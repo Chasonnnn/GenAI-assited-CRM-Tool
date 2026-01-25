@@ -122,8 +122,14 @@ def get_upcoming(
     Returns tasks where user is assignee/owner and meetings user created.
     Scoped to cases the user has access to.
     """
-    if assignee_id and assignee_id != session.user_id and session.role not in (Role.ADMIN, Role.DEVELOPER):
-        raise HTTPException(status_code=403, detail="Not authorized to view other users' upcoming items")
+    if (
+        assignee_id
+        and assignee_id != session.user_id
+        and session.role not in (Role.ADMIN, Role.DEVELOPER)
+    ):
+        raise HTTPException(
+            status_code=403, detail="Not authorized to view other users' upcoming items"
+        )
 
     target_user_id = assignee_id or session.user_id
 
@@ -163,7 +169,9 @@ def get_upcoming(
 @router.get("/attention", response_model=AttentionResponse)
 def get_attention(
     request: Request,
-    days_unreached: int = Query(7, ge=1, le=30, description="Days without contact for unreached leads"),
+    days_unreached: int = Query(
+        7, ge=1, le=30, description="Days without contact for unreached leads"
+    ),
     days_stuck: int = Query(14, ge=1, le=60, description="Days in same stage for stuck surrogates"),
     pipeline_id: UUID | None = Query(None, description="Filter by pipeline UUID"),
     assignee_id: UUID | None = Query(None, description="Filter by assignee UUID"),
@@ -180,8 +188,14 @@ def get_attention(
     - stuck_surrogates: Surrogates that haven't moved stages in X days
     - total_count: Sum of all attention items
     """
-    if assignee_id and assignee_id != session.user_id and session.role not in (Role.ADMIN, Role.DEVELOPER):
-        raise HTTPException(status_code=403, detail="Not authorized to view other users' attention items")
+    if (
+        assignee_id
+        and assignee_id != session.user_id
+        and session.role not in (Role.ADMIN, Role.DEVELOPER)
+    ):
+        raise HTTPException(
+            status_code=403, detail="Not authorized to view other users' attention items"
+        )
 
     data = dashboard_service.get_attention_items(
         db=db,

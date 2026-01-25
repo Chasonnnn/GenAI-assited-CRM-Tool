@@ -478,9 +478,7 @@ class PlatformUserSession:
         self.mfa_required = mfa_required
 
 
-def require_platform_admin(
-    request: Request, db: Session = Depends(get_db)
-) -> PlatformUserSession:
+def require_platform_admin(request: Request, db: Session = Depends(get_db)) -> PlatformUserSession:
     """
     Require platform admin access for cross-org operations.
 

@@ -43,9 +43,7 @@ async def request_with_retries(
             delay = min(max_delay, base_delay * (2**attempt))
             if delay:
                 delay = delay + random.uniform(0, delay / 2)
-            logger.warning(
-                "HTTP request returned %s, retrying", response.status_code
-            )
+            logger.warning("HTTP request returned %s, retrying", response.status_code)
             if delay:
                 await asyncio.sleep(delay)
             continue

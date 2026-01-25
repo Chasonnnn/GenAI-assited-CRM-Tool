@@ -820,7 +820,10 @@ async def worker_loop() -> None:
                         # Record failure for integration health
                         _record_job_failure(db, job, error_msg, exception=e)
 
-                        if job.job_type == JobType.AI_CHAT.value and job.status == JobStatus.FAILED.value:
+                        if (
+                            job.job_type == JobType.AI_CHAT.value
+                            and job.status == JobStatus.FAILED.value
+                        ):
                             payload = job.payload or {}
                             if "message" in payload or "message_encrypted" in payload:
                                 payload.pop("message", None)
@@ -929,9 +932,7 @@ async def process_csv_import(db, job) -> None:
         raise Exception("Missing import_id in payload")
 
     # Get import record
-    import_record = (
-        db.query(SurrogateImport).filter(SurrogateImport.id == UUID(import_id)).first()
-    )
+    import_record = db.query(SurrogateImport).filter(SurrogateImport.id == UUID(import_id)).first()
 
     if not import_record:
         raise Exception(f"Import record {import_id} not found")

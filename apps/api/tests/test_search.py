@@ -45,4 +45,3 @@ async def test_search_default_types_includes_surrogates(
         r["entity_type"] == "surrogate" and r["entity_id"] == str(surrogate.id)
         for r in payload["results"]
     )
-

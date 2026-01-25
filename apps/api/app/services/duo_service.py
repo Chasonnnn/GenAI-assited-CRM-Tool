@@ -59,9 +59,12 @@ def get_duo_client(redirect_uri: str | None = None) -> duo_universal.Client:
             "Duo MFA is not configured. Set DUO_CLIENT_ID, DUO_CLIENT_SECRET, and DUO_API_HOST."
         )
 
-    client_redirect_uri = _strip_invisible(
-        (redirect_uri or settings.DUO_REDIRECT_URI or "")
-    ).strip().strip('"').strip("'")
+    client_redirect_uri = (
+        _strip_invisible((redirect_uri or settings.DUO_REDIRECT_URI or ""))
+        .strip()
+        .strip('"')
+        .strip("'")
+    )
     if not client_redirect_uri:
         raise ValueError("Duo redirect URI is not configured.")
 

@@ -28,7 +28,9 @@ def _normalize_entries(report: Any) -> list[dict[str, Any]]:
                 if not isinstance(item, dict):
                     continue
                 package = item.get("package") or item.get("dependency") or {}
-                name = item.get("name") or (package.get("name") if isinstance(package, dict) else None)
+                name = item.get("name") or (
+                    package.get("name") if isinstance(package, dict) else None
+                )
                 version = item.get("version") or (
                     package.get("version") if isinstance(package, dict) else None
                 )
@@ -79,7 +81,10 @@ def main() -> int:
         return result.returncode
 
     if not report and result.stdout.strip():
-        print("pip-audit output was not in a supported JSON shape; failing with original output.", file=sys.stderr)
+        print(
+            "pip-audit output was not in a supported JSON shape; failing with original output.",
+            file=sys.stderr,
+        )
         if result.stdout:
             print(result.stdout, end="")
         if result.stderr:

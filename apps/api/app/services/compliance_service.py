@@ -890,9 +890,7 @@ def _build_retention_query(
                 )
             )
         if entity_hold_ids.get("ai_action_approval"):
-            query = query.filter(
-                ~AIActionApproval.id.in_(entity_hold_ids["ai_action_approval"])
-            )
+            query = query.filter(~AIActionApproval.id.in_(entity_hold_ids["ai_action_approval"]))
         return query
     if entity_type == "ai_usage_log":
         query = (
@@ -927,9 +925,7 @@ def _build_retention_query(
                 )
             )
         if entity_hold_ids.get("ai_entity_summary"):
-            query = query.filter(
-                ~AIEntitySummary.id.in_(entity_hold_ids["ai_entity_summary"])
-            )
+            query = query.filter(~AIEntitySummary.id.in_(entity_hold_ids["ai_entity_summary"]))
         return query
     raise ValueError(f"Unsupported retention entity type: {entity_type}")
 

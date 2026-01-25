@@ -269,7 +269,9 @@ def update_status(
         )
 
     if ip.is_archived:
-        raise HTTPException(status_code=400, detail="Cannot change status of archived intended parent")
+        raise HTTPException(
+            status_code=400, detail="Cannot change status of archived intended parent"
+        )
 
     try:
         result = ip_service.change_status(
@@ -283,7 +285,11 @@ def update_status(
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
 
-    ip_read = IntendedParentRead.model_validate(result["intended_parent"]) if result["intended_parent"] else None
+    ip_read = (
+        IntendedParentRead.model_validate(result["intended_parent"])
+        if result["intended_parent"]
+        else None
+    )
     return IntendedParentStatusChangeResponse(
         status=result["status"],
         intended_parent=ip_read,

@@ -324,6 +324,7 @@ def mark_all_read(
 
 def _schedule_ws_send(coro: asyncio.Future) -> None:
     """Schedule websocket sends without blocking the request cycle."""
+
     async def _runner() -> None:
         try:
             await coro
@@ -663,7 +664,9 @@ def notify_status_change_request_resolved(
 
     status_label = "approved" if approved else "rejected"
     notification_type = (
-        NotificationType.STATUS_CHANGE_APPROVED if approved else NotificationType.STATUS_CHANGE_REJECTED
+        NotificationType.STATUS_CHANGE_APPROVED
+        if approved
+        else NotificationType.STATUS_CHANGE_REJECTED
     )
     body = f"{resolver_name} {status_label} your stage regression request"
     if reason:
@@ -700,7 +703,9 @@ def notify_ip_status_change_request_resolved(
 
     status_label = "approved" if approved else "rejected"
     notification_type = (
-        NotificationType.STATUS_CHANGE_APPROVED if approved else NotificationType.STATUS_CHANGE_REJECTED
+        NotificationType.STATUS_CHANGE_APPROVED
+        if approved
+        else NotificationType.STATUS_CHANGE_REJECTED
     )
     body = f"{resolver_name} {status_label} your status regression request"
     if reason:
@@ -733,12 +738,16 @@ def notify_match_cancel_request_resolved(
     """Notify requester that a match cancellation request was approved or rejected."""
     if not request.requested_by_user_id:
         return
-    if not should_notify(db, request.requested_by_user_id, match.organization_id, "workflow_approvals"):
+    if not should_notify(
+        db, request.requested_by_user_id, match.organization_id, "workflow_approvals"
+    ):
         return
 
     status_label = "approved" if approved else "rejected"
     notification_type = (
-        NotificationType.STATUS_CHANGE_APPROVED if approved else NotificationType.STATUS_CHANGE_REJECTED
+        NotificationType.STATUS_CHANGE_APPROVED
+        if approved
+        else NotificationType.STATUS_CHANGE_REJECTED
     )
     body = f"{resolver_name} {status_label} your match cancellation request"
     if reason:

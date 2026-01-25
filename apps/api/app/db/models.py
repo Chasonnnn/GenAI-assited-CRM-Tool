@@ -470,21 +470,11 @@ class OrganizationSubscription(Base):
         unique=True,
         nullable=False,
     )
-    plan_key: Mapped[str] = mapped_column(
-        String(50), server_default="starter", nullable=False
-    )
-    status: Mapped[str] = mapped_column(
-        String(30), server_default="active", nullable=False
-    )
-    auto_renew: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("true"), nullable=False
-    )
-    current_period_end: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=False
-    )
-    trial_end: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    plan_key: Mapped[str] = mapped_column(String(50), server_default="starter", nullable=False)
+    status: Mapped[str] = mapped_column(String(30), server_default="active", nullable=False)
+    auto_renew: Mapped[bool] = mapped_column(Boolean, server_default=text("true"), nullable=False)
+    current_period_end: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    trial_end: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False

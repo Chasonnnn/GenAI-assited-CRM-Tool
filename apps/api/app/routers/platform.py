@@ -464,7 +464,9 @@ def create_invite(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/orgs/{org_id}/invites/{invite_id}/revoke", dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/orgs/{org_id}/invites/{invite_id}/revoke", dependencies=[Depends(require_csrf_header)]
+)
 def revoke_invite(
     org_id: UUID,
     invite_id: UUID,
@@ -514,7 +516,9 @@ def get_org_admin_actions(
 @router.get("/alerts")
 def list_alerts(
     status: str | None = Query(None, description="Filter by status (open, acknowledged, resolved)"),
-    severity: str | None = Query(None, description="Filter by severity (critical, error, warn, info)"),
+    severity: str | None = Query(
+        None, description="Filter by severity (critical, error, warn, info)"
+    ),
     org_id: UUID | None = Query(None, description="Filter by organization"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),

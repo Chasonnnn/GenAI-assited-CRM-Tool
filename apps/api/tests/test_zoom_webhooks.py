@@ -176,9 +176,7 @@ async def test_zoom_webhook_meeting_ended_sets_timestamp(
 
 
 @pytest.mark.asyncio
-async def test_zoom_webhook_dedupes_event_id(
-    client, db, test_org, test_user, monkeypatch
-):
+async def test_zoom_webhook_dedupes_event_id(client, db, test_org, test_user, monkeypatch):
     secret = "test-zoom-secret"
     monkeypatch.setattr(settings, "ZOOM_WEBHOOK_SECRET", secret, raising=False)
 

@@ -34,7 +34,9 @@ def upgrade() -> None:
     # Create organization_subscriptions table
     op.create_table(
         "organization_subscriptions",
-        sa.Column("id", UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id", UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False
+        ),
         sa.Column("organization_id", UUID(as_uuid=True), nullable=False),
         sa.Column(
             "plan_key",
@@ -52,8 +54,18 @@ def upgrade() -> None:
         sa.Column("current_period_end", sa.TIMESTAMP(timezone=True), nullable=False),
         sa.Column("trial_end", sa.TIMESTAMP(timezone=True), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.UniqueConstraint("organization_id", name="uq_organization_subscriptions_org_id"),
@@ -75,8 +87,12 @@ def upgrade() -> None:
     # Create admin_action_logs table
     op.create_table(
         "admin_action_logs",
-        sa.Column("id", UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
-        sa.Column("actor_user_id", UUID(as_uuid=True), nullable=True),  # Nullable for system actions
+        sa.Column(
+            "id", UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False
+        ),
+        sa.Column(
+            "actor_user_id", UUID(as_uuid=True), nullable=True
+        ),  # Nullable for system actions
         sa.Column("action", sa.String(100), nullable=False),
         sa.Column("target_organization_id", UUID(as_uuid=True), nullable=True),
         sa.Column("target_user_id", UUID(as_uuid=True), nullable=True),
@@ -84,10 +100,17 @@ def upgrade() -> None:
         sa.Column("request_id", sa.String(64), nullable=True),
         sa.Column("ip_address_hmac", sa.String(64), nullable=True),
         sa.Column("user_agent_hmac", sa.String(64), nullable=True),
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(["actor_user_id"], ["users.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(["target_organization_id"], ["organizations.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(
+            ["target_organization_id"], ["organizations.id"], ondelete="SET NULL"
+        ),
         sa.ForeignKeyConstraint(["target_user_id"], ["users.id"], ondelete="SET NULL"),
     )
     op.create_index(
@@ -127,7 +150,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Drop trigger
-    op.execute("DROP TRIGGER IF EXISTS update_org_subscriptions_updated_at ON organization_subscriptions")
+    op.execute(
+        "DROP TRIGGER IF EXISTS update_org_subscriptions_updated_at ON organization_subscriptions"
+    )
 
     # Drop admin_action_logs table
     op.drop_index("idx_admin_action_logs_actor", table_name="admin_action_logs")

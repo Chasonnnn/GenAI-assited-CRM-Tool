@@ -26,57 +26,218 @@ from app.services import template_seeder
 
 # Sample data pools
 FIRST_NAMES_FEMALE = [
-    "Emma", "Olivia", "Ava", "Isabella", "Sophia", "Mia", "Charlotte", "Amelia",
-    "Harper", "Evelyn", "Abigail", "Emily", "Elizabeth", "Sofia", "Madison",
-    "Avery", "Ella", "Scarlett", "Grace", "Victoria", "Riley", "Aria", "Luna",
-    "Chloe", "Penelope", "Layla", "Riley", "Zoey", "Nora", "Lily", "Eleanor",
-    "Hannah", "Lillian", "Addison", "Aubrey", "Ellie", "Stella", "Natalie",
-    "Zoe", "Leah", "Hazel", "Violet", "Aurora", "Savannah", "Audrey", "Brooklyn",
-    "Bella", "Claire", "Skylar", "Lucy"
+    "Emma",
+    "Olivia",
+    "Ava",
+    "Isabella",
+    "Sophia",
+    "Mia",
+    "Charlotte",
+    "Amelia",
+    "Harper",
+    "Evelyn",
+    "Abigail",
+    "Emily",
+    "Elizabeth",
+    "Sofia",
+    "Madison",
+    "Avery",
+    "Ella",
+    "Scarlett",
+    "Grace",
+    "Victoria",
+    "Riley",
+    "Aria",
+    "Luna",
+    "Chloe",
+    "Penelope",
+    "Layla",
+    "Riley",
+    "Zoey",
+    "Nora",
+    "Lily",
+    "Eleanor",
+    "Hannah",
+    "Lillian",
+    "Addison",
+    "Aubrey",
+    "Ellie",
+    "Stella",
+    "Natalie",
+    "Zoe",
+    "Leah",
+    "Hazel",
+    "Violet",
+    "Aurora",
+    "Savannah",
+    "Audrey",
+    "Brooklyn",
+    "Bella",
+    "Claire",
+    "Skylar",
+    "Lucy",
 ]
 
 LAST_NAMES = [
-    "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis",
-    "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson",
-    "Thomas", "Taylor", "Moore", "Jackson", "Martin", "Lee", "Perez", "Thompson",
-    "White", "Harris", "Sanchez", "Clark", "Ramirez", "Lewis", "Robinson", "Walker",
-    "Young", "Allen", "King", "Wright", "Scott", "Torres", "Nguyen", "Hill", "Flores",
-    "Green", "Adams", "Nelson", "Baker", "Rivera", "Campbell", "Mitchell", "Carter"
+    "Smith",
+    "Johnson",
+    "Williams",
+    "Brown",
+    "Jones",
+    "Garcia",
+    "Miller",
+    "Davis",
+    "Rodriguez",
+    "Martinez",
+    "Hernandez",
+    "Lopez",
+    "Gonzalez",
+    "Wilson",
+    "Anderson",
+    "Thomas",
+    "Taylor",
+    "Moore",
+    "Jackson",
+    "Martin",
+    "Lee",
+    "Perez",
+    "Thompson",
+    "White",
+    "Harris",
+    "Sanchez",
+    "Clark",
+    "Ramirez",
+    "Lewis",
+    "Robinson",
+    "Walker",
+    "Young",
+    "Allen",
+    "King",
+    "Wright",
+    "Scott",
+    "Torres",
+    "Nguyen",
+    "Hill",
+    "Flores",
+    "Green",
+    "Adams",
+    "Nelson",
+    "Baker",
+    "Rivera",
+    "Campbell",
+    "Mitchell",
+    "Carter",
 ]
 
 PARTNER_NAMES_MALE = [
-    "James", "John", "Robert", "Michael", "William", "David", "Richard", "Joseph",
-    "Thomas", "Christopher", "Daniel", "Matthew", "Anthony", "Mark", "Steven",
-    "Andrew", "Joshua", "Kenneth", "Kevin", "Brian", "George", "Timothy", "Ronald"
+    "James",
+    "John",
+    "Robert",
+    "Michael",
+    "William",
+    "David",
+    "Richard",
+    "Joseph",
+    "Thomas",
+    "Christopher",
+    "Daniel",
+    "Matthew",
+    "Anthony",
+    "Mark",
+    "Steven",
+    "Andrew",
+    "Joshua",
+    "Kenneth",
+    "Kevin",
+    "Brian",
+    "George",
+    "Timothy",
+    "Ronald",
 ]
 
 STATES = [
-    "CA", "TX", "FL", "NY", "PA", "IL", "OH", "GA", "NC", "MI",
-    "NJ", "VA", "WA", "AZ", "MA", "TN", "IN", "MO", "MD", "WI",
-    "CO", "MN", "SC", "AL", "LA", "KY", "OR", "OK", "CT", "UT"
+    "CA",
+    "TX",
+    "FL",
+    "NY",
+    "PA",
+    "IL",
+    "OH",
+    "GA",
+    "NC",
+    "MI",
+    "NJ",
+    "VA",
+    "WA",
+    "AZ",
+    "MA",
+    "TN",
+    "IN",
+    "MO",
+    "MD",
+    "WI",
+    "CO",
+    "MN",
+    "SC",
+    "AL",
+    "LA",
+    "KY",
+    "OR",
+    "OK",
+    "CT",
+    "UT",
 ]
 
 RACES = [
-    "White", "Black or African American", "Hispanic or Latino", "Asian",
-    "Native American", "Pacific Islander", "Mixed Race", "Other"
+    "White",
+    "Black or African American",
+    "Hispanic or Latino",
+    "Asian",
+    "Native American",
+    "Pacific Islander",
+    "Mixed Race",
+    "Other",
 ]
 
 INSURANCE_COMPANIES = [
-    "Blue Cross Blue Shield", "UnitedHealthcare", "Aetna", "Cigna", "Humana",
-    "Kaiser Permanente", "Anthem", "Molina Healthcare", "Centene", "Oscar Health"
+    "Blue Cross Blue Shield",
+    "UnitedHealthcare",
+    "Aetna",
+    "Cigna",
+    "Humana",
+    "Kaiser Permanente",
+    "Anthem",
+    "Molina Healthcare",
+    "Centene",
+    "Oscar Health",
 ]
 
 CLINIC_NAMES = [
-    "Pacific Fertility Center", "Shady Grove Fertility", "CCRM Fertility",
-    "Boston IVF", "RMA of New York", "Fertility Institute of San Diego",
-    "HRC Fertility", "Spring Fertility", "Kindbody", "Progyny Fertility"
+    "Pacific Fertility Center",
+    "Shady Grove Fertility",
+    "CCRM Fertility",
+    "Boston IVF",
+    "RMA of New York",
+    "Fertility Institute of San Diego",
+    "HRC Fertility",
+    "Spring Fertility",
+    "Kindbody",
+    "Progyny Fertility",
 ]
 
 HOSPITAL_NAMES = [
-    "Good Samaritan Hospital", "St. Joseph's Medical Center", "Cedar-Sinai Medical Center",
-    "Northwestern Memorial Hospital", "Massachusetts General Hospital",
-    "Cleveland Clinic", "Johns Hopkins Hospital", "Mayo Clinic", "UCLA Medical Center",
-    "Stanford Hospital", "Mount Sinai Hospital", "NewYork-Presbyterian Hospital"
+    "Good Samaritan Hospital",
+    "St. Joseph's Medical Center",
+    "Cedar-Sinai Medical Center",
+    "Northwestern Memorial Hospital",
+    "Massachusetts General Hospital",
+    "Cleveland Clinic",
+    "Johns Hopkins Hospital",
+    "Mayo Clinic",
+    "UCLA Medical Center",
+    "Stanford Hospital",
+    "Mount Sinai Hospital",
+    "NewYork-Presbyterian Hospital",
 ]
 
 IP_STATUSES = [
@@ -150,7 +311,7 @@ def random_address() -> tuple[str, str | None, str, str, str]:
         line2,
         random.choice(cities),
         state,
-        f"{random.randint(10000, 99999)}"
+        f"{random.randint(10000, 99999)}",
     )
 
 
@@ -225,7 +386,9 @@ def pick_stage(stages: list[PipelineStage]) -> PipelineStage:
     return random.choices(stages, weights=weights, k=1)[0]
 
 
-def build_stage_path(stages_sorted: list[PipelineStage], target: PipelineStage) -> list[PipelineStage]:
+def build_stage_path(
+    stages_sorted: list[PipelineStage], target: PipelineStage
+) -> list[PipelineStage]:
     """Build a realistic stage path ending at target."""
     if target.slug in TERMINAL_STAGE_SLUGS:
         cutoff = random.randint(2, max(2, min(6, len(stages_sorted) - 2)))
@@ -298,7 +461,7 @@ def create_surrogates(
         phone = random_phone()
         dob = random_date_of_birth(21, 40)
         state = random.choice(STATES)
-        
+
         # Address components for clinics/hospitals
         clinic_addr = random_address()
         monitoring_addr = random_address()
@@ -307,7 +470,9 @@ def create_surrogates(
         stage = pick_stage(stages_sorted)
         created_min = 10 + stage.order * 5
         created_max = created_min + 120
-        created_at = datetime.now(timezone.utc) - timedelta(days=random.randint(created_min, created_max))
+        created_at = datetime.now(timezone.utc) - timedelta(
+            days=random.randint(created_min, created_max)
+        )
         assigned_at = created_at + timedelta(days=random.randint(0, 14))
 
         pregnancy_start = date.today() - timedelta(days=random.randint(30, 220))
@@ -370,7 +535,6 @@ def create_surrogates(
             meta_form_id=meta_form,
             meta_campaign_external_id=meta_campaign,
             meta_adset_external_id=meta_adset,
-            
             # Contact info
             full_name=full_name,
             email=email,
@@ -378,13 +542,11 @@ def create_surrogates(
             phone=phone,
             phone_hash=hash_pii(phone),
             state=state,
-            
             # Demographics
             date_of_birth=dob,
             race=random.choice(RACES),
             height_ft=Decimal(str(round(random.uniform(5.0, 6.0), 1))),
             weight_lb=random.randint(110, 180),
-            
             # Eligibility
             is_age_eligible=True,
             is_citizen_or_pr=random.random() > 0.1,  # 90% citizen/PR
@@ -393,7 +555,6 @@ def create_surrogates(
             has_surrogate_experience=random.random() < 0.3,  # 30% experienced
             num_deliveries=random.randint(1, 4),
             num_csections=random.randint(0, 2),
-            
             # Insurance
             insurance_company=random.choice(INSURANCE_COMPANIES),
             insurance_plan_name=f"{random.choice(['PPO', 'HMO', 'EPO'])} {random.choice(['Gold', 'Silver', 'Platinum'])}",
@@ -403,7 +564,6 @@ def create_surrogates(
             insurance_group_number=f"GRP{random.randint(1000, 9999)}",
             insurance_subscriber_name=full_name,
             insurance_subscriber_dob=dob,
-            
             # IVF Clinic
             clinic_name=random.choice(CLINIC_NAMES),
             clinic_address_line1=clinic_addr[0],
@@ -413,7 +573,6 @@ def create_surrogates(
             clinic_postal=clinic_addr[4],
             clinic_phone=random_phone(),
             clinic_email=email_from_name(random.choice(CLINIC_NAMES)),
-            
             # Monitoring Clinic
             monitoring_clinic_name=f"{random.choice(['Womens', 'Family', 'Advanced', 'Premier'])} Fertility Center",
             monitoring_clinic_address_line1=monitoring_addr[0],
@@ -423,7 +582,6 @@ def create_surrogates(
             monitoring_clinic_postal=monitoring_addr[4],
             monitoring_clinic_phone=random_phone(),
             monitoring_clinic_email=email_from_name("Monitoring Clinic"),
-            
             # OB Provider
             ob_provider_name=f"Dr. {random.choice(FIRST_NAMES_FEMALE)} {random.choice(LAST_NAMES)}",
             ob_clinic_name=f"{random.choice(LAST_NAMES)} Women's Health",
@@ -434,7 +592,6 @@ def create_surrogates(
             ob_postal=ob_addr[4],
             ob_phone=random_phone(),
             ob_email=email_from_name("ob"),
-            
             # Delivery Hospital
             delivery_hospital_name=random.choice(HOSPITAL_NAMES),
             delivery_hospital_address_line1=hospital_addr[0],
@@ -444,26 +601,23 @@ def create_surrogates(
             delivery_hospital_postal=hospital_addr[4],
             delivery_hospital_phone=random_phone(),
             delivery_hospital_email=email_from_name(random.choice(HOSPITAL_NAMES), prefix="labor"),
-
             # Pregnancy tracking
             pregnancy_start_date=pregnancy_start_date,
             pregnancy_due_date=pregnancy_due_date,
             actual_delivery_date=actual_delivery_date,
-            
             # Contact tracking
             contact_status="reached" if is_reached else "unreached",
             assigned_at=assigned_at,
             contacted_at=contacted_at,
             last_contacted_at=last_contacted_at,
             last_contact_method=random.choice(["email", "phone", "note"]) if is_reached else None,
-            
             # Timestamps
             created_at=created_at,
             updated_at=max(created_at, contact_times.get("last_stage_at", created_at)),
         )
-        
+
         db.add(surrogate)
-    
+
     db.commit()
     print(f"Created {count} surrogates")
 
@@ -479,16 +633,15 @@ def create_intended_parents(db, org_id: uuid4, owner_id: uuid4, count: int = 40)
         first2 = random.choice(FIRST_NAMES_FEMALE + PARTNER_NAMES_MALE)
         last = random.choice(LAST_NAMES)
         full_name = f"{first1} & {first2} {last}"
-        
+
         email = random_email(first1, last, i + 100)
         phone = random_phone()
         state = random.choice(STATES)
-        
+
         intended_parent = IntendedParent(
             id=uuid4(),
             organization_id=org_id,
             intended_parent_number=f"I{next_number + i}",
-            
             # Contact info
             full_name=full_name,
             email=email,
@@ -496,30 +649,25 @@ def create_intended_parents(db, org_id: uuid4, owner_id: uuid4, count: int = 40)
             phone=phone,
             phone_hash=hash_pii(phone),
             state=state,
-            
             # Budget (varies from $80K to $200K)
             budget=Decimal(str(random.randint(80000, 200000))),
-            
             # Internal notes
-            notes_internal=f"Initial inquiry via {random.choice(['website', 'referral', 'phone'])}. " +
-                          f"Looking to start journey {random.choice(['immediately', 'within 3 months', 'within 6 months'])}. " +
-                          f"Preference for {random.choice(['experienced', 'first-time', 'no preference'])} surrogate.",
-            
+            notes_internal=f"Initial inquiry via {random.choice(['website', 'referral', 'phone'])}. "
+            + f"Looking to start journey {random.choice(['immediately', 'within 3 months', 'within 6 months'])}. "
+            + f"Preference for {random.choice(['experienced', 'first-time', 'no preference'])} surrogate.",
             # Status & workflow
             status=random.choice(IP_STATUSES),
             owner_type="user",
             owner_id=owner_id,
-            
             # Activity tracking
             last_activity=datetime.now(timezone.utc) - timedelta(days=random.randint(0, 30)),
-            
             # Timestamps
             created_at=datetime.now(timezone.utc) - timedelta(days=random.randint(5, 540)),
             updated_at=datetime.now(timezone.utc),
         )
-        
+
         db.add(intended_parent)
-    
+
     db.commit()
     print(f"Created {count} intended parents")
 
@@ -527,9 +675,9 @@ def create_intended_parents(db, org_id: uuid4, owner_id: uuid4, count: int = 40)
 def main():
     """Main entry point."""
     print("Seeding mock data...")
-    
+
     db = SessionLocal()
-    
+
     try:
         # Get organization (prefer explicit slug if provided)
         org_slug = os.getenv("SEED_ORG_SLUG")
@@ -540,9 +688,9 @@ def main():
         if not org:
             print("ERROR: No organization found. Run create-org first.")
             return
-        
+
         print(f"Using organization: {org.name} ({org.id})")
-        
+
         # Get user (owner for all records)
         user = db.query(User).filter(User.email != "system@internal").first()
         if not user:
@@ -550,14 +698,14 @@ def main():
         if not user:
             print("ERROR: No user found.")
             return
-        
+
         print(f"Using user as owner: {mask_email(user.email)} ({user.id})")
-        
+
         # Get the default pipeline stage for surrogates
         pipeline = pipeline_service.get_or_create_default_pipeline(db, org.id, user.id)
-        
+
         print(f"Using pipeline: {pipeline.name}")
-        
+
         stages_sorted = (
             db.query(PipelineStage)
             .filter(PipelineStage.pipeline_id == pipeline.id)
@@ -573,7 +721,9 @@ def main():
 
         # Seed system templates & workflows (idempotent)
         template_result = template_seeder.seed_all(db, org.id, user.id)
-        print(f"Seeded templates: {template_result['templates_created']}, workflows: {template_result['workflows_created']}")
+        print(
+            f"Seeded templates: {template_result['templates_created']}, workflows: {template_result['workflows_created']}"
+        )
 
         # Seed signature defaults for org and user
         org.signature_company_name = org.name
@@ -581,7 +731,9 @@ def main():
         org.signature_phone = "+1 (512) 555-0199"
         org.signature_website = "https://surrogacycrm.test"
         org.signature_primary_color = "#0ea5e9"
-        org.signature_disclaimer = "This message contains confidential information intended only for the recipient."
+        org.signature_disclaimer = (
+            "This message contains confidential information intended only for the recipient."
+        )
         org.signature_social_links = [
             {"platform": "linkedin", "url": "https://linkedin.com/company/surrogacy-crm"},
             {"platform": "instagram", "url": "https://instagram.com/surrogacy-crm"},
@@ -600,12 +752,12 @@ def main():
         create_surrogates(db, org.id, user.id, stages_sorted, count=surrogate_count)
         if intended_parent_count > 0:
             create_intended_parents(db, org.id, user.id, count=intended_parent_count)
-        
+
         print("\nMock data seeded successfully!")
         print(f"  - {surrogate_count} surrogates created")
         if intended_parent_count > 0:
             print(f"  - {intended_parent_count} intended parents created")
-        
+
     except Exception as e:
         print(f"ERROR: {e}")
         db.rollback()

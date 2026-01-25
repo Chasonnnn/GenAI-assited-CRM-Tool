@@ -280,10 +280,12 @@ async def zoom_webhook(
             hashlib.sha256,
         ).hexdigest()
 
-        return JSONResponse({
-            "plainToken": plain_token,
-            "encryptedToken": encrypted_token,
-        })
+        return JSONResponse(
+            {
+                "plainToken": plain_token,
+                "encryptedToken": encrypted_token,
+            }
+        )
 
     # Verify signature for other events
     signature = request.headers.get("x-zm-signature", "")
@@ -333,9 +335,7 @@ async def zoom_webhook(
 
     # Find appointment by zoom_meeting_id
     appointment = (
-        db.query(Appointment)
-        .filter(Appointment.zoom_meeting_id == zoom_meeting_id)
-        .first()
+        db.query(Appointment).filter(Appointment.zoom_meeting_id == zoom_meeting_id).first()
     )
 
     if not appointment:

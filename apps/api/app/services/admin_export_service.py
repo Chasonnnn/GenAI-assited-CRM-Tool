@@ -463,10 +463,7 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
     ]
 
     forms = (
-        db.query(Form)
-        .filter(Form.organization_id == org_id)
-        .order_by(Form.created_at.asc())
-        .all()
+        db.query(Form).filter(Form.organization_id == org_id).order_by(Form.created_at.asc()).all()
     )
     form_payload = [
         {
@@ -480,12 +477,8 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "max_file_size_bytes": form.max_file_size_bytes,
             "max_file_count": form.max_file_count,
             "allowed_mime_types": form.allowed_mime_types,
-            "created_by_user_id": str(form.created_by_user_id)
-            if form.created_by_user_id
-            else None,
-            "updated_by_user_id": str(form.updated_by_user_id)
-            if form.updated_by_user_id
-            else None,
+            "created_by_user_id": str(form.created_by_user_id) if form.created_by_user_id else None,
+            "updated_by_user_id": str(form.updated_by_user_id) if form.updated_by_user_id else None,
             "created_at": form.created_at,
             "updated_at": form.updated_at,
         }
@@ -506,9 +499,7 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "filename": logo.filename,
             "content_type": logo.content_type,
             "file_size": logo.file_size,
-            "created_by_user_id": str(logo.created_by_user_id)
-            if logo.created_by_user_id
-            else None,
+            "created_by_user_id": str(logo.created_by_user_id) if logo.created_by_user_id else None,
             "created_at": logo.created_at,
         }
         for logo in form_logos
@@ -638,9 +629,7 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "condition_logic": template.condition_logic,
             "actions": template.actions,
             "is_global": template.is_global,
-            "organization_id": str(template.organization_id)
-            if template.organization_id
-            else None,
+            "organization_id": str(template.organization_id) if template.organization_id else None,
             "usage_count": template.usage_count,
             "created_by_user_id": str(template.created_by_user_id)
             if template.created_by_user_id
@@ -686,9 +675,7 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "entity_type": hold.entity_type,
             "entity_id": str(hold.entity_id) if hold.entity_id else None,
             "reason": hold.reason,
-            "created_by_user_id": str(hold.created_by_user_id)
-            if hold.created_by_user_id
-            else None,
+            "created_by_user_id": str(hold.created_by_user_id) if hold.created_by_user_id else None,
             "released_by_user_id": str(hold.released_by_user_id)
             if hold.released_by_user_id
             else None,

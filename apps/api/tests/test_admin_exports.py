@@ -359,14 +359,13 @@ class TestAdminExports:
             assert org_payload["signature_template"] == "modern"
 
             users_payload = json.loads(archive.read("users.json"))
-            exported_user = next(
-                item for item in users_payload if item["id"] == str(test_user.id)
-            )
+            exported_user = next(item for item in users_payload if item["id"] == str(test_user.id))
             assert exported_user["signature_name"] == "Signature Name"
             assert exported_user["signature_phone"] == "+1 555 2222"
 
             forms_payload = json.loads(archive.read("forms.json"))
             assert forms_payload and forms_payload[0]["name"] == "Test Form"
+
     @pytest.mark.asyncio
     async def test_analytics_export_zip(self, authed_client, db, test_org):
         response = await authed_client.post("/admin/exports/analytics")
