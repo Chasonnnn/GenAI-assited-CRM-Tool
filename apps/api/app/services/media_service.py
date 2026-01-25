@@ -16,7 +16,9 @@ def _extract_s3_key(url: str) -> Optional[str]:
     return storage_url_service.extract_storage_key(url, bucket)
 
 
-def get_signed_media_url(url: Optional[str], expires_in_seconds: Optional[int] = None) -> Optional[str]:
+def get_signed_media_url(
+    url: Optional[str], expires_in_seconds: Optional[int] = None
+) -> Optional[str]:
     """Return signed URL for S3-hosted media; otherwise return original."""
     if not url:
         return None

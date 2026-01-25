@@ -32,10 +32,6 @@ async def test_gcp_alert_webhook_creates_alert(client, db, test_user, test_org, 
 
     assert res.status_code == 200
 
-    alert = (
-        db.query(SystemAlert)
-        .filter(SystemAlert.organization_id == test_org.id)
-        .first()
-    )
+    alert = db.query(SystemAlert).filter(SystemAlert.organization_id == test_org.id).first()
     assert alert is not None
     assert alert.alert_type == AlertType.NOTIFICATION_PUSH_FAILED.value

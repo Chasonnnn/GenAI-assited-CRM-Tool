@@ -147,6 +147,7 @@ async def create_zoom_meeting(
         meeting_data["start_time"] = local_dt.replace(tzinfo=None, microsecond=0).isoformat()
 
     async with httpx.AsyncClient() as client:
+
         async def request_fn():
             headers = {
                 "Authorization": f"Bearer {access_token}",

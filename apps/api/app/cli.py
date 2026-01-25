@@ -70,7 +70,9 @@ def create_org(
             return
 
         if developer_email == admin_email:
-            click.echo("[INFO] Admin email matches developer email; creating developer invite only.")
+            click.echo(
+                "[INFO] Admin email matches developer email; creating developer invite only."
+            )
             developer_email = None
             admin_role = Role.DEVELOPER.value
         else:
@@ -133,7 +135,9 @@ def create_org(
                     .first()
                 )
                 if existing_dev_membership:
-                    click.echo(f"[ERROR] User already belongs to an organization: {developer_email}")
+                    click.echo(
+                        f"[ERROR] User already belongs to an organization: {developer_email}"
+                    )
                     return
 
         if base_domain and not portal_domain:

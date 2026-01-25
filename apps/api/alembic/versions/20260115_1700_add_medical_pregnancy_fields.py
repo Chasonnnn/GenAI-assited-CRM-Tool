@@ -22,18 +22,30 @@ def upgrade() -> None:
     op.add_column("surrogates", sa.Column("insurance_company", sa.String(255), nullable=True))
     op.add_column("surrogates", sa.Column("insurance_plan_name", sa.String(255), nullable=True))
     op.add_column("surrogates", sa.Column("insurance_phone", sa.Text(), nullable=True))  # Encrypted
-    op.add_column("surrogates", sa.Column("insurance_policy_number", sa.Text(), nullable=True))  # Encrypted
-    op.add_column("surrogates", sa.Column("insurance_member_id", sa.Text(), nullable=True))  # Encrypted
+    op.add_column(
+        "surrogates", sa.Column("insurance_policy_number", sa.Text(), nullable=True)
+    )  # Encrypted
+    op.add_column(
+        "surrogates", sa.Column("insurance_member_id", sa.Text(), nullable=True)
+    )  # Encrypted
     op.add_column("surrogates", sa.Column("insurance_group_number", sa.String(100), nullable=True))
-    op.add_column("surrogates", sa.Column("insurance_subscriber_name", sa.Text(), nullable=True))  # Encrypted
-    op.add_column("surrogates", sa.Column("insurance_subscriber_dob", sa.Text(), nullable=True))  # EncryptedDate
+    op.add_column(
+        "surrogates", sa.Column("insurance_subscriber_name", sa.Text(), nullable=True)
+    )  # Encrypted
+    op.add_column(
+        "surrogates", sa.Column("insurance_subscriber_dob", sa.Text(), nullable=True)
+    )  # EncryptedDate
 
     # ============================================
     # IVF CLINIC (8 fields)
     # ============================================
     op.add_column("surrogates", sa.Column("clinic_name", sa.String(255), nullable=True))
-    op.add_column("surrogates", sa.Column("clinic_address_line1", sa.Text(), nullable=True))  # Encrypted
-    op.add_column("surrogates", sa.Column("clinic_address_line2", sa.Text(), nullable=True))  # Encrypted
+    op.add_column(
+        "surrogates", sa.Column("clinic_address_line1", sa.Text(), nullable=True)
+    )  # Encrypted
+    op.add_column(
+        "surrogates", sa.Column("clinic_address_line2", sa.Text(), nullable=True)
+    )  # Encrypted
     op.add_column("surrogates", sa.Column("clinic_city", sa.String(100), nullable=True))
     op.add_column("surrogates", sa.Column("clinic_state", sa.String(2), nullable=True))
     op.add_column("surrogates", sa.Column("clinic_postal", sa.String(20), nullable=True))
@@ -44,21 +56,33 @@ def upgrade() -> None:
     # MONITORING CLINIC (8 fields)
     # ============================================
     op.add_column("surrogates", sa.Column("monitoring_clinic_name", sa.String(255), nullable=True))
-    op.add_column("surrogates", sa.Column("monitoring_clinic_address_line1", sa.Text(), nullable=True))  # Encrypted
-    op.add_column("surrogates", sa.Column("monitoring_clinic_address_line2", sa.Text(), nullable=True))  # Encrypted
+    op.add_column(
+        "surrogates", sa.Column("monitoring_clinic_address_line1", sa.Text(), nullable=True)
+    )  # Encrypted
+    op.add_column(
+        "surrogates", sa.Column("monitoring_clinic_address_line2", sa.Text(), nullable=True)
+    )  # Encrypted
     op.add_column("surrogates", sa.Column("monitoring_clinic_city", sa.String(100), nullable=True))
     op.add_column("surrogates", sa.Column("monitoring_clinic_state", sa.String(2), nullable=True))
     op.add_column("surrogates", sa.Column("monitoring_clinic_postal", sa.String(20), nullable=True))
-    op.add_column("surrogates", sa.Column("monitoring_clinic_phone", sa.Text(), nullable=True))  # Encrypted
-    op.add_column("surrogates", sa.Column("monitoring_clinic_email", sa.Text(), nullable=True))  # Encrypted
+    op.add_column(
+        "surrogates", sa.Column("monitoring_clinic_phone", sa.Text(), nullable=True)
+    )  # Encrypted
+    op.add_column(
+        "surrogates", sa.Column("monitoring_clinic_email", sa.Text(), nullable=True)
+    )  # Encrypted
 
     # ============================================
     # OB PROVIDER (9 fields)
     # ============================================
     op.add_column("surrogates", sa.Column("ob_provider_name", sa.String(255), nullable=True))
     op.add_column("surrogates", sa.Column("ob_clinic_name", sa.String(255), nullable=True))
-    op.add_column("surrogates", sa.Column("ob_address_line1", sa.Text(), nullable=True))  # Encrypted
-    op.add_column("surrogates", sa.Column("ob_address_line2", sa.Text(), nullable=True))  # Encrypted
+    op.add_column(
+        "surrogates", sa.Column("ob_address_line1", sa.Text(), nullable=True)
+    )  # Encrypted
+    op.add_column(
+        "surrogates", sa.Column("ob_address_line2", sa.Text(), nullable=True)
+    )  # Encrypted
     op.add_column("surrogates", sa.Column("ob_city", sa.String(100), nullable=True))
     op.add_column("surrogates", sa.Column("ob_state", sa.String(2), nullable=True))
     op.add_column("surrogates", sa.Column("ob_postal", sa.String(20), nullable=True))
@@ -69,19 +93,31 @@ def upgrade() -> None:
     # DELIVERY HOSPITAL (8 fields)
     # ============================================
     op.add_column("surrogates", sa.Column("delivery_hospital_name", sa.String(255), nullable=True))
-    op.add_column("surrogates", sa.Column("delivery_hospital_address_line1", sa.Text(), nullable=True))  # Encrypted
-    op.add_column("surrogates", sa.Column("delivery_hospital_address_line2", sa.Text(), nullable=True))  # Encrypted
+    op.add_column(
+        "surrogates", sa.Column("delivery_hospital_address_line1", sa.Text(), nullable=True)
+    )  # Encrypted
+    op.add_column(
+        "surrogates", sa.Column("delivery_hospital_address_line2", sa.Text(), nullable=True)
+    )  # Encrypted
     op.add_column("surrogates", sa.Column("delivery_hospital_city", sa.String(100), nullable=True))
     op.add_column("surrogates", sa.Column("delivery_hospital_state", sa.String(2), nullable=True))
     op.add_column("surrogates", sa.Column("delivery_hospital_postal", sa.String(20), nullable=True))
-    op.add_column("surrogates", sa.Column("delivery_hospital_phone", sa.Text(), nullable=True))  # Encrypted
-    op.add_column("surrogates", sa.Column("delivery_hospital_email", sa.Text(), nullable=True))  # Encrypted
+    op.add_column(
+        "surrogates", sa.Column("delivery_hospital_phone", sa.Text(), nullable=True)
+    )  # Encrypted
+    op.add_column(
+        "surrogates", sa.Column("delivery_hospital_email", sa.Text(), nullable=True)
+    )  # Encrypted
 
     # ============================================
     # PREGNANCY TRACKING (2 fields)
     # ============================================
-    op.add_column("surrogates", sa.Column("pregnancy_start_date", sa.Text(), nullable=True))  # EncryptedDate
-    op.add_column("surrogates", sa.Column("pregnancy_due_date", sa.Text(), nullable=True))  # EncryptedDate
+    op.add_column(
+        "surrogates", sa.Column("pregnancy_start_date", sa.Text(), nullable=True)
+    )  # EncryptedDate
+    op.add_column(
+        "surrogates", sa.Column("pregnancy_due_date", sa.Text(), nullable=True)
+    )  # EncryptedDate
 
 
 def downgrade() -> None:

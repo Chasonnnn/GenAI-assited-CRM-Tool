@@ -111,9 +111,7 @@ async def test_match_cancel_request_approval_updates_statuses(authed_client, db,
     assert surrogate.stage_id == ready_stage.id
 
     intended_parent = (
-        db.query(IntendedParent)
-        .filter(IntendedParent.id == match_row.intended_parent_id)
-        .first()
+        db.query(IntendedParent).filter(IntendedParent.id == match_row.intended_parent_id).first()
     )
     assert intended_parent is not None
     assert intended_parent.status == IntendedParentStatus.READY_TO_MATCH.value

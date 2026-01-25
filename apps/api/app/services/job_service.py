@@ -94,11 +94,7 @@ def claim_pending_jobs(
     now = datetime.now(timezone.utc)
     type_values: list[str] | None = None
     if job_types is not None:
-        type_values = [
-            jt.value if isinstance(jt, JobType) else str(jt)
-            for jt in job_types
-            if jt
-        ]
+        type_values = [jt.value if isinstance(jt, JobType) else str(jt) for jt in job_types if jt]
         if not type_values:
             return []
     query = db.query(Job).filter(

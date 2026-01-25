@@ -144,7 +144,11 @@ def get_surrogates_by_status(
     db: Session = Depends(get_db),
 ):
     """Get surrogate counts grouped by status."""
-    if owner_id and owner_id != session.user_id and session.role not in (Role.ADMIN, Role.DEVELOPER):
+    if (
+        owner_id
+        and owner_id != session.user_id
+        and session.role not in (Role.ADMIN, Role.DEVELOPER)
+    ):
         raise HTTPException(status_code=403, detail="Not authorized to view other users' analytics")
 
     start, end = analytics_service.parse_date_range(from_date, to_date)
@@ -185,7 +189,11 @@ def get_surrogates_trend(
     db: Session = Depends(get_db),
 ):
     """Get surrogate creation trend over time."""
-    if owner_id and owner_id != session.user_id and session.role not in (Role.ADMIN, Role.DEVELOPER):
+    if (
+        owner_id
+        and owner_id != session.user_id
+        and session.role not in (Role.ADMIN, Role.DEVELOPER)
+    ):
         raise HTTPException(status_code=403, detail="Not authorized to view other users' analytics")
 
     start, end = analytics_service.parse_date_range(from_date, to_date)

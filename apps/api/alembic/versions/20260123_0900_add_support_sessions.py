@@ -20,13 +20,17 @@ depends_on: Union[str, Sequence[str], None] = None
 
 ROLE_VALUES = "('intake_specialist', 'case_manager', 'admin', 'developer')"
 MODE_VALUES = "('write', 'read_only')"
-REASON_CODES = "('onboarding_setup', 'billing_help', 'data_fix', 'bug_repro', 'incident_response', 'other')"
+REASON_CODES = (
+    "('onboarding_setup', 'billing_help', 'data_fix', 'bug_repro', 'incident_response', 'other')"
+)
 
 
 def upgrade() -> None:
     op.create_table(
         "support_sessions",
-        sa.Column("id", UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id", UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False
+        ),
         sa.Column("actor_user_id", UUID(as_uuid=True), nullable=False),
         sa.Column("organization_id", UUID(as_uuid=True), nullable=False),
         sa.Column("role_override", sa.String(50), nullable=False),
@@ -35,13 +39,20 @@ def upgrade() -> None:
         sa.Column("reason_text", sa.Text(), nullable=True),
         sa.Column("expires_at", sa.TIMESTAMP(timezone=True), nullable=False),
         sa.Column("revoked_at", sa.TIMESTAMP(timezone=True), nullable=True),
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(["actor_user_id"], ["users.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.CheckConstraint(f"role_override IN {ROLE_VALUES}", name="ck_support_sessions_role"),
         sa.CheckConstraint(f"mode IN {MODE_VALUES}", name="ck_support_sessions_mode"),
-        sa.CheckConstraint(f"reason_code IN {REASON_CODES}", name="ck_support_sessions_reason_code"),
+        sa.CheckConstraint(
+            f"reason_code IN {REASON_CODES}", name="ck_support_sessions_reason_code"
+        ),
     )
     op.create_index("idx_support_sessions_actor", "support_sessions", ["actor_user_id"])
     op.create_index("idx_support_sessions_org", "support_sessions", ["organization_id"])

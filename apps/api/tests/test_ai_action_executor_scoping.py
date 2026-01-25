@@ -71,12 +71,7 @@ def test_add_note_executor_scoped_to_org(db, test_org, test_user):
 
     assert result["success"] is False
     assert result["error"] == "Surrogate not found"
-    assert (
-        db.query(EntityNote)
-        .filter(EntityNote.entity_id == surrogate.id)
-        .count()
-        == 0
-    )
+    assert db.query(EntityNote).filter(EntityNote.entity_id == surrogate.id).count() == 0
 
 
 def test_create_task_executor_scoped_to_org(db, test_org, test_user):

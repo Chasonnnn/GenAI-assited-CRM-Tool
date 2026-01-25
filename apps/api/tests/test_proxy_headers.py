@@ -25,7 +25,9 @@ def test_get_client_ip_ignores_forwarded_when_not_trusted(monkeypatch):
 
 def test_get_client_ip_uses_forwarded_when_trusted(monkeypatch):
     monkeypatch.setattr(settings, "TRUST_PROXY_HEADERS", True)
-    request = _make_request({"X-Forwarded-For": "203.0.113.10, 10.0.0.2"}, client_host="198.51.100.5")
+    request = _make_request(
+        {"X-Forwarded-For": "203.0.113.10, 10.0.0.2"}, client_host="198.51.100.5"
+    )
     assert session_service.get_client_ip(request) == "203.0.113.10"
 
 
