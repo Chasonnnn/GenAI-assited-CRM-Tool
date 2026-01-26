@@ -16,6 +16,7 @@ from app.schemas.import_template import (
     ColumnMappingItem,
     ColumnSuggestionResponse,
     EnhancedImportPreviewResponse,
+    ImportApprovalItem,
     ImportRejectRequest,
     MatchingTemplate,
 )
@@ -166,6 +167,8 @@ async def preview_csv_import(
     import_record.date_ambiguity_warnings = preview.date_ambiguity_warnings
     import_record.deduplication_stats = {
         "total": preview.total_rows,
+        "new_records": preview.new_records,
+        "duplicates": preview.duplicate_details,
         "duplicate_emails_db": preview.duplicate_emails_db,
         "duplicate_emails_csv": preview.duplicate_emails_csv,
     }
@@ -232,7 +235,7 @@ def list_imports(
 
 
 # NOTE: /pending MUST come before /{import_id} to avoid routing conflict
-@router.get("/pending", response_model=list[ImportHistoryItem])
+@router.get("/pending", response_model=list[ImportApprovalItem])
 def list_pending_approvals(
     session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
     db: Session = Depends(get_db),
@@ -241,16 +244,35 @@ def list_pending_approvals(
     imports = import_service.list_pending_approvals(db, session.org_id)
 
     return [
-        ImportHistoryItem(
+        ImportApprovalItem(
             id=imp.id,
             filename=imp.filename,
             status=imp.status,
             total_rows=imp.total_rows,
-            imported_count=imp.imported_count,
-            skipped_count=imp.skipped_count,
-            error_count=imp.error_count,
-            created_at=imp.created_at.isoformat(),
-            completed_at=imp.completed_at.isoformat() if imp.completed_at else None,
+            created_at=imp.created_at,
+            created_by_name=imp.created_by.display_name if imp.created_by else None,
+            deduplication_stats=(
+                {
+                    **imp.deduplication_stats,
+                    "duplicates": imp.deduplication_stats.get("duplicates", []),
+                    "new_records": imp.deduplication_stats.get(
+                        "new_records",
+                        max(
+                            imp.total_rows
+                            - int(
+                                imp.deduplication_stats.get(
+                                    "duplicate_emails_db",
+                                    len(imp.deduplication_stats.get("duplicates", [])),
+                                )
+                            ),
+                            0,
+                        ),
+                    ),
+                }
+                if imp.deduplication_stats
+                else None
+            ),
+            column_mapping_snapshot=imp.column_mapping_snapshot,
         )
         for imp in imports
     ]
@@ -368,6 +390,8 @@ async def preview_csv_enhanced(
     import_record.date_ambiguity_warnings = preview.date_ambiguity_warnings
     import_record.deduplication_stats = {
         "total": preview.total_rows,
+        "new_records": preview.new_records,
+        "duplicates": preview.duplicate_details,
         "duplicate_emails_db": preview.duplicate_emails_db,
         "duplicate_emails_csv": preview.duplicate_emails_csv,
     }
@@ -572,6 +596,8 @@ def submit_import_for_approval(
 
     dedup_stats = import_record.deduplication_stats or {
         "total": import_record.total_rows,
+        "new_records": import_record.total_rows,
+        "duplicates": [],
         "duplicate_emails_db": 0,
         "duplicate_emails_csv": 0,
     }
