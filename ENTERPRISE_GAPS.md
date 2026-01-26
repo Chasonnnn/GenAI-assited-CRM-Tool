@@ -10,20 +10,20 @@ Evidence
 - `apps/api/app/routers/auth.py:56-173` only Google OAuth login/callback.
 - `apps/web/app/login/page.tsx:19-150` UI is Google SSO + Duo only.
 - `apps/api/app/main.py:338-465` router list has no SCIM endpoints.
-- `apps/api/app/db/models.py:48-110` Organization lacks SSO configuration fields.
+- `apps/api/app/db/models/auth.py` Organization lacks SSO configuration fields.
 - `apps/api/app/routers/settings.py:34-120` org settings endpoint does not expose SSO config.
 
 Now (0-30 days)
-- [ ] Add org-level SSO policy fields: update `apps/api/app/db/models.py:48-110` to add `sso_provider` (string enum), `sso_enforced` (bool), `sso_allowed_domains` (array/JSONB), `sso_oidc_issuer` (string), `sso_client_id` (string). Create an Alembic migration adding these columns with safe defaults.
+- [ ] Add org-level SSO policy fields: update `apps/api/app/db/models/auth.py` to add `sso_provider` (string enum), `sso_enforced` (bool), `sso_allowed_domains` (array/JSONB), `sso_oidc_issuer` (string), `sso_client_id` (string). Create an Alembic migration adding these columns with safe defaults.
 - [ ] Expose SSO settings to admins: extend `apps/api/app/routers/settings.py:34-120` request/response models to include the new SSO fields; update the org settings read/write logic to persist them; add input validation (domain list, issuer URL format).
 - [ ] Enforce SSO policy at login: in `apps/api/app/routers/auth.py:56-173`, load org settings for the user (lookup by membership or invite) and block non-SSO login if `sso_enforced` is true; validate email domain against `sso_allowed_domains` after token verification.
 
 Next (30-90 days)
 - [ ] Implement SCIM provisioning: create `apps/api/app/routers/scim.py` (new file, ~1-250) with SCIM 2.0 `/Users` and `/Groups` CRUD; add `apps/api/app/services/scim_service.py` (new file, ~1-200) to map SCIM operations to `User`, `Membership`, and `Role`.
-- [ ] Add SCIM auth and tokens: add `ScimToken` model to `apps/api/app/db/models.py:296-360` (near `AuthIdentity`) with hashed token + org_id; add token validation dependency in `apps/api/app/core/deps.py:200-280` and register the SCIM router in `apps/api/app/main.py:338-465`.
+- [ ] Add SCIM auth and tokens: add `ScimToken` model to `apps/api/app/db/models/auth.py` (near `AuthIdentity`) with hashed token + org_id; add token validation dependency in `apps/api/app/core/deps.py:200-280` and register the SCIM router in `apps/api/app/main.py:338-465`.
 
 Later (90+ days)
-- [ ] Multi-IdP support: add `AuthIdentity.provider` expansion (OIDC/SAML) in `apps/api/app/db/models.py:296-316`, extend `apps/api/app/services/google_oauth.py:1-117`, and add `apps/api/app/services/oidc_service.py` (new file, ~1-200); update `apps/web/app/login/page.tsx:19-150` to route users to the configured IdP based on org slug.
+- [ ] Multi-IdP support: add `AuthIdentity.provider` expansion (OIDC/SAML) in `apps/api/app/db/models/auth.py`, extend `apps/api/app/services/google_oauth.py:1-117`, and add `apps/api/app/services/oidc_service.py` (new file, ~1-200); update `apps/web/app/login/page.tsx:19-150` to route users to the configured IdP based on org slug.
 
 ### RBAC / ABAC posture
 
@@ -37,7 +37,7 @@ Now (0-30 days)
 - [ ] Add tests: create `apps/api/tests/test_abac.py` (new file, ~1-200) covering owner vs. non-owner access and team-only access for at least surrogates and tasks.
 
 Next (30-90 days)
-- [ ] Policy storage: add `PolicyRule`/`PolicyBinding` tables in `apps/api/app/db/models.py` near `RolePermission` (~226-294) to store per-org ABAC rules; update `apps/api/app/services/permission_service.py:33-110` to evaluate policy rules against entity attributes.
+- [ ] Policy storage: add `PolicyRule`/`PolicyBinding` tables in `apps/api/app/db/models/auth.py` near `RolePermission` to store per-org ABAC rules; update `apps/api/app/services/permission_service.py:33-110` to evaluate policy rules against entity attributes.
 
 Later (90+ days)
 - [ ] UI policy management: extend `apps/web/app/(app)/settings/team/roles/page.tsx:1-115` to expose ABAC rule sets, and enforce them in frontend guards (`apps/web/lib/auth-context.tsx:1-123`).
@@ -63,14 +63,14 @@ Later (90+ days)
 Evidence
 - `apps/api/app/services/compliance_service.py:572-607` default retention list excludes `attachments`, `form_submissions`, `notifications`, and `campaign_logs`.
 - `apps/api/app/services/compliance_service.py:830-920` purge targets do not cover those tables and only hard-delete.
-- `apps/api/app/db/models.py:2837-2868` `DataRetentionPolicy` has no action enum.
+- `apps/api/app/db/models/audit.py` `DataRetentionPolicy` has no action enum.
 
 Now (0-30 days)
 - [ ] Expand retention coverage: extend `apps/api/app/services/compliance_service.py:567-827` to include `attachments`, `form_submissions`, `notifications`, and `campaign_logs` in `_build_retention_query`; update `seed_default_retention_policies` to include these entity types.
-- [ ] Add retention action type: update the `DataRetentionPolicy` model in `apps/api/app/db/models.py:2837-2868` to include `action` enum (`purge` vs `redact`); update `compliance_service.execute_purge` to redact PII where required instead of deleting.
+- [ ] Add retention action type: update the `DataRetentionPolicy` model in `apps/api/app/db/models/audit.py` to include `action` enum (`purge` vs `redact`); update `compliance_service.execute_purge` to redact PII where required instead of deleting.
 
 Next (30-90 days)
-- [ ] DSAR workflow: add `DataDeletionRequest` model to `apps/api/app/db/models.py:2837-2925` and endpoints in `apps/api/app/routers/compliance.py:27-147` to submit, approve, and execute deletion/redaction; wire to `compliance_service` for execution.
+- [ ] DSAR workflow: add `DataDeletionRequest` model to `apps/api/app/db/models/audit.py` and endpoints in `apps/api/app/routers/compliance.py:27-147` to submit, approve, and execute deletion/redaction; wire to `compliance_service` for execution.
 
 Later (90+ days)
 - [ ] Scheduled retention jobs: add a scheduled job entry in `apps/api/app/routers/internal.py:153-190` and a job handler in `apps/api/app/worker.py:720-770` to run retention nightly with reporting.
@@ -116,30 +116,30 @@ Evidence
 - `apps/api/app/routers/webhooks.py:260-341` Zoom has dedupe, but other providers lack a generic event table.
 
 Now (0-30 days)
-- [ ] Standardize idempotency keys: update `apps/api/app/services/email_service.py:324-361` to compute and pass `idempotency_key` (e.g., `send_email:{org_id}:{template_id}:{recipient_email}:{schedule_at}`); `EmailLog.idempotency_key` already exists in `apps/api/app/db/models.py:1869-1886` and just needs to be set.
+- [ ] Standardize idempotency keys: update `apps/api/app/services/email_service.py:324-361` to compute and pass `idempotency_key` (e.g., `send_email:{org_id}:{template_id}:{recipient_email}:{schedule_at}`); `EmailLog.idempotency_key` already exists in `apps/api/app/db/models/email.py` and just needs to be set.
 - [ ] Workflow email dedupe: update `apps/api/app/services/workflow_engine.py:1002-1017` to pass `idempotency_key` derived from `event_id` to `job_service.schedule_job`.
-- [ ] Inbound webhook dedupe: add `WebhookEvent` model in `apps/api/app/db/models.py:1187-1260` with unique `provider_event_id`; check/insert it in `apps/api/app/routers/webhooks.py:95-141` before scheduling jobs.
+- [ ] Inbound webhook dedupe: add `WebhookEvent` model in `apps/api/app/db/models/integrations.py` with unique `provider_event_id`; check/insert it in `apps/api/app/routers/webhooks.py:95-141` before scheduling jobs.
 
 Next (30-90 days)
 - [ ] API idempotency: add `Idempotency-Key` support in `apps/api/app/core/deps.py:200-280` and enforce it on public apply/booking endpoints (`apps/api/app/routers/forms_public.py:78-109`, `apps/api/app/routers/booking.py:195-220`) to prevent duplicate submissions.
 
 Later (90+ days)
-- [ ] Outbox pattern: add `integration_outbox` table in `apps/api/app/db/models.py:1187-1260` and a worker job in `apps/api/app/worker.py:720-775` to publish events to external systems exactly-once.
+- [ ] Outbox pattern: add `integration_outbox` table in `apps/api/app/db/models/integrations.py` and a worker job in `apps/api/app/worker.py:720-775` to publish events to external systems exactly-once.
 
 ### Job processing
 
 Evidence
-- `apps/api/app/db/models.py:1690-1739` `Job` lacks `locked_at` / `locked_by` and backoff fields.
+- `apps/api/app/db/models/jobs.py` `Job` lacks `locked_at` / `locked_by` and backoff fields.
 - `apps/api/app/services/job_service.py:141-167` `mark_job_running` does not set lock metadata.
 
 Now (0-30 days)
-- [ ] Lock fields: add `locked_at` and `locked_by` columns to the `Job` model in `apps/api/app/db/models.py:1690-1739`, and set them in `job_service.mark_job_running`.
+- [ ] Lock fields: add `locked_at` and `locked_by` columns to the `Job` model in `apps/api/app/db/models/jobs.py`, and set them in `job_service.mark_job_running`.
 
 Next (30-90 days)
 - [ ] Backoff strategy: add `next_run_at` and `backoff_seconds` fields to `Job`, update `mark_job_failed` in `apps/api/app/services/job_service.py:103-114` to compute exponential backoff, and update the job polling query to filter by `next_run_at`.
 
 Later (90+ days)
-- [ ] Dedicated queue system: replace the polling loop in `apps/api/app/worker.py:720-775` with a managed queue (e.g., Postgres-based pg-boss or Redis-backed worker) and update job scheduling APIs in `apps/api/app/services/job_service.py:12-116` and `apps/api/app/db/models.py:1690-1739` accordingly.
+- [ ] Dedicated queue system: replace the polling loop in `apps/api/app/worker.py:720-775` with a managed queue (e.g., Postgres-based pg-boss or Redis-backed worker) and update job scheduling APIs in `apps/api/app/services/job_service.py:12-116` and `apps/api/app/db/models/jobs.py` accordingly.
 
 ### Artifact Registry retention (Deferred)
 
