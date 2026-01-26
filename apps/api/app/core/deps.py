@@ -225,8 +225,10 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
             .filter(Organization.id == support_session.organization_id)
             .first()
         )
-        if support_org:
-            _validate_request_host(request, support_org.slug)
+        host = request.headers.get("host", "").split(":")[0].lower()
+        if not (user.is_platform_admin and host == f"ops.{settings.PLATFORM_BASE_DOMAIN}"):
+            if support_org:
+                _validate_request_host(request, support_org.slug)
 
         session = UserSession(
             user_id=user.id,
@@ -260,7 +262,9 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=403, detail="Organization is scheduled for deletion")
 
     # Validate request host matches org's subdomain (cross-tenant protection)
-    _validate_request_host(request, org.slug)
+    host = request.headers.get("host", "").split(":")[0].lower()
+    if not (user.is_platform_admin and host == f"ops.{settings.PLATFORM_BASE_DOMAIN}"):
+        _validate_request_host(request, org.slug)
 
     # Validate role is a known enum value - return 403 not 500
     if not Role.has_value(membership.role):
