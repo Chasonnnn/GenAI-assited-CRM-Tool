@@ -181,6 +181,7 @@ Coupling notes:
   Create/Delete: create `apps/api/app/services/appointment_integrations.py`.
   Expected blast radius: medium (calendar + Zoom/GCal sync).
   Test plan: unit tests for integration adapters; integration tests for appointment create/update.
+  Status: completed (Week 3).
 
 - **R4 — Task notification events**
   Files to change: `apps/api/app/services/task_service.py`, `apps/api/app/services/notification_service.py`.
@@ -208,6 +209,7 @@ Coupling notes:
   Create/Delete: create `apps/api/app/services/webhooks/` registry + handlers.
   Expected blast radius: medium (webhook flows).
   Test plan: integration tests for each webhook payload fixture.
+  Status: completed (Week 3).
 
 ### Move code to correct layer
 - **R8 — Remove direct model use in routers**
@@ -250,6 +252,6 @@ Coupling notes:
 - R6 — Email sender interface.
 
 ### Later (optional)
-- R3 — Appointment integrations module.
-- R7 — Webhook handler registry.
+- [x] R3 — Appointment integrations module.
+- [x] R7 — Webhook handler registry.
 - Split `db/models.py` and `db/enums.py` into domain modules once service boundaries are stable.

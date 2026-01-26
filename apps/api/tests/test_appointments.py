@@ -797,7 +797,7 @@ def test_approve_booking_creates_zoom_meeting_and_schedules_reminder(
     db, test_org, test_user, appointment_type, availability_rules, monkeypatch
 ):
     """Approval should create Zoom meeting link and schedule reminder."""
-    from app.services import appointment_service, appointment_email_service, zoom_service
+    from app.services import appointment_service, appointment_email_service, zoom_service, appointment_integrations
 
     appointment_type.meeting_mode = MeetingMode.ZOOM.value
     db.flush()
@@ -808,7 +808,7 @@ def test_approve_booking_creates_zoom_meeting_and_schedules_reminder(
 
     appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
 
-    monkeypatch.setattr(appointment_service, "_sync_to_google_calendar", lambda *a, **k: None)
+    monkeypatch.setattr(appointment_integrations, "sync_to_google_calendar", lambda *a, **k: None)
     monkeypatch.setattr(
         "app.services.notification_service.notify_appointment_confirmed", lambda *a, **k: None
     )
@@ -884,7 +884,7 @@ def test_approve_booking_creates_google_meet_link(
     db, test_org, test_user, appointment_type, availability_rules, monkeypatch
 ):
     """Google Meet mode should create a Meet link on approval."""
-    from app.services import appointment_service, calendar_service
+    from app.services import appointment_service, calendar_service, appointment_integrations
 
     appointment_type.meeting_mode = "google_meet"
     db.flush()
@@ -895,7 +895,7 @@ def test_approve_booking_creates_google_meet_link(
 
     appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
 
-    monkeypatch.setattr(appointment_service, "_sync_to_google_calendar", lambda *a, **k: None)
+    monkeypatch.setattr(appointment_integrations, "sync_to_google_calendar", lambda *a, **k: None)
 
     monkeypatch.setattr(
         calendar_service, "check_user_has_google_calendar", lambda *a, **k: True, raising=False
@@ -918,7 +918,7 @@ def test_reschedule_booking_regenerates_zoom_link(
     db, test_org, test_user, appointment_type, availability_rules, monkeypatch
 ):
     """Reschedule should regenerate the Zoom meeting link."""
-    from app.services import appointment_service, zoom_service
+    from app.services import appointment_service, zoom_service, appointment_integrations
 
     appointment_type.meeting_mode = MeetingMode.ZOOM.value
     db.flush()
@@ -933,7 +933,7 @@ def test_reschedule_booking_regenerates_zoom_link(
     appt.zoom_join_url = "https://zoom.us/j/old"
     db.flush()
 
-    monkeypatch.setattr(appointment_service, "_sync_to_google_calendar", lambda *a, **k: None)
+    monkeypatch.setattr(appointment_integrations, "sync_to_google_calendar", lambda *a, **k: None)
     monkeypatch.setattr(zoom_service, "check_user_has_zoom", lambda *a, **k: True)
 
     async def fake_get_user_zoom_token(*args, **kwargs):

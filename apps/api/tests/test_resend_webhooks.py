@@ -44,7 +44,7 @@ class TestResendWebhookSignature:
     """Test signature verification."""
 
     def test_verify_svix_signature_valid(self):
-        from app.routers.webhooks import _verify_svix_signature
+        from app.services.webhooks.resend import _verify_svix_signature
 
         body = b'{"type": "email.delivered", "data": {}}'
         secret = "test_secret_key_for_testing"
@@ -62,7 +62,7 @@ class TestResendWebhookSignature:
         assert is_valid is True
 
     def test_verify_svix_signature_invalid(self):
-        from app.routers.webhooks import _verify_svix_signature
+        from app.services.webhooks.resend import _verify_svix_signature
 
         body = b'{"type": "email.delivered", "data": {}}'
         timestamp = str(int(time.time()))
@@ -77,7 +77,7 @@ class TestResendWebhookSignature:
         assert is_valid is False
 
     def test_verify_svix_signature_missing_headers(self):
-        from app.routers.webhooks import _verify_svix_signature
+        from app.services.webhooks.resend import _verify_svix_signature
 
         body = b'{"type": "email.delivered", "data": {}}'
 
