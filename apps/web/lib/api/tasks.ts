@@ -4,7 +4,7 @@
 
 import api from './index';
 
-// Task type enum - matches backend apps/api/app/db/enums.py
+// Task type enum - matches backend apps/api/app/db/enums/*
 export type TaskType =
     | 'meeting'
     | 'follow_up'

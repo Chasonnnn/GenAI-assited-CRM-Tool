@@ -17,9 +17,7 @@ def make_csv(rows: list[dict]) -> bytes:
 
 
 @pytest.mark.asyncio
-async def test_import_submit_and_approval_flow(
-    authed_client: AsyncClient, db, test_org, test_user
-):
+async def test_import_submit_and_approval_flow(authed_client: AsyncClient, db, test_org, test_user):
     from app.services import surrogate_service
     from app.schemas.surrogate import SurrogateCreate
     from app.db.enums import SurrogateSource

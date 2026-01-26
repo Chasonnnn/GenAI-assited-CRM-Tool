@@ -12,7 +12,7 @@
 ### Backend layers
 - Router/handler layer (`apps/api/app/routers/*`): request parsing, auth/CSRF dependencies, response shaping. Allowed deps: `app.core.*`, `app.schemas.*`, services. Must not own business logic or DB writes.
 - Service layer (`apps/api/app/services/*`): domain rules, transactions, orchestration inside a domain. Allowed deps: `app.db.*`, `app.schemas.*`, `app.core.*`, integration adapters. Must not own HTTP concerns.
-- Repository/DB layer (`apps/api/app/db/*`): models, enums, session, DB helpers. Must not depend on services/routers.
+- Repository/DB layer (`apps/api/app/db/*`): models, enums package, session, DB helpers. Must not depend on services/routers.
 - Integrations/adapters (`app.services/*` for Gmail/Zoom/Meta/Resend/etc): external API calls + persisted integration state. Must not orchestrate core domain rules.
 - Jobs/worker (`apps/api/app/worker.py`, `apps/api/app/jobs/*`): background processing that calls services/adapters. Must not include routing logic.
 
@@ -69,7 +69,7 @@ Files touched (backend):
 - `apps/api/app/services/job_service.py` + `services/meta_capi.py` (Meta CAPI)
 - `apps/api/app/services/dashboard_service.py` + `core/websocket.py` (stats push)
 - `apps/api/app/routers/websocket.py`
-- `apps/api/app/db/models.py`, `apps/api/app/db/enums.py`
+- `apps/api/app/db/models/*`, `apps/api/app/db/enums/*`
 
 Coupling notes:
 - `surrogate_service.change_status` orchestrates queues, notifications, workflows, and Meta CAPI — cross‑domain effects are embedded in the core domain method.
@@ -93,7 +93,7 @@ Files touched (backend):
 - `apps/api/app/services/org_service.py` (portal URL)
 - `apps/api/app/services/oauth_service.py` (Gmail integration check)
 - `apps/api/app/services/audit_service.py` + `services/alert_service.py`
-- `apps/api/app/db/models.py`
+- `apps/api/app/db/models/*`
 
 Coupling notes:
 - Router validates integration availability and domain constraints; invite email service depends on multiple services (org, template, email providers, audit, alert), making invites a cross‑domain orchestration point.
@@ -114,7 +114,7 @@ Files touched (backend):
 - `apps/api/app/services/dashboard_service.py`
 - `apps/api/app/services/ip_service.py` (intended parent validation)
 - `apps/api/app/core/surrogate_access.py`
-- `apps/api/app/db/models.py`
+- `apps/api/app/db/models/*`
 
 Coupling notes:
 - Task creation triggers notifications and dashboard stats; router directly couples task mutations to dashboard updates.
@@ -124,8 +124,8 @@ Coupling notes:
 
 | Module / File | Why hotspot | Inbound dependencies | Outbound dependencies | Cohesion grade | Coupling grade | Risk if left as‑is | Best next refactor |
 |---|---|---|---|---|---|---|---|
-| `apps/api/app/db/models.py` | 5.5k LOC, all domain models in one file | Most routers/services/jobs (≈94) | `db/enums.py`, `db/types.py` | D (many domains mixed) | F (global dependency) | Small schema change ripples everywhere | Split into domain model modules + re‑export in `db/models/__init__.py` |
-| `apps/api/app/db/enums.py` | Single enum registry for all domains | Most modules (≈94) | None | C (multi‑domain constants) | F (global dependency) | Enum churn cascades across domains | Split by domain (`auth_enums.py`, `surrogate_enums.py`, etc.) |
+| `apps/api/app/db/models/*` | Models are split by domain, but `db/models/__init__.py` re‑exports keep global imports common | Most routers/services/jobs (≈94) | `db/enums/*`, `db/types.py` | B (domain grouping) | D (global re‑export) | Global imports still blur boundaries | Prefer per‑domain imports (`app.db.models.<domain>`) and limit `app.db.models` to bootstrapping |
+| `apps/api/app/db/enums/*` | Split enum registry by domain (re-exported) | Most modules (≈94) | None | B (domain grouping) | D (still widely imported) | Enum churn still has broad impact | Continue reducing cross-domain enum usage |
 | `apps/api/app/core/deps.py` | Central auth/permission deps used everywhere | All routers (≈50) | `core/*`, `db/*` | B (auth/permission only) | C (system‑wide usage) | Auth change risks wide regression | Split into auth/permission/platform deps modules |
 | `apps/api/app/services/surrogate_service.py` | 1.6k LOC; status, assignment, meta, workflows | Routers, status_change_request_service, matches, forms, dashboard | Pipeline, queue, notifications, workflow_triggers, job_service | D (god service) | D | Status change affects queues/workflows/notifications | Extract status + assignment submodules and add event dispatch |
 | `apps/api/app/services/analytics_service.py` | 2.9k LOC; analytics + meta + caching | `routers/analytics.py`, worker, exports, AI | Pipeline, meta_api, models | D (multiple analytics concerns) | C | Analytics change breaks exports/AI | Split by domain (surrogates/meta/usage) + facade |
@@ -181,6 +181,7 @@ Coupling notes:
   Create/Delete: create `apps/api/app/services/appointment_integrations.py`.
   Expected blast radius: medium (calendar + Zoom/GCal sync).
   Test plan: unit tests for integration adapters; integration tests for appointment create/update.
+  Status: completed (Week 3).
 
 - **R4 — Task notification events**
   Files to change: `apps/api/app/services/task_service.py`, `apps/api/app/services/notification_service.py`.
@@ -194,20 +195,21 @@ Coupling notes:
   Create/Delete: create `apps/api/app/services/notification_facade.py` and event helpers; no deletes.
   Expected blast radius: medium (central notifications).
   Test plan: unit tests per event; smoke tests for websocket and in‑app notifications.
-  Status: completed (Week 2).
+  Status: pending.
 
 - **R6 — Email sender interface**
   Files to change: `invite_email_service.py`, `email_service.py`, `platform_email_service.py`, `gmail_service.py`.
   Create/Delete: create `apps/api/app/services/email_sender.py` interface + concrete adapters.
   Expected blast radius: medium (invites + system emails).
   Test plan: integration tests for invite email path + Resend/Gmail fallback.
-  Status: completed (Week 2).
+  Status: pending.
 
 - **R7 — Webhook handler registry**
   Files to change: `apps/api/app/routers/webhooks.py`, provider services (`zoom_service.py`, `campaign_service.py`, `email_service.py`).
   Create/Delete: create `apps/api/app/services/webhooks/` registry + handlers.
   Expected blast radius: medium (webhook flows).
   Test plan: integration tests for each webhook payload fixture.
+  Status: completed (Week 3).
 
 ### Move code to correct layer
 - **R8 — Remove direct model use in routers**
@@ -250,6 +252,6 @@ Coupling notes:
 - R6 — Email sender interface.
 
 ### Later (optional)
-- R3 — Appointment integrations module.
-- R7 — Webhook handler registry.
-- Split `db/models.py` and `db/enums.py` into domain modules once service boundaries are stable.
+- [x] R3 — Appointment integrations module.
+- [x] R7 — Webhook handler registry.
+- [x] Split `db/models.py` into domain modules (re‑exported via `db/models/__init__.py`).
