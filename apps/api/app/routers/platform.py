@@ -41,13 +41,14 @@ class CreateOrgRequest(BaseModel):
     @field_validator("slug")
     @classmethod
     def validate_slug(cls, v: str) -> str:
+        # Basic format validation (detailed validation in org_service.validate_slug)
         import re
 
-        if not re.match(r"^[a-z0-9-]+$", v):
+        if not re.match(r"^[a-z0-9-]+$", v.lower()):
             raise ValueError("Slug must contain only lowercase letters, numbers, and hyphens")
-        if len(v) < 3 or len(v) > 50:
-            raise ValueError("Slug must be between 3 and 50 characters")
-        return v
+        if len(v) < 2 or len(v) > 50:
+            raise ValueError("Slug must be between 2 and 50 characters")
+        return v.lower()
 
 
 class UpdateSubscriptionRequest(BaseModel):
@@ -76,6 +77,13 @@ class UpdateMemberRequest(BaseModel):
 class CreateInviteRequest(BaseModel):
     email: EmailStr
     role: str
+
+
+class UpdateOrgRequest(BaseModel):
+    """Update org name and/or slug."""
+
+    name: str | None = None
+    slug: str | None = None
 
 
 class CreateSupportSessionRequest(BaseModel):
@@ -347,6 +355,76 @@ def get_organization(
     if not result:
         raise HTTPException(status_code=404, detail="Organization not found")
     return result
+
+
+@router.patch("/orgs/{org_id}", dependencies=[Depends(require_csrf_header)])
+def update_organization(
+    org_id: UUID,
+    body: UpdateOrgRequest,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Update organization name and/or slug.
+
+    Slug changes have significant impact:
+    - Portal URL changes to https://{new_slug}.surrogacyforce.com
+    - Existing sessions on the old subdomain become invalid
+    - Users must re-login on the new subdomain
+    - Old slug immediately returns 404 (no redirect)
+    """
+    from app.db.models import Organization
+    from app.services import org_service
+
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    old_slug = org.slug
+    changed_fields: list[str] = []
+
+    # Update name
+    if body.name is not None and body.name != org.name:
+        org.name = body.name
+        changed_fields.append("name")
+
+    # Update slug
+    if body.slug is not None and body.slug.lower() != org.slug:
+        try:
+            org, old_slug = org_service.update_org_slug(db, org, body.slug)
+            changed_fields.append("slug")
+        except ValueError as e:
+            # Return 409 for conflicts, 400 for validation errors
+            error_msg = str(e)
+            status_code = 409 if "already in use" in error_msg else 400
+            raise HTTPException(status_code=status_code, detail=error_msg)
+
+    if not changed_fields:
+        # No changes
+        return platform_service.get_organization_detail(db, org_id)
+
+    # Commit name change if only name changed (slug update already committed)
+    if "name" in changed_fields and "slug" not in changed_fields:
+        db.commit()
+
+    # Audit log
+    log_metadata = {"changed_fields": changed_fields}
+    if "slug" in changed_fields:
+        log_metadata["old_slug"] = old_slug
+        log_metadata["new_slug"] = org.slug
+
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="org.update",
+        target_org_id=org_id,
+        metadata=log_metadata,
+        request=request,
+    )
+    db.commit()
+
+    return platform_service.get_organization_detail(db, org_id)
 
 
 @router.post("/orgs/{org_id}/delete", dependencies=[Depends(require_csrf_header)])
