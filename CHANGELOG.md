@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.37.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.36.0...surrogacy-crm-platform-v0.37.0) (2026-01-26)
+
+
+### Features
+
+* **api:** add personal workflow scope with permission-based access control ([7ac5228](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7ac522868f4d0a7eb6f49349278a643411945fcf))
+* **api:** add workflow email provider resolution based on scope ([e834b2c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e834b2c8f3e01d60529e8bc8afc8ed782bfff45f))
+
+
+### Bug Fixes
+
+* **web:** refactor tab navigation to use Next.js router instead of hi… ([f08fa25](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f08fa251c7627f513bd9693e36f6199f2540db08))
+* **web:** refactor tab navigation to use Next.js router instead of history API ([c0ac130](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c0ac130a2e39d906ad9479266514580a1d14a4ca))
+
 ## [0.36.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.35.1...surrogacy-crm-platform-v0.36.0) (2026-01-26)
 
 
