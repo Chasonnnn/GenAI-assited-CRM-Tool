@@ -42,6 +42,8 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 - Routers: `apps/api/app/routers/*` (see API Index)
 - Services: `apps/api/app/services/*` (surrogates, matches, workflows, AI, analytics, integrations, compliance)
 - Service events: `apps/api/app/services/dashboard_events.py`, `apps/api/app/services/task_events.py`
+- Notification facade: `apps/api/app/services/notification_facade.py`
+- Email sender interface: `apps/api/app/services/email_sender.py`
 - Surrogate status helper: `apps/api/app/services/surrogate_status_service.py`
 - Form submissions: `apps/api/app/services/form_submission_service.py`
 - CSV import pipeline: `apps/api/app/services/import_service.py`, `apps/api/app/routers/surrogates_import.py`
