@@ -173,6 +173,24 @@ def get_sync_diff(
     return staged_changes
 
 
+def get_latest_submission_id(
+    db: Session,
+    org_id: uuid.UUID,
+    surrogate_id: uuid.UUID,
+) -> uuid.UUID | None:
+    """Get the latest submission ID for a surrogate (org-scoped)."""
+    submission = (
+        db.query(FormSubmission)
+        .filter(
+            FormSubmission.surrogate_id == surrogate_id,
+            FormSubmission.organization_id == org_id,
+        )
+        .order_by(FormSubmission.submitted_at.desc())
+        .first()
+    )
+    return submission.id if submission else None
+
+
 def save_profile_overrides(
     db: Session,
     org_id: uuid.UUID,

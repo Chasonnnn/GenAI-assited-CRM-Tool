@@ -22,9 +22,9 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 ---
 
 ## Repo Map
-- Root docs and audits: `README.md`, `CHANGELOG.md`, `LAUNCH_READINESS.md`, `REVIEW.md`, `MODERNIZATION_AUDIT.md`, `ENTERPRISE_GAPS.md`
-- CI/CD: `.github/workflows/*`
-- Infra: `docker-compose.yml`, `zap-baseline.conf`, `release-please-config.json`
+- Root docs and audits: `README.md`, `CHANGELOG.md`, `REVIEW.md`, `LAUNCH_READINESS.md`, `ENTERPRISE_GAPS.md`, `CLAUDE.md`, `code_reviews.md`, `database_optimization.md`, `deployment.md`, `terraform.md`
+- CI/CD: `.github/workflows/*`, `cloudbuild/*`
+- Infra: `docker-compose.yml`, `infra/terraform/*`, `release-please-config.json`, `zap-baseline.conf`, `zap-baseline-report.html`, `zap.yaml`
 - Scripts/tests: `scripts/`, `load-tests/`
 - Backend: `apps/api`
 - Frontend: `apps/web`
@@ -38,8 +38,11 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 - CLI: `apps/api/app/cli.py`
 - Core utilities: `apps/api/app/core/*` (config, deps, csrf, rate limits, permissions, policies, logging, stage rules, async_utils)
 - DB: `apps/api/app/db/*` (models, enums, session)
+- Utils: `apps/api/app/utils/*` (normalization, pagination)
 - Routers: `apps/api/app/routers/*` (see API Index)
 - Services: `apps/api/app/services/*` (surrogates, matches, workflows, AI, analytics, integrations, compliance)
+- Service events: `apps/api/app/services/dashboard_events.py`, `apps/api/app/services/task_events.py`
+- Surrogate status helper: `apps/api/app/services/surrogate_status_service.py`
 - Schemas: `apps/api/app/schemas/*`
 - Jobs: `apps/api/app/jobs/*`
 - Migrations: `apps/api/alembic/*`
@@ -50,14 +53,17 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 ## Frontend Map (`apps/web`)
 - App entry: `apps/web/app/layout.tsx`
 - Authenticated layout: `apps/web/app/(app)/layout.tsx`
-- Public routes: `apps/web/app/login/page.tsx`, `apps/web/app/mfa/page.tsx`, `apps/web/app/invite/[id]/page.tsx`, `apps/web/app/apply/[token]/page.tsx`, `apps/web/app/book/*`
-- Core pages: `apps/web/app/(app)/dashboard/page.tsx`, `apps/web/app/(app)/surrogates/page.tsx`, `apps/web/app/(app)/surrogates/[id]/page.tsx`, `apps/web/app/(app)/intended-parents/page.tsx`, `apps/web/app/(app)/matches/page.tsx`, `apps/web/app/(app)/tasks/page.tsx`, `apps/web/app/(app)/ai-assistant/page.tsx`, `apps/web/app/(app)/reports/page.tsx`, `apps/web/app/(app)/automation/page.tsx`, `apps/web/app/(app)/settings/*`
+- Public routes: `apps/web/app/login/page.tsx`, `apps/web/app/mfa/page.tsx`, `apps/web/app/invite/[id]/page.tsx`, `apps/web/app/apply/[token]/page.tsx`, `apps/web/app/book/*`, `apps/web/app/auth/*`, `apps/web/app/org-not-found/page.tsx`
+- Print routes: `apps/web/app/(print)/*`
+- Core pages: `apps/web/app/(app)/dashboard/page.tsx`, `apps/web/app/(app)/surrogates/page.tsx`, `apps/web/app/(app)/surrogates/[id]/page.tsx`, `apps/web/app/(app)/intended-parents/page.tsx`, `apps/web/app/(app)/matches/page.tsx`, `apps/web/app/(app)/tasks/page.tsx`, `apps/web/app/(app)/ai-assistant/page.tsx`, `apps/web/app/(app)/reports/page.tsx`, `apps/web/app/(app)/automation/page.tsx`, `apps/web/app/(app)/settings/*`, `apps/web/app/(app)/search/page.tsx`, `apps/web/app/(app)/welcome/page.tsx`
 - Ops Console (platform admin): `apps/web/app/ops/layout.tsx`, `apps/web/app/ops/page.tsx`, `apps/web/app/ops/login/page.tsx`, `apps/web/app/ops/agencies/*`, `apps/web/app/ops/alerts/page.tsx`
 - Dashboard widgets: `apps/web/app/(app)/dashboard/components/*` (KPI cards, trend chart, stage chart, attention panel)
 - Dashboard state: `apps/web/app/(app)/dashboard/context/dashboard-filters.tsx`
 - Components: `apps/web/components/*` (surrogates, interviews, matches, tasks, appointments, AI, reports)
-- API + hooks: `apps/web/lib/api.ts`, `apps/web/lib/api/*` (includes `platform.ts` for ops console), `apps/web/lib/hooks/*`
+- Surrogate tabs: `apps/web/components/surrogates/tabs/*`
+- API + hooks: `apps/web/lib/api.ts`, `apps/web/lib/api/*` (includes `platform.ts` for ops console), `apps/web/lib/hooks/*` (includes `use-unified-calendar-data.ts`)
 - Context/state: `apps/web/lib/auth-context.tsx`, `apps/web/lib/context/ai-context.tsx`, `apps/web/lib/store/*`
+- UI utilities: `apps/web/lib/utils/task-due.ts`
 - Routing: `apps/web/next.config.js` rewrites (host-based routing for ops subdomain)
 - Tests: `apps/web/tests/*`
 

@@ -14,7 +14,6 @@ from app.core.deps import (
     require_csrf_header,
 )
 from app.db.enums import Role
-from app.db.models import FormSubmission
 from app.schemas.auth import UserSession
 from app.services import surrogate_service, org_service, profile_service
 
@@ -122,20 +121,15 @@ def sync_profile(
 
     staged_changes = profile_service.get_sync_diff(db, session.org_id, surrogate_id)
 
-    # Get latest submission ID
-    submission = (
-        db.query(FormSubmission)
-        .filter(
-            FormSubmission.surrogate_id == surrogate_id,
-            FormSubmission.organization_id == session.org_id,
-        )
-        .order_by(FormSubmission.submitted_at.desc())
-        .first()
+    latest_submission_id = profile_service.get_latest_submission_id(
+        db,
+        session.org_id,
+        surrogate_id,
     )
 
     return SyncDiffResponse(
         staged_changes=[SyncDiffItem(**c) for c in staged_changes],
-        latest_submission_id=submission.id if submission else None,
+        latest_submission_id=latest_submission_id,
     )
 
 

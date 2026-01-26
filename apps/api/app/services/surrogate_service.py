@@ -1,7 +1,6 @@
 """Surrogate service - business logic for surrogate operations."""
 
 from datetime import datetime, timezone, time, timedelta
-from typing import TypedDict
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -13,27 +12,17 @@ from app.core.encryption import hash_email, hash_phone
 from app.db.enums import (
     SurrogateActivityType,
     SurrogateSource,
-    SurrogateStatus,
-    ContactStatus,
     OwnerType,
     Role,
 )
 from app.db.models import Surrogate, SurrogateStatusHistory, StatusChangeRequest, User, Organization
 from app.schemas.surrogate import SurrogateCreate, SurrogateUpdate
+from app.services.surrogate_status_service import StatusChangeResult
 from app.utils.normalization import normalize_email, normalize_name, normalize_phone
 
 
 # Grace period for undo (5 minutes)
 UNDO_GRACE_PERIOD = timedelta(minutes=5)
-
-
-class StatusChangeResult(TypedDict):
-    """Result of a status change operation."""
-
-    status: str  # 'applied' or 'pending_approval'
-    surrogate: Surrogate | None
-    request_id: UUID | None
-    message: str | None
 
 
 def _get_org_timezone(db: Session, org_id: UUID) -> str:
@@ -139,6 +128,8 @@ def create_surrogate(
     org_id: UUID,
     user_id: UUID | None,
     data: SurrogateCreate,
+    *,
+    emit_events: bool = False,
 ) -> Surrogate:
     """
     Create a new surrogatewith generated surrogatenumber.
@@ -284,6 +275,11 @@ def create_surrogate(
     from app.services import workflow_triggers
 
     workflow_triggers.trigger_surrogate_created(db, surrogate)
+
+    if emit_events:
+        from app.services import dashboard_events
+
+        dashboard_events.push_dashboard_stats(db, org_id)
 
     return surrogate
 
@@ -629,7 +625,9 @@ def change_status(
 
         if within_grace_period:
             # Undo bypasses admin approval and reason requirement
-            return _apply_status_change(
+            from app.services import surrogate_status_service
+
+            return surrogate_status_service.apply_status_change(
                 db=db,
                 surrogate=surrogate,
                 new_stage=new_stage,
@@ -688,7 +686,9 @@ def change_status(
         )
 
     # NON-REGRESSION: Apply immediately
-    return _apply_status_change(
+    from app.services import surrogate_status_service
+
+    return surrogate_status_service.apply_status_change(
         db=db,
         surrogate=surrogate,
         new_stage=new_stage,
@@ -701,198 +701,6 @@ def change_status(
         recorded_at=now,
         is_undo=False,
     )
-
-
-def _apply_status_change(
-    db: Session,
-    surrogate: Surrogate,
-    new_stage,
-    old_stage_id: UUID | None,
-    old_label: str | None,
-    old_slug: str | None,
-    user_id: UUID | None,
-    reason: str | None,
-    effective_at: datetime,
-    recorded_at: datetime,
-    is_undo: bool = False,
-    request_id: UUID | None = None,
-    approved_by_user_id: UUID | None = None,
-    approved_at: datetime | None = None,
-    requested_at: datetime | None = None,
-) -> StatusChangeResult:
-    """
-    Apply a status change to a surrogate (internal helper).
-
-    Called for non-regressions, undo within grace period, and approved regressions.
-    """
-    surrogate.stage_id = new_stage.id
-    surrogate.status_label = new_stage.label
-
-    # Update contact status if reached or leaving intake stage
-    if surrogate.contact_status == ContactStatus.UNREACHED.value:
-        if new_stage.slug == SurrogateStatus.CONTACTED.value or new_stage.is_intake_stage is False:
-            surrogate.contact_status = ContactStatus.REACHED.value
-            if not surrogate.contacted_at:
-                surrogate.contacted_at = effective_at
-
-    # Record history with dual timestamps
-    history = SurrogateStatusHistory(
-        surrogate_id=surrogate.id,
-        organization_id=surrogate.organization_id,
-        from_stage_id=old_stage_id,
-        to_stage_id=new_stage.id,
-        from_label_snapshot=old_label,
-        to_label_snapshot=new_stage.label,
-        changed_by_user_id=user_id,
-        reason=reason,
-        changed_at=effective_at,  # Derived from effective_at for backward compat
-        effective_at=effective_at,
-        recorded_at=recorded_at,
-        is_undo=is_undo,
-        request_id=request_id,
-        requested_at=requested_at,
-        approved_by_user_id=approved_by_user_id,
-        approved_at=approved_at,
-    )
-    db.add(history)
-    db.commit()
-    db.refresh(surrogate)
-
-    # Send notifications
-    from app.services import notification_service
-
-    actor = _get_org_user(db, surrogate.organization_id, user_id)
-    actor_name = actor.display_name if actor else "Someone"
-
-    notification_service.notify_surrogate_status_changed(
-        db=db,
-        surrogate=surrogate,
-        from_status=old_label,
-        to_status=new_stage.label,
-        actor_id=user_id or surrogate.created_by_user_id or surrogate.owner_id,
-        actor_name=actor_name,
-    )
-
-    # If transitioning to approved, auto-assign to Surrogate Pool queue
-    if new_stage.slug == "approved":
-        from app.services import queue_service
-
-        try:
-            pool_queue = queue_service.get_or_create_surrogate_pool_queue(
-                db, surrogate.organization_id
-            )
-            if pool_queue and (
-                surrogate.owner_type != OwnerType.QUEUE.value or surrogate.owner_id != pool_queue.id
-            ):
-                surrogate = queue_service.assign_surrogate_to_queue(
-                    db=db,
-                    org_id=surrogate.organization_id,
-                    surrogate_id=surrogate.id,
-                    queue_id=pool_queue.id,
-                    assigner_user_id=user_id,
-                )
-                db.commit()
-                db.refresh(surrogate)
-            if pool_queue:
-                notification_service.notify_surrogate_ready_for_claim(db=db, surrogate=surrogate)
-        except Exception:
-            pass  # Best-effort: don't block status change
-
-    # Meta CAPI: Send lead quality signal for Meta-sourced surrogates
-    _maybe_send_capi_event(db, surrogate, old_slug or "", new_stage.slug)
-
-    # Trigger workflows with effective_at in payload
-    from app.services import workflow_triggers
-
-    workflow_triggers.trigger_status_changed(
-        db=db,
-        surrogate=surrogate,
-        old_stage_id=old_stage_id,
-        new_stage_id=new_stage.id,
-        old_stage_slug=old_slug,
-        new_stage_slug=new_stage.slug,
-        effective_at=effective_at,
-        recorded_at=recorded_at,
-        is_undo=is_undo,
-        request_id=request_id,
-        approved_by_user_id=approved_by_user_id,
-        approved_at=approved_at,
-        requested_at=requested_at,
-        changed_by_user_id=user_id,
-    )
-
-    return StatusChangeResult(
-        status="applied",
-        surrogate=surrogate,
-        request_id=None,
-        message=None,
-    )
-
-
-def _maybe_send_capi_event(
-    db: Session, surrogate: Surrogate, old_status: str, new_status: str
-) -> None:
-    """
-    Send Meta Conversions API event if applicable.
-
-    Triggers when:
-    - Surrogatesource is META
-    - Status changes into a different Meta status bucket
-
-    Note: Per-account CAPI enablement is checked in the worker handler,
-    allowing us to skip surrogates without an ad account or where CAPI is disabled.
-    """
-    from app.db.enums import SurrogateSource, JobType
-    from app.services import job_service
-
-    # Only for Meta-sourced surrogates
-    if surrogate.source != SurrogateSource.META.value:
-        return
-
-    # Check if this status change should trigger CAPI
-    from app.services.meta_capi import should_send_capi_event
-
-    if not should_send_capi_event(old_status, new_status):
-        return
-
-    # Need the original meta_lead_id
-    if not surrogate.meta_lead_id:
-        return
-
-    # Get the meta lead to get the original Meta leadgen_id
-    from app.db.models import MetaLead
-
-    meta_lead = (
-        db.query(MetaLead)
-        .filter(
-            MetaLead.id == surrogate.meta_lead_id,
-            MetaLead.organization_id == surrogate.organization_id,
-        )
-        .first()
-    )
-    if not meta_lead:
-        return
-
-    try:
-        # Offload to worker for reliability (no event-loop assumptions, retries supported)
-        idempotency_key = f"meta_capi:{meta_lead.meta_lead_id}:{new_status}"
-        job_service.schedule_job(
-            db=db,
-            org_id=surrogate.organization_id,
-            job_type=JobType.META_CAPI_EVENT,
-            payload={
-                "meta_lead_id": meta_lead.meta_lead_id,
-                "meta_ad_external_id": surrogate.meta_ad_external_id,  # For per-account CAPI
-                "surrogate_status": new_status,
-                "email": surrogate.email,
-                "phone": surrogate.phone,
-                "meta_page_id": meta_lead.meta_page_id,
-            },
-            idempotency_key=idempotency_key,
-        )
-    except Exception:
-        # Best-effort: never block status change on CAPI scheduling.
-        db.rollback()
 
 
 def assign_surrogate(
@@ -1008,6 +816,8 @@ def archive_surrogate(
     db: Session,
     surrogate: Surrogate,
     user_id: UUID,
+    *,
+    emit_events: bool = False,
 ) -> Surrogate:
     """Soft-delete a surrogate(set is_archived)."""
     from app.services import activity_service
@@ -1043,6 +853,11 @@ def archive_surrogate(
     )
     db.commit()
 
+    if emit_events:
+        from app.services import dashboard_events
+
+        dashboard_events.push_dashboard_stats(db, surrogate.organization_id)
+
     return surrogate
 
 
@@ -1050,6 +865,8 @@ def restore_surrogate(
     db: Session,
     surrogate: Surrogate,
     user_id: UUID,
+    *,
+    emit_events: bool = False,
 ) -> tuple[Surrogate | None, str | None]:
     """
     Restore an archived surrogateto its prior status.
@@ -1104,6 +921,11 @@ def restore_surrogate(
         actor_user_id=user_id,
     )
     db.commit()
+
+    if emit_events:
+        from app.services import dashboard_events
+
+        dashboard_events.push_dashboard_stats(db, surrogate.organization_id)
 
     return surrogate, None
 
@@ -1398,7 +1220,12 @@ def get_status_history(
     )
 
 
-def hard_delete_surrogate(db: Session, surrogate: Surrogate) -> bool:
+def hard_delete_surrogate(
+    db: Session,
+    surrogate: Surrogate,
+    *,
+    emit_events: bool = False,
+) -> bool:
     """
     Permanently delete a case.
 
@@ -1412,6 +1239,10 @@ def hard_delete_surrogate(db: Session, surrogate: Surrogate) -> bool:
 
     db.delete(surrogate)
     db.commit()
+    if emit_events:
+        from app.services import dashboard_events
+
+        dashboard_events.push_dashboard_stats(db, surrogate.organization_id)
     return True
 
 
