@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.34.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.33.2...surrogacy-crm-platform-v0.34.0) (2026-01-26)
+
+
+### Features
+
+* **api:** add multi-tenant subdomain infrastructure ([d9f6e96](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d9f6e96db46d778439a6e87bfce9a048e13efbb2))
+* **api:** add public org resolution and slug management APIs ([6bf13dc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6bf13dcd5b5029e02147bb4a246f04eb6535d28c))
+* **api:** add session host validation for multi-tenancy ([89b2486](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/89b2486cfa064a0d5383ad9088fd39e5fb7de519))
+* **web:** add multi-tenant subdomain routing ([5323119](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5323119027f5b473603b66d7061945ddd58b65b0))
+
+
+### Bug Fixes
+
+* **web:** replace next/link with AppLink wrapper for navigation reliability ([cbd65e9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cbd65e93c8fff847f0d8bdfd4ae03c53e981b8ba))
+
+
+### Maintenance
+
+* **api:** cleanup portal_domain references ([c62c38f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c62c38f7fe2852e078de5c84537b752939587590))
+* minor formatting and cleanup ([458b542](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/458b542e6f4533485e8e7b63382a4e59a6adf8e5))
+
 ## [0.33.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.33.1...surrogacy-crm-platform-v0.33.2) (2026-01-25)
 
 
