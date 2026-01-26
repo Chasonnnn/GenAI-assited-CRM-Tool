@@ -119,7 +119,7 @@ if q:
 4. Migration plan if behavior changes
 
 **References**:
-- `apps/api/app/db/models.py:2082-2086` - IntendedParent search_vector definition
+- `apps/api/app/db/models/intended_parents.py` - IntendedParent search_vector definition
 - `apps/api/app/services/search_service.py:678+` - Global search implementation (uses FTS)
 
 ---
@@ -131,7 +131,7 @@ The following indexes were initially proposed but determined to be unnecessary:
 #### campaign_runs (campaign_id, started_at DESC)
 
 **Why Not Needed**:
-- Existing index: `Index("idx_campaign_runs_campaign", "campaign_id", "started_at")` in `apps/api/app/db/models.py`
+- Existing index: `Index("idx_campaign_runs_campaign", "campaign_id", "started_at")` in `apps/api/app/db/models/campaigns.py`
 - PostgreSQL can scan a B-tree index backward for `ORDER BY started_at DESC`
 - Adding a separate DESC index is redundant write amplification
 
@@ -194,7 +194,7 @@ ON meta_leads(organization_id, meta_form_id, is_converted);
 
 ## Review Methodology
 
-1. Explored database schema via SQLAlchemy models (`apps/api/app/db/models.py`)
+1. Explored database schema via SQLAlchemy models (`apps/api/app/db/models/*`)
 2. Analyzed query patterns in service layer (`apps/api/app/services/`)
 3. Consulted Supabase postgres-best-practices documentation
 4. Validated against existing indexes and constraints
