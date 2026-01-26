@@ -69,9 +69,14 @@ class WorkflowEngine:
         event_id: UUID | None = None,
         depth: int = 0,
         source: WorkflowEventSource = WorkflowEventSource.USER,
+        entity_owner_id: UUID | None = None,
     ) -> list[WorkflowExecution]:
         """
         Trigger workflows for an event.
+
+        Args:
+            entity_owner_id: The owner_id of the entity when owner_type='user'.
+                Used to match personal workflows.
 
         Returns list of execution records created.
         """
@@ -89,7 +94,9 @@ class WorkflowEngine:
         executions = []
 
         # Find matching enabled workflows
-        workflows = self._find_matching_workflows(db, org_id, trigger_type, event_data)
+        workflows = self._find_matching_workflows(
+            db, org_id, trigger_type, event_data, entity_owner_id
+        )
 
         for workflow in workflows:
             execution = self._execute_workflow(
@@ -113,14 +120,33 @@ class WorkflowEngine:
         org_id: UUID,
         trigger_type: WorkflowTriggerType,
         event_data: dict,
+        entity_owner_id: UUID | None = None,
     ) -> list[AutomationWorkflow]:
-        """Find enabled workflows that match the trigger."""
+        """
+        Find enabled workflows that match the trigger.
+
+        Scope filtering:
+        - Org workflows: always included
+        - Personal workflows: only if entity_owner_id matches workflow owner
+        """
+        from sqlalchemy import and_, or_
+
+        # Build scope filter
+        scope_filter = or_(
+            AutomationWorkflow.scope == "org",
+            and_(
+                AutomationWorkflow.scope == "personal",
+                AutomationWorkflow.owner_user_id == entity_owner_id,
+            ),
+        )
+
         workflows = (
             db.query(AutomationWorkflow)
             .filter(
                 AutomationWorkflow.organization_id == org_id,
                 AutomationWorkflow.trigger_type == trigger_type.value,
                 AutomationWorkflow.is_enabled.is_(True),
+                scope_filter,
             )
             .all()
         )
@@ -398,6 +424,8 @@ class WorkflowEngine:
                 entity_type=entity_type,
                 event_id=event_id,
                 depth=depth,
+                workflow_scope=workflow.scope,
+                workflow_owner_id=workflow.owner_user_id,
             )
             action_results.append(result)
             if not result.get("success"):
@@ -611,6 +639,8 @@ class WorkflowEngine:
                 entity_type=execution.entity_type,
                 event_id=execution.event_id,
                 depth=execution.depth,
+                workflow_scope=workflow.scope,
+                workflow_owner_id=workflow.owner_user_id,
             )
             action_results.append(result)
 
@@ -671,6 +701,8 @@ class WorkflowEngine:
                     entity_type=execution.entity_type,
                     event_id=execution.event_id,
                     depth=execution.depth,
+                    workflow_scope=workflow.scope,
+                    workflow_owner_id=workflow.owner_user_id,
                 )
                 action_results.append(result)
 
@@ -905,6 +937,8 @@ class WorkflowEngine:
         entity_type: str,
         event_id: UUID,
         depth: int,
+        workflow_scope: str = "org",
+        workflow_owner_id: UUID | None = None,
     ) -> dict:
         """Execute a single action."""
         action_type = action.get("action_type")
@@ -936,7 +970,9 @@ class WorkflowEngine:
 
         try:
             if action_type == WorkflowActionType.SEND_EMAIL.value:
-                return self._action_send_email(db, action, action_entity, event_id)
+                return self._action_send_email(
+                    db, action, action_entity, event_id, workflow_scope, workflow_owner_id
+                )
 
             if action_type == WorkflowActionType.CREATE_TASK.value:
                 return self._action_create_task(db, action, action_entity)
@@ -988,6 +1024,8 @@ class WorkflowEngine:
         action: dict,
         entity: Surrogate,
         event_id: UUID,
+        workflow_scope: str = "org",
+        workflow_owner_id: UUID | None = None,
     ) -> dict:
         """Queue an email using template."""
         template_id = action.get("template_id")
@@ -1009,6 +1047,9 @@ class WorkflowEngine:
                 "variables": variables,
                 "surrogate_id": str(entity.id),
                 "event_id": str(event_id),
+                # Scope info for email provider resolution
+                "workflow_scope": workflow_scope,
+                "workflow_owner_id": str(workflow_owner_id) if workflow_owner_id else None,
             },
         )
 

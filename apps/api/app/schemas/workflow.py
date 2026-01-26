@@ -229,6 +229,8 @@ class WorkflowCreate(BaseModel):
     name: str = Field(max_length=100)
     description: str | None = None
     icon: str = Field(default="workflow", max_length=50)
+    # Scope: 'org' for org-wide workflows, 'personal' for user-specific
+    scope: Literal["org", "personal"] = "org"
     trigger_type: WorkflowTriggerType
     trigger_config: dict[str, object] = Field(default_factory=dict)
     conditions: list[Condition] = Field(default_factory=list)
@@ -265,6 +267,10 @@ class WorkflowRead(BaseModel):
     description: str | None
     icon: str
     schema_version: int
+    # Scope and owner
+    scope: str  # 'org' or 'personal'
+    owner_user_id: UUID | None = None
+    owner_name: str | None = None  # Display name of owner (for personal workflows)
     trigger_type: str
     trigger_config: dict
     conditions: list[dict]
@@ -282,6 +288,8 @@ class WorkflowRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     config_warnings: list[str] | None = None  # Warnings from template usage
+    # Permission info for UI
+    can_edit: bool = True
 
     model_config = {"from_attributes": True}
 
@@ -293,12 +301,18 @@ class WorkflowListItem(BaseModel):
     name: str
     description: str | None
     icon: str
+    # Scope and owner
+    scope: str  # 'org' or 'personal'
+    owner_user_id: UUID | None = None
+    owner_name: str | None = None  # Display name of owner (for personal workflows)
     trigger_type: str
     is_enabled: bool
     run_count: int
     last_run_at: datetime | None
     last_error: str | None
     created_at: datetime
+    # Permission info for UI
+    can_edit: bool = True
 
     model_config = {"from_attributes": True}
 
@@ -349,6 +363,9 @@ class WorkflowStats(BaseModel):
     total_executions_24h: int
     success_rate_24h: float
     by_trigger_type: dict[str, int]
+    # Counts by scope
+    org_workflows: int = 0
+    personal_workflows: int = 0
 
     # Approval metrics
     pending_approvals: int = 0

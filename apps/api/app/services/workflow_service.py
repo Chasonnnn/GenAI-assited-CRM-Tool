@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, and_, or_
 from sqlalchemy.orm import Session
 
 from app.db.models import (
@@ -37,6 +37,7 @@ from app.schemas.workflow import (
     AddNoteActionConfig,
 )
 from app.services import user_service
+from app.services.workflow_email_provider import validate_email_provider
 
 
 # =============================================================================
@@ -58,11 +59,22 @@ def create_workflow(
     for action in data.actions:
         _validate_action_config(db, org_id, action)
 
+    # Determine owner_user_id based on scope
+    owner_user_id = user_id if data.scope == "personal" else None
+
+    # Validate email provider if there's a send_email action
+    if _has_send_email_action(data.actions):
+        is_valid, error = validate_email_provider(db, data.scope, org_id, owner_user_id)
+        if not is_valid:
+            raise ValueError(error)
+
     workflow = AutomationWorkflow(
         organization_id=org_id,
         name=data.name,
         description=data.description,
         icon=data.icon,
+        scope=data.scope,
+        owner_user_id=owner_user_id,
         trigger_type=data.trigger_type.value,
         trigger_config=data.trigger_config,
         conditions=[c.model_dump() for c in data.conditions],
@@ -77,6 +89,11 @@ def create_workflow(
     db.commit()
     db.refresh(workflow)
     return workflow
+
+
+def _has_send_email_action(actions: list[dict]) -> bool:
+    """Check if actions list contains a send_email action."""
+    return any(action.get("action_type") == "send_email" for action in actions)
 
 
 def update_workflow(
@@ -96,6 +113,15 @@ def update_workflow(
     if data.actions is not None:
         for action in data.actions:
             _validate_action_config(db, workflow.organization_id, action)
+        if _has_send_email_action(data.actions):
+            is_valid, error = validate_email_provider(
+                db,
+                workflow.scope,
+                workflow.organization_id,
+                workflow.owner_user_id,
+            )
+            if not is_valid:
+                raise ValueError(error)
 
     # Update fields
     if data.name is not None:
@@ -150,11 +176,61 @@ def get_workflow(
 def list_workflows(
     db: Session,
     org_id: UUID,
+    user_id: UUID | None = None,
+    has_manage_permission: bool = False,
+    scope_filter: str | None = None,
     enabled_only: bool = False,
     trigger_type: WorkflowTriggerType | None = None,
 ) -> list[AutomationWorkflow]:
-    """List workflows for an organization."""
+    """
+    List workflows for an organization with scope-based filtering.
+
+    Args:
+        db: Database session
+        org_id: Organization ID
+        user_id: Current user ID (for filtering personal workflows)
+        has_manage_permission: If True, user can see all workflows
+        scope_filter: Optional filter: 'org' or 'personal'
+        enabled_only: Only return enabled workflows
+        trigger_type: Filter by trigger type
+
+    Returns:
+        List of workflows the user can see
+    """
     query = db.query(AutomationWorkflow).filter(AutomationWorkflow.organization_id == org_id)
+
+    # Apply scope filter
+    if scope_filter == "org":
+        query = query.filter(AutomationWorkflow.scope == "org")
+    elif scope_filter == "personal":
+        # Personal scope: only show user's own personal workflows
+        if user_id:
+            query = query.filter(
+                AutomationWorkflow.scope == "personal",
+                AutomationWorkflow.owner_user_id == user_id,
+            )
+        else:
+            # No user_id means no personal workflows visible
+            query = query.filter(AutomationWorkflow.scope == "personal", False)
+    else:
+        # No scope filter: show based on permissions
+        if has_manage_permission:
+            # Admin sees all workflows (org + all personal)
+            pass
+        elif user_id:
+            # Non-admin: org workflows + own personal workflows
+            query = query.filter(
+                or_(
+                    AutomationWorkflow.scope == "org",
+                    and_(
+                        AutomationWorkflow.scope == "personal",
+                        AutomationWorkflow.owner_user_id == user_id,
+                    ),
+                )
+            )
+        else:
+            # No user_id: only org workflows
+            query = query.filter(AutomationWorkflow.scope == "org")
 
     if enabled_only:
         query = query.filter(AutomationWorkflow.is_enabled.is_(True))
@@ -162,7 +238,7 @@ def list_workflows(
     if trigger_type:
         query = query.filter(AutomationWorkflow.trigger_type == trigger_type.value)
 
-    return query.order_by(AutomationWorkflow.created_at.desc()).all()
+    return query.order_by(AutomationWorkflow.name).all()
 
 
 def toggle_workflow(
@@ -183,8 +259,23 @@ def duplicate_workflow(
     db: Session,
     workflow: AutomationWorkflow,
     user_id: UUID,
+    new_scope: str | None = None,
 ) -> AutomationWorkflow:
-    """Duplicate an existing workflow."""
+    """
+    Duplicate an existing workflow.
+
+    Args:
+        db: Database session
+        workflow: Workflow to duplicate
+        user_id: User creating the duplicate
+        new_scope: Scope for the new workflow. If None:
+            - Org workflows stay org (requires permission check upstream)
+            - Personal workflows become owned by the duplicating user
+    """
+    # Determine scope and owner for duplicate
+    scope = new_scope or workflow.scope
+    owner_user_id = user_id if scope == "personal" else None
+
     # Find unique name
     base_name = f"{workflow.name} (Copy)"
     name = base_name
@@ -205,6 +296,8 @@ def duplicate_workflow(
         name=name,
         description=workflow.description,
         icon=workflow.icon,
+        scope=scope,
+        owner_user_id=owner_user_id,
         trigger_type=workflow.trigger_type,
         trigger_config=workflow.trigger_config,
         conditions=workflow.conditions,
@@ -291,6 +384,26 @@ def get_workflow_stats(db: Session, org_id: UUID) -> WorkflowStats:
     for trigger_type, count in trigger_counts:
         by_trigger[trigger_type] = count
 
+    # By scope
+    org_workflows = (
+        db.query(func.count(AutomationWorkflow.id))
+        .filter(
+            AutomationWorkflow.organization_id == org_id,
+            AutomationWorkflow.scope == "org",
+        )
+        .scalar()
+        or 0
+    )
+    personal_workflows = (
+        db.query(func.count(AutomationWorkflow.id))
+        .filter(
+            AutomationWorkflow.organization_id == org_id,
+            AutomationWorkflow.scope == "personal",
+        )
+        .scalar()
+        or 0
+    )
+
     # ==========================================================================
     # Approval Metrics
     # ==========================================================================
@@ -362,6 +475,8 @@ def get_workflow_stats(db: Session, org_id: UUID) -> WorkflowStats:
         total_executions_24h=executions_24h,
         success_rate_24h=success_rate,
         by_trigger_type=by_trigger,
+        org_workflows=org_workflows,
+        personal_workflows=personal_workflows,
         # Approval metrics
         pending_approvals=pending_approvals,
         approvals_resolved_24h=total_resolved_24h,
@@ -763,10 +878,15 @@ def is_user_opted_out(
     return pref.is_opted_out if pref else False
 
 
-def to_workflow_read(db: Session, workflow: AutomationWorkflow) -> WorkflowRead:
+def to_workflow_read(
+    db: Session,
+    workflow: AutomationWorkflow,
+    can_edit: bool = True,
+) -> WorkflowRead:
     """Convert workflow model to read schema with user names."""
     created_by_name = None
     updated_by_name = None
+    owner_name = None
 
     if workflow.created_by_user_id:
         user = user_service.get_user_by_id(db, workflow.created_by_user_id)
@@ -776,12 +896,19 @@ def to_workflow_read(db: Session, workflow: AutomationWorkflow) -> WorkflowRead:
         user = user_service.get_user_by_id(db, workflow.updated_by_user_id)
         updated_by_name = user.display_name if user else None
 
+    if workflow.owner_user_id:
+        user = user_service.get_user_by_id(db, workflow.owner_user_id)
+        owner_name = user.display_name if user else None
+
     return WorkflowRead(
         id=workflow.id,
         name=workflow.name,
         description=workflow.description,
         icon=workflow.icon,
         schema_version=workflow.schema_version,
+        scope=workflow.scope,
+        owner_user_id=workflow.owner_user_id,
+        owner_name=owner_name,
         trigger_type=workflow.trigger_type,
         trigger_config=workflow.trigger_config,
         conditions=workflow.conditions,
@@ -795,6 +922,38 @@ def to_workflow_read(db: Session, workflow: AutomationWorkflow) -> WorkflowRead:
         updated_by_name=updated_by_name,
         created_at=workflow.created_at,
         updated_at=workflow.updated_at,
+        can_edit=can_edit,
+    )
+
+
+def to_workflow_list_item(
+    db: Session,
+    workflow: AutomationWorkflow,
+    can_edit: bool = True,
+):
+    """Convert workflow model to list item schema with owner name."""
+    from app.schemas.workflow import WorkflowListItem
+
+    owner_name = None
+    if workflow.owner_user_id:
+        user = user_service.get_user_by_id(db, workflow.owner_user_id)
+        owner_name = user.display_name if user else None
+
+    return WorkflowListItem(
+        id=workflow.id,
+        name=workflow.name,
+        description=workflow.description,
+        icon=workflow.icon,
+        scope=workflow.scope,
+        owner_user_id=workflow.owner_user_id,
+        owner_name=owner_name,
+        trigger_type=workflow.trigger_type,
+        is_enabled=workflow.is_enabled,
+        run_count=workflow.run_count,
+        last_run_at=workflow.last_run_at,
+        last_error=workflow.last_error,
+        created_at=workflow.created_at,
+        can_edit=can_edit,
     )
 
 
