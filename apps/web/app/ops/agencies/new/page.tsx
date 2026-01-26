@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import Link from "@/components/app-link";
 import { createOrganization } from '@/lib/api/platform';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

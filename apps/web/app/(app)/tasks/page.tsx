@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"

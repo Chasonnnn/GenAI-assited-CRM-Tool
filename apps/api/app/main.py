@@ -72,6 +72,7 @@ from app.routers import (
     pipelines,
     platform,
     profile,
+    public,
     queues,
     resend,
     search,
@@ -382,6 +383,9 @@ async def security_headers_middleware(request: Request, call_next):
 
 # Auth router (always mounted)
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
+
+# Public endpoints (no auth required - for frontend middleware)
+app.include_router(public.router)
 
 # Surrogates module routers
 app.include_router(surrogates.router, prefix="/surrogates", tags=["surrogates"])

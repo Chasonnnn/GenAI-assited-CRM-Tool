@@ -1,13 +1,78 @@
 """Organization service - org operations with version control."""
 
 from uuid import UUID
-from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import Organization
 from app.services import version_service
+
+
+# Reserved slugs that cannot be used for organizations (system/infra/env names)
+RESERVED_SLUGS = frozenset(
+    {
+        # System
+        "ops",
+        "api",
+        "admin",
+        "app",
+        "www",
+        # Infra
+        "cdn",
+        "static",
+        "assets",
+        "media",
+        # Env
+        "dev",
+        "test",
+        "staging",
+        "prod",
+        "demo",
+        "qa",
+        # Email/Network
+        "mail",
+        "smtp",
+        "imap",
+        "pop",
+        "ftp",
+        # Support
+        "support",
+        "help",
+        "status",
+    }
+)
+
+
+def validate_slug(slug: str) -> str:
+    """
+    Validate organization slug for DNS compliance.
+
+    Returns normalized (lowercase) slug or raises ValueError.
+
+    Rules:
+    - Minimum 2 characters
+    - Alphanumeric with hyphens only (no underscores)
+    - Cannot start or end with hyphen
+    - Cannot be a reserved slug
+    """
+    normalized = slug.strip().lower()
+
+    if len(normalized) < 2:
+        raise ValueError("Slug must be at least 2 characters")
+
+    # DNS hostname compliant: letters, digits, hyphens only (no underscores)
+    if not normalized.replace("-", "").isalnum():
+        raise ValueError("Slug must be alphanumeric with hyphens only")
+
+    # Cannot start or end with hyphen
+    if normalized.startswith("-") or normalized.endswith("-"):
+        raise ValueError("Slug cannot start or end with hyphen")
+
+    if normalized in RESERVED_SLUGS:
+        raise ValueError(f"Reserved slug: {normalized}")
+
+    return normalized
 
 
 def get_org_by_id(
@@ -42,17 +107,21 @@ def create_org(
     db: Session,
     name: str,
     slug: str,
-    portal_domain: str | None = None,
 ) -> Organization:
     """
     Create a new organization.
 
+    Args:
+        db: Database session
+        name: Organization display name
+        slug: URL slug (will be validated and normalized)
+
     Raises:
+        ValueError: If slug is invalid or reserved
         IntegrityError: If slug already exists
     """
-    org = Organization(name=name, slug=slug.lower())
-    if portal_domain:
-        org.portal_domain = normalize_portal_domain(portal_domain)
+    validated_slug = validate_slug(slug)
+    org = Organization(name=name, slug=validated_slug)
     db.add(org)
     db.commit()
     db.refresh(org)
@@ -89,42 +158,51 @@ def seed_org_defaults(
     }
 
 
-def normalize_portal_domain(domain: str) -> str:
-    """Normalize a portal domain to host[:port] format."""
-    value = domain.strip().lower()
-    if not value:
-        raise ValueError("Portal domain must not be empty")
-
-    parsed = urlparse(value if "://" in value else f"https://{value}")
-    if not parsed.hostname:
-        raise ValueError("Portal domain is invalid")
-    if parsed.username or parsed.password:
-        raise ValueError("Portal domain must not include credentials")
-    if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
-        raise ValueError("Portal domain must not include a path or query")
-
-    host = parsed.hostname
-    if parsed.port:
-        host = f"{host}:{parsed.port}"
-    return host
-
-
-def build_portal_domain(base_domain: str, prefix: str = "ap") -> str:
-    """Build a portal domain from a base domain and prefix."""
-    base_host = normalize_portal_domain(base_domain)
-    prefix_value = prefix.strip().lower().strip(".")
-    if not prefix_value:
-        raise ValueError("Portal prefix must not be empty")
-    if base_host.startswith(f"{prefix_value}."):
-        return base_host
-    return normalize_portal_domain(f"{prefix_value}.{base_host}")
-
-
 def get_org_portal_base_url(org: Organization | None) -> str:
-    """Resolve the portal base URL for an organization."""
-    if org and org.portal_domain:
-        return f"https://{org.portal_domain}"
+    """
+    Compute the portal base URL for an organization from its slug.
+
+    Returns: https://{slug}.{PLATFORM_BASE_DOMAIN} in production,
+             or FRONTEND_URL fallback for dev/test.
+    """
+    if org and org.slug and settings.PLATFORM_BASE_DOMAIN:
+        return f"https://{org.slug}.{settings.PLATFORM_BASE_DOMAIN}"
     return settings.FRONTEND_URL.rstrip("/") if settings.FRONTEND_URL else ""
+
+
+def get_org_by_host(db: Session, host: str) -> Organization | None:
+    """
+    Get organization by hostname (e.g., ewi.surrogacyforce.com → org with slug=ewi).
+
+    Args:
+        db: Database session
+        host: Request hostname (may include port)
+
+    Returns:
+        Organization if found, None otherwise
+    """
+    # Normalize: lowercase, strip port, strip trailing dot
+    host = host.lower().split(":")[0].rstrip(".")
+
+    base_domain = settings.PLATFORM_BASE_DOMAIN
+
+    # Dev bypass: allow localhost, *.localhost, *.test
+    if settings.ENV.lower() in ("dev", "development", "test"):
+        if (
+            host in ("localhost", "127.0.0.1")
+            or host.endswith(".localhost")
+            or host.endswith(".test")
+        ):
+            return None  # Skip org resolution for dev
+
+    if not host.endswith(f".{base_domain}"):
+        return None
+
+    slug = host.removesuffix(f".{base_domain}")
+    if not slug:
+        return None
+
+    return get_org_by_slug(db, slug)
 
 
 def get_org_display_name(org: Organization | None) -> str:
@@ -200,9 +278,6 @@ def update_org_settings(
     return org
 
 
-PORTAL_DOMAIN_UNSET = object()
-
-
 def update_org_contact(
     db: Session,
     org: Organization,
@@ -210,7 +285,6 @@ def update_org_contact(
     address: str | None = None,
     phone: str | None = None,
     email: str | None = None,
-    portal_domain: str | None | object = PORTAL_DOMAIN_UNSET,
 ) -> Organization:
     """Update organization contact settings."""
     if name is not None:
@@ -221,12 +295,50 @@ def update_org_contact(
         org.phone = phone
     if email is not None and hasattr(org, "contact_email"):
         org.contact_email = email
-    if portal_domain is not PORTAL_DOMAIN_UNSET:
-        org.portal_domain = portal_domain
 
     db.commit()
     db.refresh(org)
     return org
+
+
+def update_org_slug(
+    db: Session,
+    org: Organization,
+    new_slug: str,
+) -> tuple[Organization, str]:
+    """
+    Update organization slug (platform admin only).
+
+    After slug change, existing sessions on the old subdomain will be rejected
+    when they try to access the new subdomain. Users must re-login.
+
+    Args:
+        db: Database session
+        org: Organization to update
+        new_slug: New slug (will be validated and normalized)
+
+    Returns:
+        Tuple of (updated org, old_slug for audit logging)
+
+    Raises:
+        ValueError: If slug is invalid, reserved, or already taken
+    """
+    validated_slug = validate_slug(new_slug)
+
+    if validated_slug == org.slug:
+        return org, org.slug  # No change
+
+    # Check uniqueness
+    existing = get_org_by_slug(db, validated_slug)
+    if existing and existing.id != org.id:
+        raise ValueError("Slug already in use")
+
+    old_slug = org.slug
+    org.slug = validated_slug
+    db.commit()
+    db.refresh(org)
+
+    return org, old_slug
 
 
 def get_org_versions(db: Session, org_id: UUID) -> list:

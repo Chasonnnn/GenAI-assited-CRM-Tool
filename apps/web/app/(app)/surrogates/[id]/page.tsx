@@ -281,11 +281,14 @@ export default function SurrogateDetailPage() {
         return allowed.includes(value as TabValue)
     }
     const tabParam = searchParams.get("tab")
-    const currentTab: TabValue = isTabValue(tabParam, allowedTabs) ? tabParam : "overview"
+    const urlTab: TabValue = isTabValue(tabParam, allowedTabs) ? tabParam : "overview"
+    const [tabOverride, setTabOverride] = React.useState<TabValue | null>(null)
+    const currentTab: TabValue = tabOverride ?? urlTab
     const searchParamsString = searchParams.toString()
     const handleTabChange = React.useCallback(
         (value: string) => {
             const nextTab: TabValue = isTabValue(value, allowedTabs) ? value : "overview"
+            setTabOverride(nextTab)
             const nextParams = new URLSearchParams(searchParamsString)
             if (nextTab === "overview") {
                 nextParams.delete("tab")
@@ -295,6 +298,24 @@ export default function SurrogateDetailPage() {
             const queryString = nextParams.toString()
             const nextUrl = queryString ? `/surrogates/${id}?${queryString}` : `/surrogates/${id}`
             router.replace(nextUrl, { scroll: false })
+
+            window.setTimeout(() => {
+                const url = new URL(window.location.href)
+                const currentParam = url.searchParams.get("tab")
+                const targetParam = nextTab === "overview" ? null : nextTab
+                const matches = targetParam === null ? currentParam === null : currentParam === targetParam
+
+                if (!matches) {
+                    if (targetParam === null) {
+                        url.searchParams.delete("tab")
+                    } else {
+                        url.searchParams.set("tab", targetParam)
+                    }
+                    window.history.replaceState({}, "", url.toString())
+                }
+
+                setTabOverride(null)
+            }, 400)
         },
         [allowedTabs, searchParamsString, router, id]
     )

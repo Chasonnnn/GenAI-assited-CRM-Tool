@@ -84,14 +84,14 @@ export function SurrogateApplicationTab({
     const [baseUrl, setBaseUrl] = React.useState("")
 
     React.useEffect(() => {
-        if (user?.org_portal_domain) {
-            setBaseUrl(`https://${user.org_portal_domain}`)
+        if (user?.org_portal_base_url) {
+            setBaseUrl(user.org_portal_base_url)
             return
         }
         if (typeof window !== "undefined") {
             setBaseUrl(window.location.origin)
         }
-    }, [user?.org_portal_domain])
+    }, [user?.org_portal_base_url])
 
     const {
         data: submission,

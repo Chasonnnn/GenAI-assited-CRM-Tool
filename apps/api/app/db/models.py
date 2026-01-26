@@ -64,15 +64,10 @@ class Organization(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    portal_domain: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
-    deleted_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
-    purge_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
+    deleted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    purge_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     deleted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -2071,13 +2066,9 @@ class EmailLog(Base):
     bounce_type: Mapped[str | None] = mapped_column(String(20), nullable=True)  # 'hard' | 'soft'
     complained_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     opened_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
-    open_count: Mapped[int] = mapped_column(
-        Integer, server_default=text("0"), nullable=False
-    )
+    open_count: Mapped[int] = mapped_column(Integer, server_default=text("0"), nullable=False)
     clicked_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
-    click_count: Mapped[int] = mapped_column(
-        Integer, server_default=text("0"), nullable=False
-    )
+    click_count: Mapped[int] = mapped_column(Integer, server_default=text("0"), nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 

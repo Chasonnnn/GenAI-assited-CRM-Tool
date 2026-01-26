@@ -17,14 +17,6 @@ import { CheckIcon, CopyIcon, KeyIcon, Loader2Icon } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { verifyDuoCallback } from "@/lib/api/mfa"
 
-function getOpsOrigin(): string | null {
-    if (typeof window === "undefined") return null
-    const { protocol, hostname, origin } = window.location
-    if (hostname.startsWith("ops.")) return origin
-    if (hostname.startsWith("app.")) return `${protocol}//ops.${hostname.slice(4)}`
-    return null
-}
-
 function hasAuthReturnToOpsCookie(): boolean {
     if (typeof document === "undefined") return false
     return document.cookie.split(";").some((c) => c.trim().startsWith("auth_return_to=ops"))
@@ -108,11 +100,6 @@ function DuoCallbackContent() {
                     : "app"
 
             if (returnTo === "ops") {
-                const opsOrigin = getOpsOrigin()
-                if (opsOrigin && opsOrigin !== window.location.origin) {
-                    window.location.replace(`${opsOrigin}/login`)
-                    return
-                }
                 router.replace("/ops/login")
                 return
             }
@@ -165,11 +152,6 @@ function DuoCallbackContent() {
                 if (!result.recovery_codes || result.recovery_codes.length === 0) {
                     if (returnTo === "ops") {
                         sessionStorage.removeItem("auth_return_to")
-                        const opsOrigin = getOpsOrigin()
-                        if (opsOrigin && opsOrigin !== window.location.origin) {
-                            window.location.replace(`${opsOrigin}/`)
-                            return
-                        }
                         router.replace("/ops")
                         return
                     }
@@ -234,11 +216,6 @@ function DuoCallbackContent() {
                                 : "app"
                         if (returnTo === "ops") {
                             sessionStorage.removeItem("auth_return_to")
-                            const opsOrigin = getOpsOrigin()
-                            if (opsOrigin && opsOrigin !== window.location.origin) {
-                                window.location.replace(`${opsOrigin}/`)
-                                return
-                            }
                             router.replace("/ops")
                             return
                         }
