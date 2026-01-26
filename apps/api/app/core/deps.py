@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.permissions import PermissionKey
 from app.core.security import decode_session_token
 from app.core.csrf import CSRF_HEADER, CSRF_COOKIE_NAME, validate_csrf
@@ -30,6 +31,43 @@ def _is_mfa_bypass_allowed(request: Request) -> bool:
     if any(path.startswith(prefix) for prefix in MFA_BYPASS_PREFIXES):
         return True
     return (method, path) in MFA_BYPASS_ROUTES
+
+
+def _is_dev_host(host: str) -> bool:
+    """Allow common dev/test hosts to bypass strict host validation."""
+    if settings.ENV.lower() in ("dev", "development", "test"):
+        if host in ("localhost", "127.0.0.1", "test", "testserver"):
+            return True
+        if host.endswith(".localhost") or host.endswith(".test"):
+            return True
+    return False
+
+
+def _validate_request_host(request: Request, org_slug: str) -> None:
+    """
+    Validate that the request host matches the organization's subdomain.
+
+    This prevents cross-tenant session reuse when using a shared cookie domain.
+    With .surrogacyforce.com cookie domain, a session cookie from ewi.surrogacyforce.com
+    would be sent to agency2.surrogacyforce.com - this validation rejects that.
+
+    Args:
+        request: FastAPI request
+        org_slug: Organization slug from the session
+
+    Raises:
+        HTTPException 403: If host doesn't match expected subdomain
+    """
+    host = request.headers.get("host", "").split(":")[0].lower()
+
+    # Allow localhost/dev environments
+    if _is_dev_host(host):
+        return
+
+    # Validate host matches expected subdomain
+    expected_host = f"{org_slug}.{settings.PLATFORM_BASE_DOMAIN}"
+    if host != expected_host:
+        raise HTTPException(status_code=403, detail="Session invalid for this domain")
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -181,6 +219,15 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
 
         role = Role(role_value)
 
+        # Validate request host matches support session's org
+        support_org = (
+            db.query(Organization)
+            .filter(Organization.id == support_session.organization_id)
+            .first()
+        )
+        if support_org:
+            _validate_request_host(request, support_org.slug)
+
         session = UserSession(
             user_id=user.id,
             org_id=support_session.organization_id,
@@ -211,6 +258,9 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
     org = db.query(Organization).filter(Organization.id == membership.organization_id).first()
     if not org or org.deleted_at:
         raise HTTPException(status_code=403, detail="Organization is scheduled for deletion")
+
+    # Validate request host matches org's subdomain (cross-tenant protection)
+    _validate_request_host(request, org.slug)
 
     # Validate role is a known enum value - return 403 not 500
     if not Role.has_value(membership.role):
@@ -546,6 +596,14 @@ def require_platform_admin(request: Request, db: Session = Depends(get_db)) -> P
 
     if not is_admin:
         raise HTTPException(status_code=403, detail="Platform admin access required")
+
+    host = request.headers.get("host", "").split(":")[0].lower()
+    if not _is_dev_host(host):
+        from app.services import org_service
+
+        org = org_service.get_org_by_host(db, host)
+        if not org:
+            raise HTTPException(status_code=403, detail="Session invalid for this domain")
 
     return PlatformUserSession(
         user_id=user.id,
