@@ -12,7 +12,7 @@ import {
     Loader2Icon,
     AlertTriangleIcon,
 } from "lucide-react"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { useUpcoming, type UpcomingTask, type UpcomingMeeting } from "@/lib/hooks/use-dashboard"
 import { formatLocalDate } from "@/lib/utils/date"
 

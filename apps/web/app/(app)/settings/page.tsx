@@ -958,20 +958,37 @@ export default function SettingsPage() {
 
   const isAdmin = user?.role === "admin" || user?.role === "developer"
 
-  const activeTab = (() => {
-    const tab = searchParams?.get("tab")
-    if (tab === "email-signature" && isAdmin) return tab
-    return "general"
-  })()
+  const [tabOverride, setTabOverride] = useState<string | null>(null)
+  const urlTab = searchParams?.get("tab")
+  const resolvedUrlTab =
+    urlTab === "email-signature" && isAdmin ? urlTab : "general"
+  const activeTab = tabOverride ?? resolvedUrlTab
 
   const handleTabChange = (value: string) => {
+    const nextTab = value === "email-signature" && isAdmin ? value : "general"
+    setTabOverride(nextTab)
     const url = new URL(window.location.href)
-    if (value === "general") {
+    if (nextTab === "general") {
       url.searchParams.delete("tab")
     } else {
-      url.searchParams.set("tab", value)
+      url.searchParams.set("tab", nextTab)
     }
     window.history.pushState({}, "", url.toString())
+
+    window.setTimeout(() => {
+      const currentUrl = new URL(window.location.href)
+      const currentTab = currentUrl.searchParams.get("tab")
+      const matches = nextTab === "general" ? currentTab === null : currentTab === nextTab
+      if (!matches) {
+        if (nextTab === "general") {
+          currentUrl.searchParams.delete("tab")
+        } else {
+          currentUrl.searchParams.set("tab", nextTab)
+        }
+        window.history.replaceState({}, "", currentUrl.toString())
+      }
+      setTabOverride(null)
+    }, 400)
   }
 
   return (

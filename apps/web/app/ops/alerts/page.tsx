@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
+import Link from "@/components/app-link";
 import { listAlerts, acknowledgeAlert, resolveAlert, type PlatformAlert } from '@/lib/api/platform';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

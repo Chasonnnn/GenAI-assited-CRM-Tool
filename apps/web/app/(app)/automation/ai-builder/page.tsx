@@ -19,7 +19,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { generateWorkflow, saveAIWorkflow, type GeneratedWorkflow } from "@/lib/api/ai"
-import Link from "next/link"
+import Link from "@/components/app-link"
 
 // Trigger display labels
 const TRIGGER_LABELS: Record<string, string> = {

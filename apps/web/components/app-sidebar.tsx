@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useState, useCallback } from "react"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { useSearchHotkey } from "@/components/search-command"
 
