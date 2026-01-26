@@ -3670,6 +3670,21 @@ class AutomationWorkflow(Base):
     __table_args__ = (
         UniqueConstraint("organization_id", "name", name="uq_workflow_name"),
         Index("idx_wf_org_enabled", "organization_id", "is_enabled"),
+        # Scope/owner integrity: org workflows have no owner, personal workflows require owner
+        CheckConstraint(
+            "(scope = 'org' AND owner_user_id IS NULL) OR "
+            "(scope = 'personal' AND owner_user_id IS NOT NULL)",
+            name="chk_workflow_scope_owner",
+        ),
+        # Optimized index for matching workflows at trigger time
+        Index(
+            "idx_wf_matching",
+            "organization_id",
+            "scope",
+            "owner_user_id",
+            "trigger_type",
+            "is_enabled",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -3729,6 +3744,17 @@ class AutomationWorkflow(Base):
         String(100), nullable=True
     )  # Unique key for system workflows
 
+    # Workflow scope: 'org' (org-wide) or 'personal' (user-specific)
+    scope: Mapped[str] = mapped_column(
+        String(20), server_default=text("'org'"), nullable=False
+    )  # 'org' | 'personal'
+    # Owner for personal workflows (NULL for org workflows)
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+
     # First-run review tracking
     requires_review: Mapped[bool] = mapped_column(
         Boolean, server_default=text("FALSE"), nullable=False
@@ -3750,6 +3776,7 @@ class AutomationWorkflow(Base):
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
+    owner: Mapped["User | None"] = relationship(foreign_keys=[owner_user_id])
     created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
     updated_by: Mapped["User | None"] = relationship(foreign_keys=[updated_by_user_id])
     executions: Mapped[list["WorkflowExecution"]] = relationship(

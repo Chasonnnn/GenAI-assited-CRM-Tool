@@ -194,12 +194,14 @@ Coupling notes:
   Create/Delete: create `apps/api/app/services/notification_facade.py` and event helpers; no deletes.
   Expected blast radius: medium (central notifications).
   Test plan: unit tests per event; smoke tests for websocket and in‑app notifications.
+  Status: completed (Week 2).
 
 - **R6 — Email sender interface**
   Files to change: `invite_email_service.py`, `email_service.py`, `platform_email_service.py`, `gmail_service.py`.
   Create/Delete: create `apps/api/app/services/email_sender.py` interface + concrete adapters.
   Expected blast radius: medium (invites + system emails).
   Test plan: integration tests for invite email path + Resend/Gmail fallback.
+  Status: completed (Week 2).
 
 - **R7 — Webhook handler registry**
   Files to change: `apps/api/app/routers/webhooks.py`, provider services (`zoom_service.py`, `campaign_service.py`, `email_service.py`).
