@@ -26,7 +26,7 @@ def create_csv_content(rows: list[dict]) -> bytes:
 
 
 @pytest.mark.asyncio
-async def test_preview_import_success(authed_client: AsyncClient, test_org):
+async def test_preview_import_success(authed_client: AsyncClient):
     """Test CSV preview with valid data."""
     csv_data = create_csv_content(
         [
@@ -162,103 +162,85 @@ async def test_preview_import_without_auth_fails(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_execute_import_success(authed_client: AsyncClient, db, test_org):
-    """Test successful CSV import execution queues background job."""
-    from app.db.models import SurrogateImport, Job
+async def test_submit_import_updates_status_and_snapshot(authed_client: AsyncClient, db):
+    """Test submitting import stores mapping snapshot and status."""
+    from app.db.models import SurrogateImport
+
+    csv_data = create_csv_content(
+        [
+            {"full_name": "Alice Johnson", "email": "alice@test.com"},
+            {"full_name": "Bob Wilson", "email": "bob@test.com"},
+        ]
+    )
+
+    preview = await authed_client.post(
+        "/surrogates/import/preview",
+        files={"file": ("import.csv", io.BytesIO(csv_data), "text/csv")},
+    )
+    assert preview.status_code == 200
+    import_id = preview.json()["import_id"]
+
+    submit = await authed_client.post(
+        f"/surrogates/import/{import_id}/submit",
+        json={
+            "column_mappings": [
+                {"csv_column": "full_name", "surrogate_field": "full_name"},
+                {"csv_column": "email", "surrogate_field": "email"},
+            ],
+            "unknown_column_behavior": "metadata",
+        },
+    )
+    assert submit.status_code == 200
+    submit_data = submit.json()
+    assert submit_data["status"] == "awaiting_approval"
+    assert "deduplication_stats" in submit_data
+
+    db.expire_all()
+    import_record = (
+        db.query(SurrogateImport).filter(SurrogateImport.id == uuid.UUID(import_id)).first()
+    )
+    assert import_record is not None
+    assert import_record.status == "awaiting_approval"
+    assert import_record.column_mapping_snapshot is not None
+    assert import_record.unknown_column_behavior == "metadata"
+
+
+@pytest.mark.asyncio
+async def test_approve_import_queues_job(authed_client: AsyncClient, db, test_org):
+    """Test approving import queues a background job."""
+    from app.db.models import Job
     from app.db.enums import JobType
 
     csv_data = create_csv_content(
         [
-            {
-                "full_name": "Alice Johnson",
-                "email": "alice@test.com",
-                "phone": "5551111111",
-            },
-            {"full_name": "Bob Wilson", "email": "bob@test.com", "phone": "5552222222"},
+            {"full_name": "Charlie", "email": "charlie@test.com"},
+            {"full_name": "Delta", "email": "delta@test.com"},
         ]
     )
 
-    response = await authed_client.post(
-        "/surrogates/import/execute",
+    preview = await authed_client.post(
+        "/surrogates/import/preview",
         files={"file": ("import.csv", io.BytesIO(csv_data), "text/csv")},
     )
+    assert preview.status_code == 200
+    import_id = preview.json()["import_id"]
 
-    assert response.status_code == 202
-    data = response.json()
-    assert "import_id" in data
-    assert "message" in data
-    assert "queued" in data["message"].lower()  # Async message
-
-    # Refresh session to see committed data
-    db.expire_all()
-
-    # Verify import record created with pending status
-    import_record = (
-        db.query(SurrogateImport).filter(SurrogateImport.id == uuid.UUID(data["import_id"])).first()
+    submit = await authed_client.post(
+        f"/surrogates/import/{import_id}/submit",
+        json={
+            "column_mappings": [
+                {"csv_column": "full_name", "surrogate_field": "full_name"},
+                {"csv_column": "email", "surrogate_field": "email"},
+            ],
+            "unknown_column_behavior": "metadata",
+        },
     )
-    assert import_record is not None
-    assert import_record.status == "pending"
-    assert import_record.total_rows == 2
-    assert import_record.file_content is not None
+    assert submit.status_code == 200
 
-    # Verify background job was queued
-    job = (
-        db.query(Job)
-        .filter(
-            Job.organization_id == test_org.id,
-            Job.job_type == JobType.CSV_IMPORT.value,
-        )
-        .first()
-    )
-    assert job is not None
-    assert job.payload["import_id"] == str(import_record.id)
-    assert job.payload.get("file_content_base64") is None
-
-
-@pytest.mark.asyncio
-async def test_execute_import_skips_duplicates(authed_client: AsyncClient, db, test_org, test_user):
-    """Test import queues job that will skip duplicate emails when processed."""
-    from app.db.models import SurrogateImport, Job
-    from app.services import surrogate_service
-    from app.schemas.surrogate import SurrogateCreate
-    from app.db.enums import SurrogateSource, JobType
-
-    # Create existing case using service
-    case_data = SurrogateCreate(
-        full_name="Existing",
-        email="existing@test.com",
-        source=SurrogateSource.IMPORT,
-    )
-    surrogate_service.create_surrogate(db, test_org.id, test_user.id, case_data)
-
-    # Import with duplicate
-    csv_data = create_csv_content(
-        [
-            {"full_name": "Duplicate", "email": "existing@test.com"},
-            {"full_name": "New User", "email": "newuser@test.com"},
-        ]
-    )
-
-    response = await authed_client.post(
-        "/surrogates/import/execute",
-        files={"file": ("import.csv", io.BytesIO(csv_data), "text/csv")},
-    )
-
-    assert response.status_code == 202
-    data = response.json()
+    approve = await authed_client.post(f"/surrogates/import/{import_id}/approve")
+    assert approve.status_code == 200
 
     db.expire_all()
-
-    # Verify import record created
-    import_record = (
-        db.query(SurrogateImport).filter(SurrogateImport.id == uuid.UUID(data["import_id"])).first()
-    )
-    assert import_record is not None
-    assert import_record.status == "pending"
-    assert import_record.total_rows == 2
-    assert import_record.file_content is not None
-
-    # Verify job queued with dedupe action
     job = (
         db.query(Job)
         .filter(
@@ -269,37 +251,91 @@ async def test_execute_import_skips_duplicates(authed_client: AsyncClient, db, t
         .first()
     )
     assert job is not None
-    assert job.payload["dedupe_action"] == "skip"
-    assert job.payload.get("file_content_base64") is None
+    assert job.payload["import_id"] == str(import_id)
+    assert job.payload["use_mappings"] is True
+    assert job.payload["unknown_column_behavior"] == "metadata"
 
 
-async def test_execute_import_handles_validation_errors(authed_client: AsyncClient, db):
-    """Test import handles rows with validation errors."""
-    from app.db.models import SurrogateImport
-
+@pytest.mark.asyncio
+async def test_preview_import_reports_validation_errors(authed_client: AsyncClient):
+    """Test preview reports validation errors for bad rows."""
     csv_data = create_csv_content(
         [
-            {"full_name": "Valid User", "email": "alice@test.com"},
-            {"full_name": "", "email": "invalid-email"},  # Invalid
+            {"full_name": "Valid User", "email": "valid@test.com"},
+            {"full_name": "", "email": "invalid-email"},
         ]
     )
 
     response = await authed_client.post(
-        "/surrogates/import/execute",
+        "/surrogates/import/preview",
         files={"file": ("import.csv", io.BytesIO(csv_data), "text/csv")},
     )
 
-    assert response.status_code == 202
-    import_id = response.json()["import_id"]
+    assert response.status_code == 200
+    data = response.json()
+    assert data["validation_errors"] >= 1
 
-    # Check import record
-    import_record = (
-        db.query(SurrogateImport).filter(SurrogateImport.id == uuid.UUID(import_id)).first()
+
+def test_execute_import_warns_on_unmapped_columns(db, test_org, test_user):
+    """Test unknown_column_behavior=warn stores warnings without error_count."""
+    from app.services import import_service
+    from app.services.import_service import ColumnMapping
+    from app.db.models import SurrogateImport
+
+    csv_data = create_csv_content(
+        [
+            {
+                "full_name": "Warn User",
+                "email": "warn@test.com",
+                "unmapped_col": "extra",
+            }
+        ]
     )
 
-    # Check import record - may have errors but should have tried
-    assert import_record.imported_count >= 0
-    assert import_record.error_count >= 0
+    import_record = import_service.create_import_job(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        filename="warn.csv",
+        total_rows=1,
+        file_content=csv_data,
+        status="pending",
+    )
+
+    mappings = [
+        ColumnMapping(
+            csv_column="full_name",
+            surrogate_field="full_name",
+            transformation=None,
+            action="map",
+        ),
+        ColumnMapping(
+            csv_column="email",
+            surrogate_field="email",
+            transformation=None,
+            action="map",
+        ),
+    ]
+
+    import_service.execute_import_with_mappings(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        import_id=import_record.id,
+        file_content=csv_data,
+        column_mappings=mappings,
+        unknown_column_behavior="warn",
+    )
+
+    db.expire_all()
+    stored = (
+        db.query(SurrogateImport).filter(SurrogateImport.id == import_record.id).first()
+    )
+    assert stored is not None
+    assert stored.error_count == 0
+    warnings = [entry for entry in (stored.errors or []) if entry.get("level") == "warning"]
+    assert warnings
+    assert warnings[0]["column"] == "unmapped_col"
 
 
 @pytest.mark.asyncio
@@ -419,9 +455,16 @@ async def test_imports_org_isolation(authed_client: AsyncClient, db, test_user):
 
 
 @pytest.mark.asyncio
-async def test_execute_import_requires_csrf(authed_client: AsyncClient, db):
-    """Test import execution requires CSRF header."""
+async def test_submit_import_requires_csrf(authed_client: AsyncClient, db):
+    """Test submit import requires CSRF header."""
     csv_data = create_csv_content([{"email": "alice@test.com"}])
+
+    preview = await authed_client.post(
+        "/surrogates/import/preview",
+        files={"file": ("test.csv", io.BytesIO(csv_data), "text/csv")},
+    )
+    assert preview.status_code == 200
+    import_id = preview.json()["import_id"]
 
     # Remove CSRF header (create new client without it)
     from httpx import AsyncClient, ASGITransport
@@ -440,8 +483,8 @@ async def test_execute_import_requires_csrf(authed_client: AsyncClient, db):
         cookies=authed_client.cookies,
     ) as no_csrf_client:
         response = await no_csrf_client.post(
-            "/surrogates/import/execute",
-            files={"file": ("test.csv", io.BytesIO(csv_data), "text/csv")},
+            f"/surrogates/import/{import_id}/submit",
+            json={"column_mappings": [{"csv_column": "email", "surrogate_field": "email"}]},
         )
         # Should fail due to missing CSRF
         assert response.status_code in [403, 401]
@@ -450,14 +493,16 @@ async def test_execute_import_requires_csrf(authed_client: AsyncClient, db):
 
 
 @pytest.mark.asyncio
-async def test_execute_import_empty_csv(authed_client: AsyncClient):
-    """Test importing empty CSV."""
+async def test_preview_import_empty_csv(authed_client: AsyncClient):
+    """Test previewing empty CSV."""
     csv_data = b"full_name,email\n"  # Just headers, no data
 
     response = await authed_client.post(
-        "/surrogates/import/execute",
+        "/surrogates/import/preview",
         files={"file": ("empty.csv", io.BytesIO(csv_data), "text/csv")},
     )
 
-    assert response.status_code == 202
-    # Should complete with 0 imports
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_rows"] == 0
+    assert "import_id" in data
