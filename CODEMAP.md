@@ -43,6 +43,10 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 - Services: `apps/api/app/services/*` (surrogates, matches, workflows, AI, analytics, integrations, compliance)
 - Service events: `apps/api/app/services/dashboard_events.py`, `apps/api/app/services/task_events.py`
 - Surrogate status helper: `apps/api/app/services/surrogate_status_service.py`
+- Form submissions: `apps/api/app/services/form_submission_service.py`
+- CSV import pipeline: `apps/api/app/services/import_service.py`, `apps/api/app/routers/surrogates_import.py`
+- Import templates: `apps/api/app/services/import_template_service.py`, `apps/api/app/routers/import_templates.py`
+- Custom fields: `apps/api/app/services/custom_field_service.py`, `apps/api/app/routers/custom_fields.py`
 - Schemas: `apps/api/app/schemas/*`
 - Jobs: `apps/api/app/jobs/*`
 - Migrations: `apps/api/alembic/*`
@@ -79,7 +83,8 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 - Tasks: UI in `apps/web/app/(app)/tasks/page.tsx`; API in `apps/api/app/routers/tasks.py`; service in `apps/api/app/services/task_service.py`
 - Interviews: UI in `apps/web/components/surrogates/interviews/*`; API in `apps/api/app/routers/interviews.py`; service in `apps/api/app/services/interview_service.py`
 - Appointments/booking: UI in `apps/web/app/(app)/appointments/page.tsx`, `apps/web/app/book/*`; API in `apps/api/app/routers/appointments.py`, `apps/api/app/routers/booking.py`; service in `apps/api/app/services/appointment_service.py`
-- Forms: UI in `apps/web/app/(app)/automation/forms/*`, public in `apps/web/app/apply/[token]/page.tsx`; API in `apps/api/app/routers/forms.py`, `apps/api/app/routers/forms_public.py`; service in `apps/api/app/services/form_service.py`
+- Forms: UI in `apps/web/app/(app)/automation/forms/*`, public in `apps/web/app/apply/[token]/page.tsx`; API in `apps/api/app/routers/forms.py`, `apps/api/app/routers/forms_public.py`; services in `apps/api/app/services/form_service.py`, `apps/api/app/services/form_submission_service.py`
+- CSV imports + templates: API in `apps/api/app/routers/surrogates_import.py`, `apps/api/app/routers/import_templates.py`, `apps/api/app/routers/custom_fields.py`; services in `apps/api/app/services/import_service.py`, `apps/api/app/services/import_template_service.py`, `apps/api/app/services/custom_field_service.py`
 - Automation/workflows: UI in `apps/web/app/(app)/automation/*`; API in `apps/api/app/routers/workflows.py`, `apps/api/app/routers/templates.py`; services in `apps/api/app/services/workflow_engine.py`, `apps/api/app/services/workflow_triggers.py`
 - Campaigns + email templates: UI in `apps/web/app/(app)/automation/campaigns/*`, `apps/web/app/(app)/automation/email-templates/page.tsx`; API in `apps/api/app/routers/campaigns.py`, `apps/api/app/routers/email_templates.py`; services in `apps/api/app/services/campaign_service.py`, `apps/api/app/services/email_service.py`
 - AI assistant: UI in `apps/web/app/(app)/ai-assistant/page.tsx`; API in `apps/api/app/routers/ai.py`; services in `apps/api/app/services/ai_chat_service.py`, `apps/api/app/services/ai_workflow_service.py`, `apps/api/app/services/ai_interview_service.py`
@@ -114,6 +119,9 @@ Models live in `apps/api/app/db/models.py` with migrations in `apps/api/alembic/
 - `SurrogateActivityLog` (surrogate_activity_logs)
 - `SurrogateContactAttempt` (surrogate_contact_attempts)
 - `SurrogateImport` (surrogate_imports)
+- `ImportTemplate` (import_templates)
+- `CustomField` (custom_fields)
+- `CustomFieldValue` (custom_field_values)
 - `SurrogateInterview` (surrogate_interviews)
 - `SurrogateProfileState` (surrogate_profile_state)
 - `SurrogateProfileOverride` (surrogate_profile_overrides)
