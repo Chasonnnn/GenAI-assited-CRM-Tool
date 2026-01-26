@@ -242,10 +242,10 @@ Coupling notes:
 - [x] R9 — Dashboard stats push via service/event.
 
 ### Weeks 2–3 (structural)
-- R1 — Surrogate status module.
-- R2 — Form submission pipeline split.
-- R5 — Notification dispatch facade.
-- R6 — Email sender interface.
+- [x] R1 — Surrogate status module.
+- [x] R2 — Form submission pipeline split.
+- [x] R5 — Notification dispatch facade.
+- [x] R6 — Email sender interface.
 
 ### Later (optional)
 - R3 — Appointment integrations module.
