@@ -42,8 +42,8 @@ import {
     LinkIcon,
     XIcon,
 } from "lucide-react"
-import { useAppointments, useRescheduleAppointment, useGoogleCalendarEvents, useUpdateAppointmentLink } from "@/lib/hooks/use-appointments"
-import { useTasks } from "@/lib/hooks/use-tasks"
+import { useRescheduleAppointment, useUpdateAppointmentLink } from "@/lib/hooks/use-appointments"
+import { useUnifiedCalendarData } from "@/lib/hooks/use-unified-calendar-data"
 import { useSurrogates } from "@/lib/hooks/use-surrogates"
 import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
 import type { AppointmentListItem, GoogleCalendarEvent } from "@/lib/api/appointments"
@@ -1018,44 +1018,20 @@ export function UnifiedCalendar({
         }
     }, [currentDate])
 
-    const { data, isLoading: appointmentsLoadingRaw } = useAppointments(
-        {
-            ...dateRange,
-            per_page: 100,
-        },
-        { enabled: includeAppointments }
-    )
-
-    const appointments = includeAppointments ? data?.items || [] : []
-    const appointmentsLoading = includeAppointments ? appointmentsLoadingRaw : false
-
-    const userTimezone = useMemo(
-        () => Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles",
-        []
-    )
-
-    // Fetch Google Calendar events
-    const { data: googleEventsData } = useGoogleCalendarEvents(
-        dateRange.date_start,
-        dateRange.date_end,
-        userTimezone,
-        { enabled: includeGoogleEvents }
-    )
-    const googleEvents = includeGoogleEvents ? googleEventsData?.events || [] : []
-    const calendarConnected = includeGoogleEvents ? googleEventsData?.connected ?? true : true
-    const calendarError = includeGoogleEvents ? googleEventsData?.error ?? null : null
-
-    const taskParams = {
-        is_completed: false,
-        per_page: 100,
-        due_after: dateRange.date_start,
-        due_before: dateRange.date_end,
-        exclude_approvals: true,
-        ...(taskFilter?.my_tasks ? { my_tasks: true } : {}),
-        ...(taskFilter?.surrogate_id ? { surrogate_id: taskFilter.surrogate_id } : {}),
-    }
-    const { data: tasksData, isLoading: tasksLoading } = useTasks(taskParams)
-    const tasks = tasksData?.items || []
+    const {
+        appointments,
+        appointmentsLoading,
+        tasks,
+        tasksLoading,
+        googleEvents,
+        calendarConnected,
+        calendarError,
+    } = useUnifiedCalendarData({
+        dateRange,
+        includeAppointments,
+        includeGoogleEvents,
+        taskFilter,
+    })
 
     // Navigation
     const navigate = (direction: "prev" | "next") => {

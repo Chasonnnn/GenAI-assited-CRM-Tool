@@ -139,6 +139,8 @@ def create_surrogate(
     org_id: UUID,
     user_id: UUID | None,
     data: SurrogateCreate,
+    *,
+    emit_events: bool = False,
 ) -> Surrogate:
     """
     Create a new surrogatewith generated surrogatenumber.
@@ -284,6 +286,11 @@ def create_surrogate(
     from app.services import workflow_triggers
 
     workflow_triggers.trigger_surrogate_created(db, surrogate)
+
+    if emit_events:
+        from app.services import dashboard_events
+
+        dashboard_events.push_dashboard_stats(db, org_id)
 
     return surrogate
 
@@ -1008,6 +1015,8 @@ def archive_surrogate(
     db: Session,
     surrogate: Surrogate,
     user_id: UUID,
+    *,
+    emit_events: bool = False,
 ) -> Surrogate:
     """Soft-delete a surrogate(set is_archived)."""
     from app.services import activity_service
@@ -1043,6 +1052,11 @@ def archive_surrogate(
     )
     db.commit()
 
+    if emit_events:
+        from app.services import dashboard_events
+
+        dashboard_events.push_dashboard_stats(db, surrogate.organization_id)
+
     return surrogate
 
 
@@ -1050,6 +1064,8 @@ def restore_surrogate(
     db: Session,
     surrogate: Surrogate,
     user_id: UUID,
+    *,
+    emit_events: bool = False,
 ) -> tuple[Surrogate | None, str | None]:
     """
     Restore an archived surrogateto its prior status.
@@ -1104,6 +1120,11 @@ def restore_surrogate(
         actor_user_id=user_id,
     )
     db.commit()
+
+    if emit_events:
+        from app.services import dashboard_events
+
+        dashboard_events.push_dashboard_stats(db, surrogate.organization_id)
 
     return surrogate, None
 
@@ -1398,7 +1419,12 @@ def get_status_history(
     )
 
 
-def hard_delete_surrogate(db: Session, surrogate: Surrogate) -> bool:
+def hard_delete_surrogate(
+    db: Session,
+    surrogate: Surrogate,
+    *,
+    emit_events: bool = False,
+) -> bool:
     """
     Permanently delete a case.
 
@@ -1412,6 +1438,10 @@ def hard_delete_surrogate(db: Session, surrogate: Surrogate) -> bool:
 
     db.delete(surrogate)
     db.commit()
+    if emit_events:
+        from app.services import dashboard_events
+
+        dashboard_events.push_dashboard_stats(db, surrogate.organization_id)
     return True
 
 

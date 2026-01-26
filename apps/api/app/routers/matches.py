@@ -471,7 +471,7 @@ def accept_match(
     from app.services import (
         activity_service,
         surrogate_service,
-        dashboard_service,
+        dashboard_events,
         pipeline_service,
     )
 
@@ -568,7 +568,7 @@ def accept_match(
         )
 
     db.refresh(match)
-    dashboard_service.push_dashboard_stats(db, session.org_id)
+    dashboard_events.push_dashboard_stats(db, session.org_id)
 
     # Fire workflow trigger for match accepted
     workflow_triggers.trigger_match_accepted(db, match)

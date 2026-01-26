@@ -37,7 +37,7 @@ from app.schemas.surrogate import (
 )
 from app.services import (
     surrogate_service,
-    dashboard_service,
+    dashboard_events,
     import_service,
     membership_service,
     queue_service,
@@ -680,6 +680,7 @@ def create_surrogate(
             org_id=session.org_id,
             user_id=session.user_id,
             data=data,
+            emit_events=True,
         )
     except Exception as e:
         # Handle unique constraint violations
@@ -689,7 +690,6 @@ def create_surrogate(
             )
         raise
 
-    dashboard_service.push_dashboard_stats(db, session.org_id)
     return _surrogate_to_read(surrogate, db)
 
 
@@ -1090,7 +1090,7 @@ def change_status(
         db.commit()
         db.refresh(result["surrogate"])
 
-    dashboard_service.push_dashboard_stats(db, session.org_id)
+    dashboard_events.push_dashboard_stats(db, session.org_id)
 
     # Build response with full surrogate data
     surrogate_read = _surrogate_to_read(result["surrogate"], db) if result["surrogate"] else None
@@ -1204,8 +1204,9 @@ def archive_surrogate(
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
 
-    surrogate = surrogate_service.archive_surrogate(db, surrogate, session.user_id)
-    dashboard_service.push_dashboard_stats(db, session.org_id)
+    surrogate = surrogate_service.archive_surrogate(
+        db, surrogate, session.user_id, emit_events=True
+    )
     return _surrogate_to_read(surrogate, db)
 
 
@@ -1230,11 +1231,12 @@ def restore_surrogate(
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
 
-    surrogate, error = surrogate_service.restore_surrogate(db, surrogate, session.user_id)
+    surrogate, error = surrogate_service.restore_surrogate(
+        db, surrogate, session.user_id, emit_events=True
+    )
     if error:
         raise HTTPException(status_code=409, detail=error)
 
-    dashboard_service.push_dashboard_stats(db, session.org_id)
     return _surrogate_to_read(surrogate, db)
 
 
@@ -1259,9 +1261,7 @@ def delete_surrogate(
             status_code=400, detail="Surrogate must be archived before permanent deletion"
         )
 
-    deleted = surrogate_service.hard_delete_surrogate(db, surrogate)
-    if deleted:
-        dashboard_service.push_dashboard_stats(db, session.org_id)
+    deleted = surrogate_service.hard_delete_surrogate(db, surrogate, emit_events=True)
     return None
 
 
