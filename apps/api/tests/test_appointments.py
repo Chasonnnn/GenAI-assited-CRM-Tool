@@ -797,7 +797,12 @@ def test_approve_booking_creates_zoom_meeting_and_schedules_reminder(
     db, test_org, test_user, appointment_type, availability_rules, monkeypatch
 ):
     """Approval should create Zoom meeting link and schedule reminder."""
-    from app.services import appointment_service, appointment_email_service, zoom_service, appointment_integrations
+    from app.services import (
+        appointment_service,
+        appointment_email_service,
+        zoom_service,
+        appointment_integrations,
+    )
 
     appointment_type.meeting_mode = MeetingMode.ZOOM.value
     db.flush()
