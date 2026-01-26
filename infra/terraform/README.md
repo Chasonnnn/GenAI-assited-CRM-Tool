@@ -192,7 +192,34 @@ terraform init -reconfigure -backend-config="bucket=YOUR_STATE_BUCKET"
 
 ## 4) DNS
 Terraform creates Cloud Run domain mappings (if enabled). Add the CNAME/TXT records shown in the Cloud Run console
-for `api.<domain>` and `app.<domain>` in Cloudflare.
+for `api.<domain>`, `app.<domain>`, and `ops.<domain>` in Cloudflare.
+
+Note: Cloud Run domain mappings do not support wildcard (`*.<domain>`) hosts. If you need wildcard subdomains for
+tenants, use an external HTTP(S) load balancer with a wildcard certificate (or a Cloudflare proxy with an origin
+host override) and route to the web service via a serverless NEG.
+
+### Wildcard subdomains (load balancer path)
+If you enable `enable_load_balancer=true`, Terraform provisions an external HTTPS load balancer and a Google-managed
+wildcard certificate for `*.<domain>` using Certificate Manager.
+
+After `terraform apply`, create the Certificate Manager DNS authorization records shown by:
+```bash
+terraform output lb_dns_authorization_root
+```
+This single DNS authorization is used for both the apex and wildcard certificate.
+
+Then create A/AAAA records that point to the load balancer IP for:
+- `@` (apex)
+- `*` (wildcard)
+- `api`
+- `ops`
+- `app`
+
+If you keep `enable_domain_mapping=true`, set it to `false` when using the load balancer to avoid conflicting
+Cloud Run mappings.
+
+Also ensure `enable_public_invoker=true` for Cloud Run when using the load balancer, since the LB needs to reach
+the services (unless you implement authenticated invokers).
 
 If your org policy blocks `allUsers`, set:
 ```hcl

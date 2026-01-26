@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from contextlib import asynccontextmanager
 from time import perf_counter
 from uuid import UUID
@@ -348,10 +349,16 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS middleware - must be added before routers
-# Tightened for production
+# Tightened for production, but allow tenant subdomains.
+tenant_origin_regex = None
+if settings.PLATFORM_BASE_DOMAIN:
+    scheme = "https?" if settings.is_dev else "https"
+    tenant_origin_regex = rf"^{scheme}://([a-z0-9-]+\.)?{re.escape(settings.PLATFORM_BASE_DOMAIN)}$"
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
+    allow_origin_regex=tenant_origin_regex,
     allow_credentials=True,  # Required for cookies
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", CSRF_HEADER, "X-Dev-Secret"],
