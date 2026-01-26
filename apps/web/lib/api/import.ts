@@ -41,18 +41,14 @@ export async function previewImport(file: File): Promise<ImportPreview> {
     const formData = new FormData()
     formData.append('file', file)
 
-    return api.post<ImportPreview>('/surrogates/import/preview', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-    })
+    return api.post<ImportPreview>('/surrogates/import/preview', formData)
 }
 
 export async function executeImport(file: File): Promise<ImportExecuteResponse> {
     const formData = new FormData()
     formData.append('file', file)
 
-    return api.post<ImportExecuteResponse>('/surrogates/import/execute', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-    })
+    return api.post<ImportExecuteResponse>('/surrogates/import/execute', formData)
 }
 
 export async function listImports(): Promise<ImportHistoryItem[]> {

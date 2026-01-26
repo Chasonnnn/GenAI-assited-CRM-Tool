@@ -36,6 +36,9 @@ export async function proxy(request: NextRequest) {
         if (pathname === '/' || pathname === '/dashboard') {
             return NextResponse.redirect(new URL('/ops', request.url));
         }
+        if (pathname === '/login') {
+            return NextResponse.redirect(new URL('/ops/login', request.url));
+        }
         return NextResponse.next();
     }
 

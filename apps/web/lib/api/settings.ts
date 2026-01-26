@@ -101,9 +101,7 @@ export async function revokeAllSessions(): Promise<{ status: string; count: numb
 export async function uploadAvatar(file: File): Promise<AvatarResponse> {
     const formData = new FormData();
     formData.append('file', file);
-    return api.post<AvatarResponse>('/auth/me/avatar', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    return api.post<AvatarResponse>('/auth/me/avatar', formData);
 }
 
 export async function deleteAvatar(): Promise<AvatarResponse> {
