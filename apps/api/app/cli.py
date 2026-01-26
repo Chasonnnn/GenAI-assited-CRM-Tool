@@ -17,22 +17,14 @@ def cli():
 
 @cli.command()
 @click.option("--name", required=True, help="Organization name")
-@click.option("--slug", required=True, help="URL-friendly slug (lowercase, no spaces)")
+@click.option("--slug", required=True, help="URL-friendly slug (lowercase, hyphens allowed)")
 @click.option("--admin-email", required=True, help="Admin email address")
 @click.option("--developer-email", required=False, help="Developer email address (optional)")
-@click.option("--portal-domain", required=False, help="Portal domain host (e.g. ap.example.com)")
-@click.option(
-    "--base-domain",
-    required=False,
-    help="Base domain for portal (builds ap.<domain>)",
-)
 def create_org(
     name: str,
     slug: str,
     admin_email: str,
     developer_email: str | None,
-    portal_domain: str | None,
-    base_domain: str | None,
 ):
     """
     Create organization and initial admin invite.
@@ -40,27 +32,22 @@ def create_org(
     This is the bootstrap command for setting up a new tenant.
     The admin will need to log in with Google using the specified email.
 
+    Portal URL will be https://{slug}.surrogacyforce.com
+
     Example:
         python -m app.cli create-org --name "Acme Corp" --slug "acme" --admin-email "admin@acme.com"
         python -m app.cli create-org --name "Acme Corp" --slug "acme" --admin-email "admin@acme.com" --developer-email "dev@acme.com"
-        python -m app.cli create-org --name "Acme Corp" --slug "acme" --admin-email "admin@acme.com" --base-domain "acme.com"
-        python -m app.cli create-org --name "Acme Corp" --slug "acme" --admin-email "admin@acme.com" --portal-domain "ap.acme.com"
     """
     db = SessionLocal()
     try:
         admin_email = admin_email.lower().strip()
         developer_email = developer_email.lower().strip() if developer_email else None
-        portal_domain = portal_domain.lower().strip() if portal_domain else None
-        base_domain = base_domain.lower().strip() if base_domain else None
 
-        if portal_domain and base_domain:
-            click.echo("[ERROR] Provide either --portal-domain or --base-domain, not both")
-            return
-
-        # Validate slug format
-        slug = slug.lower().strip()
-        if not slug.replace("-", "").replace("_", "").isalnum():
-            click.echo("[ERROR] Slug must be alphanumeric (with optional hyphens/underscores)")
+        # Validate slug (checks format, reserved slugs, normalizes to lowercase)
+        try:
+            slug = org_service.validate_slug(slug)
+        except ValueError as e:
+            click.echo(f"[ERROR] Invalid slug: {e}")
             return
 
         # Check if org already exists
@@ -140,22 +127,8 @@ def create_org(
                     )
                     return
 
-        if base_domain and not portal_domain:
-            try:
-                portal_domain = org_service.build_portal_domain(base_domain)
-            except ValueError as e:
-                click.echo(f"[ERROR] {e}")
-                return
-
-        if portal_domain:
-            try:
-                portal_domain = org_service.normalize_portal_domain(portal_domain)
-            except ValueError as e:
-                click.echo(f"[ERROR] {e}")
-                return
-
         # Create organization with defaults
-        org = org_service.create_org(db, name=name, slug=slug, portal_domain=portal_domain)
+        org = org_service.create_org(db, name=name, slug=slug)
 
         # Create admin invite (never expires for bootstrap)
         invite = OrgInvite(
@@ -181,8 +154,7 @@ def create_org(
         click.echo(f"[OK] Created organization: {name}")
         click.echo(f"  ID: {org.id}")
         click.echo(f"  Slug: {slug}")
-        if portal_domain:
-            click.echo(f"  Portal domain: {portal_domain}")
+        click.echo(f"  Portal URL: {org_service.get_org_portal_base_url(org)}")
         click.echo(f"[OK] Created invite for {admin_email} with role: {admin_role}")
         if developer_email:
             click.echo(f"[OK] Created invite for {developer_email} with role: developer")

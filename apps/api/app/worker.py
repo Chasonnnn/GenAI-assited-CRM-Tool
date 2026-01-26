@@ -1685,9 +1685,7 @@ async def process_org_delete(db, job) -> None:
 
     deleted = platform_service.purge_organization(db, UUID(str(org_id)))
     if not deleted:
-        logger.info(
-            "Org delete job no-op for org_id=%s (not due or already deleted)", org_id
-        )
+        logger.info("Org delete job no-op for org_id=%s (not due or already deleted)", org_id)
 
 
 def main() -> None:

@@ -17,7 +17,7 @@ export interface OrganizationSummary {
     id: string;
     name: string;
     slug: string;
-    portal_domain?: string;
+    portal_base_url: string;
     timezone: string;
     member_count: number;
     surrogate_count: number;
@@ -192,6 +192,21 @@ export function getOrganization(orgId: string): Promise<OrganizationDetail> {
  */
 export function createOrganization(data: CreateOrganizationRequest): Promise<OrganizationDetail> {
     return api.post<OrganizationDetail>('/platform/orgs', data);
+}
+
+/**
+ * Update organization name and/or slug.
+ *
+ * Note: Slug changes have significant impact:
+ * - Portal URL changes to https://{new_slug}.surrogacyforce.com
+ * - Existing sessions become invalid, users must re-login
+ * - Old slug immediately returns 404
+ */
+export function updateOrganization(
+    orgId: string,
+    data: { name?: string; slug?: string }
+): Promise<OrganizationDetail> {
+    return api.patch<OrganizationDetail>(`/platform/orgs/${orgId}`, data);
 }
 
 /**

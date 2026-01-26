@@ -239,9 +239,7 @@ class TestMFAEndpoints:
         test_user.duo_enrolled_at = datetime.now(timezone.utc)
         db.commit()
 
-        response = await authed_client.post(
-            "/mfa/verify", json={"code": recovery_codes[0]}
-        )
+        response = await authed_client.post("/mfa/verify", json={"code": recovery_codes[0]})
 
         assert response.status_code == 200
         payload = response.json()

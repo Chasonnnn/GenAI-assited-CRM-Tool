@@ -33,14 +33,6 @@ import {
     useVerifyTOTPSetup,
 } from "@/lib/hooks/use-mfa"
 
-function getOpsOrigin(): string | null {
-    if (typeof window === "undefined") return null
-    const { protocol, hostname, origin } = window.location
-    if (hostname.startsWith("ops.")) return origin
-    if (hostname.startsWith("app.")) return `${protocol}//ops.${hostname.slice(4)}`
-    return null
-}
-
 function hasAuthReturnToOpsCookie(): boolean {
     if (typeof document === "undefined") return false
     return document.cookie.split(";").some((c) => c.trim().startsWith("auth_return_to=ops"))
@@ -157,8 +149,10 @@ function MFAPageContent() {
         // Ensure ops flows keep "return_to=ops" even if the user landed here without coming from /ops/login.
         if (typeof window === "undefined") return
         const queryReturnTo = searchParams.get("return_to")
-        const isOpsHost = window.location.hostname.startsWith("ops.")
-        const isOps = queryReturnTo === "ops" || isOpsHost || hasAuthReturnToOpsCookie()
+        const isOps =
+            queryReturnTo === "ops" ||
+            hasAuthReturnToOpsCookie() ||
+            sessionStorage.getItem("auth_return_to") === "ops"
         if (isOps) {
             sessionStorage.setItem("auth_return_to", "ops")
         }
@@ -175,11 +169,6 @@ function MFAPageContent() {
             const returnTo = sessionStorage.getItem("auth_return_to")
             if (returnTo === "ops") {
                 sessionStorage.removeItem("auth_return_to")
-                const opsOrigin = getOpsOrigin()
-                if (opsOrigin && typeof window !== "undefined" && opsOrigin !== window.location.origin) {
-                    window.location.replace(`${opsOrigin}/`)
-                    return
-                }
                 router.replace("/ops")
                 return
             }
@@ -225,11 +214,6 @@ function MFAPageContent() {
             await refetch()
             if (returnTo === "ops") {
                 sessionStorage.removeItem("auth_return_to")
-                const opsOrigin = getOpsOrigin()
-                if (opsOrigin && typeof window !== "undefined" && opsOrigin !== window.location.origin) {
-                    window.location.replace(`${opsOrigin}/`)
-                    return
-                }
                 router.replace("/ops")
                 return
             }
@@ -243,13 +227,11 @@ function MFAPageContent() {
     const handleDuo = async () => {
         setErrorMessage(null)
         try {
-            const isOpsHost = typeof window !== "undefined" && window.location.hostname.startsWith("ops.")
             const queryReturnTo = searchParams.get("return_to")
             const returnTo =
                 queryReturnTo === "ops" ||
                 hasAuthReturnToOpsCookie() ||
-                sessionStorage.getItem("auth_return_to") === "ops" ||
-                isOpsHost
+                sessionStorage.getItem("auth_return_to") === "ops"
                     ? "ops"
                     : undefined
             if (returnTo === "ops") {
@@ -430,15 +412,6 @@ function MFAPageContent() {
                         const returnTo = sessionStorage.getItem("auth_return_to")
                         if (returnTo === "ops") {
                             sessionStorage.removeItem("auth_return_to")
-                            const opsOrigin = getOpsOrigin()
-                            if (
-                                opsOrigin &&
-                                typeof window !== "undefined" &&
-                                opsOrigin !== window.location.origin
-                            ) {
-                                window.location.replace(`${opsOrigin}/`)
-                                return
-                            }
                             router.replace("/ops")
                             return
                         }

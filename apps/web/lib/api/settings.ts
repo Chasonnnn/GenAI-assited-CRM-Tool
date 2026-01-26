@@ -12,10 +12,11 @@ import type { User } from '@/lib/auth-context';
 export interface OrgSettings {
     id: string;
     name: string;
+    slug: string;
+    portal_base_url: string;
     address: string | null;
     phone: string | null;
     email: string | null;
-    portal_domain: string | null;
 }
 
 export interface UpdateOrgRequest {
@@ -23,7 +24,6 @@ export interface UpdateOrgRequest {
     address?: string;
     phone?: string;
     email?: string;
-    portal_domain?: string | null;
 }
 
 // =============================================================================

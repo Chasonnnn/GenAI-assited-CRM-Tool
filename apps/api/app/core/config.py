@@ -108,6 +108,10 @@ class Settings(BaseSettings):
     # Leave empty for host-only cookies (local dev)
     COOKIE_DOMAIN: str = ""
 
+    # Platform base domain for slug-based subdomains (e.g., "surrogacyforce.com")
+    # Tenant portals are at {slug}.{PLATFORM_BASE_DOMAIN}
+    PLATFORM_BASE_DOMAIN: str = "surrogacyforce.com"
+
     # Platform admin emails (comma-separated, for allowlist-based access)
     PLATFORM_ADMIN_EMAILS: str = ""
 

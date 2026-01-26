@@ -211,8 +211,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
         org.ai_enabled = organization_payload.get("ai_enabled", org.ai_enabled)
         if organization_payload.get("current_version"):
             org.current_version = organization_payload["current_version"]
-        if "portal_domain" in organization_payload:
-            org.portal_domain = organization_payload.get("portal_domain")
+        # Note: portal_domain is no longer supported - URLs are computed from slug
         if "signature_template" in organization_payload:
             org.signature_template = organization_payload.get("signature_template")
         if "signature_logo_url" in organization_payload:

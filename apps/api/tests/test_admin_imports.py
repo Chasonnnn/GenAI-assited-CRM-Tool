@@ -154,7 +154,6 @@ class TestAdminImports:
                 "timezone": "America/Los_Angeles",
                 "ai_enabled": True,
                 "current_version": 1,
-                "portal_domain": "portal.example.com",
                 "signature_template": "modern",
                 "signature_logo_url": "logos/org.png",
                 "signature_primary_color": "#112233",
@@ -374,7 +373,6 @@ class TestAdminImports:
 
         refreshed_org = db.query(Organization).filter(Organization.id == test_org.id).first()
         assert refreshed_org is not None
-        assert refreshed_org.portal_domain == "portal.example.com"
         assert refreshed_org.signature_template == "modern"
         assert refreshed_org.signature_logo_url == "logos/org.png"
         assert refreshed_org.signature_primary_color == "#112233"

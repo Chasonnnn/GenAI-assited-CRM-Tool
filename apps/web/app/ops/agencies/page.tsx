@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import Link from "@/components/app-link";
 import { useRouter } from 'next/navigation';
 import { listOrganizations, type OrganizationSummary } from '@/lib/api/platform';
 import { buttonVariants } from '@/components/ui/button';

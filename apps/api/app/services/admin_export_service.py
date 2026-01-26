@@ -909,7 +909,6 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "id": str(org.id),
             "name": org.name,
             "slug": org.slug,
-            "portal_domain": org.portal_domain,
             "timezone": org.timezone,
             "ai_enabled": org.ai_enabled,
             "current_version": org.current_version,

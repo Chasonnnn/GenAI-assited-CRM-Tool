@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback } from "react"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { useQuery } from "@tanstack/react-query"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"

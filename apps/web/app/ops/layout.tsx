@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import Link from 'next/link';
+import Link from "@/components/app-link";
 import { getPlatformMe, getPlatformStats, type PlatformUser } from '@/lib/api/platform';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

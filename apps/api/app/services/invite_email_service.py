@@ -9,7 +9,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.models import OrgInvite, Organization, User
+from app.db.models import OrgInvite, User
 from app.services import (
     email_service,
     gmail_service,

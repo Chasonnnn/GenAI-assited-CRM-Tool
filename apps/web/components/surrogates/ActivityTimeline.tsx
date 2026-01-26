@@ -1,7 +1,7 @@
 "use client"
 
 import { memo, useEffect, useMemo, useRef, useState } from "react"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { formatDistanceToNow, isBefore, parseISO, startOfToday } from "date-fns"
 import {
     ActivityIcon,

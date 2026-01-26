@@ -372,7 +372,7 @@ function OrganizationSection() {
   const [orgAddress, setOrgAddress] = useState("")
   const [orgPhone, setOrgPhone] = useState("")
   const [orgEmail, setOrgEmail] = useState("")
-  const [orgPortalDomain, setOrgPortalDomain] = useState("")
+  const [portalBaseUrl, setPortalBaseUrl] = useState("")
   const [orgSaving, setOrgSaving] = useState(false)
   const [orgSaved, setOrgSaved] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -387,7 +387,7 @@ function OrganizationSection() {
         setOrgAddress(settings.address || "")
         setOrgPhone(settings.phone || "")
         setOrgEmail(settings.email || "")
-        setOrgPortalDomain(settings.portal_domain || "")
+        setPortalBaseUrl(settings.portal_base_url || "")
       } catch (error) {
         console.error("Failed to load organization settings:", error)
       } finally {
@@ -409,13 +409,11 @@ function OrganizationSection() {
       const trimmedAddress = orgAddress.trim()
       const trimmedPhone = orgPhone.trim()
       const trimmedEmail = orgEmail.trim()
-      const trimmedPortalDomain = orgPortalDomain.trim()
       await updateOrgSettings({
         ...(trimmedName ? { name: trimmedName } : {}),
         ...(trimmedAddress ? { address: trimmedAddress } : {}),
         ...(trimmedPhone ? { phone: trimmedPhone } : {}),
         ...(trimmedEmail ? { email: trimmedEmail } : {}),
-        portal_domain: trimmedPortalDomain || null,
       })
       setOrgSaved(true)
       setTimeout(() => setOrgSaved(false), 2000)
@@ -485,18 +483,21 @@ function OrganizationSection() {
           />
         </div>
 
-        <div className="space-y-2 md:col-span-2">
-          <Label htmlFor="portalDomain">Portal Domain</Label>
-          <Input
-            id="portalDomain"
-            placeholder="portal.ewifamilyglobal.com"
-            value={orgPortalDomain}
-            onChange={(e) => setOrgPortalDomain(e.target.value)}
-          />
-          <p className="text-xs text-muted-foreground">
-            Used for public links (forms, booking, invites). Leave blank to use the main app domain.
-          </p>
-        </div>
+        {portalBaseUrl && (
+          <div className="space-y-2 md:col-span-2">
+            <Label>Portal URL</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                value={portalBaseUrl}
+                disabled
+                className="font-mono text-sm"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Your portal URL is derived from your organization slug. Contact platform support to change it.
+            </p>
+          </div>
+        )}
       </div>
 
       <Button onClick={handleSaveOrg} disabled={orgSaving}>
@@ -957,20 +958,37 @@ export default function SettingsPage() {
 
   const isAdmin = user?.role === "admin" || user?.role === "developer"
 
-  const activeTab = (() => {
-    const tab = searchParams?.get("tab")
-    if (tab === "email-signature" && isAdmin) return tab
-    return "general"
-  })()
+  const [tabOverride, setTabOverride] = useState<string | null>(null)
+  const urlTab = searchParams?.get("tab")
+  const resolvedUrlTab =
+    urlTab === "email-signature" && isAdmin ? urlTab : "general"
+  const activeTab = tabOverride ?? resolvedUrlTab
 
   const handleTabChange = (value: string) => {
+    const nextTab = value === "email-signature" && isAdmin ? value : "general"
+    setTabOverride(nextTab)
     const url = new URL(window.location.href)
-    if (value === "general") {
+    if (nextTab === "general") {
       url.searchParams.delete("tab")
     } else {
-      url.searchParams.set("tab", value)
+      url.searchParams.set("tab", nextTab)
     }
     window.history.pushState({}, "", url.toString())
+
+    window.setTimeout(() => {
+      const currentUrl = new URL(window.location.href)
+      const currentTab = currentUrl.searchParams.get("tab")
+      const matches = nextTab === "general" ? currentTab === null : currentTab === nextTab
+      if (!matches) {
+        if (nextTab === "general") {
+          currentUrl.searchParams.delete("tab")
+        } else {
+          currentUrl.searchParams.set("tab", nextTab)
+        }
+        window.history.replaceState({}, "", currentUrl.toString())
+      }
+      setTabOverride(null)
+    }, 400)
   }
 
   return (

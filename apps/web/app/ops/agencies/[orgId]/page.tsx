@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import Link from 'next/link';
+import Link from "@/components/app-link";
 import {
     getOrganization,
     getSubscription,
@@ -414,7 +414,7 @@ export default function AgencyDetailPage() {
             .replace(/\{\{role_title\}\}/g, 'Admin')
             .replace(
                 /\{\{invite_url\}\}/g,
-                `${org?.portal_domain ? `https://${org.portal_domain}` : 'https://app.example.com'}/invite/EXAMPLE`
+                `${org?.portal_base_url || 'https://app.example.com'}/invite/EXAMPLE`
             )
             .replace(/\{\{expires_block\}\}/g, '<p>This invitation expires in 7 days.</p>'),
         {
@@ -660,11 +660,16 @@ export default function AgencyDetailPage() {
                             <div className="flex items-center gap-4 mt-1 text-sm text-stone-500 dark:text-stone-400">
                                 <span className="font-mono">{org.slug}</span>
                                 <CopyButton value={org.id} label="ID" />
-                                {org.portal_domain && (
-                                    <span className="flex items-center gap-1">
+                                {org.portal_base_url && (
+                                    <a
+                                        href={org.portal_base_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-1 hover:text-primary transition-colors"
+                                    >
                                         <Globe className="size-3.5" />
-                                        {org.portal_domain}
-                                    </span>
+                                        {org.portal_base_url.replace('https://', '')}
+                                    </a>
                                 )}
                             </div>
                         </div>

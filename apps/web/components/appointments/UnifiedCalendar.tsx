@@ -48,7 +48,7 @@ import { useSurrogates } from "@/lib/hooks/use-surrogates"
 import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
 import type { AppointmentListItem, GoogleCalendarEvent } from "@/lib/api/appointments"
 import type { TaskListItem } from "@/lib/api/tasks"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import {
     format,
     startOfMonth,

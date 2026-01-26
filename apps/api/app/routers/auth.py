@@ -314,7 +314,7 @@ def get_me(
         org_display_name=org_service.get_org_display_name(org),
         org_slug=org.slug,
         org_timezone=org.timezone,
-        org_portal_domain=org.portal_domain if org else None,
+        org_portal_base_url=org_service.get_org_portal_base_url(org),
         role=session.role,
         ai_enabled=org.ai_enabled if org else False,
         mfa_enabled=user.mfa_enabled,
@@ -363,7 +363,7 @@ def update_me(
         org_display_name=org_service.get_org_display_name(org),
         org_slug=org.slug,
         org_timezone=org.timezone,
-        org_portal_domain=org.portal_domain if org else None,
+        org_portal_base_url=org_service.get_org_portal_base_url(org),
         role=session.role,
         ai_enabled=org.ai_enabled if org else False,
         mfa_enabled=user.mfa_enabled,
@@ -1078,26 +1078,19 @@ def _get_success_redirect(
         return_to: Target app ("app" or "ops").
         mfa_pending: If true, redirect to MFA instead of the post-login landing page.
     """
+    base = (base_url or settings.FRONTEND_URL or "").rstrip("/")
+
+    def _join(path: str) -> str:
+        return f"{base}{path}" if base else path
+
     if mfa_pending:
         if return_to == "ops":
-            base = (
-                settings.OPS_FRONTEND_URL.rstrip("/")
-                if settings.OPS_FRONTEND_URL
-                else settings.FRONTEND_URL.rstrip("/")
-            )
-            return f"{base}/mfa?return_to=ops"
-        base = base_url or settings.FRONTEND_URL.rstrip("/")
-        return f"{base}/mfa"
+            return _join("/mfa?return_to=ops")
+        return _join("/mfa")
 
     if return_to == "ops":
-        base = (
-            settings.OPS_FRONTEND_URL.rstrip("/")
-            if settings.OPS_FRONTEND_URL
-            else settings.FRONTEND_URL.rstrip("/")
-        )
-        return f"{base}/"
-    base = base_url or settings.FRONTEND_URL.rstrip("/")
-    return f"{base}/dashboard"
+        return _join("/ops")
+    return _join("/dashboard")
 
 
 def _get_error_redirect(
@@ -1111,12 +1104,11 @@ def _get_error_redirect(
         base_url: Optional org portal base URL (takes precedence for app redirects).
         return_to: Target app ("app" or "ops").
     """
+    base = (base_url or settings.FRONTEND_URL or "").rstrip("/")
+
+    def _join(path: str) -> str:
+        return f"{base}{path}" if base else path
+
     if return_to == "ops":
-        base = (
-            settings.OPS_FRONTEND_URL.rstrip("/")
-            if settings.OPS_FRONTEND_URL
-            else settings.FRONTEND_URL.rstrip("/")
-        )
-        return f"{base}/login?error={error_code}"
-    base = base_url or settings.FRONTEND_URL.rstrip("/")
-    return f"{base}/login?error={error_code}"
+        return _join(f"/ops/login?error={error_code}")
+    return _join(f"/login?error={error_code}")

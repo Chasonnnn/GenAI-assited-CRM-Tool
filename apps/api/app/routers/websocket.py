@@ -11,6 +11,7 @@ import asyncio
 import time
 from uuid import UUID
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.websocket import manager, send_ws_to_user, send_ws_to_org
@@ -30,20 +31,85 @@ def _normalize_origin(origin: str) -> str:
 
 
 def _allowed_origins() -> set[str]:
+    """Get static list of allowed origins (for backwards compatibility)."""
     allowed = {_normalize_origin(origin) for origin in settings.cors_origins_list}
     if settings.FRONTEND_URL:
         allowed.add(_normalize_origin(settings.FRONTEND_URL))
     return {origin for origin in allowed if origin}
 
 
-def _origin_is_allowed(origin: str | None, *, allowed: set[str], is_dev: bool) -> bool:
+def validate_websocket_origin(origin: str | None, db: Session) -> bool:
+    """
+    Validate a WebSocket origin against known org domains or static origins.
+
+    This is used by tests and can be reused by callers that already have a DB session.
+    """
+    if not origin:
+        return False
+
+    normalized = _normalize_origin(origin)
+    if normalized in _allowed_origins():
+        return True
+
+    from urllib.parse import urlparse
+    from app.services import org_service
+
+    parsed = urlparse(normalized)
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return False
+
+    if settings.is_dev and (
+        host in ("localhost", "127.0.0.1") or host.endswith(".localhost") or host.endswith(".test")
+    ):
+        return True
+
+    return org_service.get_org_by_host(db, host) is not None
+
+
+def _validate_websocket_origin(origin: str | None, *, is_dev: bool) -> bool:
+    """
+    Validate WebSocket origin dynamically.
+
+    Allows:
+    - Any origin in dev mode
+    - Static CORS_ORIGINS list
+    - Dynamic {slug}.{PLATFORM_BASE_DOMAIN} subdomains
+    """
     if is_dev:
         return True
     if not origin:
         return False
-    if not allowed:
+
+    normalized = _normalize_origin(origin)
+
+    # Check static list first
+    if normalized in _allowed_origins():
+        return True
+
+    # Extract hostname from origin (https://ewi.surrogacyforce.com -> ewi.surrogacyforce.com)
+    from urllib.parse import urlparse
+
+    parsed = urlparse(normalized)
+    host = (parsed.hostname or "").lower()
+
+    if not host:
         return False
-    return _normalize_origin(origin) in allowed
+
+    # Allow any *.{PLATFORM_BASE_DOMAIN} subdomain (will be validated at session level)
+    base_domain = settings.PLATFORM_BASE_DOMAIN
+    if base_domain and host.endswith(f".{base_domain}"):
+        slug = host.removesuffix(f".{base_domain}")
+        # Basic slug format check (actual org validation happens during auth)
+        if slug and slug.replace("-", "").isalnum():
+            return True
+
+    return False
+
+
+def _origin_is_allowed(origin: str | None, *, allowed: set[str], is_dev: bool) -> bool:
+    """Legacy function for backwards compatibility."""
+    return _validate_websocket_origin(origin, is_dev=is_dev)
 
 
 @router.websocket("/notifications")
@@ -105,6 +171,8 @@ async def websocket_notifications(
         await websocket.close(code=4001, reason="Authentication required")
         return
     with SessionLocal() as db:
+        from app.db.models import Organization
+
         db_session = session_service.get_session_by_token_hash(db, token_hash)
         if not db_session:
             await websocket.close(code=4001, reason="Session revoked")
@@ -123,6 +191,23 @@ async def websocket_notifications(
         if not membership:
             await websocket.close(code=4001, reason="Membership inactive")
             return
+
+        # Validate origin matches org's subdomain (cross-tenant protection)
+        if origin and not settings.is_dev:
+            org = db.query(Organization).filter(Organization.id == org_id).first()
+            if org:
+                from urllib.parse import urlparse
+
+                parsed = urlparse(origin)
+                origin_host = (parsed.hostname or "").lower()
+                expected_host = f"{org.slug}.{settings.PLATFORM_BASE_DOMAIN}"
+                # Allow both exact match and static CORS origins
+                if (
+                    origin_host != expected_host
+                    and _normalize_origin(origin) not in _allowed_origins()
+                ):
+                    await websocket.close(code=4003, reason="Origin invalid for organization")
+                    return
 
     # Register connection with org tracking
     await manager.connect(websocket, user_id, org_id, token_hash=token_hash)
