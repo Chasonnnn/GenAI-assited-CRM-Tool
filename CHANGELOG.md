@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.34.3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.34.2...surrogacy-crm-platform-v0.34.3) (2026-01-26)
+
+
+### Bug Fixes
+
+* Refine 'ops' subdomain authentication and routing, and remove re… ([61fe4b1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/61fe4b1787d6345a3485875f46df50a3ba6f23bd))
+* Refine 'ops' subdomain authentication and routing, and remove redundant multipart Content-Type headers from API requests. ([6a972a4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6a972a4fa9cdb11c491a1f372523cca4569f6254))
+
 ## [0.34.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.34.1...surrogacy-crm-platform-v0.34.2) (2026-01-26)
 
 
