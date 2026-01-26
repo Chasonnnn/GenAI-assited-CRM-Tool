@@ -96,7 +96,9 @@ export function useRequireAuth() {
             const hasOpsCookie = document.cookie
                 .split(';')
                 .some((c) => c.trim().startsWith('auth_return_to=ops'));
-            const isOpsRoute = window.location.pathname.startsWith('/ops');
+            const isOpsRoute =
+                window.location.pathname.startsWith('/ops') ||
+                window.location.hostname.startsWith('ops.');
             const url = hasOpsCookie || isOpsRoute ? '/mfa?return_to=ops' : '/mfa';
             window.location.href = url;
         }

@@ -95,7 +95,8 @@ function DuoCallbackContent() {
             const returnTo =
                 sessionStorage.getItem("auth_return_to") === "ops" ||
                 searchParams.get("return_to") === "ops" ||
-                hasAuthReturnToOpsCookie()
+                hasAuthReturnToOpsCookie() ||
+                window.location.hostname.startsWith("ops.")
                     ? "ops"
                     : "app"
 
@@ -114,7 +115,8 @@ function DuoCallbackContent() {
         const returnTo =
             sessionStorage.getItem("auth_return_to") === "ops" ||
             searchParams.get("return_to") === "ops" ||
-            hasAuthReturnToOpsCookie()
+            hasAuthReturnToOpsCookie() ||
+            window.location.hostname.startsWith("ops.")
                 ? "ops"
                 : "app"
 
@@ -211,7 +213,8 @@ function DuoCallbackContent() {
                         const returnTo =
                             sessionStorage.getItem("auth_return_to") === "ops" ||
                             searchParams.get("return_to") === "ops" ||
-                            hasAuthReturnToOpsCookie()
+                            hasAuthReturnToOpsCookie() ||
+                            window.location.hostname.startsWith("ops.")
                                 ? "ops"
                                 : "app"
                         if (returnTo === "ops") {
