@@ -14,7 +14,7 @@ import {
     PlusIcon,
     LockIcon,
 } from "lucide-react"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { useSurrogatesByStatus } from "@/lib/hooks/use-analytics"
 import { useSurrogateStats } from "@/lib/hooks/use-surrogates"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"

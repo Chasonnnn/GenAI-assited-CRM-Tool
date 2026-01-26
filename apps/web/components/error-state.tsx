@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { AlertCircle, ChevronDown, ChevronUp } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import {

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Table, TableHead, TableHeader, TableBody, TableRow, TableCell } from "@/components/ui/table"
 import { ArrowLeftIcon, VideoIcon, CheckCircleIcon, UnlinkIcon, Loader2Icon, ExternalLinkIcon, CalendarIcon } from "lucide-react"
 import { useZoomStatus, useZoomMeetings, useConnectZoom, useDisconnectIntegration, type ZoomMeetingRead } from "@/lib/hooks/use-user-integrations"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { formatDistanceToNow } from "date-fns"
 
 export default function ZoomSettingsPage() {

@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react"
 import { useParams, useSearchParams, useRouter } from "next/navigation"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
