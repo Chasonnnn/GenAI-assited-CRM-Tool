@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.35.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.34.6...surrogacy-crm-platform-v0.35.0) (2026-01-26)
+
+
+### Features
+
+* wildcard tenant routing, UI component extraction, architecture docs ([a56fec6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a56fec6bdb68e171b1535661f8b63817fb8a90b3))
+
 ## [0.34.6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.34.5...surrogacy-crm-platform-v0.34.6) (2026-01-26)
 
 
