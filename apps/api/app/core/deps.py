@@ -599,6 +599,16 @@ def require_platform_admin(request: Request, db: Session = Depends(get_db)) -> P
 
     host = request.headers.get("host", "").split(":")[0].lower()
     if not _is_dev_host(host):
+        if host == f"ops.{settings.PLATFORM_BASE_DOMAIN}":
+            return PlatformUserSession(
+                user_id=user.id,
+                email=user.email,
+                display_name=user.display_name,
+                is_platform_admin=user.is_platform_admin,
+                token_version=user.token_version,
+                mfa_verified=mfa_verified,
+                mfa_required=mfa_required,
+            )
         from app.services import org_service
 
         org = org_service.get_org_by_host(db, host)
