@@ -33,10 +33,12 @@ def _resolve_portal_base_url(request: Request, db: Session, org_id: UUID | None)
         base_url = org_service.get_org_portal_base_url(org)
         if base_url:
             return base_url.rstrip("/")
-    if settings.FRONTEND_URL:
-        return settings.FRONTEND_URL.rstrip("/")
     scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
     host = (request.headers.get("host") or "").lower()
+    if host == f"ops.{settings.PLATFORM_BASE_DOMAIN}":
+        return f"{scheme}://{host}".rstrip("/")
+    if settings.FRONTEND_URL:
+        return settings.FRONTEND_URL.rstrip("/")
     return f"{scheme}://{host}".rstrip("/")
 
 
