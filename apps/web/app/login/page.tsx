@@ -8,13 +8,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChevronDown, ChevronUp, ShieldCheck } from "lucide-react"
+import { getAuthApiBase } from "@/lib/auth-utils"
 
 export default function LoginPage() {
   const [username, setUsername] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [showOtherOptions, setShowOtherOptions] = useState(false)
 
-  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
+  const apiBase = getAuthApiBase()
 
   const getReturnTo = () =>
     typeof window !== "undefined" &&
