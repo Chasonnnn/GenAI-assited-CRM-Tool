@@ -416,9 +416,7 @@ def trigger_task_overdue_sweep(db: Session, org_id: UUID) -> None:
 
 def trigger_match_proposed(db: Session, match: Match) -> None:
     """Trigger workflows when a match is proposed."""
-    entity_owner_id = _get_owner_id_for_surrogate_id(
-        db, match.organization_id, match.surrogate_id
-    )
+    entity_owner_id = _get_owner_id_for_surrogate_id(db, match.organization_id, match.surrogate_id)
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.MATCH_PROPOSED,
@@ -441,9 +439,7 @@ def trigger_match_proposed(db: Session, match: Match) -> None:
 def trigger_match_accepted(db: Session, match: Match) -> None:
     """Trigger workflows when a match is accepted."""
     accepted_at = match.reviewed_at or match.updated_at
-    entity_owner_id = _get_owner_id_for_surrogate_id(
-        db, match.organization_id, match.surrogate_id
-    )
+    entity_owner_id = _get_owner_id_for_surrogate_id(db, match.organization_id, match.surrogate_id)
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.MATCH_ACCEPTED,
@@ -466,9 +462,7 @@ def trigger_match_accepted(db: Session, match: Match) -> None:
 
 def trigger_match_rejected(db: Session, match: Match) -> None:
     """Trigger workflows when a match is rejected."""
-    entity_owner_id = _get_owner_id_for_surrogate_id(
-        db, match.organization_id, match.surrogate_id
-    )
+    entity_owner_id = _get_owner_id_for_surrogate_id(db, match.organization_id, match.surrogate_id)
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.MATCH_REJECTED,

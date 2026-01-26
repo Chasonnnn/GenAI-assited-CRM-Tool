@@ -328,9 +328,7 @@ def test_execute_import_warns_on_unmapped_columns(db, test_org, test_user):
     )
 
     db.expire_all()
-    stored = (
-        db.query(SurrogateImport).filter(SurrogateImport.id == import_record.id).first()
-    )
+    stored = db.query(SurrogateImport).filter(SurrogateImport.id == import_record.id).first()
     assert stored is not None
     assert stored.error_count == 0
     warnings = [entry for entry in (stored.errors or []) if entry.get("level") == "warning"]

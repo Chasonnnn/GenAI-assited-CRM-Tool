@@ -4,7 +4,7 @@
 - Frontend: Next.js 16 App Router in `apps/web` (SSR + client components, React Query, Zustand)
 - Backend: FastAPI app in `apps/api/app/main.py` with thin routers and service layer
 - Background jobs: polling worker in `apps/api/app/worker.py` processing `Job` rows; scheduled triggers via `/internal/scheduled/*`
-- Database: PostgreSQL with SQLAlchemy models in `apps/api/app/db/models.py`, migrations in `apps/api/alembic/versions` (archive in `apps/api/alembic/versions_archive`)
+- Database: PostgreSQL with SQLAlchemy models in `apps/api/app/db/models/*` (re-exported in `apps/api/app/db/models/__init__.py`), migrations in `apps/api/alembic/versions` (archive in `apps/api/alembic/versions_archive`)
 - Storage: attachments via `apps/api/app/services/attachment_service.py` and `apps/api/app/services/media_service.py`, optional ClamAV scanning in `apps/api/app/jobs/scan_attachment.py`
 
 ### Request Flow (HTTP)
@@ -37,15 +37,15 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 - Worker: `apps/api/app/worker.py`
 - CLI: `apps/api/app/cli.py`
 - Core utilities: `apps/api/app/core/*` (config, deps, csrf, rate limits, permissions, policies, logging, stage rules, async_utils)
-- DB: `apps/api/app/db/*` (models, enums, session)
+- DB: `apps/api/app/db/*` (models, enums package, session)
 - Utils: `apps/api/app/utils/*` (normalization, pagination)
 - Routers: `apps/api/app/routers/*` (see API Index)
 - Services: `apps/api/app/services/*` (surrogates, matches, workflows, AI, analytics, integrations, compliance)
 - Service events: `apps/api/app/services/dashboard_events.py`, `apps/api/app/services/task_events.py`
-- Notification facade: `apps/api/app/services/notification_facade.py`
-- Email sender interface: `apps/api/app/services/email_sender.py`
+- Email providers: `apps/api/app/services/email_provider_service.py`, `apps/api/app/services/resend_email_service.py`
+- Webhook handlers: `apps/api/app/services/webhooks/*` (meta, zoom, resend)
+- Appointment integrations: `apps/api/app/services/appointment_integrations.py`
 - Surrogate status helper: `apps/api/app/services/surrogate_status_service.py`
-- Form submissions: `apps/api/app/services/form_submission_service.py`
 - CSV import pipeline: `apps/api/app/services/import_service.py`, `apps/api/app/routers/surrogates_import.py`
 - Import templates: `apps/api/app/services/import_template_service.py`, `apps/api/app/routers/import_templates.py`
 - Custom fields: `apps/api/app/services/custom_field_service.py`, `apps/api/app/routers/custom_fields.py`
@@ -84,22 +84,22 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 - Matches: UI in `apps/web/app/(app)/matches/page.tsx` and `apps/web/app/(app)/intended-parents/matches/*`; API in `apps/api/app/routers/matches.py`; service in `apps/api/app/services/match_service.py`
 - Tasks: UI in `apps/web/app/(app)/tasks/page.tsx`; API in `apps/api/app/routers/tasks.py`; service in `apps/api/app/services/task_service.py`
 - Interviews: UI in `apps/web/components/surrogates/interviews/*`; API in `apps/api/app/routers/interviews.py`; service in `apps/api/app/services/interview_service.py`
-- Appointments/booking: UI in `apps/web/app/(app)/appointments/page.tsx`, `apps/web/app/book/*`; API in `apps/api/app/routers/appointments.py`, `apps/api/app/routers/booking.py`; service in `apps/api/app/services/appointment_service.py`
-- Forms: UI in `apps/web/app/(app)/automation/forms/*`, public in `apps/web/app/apply/[token]/page.tsx`; API in `apps/api/app/routers/forms.py`, `apps/api/app/routers/forms_public.py`; services in `apps/api/app/services/form_service.py`, `apps/api/app/services/form_submission_service.py`
+- Appointments/booking: UI in `apps/web/app/(app)/appointments/page.tsx`, `apps/web/app/book/*`; API in `apps/api/app/routers/appointments.py`, `apps/api/app/routers/booking.py`; services in `apps/api/app/services/appointment_service.py`, `apps/api/app/services/appointment_integrations.py`
+- Forms: UI in `apps/web/app/(app)/automation/forms/*`, public in `apps/web/app/apply/[token]/page.tsx`; API in `apps/api/app/routers/forms.py`, `apps/api/app/routers/forms_public.py`; services in `apps/api/app/services/form_service.py`
 - CSV imports + templates: API in `apps/api/app/routers/surrogates_import.py`, `apps/api/app/routers/import_templates.py`, `apps/api/app/routers/custom_fields.py`; services in `apps/api/app/services/import_service.py`, `apps/api/app/services/import_template_service.py`, `apps/api/app/services/custom_field_service.py`
 - Automation/workflows: UI in `apps/web/app/(app)/automation/*`; API in `apps/api/app/routers/workflows.py`, `apps/api/app/routers/templates.py`; services in `apps/api/app/services/workflow_engine.py`, `apps/api/app/services/workflow_triggers.py`
 - Campaigns + email templates: UI in `apps/web/app/(app)/automation/campaigns/*`, `apps/web/app/(app)/automation/email-templates/page.tsx`; API in `apps/api/app/routers/campaigns.py`, `apps/api/app/routers/email_templates.py`; services in `apps/api/app/services/campaign_service.py`, `apps/api/app/services/email_service.py`
 - AI assistant: UI in `apps/web/app/(app)/ai-assistant/page.tsx`; API in `apps/api/app/routers/ai.py`; services in `apps/api/app/services/ai_chat_service.py`, `apps/api/app/services/ai_workflow_service.py`, `apps/api/app/services/ai_interview_service.py`
 - Analytics + reports: UI in `apps/web/app/(app)/reports/page.tsx`, `apps/web/app/(app)/dashboard/page.tsx`; API in `apps/api/app/routers/analytics.py`, `apps/api/app/routers/dashboard.py`; services in `apps/api/app/services/analytics_service.py`
 - Notifications: UI in `apps/web/app/(app)/notifications/page.tsx`; API in `apps/api/app/routers/notifications.py`, `apps/api/app/routers/websocket.py`; services in `apps/api/app/services/notification_service.py`
-- Integrations: UI in `apps/web/app/(app)/settings/integrations/*`; API in `apps/api/app/routers/integrations.py`, `apps/api/app/routers/webhooks.py`; services in `apps/api/app/services/google_oauth.py`, `apps/api/app/services/gmail_service.py`, `apps/api/app/services/zoom_service.py`, `apps/api/app/services/meta_*`
+- Integrations: UI in `apps/web/app/(app)/settings/integrations/*`; API in `apps/api/app/routers/integrations.py`, `apps/api/app/routers/webhooks.py`; services in `apps/api/app/services/google_oauth.py`, `apps/api/app/services/gmail_service.py`, `apps/api/app/services/zoom_service.py`, `apps/api/app/services/meta_*`, `apps/api/app/services/webhooks/*`
 - Compliance + audit: UI in `apps/web/app/(app)/settings/compliance/page.tsx`, `apps/web/app/(app)/settings/audit/page.tsx`; API in `apps/api/app/routers/compliance.py`, `apps/api/app/routers/audit.py`; services in `apps/api/app/services/compliance_service.py`, `apps/api/app/services/audit_service.py`
 - Platform admin (Ops Console): UI in `apps/web/app/ops/*`; API in `apps/api/app/routers/platform.py`; services in `apps/api/app/services/platform_service.py`; cross-org management of agencies, subscriptions, members, invites, alerts, and admin action logs
 
 ---
 
 ## Data Model Index
-Models live in `apps/api/app/db/models.py` with migrations in `apps/api/alembic/versions/*`.
+Models live in `apps/api/app/db/models/*` with migrations in `apps/api/alembic/versions/*`.
 
 ### Auth + Org
 - `Organization` (organizations)
@@ -271,7 +271,7 @@ See each router for full endpoint list.
 ---
 
 ## Job/Worker Index
-Job types defined in `apps/api/app/db/enums.py` and processed in `apps/api/app/worker.py`.
+Job types defined in `apps/api/app/db/enums/*` and processed in `apps/api/app/worker.py`.
 
 - Email + notifications: `SEND_EMAIL`, `REMINDER`, `NOTIFICATION`
 - Webhooks: `WEBHOOK_RETRY`
