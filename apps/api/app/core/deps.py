@@ -245,12 +245,8 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
             .filter(Organization.id == support_session.organization_id)
             .first()
         )
-        host = request.headers.get("host", "").split(":")[0].lower()
         origin_host = _get_origin_host(request)
-        if not (
-            user.is_platform_admin
-            and origin_host == f"ops.{settings.PLATFORM_BASE_DOMAIN}"
-        ):
+        if not (user.is_platform_admin and origin_host == f"ops.{settings.PLATFORM_BASE_DOMAIN}"):
             if support_org:
                 _validate_request_host(request, support_org.slug)
 
@@ -286,12 +282,8 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=403, detail="Organization is scheduled for deletion")
 
     # Validate request host matches org's subdomain (cross-tenant protection)
-    host = request.headers.get("host", "").split(":")[0].lower()
     origin_host = _get_origin_host(request)
-    if not (
-        user.is_platform_admin
-        and origin_host == f"ops.{settings.PLATFORM_BASE_DOMAIN}"
-    ):
+    if not (user.is_platform_admin and origin_host == f"ops.{settings.PLATFORM_BASE_DOMAIN}"):
         _validate_request_host(request, org.slug)
 
     # Validate role is a known enum value - return 403 not 500
@@ -642,7 +634,10 @@ def require_platform_admin(request: Request, db: Session = Depends(get_db)) -> P
                 mfa_verified=mfa_verified,
                 mfa_required=mfa_required,
             )
-        if host == f"api.{settings.PLATFORM_BASE_DOMAIN}" and origin_host == f"ops.{settings.PLATFORM_BASE_DOMAIN}":
+        if (
+            host == f"api.{settings.PLATFORM_BASE_DOMAIN}"
+            and origin_host == f"ops.{settings.PLATFORM_BASE_DOMAIN}"
+        ):
             return PlatformUserSession(
                 user_id=user.id,
                 email=user.email,

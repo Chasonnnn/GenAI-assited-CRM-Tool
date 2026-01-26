@@ -789,6 +789,10 @@ class Surrogate(Base):
     meta_campaign_external_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     meta_adset_external_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
+    # Import metadata (tracking junk from CSV - ad_id, campaign_id, form_id, etc.)
+    # NOT for business data - business data goes to custom fields
+    import_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
     # Contact (normalized: E.164 phone, 2-letter state)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(EncryptedString, nullable=False)
@@ -3271,9 +3275,195 @@ class SurrogateImport(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
+    # Enhanced detection & mapping (v2)
+    template_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("import_templates.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    detected_encoding: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    detected_delimiter: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    column_mapping_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    date_ambiguity_warnings: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    unknown_column_behavior: Mapped[str] = mapped_column(
+        String(20), default="ignore", nullable=False
+    )
+
+    # Admin approval workflow
+    # Status values: 'pending', 'awaiting_approval', 'approved', 'processing', 'completed', 'rejected', 'failed'
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    deduplication_stats: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
+    approved_by: Mapped["User | None"] = relationship(foreign_keys=[approved_by_user_id])
+    template: Mapped["ImportTemplate | None"] = relationship(back_populates="imports")
+
+
+# =============================================================================
+# Import Templates & Custom Fields
+# =============================================================================
+
+
+class ImportTemplate(Base):
+    """
+    Reusable CSV import configuration.
+
+    Stores column mappings, transformations, and import settings.
+    One template per org can be is_default=true (enforced via partial index).
+    """
+
+    __tablename__ = "import_templates"
+    __table_args__ = (
+        Index("idx_import_templates_org", "organization_id"),
+        Index(
+            "uq_import_template_default",
+            "organization_id",
+            unique=True,
+            postgresql_where=text("is_default = TRUE"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_default: Mapped[bool] = mapped_column(default=False, nullable=False)
+
+    # File format settings
+    encoding: Mapped[str] = mapped_column(
+        String(20), default="auto", nullable=False
+    )  # 'auto', 'utf-8', 'utf-16'
+    delimiter: Mapped[str] = mapped_column(
+        String(5), default="auto", nullable=False
+    )  # 'auto', ',', '\t'
+    has_header: Mapped[bool] = mapped_column(default=True, nullable=False)
+
+    # Column mappings: [{csv_column: str, surrogate_field: str, transformation: str|null}]
+    column_mappings: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+
+    # Transformations config: {field: {transformer: str, options: dict}}
+    transformations: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    # What to do with unmapped columns: 'ignore', 'metadata', 'warn'
+    unknown_column_behavior: Mapped[str] = mapped_column(
+        String(20), default="ignore", nullable=False
+    )
+
+    # Usage stats
+    usage_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+    # Audit
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+
     # Relationships
     organization: Mapped["Organization"] = relationship()
     created_by: Mapped["User | None"] = relationship()
+    imports: Mapped[list["SurrogateImport"]] = relationship(back_populates="template")
+
+
+class CustomField(Base):
+    """
+    Org-scoped custom field definition.
+
+    Allows organizations to define additional fields for surrogates
+    to capture data that doesn't fit in standard schema fields.
+    """
+
+    __tablename__ = "custom_fields"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "key", name="uq_custom_field_key"),
+        Index("idx_custom_fields_org", "organization_id"),
+        Index("idx_custom_fields_org_active", "organization_id", "is_active"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # Field definition
+    key: Mapped[str] = mapped_column(String(100), nullable=False)  # e.g., "criminal_history"
+    label: Mapped[str] = mapped_column(String(255), nullable=False)  # e.g., "Criminal History"
+    field_type: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # 'text', 'number', 'boolean', 'date', 'select'
+    options: Mapped[list | None] = mapped_column(
+        JSONB, nullable=True
+    )  # For select type: ["option1", "option2"]
+
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+
+    # Audit
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    created_by: Mapped["User | None"] = relationship()
+    values: Mapped[list["CustomFieldValue"]] = relationship(
+        back_populates="custom_field",
+        cascade="all, delete-orphan",
+    )
+
+
+class CustomFieldValue(Base):
+    """
+    Custom field value for a surrogate.
+
+    Stores the actual value for a custom field on a specific surrogate.
+    """
+
+    __tablename__ = "custom_field_values"
+    __table_args__ = (
+        UniqueConstraint("surrogate_id", "custom_field_id", name="uq_custom_field_value"),
+        Index("idx_custom_field_values_surrogate", "surrogate_id"),
+        Index("idx_custom_field_values_field", "custom_field_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    surrogate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("surrogates.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    custom_field_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("custom_fields.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # Store any type as JSONB
+    value_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    # Relationships
+    surrogate: Mapped["Surrogate"] = relationship()
+    custom_field: Mapped["CustomField"] = relationship(back_populates="values")
 
 
 # =============================================================================
