@@ -1,35 +1,23 @@
-"""Tests for organization settings with portal domains."""
+"""Tests for organization settings and slug-based portal URLs."""
 
 import pytest
 from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_update_org_settings_sets_portal_domain(
+async def test_booking_link_uses_slug_based_domain(
     authed_client: AsyncClient,
     test_org,
     db,
+    monkeypatch,
 ):
-    payload = {"portal_domain": "https://Portal.EWIFamilyGlobal.com/"}
-    response = await authed_client.patch("/settings/organization", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["portal_domain"] == "portal.ewifamilyglobal.com"
+    from app.core.config import settings
 
-    db.refresh(test_org)
-    assert test_org.portal_domain == "portal.ewifamilyglobal.com"
-
-
-@pytest.mark.asyncio
-async def test_booking_link_uses_org_portal_domain(
-    authed_client: AsyncClient,
-    test_org,
-    db,
-):
-    test_org.portal_domain = "portal.ewifamilyglobal.com"
+    monkeypatch.setattr(settings, "PLATFORM_BASE_DOMAIN", "surrogacyforce.com", raising=False)
+    test_org.slug = "ewi"
     db.commit()
 
     response = await authed_client.get("/appointments/booking-link")
     assert response.status_code == 200
     data = response.json()
-    assert data["full_url"].startswith("https://portal.ewifamilyglobal.com/book/")
+    assert data["full_url"].startswith("https://ewi.surrogacyforce.com/book/")
