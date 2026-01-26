@@ -11,10 +11,9 @@ from sqlalchemy.orm import Session
 
 from app.db.models import OrgInvite, User
 from app.services import (
+    email_sender,
     email_service,
-    gmail_service,
     org_service,
-    platform_email_service,
     system_email_template_service,
 )
 
@@ -182,8 +181,9 @@ async def send_invite_email(
         # template_from_email already set from the system template (if any)
 
     # Send via platform/system sender when configured (preferred)
-    if platform_email_service.platform_sender_configured():
-        result = await platform_email_service.send_email_logged(
+    if email_sender.platform_sender_configured():
+        sender = email_sender.get_platform_sender()
+        result = await sender.send_logged(
             db=db,
             org_id=invite.organization_id,
             to_email=invite.email,
@@ -203,14 +203,14 @@ async def send_invite_email(
             logger.warning("No inviter for invite %s, cannot send email", invite.id)
             return {"success": False, "error": "No inviter to send from"}
 
-        result = await gmail_service.send_email_logged(
+        sender = email_sender.get_gmail_sender(sender_user_id)
+        result = await sender.send_logged(
             db=db,
             org_id=invite.organization_id,
-            user_id=str(sender_user_id),
-            to=invite.email,
+            to_email=invite.email,
             subject=subject,
-            body=html_body,
-            html=True,
+            html=html_body,
+            text=text_body,
             template_id=template_id,
             surrogate_id=None,
             idempotency_key=idempotency_key,

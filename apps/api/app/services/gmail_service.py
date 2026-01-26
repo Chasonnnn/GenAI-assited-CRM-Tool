@@ -211,3 +211,32 @@ async def send_email_logged(
         **result,
         "email_log_id": email_log.id,
     }
+
+
+async def send_logged(
+    *,
+    db: Session,
+    org_id: uuid.UUID,
+    user_id: str,
+    to_email: str,
+    subject: str,
+    html: str,
+    text: str | None = None,
+    template_id: uuid.UUID | None = None,
+    surrogate_id: uuid.UUID | None = None,
+    idempotency_key: str | None = None,
+) -> JsonObject:
+    """Compatibility wrapper for the email sender interface."""
+    body = html if html else (text or "")
+    return await send_email_logged(
+        db=db,
+        org_id=org_id,
+        user_id=user_id,
+        to=to_email,
+        subject=subject,
+        body=body,
+        html=bool(html),
+        template_id=template_id,
+        surrogate_id=surrogate_id,
+        idempotency_key=idempotency_key,
+    )

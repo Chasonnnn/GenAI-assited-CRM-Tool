@@ -182,6 +182,11 @@ def _normalize_from_email(value: str | None) -> str | None:
     return text
 
 
+def normalize_from_email(value: str | None) -> str | None:
+    """Public wrapper for from_email normalization."""
+    return _normalize_from_email(value)
+
+
 def _template_payload(template: EmailTemplate) -> dict:
     """Extract versionable payload from template."""
     return {
