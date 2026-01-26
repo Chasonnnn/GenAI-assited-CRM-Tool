@@ -1010,6 +1010,8 @@ async def process_csv_import(db, job) -> None:
     Payload:
         - import_id: UUID of the SurrogateImport record
         - dedupe_action: "skip" (default) or other action
+        - use_mappings: bool (optional) to apply saved column mappings
+        - unknown_column_behavior: "ignore" | "metadata" | "warn" (optional)
     """
     from app.services import import_service
     from app.db.models import SurrogateImport
@@ -1017,6 +1019,8 @@ async def process_csv_import(db, job) -> None:
     payload = job.payload or {}
     import_id = payload.get("import_id")
     dedupe_action = payload.get("dedupe_action", "skip")
+    use_mappings = bool(payload.get("use_mappings"))
+    unknown_column_behavior = payload.get("unknown_column_behavior")
 
     if not import_id:
         raise Exception("Missing import_id in payload")
@@ -1030,22 +1034,51 @@ async def process_csv_import(db, job) -> None:
     if not import_record.file_content:
         raise Exception(f"Import record {import_id} missing file content")
 
-    # Update status to running
-    import_record.status = "running"
+    if not unknown_column_behavior:
+        unknown_column_behavior = getattr(import_record, "unknown_column_behavior", "ignore")
+
+    # Update status to processing
+    import_record.status = "processing"
     db.commit()
 
     logger.info(f"Starting CSV import job: {import_id}, rows={import_record.total_rows}")
 
     try:
-        # Execute the import
-        import_service.execute_import(
-            db=db,
-            org_id=job.organization_id,
-            user_id=import_record.created_by_user_id,
-            import_id=import_record.id,
-            file_content=import_record.file_content,
-            dedupe_action=dedupe_action,
-        )
+        # Execute the import (use mappings when provided)
+        if use_mappings:
+            from app.services.import_service import ColumnMapping
+
+            snapshot = import_record.column_mapping_snapshot or []
+            mappings = [
+                ColumnMapping(
+                    csv_column=m.get("csv_column", ""),
+                    surrogate_field=m.get("surrogate_field"),
+                    transformation=m.get("transformation"),
+                    action=m.get("action", "map"),
+                    custom_field_key=m.get("custom_field_key"),
+                )
+                for m in snapshot
+                if m.get("csv_column")
+            ]
+
+            import_service.execute_import_with_mappings(
+                db=db,
+                org_id=job.organization_id,
+                user_id=import_record.created_by_user_id,
+                import_id=import_record.id,
+                file_content=import_record.file_content,
+                column_mappings=mappings,
+                unknown_column_behavior=unknown_column_behavior,
+            )
+        else:
+            import_service.execute_import(
+                db=db,
+                org_id=job.organization_id,
+                user_id=import_record.created_by_user_id,
+                import_id=import_record.id,
+                file_content=import_record.file_content,
+                dedupe_action=dedupe_action,
+            )
         import_record.file_content = None
         db.commit()
         logger.info(f"CSV import completed: {import_id}")
