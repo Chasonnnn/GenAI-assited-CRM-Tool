@@ -9,6 +9,7 @@ Provides:
 """
 
 import secrets
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
@@ -19,10 +20,24 @@ from app.core.deps import COOKIE_NAME, get_current_session, get_db, require_csrf
 from app.core.csrf import CSRF_COOKIE_NAME, set_csrf_cookie
 from app.core.security import create_session_token
 from app.schemas.auth import UserSession
-from app.services import duo_service, membership_service, mfa_service, user_service
+from app.services import duo_service, membership_service, mfa_service, org_service, user_service
 
 
 router = APIRouter()
+
+
+def _resolve_portal_base_url(request: Request, db: Session, org_id: UUID | None) -> str:
+    """Resolve the portal base URL for MFA callbacks."""
+    if org_id:
+        org = org_service.get_org_by_id(db, org_id)
+        base_url = org_service.get_org_portal_base_url(org)
+        if base_url:
+            return base_url.rstrip("/")
+    if settings.FRONTEND_URL:
+        return settings.FRONTEND_URL.rstrip("/")
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+    host = (request.headers.get("host") or "").lower()
+    return f"{scheme}://{host}".rstrip("/")
 
 
 # =============================================================================
@@ -504,26 +519,7 @@ def initiate_duo_auth(
     # Generate secure state token for CSRF protection
     state = secrets.token_urlsafe(32)
 
-    allowed_return_to = {"app", "ops"}
-    return_to = return_to if return_to in allowed_return_to else None
-    if not return_to:
-        cookie_return_to = request.cookies.get("auth_return_to")
-        if cookie_return_to in allowed_return_to:
-            return_to = cookie_return_to
-
-    if return_to == "ops" and settings.OPS_FRONTEND_URL:
-        base_url = settings.OPS_FRONTEND_URL.rstrip("/")
-    elif return_to == "app" and settings.FRONTEND_URL:
-        base_url = settings.FRONTEND_URL.rstrip("/")
-    else:
-        host = (request.headers.get("host") or "").lower()
-        if host.startswith("ops.") and settings.OPS_FRONTEND_URL:
-            base_url = settings.OPS_FRONTEND_URL.rstrip("/")
-        elif settings.FRONTEND_URL:
-            base_url = settings.FRONTEND_URL.rstrip("/")
-        else:
-            scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
-            base_url = f"{scheme}://{host}".rstrip("/")
+    base_url = _resolve_portal_base_url(request, db, session.org_id)
 
     # Duo Web SDK expects the callback URL to be exact. Avoid adding query params
     # to the redirect URI (some providers drop auth params if redirect_uri already
@@ -566,16 +562,8 @@ def verify_duo_callback(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    allowed_return_to = {"app", "ops"}
-    return_to = return_to if return_to in allowed_return_to else "app"
-
     # IMPORTANT: Duo token exchange must use the SAME redirect_uri used during initiation.
-    if return_to == "ops" and settings.OPS_FRONTEND_URL:
-        base_url = settings.OPS_FRONTEND_URL.rstrip("/")
-    elif return_to == "app" and settings.FRONTEND_URL:
-        base_url = settings.FRONTEND_URL.rstrip("/")
-    else:
-        base_url = settings.FRONTEND_URL.rstrip("/") if settings.FRONTEND_URL else ""
+    base_url = _resolve_portal_base_url(request, db, session.org_id)
 
     # Must match the redirect URI used during initiation.
     redirect_uri = f"{base_url}/auth/duo/callback" if base_url else None
