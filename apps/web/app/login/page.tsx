@@ -17,7 +17,8 @@ export default function LoginPage() {
   const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
 
   const getReturnTo = () =>
-    typeof window !== "undefined" && window.location.pathname.startsWith("/ops")
+    typeof window !== "undefined" &&
+    (window.location.pathname.startsWith("/ops") || window.location.hostname.startsWith("ops."))
       ? "ops"
       : "app"
 

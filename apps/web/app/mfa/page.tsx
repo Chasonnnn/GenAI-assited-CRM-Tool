@@ -152,7 +152,8 @@ function MFAPageContent() {
         const isOps =
             queryReturnTo === "ops" ||
             hasAuthReturnToOpsCookie() ||
-            sessionStorage.getItem("auth_return_to") === "ops"
+            sessionStorage.getItem("auth_return_to") === "ops" ||
+            window.location.hostname.startsWith("ops.")
         if (isOps) {
             sessionStorage.setItem("auth_return_to", "ops")
         }
@@ -231,7 +232,8 @@ function MFAPageContent() {
             const returnTo =
                 queryReturnTo === "ops" ||
                 hasAuthReturnToOpsCookie() ||
-                sessionStorage.getItem("auth_return_to") === "ops"
+                sessionStorage.getItem("auth_return_to") === "ops" ||
+                (typeof window !== "undefined" && window.location.hostname.startsWith("ops."))
                     ? "ops"
                     : undefined
             if (returnTo === "ops") {
