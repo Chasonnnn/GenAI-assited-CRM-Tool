@@ -948,19 +948,35 @@ async def process_workflow_email(db, job) -> None:
     """
     Process a WORKFLOW_EMAIL job - send email triggered by workflow action.
 
+    Uses the centralized email provider resolver based on workflow scope:
+    - Personal workflows: Send via user's connected Gmail
+    - Org workflows: Send via org's Resend or org's default Gmail sender
+
+    NO FALLBACK: If the configured provider is not available, the job fails
+    with an explicit error message.
+
     Payload:
         - template_id: UUID of email template
         - surrogate_id: UUID of case (for variable resolution)
         - recipient_email: Target email address
         - variables: Dict of resolved template variables
+        - workflow_scope: 'org' or 'personal'
+        - workflow_owner_id: Owner user ID (for personal workflows)
     """
     from app.db.models import EmailTemplate, EmailLog
-    from app.services import email_service
+    from app.services import email_service, gmail_service, resend_settings_service
+    from app.services.workflow_email_provider import (
+        resolve_workflow_email_provider,
+        EmailProviderError,
+    )
+    from app.services import resend_email_service
 
     template_id = job.payload.get("template_id")
     surrogate_id = job.payload.get("surrogate_id")
     recipient_email = job.payload.get("recipient_email")
     variables = job.payload.get("variables", {})
+    workflow_scope = job.payload.get("workflow_scope", "org")
+    workflow_owner_id = job.payload.get("workflow_owner_id")
 
     if not template_id or not recipient_email:
         raise Exception("Missing template_id or recipient_email in workflow email job")
@@ -992,15 +1008,89 @@ async def process_workflow_email(db, job) -> None:
     db.add(email_log)
     db.commit()
 
-    # Send email (workflow emails use global config, not campaign provider)
-    await send_email_async(email_log, db=db)
-    email_service.mark_email_sent(db, email_log)
+    # Resolve email provider based on workflow scope (NO FALLBACK)
+    try:
+        provider, config = resolve_workflow_email_provider(
+            db=db,
+            scope=workflow_scope,
+            org_id=job.organization_id,
+            owner_user_id=UUID(workflow_owner_id) if workflow_owner_id else None,
+        )
+    except EmailProviderError as e:
+        # Fail explicitly with clear error
+        email_log.status = "failed"
+        email_log.error = str(e)
+        db.commit()
+        raise Exception(str(e))
 
-    logger.info(
-        "Workflow email sent for case=%s recipient=%s",
-        surrogate_id,
-        _mask_email(recipient_email),
-    )
+    # Send via resolved provider
+    try:
+        if provider == "user_gmail":
+            # Personal workflow: send via user's Gmail
+            result = await gmail_service.send_email(
+                db=db,
+                user_id=str(config["user_id"]),
+                to=recipient_email,
+                subject=subject,
+                body=body,
+                html=True,
+            )
+            if not result.get("success"):
+                raise Exception(f"Gmail send failed: {result.get('error')}")
+            email_log.external_id = result.get("message_id")
+
+        elif provider == "org_gmail":
+            # Org workflow via org's default Gmail sender
+            result = await gmail_service.send_email(
+                db=db,
+                user_id=str(config["sender_user_id"]),
+                to=recipient_email,
+                subject=subject,
+                body=body,
+                html=True,
+            )
+            if not result.get("success"):
+                raise Exception(f"Gmail send failed: {result.get('error')}")
+            email_log.external_id = result.get("message_id")
+
+        elif provider == "resend":
+            # Org workflow via Resend
+            # For org workflows, use template from_email if set, otherwise org default
+            from_email = template.from_email or config["from_email"]
+
+            api_key = resend_settings_service.decrypt_api_key(config["api_key_encrypted"])
+            success, error, message_id = await resend_email_service.send_email_direct(
+                api_key=api_key,
+                to_email=recipient_email,
+                subject=subject,
+                body=body,
+                from_email=from_email,
+                from_name=config.get("from_name"),
+                reply_to=config.get("reply_to"),
+                idempotency_key=f"workflow-email/{email_log.id}",
+            )
+            if not success:
+                raise Exception(f"Resend send failed: {error}")
+            email_log.external_id = message_id
+
+        else:
+            raise Exception(f"Unknown email provider: {provider}")
+
+        # Mark as sent
+        email_service.mark_email_sent(db, email_log)
+
+        logger.info(
+            "Workflow email sent via %s for case=%s recipient=%s",
+            provider,
+            surrogate_id,
+            _mask_email(recipient_email),
+        )
+
+    except Exception as e:
+        email_log.status = "failed"
+        email_log.error = str(e)[:500]
+        db.commit()
+        raise
 
 
 async def process_csv_import(db, job) -> None:
