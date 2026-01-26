@@ -15,11 +15,10 @@ class OrgCreate(BaseModel):
     @field_validator("slug")
     @classmethod
     def validate_slug(cls, v: str) -> str:
-        """Validate slug format: lowercase, alphanumeric with hyphens/underscores."""
-        v = v.lower().strip()
-        if not v.replace("-", "").replace("_", "").isalnum():
-            raise ValueError("Slug must be alphanumeric with optional hyphens/underscores")
-        return v
+        """Validate slug format: lowercase, alphanumeric with hyphens only."""
+        from app.services import org_service
+
+        return org_service.validate_slug(v)
 
 
 class OrgRead(BaseModel):
@@ -28,7 +27,7 @@ class OrgRead(BaseModel):
     id: UUID
     name: str
     slug: str
-    portal_domain: str | None = None
+    portal_base_url: str
     created_at: datetime
 
     model_config = {"from_attributes": True}
