@@ -84,12 +84,12 @@ def apply_status_change(
     db.refresh(surrogate)
 
     # Send notifications
-    from app.services import notification_service
+    from app.services import notification_facade
 
     actor = _get_org_user(db, surrogate.organization_id, user_id)
     actor_name = actor.display_name if actor else "Someone"
 
-    notification_service.notify_surrogate_status_changed(
+    notification_facade.notify_surrogate_status_changed(
         db=db,
         surrogate=surrogate,
         from_status=old_label,
@@ -119,7 +119,7 @@ def apply_status_change(
                 db.commit()
                 db.refresh(surrogate)
             if pool_queue:
-                notification_service.notify_surrogate_ready_for_claim(db=db, surrogate=surrogate)
+                notification_facade.notify_surrogate_ready_for_claim(db=db, surrogate=surrogate)
         except Exception:
             pass  # Best-effort: don't block status change
 

@@ -666,10 +666,10 @@ def change_status(
             raise ValueError("A pending regression request already exists for this stage and date.")
         db.refresh(request)
 
-        from app.services import notification_service
+        from app.services import notification_facade
 
         requester = _get_org_user(db, surrogate.organization_id, user_id)
-        notification_service.notify_status_change_request_pending(
+        notification_facade.notify_status_change_request_pending(
             db=db,
             request=request,
             surrogate=surrogate,
@@ -751,11 +751,11 @@ def assign_surrogate(
 
         # Send notification to assignee (if not self-assign)
         if surrogate.owner_id != user_id:
-            from app.services import notification_service
+            from app.services import notification_facade
 
             actor = _get_org_user(db, surrogate.organization_id, user_id)
             actor_name = actor.display_name if actor else "Someone"
-            notification_service.notify_surrogate_assigned(
+            notification_facade.notify_surrogate_assigned(
                 db=db,
                 surrogate=surrogate,
                 assignee_id=surrogate.owner_id,

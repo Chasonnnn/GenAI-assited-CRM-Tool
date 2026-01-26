@@ -982,19 +982,9 @@ def expire_approval_task(
     db.commit()
 
     # Notify owner that approval expired
-    from app.services import notification_service
-    from app.db.enums import NotificationType
+    from app.services import notification_facade
 
-    notification_service.create_notification(
-        db=db,
-        org_id=task.organization_id,
-        user_id=task.owner_id,
-        type=NotificationType.TASK_OVERDUE,
-        title="Workflow Approval Expired",
-        body=f"Approval task timed out: {task.title}",
-        entity_type="task",
-        entity_id=task.id,
-    )
+    notification_facade.notify_workflow_approval_expired(db=db, task=task)
 
     logger.info(f"Expired approval task {task.id}")
 
