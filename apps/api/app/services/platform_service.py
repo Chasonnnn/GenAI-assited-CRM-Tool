@@ -6,7 +6,6 @@ Do NOT reuse org-scoped services - this service operates across all tenants.
 
 import hmac
 import hashlib
-import re
 import logging
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
@@ -101,9 +100,7 @@ def get_platform_stats(db: Session) -> dict:
     """Get platform-wide statistics for ops dashboard."""
     # Count organizations
     agency_count = (
-        db.query(func.count(Organization.id))
-        .filter(Organization.deleted_at.is_(None))
-        .scalar()
+        db.query(func.count(Organization.id)).filter(Organization.deleted_at.is_(None)).scalar()
         or 0
     )
 
@@ -199,12 +196,14 @@ def list_organizations(
         plan_value = plan_key or "starter"
         status_value = subscription_status or "active"
 
+        from app.services import org_service
+
         items.append(
             {
                 "id": str(org.id),
                 "name": org.name,
                 "slug": org.slug,
-                "portal_domain": org.portal_domain,
+                "portal_base_url": org_service.get_org_portal_base_url(org),
                 "timezone": org.timezone,
                 "member_count": member_count or 0,
                 "surrogate_count": surrogate_count or 0,
@@ -273,11 +272,13 @@ def get_organization_detail(db: Session, org_id: UUID) -> dict | None:
         .first()
     )
 
+    from app.services import org_service
+
     return {
         "id": str(org.id),
         "name": org.name,
         "slug": org.slug,
-        "portal_domain": org.portal_domain,
+        "portal_base_url": org_service.get_org_portal_base_url(org),
         "timezone": org.timezone,
         "member_count": member_count,
         "surrogate_count": surrogate_count,
@@ -313,11 +314,7 @@ def request_organization_deletion(
     org.updated_at = now
 
     # Revoke active sessions for all members
-    member_ids = (
-        db.query(Membership.user_id)
-        .filter(Membership.organization_id == org.id)
-        .all()
-    )
+    member_ids = db.query(Membership.user_id).filter(Membership.organization_id == org.id).all()
     for (user_id,) in member_ids:
         if user_id == actor_id:
             continue
@@ -407,17 +404,21 @@ def create_organization(
 
     Returns the created organization detail.
     """
-    # Validate slug format
-    if not re.match(r"^[a-z0-9-]+$", slug):
-        raise ValueError("Invalid slug format. Use lowercase letters, numbers, and hyphens only.")
+    from app.services import org_service
+
+    # Validate slug (checks format, reserved slugs, and normalizes to lowercase)
+    try:
+        validated_slug = org_service.validate_slug(slug)
+    except ValueError as e:
+        raise ValueError(str(e))
 
     # Check slug uniqueness
-    existing = db.query(Organization).filter(Organization.slug == slug).first()
+    existing = db.query(Organization).filter(Organization.slug == validated_slug).first()
     if existing:
-        raise ValueError(f"Slug '{slug}' is already taken.")
+        raise ValueError(f"Slug '{validated_slug}' is already taken.")
 
     # Create org
-    org = Organization(name=name, slug=slug, timezone=timezone_str)
+    org = Organization(name=name, slug=validated_slug, timezone=timezone_str)
     db.add(org)
     db.flush()
 
@@ -446,7 +447,7 @@ def create_organization(
         actor_id=actor_id,
         action="org.create",
         target_org_id=org.id,
-        metadata={"slug": slug},  # No PII - just slug
+        metadata={"slug": validated_slug},  # No PII - just slug
         request=request,
     )
 
@@ -905,9 +906,7 @@ def list_invites(db: Session, org_id: UUID) -> list[dict]:
         .all()
     )
 
-    invite_log_keys = {
-        f"invite:{invite.id}:v{invite.resend_count}" for invite in invites
-    }
+    invite_log_keys = {f"invite:{invite.id}:v{invite.resend_count}" for invite in invites}
     email_logs: dict[str, EmailLog] = {}
     if invite_log_keys:
         logs = (
@@ -953,15 +952,11 @@ def list_invites(db: Session, org_id: UUID) -> list[dict]:
                 "created_at": inv.created_at.isoformat(),
                 "open_count": email_log.open_count if email_log else 0,
                 "opened_at": (
-                    email_log.opened_at.isoformat()
-                    if email_log and email_log.opened_at
-                    else None
+                    email_log.opened_at.isoformat() if email_log and email_log.opened_at else None
                 ),
                 "click_count": email_log.click_count if email_log else 0,
                 "clicked_at": (
-                    email_log.clicked_at.isoformat()
-                    if email_log and email_log.clicked_at
-                    else None
+                    email_log.clicked_at.isoformat() if email_log and email_log.clicked_at else None
                 ),
             }
         )
