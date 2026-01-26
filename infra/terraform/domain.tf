@@ -1,5 +1,5 @@
 resource "google_cloud_run_domain_mapping" "api" {
-  count    = var.enable_domain_mapping ? 1 : 0
+  count    = var.enable_domain_mapping && !var.enable_load_balancer ? 1 : 0
   location = var.region
   name     = "api.${var.domain}"
 
@@ -13,7 +13,7 @@ resource "google_cloud_run_domain_mapping" "api" {
 }
 
 resource "google_cloud_run_domain_mapping" "web" {
-  count    = var.enable_domain_mapping ? 1 : 0
+  count    = var.enable_domain_mapping && !var.enable_load_balancer ? 1 : 0
   location = var.region
   name     = "app.${var.domain}"
 
@@ -27,7 +27,7 @@ resource "google_cloud_run_domain_mapping" "web" {
 }
 
 resource "google_cloud_run_domain_mapping" "ops" {
-  count    = var.enable_domain_mapping ? 1 : 0
+  count    = var.enable_domain_mapping && !var.enable_load_balancer ? 1 : 0
   location = var.region
   name     = "ops.${var.domain}"
 

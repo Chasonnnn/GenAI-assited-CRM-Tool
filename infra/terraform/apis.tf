@@ -16,6 +16,7 @@ locals {
     "cloudscheduler.googleapis.com",
     "billingbudgets.googleapis.com",
     "cloudbilling.googleapis.com",
+    "certificatemanager.googleapis.com",
   ])
 }
 

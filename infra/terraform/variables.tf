@@ -345,6 +345,12 @@ variable "enable_domain_mapping" {
   default     = true
 }
 
+variable "enable_load_balancer" {
+  description = "Enable external HTTPS load balancer for wildcard subdomains."
+  type        = bool
+  default     = false
+}
+
 variable "enable_public_invoker" {
   description = "Allow unauthenticated public access to Cloud Run services."
   type        = bool
