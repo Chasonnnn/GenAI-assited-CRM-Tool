@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -953,42 +953,36 @@ function SignatureBrandingSection() {
 // =============================================================================
 
 export default function SettingsPage() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const { user } = useAuth()
 
   const isAdmin = user?.role === "admin" || user?.role === "developer"
 
-  const [tabOverride, setTabOverride] = useState<string | null>(null)
-  const urlTab = searchParams?.get("tab")
-  const resolvedUrlTab =
-    urlTab === "email-signature" && isAdmin ? urlTab : "general"
-  const activeTab = tabOverride ?? resolvedUrlTab
+  type SettingsTab = "general" | "email-signature"
+  const urlTabParam = searchParams.get("tab")
+  const urlTab: SettingsTab =
+    isAdmin && urlTabParam === "email-signature" ? "email-signature" : "general"
+  const [activeTab, setActiveTab] = useState<SettingsTab>(urlTab)
+
+  useEffect(() => {
+    setActiveTab(urlTab)
+  }, [urlTab])
 
   const handleTabChange = (value: string) => {
-    const nextTab = value === "email-signature" && isAdmin ? value : "general"
-    setTabOverride(nextTab)
-    const url = new URL(window.location.href)
-    if (nextTab === "general") {
-      url.searchParams.delete("tab")
-    } else {
-      url.searchParams.set("tab", nextTab)
-    }
-    window.history.pushState({}, "", url.toString())
+    const nextTab: SettingsTab =
+      isAdmin && value === "email-signature" ? "email-signature" : "general"
+    setActiveTab(nextTab)
 
-    window.setTimeout(() => {
-      const currentUrl = new URL(window.location.href)
-      const currentTab = currentUrl.searchParams.get("tab")
-      const matches = nextTab === "general" ? currentTab === null : currentTab === nextTab
-      if (!matches) {
-        if (nextTab === "general") {
-          currentUrl.searchParams.delete("tab")
-        } else {
-          currentUrl.searchParams.set("tab", nextTab)
-        }
-        window.history.replaceState({}, "", currentUrl.toString())
-      }
-      setTabOverride(null)
-    }, 400)
+    const nextParams = new URLSearchParams(searchParams.toString())
+    if (nextTab === "general") {
+      nextParams.delete("tab")
+    } else {
+      nextParams.set("tab", nextTab)
+    }
+    const queryString = nextParams.toString()
+    const nextUrl = queryString ? `/settings?${queryString}` : "/settings"
+    router.replace(nextUrl, { scroll: false })
   }
 
   return (
