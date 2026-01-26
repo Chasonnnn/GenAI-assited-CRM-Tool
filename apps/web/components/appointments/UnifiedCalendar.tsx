@@ -1030,7 +1030,7 @@ export function UnifiedCalendar({
         dateRange,
         includeAppointments,
         includeGoogleEvents,
-        taskFilter,
+        ...(taskFilter ? { taskFilter } : {}),
     })
 
     // Navigation
