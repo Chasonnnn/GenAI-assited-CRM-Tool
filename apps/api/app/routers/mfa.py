@@ -26,19 +26,36 @@ from app.services import duo_service, membership_service, mfa_service, org_servi
 router = APIRouter()
 
 
-def _resolve_portal_base_url(request: Request, db: Session, org_id: UUID | None) -> str:
+def _resolve_portal_base_url(
+    request: Request,
+    db: Session,
+    org_id: UUID | None,
+    *,
+    return_to: str | None = None,
+) -> str:
     """Resolve the portal base URL for MFA callbacks."""
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+    host = (request.headers.get("host") or "").lower()
+    ops_host = f"ops.{settings.PLATFORM_BASE_DOMAIN}" if settings.PLATFORM_BASE_DOMAIN else ""
+
+    if return_to == "ops":
+        if settings.is_dev and settings.FRONTEND_URL:
+            return settings.FRONTEND_URL.rstrip("/")
+        if ops_host:
+            return f"{scheme}://{ops_host}".rstrip("/")
+
+    if ops_host and host == ops_host:
+        return f"{scheme}://{host}".rstrip("/")
+
     if org_id:
         org = org_service.get_org_by_id(db, org_id)
         base_url = org_service.get_org_portal_base_url(org)
         if base_url:
             return base_url.rstrip("/")
-    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
-    host = (request.headers.get("host") or "").lower()
-    if host == f"ops.{settings.PLATFORM_BASE_DOMAIN}":
-        return f"{scheme}://{host}".rstrip("/")
+
     if settings.FRONTEND_URL:
         return settings.FRONTEND_URL.rstrip("/")
+
     return f"{scheme}://{host}".rstrip("/")
 
 
@@ -521,7 +538,7 @@ def initiate_duo_auth(
     # Generate secure state token for CSRF protection
     state = secrets.token_urlsafe(32)
 
-    base_url = _resolve_portal_base_url(request, db, session.org_id)
+    base_url = _resolve_portal_base_url(request, db, session.org_id, return_to=return_to)
 
     # Duo Web SDK expects the callback URL to be exact. Avoid adding query params
     # to the redirect URI (some providers drop auth params if redirect_uri already
@@ -565,7 +582,7 @@ def verify_duo_callback(
         raise HTTPException(status_code=404, detail="User not found")
 
     # IMPORTANT: Duo token exchange must use the SAME redirect_uri used during initiation.
-    base_url = _resolve_portal_base_url(request, db, session.org_id)
+    base_url = _resolve_portal_base_url(request, db, session.org_id, return_to=return_to)
 
     # Must match the redirect URI used during initiation.
     redirect_uri = f"{base_url}/auth/duo/callback" if base_url else None
