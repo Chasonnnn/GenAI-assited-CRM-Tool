@@ -25,7 +25,7 @@ from app.schemas.task import (
     TaskUpdate,
     WorkflowApprovalResolve,
 )
-from app.services import dashboard_service, task_service, ip_service
+from app.services import dashboard_events, task_service, ip_service
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
 router = APIRouter(dependencies=[Depends(require_permission(POLICIES["tasks"].default))])
@@ -199,8 +199,8 @@ def create_task(
         org_id=session.org_id,
         user_id=session.user_id,
         data=data,
+        emit_events=True,
     )
-    dashboard_service.push_dashboard_stats(db, session.org_id)
     context = task_service.get_task_context(db, session.org_id, [task])
     return task_service.to_task_read(task, context)
 
@@ -313,8 +313,7 @@ def complete_task(
             detail="Workflow approvals must be resolved via /tasks/{id}/resolve",
         )
 
-    task = task_service.complete_task(db, task, session.user_id)
-    dashboard_service.push_dashboard_stats(db, session.org_id)
+    task = task_service.complete_task(db, task, session.user_id, emit_events=True)
     context = task_service.get_task_context(db, session.org_id, [task])
     return task_service.to_task_read(task, context)
 
@@ -348,8 +347,7 @@ def uncomplete_task(
             detail="Workflow approvals must be resolved via /tasks/{id}/resolve",
         )
 
-    task = task_service.uncomplete_task(db, task)
-    dashboard_service.push_dashboard_stats(db, session.org_id)
+    task = task_service.uncomplete_task(db, task, emit_events=True)
     context = task_service.get_task_context(db, session.org_id, [task])
     return task_service.to_task_read(task, context)
 
@@ -423,7 +421,7 @@ def bulk_complete_tasks(
 
     # Commit all changes once at the end for efficiency
     db.commit()
-    dashboard_service.push_dashboard_stats(db, session.org_id)
+    dashboard_events.push_dashboard_stats(db, session.org_id)
 
     return BulkCompleteResponse(completed=results["completed"], failed=results["failed"])
 
@@ -485,8 +483,7 @@ def delete_task(
             request=request,
         )
 
-    task_service.delete_task(db, task)
-    dashboard_service.push_dashboard_stats(db, session.org_id)
+    task_service.delete_task(db, task, emit_events=True)
     return None
 
 

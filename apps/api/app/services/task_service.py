@@ -29,6 +29,8 @@ def create_task(
     org_id: UUID,
     user_id: UUID,
     data: TaskCreate,
+    *,
+    emit_events: bool = False,
 ) -> Task:
     """Create a new task."""
     # Determine owner - default to creator if not provided
@@ -60,24 +62,19 @@ def create_task(
 
     # Notify assignee (if assigned to user different from creator)
     if owner_type == "user" and owner_id != user_id:
-        from app.services import notification_service
-        from app.db.models import User, Surrogate
+        from app.services import task_events
 
-        actor = db.query(User).filter(User.id == user_id).first()
-        actor_name = actor.display_name if actor else "Someone"
-        surrogate_number = None
-        if data.surrogate_id:
-            surrogate = db.query(Surrogate).filter(Surrogate.id == data.surrogate_id).first()
-            surrogate_number = surrogate.surrogate_number if surrogate else None
-        notification_service.notify_task_assigned(
+        task_events.notify_task_assigned(
             db=db,
-            task_id=task.id,
-            task_title=task.title,
-            org_id=org_id,
+            task=task,
+            actor_user_id=user_id,
             assignee_id=owner_id,
-            actor_name=actor_name,
-            surrogate_number=surrogate_number,
         )
+
+    if emit_events:
+        from app.services import dashboard_events
+
+        dashboard_events.push_dashboard_stats(db, org_id)
 
     return task
 
@@ -131,24 +128,13 @@ def update_task(
         and update_data.get("owner_id") != old_owner_id
         and update_data.get("owner_id") != actor_user_id
     ):
-        from app.services import notification_service
-        from app.db.models import User, Surrogate
+        from app.services import task_events
 
-        actor = db.query(User).filter(User.id == actor_user_id).first()
-        actor_name = actor.display_name if actor else "Someone"
-        surrogate_number = None
-        if task.surrogate_id:
-            surrogate = db.query(Surrogate).filter(Surrogate.id == task.surrogate_id).first()
-            surrogate_number = surrogate.surrogate_number if surrogate else None
-
-        notification_service.notify_task_assigned(
+        task_events.notify_task_assigned(
             db=db,
-            task_id=task.id,
-            task_title=task.title,
-            org_id=task.organization_id,
+            task=task,
+            actor_user_id=actor_user_id,
             assignee_id=update_data.get("owner_id"),
-            actor_name=actor_name,
-            surrogate_number=surrogate_number,
         )
 
     return task
@@ -159,6 +145,8 @@ def complete_task(
     task: Task,
     user_id: UUID,
     commit: bool = True,
+    *,
+    emit_events: bool = False,
 ) -> Task:
     """
     Mark task as completed.
@@ -180,16 +168,30 @@ def complete_task(
     else:
         db.flush()
 
+    if commit and emit_events:
+        from app.services import dashboard_events
+
+        dashboard_events.push_dashboard_stats(db, task.organization_id)
+
     return task
 
 
-def uncomplete_task(db: Session, task: Task) -> Task:
+def uncomplete_task(
+    db: Session,
+    task: Task,
+    *,
+    emit_events: bool = False,
+) -> Task:
     """Mark task as not completed."""
     task.is_completed = False
     task.completed_at = None
     task.completed_by_user_id = None
     db.commit()
     db.refresh(task)
+    if emit_events:
+        from app.services import dashboard_events
+
+        dashboard_events.push_dashboard_stats(db, task.organization_id)
     return task
 
 
@@ -205,10 +207,19 @@ def get_task(db: Session, task_id: UUID, org_id: UUID) -> Task | None:
     )
 
 
-def delete_task(db: Session, task: Task) -> None:
+def delete_task(
+    db: Session,
+    task: Task,
+    *,
+    emit_events: bool = False,
+) -> None:
     """Delete a task."""
     db.delete(task)
     db.commit()
+    if emit_events:
+        from app.services import dashboard_events
+
+        dashboard_events.push_dashboard_stats(db, task.organization_id)
 
 
 def validate_task_owner(
