@@ -1,6 +1,6 @@
 /**
  * TypeScript types for Tasks module.
- * Matches backend enums from apps/api/app/db/enums.py
+ * Matches backend enums from apps/api/app/db/enums/*
  */
 
 // Task type enum matching backend EXACTLY

@@ -12,7 +12,7 @@
 ### Backend layers
 - Router/handler layer (`apps/api/app/routers/*`): request parsing, auth/CSRF dependencies, response shaping. Allowed deps: `app.core.*`, `app.schemas.*`, services. Must not own business logic or DB writes.
 - Service layer (`apps/api/app/services/*`): domain rules, transactions, orchestration inside a domain. Allowed deps: `app.db.*`, `app.schemas.*`, `app.core.*`, integration adapters. Must not own HTTP concerns.
-- Repository/DB layer (`apps/api/app/db/*`): models, enums, session, DB helpers. Must not depend on services/routers.
+- Repository/DB layer (`apps/api/app/db/*`): models, enums package, session, DB helpers. Must not depend on services/routers.
 - Integrations/adapters (`app.services/*` for Gmail/Zoom/Meta/Resend/etc): external API calls + persisted integration state. Must not orchestrate core domain rules.
 - Jobs/worker (`apps/api/app/worker.py`, `apps/api/app/jobs/*`): background processing that calls services/adapters. Must not include routing logic.
 
@@ -69,7 +69,7 @@ Files touched (backend):
 - `apps/api/app/services/job_service.py` + `services/meta_capi.py` (Meta CAPI)
 - `apps/api/app/services/dashboard_service.py` + `core/websocket.py` (stats push)
 - `apps/api/app/routers/websocket.py`
-- `apps/api/app/db/models.py`, `apps/api/app/db/enums.py`
+- `apps/api/app/db/models.py`, `apps/api/app/db/enums/*`
 
 Coupling notes:
 - `surrogate_service.change_status` orchestrates queues, notifications, workflows, and Meta CAPI — cross‑domain effects are embedded in the core domain method.
@@ -124,8 +124,8 @@ Coupling notes:
 
 | Module / File | Why hotspot | Inbound dependencies | Outbound dependencies | Cohesion grade | Coupling grade | Risk if left as‑is | Best next refactor |
 |---|---|---|---|---|---|---|---|
-| `apps/api/app/db/models.py` | 5.5k LOC, all domain models in one file | Most routers/services/jobs (≈94) | `db/enums.py`, `db/types.py` | D (many domains mixed) | F (global dependency) | Small schema change ripples everywhere | Split into domain model modules + re‑export in `db/models/__init__.py` |
-| `apps/api/app/db/enums.py` | Single enum registry for all domains | Most modules (≈94) | None | C (multi‑domain constants) | F (global dependency) | Enum churn cascades across domains | Split by domain (`auth_enums.py`, `surrogate_enums.py`, etc.) |
+| `apps/api/app/db/models.py` | 5.5k LOC, all domain models in one file | Most routers/services/jobs (≈94) | `db/enums/*`, `db/types.py` | D (many domains mixed) | F (global dependency) | Small schema change ripples everywhere | Split into domain model modules + re‑export in `db/models/__init__.py` |
+| `apps/api/app/db/enums/*` | Split enum registry by domain (re-exported) | Most modules (≈94) | None | B (domain grouping) | D (still widely imported) | Enum churn still has broad impact | Continue reducing cross-domain enum usage |
 | `apps/api/app/core/deps.py` | Central auth/permission deps used everywhere | All routers (≈50) | `core/*`, `db/*` | B (auth/permission only) | C (system‑wide usage) | Auth change risks wide regression | Split into auth/permission/platform deps modules |
 | `apps/api/app/services/surrogate_service.py` | 1.6k LOC; status, assignment, meta, workflows | Routers, status_change_request_service, matches, forms, dashboard | Pipeline, queue, notifications, workflow_triggers, job_service | D (god service) | D | Status change affects queues/workflows/notifications | Extract status + assignment submodules and add event dispatch |
 | `apps/api/app/services/analytics_service.py` | 2.9k LOC; analytics + meta + caching | `routers/analytics.py`, worker, exports, AI | Pipeline, meta_api, models | D (multiple analytics concerns) | C | Analytics change breaks exports/AI | Split by domain (surrogates/meta/usage) + facade |
@@ -254,4 +254,4 @@ Coupling notes:
 ### Later (optional)
 - [x] R3 — Appointment integrations module.
 - [x] R7 — Webhook handler registry.
-- Split `db/models.py` and `db/enums.py` into domain modules once service boundaries are stable.
+- Split `db/models.py` into domain modules once service boundaries are stable (enums split completed).
