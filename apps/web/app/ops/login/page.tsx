@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ShieldCheck, AlertCircle } from 'lucide-react';
+import { getAuthApiBase } from '@/lib/auth-utils';
 
 const ERROR_MESSAGES: Record<string, string> = {
     auth_failed: 'Authentication failed. Please try again.',
@@ -21,7 +22,7 @@ function OpsLoginContent() {
     const errorCode = searchParams.get('error');
     const errorMessage = errorCode ? ERROR_MESSAGES[errorCode] || 'An error occurred.' : null;
 
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+    const apiBase = getAuthApiBase();
 
     const handleGoogleLogin = () => {
         setIsLoading(true);
