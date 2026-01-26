@@ -1,6 +1,7 @@
 """FastAPI dependencies for authentication, authorization, and database access."""
 
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 from typing import Generator
 from uuid import UUID
 
@@ -43,6 +44,17 @@ def _is_dev_host(host: str) -> bool:
     return False
 
 
+def _get_origin_host(request: Request) -> str:
+    """Extract hostname from Origin/Referer headers when present."""
+    origin = request.headers.get("origin") or request.headers.get("referer") or ""
+    if not origin:
+        return ""
+    try:
+        return (urlparse(origin).hostname or "").lower()
+    except Exception:
+        return ""
+
+
 def _validate_request_host(request: Request, org_slug: str) -> None:
     """
     Validate that the request host matches the organization's subdomain.
@@ -66,8 +78,16 @@ def _validate_request_host(request: Request, org_slug: str) -> None:
 
     # Validate host matches expected subdomain
     expected_host = f"{org_slug}.{settings.PLATFORM_BASE_DOMAIN}"
-    if host != expected_host:
-        raise HTTPException(status_code=403, detail="Session invalid for this domain")
+    if host == expected_host:
+        return
+
+    # Allow API host when Origin/Referer matches the expected tenant host
+    api_host = f"api.{settings.PLATFORM_BASE_DOMAIN}" if settings.PLATFORM_BASE_DOMAIN else ""
+    origin_host = _get_origin_host(request)
+    if host == api_host and origin_host == expected_host:
+        return
+
+    raise HTTPException(status_code=403, detail="Session invalid for this domain")
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -226,7 +246,11 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
             .first()
         )
         host = request.headers.get("host", "").split(":")[0].lower()
-        if not (user.is_platform_admin and host == f"ops.{settings.PLATFORM_BASE_DOMAIN}"):
+        origin_host = _get_origin_host(request)
+        if not (
+            user.is_platform_admin
+            and origin_host == f"ops.{settings.PLATFORM_BASE_DOMAIN}"
+        ):
             if support_org:
                 _validate_request_host(request, support_org.slug)
 
@@ -263,7 +287,11 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
 
     # Validate request host matches org's subdomain (cross-tenant protection)
     host = request.headers.get("host", "").split(":")[0].lower()
-    if not (user.is_platform_admin and host == f"ops.{settings.PLATFORM_BASE_DOMAIN}"):
+    origin_host = _get_origin_host(request)
+    if not (
+        user.is_platform_admin
+        and origin_host == f"ops.{settings.PLATFORM_BASE_DOMAIN}"
+    ):
         _validate_request_host(request, org.slug)
 
     # Validate role is a known enum value - return 403 not 500
@@ -602,8 +630,19 @@ def require_platform_admin(request: Request, db: Session = Depends(get_db)) -> P
         raise HTTPException(status_code=403, detail="Platform admin access required")
 
     host = request.headers.get("host", "").split(":")[0].lower()
+    origin_host = _get_origin_host(request)
     if not _is_dev_host(host):
         if host == f"ops.{settings.PLATFORM_BASE_DOMAIN}":
+            return PlatformUserSession(
+                user_id=user.id,
+                email=user.email,
+                display_name=user.display_name,
+                is_platform_admin=user.is_platform_admin,
+                token_version=user.token_version,
+                mfa_verified=mfa_verified,
+                mfa_required=mfa_required,
+            )
+        if host == f"api.{settings.PLATFORM_BASE_DOMAIN}" and origin_host == f"ops.{settings.PLATFORM_BASE_DOMAIN}":
             return PlatformUserSession(
                 user_id=user.id,
                 email=user.email,
