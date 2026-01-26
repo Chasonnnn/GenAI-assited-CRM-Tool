@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.35.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.35.0...surrogacy-crm-platform-v0.35.1) (2026-01-26)
+
+
+### Bug Fixes
+
+* **web:** handle optional taskFilter and notes prop types ([c481fb7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c481fb787e6b7f7c45cbd3811c55b8adce685598))
+* **web:** handle optional taskFilter and notes prop types ([e2f87bf](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e2f87bfc7d1872fd5de77c2adffa72f693176232))
+
 ## [0.35.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.34.6...surrogacy-crm-platform-v0.35.0) (2026-01-26)
 
 
