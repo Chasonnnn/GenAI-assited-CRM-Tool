@@ -120,6 +120,8 @@ class ImportPreview:
         self.unmapped_columns: list[str] = []  # Columns we couldn't map
         self.duplicate_emails_db: int = 0  # Emails already in DB
         self.duplicate_emails_csv: int = 0  # Duplicate emails within CSV
+        self.duplicate_details: list[dict[str, str]] = []  # [{email, existing_id}]
+        self.new_records: int = 0  # Unique emails not in DB
         self.validation_errors: int = 0  # Rows with validation errors
         self.detected_encoding: str | None = None
         self.detected_delimiter: str | None = None
@@ -251,6 +253,54 @@ def _detect_date_ambiguity_warnings(
     return warnings
 
 
+def _compute_dedup_stats(
+    db: Session, org_id: UUID, emails: list[str]
+) -> tuple[int, int, list[dict[str, str]], int]:
+    """
+    Compute deduplication stats for a list of emails.
+
+    Returns:
+        (duplicate_emails_db, duplicate_emails_csv, duplicate_details, new_records)
+    """
+    seen_emails: set[str] = set()
+    duplicate_in_csv: set[str] = set()
+
+    for email in emails:
+        if email in seen_emails:
+            duplicate_in_csv.add(email)
+        seen_emails.add(email)
+
+    unique_emails = set(seen_emails)
+
+    duplicate_details: list[dict[str, str]] = []
+    if unique_emails:
+        email_hashes = {hash_email(email): email for email in unique_emails}
+        existing = db.execute(
+            select(Surrogate.id, Surrogate.email_hash).where(
+                Surrogate.organization_id == org_id,
+                Surrogate.is_archived.is_(False),
+                Surrogate.email_hash.in_(email_hashes.keys()),
+            )
+        ).all()
+
+        for surrogate_id, email_hash in existing:
+            email = email_hashes.get(email_hash)
+            if email:
+                duplicate_details.append(
+                    {
+                        "email": email,
+                        "existing_id": str(surrogate_id),
+                    }
+                )
+
+    duplicate_emails_db = len(duplicate_details)
+    duplicates_db_emails = {d["email"] for d in duplicate_details}
+    new_records = len(unique_emails - duplicates_db_emails) if unique_emails else 0
+    duplicate_emails_csv = len(duplicate_in_csv)
+
+    return duplicate_emails_db, duplicate_emails_csv, duplicate_details, new_records
+
+
 def preview_import(
     db: Session,
     org_id: UUID,
@@ -299,30 +349,13 @@ def preview_import(
                 if email:
                     csv_emails.append(email)
 
-    # Check for duplicates within CSV
-    seen_emails = set()
-    duplicate_in_csv = set()
-    for email in csv_emails:
-        if email in seen_emails:
-            duplicate_in_csv.add(email)
-        seen_emails.add(email)
-    preview.duplicate_emails_csv = len(duplicate_in_csv)
-
-    # Check for duplicates in DB (active surrogates only)
     if csv_emails:
-        email_hashes = [hash_email(email) for email in csv_emails]
-        existing = (
-            db.execute(
-                select(Surrogate.email_hash).where(
-                    Surrogate.organization_id == org_id,
-                    Surrogate.is_archived.is_(False),
-                    Surrogate.email_hash.in_(email_hashes),
-                )
-            )
-            .scalars()
-            .all()
-        )
-        preview.duplicate_emails_db = len(existing)
+        (
+            preview.duplicate_emails_db,
+            preview.duplicate_emails_csv,
+            preview.duplicate_details,
+            preview.new_records,
+        ) = _compute_dedup_stats(db, org_id, csv_emails)
 
     # Sample rows with validation
     for i, row in enumerate(rows[:5]):
@@ -375,6 +408,7 @@ class ImportResult:
         self.imported: int = 0
         self.skipped: int = 0
         self.errors: list[dict[str, object]] = []  # [{row: int, errors: list[str]}]
+        self.warnings: list[dict[str, object]] = []  # [{level: "warning", column: str, count: int, message: str}]
 
 
 def execute_import(
@@ -630,6 +664,7 @@ class EnhancedImportPreview:
     duplicate_emails_db: int
     duplicate_emails_csv: int
     duplicate_details: list[dict]  # [{email: str, existing_id: UUID}]
+    new_records: int
 
     # Validation
     validation_errors: int
@@ -675,56 +710,29 @@ def preview_import_enhanced(
             email_col_idx = idx
             break
 
-    csv_emails = []
+    all_emails: list[str] = []
     if email_col_idx is not None:
-        for row in detection.sample_rows:
+        decoded = file_content.decode(detection.encoding)
+        reader = csv.reader(io.StringIO(decoded), delimiter=detection.delimiter)
+        rows = list(reader)
+        data_rows = rows[1:] if detection.has_header else rows
+        for row in data_rows:
             if email_col_idx < len(row):
                 email = row[email_col_idx].strip().lower()
                 if email:
-                    csv_emails.append(email)
+                    all_emails.append(email)
 
-        # Get all emails from full file for dedup check
-        # Re-parse with detected settings for full check
-        decoded = file_content.decode(detection.encoding)
-        reader = csv.reader(io.StringIO(decoded), delimiter=detection.delimiter)
-        rows = list(reader)[1:]  # Skip header
-
-        for row in rows:
-            if email_col_idx < len(row):
-                email = row[email_col_idx].strip().lower()
-                if email and email not in csv_emails:
-                    csv_emails.append(email)
-
-    # Check duplicates in CSV
-    seen_emails = set()
-    duplicate_in_csv = set()
-    for email in csv_emails:
-        if email in seen_emails:
-            duplicate_in_csv.add(email)
-        seen_emails.add(email)
-
-    # Check duplicates in DB
-    duplicate_details = []
-    if csv_emails:
-        email_hashes = [hash_email(email) for email in csv_emails]
-        existing = db.execute(
-            select(Surrogate.id, Surrogate.email_hash).where(
-                Surrogate.organization_id == org_id,
-                Surrogate.is_archived.is_(False),
-                Surrogate.email_hash.in_(email_hashes),
-            )
-        ).all()
-
-        # Build duplicate details
-        hash_to_email = {hash_email(e): e for e in csv_emails}
-        for surrogate_id, email_hash in existing:
-            if email_hash in hash_to_email:
-                duplicate_details.append(
-                    {
-                        "email": hash_to_email[email_hash],
-                        "existing_id": str(surrogate_id),
-                    }
-                )
+    duplicate_details: list[dict[str, str]] = []
+    duplicate_emails_db = 0
+    duplicate_emails_csv = 0
+    new_records = 0
+    if all_emails:
+        (
+            duplicate_emails_db,
+            duplicate_emails_csv,
+            duplicate_details,
+            new_records,
+        ) = _compute_dedup_stats(db, org_id, all_emails)
 
     # Build sample rows dict
     sample_rows_dict = []
@@ -764,9 +772,10 @@ def preview_import_enhanced(
         matched_count=matched,
         unmatched_count=unmatched,
         sample_rows=sample_rows_dict,
-        duplicate_emails_db=len(duplicate_details),
-        duplicate_emails_csv=len(duplicate_in_csv),
+        duplicate_emails_db=duplicate_emails_db,
+        duplicate_emails_csv=duplicate_emails_csv,
         duplicate_details=duplicate_details,
+        new_records=new_records,
         validation_errors=0,  # Will be calculated during preview validation
         date_ambiguity_warnings=date_warnings,
         matching_templates=matching_templates,
@@ -884,6 +893,8 @@ def execute_import_with_mappings(
     all_rows = list(reader)
     data_rows = all_rows[1:] if detection.has_header else all_rows
 
+    warning_counts: dict[str, int] = {}
+
     for row_num, row in enumerate(data_rows, start=2):
         row_data: dict[str, Any] = {}
         custom_values: dict[str, Any] = {}
@@ -900,9 +911,15 @@ def execute_import_with_mappings(
 
             mapping = mapping_by_column.get(header)
 
-            if not mapping or mapping.action == "ignore":
+            if not mapping:
                 if unknown_column_behavior == "metadata":
                     import_metadata[detection.headers[idx]] = raw_value
+                elif unknown_column_behavior == "warn":
+                    original_header = detection.headers[idx]
+                    warning_counts[original_header] = warning_counts.get(original_header, 0) + 1
+                continue
+
+            if mapping.action == "ignore":
                 continue
 
             if mapping.action == "metadata":
@@ -995,6 +1012,16 @@ def execute_import_with_mappings(
             )
 
     # Update import record
+    if warning_counts:
+        for column, count in sorted(warning_counts.items()):
+            result.warnings.append(
+                {
+                    "level": "warning",
+                    "column": column,
+                    "count": count,
+                    "message": "Unmapped column ignored",
+                }
+            )
     _update_import_completed(db, org_id, import_id, result)
 
     return result
@@ -1031,7 +1058,12 @@ def _update_import_completed(
         import_record.imported_count = result.imported
         import_record.skipped_count = result.skipped
         import_record.error_count = len(result.errors)
-        import_record.errors = result.errors if result.errors else None
+        combined_entries = []
+        if result.errors:
+            combined_entries.extend(result.errors)
+        if result.warnings:
+            combined_entries.extend(result.warnings)
+        import_record.errors = combined_entries if combined_entries else None
         import_record.completed_at = datetime.now(timezone.utc)
         db.commit()
 

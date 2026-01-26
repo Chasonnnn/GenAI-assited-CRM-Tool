@@ -47,6 +47,7 @@ from app.routers import (
     auth,
     booking,
     campaigns,
+    custom_fields,
     surrogates,
     surrogates_import,
     compliance,
@@ -57,6 +58,7 @@ from app.routers import (
     forms_public,
     integrations,
     internal,
+    import_templates,
     intended_parents,
     interviews,
     invites,
@@ -394,6 +396,12 @@ app.include_router(auth.router, prefix="/auth", tags=["auth"])
 # Public endpoints (no auth required - for frontend middleware)
 app.include_router(public.router)
 
+# NOTE: Import routers MUST be registered BEFORE surrogates router
+# to avoid /{surrogate_id} matching "/import" path segments
+app.include_router(surrogates_import.router)  # /surrogates/import prefix
+app.include_router(import_templates.router)
+app.include_router(custom_fields.router)
+
 # Surrogates module routers
 app.include_router(surrogates.router, prefix="/surrogates", tags=["surrogates"])
 app.include_router(
@@ -403,8 +411,6 @@ app.include_router(
     interviews.router, tags=["interviews"]
 )  # Mixed paths: /surrogates/{id}/interviews and /interviews/{id}
 app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
-
-app.include_router(surrogates_import.router)  # Already has /surrogates/import prefix
 
 # Surrogate Journey (timeline view)
 app.include_router(journey.router)  # Authenticated journey endpoints
