@@ -12,7 +12,7 @@ import { TrashIcon } from "lucide-react"
 
 type SurrogateNotesTabProps = {
     surrogateId: string
-    notes?: NoteRead[]
+    notes?: NoteRead[] | undefined
     onAddNote: (html: string) => Promise<void> | void
     isSubmitting: boolean
     onDeleteNote: (noteId: string) => Promise<void> | void
