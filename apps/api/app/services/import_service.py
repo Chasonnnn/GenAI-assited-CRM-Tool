@@ -279,7 +279,7 @@ def _compute_dedup_stats(
             select(Surrogate.id, Surrogate.email_hash).where(
                 Surrogate.organization_id == org_id,
                 Surrogate.is_archived.is_(False),
-                Surrogate.email_hash.in_(email_hashes.keys()),
+                Surrogate.email_hash.in_(list(email_hashes.keys())),
             )
         ).all()
 

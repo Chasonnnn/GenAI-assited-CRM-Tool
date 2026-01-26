@@ -243,39 +243,37 @@ def list_pending_approvals(
     """List imports awaiting admin approval."""
     imports = import_service.list_pending_approvals(db, session.org_id)
 
-    return [
-        ImportApprovalItem(
-            id=imp.id,
-            filename=imp.filename,
-            status=imp.status,
-            total_rows=imp.total_rows,
-            created_at=imp.created_at,
-            created_by_name=imp.created_by.display_name if imp.created_by else None,
-            deduplication_stats=(
-                {
-                    **imp.deduplication_stats,
-                    "duplicates": imp.deduplication_stats.get("duplicates", []),
-                    "new_records": imp.deduplication_stats.get(
-                        "new_records",
-                        max(
-                            imp.total_rows
-                            - int(
-                                imp.deduplication_stats.get(
-                                    "duplicate_emails_db",
-                                    len(imp.deduplication_stats.get("duplicates", [])),
-                                )
-                            ),
-                            0,
-                        ),
-                    ),
-                }
-                if imp.deduplication_stats
-                else None
-            ),
-            column_mapping_snapshot=imp.column_mapping_snapshot,
+    response_items: list[ImportApprovalItem] = []
+    for imp in imports:
+        dedup_stats = imp.deduplication_stats
+        if dedup_stats:
+            duplicates = dedup_stats.get("duplicates") or []
+            duplicate_count = dedup_stats.get("duplicate_emails_db", len(duplicates)) or len(
+                duplicates
+            )
+            new_records = dedup_stats.get("new_records")
+            if new_records is None:
+                new_records = max(imp.total_rows - int(duplicate_count), 0)
+            dedup_stats = {
+                **dedup_stats,
+                "duplicates": duplicates,
+                "new_records": new_records,
+            }
+
+        response_items.append(
+            ImportApprovalItem(
+                id=imp.id,
+                filename=imp.filename,
+                status=imp.status,
+                total_rows=imp.total_rows,
+                created_at=imp.created_at,
+                created_by_name=imp.created_by.display_name if imp.created_by else None,
+                deduplication_stats=dedup_stats,
+                column_mapping_snapshot=imp.column_mapping_snapshot,
+            )
         )
-        for imp in imports
-    ]
+
+    return response_items
 
 
 @router.get("/{import_id:uuid}", response_model=ImportDetailResponse)
