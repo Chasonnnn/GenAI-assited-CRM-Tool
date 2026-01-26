@@ -11,6 +11,14 @@ vi.mock('@/lib/hooks/use-surrogates', () => ({
     useSurrogateHistory: () => mockUseSurrogateHistory(),
 }))
 
+vi.mock('next/navigation', () => ({
+    useRouter: () => ({
+        push: vi.fn(),
+        replace: vi.fn(),
+        prefetch: vi.fn(),
+    }),
+}))
+
 vi.mock('date-fns', async () => {
     const actual = await vi.importActual<typeof import('date-fns')>('date-fns')
     return {

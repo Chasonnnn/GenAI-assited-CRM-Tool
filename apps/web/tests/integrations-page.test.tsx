@@ -13,6 +13,14 @@ vi.mock('@/lib/hooks/use-ops', () => ({
     useIntegrationHealth: () => mockUseIntegrationHealth(),
 }))
 
+vi.mock('next/navigation', () => ({
+    useRouter: () => ({
+        push: vi.fn(),
+        replace: vi.fn(),
+        prefetch: vi.fn(),
+    }),
+}))
+
 vi.mock('@/lib/hooks/use-user-integrations', () => ({
     useUserIntegrations: () => ({ data: [], isLoading: false }),
     useConnectZoom: () => ({ mutate: mockConnectZoom, isPending: false }),

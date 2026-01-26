@@ -180,6 +180,9 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
 
 vi.mock('@/lib/hooks/use-attachments', () => ({
     useAttachments: (surrogateId: string | null) => mockUseAttachments(surrogateId),
+    useUploadAttachment: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useDownloadAttachment: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useDeleteAttachment: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useAttachmentDownloadUrl: () => ({ mutateAsync: async () => ({ download_url: "" }), isPending: false }),
     useImageAttachments: () => ({ data: [], isLoading: false }),
 }))
