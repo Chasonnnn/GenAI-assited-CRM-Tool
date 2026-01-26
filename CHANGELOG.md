@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.36.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.35.1...surrogacy-crm-platform-v0.36.0) (2026-01-26)
+
+
+### Features
+
+* **api:** add import templates and custom fields ([b8afaed](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b8afaed5424553c1d8a9230562c62083f1f3d04b))
+
+
+### Bug Fixes
+
+* **api:** add ImportApprovalItem response and dedup stats to import router ([79ae38a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/79ae38a5c4d206cbcc2f80d26dae0392db190c7f))
+* **api:** import router readability and service fixes ([6c8a445](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6c8a445b4a54b41cb19f8ccb69dca487328560d0))
+* **api:** stabilize import routing and harden preview/approval responses ([8c93813](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8c93813e1c54edd66cb58e854b7fcbf88d80ae1f))
+
 ## [0.35.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.35.0...surrogacy-crm-platform-v0.35.1) (2026-01-26)
 
 
