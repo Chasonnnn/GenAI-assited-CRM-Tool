@@ -164,7 +164,6 @@ class TestAdminExports:
         assert download.headers["content-type"].startswith("application/zip")
 
     def test_config_export_includes_extended_config(self, db, test_org, test_user):
-        test_org.portal_domain = "portal.example.com"
         test_org.signature_template = "modern"
         test_org.signature_logo_url = "logos/org.png"
         test_org.signature_primary_color = "#112233"
@@ -355,7 +354,7 @@ class TestAdminExports:
             assert "org_counters.json" in names
 
             org_payload = json.loads(archive.read("organization.json"))
-            assert org_payload["portal_domain"] == "portal.example.com"
+            assert "portal_domain" not in org_payload
             assert org_payload["signature_template"] == "modern"
 
             users_payload = json.loads(archive.read("users.json"))
