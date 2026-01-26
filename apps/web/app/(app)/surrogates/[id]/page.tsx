@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -19,13 +18,11 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { RichTextEditor } from "@/components/rich-text-editor"
 import {
     MoreVerticalIcon,
     CopyIcon,
     CheckIcon,
     XIcon,
-    TrashIcon,
     Loader2Icon,
     ArrowLeftIcon,
     SparklesIcon,
@@ -39,7 +36,6 @@ import {
     ClipboardCheckIcon,
 } from "lucide-react"
 import { InlineEditField } from "@/components/inline-edit-field"
-import { FileUploadZone } from "@/components/FileUploadZone"
 import { useSurrogate, useSurrogateActivity, useChangeSurrogateStatus, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurrogate, useAssignSurrogate, useAssignees } from "@/lib/hooks/use-surrogates"
 import { useQueues, useClaimSurrogate, useReleaseSurrogate } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
@@ -52,7 +48,6 @@ import { EmailComposeDialog } from "@/components/email/EmailComposeDialog"
 import { ProposeMatchDialog } from "@/components/matches/ProposeMatchDialog"
 import { SurrogateApplicationTab } from "@/components/surrogates/SurrogateApplicationTab"
 import { SurrogateInterviewTab } from "@/components/surrogates/interviews/SurrogateInterviewTab"
-import { SurrogateTasksCalendar } from "@/components/surrogates/SurrogateTasksCalendar"
 import { AddSurrogateTaskDialog, type SurrogateTaskFormData } from "@/components/surrogates/AddSurrogateTaskDialog"
 import { TaskEditModal } from "@/components/tasks/TaskEditModal"
 import { SurrogateProfileCard } from "@/components/surrogates/SurrogateProfileCard"
@@ -63,6 +58,8 @@ import { ActivityTimeline } from "@/components/surrogates/ActivityTimeline"
 import { PregnancyTrackerCard } from "@/components/surrogates/PregnancyTrackerCard"
 import { SurrogateJourneyTab } from "@/components/surrogates/journey/SurrogateJourneyTab"
 import { SurrogateOverviewCard } from "@/components/surrogates/SurrogateOverviewCard"
+import { SurrogateNotesTab } from "@/components/surrogates/tabs/SurrogateNotesTab"
+import { SurrogateTasksTab } from "@/components/surrogates/tabs/SurrogateTasksTab"
 import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
 import { useForms } from "@/lib/hooks/use-forms"
 import type { EmailType, SummarizeSurrogateResponse, DraftEmailResponse } from "@/lib/api/ai"
@@ -153,12 +150,6 @@ function formatMeetingTimeForInvite(date: Date): string {
     })
 }
 
-
-// Get initials from name
-function getInitials(name: string | null): string {
-    if (!name) return "?"
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-}
 
 // Format activity type for display
 function formatActivityType(type: string): string {
@@ -1070,100 +1061,24 @@ export default function SurrogateDetailPage() {
                     </TabsContent>
 
                     {/* NOTES TAB */}
-                    <TabsContent value="notes">
-                        <Card>
-                            <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] divide-y lg:divide-y-0 lg:divide-x divide-border">
-                                {/* Notes Column - Left/Main */}
-                                <div className="p-6 order-last lg:order-first">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <h3 className="text-lg font-semibold">Notes</h3>
-                                        {notes && notes.length > 0 && (
-                                            <Badge variant="secondary" className="text-xs">
-                                                {notes.length}
-                                            </Badge>
-                                        )}
-                                    </div>
-
-                                    {/* Add Note Section */}
-                                    <div className="rounded-lg border border-border bg-muted/30 p-4 mb-6">
-                                        <h4 className="text-sm font-medium mb-3 text-muted-foreground">Add a note</h4>
-                                        <RichTextEditor
-                                            placeholder="Write your note here..."
-                                            onSubmit={handleAddNote}
-                                            submitLabel="Add Note"
-                                            isSubmitting={createNoteMutation.isPending}
-                                        />
-                                    </div>
-
-                                    {/* Notes List */}
-                                    {notes && notes.length > 0 ? (
-                                        <div className="space-y-3">
-                                            {notes.map((note) => (
-                                                <div
-                                                    key={note.id}
-                                                    className="group rounded-lg border border-border bg-card p-4 transition-colors hover:bg-accent/30"
-                                                >
-                                                    <div className="flex items-start gap-3">
-                                                        <Avatar className="h-9 w-9 flex-shrink-0">
-                                                            <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                                                                {getInitials(note.author_name)}
-                                                            </AvatarFallback>
-                                                        </Avatar>
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="flex items-center justify-between gap-2">
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="text-sm font-medium">{note.author_name || 'Unknown'}</span>
-                                                                    <span className="text-xs text-muted-foreground">
-                                                                        {formatDateTime(note.created_at)}
-                                                                    </span>
-                                                                </div>
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                    onClick={() => handleDeleteNote(note.id)}
-                                                                >
-                                                                    <TrashIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
-                                                                </Button>
-                                                            </div>
-                                                            <div
-                                                                className="mt-2 text-sm prose prose-sm max-w-none dark:prose-invert"
-                                                                dangerouslySetInnerHTML={{ __html: note.body }}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <div className="text-center py-8">
-                                            <p className="text-sm text-muted-foreground">No notes yet. Add the first note above.</p>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Attachments Column - Right/Sidebar */}
-                                <div className="lg:sticky lg:top-4 lg:self-start p-6 order-first lg:order-last">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <h3 className="text-lg font-semibold">Attachments</h3>
-                                    </div>
-                                    <FileUploadZone surrogateId={id} />
-                                </div>
-                            </div>
-                        </Card>
-                    </TabsContent>
+                    <SurrogateNotesTab
+                        surrogateId={id}
+                        notes={notes}
+                        onAddNote={handleAddNote}
+                        isSubmitting={createNoteMutation.isPending}
+                        onDeleteNote={handleDeleteNote}
+                        formatDateTime={formatDateTime}
+                    />
 
                     {/* TASKS TAB */}
-                    <TabsContent value="tasks" className="space-y-4">
-                        <SurrogateTasksCalendar
-                            surrogateId={id}
-                            tasks={tasksData?.items || []}
-                            isLoading={tasksLoading}
-                            onTaskToggle={handleTaskToggle}
-                            onAddTask={() => setAddTaskDialogOpen(true)}
-                            onTaskClick={handleTaskClick}
-                        />
-                    </TabsContent>
+                    <SurrogateTasksTab
+                        surrogateId={id}
+                        tasks={tasksData?.items || []}
+                        isLoading={tasksLoading}
+                        onTaskToggle={handleTaskToggle}
+                        onAddTask={() => setAddTaskDialogOpen(true)}
+                        onTaskClick={handleTaskClick}
+                    />
 
                     {/* HISTORY TAB */}
                     <TabsContent value="history" className="space-y-4">

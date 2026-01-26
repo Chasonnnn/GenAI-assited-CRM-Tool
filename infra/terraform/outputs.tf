@@ -22,3 +22,13 @@ output "artifact_registry_repo" {
   description = "Artifact Registry repository ID for container images."
   value       = google_artifact_registry_repository.crm.repository_id
 }
+
+output "load_balancer_ip" {
+  description = "External IP address for the load balancer (when enabled)."
+  value       = var.enable_load_balancer ? google_compute_global_address.lb_ip[0].address : null
+}
+
+output "lb_dns_authorization_root" {
+  description = "DNS record for root domain authorization (Certificate Manager)."
+  value       = var.enable_load_balancer ? google_certificate_manager_dns_authorization.root[0].dns_resource_record : null
+}

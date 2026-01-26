@@ -2,8 +2,6 @@
 
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import Underline from '@tiptap/extension-underline'
-import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Button } from '@/components/ui/button'
 import { Toggle } from '@/components/ui/toggle'
@@ -55,12 +53,11 @@ export function RichTextEditor({
         extensions: [
             StarterKit.configure({
                 heading: false, // Disable headings for notes
-            }),
-            Underline,
-            Link.configure({
-                openOnClick: false,
-                HTMLAttributes: {
-                    class: 'text-primary underline cursor-pointer',
+                link: {
+                    openOnClick: false,
+                    HTMLAttributes: {
+                        class: 'text-primary underline cursor-pointer',
+                    },
                 },
             }),
             Placeholder.configure({
