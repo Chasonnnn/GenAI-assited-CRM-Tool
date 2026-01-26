@@ -1078,7 +1078,10 @@ def _get_success_redirect(
         return_to: Target app ("app" or "ops").
         mfa_pending: If true, redirect to MFA instead of the post-login landing page.
     """
-    base = (base_url or settings.FRONTEND_URL or "").rstrip("/")
+    if return_to == "ops" and not base_url:
+        base = ""
+    else:
+        base = (base_url or settings.FRONTEND_URL or "").rstrip("/")
 
     def _join(path: str) -> str:
         return f"{base}{path}" if base else path
@@ -1104,7 +1107,10 @@ def _get_error_redirect(
         base_url: Optional org portal base URL (takes precedence for app redirects).
         return_to: Target app ("app" or "ops").
     """
-    base = (base_url or settings.FRONTEND_URL or "").rstrip("/")
+    if return_to == "ops" and not base_url:
+        base = ""
+    else:
+        base = (base_url or settings.FRONTEND_URL or "").rstrip("/")
 
     def _join(path: str) -> str:
         return f"{base}{path}" if base else path
