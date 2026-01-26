@@ -30,6 +30,15 @@ export async function proxy(request: NextRequest) {
         return NextResponse.next();
     }
 
+    const opsHost = `ops.${PLATFORM_BASE_DOMAIN}`;
+
+    if (hostname === opsHost) {
+        if (pathname === '/' || pathname === '/dashboard') {
+            return NextResponse.redirect(new URL('/ops', request.url));
+        }
+        return NextResponse.next();
+    }
+
     // Validate hostname format: {slug}.surrogacyforce.com
     if (!hostname.endsWith(`.${PLATFORM_BASE_DOMAIN}`)) {
         if (hostname === PLATFORM_BASE_DOMAIN) {
