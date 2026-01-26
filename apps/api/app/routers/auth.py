@@ -237,10 +237,17 @@ async def google_callback(
         mfa_required = bool(payload.get("mfa_required", False))
         mfa_verified = bool(payload.get("mfa_verified", False))
         mfa_pending = mfa_required and not mfa_verified
-        org_id = payload.get("org_id")
-        if org_id:
-            org = org_service.get_org_by_id(db, UUIDType(str(org_id)))
-            base_url = org_service.get_org_portal_base_url(org)
+        if return_to == "ops":
+            if settings.is_dev and settings.FRONTEND_URL:
+                base_url = settings.FRONTEND_URL.rstrip("/")
+            else:
+                scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+                base_url = f"{scheme}://ops.{settings.PLATFORM_BASE_DOMAIN}"
+        else:
+            org_id = payload.get("org_id")
+            if org_id:
+                org = org_service.get_org_by_id(db, UUIDType(str(org_id)))
+                base_url = org_service.get_org_portal_base_url(org)
     except Exception:
         base_url = None
 
@@ -1078,10 +1085,9 @@ def _get_success_redirect(
         return_to: Target app ("app" or "ops").
         mfa_pending: If true, redirect to MFA instead of the post-login landing page.
     """
-    if return_to == "ops" and not base_url:
-        base = ""
-    else:
-        base = (base_url or settings.FRONTEND_URL or "").rstrip("/")
+    base = (base_url or settings.FRONTEND_URL or "").rstrip("/")
+    if return_to == "ops" and not base and settings.PLATFORM_BASE_DOMAIN:
+        base = f"https://ops.{settings.PLATFORM_BASE_DOMAIN}"
 
     def _join(path: str) -> str:
         return f"{base}{path}" if base else path
@@ -1107,10 +1113,9 @@ def _get_error_redirect(
         base_url: Optional org portal base URL (takes precedence for app redirects).
         return_to: Target app ("app" or "ops").
     """
-    if return_to == "ops" and not base_url:
-        base = ""
-    else:
-        base = (base_url or settings.FRONTEND_URL or "").rstrip("/")
+    base = (base_url or settings.FRONTEND_URL or "").rstrip("/")
+    if return_to == "ops" and not base and settings.PLATFORM_BASE_DOMAIN:
+        base = f"https://ops.{settings.PLATFORM_BASE_DOMAIN}"
 
     def _join(path: str) -> str:
         return f"{base}{path}" if base else path
