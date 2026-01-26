@@ -1,5 +1,6 @@
 """Workflow API router - REST endpoints for automation workflows."""
 
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -7,14 +8,12 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import (
     get_db,
-    require_permission,
     get_current_session,
     require_csrf_header,
 )
-from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.db.enums import WorkflowTriggerType
-from app.services import surrogate_service, workflow_service
+from app.services import surrogate_service, workflow_service, workflow_access
 from app.services.workflow_engine import engine
 from app.schemas.workflow import (
     WorkflowCreate,
@@ -35,7 +34,7 @@ from app.schemas.workflow import (
 router = APIRouter(
     prefix="/workflows",
     tags=["Workflows"],
-    dependencies=[Depends(require_permission(POLICIES["automation"].default))],
+    # No default permission - individual endpoints check based on scope
 )
 
 
@@ -46,19 +45,35 @@ router = APIRouter(
 
 @router.get("", response_model=list[WorkflowListItem])
 def list_workflows(
+    scope: Literal["org", "personal"] | None = Query(default=None),
     enabled_only: bool = False,
     trigger_type: WorkflowTriggerType | None = None,
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
 ):
-    """List all workflows for the organization (admin+ only)."""
+    """
+    List workflows for the organization.
+
+    With manage_automation permission: sees all org + all personal workflows.
+    Without: sees org workflows (read-only) + own personal workflows.
+
+    Args:
+        scope: Filter by scope ('org' or 'personal'). If omitted, shows all visible.
+    """
+    has_manage = workflow_access.has_manage_permission(db, session)
     workflows = workflow_service.list_workflows(
         db=db,
         org_id=session.org_id,
+        user_id=session.user_id,
+        has_manage_permission=has_manage,
+        scope_filter=scope,
         enabled_only=enabled_only,
         trigger_type=trigger_type,
     )
-    return [WorkflowListItem.model_validate(w) for w in workflows]
+    return [
+        workflow_service.to_workflow_list_item(db, w, can_edit=workflow_access.can_edit(db, session, w))
+        for w in workflows
+    ]
 
 
 @router.get("/options", response_model=WorkflowOptions)
@@ -98,6 +113,9 @@ def list_org_executions(
 
     Manager/Developer only. Shows all executions across the org.
     """
+    if not workflow_access.has_manage_permission(db, session):
+        raise HTTPException(status_code=403, detail="Cannot view org executions")
+
     offset = (page - 1) * per_page
     items, total = workflow_service.list_org_executions(
         db=db,
@@ -116,6 +134,8 @@ def get_execution_stats(
     session: UserSession = Depends(get_current_session),
 ):
     """Get execution statistics for the dashboard (last 24h)."""
+    if not workflow_access.has_manage_permission(db, session):
+        raise HTTPException(status_code=403, detail="Cannot view org execution stats")
     return workflow_service.get_execution_stats(db, session.org_id)
 
 
@@ -125,7 +145,18 @@ def create_workflow(
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
 ):
-    """Create a new workflow."""
+    """
+    Create a new workflow.
+
+    - Org workflows: require manage_automation permission
+    - Personal workflows: any authenticated user can create
+    """
+    if not workflow_access.can_create(db, session, data.scope):
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot create org workflows without manage_automation permission",
+        )
+
     try:
         workflow = workflow_service.create_workflow(
             db=db,
@@ -133,7 +164,7 @@ def create_workflow(
             user_id=session.user_id,
             data=data,
         )
-        return workflow_service.to_workflow_read(db, workflow)
+        return workflow_service.to_workflow_read(db, workflow, can_edit=True)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -148,7 +179,11 @@ def get_workflow(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    return workflow_service.to_workflow_read(db, workflow)
+    if not workflow_access.can_view(db, session, workflow):
+        raise HTTPException(status_code=403, detail="Cannot view this workflow")
+    return workflow_service.to_workflow_read(
+        db, workflow, can_edit=workflow_access.can_edit(db, session, workflow)
+    )
 
 
 @router.patch(
@@ -166,6 +201,8 @@ def update_workflow(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if not workflow_access.can_edit(db, session, workflow):
+        raise HTTPException(status_code=403, detail="Cannot edit this workflow")
 
     try:
         workflow = workflow_service.update_workflow(
@@ -174,7 +211,7 @@ def update_workflow(
             user_id=session.user_id,
             data=data,
         )
-        return workflow_service.to_workflow_read(db, workflow)
+        return workflow_service.to_workflow_read(db, workflow, can_edit=True)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -189,6 +226,8 @@ def delete_workflow(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if not workflow_access.can_delete(db, session, workflow):
+        raise HTTPException(status_code=403, detail="Cannot delete this workflow")
 
     workflow_service.delete_workflow(db, workflow)
     return {"message": "Workflow deleted"}
@@ -208,9 +247,11 @@ def toggle_workflow(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if not workflow_access.can_toggle(db, session, workflow):
+        raise HTTPException(status_code=403, detail="Cannot toggle this workflow")
 
     workflow = workflow_service.toggle_workflow(db, workflow, session.user_id)
-    return workflow_service.to_workflow_read(db, workflow)
+    return workflow_service.to_workflow_read(db, workflow, can_edit=True)
 
 
 @router.post(
@@ -223,13 +264,26 @@ def duplicate_workflow(
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
 ):
-    """Duplicate a workflow."""
+    """
+    Duplicate a workflow.
+
+    - Duplicating an org workflow requires manage_automation permission
+    - Duplicating a personal workflow creates a personal copy owned by the current user
+    """
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if not workflow_access.can_duplicate(db, session, workflow):
+        raise HTTPException(status_code=403, detail="Cannot duplicate this workflow")
 
-    new_workflow = workflow_service.duplicate_workflow(db, workflow, session.user_id)
-    return workflow_service.to_workflow_read(db, new_workflow)
+    # If duplicating an org workflow, keep it as org if user has permission
+    # Otherwise, create a personal copy
+    new_scope = None
+    if workflow.scope == "org" and not workflow_access.has_manage_permission(db, session):
+        new_scope = "personal"
+
+    new_workflow = workflow_service.duplicate_workflow(db, workflow, session.user_id, new_scope)
+    return workflow_service.to_workflow_read(db, new_workflow, can_edit=True)
 
 
 # =============================================================================
@@ -252,6 +306,8 @@ def test_workflow(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if not workflow_access.can_view(db, session, workflow):
+        raise HTTPException(status_code=403, detail="Cannot view this workflow")
 
     # Get entity
     entity = surrogate_service.get_surrogate(db, session.org_id, request.entity_id)
@@ -338,6 +394,8 @@ def list_executions(
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if not workflow_access.can_view(db, session, workflow):
+        raise HTTPException(status_code=403, detail="Cannot view this workflow")
 
     items, total = workflow_service.list_executions(db, workflow_id, limit, offset)
     return ExecutionListResponse(

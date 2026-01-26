@@ -6,8 +6,36 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.db.models import Surrogate, Task, Match, Attachment, EntityNote, Appointment
-from app.db.enums import WorkflowTriggerType, WorkflowEventSource
+from app.db.enums import WorkflowTriggerType, WorkflowEventSource, OwnerType
 from app.services.workflow_engine import engine
+
+
+def _get_entity_owner_id(surrogate: Surrogate) -> UUID | None:
+    """Get owner_id if surrogate is owned by a user (not queue/unassigned)."""
+    if surrogate.owner_type == OwnerType.USER.value and surrogate.owner_id:
+        return surrogate.owner_id
+    return None
+
+
+def _get_owner_id_for_surrogate_id(
+    db: Session,
+    org_id: UUID,
+    surrogate_id: UUID | None,
+) -> UUID | None:
+    """Lookup surrogate owner_id for scope filtering on non-surrogate entities."""
+    if not surrogate_id:
+        return None
+    surrogate = (
+        db.query(Surrogate)
+        .filter(
+            Surrogate.id == surrogate_id,
+            Surrogate.organization_id == org_id,
+        )
+        .first()
+    )
+    if not surrogate:
+        return None
+    return _get_entity_owner_id(surrogate)
 
 
 # =============================================================================
@@ -36,6 +64,7 @@ def trigger_surrogate_created(db: Session, surrogate: Surrogate) -> None:
         },
         org_id=surrogate.organization_id,
         source=WorkflowEventSource.USER,
+        entity_owner_id=_get_entity_owner_id(surrogate),
     )
 
 
@@ -81,6 +110,7 @@ def trigger_status_changed(
         },
         org_id=surrogate.organization_id,
         source=WorkflowEventSource.USER,
+        entity_owner_id=_get_entity_owner_id(surrogate),
     )
 
 
@@ -107,6 +137,7 @@ def trigger_surrogate_assigned(
         },
         org_id=surrogate.organization_id,
         source=WorkflowEventSource.USER,
+        entity_owner_id=_get_entity_owner_id(surrogate),
     )
 
 
@@ -134,6 +165,7 @@ def trigger_surrogate_updated(
         },
         org_id=surrogate.organization_id,
         source=WorkflowEventSource.USER,
+        entity_owner_id=_get_entity_owner_id(surrogate),
     )
 
 
@@ -154,6 +186,8 @@ def trigger_task_due(db: Session, task: Task) -> None:
     if not org_id:
         return
 
+    entity_owner_id = _get_entity_owner_id(surrogate) if surrogate else None
+
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.TASK_DUE,
@@ -167,6 +201,7 @@ def trigger_task_due(db: Session, task: Task) -> None:
         },
         org_id=org_id,
         source=WorkflowEventSource.SYSTEM,
+        entity_owner_id=entity_owner_id,
     )
 
 
@@ -182,6 +217,8 @@ def trigger_task_overdue(db: Session, task: Task) -> None:
     if not org_id:
         return
 
+    entity_owner_id = _get_entity_owner_id(surrogate) if surrogate else None
+
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.TASK_OVERDUE,
@@ -195,6 +232,7 @@ def trigger_task_overdue(db: Session, task: Task) -> None:
         },
         org_id=org_id,
         source=WorkflowEventSource.SYSTEM,
+        entity_owner_id=entity_owner_id,
     )
 
 
@@ -240,6 +278,7 @@ def trigger_scheduled_workflows(db: Session, org_id: UUID) -> None:
                     },
                     org_id=org_id,
                     source=WorkflowEventSource.SYSTEM,
+                    entity_owner_id=_get_entity_owner_id(surrogate),
                 )
 
 
@@ -280,6 +319,7 @@ def trigger_inactivity_workflows(db: Session, org_id: UUID) -> None:
                 },
                 org_id=org_id,
                 source=WorkflowEventSource.SYSTEM,
+                entity_owner_id=_get_entity_owner_id(surrogate),
             )
 
 
@@ -376,6 +416,9 @@ def trigger_task_overdue_sweep(db: Session, org_id: UUID) -> None:
 
 def trigger_match_proposed(db: Session, match: Match) -> None:
     """Trigger workflows when a match is proposed."""
+    entity_owner_id = _get_owner_id_for_surrogate_id(
+        db, match.organization_id, match.surrogate_id
+    )
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.MATCH_PROPOSED,
@@ -391,12 +434,16 @@ def trigger_match_proposed(db: Session, match: Match) -> None:
         },
         org_id=match.organization_id,
         source=WorkflowEventSource.USER,
+        entity_owner_id=entity_owner_id,
     )
 
 
 def trigger_match_accepted(db: Session, match: Match) -> None:
     """Trigger workflows when a match is accepted."""
     accepted_at = match.reviewed_at or match.updated_at
+    entity_owner_id = _get_owner_id_for_surrogate_id(
+        db, match.organization_id, match.surrogate_id
+    )
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.MATCH_ACCEPTED,
@@ -413,11 +460,15 @@ def trigger_match_accepted(db: Session, match: Match) -> None:
         },
         org_id=match.organization_id,
         source=WorkflowEventSource.USER,
+        entity_owner_id=entity_owner_id,
     )
 
 
 def trigger_match_rejected(db: Session, match: Match) -> None:
     """Trigger workflows when a match is rejected."""
+    entity_owner_id = _get_owner_id_for_surrogate_id(
+        db, match.organization_id, match.surrogate_id
+    )
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.MATCH_REJECTED,
@@ -433,6 +484,7 @@ def trigger_match_rejected(db: Session, match: Match) -> None:
         },
         org_id=match.organization_id,
         source=WorkflowEventSource.USER,
+        entity_owner_id=entity_owner_id,
     )
 
 
@@ -450,6 +502,7 @@ def trigger_document_uploaded(db: Session, attachment: Attachment) -> None:
     """
     org_id = attachment.organization_id
     surrogate_id = None
+    entity_owner_id = None
 
     if attachment.surrogate_id:
         surrogate = (
@@ -463,6 +516,7 @@ def trigger_document_uploaded(db: Session, attachment: Attachment) -> None:
         if not surrogate:
             return
         surrogate_id = surrogate.id
+        entity_owner_id = _get_entity_owner_id(surrogate)
 
     # Fallback: check intended_parent_id for IP attachments
     if not attachment.surrogate_id and attachment.intended_parent_id:
@@ -498,6 +552,7 @@ def trigger_document_uploaded(db: Session, attachment: Attachment) -> None:
         },
         org_id=org_id,
         source=WorkflowEventSource.USER,
+        entity_owner_id=entity_owner_id,
     )
 
 
@@ -514,6 +569,23 @@ def trigger_note_added(db: Session, note: EntityNote) -> None:
     Warning: This is a high-volume trigger. Workflows using this trigger
     should have conditions to avoid excessive execution.
     """
+    entity_owner_id = None
+    if note.entity_type == "surrogate":
+        entity_owner_id = _get_owner_id_for_surrogate_id(db, note.organization_id, note.entity_id)
+    elif note.entity_type == "match":
+        match = (
+            db.query(Match)
+            .filter(
+                Match.id == note.entity_id,
+                Match.organization_id == note.organization_id,
+            )
+            .first()
+        )
+        if match:
+            entity_owner_id = _get_owner_id_for_surrogate_id(
+                db, note.organization_id, match.surrogate_id
+            )
+
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.NOTE_ADDED,
@@ -527,6 +599,7 @@ def trigger_note_added(db: Session, note: EntityNote) -> None:
         },
         org_id=note.organization_id,
         source=WorkflowEventSource.USER,
+        entity_owner_id=entity_owner_id,
     )
 
 
@@ -537,6 +610,9 @@ def trigger_note_added(db: Session, note: EntityNote) -> None:
 
 def trigger_appointment_scheduled(db: Session, appointment: Appointment) -> None:
     """Trigger workflows when an appointment is scheduled/approved."""
+    entity_owner_id = _get_owner_id_for_surrogate_id(
+        db, appointment.organization_id, appointment.surrogate_id
+    )
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.APPOINTMENT_SCHEDULED,
@@ -562,11 +638,15 @@ def trigger_appointment_scheduled(db: Session, appointment: Appointment) -> None
         },
         org_id=appointment.organization_id,
         source=WorkflowEventSource.USER,
+        entity_owner_id=entity_owner_id,
     )
 
 
 def trigger_appointment_completed(db: Session, appointment: Appointment) -> None:
     """Trigger workflows when an appointment is marked as completed."""
+    entity_owner_id = _get_owner_id_for_surrogate_id(
+        db, appointment.organization_id, appointment.surrogate_id
+    )
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.APPOINTMENT_COMPLETED,
@@ -589,6 +669,7 @@ def trigger_appointment_completed(db: Session, appointment: Appointment) -> None
         },
         org_id=appointment.organization_id,
         source=WorkflowEventSource.USER,
+        entity_owner_id=entity_owner_id,
     )
 
 

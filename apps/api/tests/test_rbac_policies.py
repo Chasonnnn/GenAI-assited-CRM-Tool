@@ -97,7 +97,7 @@ async def test_policies_reference_known_permissions():
         ("GET", "/analytics/summary", P.REPORTS_VIEW),
         ("GET", "/email-templates", P.EMAIL_TEMPLATES_VIEW),
         ("GET", "/templates", P.AUTOMATION_MANAGE),
-        ("GET", "/workflows", P.AUTOMATION_MANAGE),
+        # /workflows is accessible to all users - permissions filter what's visible
         ("GET", "/settings/pipelines", P.PIPELINES_MANAGE),
         ("GET", "/queues", P.SURROGATES_ASSIGN),
         ("GET", "/settings/invites", P.TEAM_MANAGE),
