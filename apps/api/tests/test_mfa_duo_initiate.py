@@ -7,6 +7,8 @@ async def test_duo_initiate_prefers_ops_return_to(authed_client, db, test_org, m
     from app.services import duo_service
 
     monkeypatch.setattr(settings, "PLATFORM_BASE_DOMAIN", "surrogacyforce.com", raising=False)
+    monkeypatch.setattr(settings, "ENV", "prod", raising=False)
+    monkeypatch.setattr(settings, "FRONTEND_URL", "", raising=False)
     test_org.slug = "ewi"
     db.commit()
     monkeypatch.setattr(duo_service, "is_available", lambda: True)
@@ -19,9 +21,12 @@ async def test_duo_initiate_prefers_ops_return_to(authed_client, db, test_org, m
 
     monkeypatch.setattr(duo_service, "create_auth_url", fake_create_auth_url)
 
-    response = await authed_client.post("/mfa/duo/initiate?return_to=ops")
+    response = await authed_client.post(
+        "/mfa/duo/initiate?return_to=ops",
+        headers={"host": "ewi.surrogacyforce.com"},
+    )
     assert response.status_code == 200
-    assert captured["redirect_uri"] == "https://ewi.surrogacyforce.com/auth/duo/callback"
+    assert captured["redirect_uri"] == "https://ops.surrogacyforce.com/auth/duo/callback"
 
 
 @pytest.mark.asyncio
@@ -30,6 +35,8 @@ async def test_duo_initiate_ignores_invalid_return_to(authed_client, db, test_or
     from app.services import duo_service
 
     monkeypatch.setattr(settings, "PLATFORM_BASE_DOMAIN", "surrogacyforce.com", raising=False)
+    monkeypatch.setattr(settings, "ENV", "prod", raising=False)
+    monkeypatch.setattr(settings, "FRONTEND_URL", "", raising=False)
     test_org.slug = "ewi"
     db.commit()
     monkeypatch.setattr(duo_service, "is_available", lambda: True)
@@ -42,6 +49,9 @@ async def test_duo_initiate_ignores_invalid_return_to(authed_client, db, test_or
 
     monkeypatch.setattr(duo_service, "create_auth_url", fake_create_auth_url)
 
-    response = await authed_client.post("/mfa/duo/initiate?return_to=evil")
+    response = await authed_client.post(
+        "/mfa/duo/initiate?return_to=evil",
+        headers={"host": "ewi.surrogacyforce.com"},
+    )
     assert response.status_code == 200
     assert captured["redirect_uri"] == "https://ewi.surrogacyforce.com/auth/duo/callback"
