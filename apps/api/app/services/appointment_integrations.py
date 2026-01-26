@@ -170,11 +170,15 @@ def create_google_meet_link(
     from app.services import calendar_service
 
     if not calendar_service.check_user_has_google_calendar(db, appointment.user_id):
-        raise ValueError("Google Calendar not connected. Please connect in Settings → Integrations.")
+        raise ValueError(
+            "Google Calendar not connected. Please connect in Settings → Integrations."
+        )
 
     result = _run_async(
         calendar_service.create_google_meet_link(
-            access_token=_run_async(calendar_service.get_google_access_token(db, appointment.user_id)),
+            access_token=_run_async(
+                calendar_service.get_google_access_token(db, appointment.user_id)
+            ),
             calendar_id="primary",
             summary=f"{appt_type_name} with {appointment.client_name}",
             start_time=appointment.scheduled_start,

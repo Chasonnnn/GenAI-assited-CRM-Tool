@@ -1111,7 +1111,9 @@ def approve_booking(
 
     # Sync to Google Calendar for non-Google Meet modes (best-effort, after commit)
     if meeting_mode != MeetingMode.GOOGLE_MEET.value:
-        google_event_id = appointment_integrations.sync_to_google_calendar(db, appointment, "create")
+        google_event_id = appointment_integrations.sync_to_google_calendar(
+            db, appointment, "create"
+        )
         if google_event_id:
             appointment.google_event_id = google_event_id
             db.commit()

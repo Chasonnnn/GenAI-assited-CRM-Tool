@@ -408,7 +408,9 @@ class ImportResult:
         self.imported: int = 0
         self.skipped: int = 0
         self.errors: list[dict[str, object]] = []  # [{row: int, errors: list[str]}]
-        self.warnings: list[dict[str, object]] = []  # [{level: "warning", column: str, count: int, message: str}]
+        self.warnings: list[
+            dict[str, object]
+        ] = []  # [{level: "warning", column: str, count: int, message: str}]
 
 
 def execute_import(

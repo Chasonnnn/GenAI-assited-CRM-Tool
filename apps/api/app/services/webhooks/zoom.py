@@ -95,7 +95,9 @@ class ZoomWebhookHandler:
             logger.error("ZOOM_WEBHOOK_SECRET not configured")
             raise HTTPException(500, "Webhook not configured")
 
-        if not _verify_zoom_webhook_signature(body, signature, timestamp, settings.ZOOM_WEBHOOK_SECRET):
+        if not _verify_zoom_webhook_signature(
+            body, signature, timestamp, settings.ZOOM_WEBHOOK_SECRET
+        ):
             logger.warning("Zoom webhook invalid signature")
             raise HTTPException(403, "Invalid signature")
 

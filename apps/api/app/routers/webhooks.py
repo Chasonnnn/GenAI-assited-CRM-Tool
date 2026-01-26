@@ -67,8 +67,6 @@ async def zoom_webhook(
 # =============================================================================
 
 
-
-
 @router.post("/resend/{webhook_id}")
 @limiter.limit(f"{settings.RATE_LIMIT_WEBHOOK}/minute")
 async def resend_webhook(

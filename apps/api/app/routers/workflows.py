@@ -71,7 +71,9 @@ def list_workflows(
         trigger_type=trigger_type,
     )
     return [
-        workflow_service.to_workflow_list_item(db, w, can_edit=workflow_access.can_edit(db, session, w))
+        workflow_service.to_workflow_list_item(
+            db, w, can_edit=workflow_access.can_edit(db, session, w)
+        )
         for w in workflows
     ]
 
