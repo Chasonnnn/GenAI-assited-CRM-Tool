@@ -579,11 +579,7 @@ def _process_resend_event(
                     "bounced" if event_type == "email.bounced" else "complaint"
                 )
 
-            run = (
-                db.query(CampaignRun)
-                .filter(CampaignRun.id == campaign_recipient.run_id)
-                .first()
-            )
+            run = db.query(CampaignRun).filter(CampaignRun.id == campaign_recipient.run_id).first()
             if run:
                 run.sent_count = (
                     db.query(CampaignRecipient)

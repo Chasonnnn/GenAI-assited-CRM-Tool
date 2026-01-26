@@ -79,9 +79,7 @@ def ensure_migrations(engine: Engine, auto_migrate: bool) -> MigrationStatus:
     _upgrade_to_head(engine)
     status = get_migration_status(engine)
     if not status.is_up_to_date:
-        raise MigrationError(
-            "Database migrations did not reach head after auto-upgrade."
-        )
+        raise MigrationError("Database migrations did not reach head after auto-upgrade.")
     return status
 
 
