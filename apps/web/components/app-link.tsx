@@ -113,18 +113,18 @@ const AppLink = React.forwardRef<HTMLAnchorElement, AppLinkProps>(
       [onClick, href, target, download, fallbackMode, fallbackTimeoutMs, replace, router, scroll]
     )
 
-    return (
-      <Link
-        href={href}
-        onClick={handleClick}
-        replace={replace}
-        scroll={scroll}
-        target={target}
-        download={download}
-        ref={ref}
-        {...props}
-      />
-    )
+    const linkProps = {
+      href,
+      onClick: handleClick,
+      target,
+      download,
+      ref,
+      ...props,
+      ...(replace !== undefined ? { replace } : {}),
+      ...(scroll !== undefined ? { scroll } : {}),
+    }
+
+    return <Link {...linkProps} />
   }
 )
 
