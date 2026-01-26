@@ -128,6 +128,10 @@ resource "google_cloud_run_v2_service" "web" {
         name  = "NEXT_PUBLIC_API_BASE_URL"
         value = local.api_url
       }
+      env {
+        name  = "PLATFORM_BASE_DOMAIN"
+        value = var.domain
+      }
     }
   }
 

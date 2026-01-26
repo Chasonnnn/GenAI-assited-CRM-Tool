@@ -18,6 +18,7 @@ locals {
 
   common_env = merge({
     ENV                          = "production"
+    PLATFORM_BASE_DOMAIN         = var.domain
     API_BASE_URL                 = local.api_url
     FRONTEND_URL                 = local.app_url
     OPS_FRONTEND_URL             = local.ops_url
