@@ -12,9 +12,8 @@ from app.core.policies import POLICIES
 from app.core.security import decode_export_token
 from app.core.surrogate_access import check_surrogate_access
 from app.db.enums import Role
-from app.db.models import Attachment, JourneyFeaturedImage, Surrogate
 from app.schemas.auth import UserSession
-from app.services import activity_service, journey_service, surrogate_service
+from app.services import journey_service, surrogate_service
 
 
 router = APIRouter(
@@ -215,14 +214,7 @@ def export_surrogate_journey(
     from fastapi.responses import Response
     from app.services import pdf_export_service
 
-    surrogate = (
-        db.query(Surrogate)
-        .filter(
-            Surrogate.id == surrogate_id,
-            Surrogate.organization_id == session.org_id,
-        )
-        .first()
-    )
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
 
@@ -293,97 +285,25 @@ def update_milestone_featured_image(
         raise HTTPException(status_code=400, detail=f"Invalid milestone slug: {milestone_slug}")
 
     # Verify surrogate exists and belongs to org
-    surrogate = (
-        db.query(Surrogate)
-        .filter(
-            Surrogate.id == surrogate_id,
-            Surrogate.organization_id == session.org_id,
-        )
-        .first()
-    )
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
 
-    # Get existing record if any
-    existing = (
-        db.query(JourneyFeaturedImage)
-        .filter(
-            JourneyFeaturedImage.surrogate_id == surrogate_id,
-            JourneyFeaturedImage.milestone_slug == milestone_slug,
-            JourneyFeaturedImage.organization_id == session.org_id,
-        )
-        .first()
-    )
-    old_attachment_id = existing.attachment_id if existing else None
-
-    if body.attachment_id is None:
-        # Clear the featured image
-        if existing:
-            db.delete(existing)
-            activity_service.log_journey_image_cleared(
-                db=db,
-                surrogate_id=surrogate_id,
-                organization_id=session.org_id,
-                actor_user_id=session.user_id,
-                milestone_slug=milestone_slug,
-                old_attachment_id=old_attachment_id,
-            )
-            db.commit()
-        return JourneyFeaturedImageResponse(
-            success=True,
-            milestone_slug=milestone_slug,
-            attachment_id=None,
-        )
-
-    # Verify attachment exists, belongs to surrogate, is not quarantined, and is an image
-    attachment = (
-        db.query(Attachment)
-        .filter(
-            Attachment.id == body.attachment_id,
-            Attachment.surrogate_id == surrogate_id,
-            Attachment.organization_id == session.org_id,
-            Attachment.deleted_at.is_(None),
-        )
-        .first()
-    )
-    if not attachment:
-        raise HTTPException(status_code=404, detail="Attachment not found")
-
-    if attachment.quarantined:
-        raise HTTPException(status_code=400, detail="Attachment is quarantined pending virus scan")
-
-    if not attachment.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Attachment must be an image")
-
-    # Upsert the featured image record
-    if existing:
-        existing.attachment_id = body.attachment_id
-        existing.updated_by_user_id = session.user_id
-    else:
-        new_record = JourneyFeaturedImage(
-            surrogate_id=surrogate_id,
-            organization_id=session.org_id,
+    try:
+        attachment_id = journey_service.update_milestone_featured_image(
+            db=db,
+            surrogate=surrogate,
             milestone_slug=milestone_slug,
             attachment_id=body.attachment_id,
-            created_by_user_id=session.user_id,
-            updated_by_user_id=session.user_id,
+            actor_user_id=session.user_id,
         )
-        db.add(new_record)
-
-    # Log activity
-    activity_service.log_journey_image_set(
-        db=db,
-        surrogate_id=surrogate_id,
-        organization_id=session.org_id,
-        actor_user_id=session.user_id,
-        milestone_slug=milestone_slug,
-        new_attachment_id=body.attachment_id,
-        old_attachment_id=old_attachment_id,
-    )
-    db.commit()
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = 404 if "not found" in detail.lower() else 400
+        raise HTTPException(status_code=status_code, detail=detail) from exc
 
     return JourneyFeaturedImageResponse(
         success=True,
         milestone_slug=milestone_slug,
-        attachment_id=str(body.attachment_id),
+        attachment_id=str(attachment_id) if attachment_id else None,
     )

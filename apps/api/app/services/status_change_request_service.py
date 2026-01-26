@@ -89,7 +89,7 @@ def approve_request(
         ValueError: If request not found, not pending, or user not authorized
     """
     from app.services import (
-        surrogate_service,
+        surrogate_status_service,
         pipeline_service,
         ip_service,
         match_service,
@@ -134,7 +134,7 @@ def approve_request(
         old_slug = old_stage.slug if old_stage else None
 
         # Apply the change using the helper function
-        surrogate_service._apply_status_change(
+        surrogate_status_service.apply_status_change(
             db=db,
             surrogate=surrogate,
             new_stage=new_stage,
@@ -210,7 +210,7 @@ def approve_request(
         old_stage = pipeline_service.get_stage_by_id(db, old_stage_id) if old_stage_id else None
         old_slug = old_stage.slug if old_stage else None
 
-        surrogate_service._apply_status_change(
+        surrogate_status_service.apply_status_change(
             db=db,
             surrogate=surrogate,
             new_stage=ready_stage,

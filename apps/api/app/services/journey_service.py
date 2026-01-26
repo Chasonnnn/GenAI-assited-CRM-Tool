@@ -217,6 +217,87 @@ class JourneyResponse:
     organization_logo_url: str | None
 
 
+def update_milestone_featured_image(
+    db: Session,
+    *,
+    surrogate: Surrogate,
+    milestone_slug: str,
+    attachment_id: UUID | None,
+    actor_user_id: UUID,
+) -> UUID | None:
+    """
+    Upsert or clear a featured image for a journey milestone.
+
+    Raises ValueError for invalid attachment or missing records.
+    """
+    from app.services import activity_service
+
+    existing = (
+        db.query(JourneyFeaturedImage)
+        .filter(
+            JourneyFeaturedImage.surrogate_id == surrogate.id,
+            JourneyFeaturedImage.milestone_slug == milestone_slug,
+            JourneyFeaturedImage.organization_id == surrogate.organization_id,
+        )
+        .first()
+    )
+    old_attachment_id = existing.attachment_id if existing else None
+
+    if attachment_id is None:
+        if existing:
+            db.delete(existing)
+            activity_service.log_journey_image_cleared(
+                db=db,
+                surrogate_id=surrogate.id,
+                organization_id=surrogate.organization_id,
+                actor_user_id=actor_user_id,
+                milestone_slug=milestone_slug,
+                old_attachment_id=old_attachment_id,
+            )
+            db.commit()
+        return None
+
+    attachment = attachment_service.get_attachment(
+        db,
+        surrogate.organization_id,
+        attachment_id,
+    )
+    if not attachment or attachment.surrogate_id != surrogate.id:
+        raise ValueError("Attachment not found")
+    if attachment.quarantined:
+        raise ValueError("Attachment is quarantined pending virus scan")
+    if not attachment.content_type or not attachment.content_type.startswith("image/"):
+        raise ValueError("Attachment must be an image")
+
+    if existing:
+        existing.attachment_id = attachment_id
+        existing.updated_by_user_id = actor_user_id
+    else:
+        db.add(
+            JourneyFeaturedImage(
+                surrogate_id=surrogate.id,
+                organization_id=surrogate.organization_id,
+                milestone_slug=milestone_slug,
+                attachment_id=attachment_id,
+                created_by_user_id=actor_user_id,
+                updated_by_user_id=actor_user_id,
+            )
+        )
+
+    activity_service.log_journey_image_set(
+        db=db,
+        surrogate_id=surrogate.id,
+        organization_id=surrogate.organization_id,
+        actor_user_id=actor_user_id,
+        milestone_slug=milestone_slug,
+        new_attachment_id=attachment_id,
+        old_attachment_id=old_attachment_id,
+    )
+    db.commit()
+
+    return attachment_id
+
+
 def _get_milestone_for_stage(
     stage_slug: str | None,
     pipeline_stages: dict[str, int],  # slug -> order

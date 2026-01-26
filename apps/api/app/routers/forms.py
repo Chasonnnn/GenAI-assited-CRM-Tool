@@ -14,7 +14,6 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
-from app.db.models import Form, FormSubmission
 from app.schemas.auth import UserSession
 from app.schemas.forms import (
     FormCreate,
@@ -49,7 +48,7 @@ def _schema_or_none(schema_json: dict | None) -> FormSchema | None:
         return None
 
 
-def _form_summary(form: Form) -> FormSummary:
+def _form_summary(form) -> FormSummary:
     return FormSummary(
         id=form.id,
         name=form.name,
@@ -59,7 +58,7 @@ def _form_summary(form: Form) -> FormSummary:
     )
 
 
-def _form_read(form: Form) -> FormRead:
+def _form_read(form) -> FormRead:
     schema = _schema_or_none(form.schema_json)
     published_schema = _schema_or_none(form.published_schema_json)
     if schema:
@@ -84,7 +83,7 @@ def _form_read(form: Form) -> FormRead:
     )
 
 
-def _submission_read(submission: FormSubmission, files: list) -> FormSubmissionRead:
+def _submission_read(submission, files: list) -> FormSubmissionRead:
     return FormSubmissionRead(
         id=submission.id,
         form_id=submission.form_id,
