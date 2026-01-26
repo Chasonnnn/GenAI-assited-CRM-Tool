@@ -37,7 +37,7 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 - Worker: `apps/api/app/worker.py`
 - CLI: `apps/api/app/cli.py`
 - Core utilities: `apps/api/app/core/*` (config, deps, csrf, rate limits, permissions, policies, logging, stage rules, async_utils)
-- DB: `apps/api/app/db/*` (models, enums, session)
+- DB: `apps/api/app/db/*` (models, enums package, session)
 - Utils: `apps/api/app/utils/*` (normalization, pagination)
 - Routers: `apps/api/app/routers/*` (see API Index)
 - Services: `apps/api/app/services/*` (surrogates, matches, workflows, AI, analytics, integrations, compliance)
@@ -273,7 +273,7 @@ See each router for full endpoint list.
 ---
 
 ## Job/Worker Index
-Job types defined in `apps/api/app/db/enums.py` and processed in `apps/api/app/worker.py`.
+Job types defined in `apps/api/app/db/enums/*` and processed in `apps/api/app/worker.py`.
 
 - Email + notifications: `SEND_EMAIL`, `REMINDER`, `NOTIFICATION`
 - Webhooks: `WEBHOOK_RETRY`
