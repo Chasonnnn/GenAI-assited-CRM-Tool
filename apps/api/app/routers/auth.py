@@ -86,8 +86,12 @@ def google_login(
         return_to: Target app after auth. Strict allowlist: "app" or "ops".
     """
     # Validate return_to against strict allowlist
+    host = request.headers.get("host", "").split(":")[0].lower()
+    ops_host = f"ops.{settings.PLATFORM_BASE_DOMAIN}" if settings.PLATFORM_BASE_DOMAIN else ""
     if return_to not in ALLOWED_RETURN_TO:
-        return_to = "app"
+        return_to = "ops" if host == ops_host else "app"
+    elif host == ops_host:
+        return_to = "ops"
 
     state = generate_oauth_state()
     nonce = generate_oauth_nonce()
@@ -1085,7 +1089,14 @@ def _get_success_redirect(
         return_to: Target app ("app" or "ops").
         mfa_pending: If true, redirect to MFA instead of the post-login landing page.
     """
-    base = (base_url or settings.FRONTEND_URL or "").rstrip("/")
+    if return_to == "ops":
+        base = (base_url or "").rstrip("/")
+        if not base and settings.PLATFORM_BASE_DOMAIN:
+            base = f"https://ops.{settings.PLATFORM_BASE_DOMAIN}"
+        if not base and settings.is_dev and settings.FRONTEND_URL:
+            base = settings.FRONTEND_URL.rstrip("/")
+    else:
+        base = (base_url or settings.FRONTEND_URL or "").rstrip("/")
     if return_to == "ops" and not base and settings.PLATFORM_BASE_DOMAIN:
         base = f"https://ops.{settings.PLATFORM_BASE_DOMAIN}"
 
@@ -1113,7 +1124,14 @@ def _get_error_redirect(
         base_url: Optional org portal base URL (takes precedence for app redirects).
         return_to: Target app ("app" or "ops").
     """
-    base = (base_url or settings.FRONTEND_URL or "").rstrip("/")
+    if return_to == "ops":
+        base = (base_url or "").rstrip("/")
+        if not base and settings.PLATFORM_BASE_DOMAIN:
+            base = f"https://ops.{settings.PLATFORM_BASE_DOMAIN}"
+        if not base and settings.is_dev and settings.FRONTEND_URL:
+            base = settings.FRONTEND_URL.rstrip("/")
+    else:
+        base = (base_url or settings.FRONTEND_URL or "").rstrip("/")
     if return_to == "ops" and not base and settings.PLATFORM_BASE_DOMAIN:
         base = f"https://ops.{settings.PLATFORM_BASE_DOMAIN}"
 

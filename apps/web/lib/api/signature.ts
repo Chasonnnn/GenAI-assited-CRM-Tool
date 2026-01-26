@@ -112,9 +112,7 @@ export async function getSignaturePreview(): Promise<SignaturePreview> {
 export async function uploadSignaturePhoto(file: File): Promise<SignaturePhotoResponse> {
     const formData = new FormData()
     formData.append('file', file)
-    return api.post<SignaturePhotoResponse>('/auth/me/signature/photo', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    return api.post<SignaturePhotoResponse>('/auth/me/signature/photo', formData)
 }
 
 export async function deleteSignaturePhoto(): Promise<SignaturePhotoResponse> {
@@ -136,9 +134,7 @@ export async function updateOrgSignature(data: OrgSignatureUpdate): Promise<OrgS
 export async function uploadOrgLogo(file: File): Promise<{ signature_logo_url: string }> {
     const formData = new FormData()
     formData.append('file', file)
-    return api.post<{ signature_logo_url: string }>('/settings/organization/signature/logo', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    return api.post<{ signature_logo_url: string }>('/settings/organization/signature/logo', formData)
 }
 
 export async function deleteOrgLogo(): Promise<{ status: string }> {
