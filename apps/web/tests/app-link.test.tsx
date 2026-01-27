@@ -24,12 +24,12 @@ beforeEach(() => {
 })
 
 describe('AppLink', () => {
-    it('navigates via router by default even if click is prevented upstream', () => {
+    it('navigates via router when fallbackMode="router" even if click is prevented upstream', () => {
         const onClick = vi.fn((event: MouseEvent<HTMLAnchorElement>) => {
             event.preventDefault()
         })
         render(
-            <AppLink href="/surrogates" onClick={onClick}>
+            <AppLink href="/surrogates" fallbackMode="router" onClick={onClick}>
                 Go
             </AppLink>
         )
