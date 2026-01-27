@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.38.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.38.1...surrogacy-crm-platform-v0.38.2) (2026-01-27)
+
+
+### Bug Fixes
+
+* **web:** move ops subdomain rewrites to next.config.js ([3c5e9ab](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3c5e9abcca1c12fe4e77df0c62e32ec20de6e47a))
+
 ## [0.38.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.38.0...surrogacy-crm-platform-v0.38.1) (2026-01-27)
 
 
