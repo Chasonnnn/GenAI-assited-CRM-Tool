@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.38.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.38.0...surrogacy-crm-platform-v0.38.1) (2026-01-27)
+
+
+### Bug Fixes
+
+* **web:** regenerate pnpm-lock.yaml to remove duplicate entries ([2180d61](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2180d616d2bd895b5edcd64b941ccd56295b6d10))
+
 ## [0.38.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.37.0...surrogacy-crm-platform-v0.38.0) (2026-01-27)
 
 
