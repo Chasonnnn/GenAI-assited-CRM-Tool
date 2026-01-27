@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.38.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.37.0...surrogacy-crm-platform-v0.38.0) (2026-01-27)
+
+
+### Features
+
+* webhook registry appointment integrations ([c87a35f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c87a35f0502be84e7026e8d884efe87a759d454d))
+
+
+### Bug Fixes
+
+* **deps:** update dependencies and fix TypeScript compatibility ([26babb3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/26babb3c79e2fb1163b359a26b6027694aebd453))
+* **deps:** update dependencies and fix TypeScript compatibility ([886201f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/886201f5f1dc339cdd03b76e609e827fdac80f45))
+* **deps:** update dependencies and fix TypeScript compatibility ([e23318a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e23318a56588ca4637e752b72b3498755dc29f18))
+* **deps:** update dependencies and fix TypeScript compatibility ([021a1fa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/021a1faf9c2ab884ea565f578ffc164a763794c8))
+* **web:** improve AppLink navigation and proxy org caching ([53850ed](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/53850ed87cff8a5cd9eee76ab630fb8cb3f05917))
+* **web:** migrate params/searchParams to Promise types for Next.js 15+ ([ce99392](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ce99392575a66e2309d88be2dba2e5330b0c84af))
+
 ## [0.37.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.36.0...surrogacy-crm-platform-v0.37.0) (2026-01-26)
 
 
