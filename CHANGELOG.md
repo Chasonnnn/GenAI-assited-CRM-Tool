@@ -2,6 +2,281 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.37.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.36.0...surrogacy-crm-platform-v0.37.0) (2026-01-26)
+
+
+### Features
+
+* **api:** add personal workflow scope with permission-based access control ([7ac5228](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7ac522868f4d0a7eb6f49349278a643411945fcf))
+* **api:** add workflow email provider resolution based on scope ([e834b2c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e834b2c8f3e01d60529e8bc8afc8ed782bfff45f))
+
+
+### Bug Fixes
+
+* **web:** refactor tab navigation to use Next.js router instead of hi… ([f08fa25](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f08fa251c7627f513bd9693e36f6199f2540db08))
+* **web:** refactor tab navigation to use Next.js router instead of history API ([c0ac130](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c0ac130a2e39d906ad9479266514580a1d14a4ca))
+
+## [0.36.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.35.1...surrogacy-crm-platform-v0.36.0) (2026-01-26)
+
+
+### Features
+
+* **api:** add import templates and custom fields ([b8afaed](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b8afaed5424553c1d8a9230562c62083f1f3d04b))
+
+
+### Bug Fixes
+
+* **api:** add ImportApprovalItem response and dedup stats to import router ([79ae38a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/79ae38a5c4d206cbcc2f80d26dae0392db190c7f))
+* **api:** import router readability and service fixes ([6c8a445](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6c8a445b4a54b41cb19f8ccb69dca487328560d0))
+* **api:** stabilize import routing and harden preview/approval responses ([8c93813](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8c93813e1c54edd66cb58e854b7fcbf88d80ae1f))
+
+## [0.35.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.35.0...surrogacy-crm-platform-v0.35.1) (2026-01-26)
+
+
+### Bug Fixes
+
+* **web:** handle optional taskFilter and notes prop types ([c481fb7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c481fb787e6b7f7c45cbd3811c55b8adce685598))
+* **web:** handle optional taskFilter and notes prop types ([e2f87bf](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e2f87bfc7d1872fd5de77c2adffa72f693176232))
+
+## [0.35.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.34.6...surrogacy-crm-platform-v0.35.0) (2026-01-26)
+
+
+### Features
+
+* wildcard tenant routing, UI component extraction, architecture docs ([a56fec6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a56fec6bdb68e171b1535661f8b63817fb8a90b3))
+
+## [0.34.6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.34.5...surrogacy-crm-platform-v0.34.6) (2026-01-26)
+
+
+### Bug Fixes
+
+* more and more fix for ops and subdomain ([6abbc36](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6abbc363a02fa864c27b5d438b66575a2f38909c))
+* more and more fix for ops and subdomain ([4e6227a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4e6227a9f3c8a09215782a5887215ac3aa7d062b))
+
+## [0.34.5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.34.4...surrogacy-crm-platform-v0.34.5) (2026-01-26)
+
+
+### Bug Fixes
+
+* OPS again smh ([83628ed](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/83628ed5e1b4362732c3f039e88f1e88b21054f5))
+* OPS again smh ([0c33cba](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0c33cba058e605000aa8e8534ae279b9d4924b8e))
+
+## [0.34.4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.34.3...surrogacy-crm-platform-v0.34.4) (2026-01-26)
+
+
+### Bug Fixes
+
+* OPS more fixes.... ([4cf84c3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4cf84c379e3f133d9cd0123d5f3ea13bf3482481))
+* OPS more fixes.... ([b99201e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b99201ef60f2c0485ab547acd3fbe8e3462d866f))
+
+## [0.34.3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.34.2...surrogacy-crm-platform-v0.34.3) (2026-01-26)
+
+
+### Bug Fixes
+
+* Refine 'ops' subdomain authentication and routing, and remove re… ([61fe4b1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/61fe4b1787d6345a3485875f46df50a3ba6f23bd))
+* Refine 'ops' subdomain authentication and routing, and remove redundant multipart Content-Type headers from API requests. ([6a972a4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6a972a4fa9cdb11c491a1f372523cca4569f6254))
+
+## [0.34.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.34.1...surrogacy-crm-platform-v0.34.2) (2026-01-26)
+
+
+### Bug Fixes
+
+* more ops fixes ([34f15ad](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/34f15addbf02479c098a3b7cea8b2ab4dffa2291))
+* more ops fixes ([8e89f58](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8e89f5898a15081ff772d5f0a79e2a499ce439f0))
+
+## [0.34.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.34.0...surrogacy-crm-platform-v0.34.1) (2026-01-26)
+
+
+### Bug Fixes
+
+* re-enable ops subdomain support with dedicated routing and sessi… ([991b0a8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/991b0a8bd82d59e2bedd6e98225d45f966541604))
+* re-enable ops subdomain support with dedicated routing and session management. ([1aaede9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1aaede93c0ff5034396daacaeecdf79e799a09d1))
+
+## [0.34.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.33.2...surrogacy-crm-platform-v0.34.0) (2026-01-26)
+
+
+### Features
+
+* **api:** add multi-tenant subdomain infrastructure ([d9f6e96](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d9f6e96db46d778439a6e87bfce9a048e13efbb2))
+* **api:** add public org resolution and slug management APIs ([6bf13dc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6bf13dcd5b5029e02147bb4a246f04eb6535d28c))
+* **api:** add session host validation for multi-tenancy ([89b2486](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/89b2486cfa064a0d5383ad9088fd39e5fb7de519))
+* **web:** add multi-tenant subdomain routing ([5323119](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5323119027f5b473603b66d7061945ddd58b65b0))
+
+
+### Bug Fixes
+
+* **web:** replace next/link with AppLink wrapper for navigation reliability ([cbd65e9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cbd65e93c8fff847f0d8bdfd4ae03c53e981b8ba))
+
+
+### Maintenance
+
+* **api:** cleanup portal_domain references ([c62c38f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c62c38f7fe2852e078de5c84537b752939587590))
+* minor formatting and cleanup ([458b542](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/458b542e6f4533485e8e7b63382a4e59a6adf8e5))
+
+## [0.33.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.33.1...surrogacy-crm-platform-v0.33.2) (2026-01-25)
+
+
+### Bug Fixes
+
+* **web:** fix SidebarMenuButton Link+Tooltip composition ([d7fac48](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d7fac48fc660160d707438f189f4de894a99fb6c))
+* **web:** fix SidebarMenuButton Link+Tooltip composition ([930d3a0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/930d3a05b429a2a8c82ec62e86075ffcfd5d655c))
+
+## [0.33.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.33.0...surrogacy-crm-platform-v0.33.1) (2026-01-25)
+
+
+### Bug Fixes
+
+* **web:** restore useRender for proper Link+Tooltip composition ([dce1d7d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dce1d7da772ea67705093ab90eac4ca2b45edfc5))
+* **web:** restore useRender for proper Link+Tooltip composition ([b3654b9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b3654b927e0eea9d78e048c43d6aa0b5c5341d7a))
+
+## [0.33.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.32.0...surrogacy-crm-platform-v0.33.0) (2026-01-25)
+
+
+### Features
+
+* **api,web:** add organization context to invite acceptance flow ([15f5f71](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/15f5f71e1a84ad54b0c107952cc796e9fa65e74e))
+* **api:** add database migration checks to readiness probes ([2c4667f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2c4667fc1f2d65088a497ff571326a2f98ce0ed7))
+* **api:** enforce Duo priority over TOTP when enrolled ([42a82ba](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/42a82ba8d87e01ee7cc6b3bbbc2f3fbdeecb3311))
+
+
+### Bug Fixes
+
+* **web:** resolve remaining nested interactive element violations ([f8409ff](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f8409ffc576058fbd17159a48a92eeacbf0c77df))
+
+## [0.32.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.31.6...surrogacy-crm-platform-v0.32.0) (2026-01-25)
+
+
+### Features
+
+* **api:** add email engagement tracking for invites ([57c47d3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/57c47d37cfbf7fb9fa82cc1867a98513e4c885e3))
+* **api:** add org delete/restore platform endpoints ([cace40c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cace40c937f046c376e54641ffbc76a726f969fe))
+* **api:** add ORG_DELETE worker job handler ([f369ff2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f369ff29d855f258ffd82083e91f38cfb10bca5d))
+* **api:** add organization deletion service logic ([70c3742](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/70c374294292a730645f7cc5434598ef7e005d7a))
+* **api:** add organization soft delete schema ([91227d5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/91227d585663fdd02e9c48604113e7b4492daa44))
+* **api:** block API access for deleted organizations ([6f03c58](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6f03c58e10c1f4e50a720ab88e9e3842080976d6))
+* **api:** expand HTML sanitization for email templates ([84bd5be](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/84bd5bea3093ec87b103d373c375a02ab39d96eb))
+* **api:** filter deleted orgs in org service queries ([6062753](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6062753426988abda57f6ccd2920bc50af021508))
+* **api:** improve invite flow and email template ([1061f56](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1061f568bec4d6f1748f3c359488a9643b155f84))
+* **api:** refactor Resend webhooks and add platform endpoint ([a24824d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a24824d8d08f9edf8c8377e8d06b58f74be162f9))
+* **config:** add platform Resend webhook secret setting ([2d0088a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2d0088a7175265a9c20d72c6c0ca572dee69470e))
+* **web:** add org deletion UI to ops dashboard ([ce86c66](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ce86c6601db0a76b76a1c49cada6c05f206715af))
+* **web:** expand DOMPurify config for template previews ([2d38a97](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2d38a97a958a08f61abcabbe35578551168b50c3))
+
+## [0.31.6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.31.5...surrogacy-crm-platform-v0.31.6) (2026-01-25)
+
+
+### Bug Fixes
+
+* improve ops invite template UX ([a79af1c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a79af1cf8193b385da152c5d2095ee03d4909759))
+* improve ops invite template UX ([428436c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/428436c6eb28716b5b8ad3d30484f9e9019f7bde))
+
+## [0.31.5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.31.4...surrogacy-crm-platform-v0.31.5) (2026-01-25)
+
+
+### Bug Fixes
+
+* **api:** include resend_count in invite email idempotency key ([0047702](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0047702583fdf65fd532091d383bbd314a1e0c84))
+* **api:** use urlsafe_b64decode first for webhook secret ([1bf7fb3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1bf7fb3ba419f916e679a4b2c3af1fb2900b557d))
+
+## [0.31.4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.31.3...surrogacy-crm-platform-v0.31.4) (2026-01-25)
+
+
+### Maintenance
+
+* apply API cleanup and refactors across all components ([e44631b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e44631b5d3afb8fcbe4c0bf00f2300bff17b6fd8))
+* apply API cleanup and refactors across all components ([c8f587a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c8f587a3c991ccc122acb8c48b699673d6d51737))
+
+## [0.31.3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.31.2...surrogacy-crm-platform-v0.31.3) (2026-01-24)
+
+
+### Bug Fixes
+
+* **api:** persist upgraded session on MFA completion ([ac4c970](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ac4c970d7870b87b4f0c71ccd3100557c64e1b22))
+* **api:** persist upgraded session on MFA completion ([5d3e208](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5d3e2088ee701613458a89888432bd55279671b0))
+
+## [0.31.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.31.1...surrogacy-crm-platform-v0.31.2) (2026-01-24)
+
+
+### Bug Fixes
+
+* **web:** pass return_to for ops login ([33dfa41](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/33dfa41dd1a80b1b859945a3e8a412e4d10469f2))
+* **web:** pass return_to for ops login ([9a7dadf](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9a7dadf54a0b37d49667821f8f648ec2f4f98ac9))
+
+## [0.31.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.31.0...surrogacy-crm-platform-v0.31.1) (2026-01-24)
+
+
+### Bug Fixes
+
+* **infra:** update Cloud Run job config and variable documentation ([b119a7c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b119a7c7469937ca5f1884dbdf28059a463b1a5b))
+* **web:** refine global styles, layout, and MFA UI improvements ([a25be3b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a25be3b8cca283262e932b8c9e7feb2a75d081af))
+* **web:** refine global styles, layout, and MFA UI improvements ([eaf6c97](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/eaf6c97882f3516448b485a1de85dca21143dad4))
+
+## [0.31.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.30.3...surrogacy-crm-platform-v0.31.0) (2026-01-24)
+
+
+### Features
+
+* **mfa:** refine Duo MFA authentication and UI flow ([5bb2f02](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5bb2f023b2280d7a413b0a7251efbf4db92b33bb))
+* **mfa:** refine Duo MFA authentication and UI flow ([8a3390f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8a3390fb6ab3b45ff971f934a886ea4b5d76a6f5))
+
+## [0.30.3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.30.2...surrogacy-crm-platform-v0.30.3) (2026-01-24)
+
+
+### Bug Fixes
+
+* **mfa:** refine Duo authentication flow and UI handling ([326ec25](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/326ec25a52a94e12a9e8a5424b402d148137f1c8))
+* **mfa:** refine Duo authentication flow and UI handling ([5a7df5d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5a7df5d1ec9ad3d1ebf85349a9c272641f74e6d3))
+
+## [0.30.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.30.1...surrogacy-crm-platform-v0.30.2) (2026-01-24)
+
+
+### Bug Fixes
+
+* **web:** improve Duo callback handling and update tsconfig ([69e5aaa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/69e5aaaccaf5d223cadbae7f9b8762018f8620de))
+* **web:** improve Duo callback handling and update tsconfig ([fa968e0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fa968e084c64913d54319466546110ddb3d1fd89))
+
+## [0.30.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.30.0...surrogacy-crm-platform-v0.30.1) (2026-01-24)
+
+
+### Bug Fixes
+
+* **api:** sanitize Duo credentials and add validation tests ([31c0d08](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/31c0d08a1e0449cef3a82bb6518485e99e126faa))
+* **api:** sanitize Duo credentials and add validation tests ([a19f683](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a19f6837bdaba6de13c7fa10e9da75409a36f132))
+
+## [0.30.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.29.0...surrogacy-crm-platform-v0.30.0) (2026-01-24)
+
+
+### Features
+
+* **api:** add Duo MFA initiation and platform MFA management ([3b1623b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3b1623b6a6ad14860b4321583740b15f9c543141))
+* **api:** add platform admin MFA reset endpoint ([7fec4ea](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7fec4eaae03d8ddee2d04dd704ce897d85050af4))
+* **web:** update MFA and platform admin UI ([5b114b1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5b114b19b206e1779b12bbfeed98f73a101abcf3))
+
+## [0.29.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.28.1...surrogacy-crm-platform-v0.29.0) (2026-01-24)
+
+
+### Features
+
+* **api:** enhance Duo MFA service and router ([c1927b4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c1927b4f55e902b8ac7524ce77f15118a0d81054))
+* **infra:** add Cloud Run job configuration and variable updates ([b0c1030](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b0c103094e66c70747e4c919a33cfabd25cb9f7e))
+* **web:** update MFA pages and ops layout ([60b0401](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/60b0401b46c683cdeae66c6d282a988bf1dfcdab))
+
+
+### Bug Fixes
+
+* **infra:** update Cloud Run and terraform locals ([1d0bbb4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1d0bbb4d8c1985a1a97fcc86fb8cd58781986dab))
+
+## [0.28.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.28.0...surrogacy-crm-platform-v0.28.1) (2026-01-24)
+
+
+### Bug Fixes
+
+* restore release-please manifest ([a575e1c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a575e1c2638b6d23ebd8d2e9f5926b89a8e60789))
+* restore release-please manifest ([428555e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/428555e27f260c185378f216e5c56e95481e4ab9))
+* update terraform variables and release-please config ([128da4e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/128da4e2e4aebc586e223904c8f07bfc0f9a4ad7))
+* update terraform variables and release-please config ([d8cd88c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d8cd88c9feeac6c67c546c8022d9296643d8a5fb))
+
 ## [0.28.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.27.0...surrogacy-crm-platform-v0.28.0) (2026-01-24)
 
 
