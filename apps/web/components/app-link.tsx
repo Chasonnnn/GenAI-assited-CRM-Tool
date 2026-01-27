@@ -56,7 +56,7 @@ const AppLink = React.forwardRef<HTMLAnchorElement, AppLinkProps>(
       replace,
       scroll,
       prefetch = false,
-      fallbackMode = "router",
+      fallbackMode = "none",
       target,
       download,
       ...props
