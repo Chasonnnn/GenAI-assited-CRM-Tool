@@ -240,7 +240,7 @@ export function StageChart() {
                                 tickLine={false}
                                 axisLine={false}
                                 width={140}
-                                tick={({ x, y, payload }: { x: number; y: number; payload: { value: string } }) => {
+                                tick={({ x, y, payload }: { x: string | number; y: string | number; payload: { value: string } }) => {
                                     const lines = wrapStageLabel(payload.value)
                                     return (
                                         <g transform={`translate(${x},${y})`}>
