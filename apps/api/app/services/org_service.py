@@ -187,8 +187,11 @@ def get_org_by_host(db: Session, host: str) -> Organization | None:
     base_domain = settings.PLATFORM_BASE_DOMAIN
 
     # Dev bypass: allow localhost, *.localhost, *.test
+    # Exception: If PLATFORM_BASE_DOMAIN=localhost, allow .localhost subdomains for testing
     if settings.ENV.lower() in ("dev", "development", "test"):
-        if (
+        # Skip bypass for .localhost when testing with PLATFORM_BASE_DOMAIN=localhost
+        is_local_proxy_test = base_domain == "localhost" and host.endswith(".localhost")
+        if not is_local_proxy_test and (
             host in ("localhost", "127.0.0.1")
             or host.endswith(".localhost")
             or host.endswith(".test")
