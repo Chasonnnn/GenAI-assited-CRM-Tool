@@ -6,7 +6,7 @@
  * Allows clients to reschedule their appointment using a secure token.
  */
 
-import { useState, useEffect, useMemo } from "react"
+import { use, useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
@@ -41,10 +41,16 @@ const TIMEZONE_OPTIONS = [
 ]
 
 interface PageProps {
-    params: { orgId: string; token: string }
+    params: Promise<{ orgId?: string | string[]; token?: string | string[] }>
 }
 
 export default function ReschedulePage({ params }: PageProps) {
+    const resolvedParams = use(params)
+    const rawOrgId = resolvedParams.orgId
+    const rawToken = resolvedParams.token
+    const orgId = Array.isArray(rawOrgId) ? rawOrgId[0] : rawOrgId
+    const token = Array.isArray(rawToken) ? rawToken[0] : rawToken
+
     const [appointment, setAppointment] = useState<PublicAppointmentView | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -70,11 +76,20 @@ export default function ReschedulePage({ params }: PageProps) {
 
     // Fetch appointment
     useEffect(() => {
+        if (!orgId || !token) {
+            setError("Invalid reschedule link")
+            setIsLoading(false)
+            return
+        }
+
+        const orgIdForCall = orgId
+        const tokenForCall = token
+
         async function load() {
             try {
                 const data = await getAppointmentForReschedule(
-                    params.orgId,
-                    params.token
+                    orgIdForCall,
+                    tokenForCall
                 )
                 setAppointment(data)
             } catch (err: unknown) {
@@ -84,7 +99,7 @@ export default function ReschedulePage({ params }: PageProps) {
             }
         }
         load()
-    }, [params.orgId, params.token])
+    }, [orgId, token])
 
     useEffect(() => {
         if (appointment?.client_timezone) {
@@ -99,11 +114,13 @@ export default function ReschedulePage({ params }: PageProps) {
         setIsLoadingSlots(true)
 
         try {
+            if (!orgId || !token) throw new Error("Invalid reschedule link")
+
             // Fetch real availability from API
             const dateStr = format(date, "yyyy-MM-dd")
             const response = await getRescheduleSlotsByToken(
-                params.orgId,
-                params.token,
+                orgId,
+                token,
                 dateStr,
                 dateStr,
                 timezone
@@ -123,7 +140,8 @@ export default function ReschedulePage({ params }: PageProps) {
 
         setIsSubmitting(true)
         try {
-            await rescheduleByToken(params.orgId, params.token, selectedSlot.start)
+            if (!orgId || !token) throw new Error("Invalid reschedule link")
+            await rescheduleByToken(orgId, token, selectedSlot.start)
             setIsConfirmed(true)
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : "Failed to reschedule")
