@@ -373,7 +373,7 @@ function BreakdownChart({
                 />
                 <Bar dataKey="spend" radius={[0, 4, 4, 0]}>
                     {chartData.map((entry, index) => (
-                        <Cell key={index} fill={entry.fill} />
+                        <Cell key={index} fill={entry.fill ?? "hsl(var(--primary))"} />
                     ))}
                 </Bar>
             </BarChart>

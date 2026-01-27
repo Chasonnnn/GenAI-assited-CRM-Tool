@@ -4,11 +4,16 @@ import { cva } from "class-variance-authority"
 import { cn } from '@/lib/utils'
 import { ChevronDownIcon } from "lucide-react"
 
+type NavigationMenuProps = Omit<NavigationMenuPrimitive.Root.Props, 'ref'>
+type NavigationMenuListProps = Omit<NavigationMenuPrimitive.List.Props, 'ref'>
+type NavigationMenuItemProps = Omit<NavigationMenuPrimitive.Item.Props, 'ref'>
+type NavigationMenuIconProps = Omit<NavigationMenuPrimitive.Icon.Props, 'ref'>
+
 function NavigationMenu({
   className,
   children,
   ...props
-}: NavigationMenuPrimitive.Root.Props) {
+}: NavigationMenuProps) {
   return (
     <NavigationMenuPrimitive.Root
       data-slot="navigation-menu"
@@ -27,7 +32,7 @@ function NavigationMenu({
 function NavigationMenuList({
   className,
   ...props
-}: NavigationMenuPrimitive.List.Props) {
+}: NavigationMenuListProps) {
   return (
     <NavigationMenuPrimitive.List
       data-slot="navigation-menu-list"
@@ -43,7 +48,7 @@ function NavigationMenuList({
 function NavigationMenuItem({
   className,
   ...props
-}: NavigationMenuPrimitive.Item.Props) {
+}: NavigationMenuItemProps) {
   return (
     <NavigationMenuPrimitive.Item
       data-slot="navigation-menu-item"
@@ -135,7 +140,7 @@ function NavigationMenuLink({
 function NavigationMenuIndicator({
   className,
   ...props
-}: NavigationMenuPrimitive.Icon.Props) {
+}: NavigationMenuIconProps) {
   return (
     <NavigationMenuPrimitive.Icon
       data-slot="navigation-menu-indicator"
