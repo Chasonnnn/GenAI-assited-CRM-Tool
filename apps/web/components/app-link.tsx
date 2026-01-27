@@ -46,7 +46,6 @@ function resolveHref(href: LinkProps["href"]) {
 export type AppLinkProps = LinkProps &
   React.AnchorHTMLAttributes<HTMLAnchorElement> & {
     fallbackMode?: "router" | "reload" | "none"
-    fallbackTimeoutMs?: number
   }
 
 const AppLink = React.forwardRef<HTMLAnchorElement, AppLinkProps>(
@@ -56,8 +55,7 @@ const AppLink = React.forwardRef<HTMLAnchorElement, AppLinkProps>(
       onClick,
       replace,
       scroll,
-      fallbackMode = "none",
-      fallbackTimeoutMs = 400,
+      fallbackMode = "router",
       target,
       download,
       ...props
@@ -87,30 +85,32 @@ const AppLink = React.forwardRef<HTMLAnchorElement, AppLinkProps>(
 
         if (currentUrl === targetUrl.toString()) return
 
-        if (event.defaultPrevented) {
-          if (fallbackMode === "none") return
+        if (fallbackMode === "none") return
 
-          if (targetUrl.origin === window.location.origin) {
-            if (replace) {
-              router.replace(targetUrl.toString(), scroll === undefined ? undefined : { scroll })
-            } else {
-              router.push(targetUrl.toString(), scroll === undefined ? undefined : { scroll })
-            }
-          } else {
-            window.location.assign(targetUrl.toString())
-          }
+        const targetHref =
+          targetUrl.origin === window.location.origin
+            ? `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`
+            : targetUrl.toString()
+
+        if (fallbackMode === "reload") {
+          event.preventDefault()
+          window.location.assign(targetHref)
           return
         }
 
-        if (fallbackMode !== "reload") return
-
-        window.setTimeout(() => {
-          if (window.location.href !== currentUrl) return
-          if (targetUrl.protocol !== "http:" && targetUrl.protocol !== "https:") return
-          window.location.assign(targetUrl.toString())
-        }, fallbackTimeoutMs)
+        // Default: client-side navigation via router for same-origin routes.
+        event.preventDefault()
+        if (targetUrl.origin === window.location.origin) {
+          if (replace) {
+            router.replace(targetHref, scroll === undefined ? undefined : { scroll })
+          } else {
+            router.push(targetHref, scroll === undefined ? undefined : { scroll })
+          }
+        } else {
+          window.location.assign(targetHref)
+        }
       },
-      [onClick, href, target, download, fallbackMode, fallbackTimeoutMs, replace, router, scroll]
+      [onClick, href, target, download, fallbackMode, replace, router, scroll]
     )
 
     const linkProps = {
@@ -120,7 +120,7 @@ const AppLink = React.forwardRef<HTMLAnchorElement, AppLinkProps>(
       download,
       ref,
       ...props,
-      ...(replace !== undefined ? { replace } : {}),
+      ...(replace ? { replace: true } : {}),
       ...(scroll !== undefined ? { scroll } : {}),
     }
 
