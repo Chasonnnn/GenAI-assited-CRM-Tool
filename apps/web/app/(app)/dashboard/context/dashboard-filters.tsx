@@ -103,24 +103,36 @@ export function DashboardFiltersProvider({ children }: DashboardFiltersProviderP
         rangeDates: DateRange,
         assignee?: string
     ) => {
-        const newParams = new URLSearchParams()
+        const newParams = new URLSearchParams(searchParams.toString())
 
         if (range !== "all") {
             newParams.set("range", range)
+        } else {
+            newParams.delete("range")
         }
         if (range === "custom" && rangeDates.from) {
             newParams.set("from", formatLocalDate(rangeDates.from))
             if (rangeDates.to) {
                 newParams.set("to", formatLocalDate(rangeDates.to))
             }
+        } else {
+            newParams.delete("from")
+            newParams.delete("to")
         }
         if (assignee) {
             newParams.set("assignee", assignee)
+        } else {
+            newParams.delete("assignee")
         }
 
-        const queryStr = newParams.toString()
-        router.replace(queryStr ? `?${queryStr}` : "/dashboard", { scroll: false })
-    }, [router])
+        const nextQuery = newParams.toString()
+        const currentQuery = searchParams.toString()
+        if (nextQuery === currentQuery) return
+        const newUrl = nextQuery ? `/dashboard?${nextQuery}` : "/dashboard"
+        const currentUrl = currentQuery ? `/dashboard?${currentQuery}` : "/dashboard"
+        if (newUrl === currentUrl) return
+        router.replace(newUrl, { scroll: false })
+    }, [router, searchParams])
 
     // Set date range
     const setDateRange = useCallback((preset: DateRangePreset) => {

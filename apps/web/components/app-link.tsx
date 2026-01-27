@@ -55,7 +55,8 @@ const AppLink = React.forwardRef<HTMLAnchorElement, AppLinkProps>(
       onClick,
       replace,
       scroll,
-      fallbackMode = "router",
+      prefetch = false,
+      fallbackMode = "none",
       target,
       download,
       ...props
@@ -122,6 +123,7 @@ const AppLink = React.forwardRef<HTMLAnchorElement, AppLinkProps>(
       ...props,
       ...(replace ? { replace: true } : {}),
       ...(scroll !== undefined ? { scroll } : {}),
+      ...(prefetch !== undefined ? { prefetch } : {}),
     }
 
     return <Link {...linkProps} />
