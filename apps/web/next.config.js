@@ -14,6 +14,11 @@ module.exports = withBundleAnalyzer({
         has: [{ type: "header", key: "host", value: "^ops\\." }],
         destination: "/ops",
       },
+      {
+        source: "/login",
+        has: [{ type: "header", key: "host", value: "^ops\\." }],
+        destination: "/ops/login",
+      },
     ];
   },
   turbopack: {

@@ -89,17 +89,7 @@ export async function proxy(request: NextRequest) {
     }
 
     const opsHost = `ops.${PLATFORM_BASE_DOMAIN}`;
-
     if (hostname === opsHost) {
-        const url = request.nextUrl.clone();
-        if (pathname === '/') {
-            url.pathname = '/ops';
-            return NextResponse.rewrite(url);
-        }
-        if (pathname === '/login') {
-            url.pathname = '/ops/login';
-            return NextResponse.rewrite(url);
-        }
         return NextResponse.next();
     }
 
