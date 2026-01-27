@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.38.3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.38.2...surrogacy-crm-platform-v0.38.3) (2026-01-27)
+
+
+### Bug Fixes
+
+* allow .localhost subdomain lookups when PLATFORM_BASE_DOMAIN=localhost ([b1b4c83](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b1b4c836fa16fbbf7c3cbfa96f5b96f9434d0be3))
+* default AppLink fallbackMode to none to match Next.js Link behavior ([5c05fc2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5c05fc2e4fe04c458e6b11ca7a92649ac7448b46))
+* resolve sidebar navigation and org context issues ([b391b75](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b391b752bf899a98be9756dbe9bbde0792783c68))
+* restore default fallbackMode to router in AppLink ([dfa428e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dfa428ee2cebd004c2d7e19faf4da260a04ba72e))
+
 ## [0.38.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.38.1...surrogacy-crm-platform-v0.38.2) (2026-01-27)
 
 
