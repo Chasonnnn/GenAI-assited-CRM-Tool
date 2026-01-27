@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -76,23 +76,33 @@ export default function MatchesPage() {
     const [page, setPage] = useState(parsePageParam(urlPage))
     const [search, setSearch] = useState(urlSearch || "")
     const [debouncedSearch, setDebouncedSearch] = useState(urlSearch || "")
+    const hasSyncedSearchRef = useRef(false)
 
     const updateUrlParams = useCallback((status: MatchStatusFilter, searchValue: string, currentPage: number) => {
-        const newParams = new URLSearchParams()
+        const newParams = new URLSearchParams(searchParams.toString())
         if (status !== "all") {
             newParams.set("status", status)
+        } else {
+            newParams.delete("status")
         }
         if (searchValue) {
             newParams.set("q", searchValue)
+        } else {
+            newParams.delete("q")
         }
         if (currentPage > 1) {
             newParams.set("page", String(currentPage))
+        } else {
+            newParams.delete("page")
         }
         const nextQuery = newParams.toString()
+        const currentQuery = searchParams.toString()
         if (nextQuery === currentQuery) return
-        const newUrl = nextQuery ? `?${nextQuery}` : ""
-        router.replace(`/intended-parents/matches${newUrl}`, { scroll: false })
-    }, [router, currentQuery])
+        const newUrl = nextQuery ? `/intended-parents/matches?${nextQuery}` : "/intended-parents/matches"
+        const currentUrl = currentQuery ? `/intended-parents/matches?${currentQuery}` : "/intended-parents/matches"
+        if (newUrl === currentUrl) return
+        router.replace(newUrl, { scroll: false })
+    }, [router, searchParams])
 
     const handleStatusChange = useCallback((value: string) => {
         const nextStatus = value === "all" || isMatchStatus(value) ? value : "all"
@@ -113,6 +123,10 @@ export default function MatchesPage() {
     }, [search])
 
     useEffect(() => {
+        if (!hasSyncedSearchRef.current) {
+            hasSyncedSearchRef.current = true
+            return
+        }
         const urlSearchValue = searchParams.get("q") || ""
         if (debouncedSearch !== urlSearchValue) {
             setPage(1)

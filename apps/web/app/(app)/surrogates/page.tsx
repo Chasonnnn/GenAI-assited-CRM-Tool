@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useTransition } from "react"
+import { useState, useEffect, useCallback, useTransition, useRef } from "react"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
@@ -198,6 +198,7 @@ export default function SurrogatesPage() {
     const { user } = useAuth()
     const createMutation = useCreateSurrogate()
     const [isFilterPending, startFilterTransition] = useTransition()
+    const hasSyncedSearchRef = useRef(false)
 
     // Sync state changes back to URL
     const updateUrlParams = useCallback((
@@ -209,38 +210,62 @@ export default function SurrogatesPage() {
         range: DateRangePreset,
         rangeDates: { from: Date | undefined; to: Date | undefined }
     ) => {
-        const newParams = new URLSearchParams()
+        const newParams = new URLSearchParams(searchParams.toString())
         if (stage !== "all") {
             newParams.set("stage", stage)
+        } else {
+            newParams.delete("stage")
         }
         if (source !== "all") {
             newParams.set("source", source)
+        } else {
+            newParams.delete("source")
         }
         if (queue !== "all") {
             newParams.set("queue", queue)
+        } else {
+            newParams.delete("queue")
         }
         if (search) {
             newParams.set("q", search)
+        } else {
+            newParams.delete("q")
         }
         if (currentPage > 1) {
             newParams.set("page", String(currentPage))
+        } else {
+            newParams.delete("page")
         }
         if (range !== "all") {
             newParams.set("range", range)
             if (range === "custom") {
                 if (rangeDates.from) {
                     newParams.set("from", formatLocalDate(rangeDates.from))
+                } else {
+                    newParams.delete("from")
                 }
                 if (rangeDates.to) {
                     newParams.set("to", formatLocalDate(rangeDates.to))
+                } else {
+                    newParams.delete("to")
                 }
+            } else {
+                newParams.delete("from")
+                newParams.delete("to")
             }
+        } else {
+            newParams.delete("range")
+            newParams.delete("from")
+            newParams.delete("to")
         }
         const nextQuery = newParams.toString()
+        const currentQuery = searchParams.toString()
         if (nextQuery === currentQuery) return
-        const newUrl = nextQuery ? `?${nextQuery}` : ""
-        router.replace(`/surrogates${newUrl}`, { scroll: false })
-    }, [router, currentQuery])
+        const newUrl = nextQuery ? `/surrogates?${nextQuery}` : "/surrogates"
+        const currentUrl = currentQuery ? `/surrogates?${currentQuery}` : "/surrogates"
+        if (newUrl === currentUrl) return
+        router.replace(newUrl, { scroll: false })
+    }, [router, searchParams])
 
     // Update URL when filters change - wrapped in startTransition for smoother UI
     const handleStageChange = useCallback((stage: string) => {
@@ -311,6 +336,10 @@ export default function SurrogatesPage() {
 
     // Sync debouncedSearch to URL (separate effect to avoid circular updates)
     useEffect(() => {
+        if (!hasSyncedSearchRef.current) {
+            hasSyncedSearchRef.current = true
+            return
+        }
         const urlSearchValue = searchParams.get("q") || ""
         if (debouncedSearch !== urlSearchValue) {
             setPage(1)

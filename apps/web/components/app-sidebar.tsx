@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useState, useCallback } from "react"
 import Link from "@/components/app-link"
+import NextLink from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { useSearchHotkey } from "@/components/search-command"
 
@@ -56,6 +57,7 @@ import { useAuth } from "@/lib/auth-context"
 import { getCsrfHeaders } from "@/lib/csrf"
 import { NotificationBell } from "@/components/notification-bell"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { cn } from "@/lib/utils"
 
 const navigation = [
     {
@@ -282,6 +284,30 @@ export function AppSidebar({ children }: AppSidebarProps) {
                     <SidebarGroup>
                         <SidebarGroupLabel>Navigation</SidebarGroupLabel>
                         <SidebarMenu>
+                            <SidebarMenuItem>
+                                <NextLink
+                                    href="/dashboard"
+                                    data-debug="raw-sidebar-link"
+                                    className={cn(
+                                        "ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground gap-2 rounded-lg p-2 text-left text-sm flex w-full items-center outline-hidden focus-visible:ring-2"
+                                    )}
+                                >
+                                    <Home className="size-4 shrink-0" />
+                                    <span>Raw Dashboard Link</span>
+                                </NextLink>
+                            </SidebarMenuItem>
+                            <SidebarMenuItem>
+                                <a
+                                    href="/dashboard"
+                                    data-debug="raw-anchor-link"
+                                    className={cn(
+                                        "ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground gap-2 rounded-lg p-2 text-left text-sm flex w-full items-center outline-hidden focus-visible:ring-2"
+                                    )}
+                                >
+                                    <Home className="size-4 shrink-0" />
+                                    <span>Raw Anchor Link</span>
+                                </a>
+                            </SidebarMenuItem>
                             {navigation.map((item) => (
                                 <SidebarMenuItem key={item.title}>
                                     <SidebarMenuButton

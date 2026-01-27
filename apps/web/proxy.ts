@@ -8,6 +8,10 @@ const API_BASE_URL =
 const ORG_CACHE_TTL_MS = 60_000;
 const ORG_CACHE_STALE_MS = 5 * 60_000;
 const ORG_LOOKUP_TIMEOUT_MS = 2000;
+const ORG_COOKIE_ID = 'sf_org_id';
+const ORG_COOKIE_SLUG = 'sf_org_slug';
+const ORG_COOKIE_NAME = 'sf_org_name';
+const DEBUG_PROXY_HEADERS = process.env.DEBUG_PROXY_HEADERS === '1';
 
 type OrgRecord = {
     id: string;
@@ -63,10 +67,73 @@ function setCachedOrg(hostname: string, value: OrgRecord | null, now: number, tt
     });
 }
 
+function getCookieOrg(request: NextRequest): OrgRecord | null {
+    const id = request.cookies.get(ORG_COOKIE_ID)?.value;
+    const slug = request.cookies.get(ORG_COOKIE_SLUG)?.value;
+    const name = request.cookies.get(ORG_COOKIE_NAME)?.value;
+    if (!id || !slug || !name) return null;
+    return { id, slug, name };
+}
+
+function attachOrgHeaders(
+    request: NextRequest,
+    org: OrgRecord
+): { response: NextResponse; headers: Headers } {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set('x-org-id', org.id);
+    requestHeaders.set('x-org-slug', org.slug);
+    requestHeaders.set('x-org-name', org.name);
+    const response = NextResponse.next({ request: { headers: requestHeaders } });
+    applyDebugHeaders(response, { org });
+    return { response, headers: requestHeaders };
+}
+
+function setOrgCookies(
+    response: NextResponse,
+    org: OrgRecord,
+    secure: boolean
+) {
+    const baseOptions = {
+        httpOnly: true,
+        sameSite: 'lax' as const,
+        secure,
+        path: '/',
+    };
+    response.cookies.set(ORG_COOKIE_ID, org.id, baseOptions);
+    response.cookies.set(ORG_COOKIE_SLUG, org.slug, baseOptions);
+    response.cookies.set(ORG_COOKIE_NAME, org.name, baseOptions);
+}
+
+function clearOrgCookies(response: NextResponse, secure: boolean) {
+    const baseOptions = {
+        httpOnly: true,
+        sameSite: 'lax' as const,
+        secure,
+        path: '/',
+        maxAge: 0,
+    };
+    response.cookies.set(ORG_COOKIE_ID, '', baseOptions);
+    response.cookies.set(ORG_COOKIE_SLUG, '', baseOptions);
+    response.cookies.set(ORG_COOKIE_NAME, '', baseOptions);
+}
+
+function applyDebugHeaders(
+    response: NextResponse,
+    info: { hostname?: string; org?: OrgRecord | null; reason?: string }
+) {
+    if (!DEBUG_PROXY_HEADERS) return;
+    response.headers.set('x-debug-proxy', '1');
+    if (info.hostname) response.headers.set('x-debug-host', info.hostname);
+    if (info.reason) response.headers.set('x-debug-reason', info.reason);
+    if (info.org) {
+        response.headers.set('x-debug-org-id', info.org.id);
+        response.headers.set('x-debug-org-slug', info.org.slug);
+    }
+}
+
 export async function proxy(request: NextRequest) {
     const hostname = getHostname(request);
     const pathname = request.nextUrl.pathname;
-
     // Skip static assets, API routes, and Next.js internals
     if (
         pathname.startsWith('/_next') ||
@@ -74,50 +141,71 @@ export async function proxy(request: NextRequest) {
         pathname.startsWith('/static') ||
         pathname.includes('.') // Static files with extensions
     ) {
-        return NextResponse.next();
+        const response = NextResponse.next();
+        applyDebugHeaders(response, { hostname, reason: 'bypass-static' });
+        return response;
     }
 
-    // Local development bypass
+    const isDev = process.env.NODE_ENV !== 'production';
+    // Local development bypass (dev only)
     if (
-        hostname === 'localhost' ||
-        hostname === '127.0.0.1' ||
-        hostname === '::1' ||
-        hostname.endsWith('.localhost') ||
-        hostname.endsWith('.test')
+        isDev &&
+        (hostname === 'localhost' ||
+            hostname === '127.0.0.1' ||
+            hostname === '::1' ||
+            hostname.endsWith('.localhost') ||
+            hostname.endsWith('.test'))
     ) {
-        return NextResponse.next();
+        const response = NextResponse.next();
+        applyDebugHeaders(response, { hostname, reason: 'dev-bypass' });
+        return response;
     }
 
     const opsHost = `ops.${PLATFORM_BASE_DOMAIN}`;
     if (hostname === opsHost) {
-        return NextResponse.next();
+        const response = NextResponse.next();
+        applyDebugHeaders(response, { hostname, reason: 'ops-host' });
+        return response;
     }
 
     // Validate hostname format: {slug}.surrogacyforce.com
     if (!hostname.endsWith(`.${PLATFORM_BASE_DOMAIN}`)) {
         if (hostname === PLATFORM_BASE_DOMAIN) {
-            return NextResponse.next();
+            const response = NextResponse.next();
+            applyDebugHeaders(response, { hostname, reason: 'base-domain' });
+            return response;
         }
         // Unknown domain - show org not found
         const url = request.nextUrl.clone();
         url.pathname = '/org-not-found';
-        return NextResponse.rewrite(url);
+        const response = NextResponse.rewrite(url);
+        applyDebugHeaders(response, { hostname, org: null, reason: 'org-not-found-host' });
+        return response;
     }
 
     const now = Date.now();
+    const secureCookies = request.nextUrl.protocol === 'https:';
+    const cookieOrg = getCookieOrg(request);
+    if (cookieOrg) {
+        const { response } = attachOrgHeaders(request, cookieOrg);
+        applyDebugHeaders(response, { hostname, org: cookieOrg, reason: 'cookie' });
+        return response;
+    }
+
     const cachedEntry = getCachedEntry(hostname, now);
     if (cachedEntry) {
         if (!cachedEntry.value) {
             const url = request.nextUrl.clone();
             url.pathname = '/org-not-found';
-            return NextResponse.rewrite(url);
+            const response = NextResponse.rewrite(url);
+            clearOrgCookies(response, secureCookies);
+            applyDebugHeaders(response, { hostname, org: null, reason: 'cached-none' });
+            return response;
         }
 
-        const requestHeaders = new Headers(request.headers);
-        requestHeaders.set('x-org-id', cachedEntry.value.id);
-        requestHeaders.set('x-org-slug', cachedEntry.value.slug);
-        requestHeaders.set('x-org-name', cachedEntry.value.name);
-        return NextResponse.next({ request: { headers: requestHeaders } });
+        const { response } = attachOrgHeaders(request, cachedEntry.value);
+        applyDebugHeaders(response, { hostname, org: cachedEntry.value, reason: 'cached' });
+        return response;
     }
 
     try {
@@ -140,7 +228,10 @@ export async function proxy(request: NextRequest) {
             setCachedOrg(hostname, null, now, ORG_CACHE_TTL_MS);
             const url = request.nextUrl.clone();
             url.pathname = '/org-not-found';
-            return NextResponse.rewrite(url);
+            const response = NextResponse.rewrite(url);
+            clearOrgCookies(response, secureCookies);
+            applyDebugHeaders(response, { hostname, org: null, reason: 'lookup-404' });
+            return response;
         }
 
         if (!res.ok) {
@@ -153,27 +244,28 @@ export async function proxy(request: NextRequest) {
                 if (!staleEntry.value) {
                     const url = request.nextUrl.clone();
                     url.pathname = '/org-not-found';
-                    return NextResponse.rewrite(url);
+                    const response = NextResponse.rewrite(url);
+                    clearOrgCookies(response, secureCookies);
+                    applyDebugHeaders(response, { hostname, org: null, reason: 'stale-none' });
+                    return response;
                 }
-                const requestHeaders = new Headers(request.headers);
-                requestHeaders.set('x-org-id', staleEntry.value.id);
-                requestHeaders.set('x-org-slug', staleEntry.value.slug);
-                requestHeaders.set('x-org-name', staleEntry.value.name);
-                return NextResponse.next({ request: { headers: requestHeaders } });
+                const { response } = attachOrgHeaders(request, staleEntry.value);
+                applyDebugHeaders(response, { hostname, org: staleEntry.value, reason: 'stale' });
+                return response;
             }
-            return NextResponse.next();
+            const response = NextResponse.next();
+            applyDebugHeaders(response, { hostname, reason: 'lookup-error' });
+            return response;
         }
 
         const org = (await res.json()) as OrgRecord;
         setCachedOrg(hostname, org, now, ORG_CACHE_TTL_MS);
 
         // Pass org context via request headers for server components
-        const requestHeaders = new Headers(request.headers);
-        requestHeaders.set('x-org-id', org.id);
-        requestHeaders.set('x-org-slug', org.slug);
-        requestHeaders.set('x-org-name', org.name);
-
-        return NextResponse.next({ request: { headers: requestHeaders } });
+        const { response } = attachOrgHeaders(request, org);
+        setOrgCookies(response, org, secureCookies);
+        applyDebugHeaders(response, { hostname, org, reason: 'lookup-ok' });
+        return response;
     } catch (error) {
         // Network error - let the request through to avoid blocking users
         console.error(
@@ -185,15 +277,18 @@ export async function proxy(request: NextRequest) {
             if (!staleEntry.value) {
                 const url = request.nextUrl.clone();
                 url.pathname = '/org-not-found';
-                return NextResponse.rewrite(url);
+                const response = NextResponse.rewrite(url);
+                clearOrgCookies(response, secureCookies);
+                applyDebugHeaders(response, { hostname, org: null, reason: 'stale-none' });
+                return response;
             }
-            const requestHeaders = new Headers(request.headers);
-            requestHeaders.set('x-org-id', staleEntry.value.id);
-            requestHeaders.set('x-org-slug', staleEntry.value.slug);
-            requestHeaders.set('x-org-name', staleEntry.value.name);
-            return NextResponse.next({ request: { headers: requestHeaders } });
+            const { response } = attachOrgHeaders(request, staleEntry.value);
+            applyDebugHeaders(response, { hostname, org: staleEntry.value, reason: 'stale' });
+            return response;
         }
-        return NextResponse.next();
+        const response = NextResponse.next();
+        applyDebugHeaders(response, { hostname, reason: 'network-error' });
+        return response;
     }
 }
 

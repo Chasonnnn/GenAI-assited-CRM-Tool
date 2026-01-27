@@ -114,8 +114,13 @@ export default function TasksPage() {
         } else {
             newParams.delete("filter")
         }
-        const newUrl = newParams.toString() ? `?${newParams}` : ""
-        router.replace(`/tasks${newUrl}`, { scroll: false })
+        const nextQuery = newParams.toString()
+        const currentQuery = searchParams.toString()
+        if (nextQuery === currentQuery) return
+        const newUrl = nextQuery ? `/tasks?${nextQuery}` : "/tasks"
+        const currentUrl = currentQuery ? `/tasks?${currentQuery}` : "/tasks"
+        if (newUrl === currentUrl) return
+        router.replace(newUrl, { scroll: false })
     }, [searchParams, router])
 
     // Handle filter change

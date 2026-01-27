@@ -131,8 +131,17 @@ export default function MatchDetailPage() {
         } else {
             newParams.delete("source")
         }
-        const newUrl = newParams.toString() ? `?${newParams}` : ""
-        router.replace(`/intended-parents/matches/${matchId}${newUrl}`, { scroll: false })
+        const nextQuery = newParams.toString()
+        const currentQuery = searchParams.toString()
+        if (nextQuery === currentQuery) return
+        const newUrl = nextQuery
+            ? `/intended-parents/matches/${matchId}?${nextQuery}`
+            : `/intended-parents/matches/${matchId}`
+        const currentUrl = currentQuery
+            ? `/intended-parents/matches/${matchId}?${currentQuery}`
+            : `/intended-parents/matches/${matchId}`
+        if (newUrl === currentUrl) return
+        router.replace(newUrl, { scroll: false })
     }, [searchParams, router, matchId])
 
     // Update URL when tab changes

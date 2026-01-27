@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -119,6 +119,7 @@ export default function IntendedParentsPage() {
     const [isCreateOpen, setIsCreateOpen] = useState(false)
     const [sortBy, setSortBy] = useState<string | null>("intended_parent_number")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
+    const hasSyncedSearchRef = useRef(false)
 
     // Sync state changes back to URL
     const updateUrlParams = useCallback((
@@ -128,32 +129,52 @@ export default function IntendedParentsPage() {
         range: DateRangePreset,
         rangeDates: { from: Date | undefined; to: Date | undefined }
     ) => {
-        const newParams = new URLSearchParams()
+        const newParams = new URLSearchParams(searchParams.toString())
         if (status !== "all") {
             newParams.set("status", status)
+        } else {
+            newParams.delete("status")
         }
         if (searchValue) {
             newParams.set("q", searchValue)
+        } else {
+            newParams.delete("q")
         }
         if (currentPage > 1) {
             newParams.set("page", String(currentPage))
+        } else {
+            newParams.delete("page")
         }
         if (range !== "all") {
             newParams.set("range", range)
             if (range === "custom") {
                 if (rangeDates.from) {
                     newParams.set("from", formatLocalDate(rangeDates.from))
+                } else {
+                    newParams.delete("from")
                 }
                 if (rangeDates.to) {
                     newParams.set("to", formatLocalDate(rangeDates.to))
+                } else {
+                    newParams.delete("to")
                 }
+            } else {
+                newParams.delete("from")
+                newParams.delete("to")
             }
+        } else {
+            newParams.delete("range")
+            newParams.delete("from")
+            newParams.delete("to")
         }
         const nextQuery = newParams.toString()
+        const currentQuery = searchParams.toString()
         if (nextQuery === currentQuery) return
-        const newUrl = nextQuery ? `?${nextQuery}` : ""
-        router.replace(`/intended-parents${newUrl}`, { scroll: false })
-    }, [router, currentQuery])
+        const newUrl = nextQuery ? `/intended-parents?${nextQuery}` : "/intended-parents"
+        const currentUrl = currentQuery ? `/intended-parents?${currentQuery}` : "/intended-parents"
+        if (newUrl === currentUrl) return
+        router.replace(newUrl, { scroll: false })
+    }, [router, searchParams])
 
     // Handle status filter change
     const handleStatusChange = useCallback((status: string) => {
@@ -193,6 +214,10 @@ export default function IntendedParentsPage() {
 
     // Sync debouncedSearch to URL
     useEffect(() => {
+        if (!hasSyncedSearchRef.current) {
+            hasSyncedSearchRef.current = true
+            return
+        }
         const urlSearchValue = searchParams.get("q") || ""
         if (debouncedSearch !== urlSearchValue) {
             setPage(1)
