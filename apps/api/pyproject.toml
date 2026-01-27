@@ -27,7 +27,7 @@ dependencies = [
     "uvicorn[standard]==0.40.0",
 
     # Required for UploadFile/Form parsing (FastAPI will error at import-time without it)
-    "python-multipart==0.0.21",
+    "python-multipart==0.0.22",
 
     # Auth dependencies
     "httpx==0.28.1",
