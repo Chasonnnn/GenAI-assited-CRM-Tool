@@ -5,8 +5,8 @@ export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 interface PageProps {
-    params: { id: string }
-    searchParams: { export_token?: string }
+    params: Promise<{ id?: string | string[] }>
+    searchParams: Promise<{ export_token?: string | string[] }>
 }
 
 async function fetchJourneyForExport(
@@ -25,7 +25,23 @@ async function fetchJourneyForExport(
 }
 
 export default async function JourneyPrintPage({ params, searchParams }: PageProps) {
-    const exportToken = searchParams.export_token
+    const resolvedParams = await params
+    const resolvedSearchParams = await searchParams
+
+    const rawId = resolvedParams.id
+    const surrogateId = Array.isArray(rawId) ? rawId[0] : rawId
+
+    const rawToken = resolvedSearchParams.export_token
+    const exportToken = Array.isArray(rawToken) ? rawToken[0] : rawToken
+
+    if (!surrogateId) {
+        return (
+            <div className="p-6 text-sm text-muted-foreground">
+                Missing surrogate id.
+            </div>
+        )
+    }
+
     if (!exportToken) {
         return (
             <div className="p-6 text-sm text-muted-foreground">
@@ -34,7 +50,7 @@ export default async function JourneyPrintPage({ params, searchParams }: PagePro
         )
     }
 
-    const journey = await fetchJourneyForExport(params.id, exportToken)
+    const journey = await fetchJourneyForExport(surrogateId, exportToken)
     if (!journey) {
         return (
             <div className="p-6 text-sm text-muted-foreground">

@@ -9,9 +9,7 @@ import { Metadata } from "next"
 import { PublicBookingPage } from "@/components/appointments/PublicBookingPage"
 
 interface PageProps {
-    params: {
-        slug: string
-    }
+    params: Promise<{ slug?: string | string[] }>
 }
 
 export const metadata: Metadata = {
@@ -23,6 +21,15 @@ export const metadata: Metadata = {
     },
 }
 
-export default function BookingPage({ params }: PageProps) {
-    return <PublicBookingPage publicSlug={params.slug} />
+export default async function BookingPage({ params }: PageProps) {
+    const resolvedParams = await params
+    const rawSlug = resolvedParams.slug
+    const slug = Array.isArray(rawSlug) ? rawSlug[0] : rawSlug
+
+    // Should not happen, but avoid rendering with an undefined slug.
+    if (!slug) {
+        return null
+    }
+
+    return <PublicBookingPage publicSlug={slug} />
 }

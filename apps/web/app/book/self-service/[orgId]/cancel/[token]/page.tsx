@@ -6,7 +6,7 @@
  * Allows clients to cancel their appointment using a secure token.
  */
 
-import { useState, useEffect } from "react"
+import { use, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -34,10 +34,16 @@ import type { PublicAppointmentView } from "@/lib/api/appointments"
 import { getAppointmentForCancel, cancelByToken } from "@/lib/api/appointments"
 
 interface PageProps {
-    params: { orgId: string; token: string }
+    params: Promise<{ orgId?: string | string[]; token?: string | string[] }>
 }
 
 export default function CancelPage({ params }: PageProps) {
+    const resolvedParams = use(params)
+    const rawOrgId = resolvedParams.orgId
+    const rawToken = resolvedParams.token
+    const orgId = Array.isArray(rawOrgId) ? rawOrgId[0] : rawOrgId
+    const token = Array.isArray(rawToken) ? rawToken[0] : rawToken
+
     const [appointment, setAppointment] = useState<PublicAppointmentView | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -48,11 +54,20 @@ export default function CancelPage({ params }: PageProps) {
 
     // Fetch appointment
     useEffect(() => {
+        if (!orgId || !token) {
+            setError("Invalid cancellation link")
+            setIsLoading(false)
+            return
+        }
+
+        const orgIdForCall = orgId
+        const tokenForCall = token
+
         async function load() {
             try {
                 const data = await getAppointmentForCancel(
-                    params.orgId,
-                    params.token
+                    orgIdForCall,
+                    tokenForCall
                 )
                 setAppointment(data)
             } catch (err: unknown) {
@@ -62,13 +77,14 @@ export default function CancelPage({ params }: PageProps) {
             }
         }
         load()
-    }, [params.orgId, params.token])
+    }, [orgId, token])
 
     // Submit cancellation
     const handleSubmit = async () => {
         setIsSubmitting(true)
         try {
-            await cancelByToken(params.orgId, params.token, reason || undefined)
+            if (!orgId || !token) throw new Error("Invalid cancellation link")
+            await cancelByToken(orgId, token, reason || undefined)
             setIsConfirmed(true)
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : "Failed to cancel")
