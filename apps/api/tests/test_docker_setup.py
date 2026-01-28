@@ -67,7 +67,7 @@ def test_web_dockerfile_runs_non_root_and_has_healthcheck() -> None:
     runner_idx = content.find("AS runner")
     assert runner_idx != -1, "Runner stage missing"
 
-    user_idx = content.find("USER node", runner_idx)
+    user_idx = content.find("USER nextjs", runner_idx)
     assert user_idx != -1, "Runner stage must switch to non-root user"
 
     health_idx = content.find("HEALTHCHECK", runner_idx)

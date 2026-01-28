@@ -1,4 +1,12 @@
+# VCS
 .git
+.gitignore
+
+# Env files
+**/.env
+**/.env.*
+
+# Node / JS
 **/node_modules
 **/.pnpm-store
 **/.next
@@ -6,11 +14,27 @@
 **/coverage
 **/.turbo
 **/.cache
-**/.env
-**/.env.*
+**/.npm
+**/.yarn
+**/npm-debug.log
+**/pnpm-debug.log
+**/yarn-error.log
+
+# Python
 **/__pycache__
 **/*.pyc
 **/.pytest_cache
 **/.mypy_cache
 **/.ruff_cache
 **/.venv
+**/.uv
+**/.tox
+
+# Tests
+**/tests
+**/__tests__
+
+# Editor/OS
+**/.DS_Store
+**/.vscode
+**/.idea

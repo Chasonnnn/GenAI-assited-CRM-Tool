@@ -700,7 +700,7 @@ def update_match_event(
     event_type: str | None = None,
     title: str | None = None,
     description: str | None = None,
-    timezone: str | None = None,
+    tz_name: str | None = None,
     all_day: bool,
     start_date: date | None,
     end_date: date | None,
@@ -716,8 +716,8 @@ def update_match_event(
         event.title = title
     if description is not None:
         event.description = description
-    if timezone is not None:
-        event.timezone = timezone
+    if tz_name is not None:
+        event.timezone = tz_name
 
     event.all_day = all_day
     if all_day:
