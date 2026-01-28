@@ -13,11 +13,8 @@ from sqlalchemy.orm import Session
 
 from app.db.models import SurrogateInterview, InterviewNote, Surrogate
 from app.services.ai_provider import ChatMessage, get_provider
-from app.services.ai_settings_service import (
-    get_ai_settings,
-    get_decrypted_key,
-    is_consent_required,
-)
+from app.services import ai_settings_service
+from app.services.ai_settings_service import get_ai_settings, is_consent_required
 from app.services.ai_usage_service import log_usage
 
 logger = logging.getLogger(__name__)
@@ -153,9 +150,21 @@ async def summarize_interview(
     if is_consent_required(ai_settings):
         raise AIInterviewError("AI consent has not been accepted for this organization")
 
-    api_key = get_decrypted_key(ai_settings)
-    if not api_key:
-        raise AIInterviewError("AI API key not configured")
+    if ai_settings.provider == "vertex_wif":
+        provider = ai_settings_service.get_ai_provider_for_settings(
+            ai_settings, org_id, user_id=user_id
+        )
+    else:
+        api_key = ai_settings_service.get_decrypted_key(ai_settings)
+        provider = get_provider(ai_settings.provider, api_key, ai_settings.model) if api_key else None
+
+    if not provider:
+        message = (
+            "Vertex AI configuration is incomplete"
+            if ai_settings.provider == "vertex_wif"
+            else "AI API key not configured"
+        )
+        raise AIInterviewError(message)
 
     # Get transcript text
     transcript = interview.transcript_text or ""
@@ -195,13 +204,6 @@ async def summarize_interview(
     prompt = INTERVIEW_SUMMARY_PROMPT.format(
         transcript=_truncate_text(transcript),
         notes=_truncate_text(notes_text, 5000),
-    )
-
-    # Get AI provider
-    provider = get_provider(
-        provider_name=ai_settings.provider,
-        api_key=api_key,
-        model=ai_settings.model,
     )
 
     # Call AI
@@ -272,9 +274,21 @@ async def summarize_all_interviews(
     if is_consent_required(ai_settings):
         raise AIInterviewError("AI consent has not been accepted for this organization")
 
-    api_key = get_decrypted_key(ai_settings)
-    if not api_key:
-        raise AIInterviewError("AI API key not configured")
+    if ai_settings.provider == "vertex_wif":
+        provider = ai_settings_service.get_ai_provider_for_settings(
+            ai_settings, org_id, user_id=user_id
+        )
+    else:
+        api_key = ai_settings_service.get_decrypted_key(ai_settings)
+        provider = get_provider(ai_settings.provider, api_key, ai_settings.model) if api_key else None
+
+    if not provider:
+        message = (
+            "Vertex AI configuration is incomplete"
+            if ai_settings.provider == "vertex_wif"
+            else "AI API key not configured"
+        )
+        raise AIInterviewError(message)
 
     # Get all interviews for the surrogate
     interviews = db.scalars(
@@ -343,12 +357,6 @@ Notes:
     )
 
     # Get AI provider
-    provider = get_provider(
-        provider_name=ai_settings.provider,
-        api_key=api_key,
-        model=ai_settings.model,
-    )
-
     # Call AI
     messages = [
         ChatMessage(

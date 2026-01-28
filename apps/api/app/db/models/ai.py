@@ -55,6 +55,11 @@ class AISettings(Base):
     model: Mapped[str | None] = mapped_column(
         String(50), default="gpt-4o-mini", server_default=text("'gpt-4o-mini'")
     )
+    # Vertex AI (WIF) configuration
+    vertex_project_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    vertex_location: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    vertex_audience: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    vertex_service_account_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     context_notes_limit: Mapped[int | None] = mapped_column(
         Integer, default=5, server_default=text("5")
     )

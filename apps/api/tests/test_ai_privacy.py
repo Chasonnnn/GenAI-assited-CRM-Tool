@@ -198,3 +198,69 @@ async def test_parse_schedule_anonymizes_prompt_and_rehydrates(
     combined = "\n".join(msg.content for msg in captured)
     assert surrogate.full_name not in combined
     assert surrogate.email not in combined
+
+
+@pytest.mark.asyncio
+async def test_task_chat_anonymizes_context_and_message(
+    db, test_org, test_user, default_stage, monkeypatch
+):
+    from app.db.models import Task
+    from app.db.enums import TaskType, OwnerType
+    from app.services import ai_chat_service
+
+    surrogate = _create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        default_stage,
+        name="Jane Doe",
+        email="jane.doe@example.com",
+    )
+    _create_ai_settings(db, test_org.id, test_user.id, anonymize_pii=True)
+
+    task = Task(
+        organization_id=test_org.id,
+        surrogate_id=surrogate.id,
+        created_by_user_id=test_user.id,
+        owner_type=OwnerType.USER.value,
+        owner_id=test_user.id,
+        title="Follow up",
+        description="Email Jane Doe at jane.doe@example.com about the next steps.",
+        task_type=TaskType.OTHER.value,
+        is_completed=False,
+    )
+    db.add(task)
+    db.flush()
+
+    captured = []
+
+    class StubProvider:
+        async def chat(self, messages, **kwargs):  # noqa: ARG002
+            captured.extend(messages)
+            return ChatResponse(
+                content="Ok",
+                prompt_tokens=10,
+                completion_tokens=5,
+                total_tokens=15,
+                model="gpt-4o-mini",
+            )
+
+    monkeypatch.setattr(
+        "app.services.ai_provider.get_provider",
+        lambda *_args, **_kwargs: StubProvider(),
+    )
+
+    result = await ai_chat_service.chat_async(
+        db=db,
+        organization_id=test_org.id,
+        user_id=test_user.id,
+        entity_type="task",
+        entity_id=task.id,
+        message="Ping Jane Doe at jane.doe@example.com",
+        user_integrations=[],
+    )
+
+    assert result["content"] == "Ok"
+    combined = "\n".join(msg.content for msg in captured)
+    assert surrogate.full_name not in combined
+    assert surrogate.email not in combined

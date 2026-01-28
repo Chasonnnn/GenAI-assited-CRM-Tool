@@ -4,6 +4,7 @@ import * as React from "react"
 import { createContext, useContext, useState, useCallback, useEffect } from "react"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 
 // Types
 export interface EntityContext {
@@ -38,6 +39,7 @@ const AIContext = createContext<AIContextValue | undefined>(undefined)
 export function AIContextProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth()
     const pathname = usePathname()
+    const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
 
     // Context state
     const [entityType, setEntityType] = useState<"surrogate" | "intended-parent" | "dashboard" | "task" | "match" | null>(null)
@@ -51,7 +53,8 @@ export function AIContextProvider({ children }: { children: React.ReactNode }) {
     // Visibility is controlled by ai_enabled flag from org settings
     // Backend enforces use_ai_assistant permission on API calls (returns 403 if missing)
     const isAIEnabled = user?.ai_enabled ?? false
-    const canUseAI = isAIEnabled
+    const canUseAI =
+        isAIEnabled && (effectivePermissions?.permissions || []).includes("use_ai_assistant")
 
     // Clear context on route change if navigating away from entity pages
     useEffect(() => {

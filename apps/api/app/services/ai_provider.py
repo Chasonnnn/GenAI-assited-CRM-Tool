@@ -1,12 +1,14 @@
 """AI Provider abstraction layer.
 
-Supports OpenAI and Google Gemini with a unified interface.
+Supports OpenAI, Google Gemini, and Vertex AI (WIF) with a unified interface.
 """
 
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from decimal import Decimal
+from datetime import datetime, timezone, timedelta
+import uuid
 
 import httpx
 
@@ -45,6 +47,10 @@ class ChatResponse:
                 "output": Decimal("0.40"),
             },  # Gemini 3.0 Flash
             "gemini-2.0-flash-exp": {
+                "input": Decimal("0.075"),
+                "output": Decimal("0.30"),
+            },
+            "gemini-2.0-flash": {
                 "input": Decimal("0.075"),
                 "output": Decimal("0.30"),
             },
@@ -214,6 +220,163 @@ class GeminiProvider(AIProvider):
                 return response.status_code == 200
         except Exception as e:
             logger.warning(f"Gemini key validation failed: {e}")
+            return False
+
+
+@dataclass
+class VertexWIFConfig:
+    project_id: str
+    location: str
+    audience: str
+    service_account_email: str
+    organization_id: uuid.UUID
+    user_id: uuid.UUID | None = None
+
+
+class VertexWIFProvider(AIProvider):
+    """Vertex AI provider using Workload Identity Federation (OIDC)."""
+
+    STS_TOKEN_URL = "https://sts.googleapis.com/v1/token"
+    IAM_CREDENTIALS_URL = (
+        "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{service_account}:generateAccessToken"
+    )
+
+    def __init__(self, config: VertexWIFConfig, default_model: str = "gemini-1.5-pro") -> None:
+        self.config = config
+        self.default_model = default_model
+        self.base_url = f"https://{config.location}-aiplatform.googleapis.com/v1"
+        self._cached_token: str | None = None
+        self._cached_token_expiry: datetime | None = None
+
+    def _normalize_audience(self, audience: str) -> str:
+        if audience.startswith("//"):
+            return audience
+        return f"//iam.googleapis.com/{audience}"
+
+    async def _get_access_token(self) -> str:
+        if self._cached_token and self._cached_token_expiry:
+            if self._cached_token_expiry > datetime.now(timezone.utc) + timedelta(minutes=2):
+                return self._cached_token
+
+        from app.services import wif_oidc_service
+
+        audience = self._normalize_audience(self.config.audience)
+        subject = f"org:{self.config.organization_id}"
+        claims = {
+            "org_id": str(self.config.organization_id),
+        }
+        if self.config.user_id:
+            claims["user_id"] = str(self.config.user_id)
+
+        subject_token = wif_oidc_service.create_subject_token(
+            audience=audience,
+            subject=subject,
+            claims=claims,
+        )
+
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            sts_response = await client.post(
+                self.STS_TOKEN_URL,
+                data={
+                    "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+                    "audience": audience,
+                    "requested_token_type": "urn:ietf:params:oauth:token-type:access_token",
+                    "scope": "https://www.googleapis.com/auth/cloud-platform",
+                    "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
+                    "subject_token": subject_token,
+                },
+            )
+            sts_response.raise_for_status()
+            sts_payload = sts_response.json()
+
+        sts_token = sts_payload["access_token"]
+
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            iam_response = await client.post(
+                self.IAM_CREDENTIALS_URL.format(
+                    service_account=self.config.service_account_email
+                ),
+                headers={"Authorization": f"Bearer {sts_token}"},
+                json={
+                    "scope": ["https://www.googleapis.com/auth/cloud-platform"],
+                    "lifetime": "3600s",
+                },
+            )
+            iam_response.raise_for_status()
+            iam_payload = iam_response.json()
+
+        access_token = iam_payload["accessToken"]
+        expires_at = iam_payload.get("expireTime")
+        if expires_at:
+            self._cached_token_expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+        else:
+            self._cached_token_expiry = datetime.now(timezone.utc) + timedelta(hours=1)
+        self._cached_token = access_token
+        return access_token
+
+    async def chat(
+        self,
+        messages: list[ChatMessage],
+        model: str | None = None,
+        temperature: float = 0.7,
+        max_tokens: int = 2000,
+    ) -> ChatResponse:
+        model = model or self.default_model
+
+        system_instruction = None
+        contents = []
+        for msg in messages:
+            if msg.role == "system":
+                system_instruction = msg.content
+            else:
+                role = "model" if msg.role == "assistant" else "user"
+                contents.append({"role": role, "parts": [{"text": msg.content}]})
+
+        body: dict[str, object] = {
+            "contents": contents,
+            "generationConfig": {
+                "temperature": temperature,
+                "maxOutputTokens": max_tokens,
+            },
+        }
+        if system_instruction:
+            body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+
+        access_token = await self._get_access_token()
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{self.base_url}/projects/{self.config.project_id}/locations/{self.config.location}/publishers/google/models/{model}:generateContent",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                    "x-goog-user-project": self.config.project_id,
+                },
+                json=body,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        content = data["candidates"][0]["content"]["parts"][0]["text"]
+        usage = data.get("usageMetadata", {})
+        prompt_tokens = usage.get("promptTokenCount", 0)
+        completion_tokens = usage.get("candidatesTokenCount", 0)
+
+        return ChatResponse(
+            content=content,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
+            model=model,
+        )
+
+    async def validate_key(self) -> bool:
+        """Validate WIF configuration by attempting a token exchange."""
+        try:
+            await self._get_access_token()
+            return True
+        except Exception as e:
+            logger.warning(f"Vertex WIF validation failed: {e}")
             return False
 
 

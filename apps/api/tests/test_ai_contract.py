@@ -34,6 +34,38 @@ async def test_ai_settings_test_contract(authed_client: AsyncClient, monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_ai_settings_supports_vertex_wif_config(authed_client: AsyncClient):
+    settings_response = await authed_client.get("/ai/settings")
+    assert settings_response.status_code == 200
+    current_version = settings_response.json()["current_version"]
+
+    payload = {
+        "provider": "vertex_wif",
+        "model": "gemini-1.5-pro",
+        "is_enabled": False,
+        "expected_version": current_version,
+        "vertex_wif": {
+            "project_id": "demo-project",
+            "location": "us-central1",
+            "service_account_email": "vertex-sa@demo-project.iam.gserviceaccount.com",
+            "audience": "//iam.googleapis.com/projects/123456789/locations/global/workloadIdentityPools/pool/providers/provider",
+        },
+    }
+
+    response = await authed_client.patch("/ai/settings", json=payload)
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["provider"] == "vertex_wif"
+    assert data["vertex_wif"]["project_id"] == payload["vertex_wif"]["project_id"]
+    assert data["vertex_wif"]["location"] == payload["vertex_wif"]["location"]
+    assert data["vertex_wif"]["service_account_email"] == payload["vertex_wif"][
+        "service_account_email"
+    ]
+    assert data["vertex_wif"]["audience"] == payload["vertex_wif"]["audience"]
+
+
+@pytest.mark.asyncio
 async def test_ai_consent_accept_contract(db, authed_client: AsyncClient, test_auth):
     response = await authed_client.post("/ai/consent/accept")
     assert response.status_code == 200
