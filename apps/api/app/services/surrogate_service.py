@@ -511,6 +511,8 @@ def change_status(
     user_role: Role | None,
     reason: str | None = None,
     effective_at: datetime | None = None,
+    *,
+    emit_events: bool = False,
 ) -> StatusChangeResult:
     """
     Change surrogate stage and record history with backdating support.
@@ -627,7 +629,7 @@ def change_status(
             # Undo bypasses admin approval and reason requirement
             from app.services import surrogate_status_service
 
-            return surrogate_status_service.apply_status_change(
+            result = surrogate_status_service.apply_status_change(
                 db=db,
                 surrogate=surrogate,
                 new_stage=new_stage,
@@ -640,6 +642,11 @@ def change_status(
                 recorded_at=now,
                 is_undo=True,
             )
+            if emit_events:
+                from app.services import dashboard_events
+
+                dashboard_events.push_dashboard_stats(db, surrogate.organization_id)
+            return result
 
     # Backdating or regression requires reason (unless undo)
     if (is_backdated or is_regression) and not reason:
@@ -678,17 +685,22 @@ def change_status(
             requester_name=requester.display_name if requester else "Someone",
         )
 
-        return StatusChangeResult(
+        result = StatusChangeResult(
             status="pending_approval",
             surrogate=surrogate,
             request_id=request.id,
             message="Regression requires admin approval. Request submitted.",
         )
+        if emit_events:
+            from app.services import dashboard_events
+
+            dashboard_events.push_dashboard_stats(db, surrogate.organization_id)
+        return result
 
     # NON-REGRESSION: Apply immediately
     from app.services import surrogate_status_service
 
-    return surrogate_status_service.apply_status_change(
+    result = surrogate_status_service.apply_status_change(
         db=db,
         surrogate=surrogate,
         new_stage=new_stage,
@@ -701,6 +713,11 @@ def change_status(
         recorded_at=now,
         is_undo=False,
     )
+    if emit_events:
+        from app.services import dashboard_events
+
+        dashboard_events.push_dashboard_stats(db, surrogate.organization_id)
+    return result
 
 
 def assign_surrogate(

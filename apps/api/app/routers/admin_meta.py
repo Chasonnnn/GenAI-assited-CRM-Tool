@@ -12,7 +12,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
@@ -24,9 +23,8 @@ from app.core.deps import (
 from app.core.policies import POLICIES
 from app.core.encryption import encrypt_token, is_encryption_configured
 
-from app.db.models import MetaAdAccount
 from app.schemas.auth import UserSession
-from app.services import meta_page_service, meta_sync_service
+from app.services import meta_admin_service, meta_page_service, meta_sync_service
 
 
 router = APIRouter(
@@ -269,12 +267,7 @@ def list_meta_ad_accounts(
     db: Session = Depends(get_db),
 ):
     """List all Meta ad accounts for the organization."""
-    accounts = db.scalars(
-        select(MetaAdAccount)
-        .where(MetaAdAccount.organization_id == session.org_id)
-        .order_by(MetaAdAccount.created_at.desc())
-    ).all()
-    return list(accounts)
+    return meta_admin_service.list_ad_accounts(db, session.org_id)
 
 
 @ad_account_router.post("", response_model=MetaAdAccountRead, status_code=status.HTTP_201_CREATED)
@@ -292,11 +285,8 @@ def create_meta_ad_account(
         )
 
     # Check for existing
-    existing = db.scalar(
-        select(MetaAdAccount).where(
-            MetaAdAccount.organization_id == session.org_id,
-            MetaAdAccount.ad_account_external_id == data.ad_account_external_id,
-        )
+    existing = meta_admin_service.get_ad_account_by_external_id(
+        db, session.org_id, data.ad_account_external_id
     )
     if existing:
         raise HTTPException(
@@ -309,8 +299,9 @@ def create_meta_ad_account(
     capi_token_encrypted = encrypt_token(data.capi_token) if data.capi_token else None
     expires_at = datetime.now(timezone.utc) + timedelta(days=data.expires_days)
 
-    account = MetaAdAccount(
-        organization_id=session.org_id,
+    return meta_admin_service.create_ad_account(
+        db=db,
+        org_id=session.org_id,
         ad_account_external_id=data.ad_account_external_id,
         ad_account_name=data.ad_account_name,
         system_token_encrypted=system_token_encrypted,
@@ -319,10 +310,6 @@ def create_meta_ad_account(
         capi_enabled=data.capi_enabled,
         capi_token_encrypted=capi_token_encrypted,
     )
-    db.add(account)
-    db.commit()
-    db.refresh(account)
-    return account
 
 
 @ad_account_router.get("/{account_id}", response_model=MetaAdAccountRead)
@@ -332,12 +319,7 @@ def get_meta_ad_account(
     db: Session = Depends(get_db),
 ):
     """Get a specific Meta ad account."""
-    account = db.scalar(
-        select(MetaAdAccount).where(
-            MetaAdAccount.id == account_id,
-            MetaAdAccount.organization_id == session.org_id,
-        )
-    )
+    account = meta_admin_service.get_ad_account(db, account_id, session.org_id)
     if not account:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ad account not found")
     return account
@@ -352,39 +334,37 @@ def update_meta_ad_account(
     db: Session = Depends(get_db),
 ):
     """Update Meta ad account configuration."""
-    account = db.scalar(
-        select(MetaAdAccount).where(
-            MetaAdAccount.id == account_id,
-            MetaAdAccount.organization_id == session.org_id,
-        )
-    )
+    account = meta_admin_service.get_ad_account(db, account_id, session.org_id)
     if not account:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ad account not found")
 
-    if data.ad_account_name is not None:
-        account.ad_account_name = data.ad_account_name
+    system_token_encrypted = None
     if data.system_token is not None:
         if not is_encryption_configured():
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="META_ENCRYPTION_KEY not configured",
             )
-        account.system_token_encrypted = encrypt_token(data.system_token)
-    if data.expires_days is not None:
-        account.token_expires_at = datetime.now(timezone.utc) + timedelta(days=data.expires_days)
-    if data.pixel_id is not None:
-        account.pixel_id = data.pixel_id
-    if data.capi_enabled is not None:
-        account.capi_enabled = data.capi_enabled
+        system_token_encrypted = encrypt_token(data.system_token)
+    capi_token_encrypted = None
     if data.capi_token is not None:
-        account.capi_token_encrypted = encrypt_token(data.capi_token)
-    if data.is_active is not None:
-        account.is_active = data.is_active
-
-    account.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(account)
-    return account
+        capi_token_encrypted = encrypt_token(data.capi_token)
+    expires_at = (
+        datetime.now(timezone.utc) + timedelta(days=data.expires_days)
+        if data.expires_days is not None
+        else None
+    )
+    return meta_admin_service.update_ad_account(
+        db=db,
+        account=account,
+        ad_account_name=data.ad_account_name,
+        system_token_encrypted=system_token_encrypted,
+        token_expires_at=expires_at,
+        pixel_id=data.pixel_id,
+        capi_enabled=data.capi_enabled,
+        capi_token_encrypted=capi_token_encrypted,
+        is_active=data.is_active,
+    )
 
 
 @ad_account_router.delete("/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -399,18 +379,11 @@ def delete_meta_ad_account(
 
     Preserves historical data for spend/hierarchy tables.
     """
-    account = db.scalar(
-        select(MetaAdAccount).where(
-            MetaAdAccount.id == account_id,
-            MetaAdAccount.organization_id == session.org_id,
-        )
-    )
+    account = meta_admin_service.get_ad_account(db, account_id, session.org_id)
     if not account:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ad account not found")
 
-    account.is_active = False
-    account.updated_at = datetime.now(timezone.utc)
-    db.commit()
+    meta_admin_service.deactivate_ad_account(db, account)
 
 
 # =============================================================================
@@ -439,7 +412,9 @@ async def trigger_hierarchy_sync(
         account_id: Specific ad account ID, or sync all if None
         full_sync: If True, fetch all entities. If False, delta sync.
     """
-    accounts = _get_accounts(db, session.org_id, account_id)
+    accounts = meta_admin_service.list_active_ad_accounts_for_org(
+        db, session.org_id, account_id
+    )
     if not accounts:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No ad accounts found")
 
@@ -478,7 +453,9 @@ async def trigger_spend_sync(
     """
     from datetime import date, timedelta
 
-    accounts = _get_accounts(db, session.org_id, account_id)
+    accounts = meta_admin_service.list_active_ad_accounts_for_org(
+        db, session.org_id, account_id
+    )
     if not accounts:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No ad accounts found")
 
@@ -534,14 +511,7 @@ def get_sync_status(
     db: Session = Depends(get_db),
 ):
     """Get sync status for all ad accounts."""
-    accounts = db.scalars(
-        select(MetaAdAccount)
-        .where(
-            MetaAdAccount.organization_id == session.org_id,
-            MetaAdAccount.is_active.is_(True),
-        )
-        .order_by(MetaAdAccount.created_at.desc())
-    ).all()
+    accounts = meta_admin_service.list_active_ad_accounts(db, org_id=session.org_id)
 
     return [
         SyncStatusResponse(
@@ -553,15 +523,3 @@ def get_sync_status(
         )
         for a in accounts
     ]
-
-
-def _get_accounts(db: Session, org_id: UUID, account_id: UUID | None) -> list[MetaAdAccount]:
-    """Get ad accounts for sync operations."""
-    query = select(MetaAdAccount).where(
-        MetaAdAccount.organization_id == org_id,
-        MetaAdAccount.is_active.is_(True),
-    )
-    if account_id:
-        query = query.where(MetaAdAccount.id == account_id)
-
-    return list(db.scalars(query).all())

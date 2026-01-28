@@ -25,7 +25,7 @@ from app.schemas.task import (
     TaskUpdate,
     WorkflowApprovalResolve,
 )
-from app.services import dashboard_events, task_service, ip_service
+from app.services import task_service, ip_service
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
 router = APIRouter(dependencies=[Depends(require_permission(POLICIES["tasks"].default))])
@@ -370,60 +370,7 @@ def bulk_complete_tasks(
 
     Requires: creator, owner, or admin+ for each task
     """
-    results = {"completed": 0, "failed": []}
-
-    for task_id in data.task_ids:
-        try:
-            task = task_service.get_task(db, task_id, session.org_id)
-            if not task:
-                results["failed"].append({"task_id": str(task_id), "reason": "Task not found"})
-                continue
-
-            # Access control: check case access if task is linked to a case
-            try:
-                _check_task_surrogate_access(task, session, db)
-            except HTTPException as e:
-                results["failed"].append({"task_id": str(task_id), "reason": e.detail})
-                continue
-
-            # Permission: creator, owner, or admin+
-            if not is_owner_or_assignee_or_admin(
-                session, task.created_by_user_id, task.owner_type, task.owner_id
-            ):
-                results["failed"].append({"task_id": str(task_id), "reason": "Not authorized"})
-                continue
-
-            if task.task_type == TaskType.WORKFLOW_APPROVAL.value:
-                results["failed"].append(
-                    {
-                        "task_id": str(task_id),
-                        "reason": "Workflow approvals must be resolved via /tasks/{id}/resolve",
-                    }
-                )
-                continue
-
-            # Already completed? Skip but count as success
-            if task.is_completed:
-                results["completed"] += 1
-                continue
-
-            task_service.complete_task(db, task, session.user_id, commit=False)
-            results["completed"] += 1
-
-        except Exception as e:
-            # Log the actual error server-side, but don't leak details to client
-            import logging
-
-            logging.error(f"Bulk complete failed for task {task_id}: {e}")
-            results["failed"].append(
-                {"task_id": str(task_id), "reason": "An unexpected error occurred"}
-            )
-
-    # Commit all changes once at the end for efficiency
-    db.commit()
-    dashboard_events.push_dashboard_stats(db, session.org_id)
-
-    return BulkCompleteResponse(completed=results["completed"], failed=results["failed"])
+    return task_service.bulk_complete_tasks(db, session, data.task_ids)
 
 
 @router.delete("/{task_id}", status_code=204, dependencies=[Depends(require_csrf_header)])
