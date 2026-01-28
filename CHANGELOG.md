@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.40.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.40.0...surrogacy-crm-platform-v0.40.1) (2026-01-28)
+
+
+### Bug Fixes
+
+* add missing timezone import to match_service ([0b8355e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0b8355ee48fb32c10918d2980f2f644c29addb9f))
+* add missing timezone import to match_service ([7e95aa9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7e95aa92cd6ed4833e8446ac7809c6e8340ede30))
+* rename timezone parameter to tz_name to avoid shadowing datetime.timezone ([46a917e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/46a917ee16e3f03fba8107ed74ec57ede41a5bf0))
+
+
+### Maintenance
+
+* update Docker files to match test requirements ([ef87fb7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ef87fb7fde6224123d3328efca852d7de6c876c7))
+* update Docker files to match test requirements ([bedaa76](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bedaa7682c500e29337dbce50a50ba2a6fc31711))
+
 ## [0.40.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.39.3...surrogacy-crm-platform-v0.40.0) (2026-01-28)
 
 
