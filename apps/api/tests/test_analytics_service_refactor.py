@@ -50,7 +50,9 @@ def test_analytics_service_delegates_activity_feed(monkeypatch):
 
     sentinel = ([{"id": "activity"}], True)
 
-    def fake_get_activity_feed(db, organization_id, limit=20, offset=0, activity_type=None, user_id=None):
+    def fake_get_activity_feed(
+        db, organization_id, limit=20, offset=0, activity_type=None, user_id=None
+    ):
         assert limit == 20
         assert offset == 0
         return sentinel
