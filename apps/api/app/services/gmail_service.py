@@ -6,6 +6,7 @@ Uses Gmail API to send emails via user's connected account.
 import base64
 import logging
 import uuid
+from uuid import UUID
 from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -211,3 +212,39 @@ async def send_email_logged(
         **result,
         "email_log_id": email_log.id,
     }
+
+
+class GmailEmailSender:
+    key = "gmail"
+
+    def __init__(self, user_id: UUID) -> None:
+        self.user_id = user_id
+
+    async def send_email_logged(
+        self,
+        *,
+        db: Session,
+        org_id: uuid.UUID,
+        to_email: str,
+        subject: str,
+        html: str,
+        text: str | None = None,
+        from_email: str | None = None,
+        template_id: uuid.UUID | None = None,
+        surrogate_id: uuid.UUID | None = None,
+        idempotency_key: str | None = None,
+    ) -> JsonObject:
+        _ = text
+        _ = from_email
+        return await send_email_logged(
+            db=db,
+            org_id=org_id,
+            user_id=str(self.user_id),
+            to=to_email,
+            subject=subject,
+            body=html,
+            html=True,
+            template_id=template_id,
+            surrogate_id=surrogate_id,
+            idempotency_key=idempotency_key,
+        )

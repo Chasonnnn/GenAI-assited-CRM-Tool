@@ -11,10 +11,9 @@ from sqlalchemy.orm import Session
 
 from app.db.models import OrgInvite, User
 from app.services import (
+    email_sender,
     email_service,
-    gmail_service,
     org_service,
-    platform_email_service,
     system_email_template_service,
 )
 
@@ -181,41 +180,27 @@ async def send_invite_email(
         template_id = None
         # template_from_email already set from the system template (if any)
 
-    # Send via platform/system sender when configured (preferred)
-    if platform_email_service.platform_sender_configured():
-        result = await platform_email_service.send_email_logged(
-            db=db,
-            org_id=invite.organization_id,
-            to_email=invite.email,
-            subject=subject,
-            from_email=template_from_email,
-            html=html_body,
-            text=text_body,
-            template_id=template_id,
-            surrogate_id=None,
-            idempotency_key=idempotency_key,
-        )
-        integration_key = "resend"
-    else:
-        # Fallback: send via inviter's Gmail integration
-        sender_user_id = invite.invited_by_user_id
-        if not sender_user_id:
-            logger.warning("No inviter for invite %s, cannot send email", invite.id)
-            return {"success": False, "error": "No inviter to send from"}
+    sender_selection = email_sender.select_sender(
+        prefer_platform=True,
+        sender_user_id=invite.invited_by_user_id,
+    )
+    if sender_selection.error:
+        logger.warning("No inviter for invite %s, cannot send email", invite.id)
+        return {"success": False, "error": sender_selection.error}
 
-        result = await gmail_service.send_email_logged(
-            db=db,
-            org_id=invite.organization_id,
-            user_id=str(sender_user_id),
-            to=invite.email,
-            subject=subject,
-            body=html_body,
-            html=True,
-            template_id=template_id,
-            surrogate_id=None,
-            idempotency_key=idempotency_key,
-        )
-        integration_key = "gmail"
+    result = await sender_selection.sender.send_email_logged(
+        db=db,
+        org_id=invite.organization_id,
+        to_email=invite.email,
+        subject=subject,
+        from_email=template_from_email,
+        html=html_body,
+        text=text_body,
+        template_id=template_id,
+        surrogate_id=None,
+        idempotency_key=idempotency_key,
+    )
+    integration_key = sender_selection.integration_key
 
     if result.get("success"):
         from app.services import audit_service

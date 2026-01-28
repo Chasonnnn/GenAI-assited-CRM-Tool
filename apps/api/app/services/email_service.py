@@ -17,7 +17,8 @@ from email_validator import EmailNotValidError, validate_email
 from app.db.models import EmailTemplate, EmailLog, Job, Surrogate
 from app.db.enums import EmailStatus, JobType
 from app.services.job_service import enqueue_job
-from app.services import version_service
+from app.services import email_sender, version_service
+from app.types import JsonObject
 
 
 # Variable pattern for template substitution: {{variable_name}}
@@ -541,6 +542,47 @@ def send_email(
         db.flush()
 
     return email_log, job
+
+
+async def send_immediate_email(
+    db: Session,
+    org_id: UUID,
+    recipient_email: str,
+    subject: str,
+    body: str,
+    *,
+    from_email: str | None = None,
+    text: str | None = None,
+    template_id: UUID | None = None,
+    surrogate_id: UUID | None = None,
+    idempotency_key: str | None = None,
+    sender_user_id: UUID | None = None,
+    prefer_platform: bool = True,
+) -> JsonObject:
+    """
+    Send an email immediately via the configured sender (platform or Gmail).
+
+    This bypasses the queued SEND_EMAIL job and is intended for system/admin flows.
+    """
+    selection = email_sender.select_sender(
+        prefer_platform=prefer_platform,
+        sender_user_id=sender_user_id,
+    )
+    if selection.error:
+        return {"success": False, "error": selection.error}
+
+    return await selection.sender.send_email_logged(
+        db=db,
+        org_id=org_id,
+        to_email=recipient_email,
+        subject=subject,
+        from_email=from_email,
+        html=body,
+        text=text,
+        template_id=template_id,
+        surrogate_id=surrogate_id,
+        idempotency_key=idempotency_key,
+    )
 
 
 def send_from_template(
