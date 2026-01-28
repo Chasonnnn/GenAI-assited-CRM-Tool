@@ -169,6 +169,8 @@ Coupling notes:
   Create/Delete: create `apps/api/app/services/surrogate_status_service.py`; no deletes.
   Expected blast radius: medium (status change + approvals).
   Test plan: unit tests for status change rules; integration tests for `/surrogates/{id}/status` and approval flow.
+  Status: completed (2026-01-28).
+  Notes: moved change-status orchestration into `surrogate_status_service` and added service-level tests.
 
 - **R2 — Form submission pipeline**
   Files to change: `apps/api/app/services/form_service.py`, `apps/api/app/routers/forms.py`, `apps/api/app/routers/forms_public.py`.
@@ -217,12 +219,15 @@ Coupling notes:
   Create/Delete: create small service methods or repositories for each query; no deletes.
   Expected blast radius: low‑medium (endpoint refactors).
   Test plan: endpoint integration tests for each affected router.
+  Status: completed (2026-01-28).
+  Notes: extended cleanup to `admin_meta.py` + `internal.py` by introducing `meta_admin_service`.
 
 - **R9 — Dashboard stats push via service/event**
   Files to change: `apps/api/app/routers/surrogates.py`, `apps/api/app/routers/tasks.py`, `apps/api/app/services/dashboard_service.py`.
   Create/Delete: create `apps/api/app/services/dashboard_events.py` and call from services instead of routers.
   Expected blast radius: low (dashboard updates).
   Test plan: integration tests for status change and task create; verify websocket `stats_update`.
+  Status: completed (2026-01-28).
 
 ### Delete/merge duplicates
 - **R10 — Calendar data adapter consolidation**

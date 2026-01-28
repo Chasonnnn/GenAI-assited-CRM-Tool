@@ -173,9 +173,7 @@ def _match_to_read(match: Any, db: Session, org_id: str | None = None) -> MatchR
     )
 
 
-def _match_to_list_item(
-    match: Any, surrogate: Any | None, ip: Any | None
-) -> MatchListItem:
+def _match_to_list_item(match: Any, surrogate: Any | None, ip: Any | None) -> MatchListItem:
     """Convert Match to list item."""
     return MatchListItem(
         id=str(match.id),

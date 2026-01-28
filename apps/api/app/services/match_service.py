@@ -370,10 +370,7 @@ def mark_match_reviewing_if_needed(
     org_id: UUID,
 ) -> Match:
     """Auto-transition match to reviewing if viewed by non-proposer."""
-    if (
-        match.status == MatchStatus.PROPOSED.value
-        and match.proposed_by_user_id != actor_user_id
-    ):
+    if match.status == MatchStatus.PROPOSED.value and match.proposed_by_user_id != actor_user_id:
         from app.services import activity_service
 
         match.status = MatchStatus.REVIEWING.value

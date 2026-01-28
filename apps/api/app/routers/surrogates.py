@@ -749,7 +749,9 @@ def update_surrogate(
                         if delivery_date_value
                         else None
                     )
-                    surrogate_service.change_status(
+                    from app.services import surrogate_status_service
+
+                    surrogate_status_service.change_status(
                         db=db,
                         surrogate=surrogate,
                         new_stage_id=delivered_stage.id,
@@ -814,7 +816,9 @@ def change_status(
     is_changing_to_delivered = target_stage and target_stage.slug == "delivered"
 
     try:
-        result = surrogate_service.change_status(
+        from app.services import surrogate_status_service
+
+        result = surrogate_status_service.change_status(
             db=db,
             surrogate=surrogate,
             new_stage_id=data.stage_id,

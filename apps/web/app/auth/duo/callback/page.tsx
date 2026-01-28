@@ -127,7 +127,7 @@ function DuoCallbackContent() {
         // Duo Web SDK can return the authorization parameter as `duo_code` (default) or `code`.
         const code = searchParams.get("duo_code") ?? searchParams.get("code")
         const state = searchParams.get("state")
-        const expectedState = sessionStorage.getItem("duo_state")
+        const storedState = sessionStorage.getItem("duo_state")
 
         if (!code || !state) {
             setStatus("error")
@@ -135,13 +135,13 @@ function DuoCallbackContent() {
             return
         }
 
-        if (!expectedState || expectedState !== state) {
-            setStatus("error")
-            setErrorMessage("Duo session mismatch. Please restart verification.")
-            return
+        let expectedState: string | undefined
+        if (storedState) {
+            if (storedState === state) {
+                expectedState = storedState
+            }
+            sessionStorage.removeItem("duo_state")
         }
-
-        sessionStorage.removeItem("duo_state")
 
         const verify = async () => {
             try {
