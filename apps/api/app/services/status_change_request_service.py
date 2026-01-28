@@ -91,7 +91,7 @@ def approve_request(
     from app.services import (
         surrogate_status_service,
         pipeline_service,
-        ip_service,
+        intended_parent_status_service,
         match_service,
         activity_service,
     )
@@ -167,7 +167,7 @@ def approve_request(
             raise ValueError("Target status not found")
 
         old_status = intended_parent.status
-        ip_service._apply_status_change(
+        intended_parent_status_service.apply_status_change(
             db=db,
             ip=intended_parent,
             new_status=request.target_status,
@@ -228,7 +228,7 @@ def approve_request(
             requested_at=request.requested_at,
         )
 
-        ip_service._apply_status_change(
+        intended_parent_status_service.apply_status_change(
             db=db,
             ip=intended_parent,
             new_status=IntendedParentStatus.READY_TO_MATCH.value,

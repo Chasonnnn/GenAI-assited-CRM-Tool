@@ -155,7 +155,7 @@ Coupling notes:
 - `apps/api/app/routers/admin_meta.py` and `routers/internal.py` → import `MetaAdAccount` directly. Correct direction: router → `meta_admin_service`. Minimal fix: introduce `meta_admin_service.get_ad_account()`.
 - `apps/api/app/routers/platform.py` → imports `Organization` model directly. Correct direction: router → `platform_service`/`org_service`. Minimal fix: move org lookups into services.
 - `apps/api/app/routers/websocket.py` → imports `Membership/Organization` models directly. Correct direction: router → `membership_service`/`org_service`. Minimal fix: add service methods for ws auth context.
-- `apps/api/app/services/status_change_request_service.py` → calls `surrogate_service._apply_status_change` (private). Correct direction: shared `status_change_service` with public API. Minimal fix: extract helper into new module used by both.
+- `apps/api/app/services/status_change_request_service.py` → called private status helpers (`surrogate_service._apply_status_change`, `ip_service._apply_status_change`). Correct direction: dedicated status-change services with public APIs. Status: completed (2026-01-28).
 - `apps/api/app/services/task_service.py` → queries `User/Surrogate` to format notifications. Correct direction: notification formatting in notification/event layer. Minimal fix: move to `notification_events.task_assigned`.
 - `apps/api/app/services/surrogate_service.py` → triggers queue assignment + workflows + notifications + Meta CAPI. Correct direction: publish domain event; consumers handle side effects. Minimal fix: introduce event dispatch module and move side effects there.
 - `apps/web/app/(app)/surrogates/[id]/page.tsx` → mixes AI, tasks, notes, meetings, queues logic. Correct direction: page composes domain sub‑containers. Minimal fix: split tab containers into separate files.
@@ -177,6 +177,8 @@ Coupling notes:
   Create/Delete: create `apps/api/app/services/form_submission_service.py`.
   Expected blast radius: medium (forms submit + auto‑map).
   Test plan: integration tests for form submission + mapping; regression on attachments.
+  Status: completed (2026-01-28).
+  Notes: moved submission/token/review/file logic into `form_submission_service` and added service-level tests.
 
 - **R3 — Appointment integrations**
   Files to change: `apps/api/app/services/appointment_service.py`, `apps/api/app/services/appointment_email_service.py`.
