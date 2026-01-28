@@ -1,14 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { useState, useCallback } from "react"
-import Link from "@/components/app-link"
-import NextLink from "next/link"
+import { useCallback, useEffect, useState } from "react"
+import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
-import { useSearchHotkey } from "@/components/search-command"
+import { useSearchHotkey, SearchCommandDialog } from "@/components/search-command"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -18,24 +16,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-    Sidebar,
-    SidebarContent,
-    SidebarFooter,
-    SidebarGroup,
-    SidebarGroupLabel,
-    SidebarHeader,
-    SidebarInset,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
-    SidebarMenuSub,
-    SidebarMenuSubButton,
-    SidebarMenuSubItem,
-    SidebarProvider,
-    SidebarRail,
-    SidebarTrigger,
-} from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
 import {
     Home,
     FolderOpen,
@@ -52,12 +33,17 @@ import {
     ChevronRightIcon,
     HeartHandshake,
     Search,
+    PanelLeftIcon,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { getCsrfHeaders } from "@/lib/csrf"
 import { NotificationBell } from "@/components/notification-bell"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { cn } from "@/lib/utils"
+import { useIsMobile } from "@/hooks/use-mobile"
+
+const SIDEBAR_COOKIE_NAME = "sidebar_state"
+const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
 const navigation = [
     {
@@ -115,29 +101,67 @@ interface AppSidebarProps {
     children: React.ReactNode
 }
 
+function readSidebarCookie() {
+    if (typeof document === "undefined") return true
+    const match = document.cookie
+        .split(";")
+        .map((c) => c.trim())
+        .find((c) => c.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
+    if (!match) return true
+    return match.split("=")[1] === "true"
+}
+
 export function AppSidebar({ children }: AppSidebarProps) {
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const { user } = useAuth()
-    const isManager = user?.role && ['admin', 'developer'].includes(user.role)
-    const isAdmin = user?.role === 'admin'
-    const isDeveloper = user?.role === 'developer'
+    const isManager = user?.role && ["admin", "developer"].includes(user.role)
+    const isAdmin = user?.role === "admin"
+    const isDeveloper = user?.role === "developer"
+    const isMobile = useIsMobile()
     const activeSettingsTab = searchParams.get("tab")
     const activeAutomationTab = searchParams.get("tab")
 
-    // Controlled collapsible state to avoid hydration warning
+    const [isExpanded, setIsExpanded] = useState(readSidebarCookie)
+    const [mobileOpen, setMobileOpen] = useState(false)
+
+    const isCollapsed = !isExpanded && !isMobile
+
+    const setExpanded = useCallback((open: boolean) => {
+        setIsExpanded(open)
+        document.cookie = `${SIDEBAR_COOKIE_NAME}=${open}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+    }, [])
+
+    const toggleSidebar = useCallback(() => {
+        if (isMobile) {
+            setMobileOpen((prev) => !prev)
+            return
+        }
+        setExpanded(!isExpanded)
+    }, [isMobile, isExpanded, setExpanded])
+
+    // Sync cookie on mount when switching between mobile/desktop
+    useEffect(() => {
+        if (!isMobile) {
+            setIsExpanded(readSidebarCookie())
+        }
+    }, [isMobile])
+
+    // Controlled collapsible state
     const [automationOpen, setAutomationOpen] = React.useState(false)
     const [settingsOpen, setSettingsOpen] = React.useState(false)
     const [tasksOpen, setTasksOpen] = React.useState(false)
 
-    // Sync collapsible state with pathname on mount/navigation
     React.useEffect(() => {
         if (pathname?.startsWith("/automation")) setAutomationOpen(true)
-        // Exclude /settings/appointments which is now under Tasks & Scheduling
         if (pathname?.startsWith("/settings") && !pathname?.startsWith("/settings/appointments")) {
             setSettingsOpen(true)
         }
-        if (pathname?.startsWith("/tasks") || pathname?.startsWith("/appointments") || pathname === "/settings/appointments") {
+        if (
+            pathname?.startsWith("/tasks") ||
+            pathname?.startsWith("/appointments") ||
+            pathname === "/settings/appointments"
+        ) {
             setTasksOpen(true)
         }
     }, [pathname])
@@ -215,324 +239,310 @@ export function AppSidebar({ children }: AppSidebarProps) {
     // Search command palette state
     const [searchOpen, setSearchOpen] = useState(false)
     const openSearch = useCallback(() => setSearchOpen(true), [])
-
-    // Register ⌘K / Ctrl+K using shared hook - avoids duplicate listeners
     useSearchHotkey(openSearch)
 
-    // Dynamic import to avoid circular deps
-    const SearchCommandDialog = React.lazy(() => import("@/components/search-command").then(mod => ({ default: mod.SearchCommandDialog })))
+    const navItemClass = useCallback(
+        (active: boolean) =>
+            cn(
+                "ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground gap-2 rounded-lg p-2 text-left text-sm flex w-full items-center transition-colors focus-visible:ring-2 outline-none",
+                active && "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+            ),
+        []
+    )
+
+    const renderNavLink = useCallback(
+        (item: { title: string; url: string; icon: React.ComponentType<{ className?: string }> }) => {
+            const active = pathname === item.url || pathname?.startsWith(item.url + "/")
+            const Icon = item.icon
+            return (
+                <Link
+                    href={item.url}
+                    prefetch={false}
+                    className={navItemClass(active)}
+                    title={item.title}
+                >
+                    <Icon className="size-4 shrink-0" />
+                    {!isCollapsed && <span className="truncate">{item.title}</span>}
+                </Link>
+            )
+        },
+        [pathname, navItemClass, isCollapsed]
+    )
+
+    const sidebarContent = (
+        <div className="flex h-full flex-col">
+            <div className="p-2">
+                <div className={cn("flex items-center gap-2 rounded-lg p-2", isCollapsed && "justify-center")}
+                >
+                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                        <Users className="size-4" />
+                    </div>
+                    {!isCollapsed && (
+                        <div className="grid flex-1 text-left text-sm leading-tight">
+                            <span className="truncate font-semibold">Surrogacy Force</span>
+                            <span className="truncate text-xs text-muted-foreground">
+                                {user?.org_display_name || user?.org_name || "Loading..."}
+                            </span>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div className="px-2">
+                <Button
+                    variant="secondary"
+                    className={cn(
+                        "w-full justify-start gap-2",
+                        isCollapsed && "justify-center"
+                    )}
+                    onClick={openSearch}
+                    title="Search (⌘K)"
+                >
+                    <Search className="h-4 w-4" />
+                    {!isCollapsed && (
+                        <span className="flex-1 text-left text-muted-foreground">Search</span>
+                    )}
+                </Button>
+            </div>
+
+            <nav className="flex-1 px-2 pt-3">
+                <div className="mb-2 text-xs font-medium text-muted-foreground">Navigation</div>
+                <div className="flex flex-col gap-1">
+                    {navigation.map((item) => (
+                        <div key={item.title}>{renderNavLink(item)}</div>
+                    ))}
+
+                    <button
+                        type="button"
+                        onClick={() => setTasksOpen((o) => !o)}
+                        className={navItemClass(pathname?.startsWith("/tasks") || pathname?.startsWith("/appointments") || pathname === "/settings/appointments")}
+                        title={tasksNavigation.title}
+                    >
+                        <tasksNavigation.icon className="size-4 shrink-0" />
+                        {!isCollapsed && (
+                            <>
+                                <span className="truncate">{tasksNavigation.title}</span>
+                                <ChevronRightIcon
+                                    className={cn(
+                                        "ml-auto transition-transform",
+                                        tasksOpen && "rotate-90"
+                                    )}
+                                />
+                            </>
+                        )}
+                    </button>
+                    {!isCollapsed && tasksOpen && (
+                        <div className="ml-6 flex flex-col gap-1">
+                            {tasksItems.map((subItem) => (
+                                <Link
+                                    key={subItem.url}
+                                    href={subItem.url}
+                                    prefetch={false}
+                                    className={navItemClass(pathname === subItem.url || pathname?.startsWith(subItem.url + "/"))}
+                                >
+                                    <span className="truncate text-sm">{subItem.title}</span>
+                                </Link>
+                            ))}
+                        </div>
+                    )}
+
+                    <button
+                        type="button"
+                        onClick={() => setAutomationOpen((o) => !o)}
+                        className={navItemClass(pathname?.startsWith("/automation"))}
+                        title={automationNavigation.title}
+                    >
+                        <automationNavigation.icon className="size-4 shrink-0" />
+                        {!isCollapsed && (
+                            <>
+                                <span className="truncate">{automationNavigation.title}</span>
+                                <ChevronRightIcon
+                                    className={cn(
+                                        "ml-auto transition-transform",
+                                        automationOpen && "rotate-90"
+                                    )}
+                                />
+                            </>
+                        )}
+                    </button>
+                    {!isCollapsed && automationOpen && (
+                        <div className="ml-6 flex flex-col gap-1">
+                            {automationItems.map((subItem) => (
+                                <Link
+                                    key={subItem.url}
+                                    href={subItem.url}
+                                    prefetch={false}
+                                    className={navItemClass(isAutomationItemActive(subItem))}
+                                >
+                                    <span className="truncate text-sm">{subItem.title}</span>
+                                </Link>
+                            ))}
+                        </div>
+                    )}
+
+                    <div>{renderNavLink(reportsNavigation)}</div>
+
+                    {user?.ai_enabled && (
+                        <div>{renderNavLink(aiNavigation)}</div>
+                    )}
+
+                    <button
+                        type="button"
+                        onClick={() => setSettingsOpen((o) => !o)}
+                        className={navItemClass(pathname?.startsWith("/settings") && !pathname?.startsWith("/settings/appointments"))}
+                        title={settingsNavigation.title}
+                    >
+                        <settingsNavigation.icon className="size-4 shrink-0" />
+                        {!isCollapsed && (
+                            <>
+                                <span className="truncate">{settingsNavigation.title}</span>
+                                <ChevronRightIcon
+                                    className={cn(
+                                        "ml-auto transition-transform",
+                                        settingsOpen && "rotate-90"
+                                    )}
+                                />
+                            </>
+                        )}
+                    </button>
+                    {!isCollapsed && settingsOpen && (
+                        <div className="ml-6 flex flex-col gap-1">
+                            {settingsItems.map((subItem) => (
+                                <Link
+                                    key={subItem.url}
+                                    href={subItem.url}
+                                    prefetch={false}
+                                    className={navItemClass(isSettingsItemActive(subItem))}
+                                >
+                                    <span className="truncate text-sm">{subItem.title}</span>
+                                </Link>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </nav>
+
+            <div className="mt-auto p-2">
+                <DropdownMenu>
+                    <DropdownMenuTrigger
+                        render={
+                            <button
+                                className={cn(
+                                    "w-full rounded-lg data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground",
+                                    navItemClass(false)
+                                )}
+                            />
+                        }
+                    >
+                        <Avatar className="h-8 w-8 rounded-lg">
+                            <AvatarImage src="/placeholder.svg" alt={user?.display_name || "User"} />
+                            <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
+                        </Avatar>
+                        {!isCollapsed && (
+                            <>
+                                <div className="grid flex-1 text-left text-sm leading-tight">
+                                    <span className="truncate font-semibold">{user?.display_name || "Loading..."}</span>
+                                    <span className="truncate text-xs text-muted-foreground">{user?.email || ""}</span>
+                                </div>
+                                <ChevronsUpDown className="ml-auto size-4" />
+                            </>
+                        )}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                        className="w-56 rounded-lg"
+                        side="bottom"
+                        align="end"
+                        sideOffset={4}
+                    >
+                        <DropdownMenuGroup>
+                            <DropdownMenuLabel className="p-0 font-normal">
+                                <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
+                                    <Avatar className="h-8 w-8 rounded-lg">
+                                        <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
+                                    </Avatar>
+                                    <div className="grid flex-1 text-left text-sm leading-tight">
+                                        <span className="truncate font-semibold">{user?.display_name}</span>
+                                        <span className="truncate text-xs">{user?.role}</span>
+                                    </div>
+                                </div>
+                            </DropdownMenuLabel>
+                        </DropdownMenuGroup>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuGroup>
+                            <DropdownMenuItem
+                                className="flex items-center"
+                                render={<Link href="/settings" prefetch={false} />}
+                            >
+                                <User className="mr-2 h-4 w-4" />
+                                Profile
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                className="flex items-center"
+                                render={<Link href="/settings/notifications" prefetch={false} />}
+                            >
+                                <Bell className="mr-2 h-4 w-4" />
+                                Notifications
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                className="flex items-center"
+                                render={<Link href="/settings" prefetch={false} />}
+                            >
+                                <Settings className="mr-2 h-4 w-4" />
+                                Settings
+                            </DropdownMenuItem>
+                        </DropdownMenuGroup>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
+                            <LogOut className="mr-2 h-4 w-4" />
+                            Log out
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+        </div>
+    )
 
     return (
-        <SidebarProvider>
-            <Sidebar collapsible="icon" className="print:hidden">
-                <SidebarHeader>
-                    <SidebarMenu>
-                        <SidebarMenuItem>
-                            <SidebarMenuButton
-                                render={<Link href="/dashboard" />}
-                                size="lg"
-                                tooltip="Surrogacy Force"
-                            >
-                                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            className="size-4"
-                                        >
-                                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                                            <circle cx="9" cy="7" r="4" />
-                                            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                                            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                                        </svg>
-                                    </div>
-                                    <div className="grid flex-1 text-left text-sm leading-tight">
-                                        <span className="truncate font-semibold">Surrogacy Force</span>
-                                        <span className="truncate text-xs text-muted-foreground">
-                                            {user?.org_display_name || user?.org_name || "Loading..."}
-                                        </span>
-                                    </div>
-                            </SidebarMenuButton>
-                        </SidebarMenuItem>
-                    </SidebarMenu>
-                </SidebarHeader>
+        <div className="flex min-h-svh w-full bg-sidebar">
+            {isMobile && mobileOpen && (
+                <div
+                    className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm"
+                    onClick={() => setMobileOpen(false)}
+                />
+            )}
 
-                <SidebarContent>
-                    {/* Global Search - above navigation */}
-                    <SidebarGroup className="py-0">
-                        <SidebarMenu>
-                            <SidebarMenuItem>
-                                <SidebarMenuButton
-                                    tooltip="Search (⌘K)"
-                                    className="w-full justify-start gap-2 bg-sidebar-accent/50 hover:bg-sidebar-accent"
-                                    onClick={openSearch}
-                                >
-                                    <Search className="h-4 w-4" />
-                                    <span className="flex-1 text-left text-muted-foreground">Search</span>
-                                    <kbd className="pointer-events-none hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
-                                        <span className="text-xs">⌘</span>K
-                                    </kbd>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-                        </SidebarMenu>
-                    </SidebarGroup>
+            <aside
+                className={cn(
+                    "bg-sidebar text-sidebar-foreground z-50 flex h-svh flex-col border-r border-sidebar-border transition-[width,transform] duration-200 ease-linear",
+                    isCollapsed ? "w-12" : "w-64",
+                    isMobile && "fixed inset-y-0 left-0",
+                    isMobile && (mobileOpen ? "translate-x-0" : "-translate-x-full")
+                )}
+            >
+                {sidebarContent}
+            </aside>
 
-                    <SidebarGroup>
-                        <SidebarGroupLabel>Navigation</SidebarGroupLabel>
-                        <SidebarMenu>
-                            <SidebarMenuItem>
-                                <NextLink
-                                    href="/dashboard"
-                                    data-debug="raw-sidebar-link"
-                                    className={cn(
-                                        "ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground gap-2 rounded-lg p-2 text-left text-sm flex w-full items-center outline-hidden focus-visible:ring-2"
-                                    )}
-                                >
-                                    <Home className="size-4 shrink-0" />
-                                    <span>Raw Dashboard Link</span>
-                                </NextLink>
-                            </SidebarMenuItem>
-                            <SidebarMenuItem>
-                                <a
-                                    href="/dashboard"
-                                    data-debug="raw-anchor-link"
-                                    className={cn(
-                                        "ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground gap-2 rounded-lg p-2 text-left text-sm flex w-full items-center outline-hidden focus-visible:ring-2"
-                                    )}
-                                >
-                                    <Home className="size-4 shrink-0" />
-                                    <span>Raw Anchor Link</span>
-                                </a>
-                            </SidebarMenuItem>
-                            {navigation.map((item) => (
-                                <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton
-                                        render={<Link href={item.url} />}
-                                        isActive={pathname === item.url || pathname?.startsWith(item.url + "/")}
-                                        tooltip={item.title}
-                                    >
-                                            <item.icon />
-                                            <span>{item.title}</span>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            ))}
-                            {/* Tasks & Scheduling with sub-menu */}
-                            <Collapsible
-                                open={tasksOpen}
-                                onOpenChange={setTasksOpen}
-                                className="group/collapsible"
-                            >
-                                <SidebarMenuItem>
-                                    <CollapsibleTrigger
-                                        render={
-                                            <SidebarMenuButton
-                                                isActive={pathname?.startsWith("/tasks") || pathname?.startsWith("/appointments") || pathname === "/settings/appointments"}
-                                                tooltip={tasksNavigation.title}
-                                            >
-                                                <tasksNavigation.icon />
-                                                <span>{tasksNavigation.title}</span>
-                                                <ChevronRightIcon className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                                            </SidebarMenuButton>
-                                        }
-                                    />
-                                    <CollapsibleContent>
-                                        <SidebarMenuSub>
-                                            {tasksItems.map((subItem) => (
-                                                <SidebarMenuSubItem key={subItem.url}>
-                                                    <SidebarMenuSubButton
-                                                        render={<Link href={subItem.url} />}
-                                                        isActive={pathname === subItem.url || pathname?.startsWith(subItem.url + "/")}
-                                                    >
-                                                        <span>{subItem.title}</span>
-                                                    </SidebarMenuSubButton>
-                                                </SidebarMenuSubItem>
-                                            ))}
-                                        </SidebarMenuSub>
-                                    </CollapsibleContent>
-                                </SidebarMenuItem>
-                            </Collapsible>
-                            {/* Automation with sub-menu */}
-                            <Collapsible
-                                open={automationOpen}
-                                onOpenChange={setAutomationOpen}
-                                className="group/collapsible"
-                            >
-                                <SidebarMenuItem>
-                                    <CollapsibleTrigger
-                                        render={
-                                            <SidebarMenuButton
-                                                isActive={pathname?.startsWith("/automation")}
-                                                tooltip={automationNavigation.title}
-                                            >
-                                                <automationNavigation.icon />
-                                                <span>{automationNavigation.title}</span>
-                                                <ChevronRightIcon className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                                            </SidebarMenuButton>
-                                        }
-                                    />
-                                    <CollapsibleContent>
-                                        <SidebarMenuSub>
-                                            {automationItems.map((subItem) => (
-                                                <SidebarMenuSubItem key={subItem.url}>
-                                                    <SidebarMenuSubButton
-                                                        render={<Link href={subItem.url} />}
-                                                        isActive={isAutomationItemActive(subItem)}
-                                                    >
-                                                        <span>{subItem.title}</span>
-                                                    </SidebarMenuSubButton>
-                                                </SidebarMenuSubItem>
-                                            ))}
-                                        </SidebarMenuSub>
-                                    </CollapsibleContent>
-                                </SidebarMenuItem>
-                            </Collapsible>
-                            {/* Reports */}
-                            <SidebarMenuItem>
-                                <SidebarMenuButton
-                                    render={<Link href={reportsNavigation.url} />}
-                                    isActive={pathname === reportsNavigation.url || pathname?.startsWith(reportsNavigation.url + "/")}
-                                    tooltip={reportsNavigation.title}
-                                >
-                                        <reportsNavigation.icon />
-                                        <span>{reportsNavigation.title}</span>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-                            {/* AI Assistant - only shown if enabled for org */}
-                            {user?.ai_enabled && (
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton
-                                        render={<Link href={aiNavigation.url} />}
-                                        isActive={pathname === aiNavigation.url || pathname?.startsWith(aiNavigation.url + "/")}
-                                        tooltip={aiNavigation.title}
-                                    >
-                                            <aiNavigation.icon />
-                                            <span>{aiNavigation.title}</span>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            )}
-                            {/* Settings with sub-menu */}
-                            <Collapsible
-                                open={settingsOpen}
-                                onOpenChange={setSettingsOpen}
-                                className="group/collapsible"
-                            >
-                                <SidebarMenuItem>
-                                    <CollapsibleTrigger
-                                        render={
-                                            <SidebarMenuButton
-                                                isActive={pathname?.startsWith("/settings") && !pathname?.startsWith("/settings/appointments")}
-                                                tooltip={settingsNavigation.title}
-                                            >
-                                                <settingsNavigation.icon />
-                                                <span>{settingsNavigation.title}</span>
-                                                <ChevronRightIcon className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                                            </SidebarMenuButton>
-                                        }
-                                    />
-                                    <CollapsibleContent>
-                                        <SidebarMenuSub>
-                                            {settingsItems.map((subItem) => (
-                                                <SidebarMenuSubItem key={subItem.url}>
-                                                    <SidebarMenuSubButton
-                                                        render={<Link href={subItem.url} />}
-                                                        isActive={isSettingsItemActive(subItem)}
-                                                    >
-                                                        <span>{subItem.title}</span>
-                                                    </SidebarMenuSubButton>
-                                                </SidebarMenuSubItem>
-                                            ))}
-                                        </SidebarMenuSub>
-                                    </CollapsibleContent>
-                                </SidebarMenuItem>
-                            </Collapsible>
-                        </SidebarMenu>
-                    </SidebarGroup>
-                </SidebarContent>
-
-                <SidebarFooter>
-                    <SidebarMenu>
-                        <SidebarMenuItem>
-                            <DropdownMenu>
-                                <DropdownMenuTrigger
-                                    className="w-full rounded-lg data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-                                    render={<SidebarMenuButton size="lg" />}
-                                >
-                                        <Avatar className="h-8 w-8 rounded-lg">
-                                            <AvatarImage src="/placeholder.svg" alt={user?.display_name || "User"} />
-                                            <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
-                                        </Avatar>
-                                        <div className="grid flex-1 text-left text-sm leading-tight">
-                                            <span className="truncate font-semibold">{user?.display_name || "Loading..."}</span>
-                                            <span className="truncate text-xs text-muted-foreground">{user?.email || ""}</span>
-                                        </div>
-                                        <ChevronsUpDown className="ml-auto size-4" />
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent
-                                    className="w-56 rounded-lg"
-                                    side="bottom"
-                                    align="end"
-                                    sideOffset={4}
-                                >
-                                    <DropdownMenuGroup>
-                                        <DropdownMenuLabel className="p-0 font-normal">
-                                            <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                                                <Avatar className="h-8 w-8 rounded-lg">
-                                                    <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
-                                                </Avatar>
-                                                <div className="grid flex-1 text-left text-sm leading-tight">
-                                                    <span className="truncate font-semibold">{user?.display_name}</span>
-                                                    <span className="truncate text-xs">{user?.role}</span>
-                                                </div>
-                                            </div>
-                                        </DropdownMenuLabel>
-                                    </DropdownMenuGroup>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuGroup>
-                                        <DropdownMenuItem render={<Link href="/settings" />} className="flex items-center">
-                                            <User className="mr-2 h-4 w-4" />
-                                            Profile
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem render={<Link href="/settings/notifications" />} className="flex items-center">
-                                            <Bell className="mr-2 h-4 w-4" />
-                                            Notifications
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem render={<Link href="/settings" />} className="flex items-center">
-                                            <Settings className="mr-2 h-4 w-4" />
-                                            Settings
-                                        </DropdownMenuItem>
-                                    </DropdownMenuGroup>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
-                                        <LogOut className="mr-2 h-4 w-4" />
-                                        Log out
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        </SidebarMenuItem>
-                    </SidebarMenu>
-                </SidebarFooter>
-                <SidebarRail className="print:hidden" />
-            </Sidebar>
-
-            <SidebarInset>
+            <div className="flex min-w-0 flex-1 flex-col bg-background">
                 <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b px-4 print:hidden">
-                    <SidebarTrigger className="-ml-1" />
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={toggleSidebar}
+                        aria-label="Toggle sidebar"
+                    >
+                        <PanelLeftIcon className="size-4" />
+                    </Button>
                     <div className="flex items-center gap-2">
                         <NotificationBell />
                         <ThemeToggle />
                     </div>
                 </header>
                 <main className="flex-1 min-w-0 overflow-hidden print:overflow-visible">{children}</main>
-            </SidebarInset>
+            </div>
 
-            {/* Search Command Palette */}
             <React.Suspense fallback={null}>
                 <SearchCommandDialog open={searchOpen} onOpenChange={setSearchOpen} />
             </React.Suspense>
-        </SidebarProvider>
+        </div>
     )
 }

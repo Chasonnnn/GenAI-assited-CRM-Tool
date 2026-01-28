@@ -1,7 +1,7 @@
 "use client"
 
 import { Suspense, useEffect } from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
 import { useRequireAuth } from "@/lib/auth-context"
 import { AIContextProvider } from "@/lib/context/ai-context"
@@ -30,12 +30,6 @@ export default function AppShellClient({
   const { user, isLoading } = useRequireAuth();
   const pathname = usePathname();
   const router = useRouter();
-
-  const searchParams = useSearchParams();
-  const disableShell = searchParams?.get("noShell") === "1";
-  const disableSidebar = disableShell || searchParams?.get("noSidebar") === "1";
-  const disableAI = disableShell || searchParams?.get("noAI") === "1";
-  const disableOffline = disableShell || searchParams?.get("noOffline") === "1";
 
   const shouldRedirectToWelcome =
     !!user &&
@@ -74,13 +68,7 @@ export default function AppShellClient({
     );
   }
 
-  if (disableShell) {
-    return <>{children}</>;
-  }
-
-  const inner = disableAI ? (
-    <>{children}</>
-  ) : (
+  const inner = (
     <AIContextProvider>
       {children}
       {/* AI Assistant - only shown when AI is enabled */}
@@ -97,13 +85,13 @@ export default function AppShellClient({
         </div>
       }
     >
-      {disableSidebar ? inner : <AppSidebar>{inner}</AppSidebar>}
+      <AppSidebar>{inner}</AppSidebar>
     </Suspense>
   )
 
   return (
     <>
-      {!disableOffline && <OfflineBanner />}
+      <OfflineBanner />
       {content}
     </>
   )
