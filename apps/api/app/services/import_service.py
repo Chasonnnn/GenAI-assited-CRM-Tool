@@ -76,20 +76,6 @@ def normalize_column_name(col: str) -> str:
     return col.lower().strip().replace(" ", "_").replace("-", "_")
 
 
-SUGGESTED_COLUMN_MAPPING: dict[str, dict[str, str | None]] = {
-    normalize_column_name("are_you_currently_between_the_ages_of_21_and_36?"): {
-        "suggested_field": "is_age_eligible",
-        "transformation": "boolean_flexible",
-    },
-    normalize_column_name(
-        "do_you_use_nicotine/tobacco_products_of_any_kind_(cigarettes,_cigars,_vape_devices,_hookahs,_marijuana,_etc.)?"
-    ): {
-        "suggested_field": "is_non_smoker",
-        "transformation": "boolean_inverted",
-    },
-}
-
-
 def map_columns(headers: list[str]) -> dict[int, str]:
     """
     Map CSV column indices to field names.
@@ -108,26 +94,6 @@ def map_columns(headers: list[str]) -> dict[int, str]:
 # =============================================================================
 # CSV Parsing
 # =============================================================================
-
-
-class ImportPreview:
-    """Preview of CSV import before confirmation."""
-
-    def __init__(self) -> None:
-        self.total_rows: int = 0
-        self.sample_rows: list[dict[str, str]] = []  # First 5 rows
-        self.detected_columns: list[str] = []  # Mapped field names
-        self.unmapped_columns: list[str] = []  # Columns we couldn't map
-        self.duplicate_emails_db: int = 0  # Emails already in DB
-        self.duplicate_emails_csv: int = 0  # Duplicate emails within CSV
-        self.duplicate_details: list[dict[str, str]] = []  # [{email, existing_id}]
-        self.new_records: int = 0  # Unique emails not in DB
-        self.validation_errors: int = 0  # Rows with validation errors
-        self.detected_encoding: str | None = None
-        self.detected_delimiter: str | None = None
-        self.column_suggestions: list[dict[str, str | None]] = []
-        self.date_ambiguity_warnings: list[dict[str, str | int]] = []
-        self.column_mapping_snapshot: list[dict[str, str]] = []
 
 
 def parse_csv_file(file_content: bytes | str) -> tuple[list[str], list[list[str]]]:
@@ -198,23 +164,6 @@ def _parse_csv_with_detection(
         headers[0] = headers[0].lstrip("\ufeff")
     data_rows = rows[1:]
     return headers, data_rows, encoding, delimiter
-
-
-def _build_column_suggestions(headers: list[str]) -> list[dict[str, str | None]]:
-    suggestions: list[dict[str, str | None]] = []
-    for header in headers:
-        normalized = normalize_column_name(header)
-        suggestion = SUGGESTED_COLUMN_MAPPING.get(normalized)
-        if not suggestion:
-            continue
-        suggestions.append(
-            {
-                "csv_column": header,
-                "suggested_field": suggestion.get("suggested_field"),
-                "transformation": suggestion.get("transformation"),
-            }
-        )
-    return suggestions
 
 
 def _detect_date_ambiguity_warnings(
@@ -299,76 +248,6 @@ def _compute_dedup_stats(
     duplicate_emails_csv = len(duplicate_in_csv)
 
     return duplicate_emails_db, duplicate_emails_csv, duplicate_details, new_records
-
-
-def preview_import(
-    db: Session,
-    org_id: UUID,
-    file_content: bytes | str,
-) -> ImportPreview:
-    """
-    Generate preview of CSV import.
-
-    - Parses CSV
-    - Maps columns
-    - Counts duplicates (DB + CSV)
-    - Validates sample rows
-    """
-    preview = ImportPreview()
-
-    headers, rows, encoding, delimiter = _parse_csv_with_detection(file_content)
-    if not headers:
-        return preview
-
-    preview.detected_encoding = encoding
-    preview.detected_delimiter = delimiter
-
-    # Map columns
-    column_map = map_columns(headers)
-    preview.detected_columns = list(set(column_map.values()))
-    preview.unmapped_columns = [headers[i] for i in range(len(headers)) if i not in column_map]
-    preview.total_rows = len(rows)
-    preview.column_suggestions = _build_column_suggestions(headers)
-    preview.column_mapping_snapshot = [
-        {"csv_column": headers[idx], "surrogate_field": field} for idx, field in column_map.items()
-    ]
-    preview.date_ambiguity_warnings = _detect_date_ambiguity_warnings(headers, rows, column_map)
-
-    # Extract emails for dedupe check
-    email_col_idx = None
-    for idx, field in column_map.items():
-        if field == "email":
-            email_col_idx = idx
-            break
-
-    csv_emails = []
-    if email_col_idx is not None:
-        for row in rows:
-            if email_col_idx < len(row):
-                email = row[email_col_idx].strip().lower()
-                if email:
-                    csv_emails.append(email)
-
-    if csv_emails:
-        (
-            preview.duplicate_emails_db,
-            preview.duplicate_emails_csv,
-            preview.duplicate_details,
-            preview.new_records,
-        ) = _compute_dedup_stats(db, org_id, csv_emails)
-
-    # Sample rows with validation
-    for i, row in enumerate(rows[:5]):
-        row_data = _row_to_dict(row, column_map)
-        preview.sample_rows.append(row_data)
-
-        # Try to validate
-        try:
-            _validate_row(row_data)
-        except Exception:
-            preview.validation_errors += 1
-
-    return preview
 
 
 def _row_to_dict(row: list[str], column_map: dict[int, str]) -> dict[str, str]:
@@ -613,32 +492,6 @@ def list_pending_imports(db: Session, org_id: UUID) -> list[SurrogateImport]:
     )
 
 
-def submit_import_for_approval(
-    db: Session,
-    import_record: SurrogateImport,
-) -> SurrogateImport:
-    preview = None
-    if import_record.file_content:
-        preview = preview_import(
-            db=db,
-            org_id=import_record.organization_id,
-            file_content=import_record.file_content,
-        )
-        import_record.deduplication_stats = {
-            "total": preview.total_rows,
-            "duplicate_emails_db": preview.duplicate_emails_db,
-            "duplicate_emails_csv": preview.duplicate_emails_csv,
-        }
-        import_record.total_rows = preview.total_rows
-        import_record.column_mapping_snapshot = preview.column_mapping_snapshot
-        import_record.date_ambiguity_warnings = preview.date_ambiguity_warnings
-
-    import_record.status = "awaiting_approval"
-    db.commit()
-    db.refresh(import_record)
-    return import_record
-
-
 # =============================================================================
 # Enhanced Import Preview (v2)
 # =============================================================================
@@ -705,6 +558,11 @@ def preview_import_enhanced(
     matched = sum(1 for s in column_suggestions if s.confidence >= 0.5)
     unmatched = len(column_suggestions) - matched
 
+    decoded = file_content.decode(detection.encoding)
+    reader = csv.reader(io.StringIO(decoded), delimiter=detection.delimiter)
+    rows = list(reader)
+    data_rows = rows[1:] if detection.has_header else rows
+
     # Check for email column and duplicates
     email_col_idx = None
     for idx, suggestion in enumerate(column_suggestions):
@@ -714,10 +572,6 @@ def preview_import_enhanced(
 
     all_emails: list[str] = []
     if email_col_idx is not None:
-        decoded = file_content.decode(detection.encoding)
-        reader = csv.reader(io.StringIO(decoded), delimiter=detection.delimiter)
-        rows = list(reader)
-        data_rows = rows[1:] if detection.has_header else rows
         for row in data_rows:
             if email_col_idx < len(row):
                 email = row[email_col_idx].strip().lower()
@@ -745,17 +599,21 @@ def preview_import_enhanced(
                 row_dict[detection.headers[idx]] = value
         sample_rows_dict.append(row_dict)
 
-    # Check date ambiguity warnings in suggestions
-    date_warnings = []
-    for suggestion in column_suggestions:
-        for warning in suggestion.warnings:
-            if "ambiguous" in warning.lower() or "date" in warning.lower():
-                date_warnings.append(
-                    {
-                        "column": suggestion.csv_column,
-                        "warning": warning,
-                    }
-                )
+    # Check date ambiguity warnings in data (only for date-like fields)
+    date_column_map: dict[int, str] = {}
+    for idx, suggestion in enumerate(column_suggestions):
+        if (
+            suggestion.suggested_field
+            and ("date" in suggestion.suggested_field or "dob" in suggestion.suggested_field)
+            and suggestion.confidence >= 0.5
+        ):
+            date_column_map[idx] = suggestion.suggested_field
+
+    date_warnings = _detect_date_ambiguity_warnings(
+        detection.headers,
+        data_rows,
+        date_column_map,
+    )
 
     # Find matching templates
     matching_templates = _find_matching_templates(db, org_id, detection.headers)
@@ -764,6 +622,26 @@ def preview_import_enhanced(
     from app.services.import_ai_mapper_service import is_ai_available
 
     ai_available = is_ai_available(db, org_id)
+
+    # Basic validation errors (focus on required fields only)
+    validation_errors = 0
+    required_map: dict[int, str] = {}
+    for idx, suggestion in enumerate(column_suggestions):
+        if suggestion.suggested_field in ("full_name", "email") and suggestion.confidence >= 0.5:
+            required_map[idx] = suggestion.suggested_field
+
+    if required_map:
+        for row in detection.sample_rows[:5]:
+            row_data: dict[str, str] = {}
+            for idx, field in required_map.items():
+                if idx < len(row):
+                    value = row[idx].strip()
+                    if value:
+                        row_data[field] = value
+            try:
+                _validate_row(row_data)
+            except Exception:
+                validation_errors += 1
 
     return EnhancedImportPreview(
         detected_encoding=detection.encoding,
@@ -778,7 +656,7 @@ def preview_import_enhanced(
         duplicate_emails_csv=duplicate_emails_csv,
         duplicate_details=duplicate_details,
         new_records=new_records,
-        validation_errors=0,  # Will be calculated during preview validation
+        validation_errors=validation_errors,
         date_ambiguity_warnings=date_warnings,
         matching_templates=matching_templates,
         available_fields=AVAILABLE_SURROGATE_FIELDS,

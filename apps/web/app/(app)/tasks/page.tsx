@@ -22,8 +22,10 @@ import { AddTaskDialog, type TaskFormData } from "@/components/tasks/AddTaskDial
 import { ApprovalTaskActions } from "@/components/tasks/ApprovalTaskActions"
 import { ApprovalStatusBadge } from "@/components/tasks/ApprovalStatusBadge"
 import { StatusChangeRequestActions } from "@/components/status-change-requests/StatusChangeRequestActions"
+import { ImportApprovalActions } from "@/components/import/ImportApprovalActions"
 import { useTasks, useCompleteTask, useUncompleteTask, useUpdateTask, useCreateTask, useDeleteTask } from "@/lib/hooks/use-tasks"
 import { useStatusChangeRequests } from "@/lib/hooks/use-status-change-requests"
+import { usePendingImportApprovals } from "@/lib/hooks/use-import"
 import { useAuth } from "@/lib/auth-context"
 import { useAIContext } from "@/lib/context/ai-context"
 import type { TaskListItem } from "@/lib/types/task"
@@ -79,6 +81,7 @@ export default function TasksPage() {
     const searchParams = useSearchParams()
     const router = useRouter()
     const { user: currentUser } = useAuth()
+    const canApproveImports = ["admin", "developer"].includes(currentUser?.role || "")
 
     // Read initial values from URL params
     const urlFilter = searchParams.get("filter")
@@ -196,6 +199,12 @@ export default function TasksPage() {
         exclude_approvals: false,
         per_page: 50,
     })
+
+    const {
+        data: pendingImportApprovals,
+        isLoading: loadingImportApprovals,
+        refetch: refetchImportApprovals,
+    } = usePendingImportApprovals(canApproveImports)
 
     const canViewStatusRequests = ["admin", "developer"].includes(currentUser?.role || "")
 
@@ -388,7 +397,7 @@ export default function TasksPage() {
         if (!pendingFocus) return
         if (pendingFocus !== "approvals" && view !== "list") return
         if (isLoading) return
-        if (pendingFocus === "approvals" && (loadingApprovals || loadingStatusRequests)) return
+        if (pendingFocus === "approvals" && (loadingApprovals || loadingStatusRequests || loadingImportApprovals)) return
 
         const targetId =
             pendingFocus === "approvals"
@@ -402,7 +411,7 @@ export default function TasksPage() {
 
         target.scrollIntoView({ behavior: "smooth", block: "start" })
         setPendingFocus(null)
-    }, [pendingFocus, view, isLoading, loadingApprovals, loadingStatusRequests])
+    }, [pendingFocus, view, isLoading, loadingApprovals, loadingStatusRequests, loadingImportApprovals])
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -505,13 +514,13 @@ export default function TasksPage() {
                                         Pending Approvals
                                     </h2>
                                     <p className="text-xs text-amber-600/80 dark:text-amber-500/70 sm:text-sm">
-                                        {(pendingApprovals?.items?.length || 0) + (pendingStatusRequests?.items?.length || 0)} item{(pendingApprovals?.items?.length || 0) + (pendingStatusRequests?.items?.length || 0) !== 1 ? 's' : ''} awaiting review
+                                        {(pendingApprovals?.items?.length || 0) + (pendingStatusRequests?.items?.length || 0) + (pendingImportApprovals?.length || 0)} item{(pendingApprovals?.items?.length || 0) + (pendingStatusRequests?.items?.length || 0) + (pendingImportApprovals?.length || 0) !== 1 ? 's' : ''} awaiting review
                                     </p>
                                 </div>
                             </div>
                         </div>
                         <div className="divide-y divide-border">
-                            {(loadingApprovals || loadingStatusRequests) ? (
+                            {(loadingApprovals || loadingStatusRequests || loadingImportApprovals) ? (
                                 <div className="flex items-center justify-center py-8">
                                     <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
                                 </div>
@@ -563,6 +572,53 @@ export default function TasksPage() {
                                                     <StatusChangeRequestActions
                                                         requestId={item.request.id}
                                                         onResolved={() => refetchStatusRequests()}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+
+                                    {/* Import Approvals (Admin Only) */}
+                                    {pendingImportApprovals?.map((item) => {
+                                        const dedupe = item.deduplication_stats
+                                        const duplicateCount = dedupe?.duplicates?.length ?? 0
+                                        const newRecords =
+                                            typeof dedupe?.new_records === "number"
+                                                ? dedupe.new_records
+                                                : Math.max(item.total_rows - duplicateCount, 0)
+                                        const createdAtLabel = item.created_at
+                                            ? format(new Date(item.created_at), "MMM d, yyyy h:mm a")
+                                            : "Unknown time"
+
+                                        return (
+                                            <div
+                                                key={`import-${item.id}`}
+                                                className="group flex flex-col gap-3 p-3 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4"
+                                            >
+                                                <div className="flex-1 space-y-2">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className="font-medium">Import Approval</span>
+                                                        <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-xs">
+                                                            Awaiting Approval
+                                                        </Badge>
+                                                    </div>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        {item.filename}
+                                                    </p>
+                                                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                                                        <span>{item.total_rows} rows</span>
+                                                        <span>{newRecords} new</span>
+                                                        <span>{duplicateCount} duplicate{duplicateCount === 1 ? "" : "s"}</span>
+                                                        <span>
+                                                            Submitted by {item.created_by_name || "Unknown"}
+                                                        </span>
+                                                        <span>{createdAtLabel}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex-shrink-0">
+                                                    <ImportApprovalActions
+                                                        importId={item.id}
+                                                        onResolved={() => refetchImportApprovals()}
                                                     />
                                                 </div>
                                             </div>
@@ -625,7 +681,7 @@ export default function TasksPage() {
                                     })}
 
                                     {/* Empty State */}
-                                    {!(pendingApprovals?.items?.length || pendingStatusRequests?.items?.length) && (
+                                    {!(pendingApprovals?.items?.length || pendingStatusRequests?.items?.length || pendingImportApprovals?.length) && (
                                         <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
                                             No pending approvals right now.
                                         </div>

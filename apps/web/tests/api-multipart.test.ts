@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 
-import { previewImport, executeImport } from '@/lib/api/import'
+import { previewImport } from '@/lib/api/import'
 
 function makeResponse(body: unknown) {
     return {
@@ -38,13 +38,22 @@ describe('multipart requests', () => {
     it('previewImport does not set multipart Content-Type header', async () => {
         const fetchMock = vi.fn().mockResolvedValue(
             makeResponse({
+                import_id: '00000000-0000-0000-0000-000000000000',
                 total_rows: 0,
                 sample_rows: [],
-                detected_columns: [],
-                unmapped_columns: [],
+                detected_encoding: 'utf-8',
+                detected_delimiter: ',',
+                has_header: true,
+                column_suggestions: [],
+                matched_count: 0,
+                unmatched_count: 0,
+                matching_templates: [],
+                available_fields: [],
                 duplicate_emails_db: 0,
                 duplicate_emails_csv: 0,
                 validation_errors: 0,
+                date_ambiguity_warnings: [],
+                ai_available: false,
             })
         )
         global.fetch = fetchMock as unknown as typeof fetch
@@ -56,19 +65,5 @@ describe('multipart requests', () => {
         expect(getContentType(requestInit?.headers)).toBeUndefined()
     })
 
-    it('executeImport does not set multipart Content-Type header', async () => {
-        const fetchMock = vi.fn().mockResolvedValue(
-            makeResponse({
-                import_id: '00000000-0000-0000-0000-000000000000',
-                message: 'queued',
-            })
-        )
-        global.fetch = fetchMock as unknown as typeof fetch
-
-        const file = new File(['test'], 'test.csv', { type: 'text/csv' })
-        await executeImport(file)
-
-        const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit
-        expect(getContentType(requestInit?.headers)).toBeUndefined()
-    })
+    // Additional FormData endpoints can be added here as needed.
 })

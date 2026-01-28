@@ -41,7 +41,7 @@ async def test_import_submit_and_approval_flow(authed_client: AsyncClient, db, t
     csv_data = make_csv(rows)
 
     preview = await authed_client.post(
-        "/surrogates/import/preview",
+        "/surrogates/import/preview/enhanced",
         files={"file": ("preview.csv", io.BytesIO(csv_data), "text/csv")},
     )
     assert preview.status_code == 200, preview.text
@@ -73,7 +73,7 @@ async def test_import_submit_and_approval_flow(authed_client: AsyncClient, db, t
 
     approve = await authed_client.post(f"/surrogates/import/{import_id}/approve")
     assert approve.status_code == 200, approve.text
-    assert approve.json()["status"] in {"approved", "processing"}
+    assert approve.json()["status"] == "approved"
 
 
 @pytest.mark.asyncio
@@ -82,7 +82,7 @@ async def test_import_reject_requires_reason(authed_client: AsyncClient):
     csv_data = make_csv(rows)
 
     preview = await authed_client.post(
-        "/surrogates/import/preview",
+        "/surrogates/import/preview/enhanced",
         files={"file": ("preview.csv", io.BytesIO(csv_data), "text/csv")},
     )
     assert preview.status_code == 200, preview.text

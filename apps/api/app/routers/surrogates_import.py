@@ -46,21 +46,6 @@ router = APIRouter(
 # =============================================================================
 
 
-class ImportPreviewResponse(BaseModel):
-    import_id: UUID
-    total_rows: int
-    sample_rows: list[dict]
-    detected_columns: list[str]
-    unmapped_columns: list[str]
-    duplicate_emails_db: int
-    duplicate_emails_csv: int
-    validation_errors: int
-    detected_encoding: str | None = None
-    detected_delimiter: str | None = None
-    column_suggestions: list[dict] = Field(default_factory=list)
-    date_ambiguity_warnings: list[dict] = Field(default_factory=list)
-
-
 class ImportHistoryItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -110,100 +95,6 @@ class ImportApprovalResponse(BaseModel):
 # =============================================================================
 # Endpoints
 # =============================================================================
-
-
-@router.post(
-    "/preview",
-    response_model=ImportPreviewResponse,
-    dependencies=[Depends(require_csrf_header)],
-)
-async def preview_csv_import(
-    request: Request,
-    file: UploadFile = File(..., description="CSV file to preview"),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
-    """
-    Upload and preview CSV file before importing.
-
-    Returns column mapping, sample data, and duplicate counts.
-    """
-    # Read file
-    content = await file.read()
-
-    # Validate file type
-    if not file.filename or not file.filename.endswith(".csv"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="File must be a CSV file"
-        )
-
-    # Generate preview
-    try:
-        preview = import_service.preview_import(
-            db=db,
-            org_id=session.org_id,
-            file_content=content,
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to parse CSV: {str(e)}",
-        )
-
-    from app.services import audit_service
-
-    import_record = import_service.create_import_job(
-        db=db,
-        org_id=session.org_id,
-        user_id=session.user_id,
-        filename=file.filename,
-        total_rows=preview.total_rows,
-        file_content=content,
-        status="pending",
-    )
-    import_record.detected_encoding = preview.detected_encoding
-    import_record.detected_delimiter = preview.detected_delimiter
-    import_record.column_mapping_snapshot = preview.column_mapping_snapshot
-    import_record.date_ambiguity_warnings = preview.date_ambiguity_warnings
-    import_record.deduplication_stats = {
-        "total": preview.total_rows,
-        "new_records": preview.new_records,
-        "duplicates": preview.duplicate_details,
-        "duplicate_emails_db": preview.duplicate_emails_db,
-        "duplicate_emails_csv": preview.duplicate_emails_csv,
-    }
-    db.commit()
-
-    audit_service.log_phi_access(
-        db=db,
-        org_id=session.org_id,
-        user_id=session.user_id,
-        target_type="surrogate_import_preview",
-        target_id=None,
-        request=request,
-        details={
-            "total_rows": preview.total_rows,
-            "validation_errors": preview.validation_errors,
-            "duplicate_emails_db": preview.duplicate_emails_db,
-            "duplicate_emails_csv": preview.duplicate_emails_csv,
-        },
-    )
-    db.commit()
-
-    return ImportPreviewResponse(
-        import_id=import_record.id,
-        total_rows=preview.total_rows,
-        sample_rows=preview.sample_rows,
-        detected_columns=preview.detected_columns,
-        unmapped_columns=preview.unmapped_columns,
-        duplicate_emails_db=preview.duplicate_emails_db,
-        duplicate_emails_csv=preview.duplicate_emails_csv,
-        validation_errors=preview.validation_errors,
-        detected_encoding=preview.detected_encoding,
-        detected_delimiter=preview.detected_delimiter,
-        column_suggestions=preview.column_suggestions,
-        date_ambiguity_warnings=preview.date_ambiguity_warnings,
-    )
 
 
 @router.get("", response_model=list[ImportHistoryItem])

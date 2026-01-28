@@ -36,13 +36,13 @@ async def test_preview_detects_utf16_tsv_and_suggestions(authed_client: AsyncCli
     csv_data = make_delimited_content(rows, delimiter="\t", encoding="utf-16")
 
     response = await authed_client.post(
-        "/surrogates/import/preview",
+        "/surrogates/import/preview/enhanced",
         files={"file": ("meta.tsv.csv", io.BytesIO(csv_data), "text/csv")},
     )
 
     assert response.status_code == 200, response.text
     data = response.json()
-    assert data["detected_encoding"] == "utf-16"
+    assert data["detected_encoding"].startswith("utf-16")
     assert data["detected_delimiter"] == "\t"
     assert isinstance(data.get("column_suggestions"), list)
 
@@ -88,7 +88,7 @@ async def test_preview_returns_date_ambiguity_warnings(authed_client: AsyncClien
     csv_data = make_delimited_content(rows, delimiter=",", encoding="utf-8")
 
     response = await authed_client.post(
-        "/surrogates/import/preview",
+        "/surrogates/import/preview/enhanced",
         files={"file": ("ambiguous.csv", io.BytesIO(csv_data), "text/csv")},
     )
 

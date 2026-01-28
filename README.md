@@ -1,6 +1,6 @@
 # Surrogacy Force Platform
 
-**Version:** 0.16.0 | **Last Updated:** January 28, 2026
+**Version:** 0.41.0 | **Last Updated:** January 28, 2026
 
 A modern, multi-tenant platform for surrogacy agencies. Manage surrogates from intake through delivery with configurable workflows, matching, automation, and full auditability.
 
@@ -55,7 +55,7 @@ A modern, multi-tenant platform for surrogacy agencies. Manage surrogates from i
 |-------|------------|
 | **Frontend** | Next.js 16, React 19, TypeScript, Tailwind CSS, shadcn/ui |
 | **Backend** | FastAPI, Pydantic v2, SQLAlchemy 2.0 |
-| **Database** | PostgreSQL 18 (dev uses 18.1 in Docker) |
+| **Database** | PostgreSQL 18 |
 | **Search** | PostgreSQL Full-Text Search (tsvector + GIN) |
 | **Migrations** | Alembic |
 | **Testing** | pytest (backend), Vitest + React Testing Library (frontend) |
