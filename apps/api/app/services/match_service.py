@@ -1,6 +1,6 @@
 """Match service - query helpers for matches and match events."""
 
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from uuid import UUID
 
 from sqlalchemy import asc, desc, func, and_, or_, text
