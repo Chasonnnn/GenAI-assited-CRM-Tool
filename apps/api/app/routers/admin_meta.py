@@ -412,9 +412,7 @@ async def trigger_hierarchy_sync(
         account_id: Specific ad account ID, or sync all if None
         full_sync: If True, fetch all entities. If False, delta sync.
     """
-    accounts = meta_admin_service.list_active_ad_accounts_for_org(
-        db, session.org_id, account_id
-    )
+    accounts = meta_admin_service.list_active_ad_accounts_for_org(db, session.org_id, account_id)
     if not accounts:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No ad accounts found")
 
@@ -453,9 +451,7 @@ async def trigger_spend_sync(
     """
     from datetime import date, timedelta
 
-    accounts = meta_admin_service.list_active_ad_accounts_for_org(
-        db, session.org_id, account_id
-    )
+    accounts = meta_admin_service.list_active_ad_accounts_for_org(db, session.org_id, account_id)
     if not accounts:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No ad accounts found")
 

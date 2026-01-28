@@ -17,6 +17,7 @@ from app.db.models import (
     WorkflowExecution,
     WorkflowResumeJob,
 )
+from app.schemas.auth import UserSession
 from app.schemas.task import TaskCreate, TaskUpdate, TaskRead, TaskListItem, BulkCompleteResponse
 from app.services import membership_service, queue_service
 
@@ -197,7 +198,7 @@ def uncomplete_task(
 
 def bulk_complete_tasks(
     db: Session,
-    session: "UserSession",
+    session: UserSession,
     task_ids: list[UUID],
 ) -> BulkCompleteResponse:
     """
@@ -221,9 +222,7 @@ def bulk_complete_tasks(
                 continue
 
             if task.surrogate_id:
-                surrogate = surrogate_service.get_surrogate(
-                    db, session.org_id, task.surrogate_id
-                )
+                surrogate = surrogate_service.get_surrogate(db, session.org_id, task.surrogate_id)
                 if surrogate:
                     check_surrogate_access(
                         surrogate,
@@ -236,9 +235,7 @@ def bulk_complete_tasks(
             if not is_owner_or_assignee_or_admin(
                 session, task.created_by_user_id, task.owner_type, task.owner_id
             ):
-                results["failed"].append(
-                    {"task_id": str(task_id), "reason": "Not authorized"}
-                )
+                results["failed"].append({"task_id": str(task_id), "reason": "Not authorized"})
                 continue
 
             if task.task_type == TaskType.WORKFLOW_APPROVAL.value:
