@@ -37,6 +37,9 @@ const mockUpdateTask = vi.fn()
 const mockCreateTask = vi.fn()
 const mockDeleteTask = vi.fn()
 const mockResolveApproval = vi.fn()
+const mockUsePendingImportApprovals = vi.fn()
+const mockApproveImport = vi.fn()
+const mockRejectImport = vi.fn()
 const mockUseStatusChangeRequests = vi.fn(() => ({
     data: { items: [], total: 0 },
     isLoading: false,
@@ -51,6 +54,12 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
     useCreateTask: () => ({ mutateAsync: mockCreateTask, isPending: false }),
     useDeleteTask: () => ({ mutateAsync: mockDeleteTask, isPending: false }),
     useResolveWorkflowApproval: () => ({ mutateAsync: mockResolveApproval, isPending: false }),
+}))
+
+vi.mock('@/lib/hooks/use-import', () => ({
+    usePendingImportApprovals: () => mockUsePendingImportApprovals(),
+    useApproveImport: () => ({ mutateAsync: mockApproveImport, isPending: false }),
+    useRejectImport: () => ({ mutateAsync: mockRejectImport, isPending: false }),
 }))
 
 vi.mock('@/lib/hooks/use-status-change-requests', () => ({
@@ -78,6 +87,7 @@ vi.mock('@/components/appointments', () => ({
 
 describe('TasksPage', () => {
     beforeEach(() => {
+        mockCurrentUser.role = 'case_manager'
         mockUseTasks.mockImplementation((params: { is_completed?: boolean; task_type?: string; exclude_approvals?: boolean }) => {
             // Return workflow approvals for approval query
             if (params?.task_type === 'workflow_approval' && params?.exclude_approvals === false) {
@@ -128,9 +138,16 @@ describe('TasksPage', () => {
             }
             return { data: { items: [], total: 0 }, isLoading: false }
         })
+        mockUsePendingImportApprovals.mockReturnValue({
+            data: [],
+            isLoading: false,
+            refetch: vi.fn(),
+        })
         mockCompleteTask.mockReset()
         mockUncompleteTask.mockReset()
         mockResolveApproval.mockReset()
+        mockApproveImport.mockReset()
+        mockRejectImport.mockReset()
     })
 
     it('renders tasks and toggles completion', () => {
@@ -175,5 +192,36 @@ describe('TasksPage', () => {
         surrogateLinks.forEach(link => {
             expect(link.closest('a')).toHaveAttribute('href', '/surrogates/s1')
         })
+    })
+
+    it('renders pending import approvals for admins', () => {
+        mockCurrentUser.role = 'admin'
+        mockUsePendingImportApprovals.mockReturnValue({
+            data: [
+                {
+                    id: 'import-1',
+                    filename: 'surrogates.csv',
+                    status: 'awaiting_approval',
+                    total_rows: 120,
+                    created_at: new Date().toISOString(),
+                    created_by_name: 'Admin User',
+                    deduplication_stats: {
+                        total: 120,
+                        new_records: 115,
+                        duplicates: [{ email: 'dup@example.com', existing_id: 's1' }],
+                    },
+                    column_mapping_snapshot: [],
+                },
+            ],
+            isLoading: false,
+            refetch: vi.fn(),
+        })
+
+        render(<TasksPage />)
+
+        expect(screen.getByText('Import Approval')).toBeInTheDocument()
+        expect(screen.getByText('surrogates.csv')).toBeInTheDocument()
+        expect(screen.getByText(/120 rows/i)).toBeInTheDocument()
+        expect(screen.getByText(/1 duplicate/i)).toBeInTheDocument()
     })
 })

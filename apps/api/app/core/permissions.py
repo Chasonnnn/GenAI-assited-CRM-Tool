@@ -410,6 +410,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "change_surrogate_status",
         "view_surrogate_notes",
         "edit_surrogate_notes",
+        "import_surrogates",
         "view_tasks",
         "create_tasks",
         "edit_tasks",

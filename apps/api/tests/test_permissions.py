@@ -269,6 +269,18 @@ def test_precedence_user_grant_overrides_role_deny(db, org_a, intake_user, devel
 # =============================================================================
 
 
+def test_intake_role_has_import_surrogates_by_default(db, org_a, intake_user):
+    """Intake specialists should be able to import surrogates by default."""
+    result = permission_service.check_permission(
+        db,
+        org_a.id,
+        intake_user.id,
+        Role.INTAKE_SPECIALIST.value,
+        "import_surrogates",
+    )
+    assert result is True, "Intake should have import_surrogates access by default"
+
+
 def test_missing_permission_returns_false(db, org_a, admin_user):
     """Missing/undefined permission should return False."""
     result = permission_service.check_permission(

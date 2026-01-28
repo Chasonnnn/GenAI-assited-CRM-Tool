@@ -27,7 +27,7 @@ def create_csv_content(rows: list[dict]) -> bytes:
 
 @pytest.mark.asyncio
 async def test_preview_import_success(authed_client: AsyncClient):
-    """Test CSV preview with valid data."""
+    """Test enhanced CSV preview with valid data."""
     csv_data = create_csv_content(
         [
             {"full_name": "John Doe", "email": "john@test.com", "phone": "5551234567"},
@@ -40,7 +40,7 @@ async def test_preview_import_success(authed_client: AsyncClient):
     )
 
     response = await authed_client.post(
-        "/surrogates/import/preview",
+        "/surrogates/import/preview/enhanced",
         files={"file": ("test.csv", io.BytesIO(csv_data), "text/csv")},
     )
 
@@ -49,12 +49,15 @@ async def test_preview_import_success(authed_client: AsyncClient):
 
     assert data["total_rows"] == 2
     assert len(data["sample_rows"]) == 2
-    assert "full_name" in data["detected_columns"]
-    assert "email" in data["detected_columns"]
     assert data["duplicate_emails_db"] == 0
     assert data["duplicate_emails_csv"] == 0
-    # Validation count varies based on sample data
+    assert data["has_header"] is True
     assert isinstance(data["validation_errors"], int)
+    assert isinstance(data["ai_available"], bool)
+
+    suggested_fields = {s["suggested_field"] for s in data["column_suggestions"]}
+    assert "full_name" in suggested_fields
+    assert "email" in suggested_fields
 
 
 @pytest.mark.asyncio
@@ -83,7 +86,7 @@ async def test_preview_import_detects_duplicates_in_db(
     )
 
     response = await authed_client.post(
-        "/surrogates/import/preview",
+        "/surrogates/import/preview/enhanced",
         files={"file": ("test.csv", io.BytesIO(csv_data), "text/csv")},
     )
 
@@ -104,7 +107,7 @@ async def test_preview_import_detects_duplicates_in_csv(authed_client: AsyncClie
     )
 
     response = await authed_client.post(
-        "/surrogates/import/preview",
+        "/surrogates/import/preview/enhanced",
         files={"file": ("test.csv", io.BytesIO(csv_data), "text/csv")},
     )
 
@@ -115,7 +118,7 @@ async def test_preview_import_detects_duplicates_in_csv(authed_client: AsyncClie
 
 @pytest.mark.asyncio
 async def test_preview_import_detects_unmapped_columns(authed_client: AsyncClient):
-    """Test preview identifies unmapped columns."""
+    """Test enhanced preview identifies unmapped columns."""
     csv_data = create_csv_content(
         [
             {
@@ -127,20 +130,22 @@ async def test_preview_import_detects_unmapped_columns(authed_client: AsyncClien
     )
 
     response = await authed_client.post(
-        "/surrogates/import/preview",
+        "/surrogates/import/preview/enhanced",
         files={"file": ("test.csv", io.BytesIO(csv_data), "text/csv")},
     )
 
     assert response.status_code == 200
     data = response.json()
-    assert "unknown_field" in data["unmapped_columns"]
+    assert data["unmatched_count"] >= 1
+    unknown = [s for s in data["column_suggestions"] if s["csv_column"] == "unknown_field"]
+    assert unknown and unknown[0]["suggested_field"] is None
 
 
 @pytest.mark.asyncio
 async def test_preview_import_rejects_non_csv(authed_client: AsyncClient):
     """Test preview rejects non-CSV files."""
     response = await authed_client.post(
-        "/surrogates/import/preview",
+        "/surrogates/import/preview/enhanced",
         files={"file": ("test.txt", io.BytesIO(b"not a csv"), "text/plain")},
     )
 
@@ -154,7 +159,7 @@ async def test_preview_import_without_auth_fails(client: AsyncClient):
     csv_data = create_csv_content([{"email": "alice@test.com"}])
 
     response = await client.post(
-        "/surrogates/import/preview",
+        "/surrogates/import/preview/enhanced",
         files={"file": ("test.csv", io.BytesIO(csv_data), "text/csv")},
     )
 
@@ -174,7 +179,7 @@ async def test_submit_import_updates_status_and_snapshot(authed_client: AsyncCli
     )
 
     preview = await authed_client.post(
-        "/surrogates/import/preview",
+        "/surrogates/import/preview/enhanced",
         files={"file": ("import.csv", io.BytesIO(csv_data), "text/csv")},
     )
     assert preview.status_code == 200
@@ -219,7 +224,7 @@ async def test_approve_import_queues_job(authed_client: AsyncClient, db, test_or
     )
 
     preview = await authed_client.post(
-        "/surrogates/import/preview",
+        "/surrogates/import/preview/enhanced",
         files={"file": ("import.csv", io.BytesIO(csv_data), "text/csv")},
     )
     assert preview.status_code == 200
@@ -258,7 +263,7 @@ async def test_approve_import_queues_job(authed_client: AsyncClient, db, test_or
 
 @pytest.mark.asyncio
 async def test_preview_import_reports_validation_errors(authed_client: AsyncClient):
-    """Test preview reports validation errors for bad rows."""
+    """Test enhanced preview reports validation errors for bad rows."""
     csv_data = create_csv_content(
         [
             {"full_name": "Valid User", "email": "valid@test.com"},
@@ -267,7 +272,7 @@ async def test_preview_import_reports_validation_errors(authed_client: AsyncClie
     )
 
     response = await authed_client.post(
-        "/surrogates/import/preview",
+        "/surrogates/import/preview/enhanced",
         files={"file": ("import.csv", io.BytesIO(csv_data), "text/csv")},
     )
 
@@ -334,6 +339,77 @@ def test_execute_import_warns_on_unmapped_columns(db, test_org, test_user):
     warnings = [entry for entry in (stored.errors or []) if entry.get("level") == "warning"]
     assert warnings
     assert warnings[0]["column"] == "unmapped_col"
+
+
+@pytest.mark.asyncio
+async def test_csv_import_job_uses_mapping_snapshot(db, test_org, test_user):
+    """Worker should honor mapping snapshots for non-legacy headers."""
+    from app.db.enums import JobType
+    from app.db.models import Job, Surrogate, SurrogateImport
+    from app.worker import process_csv_import
+
+    csv_data = create_csv_content(
+        [
+            {
+                "Full Name": "Mapped User",
+                "Primary Email": "mapped@test.com",
+            }
+        ]
+    )
+
+    import_record = SurrogateImport(
+        organization_id=test_org.id,
+        created_by_user_id=test_user.id,
+        filename="mapped.csv",
+        file_content=csv_data,
+        status="approved",
+        total_rows=1,
+        column_mapping_snapshot=[
+            {
+                "csv_column": "Full Name",
+                "surrogate_field": "full_name",
+                "transformation": None,
+                "action": "map",
+                "custom_field_key": None,
+            },
+            {
+                "csv_column": "Primary Email",
+                "surrogate_field": "email",
+                "transformation": None,
+                "action": "map",
+                "custom_field_key": None,
+            },
+        ],
+        unknown_column_behavior="ignore",
+    )
+    db.add(import_record)
+    db.flush()
+
+    job = Job(
+        organization_id=test_org.id,
+        job_type=JobType.CSV_IMPORT.value,
+        payload={
+            "import_id": str(import_record.id),
+            "dedupe_action": "skip",
+            "use_mappings": True,
+            "unknown_column_behavior": "ignore",
+        },
+    )
+    db.add(job)
+    db.flush()
+
+    await process_csv_import(db, job)
+
+    surrogate = (
+        db.query(Surrogate)
+        .filter(
+            Surrogate.organization_id == test_org.id,
+            Surrogate.email_hash.isnot(None),
+        )
+        .first()
+    )
+    assert surrogate is not None
+    assert surrogate.full_name == "Mapped User"
 
 
 @pytest.mark.asyncio
@@ -458,7 +534,7 @@ async def test_submit_import_requires_csrf(authed_client: AsyncClient, db):
     csv_data = create_csv_content([{"email": "alice@test.com"}])
 
     preview = await authed_client.post(
-        "/surrogates/import/preview",
+        "/surrogates/import/preview/enhanced",
         files={"file": ("test.csv", io.BytesIO(csv_data), "text/csv")},
     )
     assert preview.status_code == 200
@@ -492,11 +568,11 @@ async def test_submit_import_requires_csrf(authed_client: AsyncClient, db):
 
 @pytest.mark.asyncio
 async def test_preview_import_empty_csv(authed_client: AsyncClient):
-    """Test previewing empty CSV."""
+    """Test enhanced previewing empty CSV."""
     csv_data = b"full_name,email\n"  # Just headers, no data
 
     response = await authed_client.post(
-        "/surrogates/import/preview",
+        "/surrogates/import/preview/enhanced",
         files={"file": ("empty.csv", io.BytesIO(csv_data), "text/csv")},
     )
 

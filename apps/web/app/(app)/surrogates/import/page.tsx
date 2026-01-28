@@ -23,9 +23,12 @@ export default function CSVImportPage() {
             case "completed":
                 return { variant: "default" as const, icon: CheckCircleIcon, color: "bg-green-500/10 text-green-600 border-green-500/20" }
             case "failed":
+            case "rejected":
                 return { variant: "destructive" as const, icon: XCircleIcon, color: "bg-destructive/10 text-destructive border-destructive/20" }
             case "pending":
-            case "in_progress":
+            case "awaiting_approval":
+            case "approved":
+            case "running":
                 return { variant: "secondary" as const, icon: ClockIcon, color: "bg-amber-500/10 text-amber-600 border-amber-500/20" }
             default:
                 return { variant: "secondary" as const, icon: FileUpIcon, color: "" }
@@ -39,7 +42,7 @@ export default function CSVImportPage() {
                 <div className="flex h-16 items-center justify-between px-6">
                     <div>
                         <h1 className="text-2xl font-semibold">CSV Import</h1>
-                        <p className="text-sm text-muted-foreground">Bulk import cases from CSV files</p>
+                        <p className="text-sm text-muted-foreground">Bulk import surrogates from CSV files</p>
                     </div>
                 </div>
             </div>

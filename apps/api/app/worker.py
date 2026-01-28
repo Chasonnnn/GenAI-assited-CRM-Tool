@@ -1128,14 +1128,50 @@ async def process_csv_import(db, job) -> None:
 
     try:
         # Execute the import
-        import_service.execute_import(
-            db=db,
-            org_id=job.organization_id,
-            user_id=import_record.created_by_user_id,
-            import_id=import_record.id,
-            file_content=import_record.file_content,
-            dedupe_action=dedupe_action,
+        use_mappings = bool(payload.get("use_mappings"))
+        mapping_snapshot = import_record.column_mapping_snapshot or []
+        unknown_column_behavior = (
+            import_record.unknown_column_behavior
+            or payload.get("unknown_column_behavior")
+            or "ignore"
         )
+
+        if use_mappings and isinstance(mapping_snapshot, list) and mapping_snapshot:
+            from app.services.import_service import ColumnMapping
+
+            mappings: list[ColumnMapping] = []
+            for item in mapping_snapshot:
+                if not isinstance(item, dict):
+                    continue
+                action = item.get("action") or ("map" if item.get("surrogate_field") else "ignore")
+                mappings.append(
+                    ColumnMapping(
+                        csv_column=item.get("csv_column", ""),
+                        surrogate_field=item.get("surrogate_field"),
+                        transformation=item.get("transformation"),
+                        action=action,
+                        custom_field_key=item.get("custom_field_key"),
+                    )
+                )
+
+            import_service.execute_import_with_mappings(
+                db=db,
+                org_id=job.organization_id,
+                user_id=import_record.created_by_user_id,
+                import_id=import_record.id,
+                file_content=import_record.file_content,
+                column_mappings=mappings,
+                unknown_column_behavior=unknown_column_behavior,
+            )
+        else:
+            import_service.execute_import(
+                db=db,
+                org_id=job.organization_id,
+                user_id=import_record.created_by_user_id,
+                import_id=import_record.id,
+                file_content=import_record.file_content,
+                dedupe_action=dedupe_action,
+            )
         import_record.file_content = None
         db.commit()
         logger.info(f"CSV import completed: {import_id}")
