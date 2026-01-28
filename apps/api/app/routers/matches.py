@@ -850,7 +850,7 @@ def update_match_event(
         event_type=data.event_type,
         title=data.title,
         description=data.description,
-        timezone=data.timezone,
+        tz_name=data.timezone,
         all_day=next_all_day,
         start_date=next_start_date,
         end_date=next_end_date,

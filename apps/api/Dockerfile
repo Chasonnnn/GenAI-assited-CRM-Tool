@@ -4,9 +4,9 @@
 # ============================================================================
 # Stage 1: Build dependencies
 # ============================================================================
-FROM ghcr.io/astral-sh/uv:0.9.24 as uv
+FROM ghcr.io/astral-sh/uv:0.9.24 AS uv
 
-FROM python:3.11.14-slim-bookworm as builder
+FROM python:3.11.14-slim-bookworm AS builder
 
 WORKDIR /app
 
