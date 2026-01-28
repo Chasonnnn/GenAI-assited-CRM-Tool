@@ -4,7 +4,7 @@ import * as React from "react"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { DateTimePicker } from "@/components/ui/date-time-picker"
@@ -24,10 +24,8 @@ import {
     CheckIcon,
     XIcon,
     Loader2Icon,
-    ArrowLeftIcon,
     SparklesIcon,
     MailIcon,
-    BrainIcon,
     HeartHandshakeIcon,
     PhoneIcon,
     VideoIcon,
@@ -61,6 +59,9 @@ import { SurrogateOverviewCard } from "@/components/surrogates/SurrogateOverview
 import { SurrogateNotesTab } from "@/components/surrogates/tabs/SurrogateNotesTab"
 import { SurrogateTasksTab } from "@/components/surrogates/tabs/SurrogateTasksTab"
 import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
+import { SurrogateDetailHeader } from "@/components/surrogates/detail/SurrogateDetailHeader"
+import { SurrogateHistoryTab } from "@/components/surrogates/detail/SurrogateHistoryTab"
+import { SurrogateAiTab } from "@/components/surrogates/detail/SurrogateAiTab"
 import { useForms } from "@/lib/hooks/use-forms"
 import type { EmailType, SummarizeSurrogateResponse, DraftEmailResponse } from "@/lib/api/ai"
 import type { TaskListItem } from "@/lib/types/task"
@@ -71,14 +72,6 @@ import { parseDateInput } from "@/lib/utils/date"
 import { format, parseISO } from "date-fns"
 import { buildRecurringDates, MAX_TASK_OCCURRENCES } from "@/lib/utils/task-recurrence"
 import { toast } from "sonner"
-
-const EMAIL_TYPES: EmailType[] = [
-    "follow_up",
-    "status_update",
-    "meeting_request",
-    "document_request",
-    "introduction",
-]
 
 const TAB_VALUES = [
     "overview",
@@ -152,108 +145,6 @@ function formatMeetingTimeForInvite(date: Date): string {
 
 
 // Format activity type for display
-function formatActivityType(type: string): string {
-    const labels: Record<string, string> = {
-        surrogate_created: 'Surrogate Created',
-        info_edited: 'Information Edited',
-        stage_changed: 'Stage Changed',
-        assigned: 'Assigned',
-        unassigned: 'Unassigned',
-        surrogate_assigned_to_queue: 'Assigned to Queue',
-        surrogate_claimed: 'Surrogate Claimed',
-        surrogate_released: 'Released to Queue',
-        priority_changed: 'Priority Changed',
-        archived: 'Archived',
-        restored: 'Restored',
-        note_added: 'Note Added',
-        note_deleted: 'Note Deleted',
-        attachment_added: 'Attachment Uploaded',
-        attachment_deleted: 'Attachment Deleted',
-        task_created: 'Task Created',
-        task_deleted: 'Task Deleted',
-        contact_attempt: 'Contact Attempt',
-    }
-    return labels[type] || type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-// Format activity details for display
-function formatActivityDetails(type: string, details: Record<string, unknown>): string {
-    const aiPrefix = details?.source === 'ai' ? 'AI-generated' : ''
-    const withAiPrefix = (detail: string) => (aiPrefix ? `${aiPrefix} · ${detail}` : detail)
-    const aiOnly = () => (aiPrefix ? aiPrefix : '')
-
-    switch (type) {
-        case 'status_changed':
-            return withAiPrefix(`${details.from} → ${details.to}${details.reason ? `: ${details.reason}` : ''}`)
-        case 'info_edited':
-            if (isRecord(details.changes)) {
-                const changes = Object.entries(details.changes)
-                    .map(([field, value]) => `${field.replace(/_/g, ' ')}: ${String(value)}`)
-                    .join(', ')
-                return aiPrefix ? withAiPrefix(changes) : changes
-            }
-            return aiOnly()
-        case 'assigned':
-            return aiPrefix ? withAiPrefix(details.from_user_id ? 'Reassigned' : 'Assigned to user') : (details.from_user_id ? 'Reassigned' : 'Assigned to user')
-        case 'unassigned':
-            return aiPrefix ? withAiPrefix('Removed assignment') : 'Removed assignment'
-        case 'surrogate_assigned_to_queue': {
-            const toQueue = details.to_queue_id ? `Queue ${String(details.to_queue_id)}` : 'queue'
-            return withAiPrefix(`Assigned to ${toQueue}`)
-        }
-        case 'surrogate_claimed': {
-            const fromQueue = details.from_queue_id ? `Queue ${String(details.from_queue_id)}` : 'queue'
-            return withAiPrefix(`Claimed from ${fromQueue}`)
-        }
-        case 'surrogate_released': {
-            const toQueue = details.to_queue_id ? `Queue ${String(details.to_queue_id)}` : 'queue'
-            return withAiPrefix(`Released to ${toQueue}`)
-        }
-        case 'priority_changed':
-            return aiPrefix ? withAiPrefix(details.is_priority ? 'Marked as priority' : 'Removed priority') : (details.is_priority ? 'Marked as priority' : 'Removed priority')
-        case 'note_added': {
-            // Use preview field (sanitized snapshot at creation time)
-            const preview = details.preview ? String(details.preview) : ''
-            return preview
-                ? withAiPrefix(preview)
-                : withAiPrefix('Note added')
-        }
-        case 'note_deleted': {
-            // Use preview field (sanitized snapshot, preserved after deletion)
-            const preview = details.preview ? String(details.preview) : ''
-            return preview
-                ? withAiPrefix(`${preview} (deleted)`)
-                : withAiPrefix('Note deleted')
-        }
-        case 'attachment_added': {
-            const filename = details.filename ? String(details.filename) : 'file'
-            return withAiPrefix(`Uploaded: ${filename}`)
-        }
-        case 'attachment_deleted': {
-            const filename = details.filename ? String(details.filename) : 'file'
-            return withAiPrefix(`Deleted: ${filename}`)
-        }
-        case 'task_created':
-            return details.title ? withAiPrefix(`Task: ${String(details.title)}`) : aiOnly()
-        case 'task_deleted':
-            return details.title ? withAiPrefix(`Deleted: ${String(details.title)}`) : withAiPrefix('Task deleted')
-        case 'contact_attempt': {
-            const methods = Array.isArray(details.contact_methods)
-                ? details.contact_methods.map((method) => String(method)).join(', ')
-                : ''
-            const outcome = String(details.outcome || '').replace(/_/g, ' ')
-            const backdated = details.is_backdated ? ' (backdated)' : ''
-            return withAiPrefix(`${methods}: ${outcome}${backdated}`)
-        }
-        default:
-            return aiOnly()
-    }
-}
-
 export default function SurrogateDetailPage() {
     const params = useParams<{ id: string }>()
     const id = params.id
@@ -600,6 +491,20 @@ export default function SurrogateDetailPage() {
         setSelectedQueueId("")
     }
 
+    const handleGenerateSummary = async () => {
+        const result = await summarizeSurrogateMutation.mutateAsync(id)
+        setAiSummary(result)
+    }
+
+    const handleDraftEmail = async () => {
+        if (!selectedEmailType) return
+        const result = await draftEmailMutation.mutateAsync({
+            surrogate_id: id,
+            email_type: selectedEmailType,
+        })
+        setAiDraftEmail(result)
+    }
+
     // Check if surrogate is in a queue (can be claimed)
     const isInQueue = surrogateData?.owner_type === 'queue'
     const isOwnedByUser = surrogateData?.owner_type === 'user'
@@ -632,23 +537,18 @@ export default function SurrogateDetailPage() {
 
     return (
         <div className="flex flex-1 flex-col">
-            {/* Surrogate Header */}
-            <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b px-4">
-                <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => router.push('/surrogates')}>
-                        <ArrowLeftIcon className="mr-2 size-4" />
-                        Back
-                    </Button>
-                    <h1 className="text-xl font-semibold">Surrogate #{surrogateData.surrogate_number}</h1>
-                    <Badge style={{ backgroundColor: statusColor, color: 'white' }}>{statusLabel}</Badge>
-                    {surrogateData.is_archived && <Badge variant="secondary">Archived</Badge>}
-                </div>
-                <div className="flex items-center gap-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setChangeStageModalOpen(true)}
-                        disabled={surrogateData.is_archived || !canChangeStage}
+            <SurrogateDetailHeader
+                surrogateNumber={surrogateData.surrogate_number}
+                statusLabel={statusLabel}
+                statusColor={statusColor}
+                isArchived={surrogateData.is_archived}
+                onBack={() => router.push('/surrogates')}
+            >
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setChangeStageModalOpen(true)}
+                    disabled={surrogateData.is_archived || !canChangeStage}
                     >
                         Change Stage
                     </Button>
@@ -812,22 +712,21 @@ export default function SurrogateDetailPage() {
                         </DropdownMenu>
                     )}
                     <DropdownMenu>
-                        <DropdownMenuTrigger className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}>
-                            <span className="inline-flex items-center justify-center">
-                                <MoreVerticalIcon className="h-4 w-4" />
-                            </span>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setEditDialogOpen(true)}>Edit</DropdownMenuItem>
-                            {surrogateData.is_archived ? (
-                                <DropdownMenuItem onClick={handleRestore}>Restore</DropdownMenuItem>
-                            ) : (
-                                <DropdownMenuItem onClick={handleArchive}>Archive</DropdownMenuItem>
-                            )}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
-            </header>
+                    <DropdownMenuTrigger className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}>
+                        <span className="inline-flex items-center justify-center">
+                            <MoreVerticalIcon className="h-4 w-4" />
+                        </span>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setEditDialogOpen(true)}>Edit</DropdownMenuItem>
+                        {surrogateData.is_archived ? (
+                            <DropdownMenuItem onClick={handleRestore}>Restore</DropdownMenuItem>
+                        ) : (
+                            <DropdownMenuItem onClick={handleArchive}>Archive</DropdownMenuItem>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </SurrogateDetailHeader>
 
             {/* Tabs Content */}
             <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
@@ -1068,41 +967,10 @@ export default function SurrogateDetailPage() {
 
                     {/* HISTORY TAB */}
                     <TabsContent value="history" className="space-y-4">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Activity Log</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-6">
-                                {activityData && activityData.items.length > 0 ? (
-                                    activityData.items.map((entry, idx) => {
-                                        const isLast = idx === activityData.items.length - 1
-                                        return (
-                                            <div key={entry.id} className="flex gap-3">
-                                                <div className="relative">
-                                                    <div className="h-2 w-2 rounded-full bg-primary mt-1.5"></div>
-                                                    {!isLast && <div className="absolute left-1 top-4 h-full w-px bg-border"></div>}
-                                                </div>
-                                                <div className="flex-1 space-y-1 pb-4">
-                                                    <div className="text-sm font-medium">
-                                                        {formatActivityType(entry.activity_type)}
-                                                    </div>
-                                                    <div className="text-xs text-muted-foreground">
-                                                        {entry.actor_name || 'System'} • {formatDateTime(entry.created_at)}
-                                                    </div>
-                                                    {entry.details && (
-                                                        <div className="text-sm pt-1 text-muted-foreground">
-                                                            {formatActivityDetails(entry.activity_type, entry.details)}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )
-                                    })
-                                ) : (
-                                    <p className="text-sm text-muted-foreground text-center py-4">No activity recorded.</p>
-                                )}
-                            </CardContent>
-                        </Card>
+                        <SurrogateHistoryTab
+                            activities={activityData?.items ?? []}
+                            formatDateTime={formatDateTime}
+                        />
                     </TabsContent>
 
                     <AddSurrogateTaskDialog
@@ -1152,178 +1020,17 @@ export default function SurrogateDetailPage() {
 
                     {/* AI TAB */}
                     <TabsContent value="ai" className="space-y-4">
-                        {aiSettings && !aiSettings.is_enabled ? (
-                            <Card>
-                                <CardContent className="pt-6">
-                                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                                        <BrainIcon className="h-12 w-12 text-muted-foreground mb-4" />
-                                        <h3 className="text-lg font-medium">AI Assistant Not Enabled</h3>
-                                        <p className="text-sm text-muted-foreground mt-2 max-w-md">
-                                            Contact your admin to enable AI features and configure an API key in Settings.
-                                        </p>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        ) : (
-                            <div className="grid gap-4 md:grid-cols-2">
-                                {/* Summarize Surrogate Card */}
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle className="flex items-center gap-2">
-                                            <SparklesIcon className="h-4 w-4" />
-                                            Surrogate Summary
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-4">
-                                        <Button
-                                            onClick={async () => {
-                                                const result = await summarizeSurrogateMutation.mutateAsync(id)
-                                                setAiSummary(result)
-                                            }}
-                                            disabled={summarizeSurrogateMutation.isPending}
-                                            className="w-full"
-                                        >
-                                            {summarizeSurrogateMutation.isPending ? (
-                                                <><Loader2Icon className="h-4 w-4 mr-2 animate-spin" /> Generating...</>
-                                            ) : (
-                                                <><SparklesIcon className="h-4 w-4 mr-2" /> Generate Summary</>
-                                            )}
-                                        </Button>
-
-                                        {aiSummary && (
-                                            <div className="space-y-4 pt-4 border-t">
-                                                <div>
-                                                    <h4 className="text-sm font-medium mb-1">Summary</h4>
-                                                    <p className="text-sm text-muted-foreground">{aiSummary.summary}</p>
-                                                </div>
-                                                <div>
-                                                    <h4 className="text-sm font-medium mb-1">Recent Activity</h4>
-                                                    <p className="text-sm text-muted-foreground">{aiSummary.recent_activity}</p>
-                                                </div>
-                                                {aiSummary.suggested_next_steps.length > 0 && (
-                                                    <div>
-                                                        <h4 className="text-sm font-medium mb-1">Suggested Next Steps</h4>
-                                                        <ul className="text-sm text-muted-foreground space-y-1">
-                                                            {aiSummary.suggested_next_steps.map((step, i) => (
-                                                                <li key={i} className="flex items-start gap-2">
-                                                                    <span className="text-primary">•</span>
-                                                                    {step}
-                                                                </li>
-                                                            ))}
-                                                        </ul>
-                                                    </div>
-                                                )}
-                                                {aiSummary.pending_tasks.length > 0 && (
-                                                    <div>
-                                                        <h4 className="text-sm font-medium mb-1">Pending Tasks</h4>
-                                                        <ul className="text-sm text-muted-foreground space-y-1">
-                                                            {aiSummary.pending_tasks.map((task) => (
-                                                                <li key={task.id} className="flex items-center gap-2">
-                                                                    <Badge variant="secondary" className="text-xs">
-                                                                        {task.due_date || 'No due date'}
-                                                                    </Badge>
-                                                                    {task.title}
-                                                                </li>
-                                                            ))}
-                                                        </ul>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </CardContent>
-                                </Card>
-
-                                {/* Draft Email Card */}
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle className="flex items-center gap-2">
-                                            <MailIcon className="h-4 w-4" />
-                                            Draft Email
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-4">
-                                        <div className="grid grid-cols-2 gap-2">
-                                            {EMAIL_TYPES.map((emailType) => {
-                                                const label =
-                                                    emailType === 'meeting_request'
-                                                        ? 'appointment request'
-                                                        : emailType.replace(/_/g, ' ')
-                                                return (
-                                                    <Button
-                                                        key={emailType}
-                                                        variant={selectedEmailType === emailType ? 'default' : 'outline'}
-                                                        size="sm"
-                                                        onClick={() => setSelectedEmailType(emailType)}
-                                                        className="capitalize text-xs"
-                                                    >
-                                                        {label}
-                                                    </Button>
-                                                )
-                                            })}
-                                        </div>
-
-                                        <Button
-                                            onClick={async () => {
-                                                if (!selectedEmailType) return
-                                                const result = await draftEmailMutation.mutateAsync({
-                                                    surrogate_id: id,
-                                                    email_type: selectedEmailType,
-                                                })
-                                                setAiDraftEmail(result)
-                                            }}
-                                            disabled={!selectedEmailType || draftEmailMutation.isPending}
-                                            className="w-full"
-                                        >
-                                            {draftEmailMutation.isPending ? (
-                                                <><Loader2Icon className="h-4 w-4 mr-2 animate-spin" /> Drafting...</>
-                                            ) : (
-                                                <><MailIcon className="h-4 w-4 mr-2" /> Draft Email</>
-                                            )}
-                                        </Button>
-
-                                        {aiDraftEmail && (
-                                            <div className="space-y-3 pt-4 border-t">
-                                                <div>
-                                                    <h4 className="text-sm font-medium mb-1">To</h4>
-                                                    <p className="text-sm text-muted-foreground">
-                                                        {aiDraftEmail.recipient_name} &lt;{aiDraftEmail.recipient_email}&gt;
-                                                    </p>
-                                                </div>
-                                                <div>
-                                                    <h4 className="text-sm font-medium mb-1">Subject</h4>
-                                                    <p className="text-sm text-muted-foreground">{aiDraftEmail.subject}</p>
-                                                </div>
-                                                <div>
-                                                    <h4 className="text-sm font-medium mb-1">Body</h4>
-                                                    <div className="text-sm text-muted-foreground bg-muted/50 rounded-md p-3 whitespace-pre-wrap max-h-64 overflow-y-auto">
-                                                        {aiDraftEmail.body}
-                                                    </div>
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={() => {
-                                                            navigator.clipboard.writeText(`Subject: ${aiDraftEmail.subject}\n\n${aiDraftEmail.body}`)
-                                                        }}
-                                                    >
-                                                        <CopyIcon className="h-3 w-3 mr-1" /> Copy
-                                                    </Button>
-                                                    <Button
-                                                        size="sm"
-                                                        onClick={() => {
-                                                            window.open(`mailto:${aiDraftEmail.recipient_email}?subject=${encodeURIComponent(aiDraftEmail.subject)}&body=${encodeURIComponent(aiDraftEmail.body)}`)
-                                                        }}
-                                                    >
-                                                        <MailIcon className="h-3 w-3 mr-1" /> Open in Email
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </CardContent>
-                                </Card>
-                            </div>
-                        )}
+                        <SurrogateAiTab
+                            aiSettings={aiSettings}
+                            aiSummary={aiSummary}
+                            aiDraftEmail={aiDraftEmail}
+                            selectedEmailType={selectedEmailType}
+                            onSelectEmailType={setSelectedEmailType}
+                            onGenerateSummary={handleGenerateSummary}
+                            onDraftEmail={handleDraftEmail}
+                            isGeneratingSummary={summarizeSurrogateMutation.isPending}
+                            isDraftingEmail={draftEmailMutation.isPending}
+                        />
                     </TabsContent>
 
                     {/* JOURNEY TAB */}
