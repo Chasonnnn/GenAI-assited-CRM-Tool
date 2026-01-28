@@ -13,7 +13,7 @@ from app.core.deps import get_db
 from app.core.rate_limit import limiter
 from app.db.enums import FormStatus
 from app.schemas.forms import FormPublicRead, FormSubmissionPublicResponse, FormSchema
-from app.services import form_service
+from app.services import form_service, form_submission_service
 
 router = APIRouter(prefix="/forms/public", tags=["forms-public"])
 
@@ -52,7 +52,7 @@ def get_form_logo(request: Request, org_id: UUID, logo_id: UUID, db: Session = D
 @router.get("/{token}", response_model=FormPublicRead)
 @limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
 def get_public_form(request: Request, token: str, db: Session = Depends(get_db)):
-    token_record = form_service.get_valid_token(db, token)
+    token_record = form_submission_service.get_valid_token(db, token)
     if not token_record:
         raise HTTPException(status_code=404, detail="Form not found")
 
@@ -86,7 +86,7 @@ async def submit_public_form(
     files: list[UploadFile] | None = File(default=None),
     db: Session = Depends(get_db),
 ):
-    token_record = form_service.get_valid_token(db, token)
+    token_record = form_submission_service.get_valid_token(db, token)
     if not token_record:
         raise HTTPException(status_code=404, detail="Form not found")
 
@@ -100,7 +100,7 @@ async def submit_public_form(
         raise HTTPException(status_code=400, detail="Invalid answers JSON") from exc
 
     try:
-        submission = form_service.create_submission(
+        submission = form_submission_service.create_submission(
             db=db,
             token=token_record,
             form=form,
