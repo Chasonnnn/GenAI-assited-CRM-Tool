@@ -33,6 +33,8 @@ from app.services import note_service
 from app.services import task_service
 from app.services import meta_lead_service
 from app.services import status_change_request_service
+from app.services import intended_parent_status_service
+from app.services import form_submission_service
 
 __all__ = [
     # Auth service
@@ -63,4 +65,6 @@ __all__ = [
     "task_service",
     "meta_lead_service",
     "status_change_request_service",
+    "intended_parent_status_service",
+    "form_submission_service",
 ]

@@ -135,12 +135,22 @@ function DuoCallbackContent() {
             return
         }
 
-        let expectedState: string | undefined
+        let expectedState: string | null = null
         if (storedState) {
-            if (storedState === state) {
-                expectedState = storedState
+            if (storedState !== state) {
+                sessionStorage.removeItem("duo_state")
+                setStatus("error")
+                setErrorMessage("Invalid Duo state. Please try again.")
+                return
             }
+            expectedState = storedState
             sessionStorage.removeItem("duo_state")
+        }
+
+        if (!expectedState) {
+            setStatus("error")
+            setErrorMessage("Missing Duo state. Please try again.")
+            return
         }
 
         const verify = async () => {

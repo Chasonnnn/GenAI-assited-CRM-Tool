@@ -17,7 +17,7 @@ from app.core.config import settings
 from app.core.security import create_export_token
 from app.db.models import Attachment, SurrogateInterview, FormSubmission
 from app.services import (
-    form_service,
+    form_submission_service,
     interview_service,
     journey_service,
     profile_service,
@@ -656,7 +656,7 @@ def export_submission_pdf(
         raise ValueError("Submission not found")
 
     schema = submission.schema_snapshot or {}
-    files = form_service.list_submission_files(db, org_id, submission.id)
+    files = form_submission_service.list_submission_files(db, org_id, submission.id)
     file_entries = _collect_submission_files(files)
 
     html_content = _generate_submission_html(
@@ -717,7 +717,7 @@ def export_profile_pdf(
         raise ValueError("Submission not found")
 
     schema = submission.schema_snapshot or {}
-    files = form_service.list_submission_files(db, org_id, submission.id)
+    files = form_submission_service.list_submission_files(db, org_id, submission.id)
     file_entries = _collect_submission_files(files)
 
     html_content = _generate_submission_html(
