@@ -286,6 +286,10 @@ async def send_lead_event_for_account(
     """
     from app.core.encryption import decrypt_token
 
+    if not settings.META_CAPI_ENABLED:
+        logger.debug("Meta CAPI disabled, skipping per-account event")
+        return True, None
+
     if not ad_account.capi_enabled:
         logger.debug(f"CAPI disabled for ad account {ad_account.ad_account_external_id}")
         return True, None

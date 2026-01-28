@@ -256,6 +256,8 @@ class Settings(BaseSettings):
             errors.append("API_BASE_URL must be set for non-dev environments")
         if self.META_TEST_MODE:
             errors.append("META_TEST_MODE must be false in non-dev environments")
+        if not self.META_VERIFY_TOKEN:
+            errors.append("META_VERIFY_TOKEN must be set for non-dev environments")
 
         url_fields = [
             "API_BASE_URL",

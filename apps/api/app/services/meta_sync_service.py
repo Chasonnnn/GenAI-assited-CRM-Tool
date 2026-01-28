@@ -630,7 +630,10 @@ async def sync_forms(
         try:
             access_token = decrypt_token(page.access_token_encrypted)
         except Exception as e:
+            error_message = f"Token decryption failed: {str(e)[:100]}"
             logger.error(f"Failed to decrypt token for page {page.page_id}: {e}")
+            page.last_error = error_message
+            page.last_error_at = datetime.now(timezone.utc)
             continue
 
         # Fetch forms

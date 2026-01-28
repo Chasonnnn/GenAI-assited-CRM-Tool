@@ -729,7 +729,7 @@ async def process_meta_lead_fetch(db, job) -> None:
 
     logger.info(f"Meta lead {leadgen_id} stored successfully for org {mapping.organization_id}")
 
-    # Auto-convert to case so it appears in Cases list immediately
+    # Auto-convert to surrogate so it appears in Cases list immediately
     if meta_lead.is_converted:
         meta_lead.status = "converted"
         db.commit()
@@ -738,7 +738,7 @@ async def process_meta_lead_fetch(db, job) -> None:
     meta_lead.status = "stored"
     db.commit()
 
-    case, convert_error = meta_lead_service.convert_to_case(
+    surrogate, convert_error = meta_lead_service.convert_to_surrogate(
         db=db,
         meta_lead=meta_lead,
         user_id=None,  # No assignee - managers can bulk-assign later
@@ -751,7 +751,9 @@ async def process_meta_lead_fetch(db, job) -> None:
     else:
         meta_lead.status = "converted"
         db.commit()
-        logger.info(f"Meta lead {leadgen_id} auto-converted to case {case.surrogate_number}")
+        logger.info(
+            f"Meta lead {leadgen_id} auto-converted to case {surrogate.surrogate_number}"
+        )
 
 
 async def process_meta_capi_event(db, job) -> None:
@@ -1650,6 +1652,8 @@ async def process_meta_hierarchy_sync(db, job) -> None:
             ad_account=ad_account,
             full_sync=full_sync,
         )
+        if result.get("error"):
+            raise Exception(result["error"])
 
         logger.info(
             f"Hierarchy sync complete: campaigns={result.get('campaigns', 0)}, "
@@ -1740,6 +1744,8 @@ async def process_meta_spend_sync(db, job) -> None:
             date_start=date_start,
             date_end=date_end,
         )
+        if result.get("error"):
+            raise Exception(result["error"])
 
         logger.info(
             f"Spend sync complete: rows_synced={result.get('rows_synced', 0)}, "
@@ -1779,6 +1785,8 @@ async def process_meta_form_sync(db, job) -> None:
                     org_id=job.organization_id,
                     page_id=page_id,
                 )
+                if page_result.get("error"):
+                    raise Exception(page_result["error"])
                 total_result["forms_synced"] += page_result.get("forms_synced", 0)
                 total_result["versions_created"] += page_result.get("versions_created", 0)
             result = total_result
@@ -1789,6 +1797,8 @@ async def process_meta_form_sync(db, job) -> None:
                 org_id=job.organization_id,
                 page_id=None,
             )
+        if result.get("error"):
+            raise Exception(result["error"])
 
         logger.info(
             f"Forms sync complete: forms_synced={result.get('forms_synced', 0)}, "

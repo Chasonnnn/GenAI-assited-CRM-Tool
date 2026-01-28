@@ -366,18 +366,18 @@ def get_cached_surrogates_by_state_with_filter(
 
 
 async def get_meta_spend_summary(
+    db: Session,
+    organization_id: uuid.UUID,
     start: datetime,
     end: datetime,
     time_increment: int | None = None,
     breakdowns: list[str] | None = None,
+    ad_account_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
-    from app.core.config import settings
-    from app.services import meta_api
+    start_date = start.date() if start else None
+    end_date = end.date() if end else None
 
-    ad_account_id = settings.META_AD_ACCOUNT_ID
-    access_token = settings.META_SYSTEM_TOKEN
-
-    if not settings.META_TEST_MODE and (not ad_account_id or not access_token):
+    if not start_date or not end_date:
         return {
             "total_spend": 0.0,
             "total_impressions": 0,
@@ -388,203 +388,90 @@ async def get_meta_spend_summary(
             "breakdowns": [],
         }
 
-    date_start = start.strftime("%Y-%m-%d")
-    date_end = end.strftime("%Y-%m-%d")
-
-    insights, error = await meta_api.fetch_ad_account_insights(
-        ad_account_id=ad_account_id or "act_mock",
-        access_token=access_token or "mock_token",
-        date_start=date_start,
-        date_end=date_end,
-        level="campaign",
-        time_increment=time_increment,
-        breakdowns=breakdowns or None,
+    totals = get_spend_totals(
+        db=db,
+        organization_id=organization_id,
+        start_date=start_date,
+        end_date=end_date,
+        ad_account_id=ad_account_id,
     )
 
-    if error or not insights:
-        return {
-            "total_spend": 0.0,
-            "total_impressions": 0,
-            "total_leads": 0,
-            "cost_per_lead": None,
-            "campaigns": [],
-            "time_series": [],
-            "breakdowns": [],
+    campaigns_data = get_spend_by_campaign(
+        db=db,
+        organization_id=organization_id,
+        start_date=start_date,
+        end_date=end_date,
+        ad_account_id=ad_account_id,
+    )
+
+    campaigns = [
+        {
+            "campaign_id": item["campaign_external_id"],
+            "campaign_name": item["campaign_name"],
+            "spend": item["spend"],
+            "impressions": item["impressions"],
+            "reach": 0,
+            "clicks": item["clicks"],
+            "leads": item["leads"],
+            "cost_per_lead": item["cost_per_lead"],
         }
-
-    def safe_float(val, default=0.0) -> float:
-        if val is None or val == "":
-            return default
-        try:
-            return float(val)
-        except (ValueError, TypeError):
-            return default
-
-    def safe_int(val, default=0) -> int:
-        if val is None or val == "":
-            return default
-        try:
-            return int(float(val))
-        except (ValueError, TypeError):
-            return default
-
-    lead_action_types = {
-        "lead",
-        "leadgen",
-        "onsite_conversion.lead_grouped",
-        "offsite_conversion.fb_pixel_lead",
-    }
-
-    campaigns_by_id: dict[str, dict[str, float | int | str]] = {}
-    total_spend = 0.0
-    total_impressions = 0
-    total_leads = 0
-    time_series: dict[tuple[str, str], dict[str, float | int]] = {}
-    breakdown_totals: dict[tuple[str, ...], dict[str, float | int | dict[str, str]]] = {}
-
-    for insight in insights:
-        spend = safe_float(insight.get("spend"))
-        impressions = safe_int(insight.get("impressions"))
-        reach = safe_int(insight.get("reach"))
-        clicks = safe_int(insight.get("clicks"))
-
-        leads = 0
-        actions = insight.get("actions") or []
-        for action in actions:
-            action_type = action.get("action_type", "")
-            if action_type in lead_action_types:
-                leads += safe_int(action.get("value"))
-
-        campaign_id = insight.get("campaign_id", "") or "unknown"
-        campaign_name = insight.get("campaign_name", "Unknown")
-        campaign_totals = campaigns_by_id.get(campaign_id)
-        if not campaign_totals:
-            campaign_totals = {
-                "campaign_id": campaign_id,
-                "campaign_name": campaign_name,
-                "spend": 0.0,
-                "impressions": 0,
-                "reach": 0,
-                "clicks": 0,
-                "leads": 0,
-            }
-            campaigns_by_id[campaign_id] = campaign_totals
-        campaign_totals["spend"] = float(campaign_totals["spend"]) + spend
-        campaign_totals["impressions"] = int(campaign_totals["impressions"]) + impressions
-        campaign_totals["reach"] = int(campaign_totals["reach"]) + reach
-        campaign_totals["clicks"] = int(campaign_totals["clicks"]) + clicks
-        campaign_totals["leads"] = int(campaign_totals["leads"]) + leads
-
-        total_spend += spend
-        total_impressions += impressions
-        total_leads += leads
-
-        if time_increment:
-            date_start_value = insight.get("date_start") or date_start
-            date_stop_value = insight.get("date_stop") or date_end
-            time_key = (str(date_start_value), str(date_stop_value))
-            point = time_series.get(time_key)
-            if not point:
-                point = {
-                    "spend": 0.0,
-                    "impressions": 0,
-                    "reach": 0,
-                    "clicks": 0,
-                    "leads": 0,
-                }
-                time_series[time_key] = point
-            point["spend"] = float(point["spend"]) + spend
-            point["impressions"] = int(point["impressions"]) + impressions
-            point["reach"] = int(point["reach"]) + reach
-            point["clicks"] = int(point["clicks"]) + clicks
-            point["leads"] = int(point["leads"]) + leads
-
-        if breakdowns:
-            breakdown_values = {key: str(insight.get(key, "unknown")) for key in breakdowns}
-            breakdown_key = tuple(breakdown_values.get(key, "unknown") for key in breakdowns)
-            breakdown = breakdown_totals.get(breakdown_key)
-            if not breakdown:
-                breakdown = {
-                    "breakdown_values": breakdown_values,
-                    "spend": 0.0,
-                    "impressions": 0,
-                    "reach": 0,
-                    "clicks": 0,
-                    "leads": 0,
-                }
-                breakdown_totals[breakdown_key] = breakdown
-            breakdown["spend"] = float(breakdown["spend"]) + spend
-            breakdown["impressions"] = int(breakdown["impressions"]) + impressions
-            breakdown["reach"] = int(breakdown["reach"]) + reach
-            breakdown["clicks"] = int(breakdown["clicks"]) + clicks
-            breakdown["leads"] = int(breakdown["leads"]) + leads
-
-    overall_cpl = round(total_spend / total_leads, 2) if total_leads > 0 else None
-
-    campaigns = []
-    for totals in campaigns_by_id.values():
-        campaign_spend = float(totals["spend"])
-        campaign_leads = int(totals["leads"])
-        cpl = round(campaign_spend / campaign_leads, 2) if campaign_leads > 0 else None
-        campaigns.append(
-            {
-                "campaign_id": str(totals["campaign_id"]),
-                "campaign_name": str(totals["campaign_name"]),
-                "spend": campaign_spend,
-                "impressions": int(totals["impressions"]),
-                "reach": int(totals["reach"]),
-                "clicks": int(totals["clicks"]),
-                "leads": campaign_leads,
-                "cost_per_lead": cpl,
-            }
-        )
+        for item in campaigns_data
+    ]
 
     time_series_points = []
-    if time_increment:
-        for (start_key, stop_key), totals in sorted(time_series.items()):
-            point_spend = float(totals["spend"])
-            point_leads = int(totals["leads"])
-            point_cpl = round(point_spend / point_leads, 2) if point_leads > 0 else None
-            time_series_points.append(
-                {
-                    "date_start": start_key,
-                    "date_stop": stop_key,
-                    "spend": point_spend,
-                    "impressions": int(totals["impressions"]),
-                    "reach": int(totals["reach"]),
-                    "clicks": int(totals["clicks"]),
-                    "leads": point_leads,
-                    "cost_per_lead": point_cpl,
-                }
-            )
+    if time_increment is not None:
+        trend_data = get_spend_trend(
+            db=db,
+            organization_id=organization_id,
+            start_date=start_date,
+            end_date=end_date,
+            ad_account_id=ad_account_id,
+        )
+        time_series_points = [
+            {
+                "date_start": point["date"],
+                "date_stop": point["date"],
+                "spend": point["spend"],
+                "impressions": point["impressions"],
+                "reach": 0,
+                "clicks": point["clicks"],
+                "leads": point["leads"],
+                "cost_per_lead": point["cost_per_lead"],
+            }
+            for point in trend_data
+        ]
 
     breakdown_points = []
     if breakdowns:
-        for breakdown in breakdown_totals.values():
-            breakdown_spend = float(breakdown["spend"])
-            breakdown_leads = int(breakdown["leads"])
-            breakdown_cpl = (
-                round(breakdown_spend / breakdown_leads, 2) if breakdown_leads > 0 else None
+        for breakdown in breakdowns:
+            breakdown_data = get_spend_by_breakdown(
+                db=db,
+                organization_id=organization_id,
+                start_date=start_date,
+                end_date=end_date,
+                breakdown_type=breakdown,
+                ad_account_id=ad_account_id,
             )
-            breakdown_points.append(
-                {
-                    "breakdown_values": breakdown["breakdown_values"],
-                    "spend": breakdown_spend,
-                    "impressions": int(breakdown["impressions"]),
-                    "reach": int(breakdown["reach"]),
-                    "clicks": int(breakdown["clicks"]),
-                    "leads": breakdown_leads,
-                    "cost_per_lead": breakdown_cpl,
-                }
-            )
+            for item in breakdown_data:
+                breakdown_points.append(
+                    {
+                        "breakdown_values": {breakdown: item["breakdown_value"]},
+                        "spend": item["spend"],
+                        "impressions": item["impressions"],
+                        "reach": 0,
+                        "clicks": item["clicks"],
+                        "leads": item["leads"],
+                        "cost_per_lead": item["cost_per_lead"],
+                    }
+                )
 
     breakdown_points.sort(key=lambda item: item["spend"], reverse=True)
 
     return {
-        "total_spend": round(total_spend, 2),
-        "total_impressions": total_impressions,
-        "total_leads": total_leads,
-        "cost_per_lead": overall_cpl,
+        "total_spend": totals.get("total_spend", 0.0),
+        "total_impressions": totals.get("total_impressions", 0),
+        "total_leads": totals.get("total_leads", 0),
+        "cost_per_lead": totals.get("cost_per_lead"),
         "campaigns": campaigns,
         "time_series": time_series_points,
         "breakdowns": breakdown_points,
@@ -611,7 +498,12 @@ async def get_cached_meta_spend_summary(
         "meta_spend",
         params,
         lambda: get_meta_spend_summary(
-            start=start, end=end, time_increment=time_increment, breakdowns=breakdowns
+            db=db,
+            organization_id=organization_id,
+            start=start,
+            end=end,
+            time_increment=time_increment,
+            breakdowns=breakdowns,
         ),
         range_start=start,
         range_end=end,
@@ -728,7 +620,7 @@ def get_spend_by_campaign(
     campaigns = []
     for r in results:
         spend = float(r.spend) if r.spend else 0.0
-        leads = r.leads or 0
+        leads = int(r.leads or 0)
         cpl = round(spend / leads, 2) if leads > 0 else None
 
         campaigns.append(
@@ -789,7 +681,7 @@ def get_spend_by_breakdown(
     breakdowns = []
     for r in results:
         spend = float(r.spend) if r.spend else 0.0
-        leads = r.leads or 0
+        leads = int(r.leads or 0)
         cpl = round(spend / leads, 2) if leads > 0 else None
 
         breakdowns.append(
@@ -843,7 +735,7 @@ def get_spend_trend(
     trend = []
     for r in results:
         spend = float(r.spend) if r.spend else 0.0
-        leads = r.leads or 0
+        leads = int(r.leads or 0)
         cpl = round(spend / leads, 2) if leads > 0 else None
 
         trend.append(

@@ -1814,6 +1814,8 @@ async def export_analytics_pdf_async(
     meta_start = start_dt or datetime(1970, 1, 1, tzinfo=timezone.utc)
     meta_end = end_dt or datetime.now(timezone.utc)
     meta_spend = await analytics_service.get_meta_spend_summary(
+        db=db,
+        organization_id=organization_id,
         start=meta_start,
         end=meta_end,
     )
