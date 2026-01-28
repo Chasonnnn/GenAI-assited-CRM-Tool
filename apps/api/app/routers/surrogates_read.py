@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_session, get_db, require_permission
 from app.core.policies import POLICIES
 from app.core.surrogate_access import check_surrogate_access
-from app.db.enums import AuditEventType, OwnerType, Role, SurrogateSource
+from app.db.enums import AuditEventType, Role, SurrogateSource
 from app.db.models import User
 from app.schemas.auth import UserSession
 from app.schemas.surrogate import (
