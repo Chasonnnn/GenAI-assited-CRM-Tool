@@ -264,3 +264,7 @@ Coupling notes:
 - [x] R3 — Appointment integrations module.
 - [x] R7 — Webhook handler registry.
 - [x] Split `db/models.py` into domain modules (re‑exported via `db/models/__init__.py`).
+
+## Progress Log
+- 2026-01-28: Split `routers/surrogates.py` into sub-routers; list/create routes stay on the aggregator to preserve `/surrogates`.
+- 2026-01-28: Split `surrogates/[id]/page.tsx` by extracting the header, history tab, and AI tab components.
