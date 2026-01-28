@@ -37,7 +37,6 @@ from app.schemas.surrogate import (
 )
 from app.services import (
     surrogate_service,
-    dashboard_events,
     membership_service,
     queue_service,
     user_service,
@@ -823,6 +822,7 @@ def change_status(
             user_role=session.role,
             reason=data.reason,
             effective_at=data.effective_at,
+            emit_events=True,
         )
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
@@ -844,8 +844,6 @@ def change_status(
         result["surrogate"].actual_delivery_date = delivery_date
         db.commit()
         db.refresh(result["surrogate"])
-
-    dashboard_events.push_dashboard_stats(db, session.org_id)
 
     # Build response with full surrogate data
     surrogate_read = _surrogate_to_read(result["surrogate"], db) if result["surrogate"] else None

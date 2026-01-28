@@ -17,7 +17,7 @@ from app.db.models import (
     WorkflowExecution,
     WorkflowResumeJob,
 )
-from app.schemas.task import TaskCreate, TaskUpdate, TaskRead, TaskListItem
+from app.schemas.task import TaskCreate, TaskUpdate, TaskRead, TaskListItem, BulkCompleteResponse
 from app.services import membership_service, queue_service
 
 
@@ -193,6 +193,82 @@ def uncomplete_task(
 
         dashboard_events.push_dashboard_stats(db, task.organization_id)
     return task
+
+
+def bulk_complete_tasks(
+    db: Session,
+    session: "UserSession",
+    task_ids: list[UUID],
+) -> BulkCompleteResponse:
+    """
+    Mark multiple tasks as completed with access and permission checks.
+
+    Returns counts + failures for per-task errors.
+    """
+    from fastapi import HTTPException
+
+    from app.core.deps import is_owner_or_assignee_or_admin
+    from app.core.surrogate_access import check_surrogate_access
+    from app.services import surrogate_service, dashboard_events
+
+    results: dict = {"completed": 0, "failed": []}
+
+    for task_id in task_ids:
+        try:
+            task = get_task(db, task_id, session.org_id)
+            if not task:
+                results["failed"].append({"task_id": str(task_id), "reason": "Task not found"})
+                continue
+
+            if task.surrogate_id:
+                surrogate = surrogate_service.get_surrogate(
+                    db, session.org_id, task.surrogate_id
+                )
+                if surrogate:
+                    check_surrogate_access(
+                        surrogate,
+                        session.role,
+                        session.user_id,
+                        db=db,
+                        org_id=session.org_id,
+                    )
+
+            if not is_owner_or_assignee_or_admin(
+                session, task.created_by_user_id, task.owner_type, task.owner_id
+            ):
+                results["failed"].append(
+                    {"task_id": str(task_id), "reason": "Not authorized"}
+                )
+                continue
+
+            if task.task_type == TaskType.WORKFLOW_APPROVAL.value:
+                results["failed"].append(
+                    {
+                        "task_id": str(task_id),
+                        "reason": "Workflow approvals must be resolved via /tasks/{id}/resolve",
+                    }
+                )
+                continue
+
+            if task.is_completed:
+                results["completed"] += 1
+                continue
+
+            complete_task(db, task, session.user_id, commit=False)
+            results["completed"] += 1
+
+        except HTTPException as exc:
+            results["failed"].append({"task_id": str(task_id), "reason": exc.detail})
+        except Exception as exc:
+            logger.error("Bulk complete failed for task %s: %s", task_id, exc)
+            results["failed"].append(
+                {"task_id": str(task_id), "reason": "An unexpected error occurred"}
+            )
+
+    db.commit()
+    dashboard_events.push_dashboard_stats(db, session.org_id)
+
+    return BulkCompleteResponse(completed=results["completed"], failed=results["failed"])
 
 
 def get_task(db: Session, task_id: UUID, org_id: UUID) -> Task | None:
