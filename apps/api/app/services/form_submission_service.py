@@ -194,9 +194,9 @@ def create_submission(
 
     surrogate = db.query(Surrogate).filter(Surrogate.id == token.surrogate_id).first()
     if surrogate:
-        from app.services import notification_service
+        from app.services import notification_facade
 
-        notification_service.notify_form_submission_received(
+        notification_facade.notify_form_submission_received(
             db=db,
             surrogate=surrogate,
             submission_id=submission.id,

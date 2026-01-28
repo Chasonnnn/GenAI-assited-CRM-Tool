@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db.enums import NotificationType
 from app.db.models import Organization
-from app.services import notification_service
+from app.services import notification_facade
 from app.services.contact_attempt_service import get_surrogates_needing_followup
 
 
@@ -45,14 +45,14 @@ def check_contact_reminders_for_org(
         today = surrogate_data["today"]
         days_ago = (today - assigned_day).days if assigned_day else 0
 
-        if not notification_service.should_notify(session, owner_id, org_id, "contact_reminder"):
+        if not notification_facade.should_notify(session, owner_id, org_id, "contact_reminder"):
             continue
 
         # Create dedupe key with today's date (in org timezone)
         today_str = today.isoformat() if hasattr(today, "isoformat") else str(today)
         dedupe_key = f"contact_reminder:{surrogate_id}:{today_str}"
 
-        notification = notification_service.create_notification(
+        notification = notification_facade.create_notification(
             db=session,
             org_id=org_id,
             user_id=owner_id,

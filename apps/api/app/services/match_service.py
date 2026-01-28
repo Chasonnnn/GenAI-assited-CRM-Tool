@@ -583,7 +583,7 @@ def request_cancel_match(
     db.refresh(match)
     db.refresh(request)
 
-    from app.services import notification_service, user_service
+    from app.services import notification_facade, user_service
 
     surrogate = get_surrogate_with_stage(db, match.surrogate_id, org_id)
     intended_parent = get_intended_parent(db, match.intended_parent_id, org_id)
@@ -591,7 +591,7 @@ def request_cancel_match(
     requester_name = requester.display_name if requester else "Someone"
 
     if surrogate and intended_parent:
-        notification_service.notify_match_cancel_request_pending(
+        notification_facade.notify_match_cancel_request_pending(
             db=db,
             request=request,
             match=match,

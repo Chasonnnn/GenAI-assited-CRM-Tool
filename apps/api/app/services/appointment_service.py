@@ -1002,9 +1002,9 @@ def create_booking(
     db.refresh(appointment)
 
     # Notify staff about new appointment request
-    from app.services import notification_service
+    from app.services import notification_facade
 
-    notification_service.notify_appointment_requested(
+    notification_facade.notify_appointment_requested(
         db=db,
         org_id=org_id,
         staff_user_id=user_id,
@@ -1131,9 +1131,9 @@ def approve_booking(
         )
 
     # Notify staff about confirmed appointment
-    from app.services import notification_service
+    from app.services import notification_facade
 
-    notification_service.notify_appointment_confirmed(
+    notification_facade.notify_appointment_confirmed(
         db=db,
         org_id=appointment.organization_id,
         staff_user_id=appointment.user_id,
@@ -1334,14 +1334,14 @@ def cancel_booking(
         db.refresh(appointment)
 
     # Notify staff about cancelled appointment
-    from app.services import notification_service
+    from app.services import notification_facade
 
     appt_type = (
         db.query(AppointmentType)
         .filter(AppointmentType.id == appointment.appointment_type_id)
         .first()
     )
-    notification_service.notify_appointment_cancelled(
+    notification_facade.notify_appointment_cancelled(
         db=db,
         org_id=appointment.organization_id,
         staff_user_id=appointment.user_id,
