@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.40.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.39.3...surrogacy-crm-platform-v0.40.0) (2026-01-28)
+
+
+### Features
+
+* add health probes and monitoring webhook infrastructure ([d4cdbed](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d4cdbed4c89a74ecb31de550b5cb4b67998a320b))
+* add health probes and monitoring webhook infrastructure ([5b13d76](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5b13d76e8b8e5dea43db2f5a160fc7b2cb6798ee))
+* add health route and observability infrastructure ([e89bb02](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e89bb0235e7a49bf7c833f1fffcf565d306b35a7))
+* add health route and observability infrastructure ([81485e8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/81485e8405d245f32e0adf0710fe7b706f2bfea8))
+
+
+### Maintenance
+
+* add API dockerignore and docker setup tests ([6996990](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6996990ad3b8bef0843fdca6734976ed1ab21222))
+* add API dockerignore and docker setup tests ([751686f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/751686fe2b199348b41c180610f42590fa83895e))
+* add URL utils and form field attribute tests ([e0383e8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e0383e8e3f2a2ee6f0bc75261ce9070be2cebb4d))
+* add URL utils and form field attribute tests ([8245467](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/824546715f0e8d34f73550c556fd20f06704812b))
+
 ## [0.39.3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.39.2...surrogacy-crm-platform-v0.39.3) (2026-01-28)
 
 
