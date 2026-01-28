@@ -10,6 +10,7 @@ import {
     getZoomConnectUrl,
     getGmailConnectUrl,
     getGoogleCalendarConnectUrl,
+    getGcpConnectUrl,
     getZoomStatus,
     getZoomMeetings,
     disconnectIntegration,
@@ -142,6 +143,30 @@ export function useConnectGoogleCalendar() {
                     : error instanceof Error
                         ? error.message
                         : 'Failed to connect Google Calendar.'
+            toast.error(message)
+        },
+    })
+}
+
+/**
+ * Connect Google Cloud - returns auth URL and redirects user.
+ */
+export function useConnectGcp() {
+    return useMutation({
+        mutationFn: async () => {
+            const { auth_url } = await getGcpConnectUrl()
+            if (!auth_url) {
+                throw new Error('Google Cloud authorization URL is missing.')
+            }
+            window.location.assign(auth_url)
+        },
+        onError: (error) => {
+            const message =
+                error instanceof ApiError
+                    ? error.message || 'Failed to connect Google Cloud.'
+                    : error instanceof Error
+                        ? error.message
+                        : 'Failed to connect Google Cloud.'
             toast.error(message)
         },
     })

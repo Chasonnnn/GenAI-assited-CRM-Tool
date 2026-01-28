@@ -189,6 +189,11 @@ GOOGLE_CALENDAR_SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
 ]
 
+GCP_SCOPES = [
+    "https://www.googleapis.com/auth/cloud-platform.read-only",
+    "https://www.googleapis.com/auth/userinfo.email",
+]
+
 
 def _get_google_auth_url(scopes: list[str], redirect_uri: str, state: str) -> str:
     """Generate Google OAuth authorization URL for a scope set."""
@@ -274,6 +279,26 @@ async def get_google_calendar_user_info(access_token: str) -> JsonObject:
 
 async def refresh_google_calendar_token(refresh_token: str) -> JsonObject | None:
     """Refresh Google Calendar access token."""
+    return await refresh_gmail_token(refresh_token)
+
+
+def get_gcp_auth_url(redirect_uri: str, state: str) -> str:
+    """Generate Google Cloud OAuth authorization URL."""
+    return _get_google_auth_url(GCP_SCOPES, redirect_uri, state)
+
+
+async def exchange_gcp_code(code: str, redirect_uri: str) -> JsonObject:
+    """Exchange authorization code for Google Cloud tokens."""
+    return await exchange_gmail_code(code, redirect_uri)
+
+
+async def get_gcp_user_info(access_token: str) -> JsonObject:
+    """Get user info for Google Cloud integration."""
+    return await get_gmail_user_info(access_token)
+
+
+async def refresh_gcp_token(refresh_token: str) -> JsonObject | None:
+    """Refresh Google Cloud access token."""
     return await refresh_gmail_token(refresh_token)
 
 
@@ -409,6 +434,8 @@ def refresh_token(db: Session, integration: UserIntegration, integration_type: s
             return await refresh_gmail_token(refresh)
         if integration_type == "google_calendar":
             return await refresh_google_calendar_token(refresh)
+        if integration_type == "gcp":
+            return await refresh_gcp_token(refresh)
         elif integration_type == "zoom":
             return await refresh_zoom_token(refresh)
         return None
@@ -450,6 +477,8 @@ async def refresh_token_async(
             result = await refresh_gmail_token(refresh)
         elif integration_type == "google_calendar":
             result = await refresh_google_calendar_token(refresh)
+        elif integration_type == "gcp":
+            result = await refresh_gcp_token(refresh)
         elif integration_type == "zoom":
             result = await refresh_zoom_token(refresh)
         else:

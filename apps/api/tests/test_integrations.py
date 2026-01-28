@@ -139,6 +139,31 @@ async def test_google_calendar_connect_sets_state_cookie_and_returns_auth_url(
 
 
 @pytest.mark.asyncio
+async def test_gcp_connect_sets_state_cookie_and_returns_auth_url(
+    authed_client: AsyncClient,
+):
+    response = await authed_client.get("/integrations/gcp/connect")
+    assert response.status_code == 200
+
+    data = response.json()
+    assert "auth_url" in data
+
+    parsed = urlparse(data["auth_url"])
+    qs = parse_qs(parsed.query)
+    assert "state" in qs
+    state = qs["state"][0]
+
+    cookie = SimpleCookie()
+    for header in response.headers.get_list("set-cookie"):
+        cookie.load(header)
+    cookie_value = cookie.get("integration_oauth_state_gcp")
+    assert cookie_value
+    payload = json.loads(cookie_value.value)
+    assert payload["state"] == state
+    assert "ua_hash" in payload
+
+
+@pytest.mark.asyncio
 async def test_google_calendar_callback_happy_path_saves_integration(
     authed_client: AsyncClient, db, test_auth, monkeypatch
 ):
@@ -178,6 +203,48 @@ async def test_google_calendar_callback_happy_path_saves_integration(
     )
     assert integration is not None
     assert integration.account_email == "calendaruser@test.com"
+
+
+@pytest.mark.asyncio
+async def test_gcp_callback_happy_path_saves_integration(
+    authed_client: AsyncClient, db, test_auth, monkeypatch
+):
+    from app.db.models import UserIntegration
+    from app.services import oauth_service
+
+    async def fake_exchange_code(code: str, redirect_uri: str):
+        return {
+            "access_token": "gcp-access-token",
+            "refresh_token": "gcp-refresh-token",
+            "expires_in": 3600,
+        }
+
+    async def fake_get_user_info(access_token: str):
+        return {"email": "gcpuser@test.com"}
+
+    monkeypatch.setattr(oauth_service, "exchange_gcp_code", fake_exchange_code)
+    monkeypatch.setattr(oauth_service, "get_gcp_user_info", fake_get_user_info)
+
+    connect = await authed_client.get("/integrations/gcp/connect")
+    assert connect.status_code == 200
+    state = parse_qs(urlparse(connect.json()["auth_url"]).query)["state"][0]
+
+    callback = await authed_client.get(
+        "/integrations/gcp/callback",
+        params={"code": "dummy", "state": state},
+        follow_redirects=False,
+    )
+    assert callback.status_code == 302
+    assert "/settings/integrations?success=gcp" in callback.headers.get("location", "")
+
+    integration = (
+        db.query(UserIntegration)
+        .filter(UserIntegration.user_id == test_auth.user.id)
+        .filter(UserIntegration.integration_type == "gcp")
+        .first()
+    )
+    assert integration is not None
+    assert integration.account_email == "gcpuser@test.com"
 
 
 @pytest.mark.asyncio

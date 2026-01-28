@@ -94,6 +94,13 @@ export async function getGoogleCalendarConnectUrl(): Promise<{ auth_url: string 
 }
 
 /**
+ * Get Google Cloud OAuth authorization URL.
+ */
+export async function getGcpConnectUrl(): Promise<{ auth_url: string }> {
+    return api.get<{ auth_url: string }>('/integrations/gcp/connect')
+}
+
+/**
  * Check if current user has Zoom connected.
  */
 export async function getZoomStatus(): Promise<ZoomStatusResponse> {
