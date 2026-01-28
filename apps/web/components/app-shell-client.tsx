@@ -78,6 +78,17 @@ export default function AppShellClient({
     return <>{children}</>;
   }
 
+  const inner = disableAI ? (
+    <>{children}</>
+  ) : (
+    <AIContextProvider>
+      {children}
+      {/* AI Assistant - only shown when AI is enabled */}
+      <AIChatDrawer />
+      <AIFloatingButton />
+    </AIContextProvider>
+  )
+
   const content = (
     <Suspense
       fallback={
@@ -86,27 +97,14 @@ export default function AppShellClient({
         </div>
       }
     >
-      {disableSidebar ? children : <AppSidebar>{children}</AppSidebar>}
+      {disableSidebar ? inner : <AppSidebar>{inner}</AppSidebar>}
     </Suspense>
-  );
-
-  if (disableAI) {
-    return (
-      <>
-        {!disableOffline && <OfflineBanner />}
-        {content}
-      </>
-    );
-  }
+  )
 
   return (
-    <AIContextProvider>
+    <>
       {!disableOffline && <OfflineBanner />}
       {content}
-
-      {/* AI Assistant - only shown when AI is enabled */}
-      <AIChatDrawer />
-      <AIFloatingButton />
-    </AIContextProvider>
+    </>
   )
 }
