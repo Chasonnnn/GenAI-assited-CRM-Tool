@@ -17,7 +17,6 @@ from app.core.config import settings
 from app.core.websocket import manager, send_ws_to_user, send_ws_to_org
 from app.core.security import decode_session_token
 from app.core.deps import COOKIE_NAME
-from app.db.models import Membership
 from app.db.session import SessionLocal
 from app.services import session_service
 
@@ -171,7 +170,7 @@ async def websocket_notifications(
         await websocket.close(code=4001, reason="Authentication required")
         return
     with SessionLocal() as db:
-        from app.db.models import Organization
+        from app.services import membership_service, org_service
 
         db_session = session_service.get_session_by_token_hash(db, token_hash)
         if not db_session:
@@ -179,22 +178,14 @@ async def websocket_notifications(
             return
         if not org_id:
             org_id = db_session.organization_id
-        membership = (
-            db.query(Membership)
-            .filter(
-                Membership.user_id == user_id,
-                Membership.organization_id == org_id,
-                Membership.is_active.is_(True),
-            )
-            .first()
-        )
+        membership = membership_service.get_membership_for_org(db, org_id, user_id)
         if not membership:
             await websocket.close(code=4001, reason="Membership inactive")
             return
 
         # Validate origin matches org's subdomain (cross-tenant protection)
         if origin and not settings.is_dev:
-            org = db.query(Organization).filter(Organization.id == org_id).first()
+            org = org_service.get_org_by_id(db, org_id, include_deleted=True)
             if org:
                 from urllib.parse import urlparse
 

@@ -1,6 +1,7 @@
 """Matches router - API endpoints for matching surrogates with intended parents."""
 
 from datetime import date as date_type, datetime, timezone, timedelta
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -15,18 +16,8 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
-from app.db.enums import SurrogateActivityType, IntendedParentStatus, MatchStatus
-from app.db.models import (
-    Surrogate,
-    IntendedParent,
-    Match,
-    IntendedParentStatusHistory,
-    MatchEvent,
-    StatusChangeRequest,
-    User,
-)
 from app.schemas.auth import UserSession
-from app.services import match_service, note_service, workflow_triggers
+from app.services import match_service, workflow_triggers
 
 router = APIRouter(
     prefix="/matches",
@@ -143,7 +134,7 @@ class MatchUpdateNotesRequest(BaseModel):
 # =============================================================================
 
 
-def _match_to_read(match: Match, db: Session, org_id: str | None = None) -> MatchRead:
+def _match_to_read(match: Any, db: Session, org_id: str | None = None) -> MatchRead:
     """Convert Match model to MatchRead schema with org-scoped lookups."""
     # Org-scoped lookups for defense in depth, with eager load for stage
     surrogate = match_service.get_surrogate_with_stage(
@@ -183,7 +174,7 @@ def _match_to_read(match: Match, db: Session, org_id: str | None = None) -> Matc
 
 
 def _match_to_list_item(
-    match: Match, surrogate: Surrogate | None, ip: IntendedParent | None
+    match: Any, surrogate: Any | None, ip: Any | None
 ) -> MatchListItem:
     """Convert Match to list item."""
     return MatchListItem(
@@ -225,8 +216,6 @@ def create_match(
 
     Requires: Manager+ role
     """
-    from app.services import activity_service
-
     # Verify surrogate exists and belongs to org
     surrogate = match_service.get_surrogate_with_stage(db, data.surrogate_id, session.org_id)
     if not surrogate:
@@ -264,38 +253,15 @@ def create_match(
             detail="Surrogate already has an accepted match",
         )
 
-    # Create match
-    clean_notes = note_service.sanitize_html(data.notes) if data.notes else None
-
-    match = Match(
-        organization_id=session.org_id,
-        match_number=match_service.generate_match_number(db, session.org_id),
+    match = match_service.create_match(
+        db=db,
+        org_id=session.org_id,
         surrogate_id=data.surrogate_id,
         intended_parent_id=data.intended_parent_id,
-        status=MatchStatus.PROPOSED.value,
-        compatibility_score=data.compatibility_score,
         proposed_by_user_id=session.user_id,
-        notes=clean_notes,
+        compatibility_score=data.compatibility_score,
+        notes=data.notes,
     )
-    db.add(match)
-    db.flush()
-
-    # Log activity
-    activity_service.log_activity(
-        db=db,
-        surrogate_id=data.surrogate_id,
-        organization_id=session.org_id,
-        activity_type=SurrogateActivityType.MATCH_PROPOSED,
-        actor_user_id=session.user_id,
-        details={
-            "match_id": str(match.id),
-            "intended_parent_id": str(data.intended_parent_id),
-            "compatibility_score": data.compatibility_score,
-        },
-    )
-
-    db.commit()
-    db.refresh(match)
 
     # Fire workflow trigger for match proposed
     workflow_triggers.trigger_match_proposed(db, match)
@@ -400,34 +366,17 @@ def get_match(
     session: UserSession = Depends(get_current_session),
 ) -> MatchRead:
     """Get match details. Auto-transitions to 'reviewing' on first view by non-proposer."""
-    from app.services import activity_service
-
     match = match_service.get_match(db, match_id, session.org_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
 
     # Auto-transition to reviewing on first view by someone other than proposer
-    if match.status == MatchStatus.PROPOSED.value and match.proposed_by_user_id != session.user_id:
-        match.status = MatchStatus.REVIEWING.value
-        match.reviewed_by_user_id = session.user_id
-        match.reviewed_at = datetime.now(timezone.utc)
-        match.updated_at = datetime.now(timezone.utc)
-
-        # Log review start
-        activity_service.log_activity(
-            db=db,
-            surrogate_id=match.surrogate_id,
-            organization_id=session.org_id,
-            activity_type=SurrogateActivityType.MATCH_REVIEWING,
-            actor_user_id=session.user_id,
-            details={
-                "match_id": str(match.id),
-                "intended_parent_id": str(match.intended_parent_id),
-            },
-        )
-
-        db.commit()
-        db.refresh(match)
+    match = match_service.mark_match_reviewing_if_needed(
+        db,
+        match,
+        actor_user_id=session.user_id,
+        org_id=session.org_id,
+    )
 
     from app.services import audit_service
 
@@ -468,107 +417,26 @@ def accept_match(
 
     Requires: Manager+ role
     """
-    from app.services import (
-        activity_service,
-        surrogate_service,
-        dashboard_events,
-        pipeline_service,
-    )
-
     match = match_service.get_match(db, match_id, session.org_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
 
-    if match.status not in [MatchStatus.PROPOSED.value, MatchStatus.REVIEWING.value]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot accept match with status: {match.status}",
-        )
-
-    # Update surrogate stage to matched if configured
-    surrogate = match_service.get_surrogate_with_stage(db, match.surrogate_id, session.org_id)
-    if surrogate:
-        current_stage = surrogate.stage
-        pipeline_id = current_stage.pipeline_id if current_stage else None
-        if not pipeline_id:
-            pipeline_id = pipeline_service.get_or_create_default_pipeline(
-                db,
-                session.org_id,
-                session.user_id,
-            ).id
-        matched_stage = pipeline_service.get_stage_by_slug(db, pipeline_id, "matched")
-        if matched_stage:
-            surrogate_service.change_status(
-                db=db,
-                surrogate=surrogate,
-                new_stage_id=matched_stage.id,
-                user_id=session.user_id,
-                user_role=session.role,
-                reason="Match accepted",
-            )
-
-    # Accept this match
-    match.status = MatchStatus.ACCEPTED.value
-    match.reviewed_by_user_id = session.user_id
-    match.reviewed_at = datetime.now(timezone.utc)
-    if data.notes:
-        clean_notes = note_service.sanitize_html(data.notes)
-        match.notes = (match.notes or "") + "\n\n" + clean_notes
-    match.updated_at = datetime.now(timezone.utc)
-
-    # Update intended parent status to matched (if not already)
-    ip = match_service.get_intended_parent(db, match.intended_parent_id, session.org_id)
-    if ip and ip.status != IntendedParentStatus.MATCHED.value:
-        old_status = ip.status
-        ip.status = IntendedParentStatus.MATCHED.value
-        ip.last_activity = datetime.now(timezone.utc)
-        ip.updated_at = datetime.now(timezone.utc)
-        db.add(
-            IntendedParentStatusHistory(
-                intended_parent_id=ip.id,
-                changed_by_user_id=session.user_id,
-                old_status=old_status,
-                new_status=IntendedParentStatus.MATCHED.value,
-                reason="Match accepted",
-            )
-        )
-
-    # Cancel all other pending matches for this surrogate
-    other_matches = match_service.list_pending_matches_for_surrogate(
-        db=db,
-        surrogate_id=match.surrogate_id,
-        exclude_match_id=match.id,
-    )
-
-    for other in other_matches:
-        other.status = MatchStatus.CANCELLED.value
-        other.updated_at = datetime.now(timezone.utc)
-
-    # Log activity
-    activity_service.log_activity(
-        db=db,
-        surrogate_id=match.surrogate_id,
-        organization_id=session.org_id,
-        activity_type=SurrogateActivityType.MATCH_ACCEPTED,
-        actor_user_id=session.user_id,
-        details={
-            "match_id": str(match.id),
-            "intended_parent_id": str(match.intended_parent_id),
-            "cancelled_matches": len(other_matches),
-        },
-    )
-
     try:
-        db.commit()
+        match = match_service.accept_match(
+            db=db,
+            match=match,
+            actor_user_id=session.user_id,
+            actor_role=session.role,
+            org_id=session.org_id,
+            notes=data.notes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except IntegrityError:
-        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="This surrogate already has an accepted match (concurrent accept detected)",
         )
-
-    db.refresh(match)
-    dashboard_events.push_dashboard_stats(db, session.org_id)
 
     # Fire workflow trigger for match accepted
     workflow_triggers.trigger_match_accepted(db, match)
@@ -592,44 +460,21 @@ def reject_match(
 
     Requires: Manager+ role
     """
-    from app.services import activity_service
-
     match = match_service.get_match(db, match_id, session.org_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
 
-    if match.status not in [MatchStatus.PROPOSED.value, MatchStatus.REVIEWING.value]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot reject match with status: {match.status}",
+    try:
+        match = match_service.reject_match(
+            db=db,
+            match=match,
+            actor_user_id=session.user_id,
+            org_id=session.org_id,
+            rejection_reason=data.rejection_reason,
+            notes=data.notes,
         )
-
-    # Reject
-    match.status = MatchStatus.REJECTED.value
-    match.reviewed_by_user_id = session.user_id
-    match.reviewed_at = datetime.now(timezone.utc)
-    match.rejection_reason = data.rejection_reason
-    if data.notes:
-        clean_notes = note_service.sanitize_html(data.notes)
-        match.notes = (match.notes or "") + "\n\n" + clean_notes
-    match.updated_at = datetime.now(timezone.utc)
-
-    # Log activity
-    activity_service.log_activity(
-        db=db,
-        surrogate_id=match.surrogate_id,
-        organization_id=session.org_id,
-        activity_type=SurrogateActivityType.MATCH_REJECTED,
-        actor_user_id=session.user_id,
-        details={
-            "match_id": str(match.id),
-            "intended_parent_id": str(match.intended_parent_id),
-            "rejection_reason": data.rejection_reason,
-        },
-    )
-
-    db.commit()
-    db.refresh(match)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
     # Fire workflow trigger for match rejected
     workflow_triggers.trigger_match_rejected(db, match)
@@ -658,68 +503,19 @@ def request_cancel_match(
     match = match_service.get_match(db, match_id, session.org_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
-
-    if match.status != MatchStatus.ACCEPTED.value:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only accepted matches can be cancelled",
-        )
-
-    existing_request = (
-        db.query(StatusChangeRequest)
-        .filter(
-            StatusChangeRequest.organization_id == session.org_id,
-            StatusChangeRequest.entity_type == "match",
-            StatusChangeRequest.entity_id == match.id,
-            StatusChangeRequest.status == "pending",
-        )
-        .first()
-    )
-    if existing_request:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="A pending cancellation request already exists for this match",
-        )
-
-    now = datetime.now(timezone.utc)
-    request = StatusChangeRequest(
-        organization_id=session.org_id,
-        entity_type="match",
-        entity_id=match.id,
-        target_status=MatchStatus.CANCELLED.value,
-        effective_at=now,
-        reason=(data.reason or "").strip(),
-        requested_by_user_id=session.user_id,
-        requested_at=now,
-        status="pending",
-    )
-    db.add(request)
-
-    match.status = MatchStatus.CANCEL_PENDING.value
-    match.updated_at = now
-
-    db.commit()
-    db.refresh(match)
-    db.refresh(request)
-
-    from app.services import notification_service
-
-    surrogate = match_service.get_surrogate_with_stage(db, match.surrogate_id, session.org_id)
-    intended_parent = match_service.get_intended_parent(
-        db, match.intended_parent_id, session.org_id
-    )
-    requester = db.query(User).filter(User.id == session.user_id).first()
-    requester_name = requester.display_name if requester else "Someone"
-
-    if surrogate and intended_parent:
-        notification_service.notify_match_cancel_request_pending(
+    try:
+        match = match_service.request_cancel_match(
             db=db,
-            request=request,
             match=match,
-            surrogate=surrogate,
-            intended_parent=intended_parent,
-            requester_name=requester_name,
+            actor_user_id=session.user_id,
+            org_id=session.org_id,
+            reason=data.reason,
         )
+    except ValueError as exc:
+        status_code = (
+            status.HTTP_409_CONFLICT if "pending cancellation request" in str(exc) else 400
+        )
+        raise HTTPException(status_code=status_code, detail=str(exc))
 
     return _match_to_read(match, db, str(session.org_id))
 
@@ -743,32 +539,15 @@ def cancel_match(
     match = match_service.get_match(db, match_id, session.org_id)
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
-
-    if match.status not in [MatchStatus.PROPOSED.value, MatchStatus.REVIEWING.value]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot cancel match with status: {match.status}",
+    try:
+        match_service.cancel_match(
+            db=db,
+            match=match,
+            actor_user_id=session.user_id,
+            org_id=session.org_id,
         )
-
-    match.status = MatchStatus.CANCELLED.value
-    match.updated_at = datetime.now(timezone.utc)
-
-    # Log activity
-    from app.services import activity_service
-
-    activity_service.log_activity(
-        db=db,
-        surrogate_id=match.surrogate_id,
-        organization_id=session.org_id,
-        activity_type=SurrogateActivityType.MATCH_CANCELLED,
-        actor_user_id=session.user_id,
-        details={
-            "match_id": str(match.id),
-            "intended_parent_id": str(match.intended_parent_id),
-        },
-    )
-
-    db.commit()
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.patch(
@@ -787,11 +566,7 @@ def update_match_notes(
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
 
-    match.notes = note_service.sanitize_html(data.notes)
-    match.updated_at = datetime.now(timezone.utc)
-
-    db.commit()
-    db.refresh(match)
+    match = match_service.update_match_notes(db, match=match, notes=data.notes)
 
     return _match_to_read(match, db, str(session.org_id))
 
@@ -853,7 +628,7 @@ class MatchEventRead(BaseModel):
     updated_at: str
 
 
-def _event_to_read(event: MatchEvent) -> MatchEventRead:
+def _event_to_read(event: Any) -> MatchEventRead:
     """Convert MatchEvent model to read schema."""
     return MatchEventRead(
         id=str(event.id),
@@ -972,9 +747,11 @@ def create_match_event(
         starts_at = data.starts_at
         ends_at = data.ends_at
 
-    event = MatchEvent(
-        organization_id=session.org_id,
+    event = match_service.create_match_event(
+        db=db,
+        org_id=session.org_id,
         match_id=match_id,
+        created_by_user_id=session.user_id,
         person_type=data.person_type,
         event_type=data.event_type,
         title=data.title,
@@ -985,11 +762,7 @@ def create_match_event(
         all_day=data.all_day,
         start_date=start_date,
         end_date=end_date,
-        created_by_user_id=session.user_id,
     )
-    db.add(event)
-    db.commit()
-    db.refresh(event)
 
     return _event_to_read(event)
 
@@ -1045,6 +818,10 @@ def update_match_event(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
 
     next_all_day = data.all_day if data.all_day is not None else event.all_day
+    next_start_date = None
+    next_end_date = None
+    next_starts_at = None
+    next_ends_at = None
     if next_all_day:
         next_start_date = (
             date_type.fromisoformat(data.start_date)
@@ -1066,33 +843,20 @@ def update_match_event(
         if next_ends_at and next_ends_at < next_starts_at:
             raise HTTPException(status_code=400, detail="ends_at must be on or after starts_at")
 
-    # Update fields
-    if data.person_type is not None:
-        event.person_type = data.person_type
-    if data.event_type is not None:
-        event.event_type = data.event_type
-    if data.title is not None:
-        event.title = data.title
-    if data.description is not None:
-        event.description = data.description
-    if data.timezone is not None:
-        event.timezone = data.timezone
-    event.all_day = next_all_day
-    if next_all_day:
-        event.start_date = next_start_date
-        event.end_date = next_end_date
-        event.starts_at = None
-        event.ends_at = None
-    else:
-        event.start_date = None
-        event.end_date = None
-        event.starts_at = next_starts_at
-        event.ends_at = next_ends_at
-
-    event.updated_at = datetime.now(timezone.utc)
-
-    db.commit()
-    db.refresh(event)
+    event = match_service.update_match_event(
+        db=db,
+        event=event,
+        person_type=data.person_type,
+        event_type=data.event_type,
+        title=data.title,
+        description=data.description,
+        timezone=data.timezone,
+        all_day=next_all_day,
+        start_date=next_start_date,
+        end_date=next_end_date,
+        starts_at=next_starts_at,
+        ends_at=next_ends_at,
+    )
 
     return _event_to_read(event)
 
@@ -1122,5 +886,4 @@ def delete_match_event(
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
 
-    db.delete(event)
-    db.commit()
+    match_service.delete_match_event(db, event)
