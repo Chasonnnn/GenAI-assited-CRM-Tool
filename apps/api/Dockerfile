@@ -6,7 +6,7 @@
 # ============================================================================
 FROM ghcr.io/astral-sh/uv:0.9.24 as uv
 
-FROM python:3.11-slim as builder
+FROM python:3.11.14-slim-bookworm as builder
 
 WORKDIR /app
 
@@ -31,7 +31,7 @@ RUN uv sync --frozen --no-install-project
 # ============================================================================
 # Stage 2: Production image
 # ============================================================================
-FROM python:3.11-slim
+FROM python:3.11.14-slim-bookworm
 
 WORKDIR /app
 
