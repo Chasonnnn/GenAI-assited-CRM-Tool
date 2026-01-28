@@ -1,137 +1,124 @@
 # Surrogacy Force Platform
 
-**Version:** 0.24.0 | **Last Updated:** January 22, 2026
+**Version:** 0.16.0 | **Last Updated:** January 28, 2026
 
-A modern, multi-tenant Surrogacy Force platform purpose-built for surrogacy agencies. Manage surrogates from lead intake through delivery with customizable pipelines, intended parent matching, AI-powered assistance, and comprehensive automation.
+A modern, multi-tenant platform for surrogacy agencies. Manage surrogates from intake through delivery with configurable workflows, matching, automation, and full auditability.
 
 ---
 
-## ✨ Key Features
+## Current Status
 
-### Surrogate Management
-- **Customizable Pipelines** — Define stages, colors, and workflows per organization
-- **Surrogate Claim Workflow** — Intake-to-case-manager claim flow via queues
-- **Activity Logging** — Complete audit trail of all surrogate actions
-- **Queue System** — Salesforce-style claim/release for workload distribution
+- Auth, org setup, and multi-tenancy
+- Surrogates, intended parents, and matches
+- Tasks, notes, attachments, and notifications
+- Calendar, booking links, and appointment workflows
+- Queue management, bulk operations, and filter persistence
+- Automation workflows and email campaigns
+- Integrations: Google OAuth, Google Calendar, Gmail, Zoom, Meta Lead Ads
 
-### Form Builder
-- **Dynamic Forms** — Create multi-page application forms with drag-and-drop
-- **Secure Public Links** — Token-based form access for applicants
-- **Auto-Mapping** — Form submissions auto-populate surrogate fields on approval
-- **File Uploads** — Secure document collection with virus scanning
+---
 
-### Matching & Coordination
-- **IP-Surrogate Matching** — Propose, review, accept/reject workflow
-- **Shared Calendar** — Coordinated scheduling across match parties
-- **Notes & Files** — Centralized documentation per match
+## Key Features
 
-### Automation
-- **Workflow Engine** — Event-driven automation with approvals and scheduling hooks
-- **Workflow Approvals** — Human-in-the-loop gating for sensitive actions
-- **Email Campaigns** — Bulk sends with recipient filtering and tracking
-- **Email Templates** — Customizable templates with variable substitution
+### Core CRM
+- Pipeline-driven surrogate and intended parent lifecycles with stage history
+- Match lifecycle tracking with approvals and coordination
+- Tasks, notes, and attachments tied to records with audit trails
+- Queue-based assignment with claim and release to balance workload
 
-### AI Assistant (Optional)
-- **BYOK Model** — Bring your own API key (OpenAI, etc.)
-- **Surrogate Summarization** — AI-generated surrogate and interview summaries
-- **Schedule Parsing** — Extract meeting intent into tasks or appointments
-- **Smart Task Creation** — Suggest tasks from surrogate and match context
-- **Email Drafting** — Context-aware email composition
-- **Dashboard Insights** — Smart analytics recommendations
+### Automation and Campaigns
+- Workflow engine with event triggers, conditions, and approvals
+- Campaigns with recipient segmentation and suppression lists
+- Email templates with variable rendering and delivery logging
+
+### Scheduling
+- Appointment types, availability rules, and public booking links
+- Shared calendar views for cross-team coordination
 
 ### Integrations
-- **Google OAuth SSO** — Secure authentication
-- **Google Calendar** — Two-way appointment sync
-- **Zoom** — Meeting creation and invites
-- **Meta Lead Ads** — Auto-import leads with CAPI feedback
-- **Gmail** — Send emails through connected accounts
+- Google OAuth SSO and per-user integrations
+- Google Calendar sync and Gmail send
+- Zoom meeting creation and updates
+- Meta Lead Ads import with optional CAPI feedback
 
-### Enterprise Features
-- **Multi-Tenancy** — Complete organization isolation
-- **RBAC** — Role-based permissions (intake, case manager, admin, developer)
-- **MFA** — TOTP and Duo Security support
-- **Audit Trail** — Tamper-evident hash-chain logging
-- **Notifications** — Browser push alerts with per-user preferences
-- **Version Control** — Rollback support for configurations
+### Platform and Security
+- Strict tenant isolation with org-scoped queries
+- Role-based access control and permission checks
+- MFA via TOTP and Duo
+- Hash-chain audit logging and encryption at rest
 
 ---
 
-## 🛠 Tech Stack
+## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
-| **Frontend** | Next.js 16, React 19, TypeScript, Tailwind CSS 4, shadcn/ui components |
+| **Frontend** | Next.js 16, React 19, TypeScript, Tailwind CSS, shadcn/ui |
 | **Backend** | FastAPI, Pydantic v2, SQLAlchemy 2.0 |
-| **Database** | PostgreSQL 16 |
+| **Database** | PostgreSQL 18 (dev uses 18.1 in Docker) |
 | **Search** | PostgreSQL Full-Text Search (tsvector + GIN) |
 | **Migrations** | Alembic |
 | **Testing** | pytest (backend), Vitest + React Testing Library (frontend) |
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 ├── apps/
 │   ├── api/                    # FastAPI backend
 │   │   ├── app/
 │   │   │   ├── core/           # Config, security, permissions
-│   │   │   ├── db/             # SQLAlchemy models, enums
-│   │   │   ├── routers/        # API endpoints (25+ modules)
-│   │   │   ├── schemas/        # Pydantic request/response DTOs
-│   │   │   ├── services/       # Business logic (40+ services)
+│   │   │   ├── db/             # ORM models, enums
+│   │   │   ├── routers/        # API endpoints (thin)
+│   │   │   ├── schemas/        # Pydantic DTOs
+│   │   │   ├── services/       # Business logic
+│   │   │   ├── jobs/           # Scheduled tasks / background jobs
 │   │   │   └── utils/          # Helpers (normalization, pagination)
 │   │   ├── alembic/            # Database migrations
-│   │   └── tests/              # pytest test suite
+│   │   └── tests/              # pytest suite
 │   │
 │   └── web/                    # Next.js frontend
 │       ├── app/
 │       │   ├── (app)/          # Authenticated routes
 │       │   ├── apply/          # Public application forms
 │       │   ├── book/           # Public booking pages
-│       │   └── login/          # Authentication
+│       │   ├── login/          # Authentication
+│       │   ├── ops/            # Ops console
+│       │   └── health/         # Health endpoint
 │       ├── components/         # Shared UI components
-│       └── lib/                # API client, hooks, schemas, utilities
+│       └── lib/                # API clients, hooks, types, utilities
 │
+├── infra/terraform/            # Terraform for GCP infra
+├── cloudbuild/                 # Cloud Build configs
 ├── docs/                       # Documentation
-│   ├── DESIGN.md               # Architecture documentation
-│   ├── automation.md           # Automation system guide
-│   ├── oauth-setup-guide.md    # Integration setup
-│   ├── agents.md               # Agent rules and workflows
-│   ├── email-template-variables.md # Email template variables reference
-│   ├── gcp-oidc-deploy.md      # GCP deployment notes
-│   ├── FEATURE_GAPS.md         # Known gaps and roadmap
-│   └── ROADMAP.txt             # Planning notes
-│
-├── load-tests/                 # k6 and performance scripts
-├── CHANGELOG.md                # Version history
-├── CLAUDE.md                   # Project conventions and rules
-├── release-please-config.json  # Release automation config
-├── zap-baseline.conf           # ZAP baseline scan config
+├── scripts/                    # Utilities (stage map generator, etc.)
+├── deployment.md               # Manual deploy notes
+├── post-deployment.md          # Post-deploy checklist
 └── docker-compose.yml          # PostgreSQL for development
 ```
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
-- **Node.js** ≥ 20 (LTS)
-- **pnpm** (package manager)
-- **Python** ≥ 3.11
+- **Node.js** 20+
+- **pnpm**
+- **Python** 3.11+
 - **uv** (Python package manager)
-- **Docker** & Docker Compose
+- **Docker** + Docker Compose
 
-### 1. Start Database
+### 1) Start Database
 
 ```bash
-docker compose up -d
+docker compose up -d db
 ```
 
-PostgreSQL runs on `localhost:5432` (database: `crm`, user: `postgres`, password: `postgres`)
+PostgreSQL runs on `localhost:5432` (database: `crm`, user: `postgres`, password: `postgres`).
 
-### 2. Setup Backend
+### 2) Setup Backend
 
 ```bash
 cd apps/api
@@ -146,12 +133,8 @@ cp .env.example .env
 # Run migrations
 uv run -m alembic upgrade head
 
-# Bootstrap first organization (portal domain optional)
+# Bootstrap first organization
 uv run -m app.cli create-org --name "Your Agency" --slug "agency" --admin-email "admin@agency.com"
-# Optional: derive portal domain as ap.<domain>
-uv run -m app.cli create-org --name "Your Agency" --slug "agency" --admin-email "admin@agency.com" --base-domain "agency.com"
-# Optional: set explicit portal domain
-uv run -m app.cli create-org --name "Your Agency" --slug "agency" --admin-email "admin@agency.com" --portal-domain "ap.agency.com"
 
 # Start server
 uv run -- uvicorn app.main:app --reload --port 8000
@@ -159,7 +142,7 @@ uv run -- uvicorn app.main:app --reload --port 8000
 
 API: `http://localhost:8000` | Docs: `http://localhost:8000/docs`
 
-### 3. Setup Frontend
+### 3) Setup Frontend
 
 ```bash
 cd apps/web
@@ -178,60 +161,24 @@ Frontend: `http://localhost:3000`
 
 ---
 
-## ⚙️ Environment Variables
+## Environment Variables
 
-### Backend (`apps/api/.env`)
+- **Backend**: see `apps/api/.env.example` for the full list.
+- **Frontend**: `apps/web/.env.local`
+
+Minimum backend vars for local dev:
 
 ```env
-# Environment
 ENV=dev
-
-# Database (psycopg3; keep the +psycopg scheme)
 DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/crm
-
-# Authentication (JWT in HTTP-only cookie)
-JWT_SECRET=your-secret-key-minimum-32-characters
-JWT_SECRET_PREVIOUS=
-JWT_EXPIRES_HOURS=4
-# Cookie SameSite policy (lax, strict, none). None requires HTTPS.
-COOKIE_SAMESITE=lax
-
-# Google OAuth
-GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/callback
-
-# Encryption (required)
-FERNET_KEY=generate-with-Fernet.generate_key()
-DATA_ENCRYPTION_KEY=generate-with-Fernet.generate_key()
-PII_HASH_KEY=generate-with-secrets.token_urlsafe(32)
-VERSION_ENCRYPTION_KEY=generate-with-Fernet.generate_key()
-
-# Frontend
-CORS_ORIGINS=http://localhost:3000
-FRONTEND_URL=http://localhost:3000
-
-# Integrations (optional)
-ZOOM_CLIENT_ID=
-ZOOM_CLIENT_SECRET=
-ZOOM_REDIRECT_URI=http://localhost:8000/integrations/zoom/callback
-GMAIL_REDIRECT_URI=http://localhost:8000/integrations/gmail/callback
-
-# Meta Lead Ads (optional)
-META_APP_ID=
-META_APP_SECRET=
-META_VERIFY_TOKEN=
-META_ENCRYPTION_KEY=
-META_AD_ACCOUNT_ID=
-META_SYSTEM_TOKEN=
-META_PIXEL_ID=
-META_CAPI_ENABLED=false
-
-# Development
-DEV_SECRET=local-dev-secret
+JWT_SECRET=change-this-in-production-minimum-32-characters
+DEV_SECRET=local-dev-secret-change-me
+FERNET_KEY=<generated>
+DATA_ENCRYPTION_KEY=<generated>
+PII_HASH_KEY=<generated>
 ```
 
-### Frontend (`apps/web/.env.local`)
+Frontend:
 
 ```env
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
@@ -239,206 +186,102 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ---
 
-## 🔧 Local Development Setup
+## Local Development Setup
 
 ### Dev Login-As (Skip Google OAuth)
 
-For local development without configuring Google OAuth:
+1) Set `DEV_SECRET` in `apps/api/.env` and start the API.
 
-1. **Backend** (`apps/api/.env`):
-   ```env
-   DEV_SECRET=local-dev-secret
-   ENV=dev
-   ```
+2) Seed a test org and users:
+```bash
+curl -s -X POST http://localhost:8000/dev/seed \
+  -H "X-Dev-Secret: $DEV_SECRET"
+```
 
-2. Start the API and web apps.
+3) Use a returned `user_id` to log in from the browser:
+```js
+await fetch("http://localhost:8000/dev/login-as/<user_id>", {
+  method: "POST",
+  headers: { "X-Dev-Secret": "<your dev secret>" },
+  credentials: "include",
+}).then((r) => r.json())
+```
 
-3. Export the dev secret for curl (or replace `$DEV_SECRET` below with the literal value):
-   ```bash
-   export DEV_SECRET=local-dev-secret
-   ```
-
-4. Seed a test org and users (returns user IDs):
-   ```bash
-   curl -s -X POST http://localhost:8000/dev/seed \
-     -H "X-Dev-Secret: $DEV_SECRET"
-   ```
-
-5. Pick a `user_id` from the response.
-
-6. Log in from the browser (recommended; this stores cookies in the browser):
-   ```js
-   await fetch("/api/dev/login-as/<user_id>", {
-     method: "POST",
-     headers: { "X-Dev-Secret": "<your dev secret>" },
-     credentials: "include",
-   }).then((r) => r.json())
-   ```
-
-7. Refresh the browser — you should now be authenticated.
-
-Note: `curl -i` against `/dev/login-as` is useful for inspecting `Set-Cookie`, but it does not log your browser in.
+Note: `curl -i` against `/dev/login-as/<user_id>` is useful for inspecting `Set-Cookie`, but it does not log your browser in.
 
 ### Database Reset & Seed
 
-When you need a fresh database:
-
 ```bash
-# 1. Reset database (removes all data)
-docker-compose down -v && docker-compose up -d
+# 1) Reset database (removes all data)
+docker compose down -v && docker compose up -d db
 
-# 2. Run migrations
+# 2) Run migrations
 cd apps/api
 uv run -m alembic upgrade head
 
-# 3. Seed a test org and users (dev endpoints)
+# 3) Seed test org and users
 curl -s -X POST http://localhost:8000/dev/seed \
   -H "X-Dev-Secret: $DEV_SECRET"
-
-# 4. Log in from the browser (see Dev Login-As steps above)
-#    This ensures cookies are stored in the browser.
 ```
 
 ### Required Encryption Keys
 
-Generate and add these to `apps/api/.env`:
-
 ```bash
-# Generate keys
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-
-# Required in .env:
-DATA_ENCRYPTION_KEY=<generated-key>
-META_ENCRYPTION_KEY=<generated-key>
+python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-Without these, you'll get "DATA_ENCRYPTION_KEY not configured" errors.
+Required:
+- `FERNET_KEY`
+- `DATA_ENCRYPTION_KEY`
+- `PII_HASH_KEY`
+
+Optional/conditional:
+- `VERSION_ENCRYPTION_KEY` (config version snapshots)
+- `META_ENCRYPTION_KEY` (Meta Lead Ads integration)
 
 ---
 
-## 📊 Data Models
-
-### Core Entities (55+ tables)
-
-| Category | Models |
-|----------|--------|
-| **Auth** | Organization, User, Membership, AuthIdentity, OrgInvite, RolePermission |
-| **Surrogates** | Surrogate, SurrogateStatusHistory, SurrogateActivityLog, MetaLead, SurrogateImport |
-| **Relationships** | IntendedParent, Match, MatchEvent |
-| **Tasks** | Task, EntityNote, Attachment |
-| **Forms** | Form, FormSubmission, FormSubmissionToken, FormFieldMapping |
-| **Automation** | AutomationWorkflow, WorkflowExecution, EmailTemplate, EmailLog |
-| **Campaigns** | Campaign, CampaignRun, CampaignRecipient, EmailSuppression |
-| **Scheduling** | Appointment, AppointmentType, AvailabilityRule, BookingLink |
-| **AI** | AISettings, AIConversation, AIMessage, AIEntitySummary |
-| **Operations** | Job, Notification, IntegrationHealth, SystemAlert, AuditLog |
-| **Config** | Pipeline, PipelineStage, EntityVersion, UserIntegration |
-
----
-
-## 🔐 Security
-
-- **Authentication**: Cookie-based JWT sessions with Google OAuth
-- **Authorization**: Role-based access control (RBAC) with granular permissions
-- **CSRF Protection**: Required header on all mutations
-- **Multi-Factor**: TOTP and Duo Security integration
-- **Encryption**: Fernet encryption for OAuth tokens, PII fields, and versioned configs
-- **Audit**: Hash-chain logging with tamper detection
-- **Data Isolation**: All queries scoped by organization_id
-
-### Roles
-
-| Role | Description |
-|------|-------------|
-| `intake_specialist` | Lead intake and initial processing |
-| `case_manager` | Full surrogate management access |
-| `admin` | Administrative access, analytics, team management |
-| `developer` | Platform administration, all permissions |
-
----
-
-## 📚 Documentation
-
-- **[DESIGN.md](./docs/DESIGN.md)** — Architecture decisions and patterns
-- **[CHANGELOG.md](./CHANGELOG.md)** — Version history and release notes
-- **[automation.md](./docs/automation.md)** — Workflow automation guide
-- **[oauth-setup-guide.md](./docs/oauth-setup-guide.md)** — Integration configuration
-
----
-
-## 🧪 Testing
+## Testing
 
 ### Backend
 ```bash
 cd apps/api
-pytest
+uv run -m pytest -v
 ```
 
 ### Frontend
 ```bash
 cd apps/web
-pnpm test            # Unit tests
-pnpm test:integration  # Integration tests
-pnpm test:all        # Full frontend suite
+pnpm test            # Unit tests (Vitest)
+pnpm test:integration
+pnpm typecheck
+pnpm lint
 ```
 
 ---
 
-## 🚢 Deployment
+## Deployment
+
+- Terraform: `infra/terraform/README.md`
+- GCP Cloud Build + Cloud Run: `docs/gcp-oidc-deploy.md`
+- Manual checklist: `deployment.md`
+- Post-deploy checklist: `post-deployment.md`
 
 ### Health Endpoints
-- `/health/live` — Liveness probe
-- `/health/ready` — Readiness probe (checks DB)
-
-### Recommended Stack
-- **Frontend**: Vercel
-- **Backend**: Cloud Run, Railway, or Render
-- **Database**: Cloud SQL or Supabase
-- **Storage**: S3-compatible for file uploads
-- **Proxy headers**: Set `TRUST_PROXY_HEADERS=true` behind Cloud Run/LB
-
-### Custom Domains (Branded Redirect Portals)
-Use per-client subdomains as branded entry points that redirect to your primary app domain.
-
-1) Create subdomains
-- Portal: `ap.clientdomain.com`
-
-2) Domain mapping (Cloud Run)
-- Map `ap.clientdomain.com` to a single redirect service that 308-redirects to your primary app.
-
-3) DNS (CNAME)
-- Point `ap` to the redirect service target hostname provided by Cloud Run.
-  - For Wix-managed domains, use subdomain CNAMEs (avoid apex CNAMEs)
-
-4) Env vars (stay on the primary domains)
-- Backend:
-  - `FRONTEND_URL=https://app.yourdomain.com`
-  - `CORS_ORIGINS=https://app.yourdomain.com`
-  - `API_BASE_URL=https://api.yourdomain.com`
-- Frontend:
-  - `NEXT_PUBLIC_API_BASE_URL=https://api.yourdomain.com`
-
-5) Set the org portal domain (drives public links for forms, booking, invites)
-- Settings → Organization → Portal Domain: `ap.clientdomain.com`
-- Or set on org creation:
-  - `--base-domain "clientdomain.com"` (builds `ap.clientdomain.com`)
-  - `--portal-domain "ap.clientdomain.com"`
-
-Note: A fully hosted per-client portal (no redirect) requires HTTPS and either
-same-site hosting for UI + API or `COOKIE_SAMESITE=none` plus updated `CORS_ORIGINS`
-to include the portal domain.
+- API liveness: `/health/live`
+- API readiness: `/health/ready`
+- Web health: `/health`
 
 ---
 
-## 📝 License
+## License
 
 Licensed under the PolyForm Noncommercial 1.0.0 license. See `LICENSE`.
-
-Commercial use requires a separate commercial license/permission from the maintainers.
+Commercial use requires a separate license/permission from the maintainers.
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
-This project is source-available under PolyForm Noncommercial 1.0.0.
-For questions, contributions, or commercial licensing, contact the maintainers.
+See `agents.md` for contributor rules, dev workflows, and project standards.
