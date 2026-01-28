@@ -34,7 +34,13 @@ from app.schemas.forms import (
     FormSubmissionAnswersUpdate,
     FormSubmissionAnswersUpdateResponse,
 )
-from app.services import audit_service, surrogate_service, form_service, org_service
+from app.services import (
+    audit_service,
+    form_service,
+    form_submission_service,
+    org_service,
+    surrogate_service,
+)
 
 router = APIRouter(prefix="/forms", tags=["forms"])
 
@@ -279,7 +285,7 @@ def list_mappings(
     form = form_service.get_form(db, session.org_id, form_id)
     if not form:
         raise HTTPException(status_code=404, detail="Form not found")
-    mappings = form_service.list_field_mappings(db, form.id)
+    mappings = form_submission_service.list_field_mappings(db, form.id)
     return [
         FormFieldMappingItem(field_key=m.field_key, surrogate_field=m.surrogate_field)
         for m in mappings
@@ -344,7 +350,7 @@ def create_submission_token(
         raise HTTPException(status_code=404, detail="Surrogate not found")
     check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
     try:
-        token = form_service.create_submission_token(
+        token = form_submission_service.create_submission_token(
             db=db,
             org_id=session.org_id,
             form=form,
@@ -378,10 +384,12 @@ def get_surrogate_submission(
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
     check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
-    submission = form_service.get_submission_by_surrogate(db, session.org_id, form.id, surrogate.id)
+    submission = form_submission_service.get_submission_by_surrogate(
+        db, session.org_id, form.id, surrogate.id
+    )
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
-    files = form_service.list_submission_files(db, session.org_id, submission.id)
+    files = form_submission_service.list_submission_files(db, session.org_id, submission.id)
     audit_service.log_phi_access(
         db=db,
         org_id=session.org_id,
@@ -410,10 +418,12 @@ def list_submissions(
     form = form_service.get_form(db, session.org_id, form_id)
     if not form:
         raise HTTPException(status_code=404, detail="Form not found")
-    submissions = form_service.list_form_submissions(db, session.org_id, form.id, status_filter)
+    submissions = form_submission_service.list_form_submissions(
+        db, session.org_id, form.id, status_filter
+    )
     output = []
     for submission in submissions:
-        files = form_service.list_submission_files(db, session.org_id, submission.id)
+        files = form_submission_service.list_submission_files(db, session.org_id, submission.id)
         output.append(_submission_read(submission, files))
     audit_service.log_phi_access(
         db=db,
@@ -446,7 +456,7 @@ def approve_submission(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    submission = form_service.get_submission(db, session.org_id, submission_id)
+    submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
     surrogate = surrogate_service.get_surrogate(db, session.org_id, submission.surrogate_id)
@@ -454,7 +464,7 @@ def approve_submission(
         raise HTTPException(status_code=404, detail="Surrogate not found")
     check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
     try:
-        submission = form_service.approve_submission(
+        submission = form_submission_service.approve_submission(
             db=db,
             submission=submission,
             reviewer_id=session.user_id,
@@ -462,7 +472,7 @@ def approve_submission(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    files = form_service.list_submission_files(db, session.org_id, submission.id)
+    files = form_submission_service.list_submission_files(db, session.org_id, submission.id)
     return _submission_read(submission, files)
 
 
@@ -480,7 +490,7 @@ def reject_submission(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    submission = form_service.get_submission(db, session.org_id, submission_id)
+    submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
     surrogate = surrogate_service.get_surrogate(db, session.org_id, submission.surrogate_id)
@@ -488,7 +498,7 @@ def reject_submission(
         raise HTTPException(status_code=404, detail="Surrogate not found")
     check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
     try:
-        submission = form_service.reject_submission(
+        submission = form_submission_service.reject_submission(
             db=db,
             submission=submission,
             reviewer_id=session.user_id,
@@ -496,7 +506,7 @@ def reject_submission(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    files = form_service.list_submission_files(db, session.org_id, submission.id)
+    files = form_submission_service.list_submission_files(db, session.org_id, submission.id)
     return _submission_read(submission, files)
 
 
@@ -515,7 +525,7 @@ def update_submission_answers(
     db: Session = Depends(get_db),
 ):
     """Update submission answers and sync mapped surrogate fields."""
-    submission = form_service.get_submission(db, session.org_id, submission_id)
+    submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
     surrogate = surrogate_service.get_surrogate(db, session.org_id, submission.surrogate_id)
@@ -523,7 +533,7 @@ def update_submission_answers(
         raise HTTPException(status_code=404, detail="Surrogate not found")
     check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
     try:
-        _, surrogate_updates = form_service.update_submission_answers(
+        _, surrogate_updates = form_submission_service.update_submission_answers(
             db=db,
             submission=submission,
             updates=[u.model_dump() for u in body.updates],
@@ -531,7 +541,7 @@ def update_submission_answers(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    files = form_service.list_submission_files(db, session.org_id, submission.id)
+    files = form_submission_service.list_submission_files(db, session.org_id, submission.id)
     return FormSubmissionAnswersUpdateResponse(
         submission=_submission_read(submission, files),
         surrogate_updates=surrogate_updates,
@@ -550,7 +560,7 @@ def download_submission_file(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    submission = form_service.get_submission(db, session.org_id, submission_id)
+    submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
     surrogate = surrogate_service.get_surrogate(db, session.org_id, submission.surrogate_id)
@@ -558,13 +568,15 @@ def download_submission_file(
         raise HTTPException(status_code=404, detail="Surrogate not found")
     check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
-    file_record = form_service.get_submission_file(db, session.org_id, submission_id, file_id)
+    file_record = form_submission_service.get_submission_file(
+        db, session.org_id, submission_id, file_id
+    )
     if not file_record:
         raise HTTPException(status_code=404, detail="File not found")
     if file_record.quarantined:
         raise HTTPException(status_code=403, detail="File is pending virus scan")
 
-    url = form_service.get_submission_file_download_url(
+    url = form_submission_service.get_submission_file_download_url(
         db=db,
         org_id=session.org_id,
         submission=submission,
@@ -609,7 +621,7 @@ async def upload_submission_file(
     db: Session = Depends(get_db),
 ):
     """Upload a file to an existing submission (edit mode)."""
-    submission = form_service.get_submission(db, session.org_id, submission_id)
+    submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
     surrogate = surrogate_service.get_surrogate(db, session.org_id, submission.surrogate_id)
@@ -618,7 +630,7 @@ async def upload_submission_file(
     check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
     try:
-        file_record = form_service.add_submission_file(
+        file_record = form_submission_service.add_submission_file(
             db=db,
             org_id=session.org_id,
             submission=submission,
@@ -651,7 +663,7 @@ def delete_submission_file(
     db: Session = Depends(get_db),
 ):
     """Soft-delete a file from a submission (edit mode)."""
-    submission = form_service.get_submission(db, session.org_id, submission_id)
+    submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
     surrogate = surrogate_service.get_surrogate(db, session.org_id, submission.surrogate_id)
@@ -659,11 +671,13 @@ def delete_submission_file(
         raise HTTPException(status_code=404, detail="Surrogate not found")
     check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
-    file_record = form_service.get_submission_file(db, session.org_id, submission_id, file_id)
+    file_record = form_submission_service.get_submission_file(
+        db, session.org_id, submission_id, file_id
+    )
     if not file_record:
         raise HTTPException(status_code=404, detail="File not found")
 
-    success = form_service.soft_delete_submission_file(
+    success = form_submission_service.soft_delete_submission_file(
         db=db,
         org_id=session.org_id,
         submission=submission,
@@ -688,7 +702,7 @@ def export_submission_pdf(
     db: Session = Depends(get_db),
 ):
     """Export a submission as PDF."""
-    submission = form_service.get_submission(db, session.org_id, submission_id)
+    submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
     surrogate = surrogate_service.get_surrogate(db, session.org_id, submission.surrogate_id)
