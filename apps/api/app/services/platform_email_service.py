@@ -248,3 +248,37 @@ async def send_email_logged(
         **result,
         "email_log_id": email_log.id,
     }
+
+
+class PlatformEmailSender:
+    key = "resend"
+
+    def is_configured(self) -> bool:
+        return platform_sender_configured()
+
+    async def send_email_logged(
+        self,
+        *,
+        db: Session,
+        org_id: UUID,
+        to_email: str,
+        subject: str,
+        from_email: str | None = None,
+        html: str,
+        text: str | None = None,
+        template_id: UUID | None = None,
+        surrogate_id: UUID | None = None,
+        idempotency_key: str | None = None,
+    ) -> JsonObject:
+        return await send_email_logged(
+            db=db,
+            org_id=org_id,
+            to_email=to_email,
+            subject=subject,
+            from_email=from_email,
+            html=html,
+            text=text,
+            template_id=template_id,
+            surrogate_id=surrogate_id,
+            idempotency_key=idempotency_key,
+        )

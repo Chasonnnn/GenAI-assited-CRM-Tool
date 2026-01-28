@@ -207,7 +207,8 @@ Coupling notes:
   Create/Delete: create `apps/api/app/services/email_sender.py` interface + concrete adapters.
   Expected blast radius: medium (invites + system emails).
   Test plan: integration tests for invite email path + Resend/Gmail fallback.
-  Status: pending.
+  Status: completed (2026-01-28).
+  Notes: introduced `email_sender` selection helper and sender adapters for platform/Gmail.
 
 - **R7 — Webhook handler registry**
   Files to change: `apps/api/app/routers/webhooks.py`, provider services (`zoom_service.py`, `campaign_service.py`, `email_service.py`).
