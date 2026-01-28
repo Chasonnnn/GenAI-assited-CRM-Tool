@@ -15,6 +15,7 @@ class PIIMapping:
     names: dict[str, str] = field(default_factory=dict)
     emails: dict[str, str] = field(default_factory=dict)
     phones: dict[str, str] = field(default_factory=dict)
+    sensitive: dict[str, str] = field(default_factory=dict)
 
     def add_name(self, real_value: str) -> str:
         """Add a name and return its placeholder."""
@@ -40,6 +41,14 @@ class PIIMapping:
         self.phones[real_value] = placeholder
         return placeholder
 
+    def add_sensitive(self, real_value: str) -> str:
+        """Add sensitive data and return its placeholder."""
+        if real_value in self.sensitive:
+            return self.sensitive[real_value]
+        placeholder = f"[SENSITIVE_{len(self.sensitive) + 1}]"
+        self.sensitive[real_value] = placeholder
+        return placeholder
+
     def get_reverse_mapping(self) -> dict[str, str]:
         """Get placeholder -> real value mapping for rehydration."""
         reverse = {}
@@ -48,6 +57,8 @@ class PIIMapping:
         for real, placeholder in self.emails.items():
             reverse[placeholder] = real
         for real, placeholder in self.phones.items():
+            reverse[placeholder] = real
+        for real, placeholder in self.sensitive.items():
             reverse[placeholder] = real
         return reverse
 
@@ -60,6 +71,38 @@ PHONE_PATTERNS = [
     re.compile(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b"),  # 123-456-7890
     re.compile(r"\b\(\d{3}\)\s*\d{3}[-.\s]?\d{4}\b"),  # (123) 456-7890
     re.compile(r"\b\+1\s*\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b"),  # +1 123-456-7890
+]
+
+# Sensitive key-value markers (e.g., "DOB: 01/02/1990")
+SENSITIVE_KEYWORDS = [
+    "dob",
+    "date of birth",
+    "birthdate",
+    "ssn",
+    "social security",
+    "mrn",
+    "medical record",
+    "address",
+    "street address",
+    "insurance",
+    "policy",
+    "member id",
+    "patient id",
+]
+SENSITIVE_KEY_VALUE_PATTERN = re.compile(
+    r"(?i)\b("
+    + "|".join(re.escape(keyword) for keyword in SENSITIVE_KEYWORDS)
+    + r")\b(\s*[:=]\s*)([^\n,;]+)"
+)
+
+# Additional sensitive patterns to redact in free text
+SENSITIVE_PATTERNS = [
+    re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),  # SSN
+    re.compile(
+        r"\b\d{1,5}\s+[A-Za-z0-9.\- ]{2,}\s+"
+        r"(?:St|Street|Ave|Avenue|Blvd|Boulevard|Rd|Road|Ln|Lane|Dr|Drive|Ct|Court|Cir|Circle|Way|Pkwy|Parkway)\b\.?",
+        re.IGNORECASE,
+    ),
 ]
 
 
@@ -98,6 +141,18 @@ def anonymize_text(text: str, mapping: PIIMapping, known_names: list[str] | None
             phone = match.group()
             placeholder = mapping.add_phone(phone)
             result = result.replace(phone, placeholder)
+
+    # Replace sensitive key-value pairs
+    def _replace_sensitive(match: re.Match) -> str:
+        value = match.group(3).strip()
+        placeholder = mapping.add_sensitive(value)
+        return f"{match.group(1)}{match.group(2)}{placeholder}"
+
+    result = SENSITIVE_KEY_VALUE_PATTERN.sub(_replace_sensitive, result)
+
+    # Replace sensitive patterns in free text
+    for pattern in SENSITIVE_PATTERNS:
+        result = pattern.sub(lambda m: mapping.add_sensitive(m.group(0)), result)
 
     return result
 

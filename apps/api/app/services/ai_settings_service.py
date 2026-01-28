@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import AISettings
-from app.services.ai_provider import AIProvider, get_provider
+from app.services.ai_provider import AIProvider, VertexWIFConfig, VertexWIFProvider
 from app.services import version_service
 
 
@@ -57,6 +57,12 @@ def _ai_settings_payload(ai_settings: AISettings) -> dict:
         "provider": ai_settings.provider,
         "api_key": "[REDACTED]" if ai_settings.api_key_encrypted else None,
         "model": ai_settings.model,
+        "vertex_wif": {
+            "project_id": ai_settings.vertex_project_id,
+            "location": ai_settings.vertex_location,
+            "audience": ai_settings.vertex_audience,
+            "service_account_email": ai_settings.vertex_service_account_email,
+        },
         "context_notes_limit": ai_settings.context_notes_limit,
         "conversation_history_limit": ai_settings.conversation_history_limit,
         "anonymize_pii": ai_settings.anonymize_pii,
@@ -114,6 +120,10 @@ def update_ai_settings(
     provider: str | None = None,
     api_key: str | None = None,  # Plain text, will be encrypted
     model: str | None = None,
+    vertex_project_id: str | None = None,
+    vertex_location: str | None = None,
+    vertex_audience: str | None = None,
+    vertex_service_account_email: str | None = None,
     context_notes_limit: int | None = None,
     conversation_history_limit: int | None = None,
     anonymize_pii: bool | None = None,
@@ -135,6 +145,14 @@ def update_ai_settings(
         ai_settings.api_key_encrypted = encrypt_api_key(api_key)
     if model is not None:
         ai_settings.model = model
+    if vertex_project_id is not None:
+        ai_settings.vertex_project_id = vertex_project_id
+    if vertex_location is not None:
+        ai_settings.vertex_location = vertex_location
+    if vertex_audience is not None:
+        ai_settings.vertex_audience = vertex_audience
+    if vertex_service_account_email is not None:
+        ai_settings.vertex_service_account_email = vertex_service_account_email
     if context_notes_limit is not None:
         ai_settings.context_notes_limit = context_notes_limit
     if conversation_history_limit is not None:
@@ -181,7 +199,9 @@ def is_consent_required(ai_settings: AISettings) -> bool:
     return ai_settings.is_enabled and ai_settings.consent_accepted_at is None
 
 
-def get_ai_provider_for_org(db: Session, organization_id: uuid.UUID) -> AIProvider | None:
+def get_ai_provider_for_org(
+    db: Session, organization_id: uuid.UUID, user_id: uuid.UUID | None = None
+) -> AIProvider | None:
     """Get a configured AI provider for an organization.
 
     Returns None if AI is not enabled or not configured.
@@ -193,22 +213,57 @@ def get_ai_provider_for_org(db: Session, organization_id: uuid.UUID) -> AIProvid
         return None
 
     ai_settings = get_ai_settings(db, organization_id)
+    if ai_settings and is_consent_required(ai_settings):
+        return None
+    return get_ai_provider_for_settings(ai_settings, organization_id, user_id=user_id)
 
-    if not ai_settings:
+
+def get_ai_provider_for_settings(
+    ai_settings: AISettings | None,
+    organization_id: uuid.UUID,
+    user_id: uuid.UUID | None = None,
+) -> AIProvider | None:
+    if not ai_settings or not ai_settings.is_enabled:
         return None
-    if not ai_settings.is_enabled:
-        return None
+
+    if ai_settings.provider == "vertex_wif":
+        if not (
+            ai_settings.vertex_project_id
+            and ai_settings.vertex_location
+            and ai_settings.vertex_audience
+            and ai_settings.vertex_service_account_email
+        ):
+            return None
+        if not settings.WIF_OIDC_PRIVATE_KEY:
+            return None
+        config = VertexWIFConfig(
+            project_id=ai_settings.vertex_project_id,
+            location=ai_settings.vertex_location,
+            audience=ai_settings.vertex_audience,
+            service_account_email=ai_settings.vertex_service_account_email,
+            organization_id=organization_id,
+            user_id=user_id,
+        )
+        return VertexWIFProvider(config, default_model=ai_settings.model or "gemini-1.5-pro")
+
     if not ai_settings.api_key_encrypted:
         return None
 
-    api_key = decrypt_api_key(ai_settings.api_key_encrypted)
-    return get_provider(ai_settings.provider, api_key, ai_settings.model)
+    try:
+        api_key = decrypt_api_key(ai_settings.api_key_encrypted)
+    except Exception:
+        return None
+    from app.services import ai_provider as ai_provider_module
+
+    return ai_provider_module.get_provider(ai_settings.provider, api_key, ai_settings.model)
 
 
 async def test_api_key(provider: str, api_key: str) -> bool:
     """Test if an API key is valid."""
+    from app.services import ai_provider as ai_provider_module
+
     try:
-        ai_provider = get_provider(provider, api_key)
+        ai_provider = ai_provider_module.get_provider(provider, api_key)
         return await ai_provider.validate_key()
     except Exception:
         return False
@@ -287,6 +342,15 @@ def rollback_ai_settings(
         "conversation_history_limit", ai_settings.conversation_history_limit
     )
     ai_settings.anonymize_pii = payload.get("anonymize_pii", ai_settings.anonymize_pii)
+    vertex_payload = payload.get("vertex_wif") or {}
+    ai_settings.vertex_project_id = vertex_payload.get(
+        "project_id", ai_settings.vertex_project_id
+    )
+    ai_settings.vertex_location = vertex_payload.get("location", ai_settings.vertex_location)
+    ai_settings.vertex_audience = vertex_payload.get("audience", ai_settings.vertex_audience)
+    ai_settings.vertex_service_account_email = vertex_payload.get(
+        "service_account_email", ai_settings.vertex_service_account_email
+    )
     # NOTE: api_key is NOT rolled back - it's always [REDACTED] in versions
 
     ai_settings.current_version = new_version.version

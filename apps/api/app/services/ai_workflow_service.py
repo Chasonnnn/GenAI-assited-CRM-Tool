@@ -318,7 +318,7 @@ def generate_workflow(
 
     Returns the generated workflow for user review before saving.
     """
-    from app.services.ai_provider import ChatMessage, get_provider
+    from app.services.ai_provider import ChatMessage
 
     # Check AI is enabled
     settings = ai_settings_service.get_ai_settings(db, org_id)
@@ -334,17 +334,16 @@ def generate_workflow(
             explanation="AI consent not accepted",
         )
 
-    # Get API key
-    api_key = None
-    if settings.api_key_encrypted:
-        try:
-            api_key = ai_settings_service.decrypt_api_key(settings.api_key_encrypted)
-        except Exception:
-            api_key = None
-    if not api_key:
+    provider = ai_settings_service.get_ai_provider_for_settings(settings, org_id, user_id=user_id)
+    if not provider:
+        message = (
+            "Vertex AI configuration is incomplete"
+            if settings.provider == "vertex_wif"
+            else "AI API key not configured"
+        )
         return WorkflowGenerationResponse(
             success=False,
-            explanation="AI API key not configured",
+            explanation=message,
         )
 
     # Build prompt context
@@ -360,8 +359,6 @@ def generate_workflow(
 
     # Call AI provider
     try:
-        provider = get_provider(settings.provider, api_key, settings.model)
-
         from app.core.async_utils import run_async
 
         async def _run_chat():

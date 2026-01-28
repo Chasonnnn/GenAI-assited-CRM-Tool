@@ -11,6 +11,7 @@ export interface AISettings {
     provider: string;
     model: string | null;
     api_key_masked: string | null;
+    vertex_wif: VertexWIFConfig | null;
     context_notes_limit: number;
     conversation_history_limit: number;
     anonymize_pii: boolean;
@@ -18,11 +19,19 @@ export interface AISettings {
     consent_required: boolean;
 }
 
+export interface VertexWIFConfig {
+    project_id: string | null;
+    location: string | null;
+    audience: string | null;
+    service_account_email: string | null;
+}
+
 export interface AISettingsUpdate {
     is_enabled?: boolean;
-    provider?: 'openai' | 'gemini';
+    provider?: 'openai' | 'gemini' | 'vertex_wif';
     api_key?: string;
     model?: string;
+    vertex_wif?: VertexWIFConfig;
     context_notes_limit?: number;
     conversation_history_limit?: number;
     anonymize_pii?: boolean;

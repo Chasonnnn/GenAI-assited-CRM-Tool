@@ -580,8 +580,9 @@ def _build_task_context(
         lines.append(f"- Due Date: {task.due_date}")
     if task.due_time:
         lines.append(f"- Due Time: {task.due_time}")
-    if task.priority:
-        lines.append(f"- Priority: {task.priority}")
+    priority = getattr(task, "priority", None)
+    if priority:
+        lines.append(f"- Priority: {priority}")
 
     if surrogate:
         lines.append("\n## Related Surrogate")
@@ -609,6 +610,29 @@ def get_user_integrations(db: Session, user_id: uuid.UUID) -> list[str]:
     return [i[0] for i in integrations]
 
 
+def _get_known_names(surrogate: Surrogate | None) -> list[str]:
+    """Collect known names for PII anonymization."""
+    if not surrogate or not surrogate.full_name:
+        return []
+    names = [surrogate.full_name]
+    names.extend(surrogate.full_name.split())
+    return names
+
+
+def _user_can_view_reports(db: Session, organization_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+    """Check if a user can view report data."""
+    from app.core.permissions import PermissionKey as P
+    from app.services import membership_service, permission_service
+
+    membership = membership_service.get_membership_for_org(db, organization_id, user_id)
+    if not membership:
+        return False
+    effective = permission_service.get_effective_permissions(
+        db, organization_id, user_id, membership.role
+    )
+    return P.REPORTS_VIEW in effective
+
+
 async def chat_async(
     db: Session,
     organization_id: uuid.UUID,
@@ -630,8 +654,23 @@ async def chat_async(
     if user_integrations is None:
         user_integrations = get_user_integrations(db, user_id)
 
+    # Get settings for limits and privacy
+    ai_settings = ai_settings_service.get_ai_settings(db, organization_id)
+    if ai_settings and ai_settings_service.is_consent_required(ai_settings):
+        return {
+            "content": "AI consent not accepted. An admin must accept the data processing consent before using AI.",
+            "proposed_actions": [],
+            "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
+        }
+
     # Get AI provider
-    provider = ai_settings_service.get_ai_provider_for_org(db, organization_id)
+    try:
+        provider = ai_settings_service.get_ai_provider_for_org(
+            db, organization_id, user_id=user_id
+        )
+    except TypeError:
+        # Backwards-compatible for tests that monkeypatch without user_id
+        provider = ai_settings_service.get_ai_provider_for_org(db, organization_id)
     if not provider:
         return {
             "content": "AI is not configured for this organization. Please ask an admin to enable AI in settings.",
@@ -639,11 +678,9 @@ async def chat_async(
             "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
         }
 
-    # Get settings for limits and privacy
-    ai_settings = ai_settings_service.get_ai_settings(db, organization_id)
-    notes_limit = ai_settings.context_notes_limit or 5
-    history_limit = ai_settings.conversation_history_limit or 10
-    should_anonymize = ai_settings.anonymize_pii
+    notes_limit = ai_settings.context_notes_limit if ai_settings else 5
+    history_limit = ai_settings.conversation_history_limit if ai_settings else 10
+    should_anonymize = ai_settings.anonymize_pii if ai_settings else False
 
     # Create PII mapping for anonymization/rehydration
     pii_mapping = PIIMapping() if should_anonymize else None
@@ -711,12 +748,6 @@ async def chat_async(
             )
 
         dynamic_context = summary_text + "\n\n" + _build_integrations_context(user_integrations)
-        if should_anonymize and pii_mapping:
-            known_names = []
-            if surrogate.full_name:
-                known_names.append(surrogate.full_name)
-                known_names.extend(surrogate.full_name.split())
-            dynamic_context = anonymize_text(dynamic_context, pii_mapping, known_names)
     elif normalized_entity_type == "task":
         task, related_surrogate = get_task_context(db, entity_id, organization_id)
         if not task:
@@ -726,25 +757,28 @@ async def chat_async(
                 "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
             }
         system_prompt = TASK_SYSTEM_PROMPT
+        surrogate = related_surrogate
         dynamic_context = _build_task_context(task, related_surrogate, user_integrations)
     elif normalized_entity_type == "global":
         # Global mode - use simplified prompt with performance data
         system_prompt = GLOBAL_SYSTEM_PROMPT
         integrations_ctx = f"User's connected integrations: {', '.join(user_integrations) if user_integrations else 'none'}"
         performance_ctx = ""
-        if _should_fetch_performance(message):
+        if _should_fetch_performance(message) and _user_can_view_reports(
+            db, organization_id, user_id
+        ):
             performance_ctx = _build_performance_context(db, organization_id)
         dynamic_context = integrations_ctx + ("\n" + performance_ctx if performance_ctx else "")
     else:
         dynamic_context = "No context available for this entity type."
 
+    known_names = _get_known_names(surrogate)
+    if should_anonymize and pii_mapping:
+        dynamic_context = anonymize_text(dynamic_context, pii_mapping, known_names)
+
     # Anonymize user message if enabled
     anonymized_message = message
-    if should_anonymize and pii_mapping and surrogate:
-        known_names = []
-        if surrogate.full_name:
-            known_names.append(surrogate.full_name)
-            known_names.extend(surrogate.full_name.split())
+    if should_anonymize and pii_mapping:
         anonymized_message = anonymize_text(message, pii_mapping, known_names)
 
     # Build messages for AI
@@ -757,11 +791,7 @@ async def chat_async(
     # Add conversation history (anonymize if PII anonymization is enabled)
     for msg in history:
         content = msg.content
-        if should_anonymize and pii_mapping and surrogate:
-            known_names = []
-            if surrogate.full_name:
-                known_names.append(surrogate.full_name)
-                known_names.extend(surrogate.full_name.split())
+        if should_anonymize and pii_mapping:
             content = anonymize_text(content, pii_mapping, known_names)
         ai_messages.append(ChatMessage(role=msg.role, content=content))
 

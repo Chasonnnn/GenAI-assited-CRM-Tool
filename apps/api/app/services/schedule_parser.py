@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 from app.db.enums import TaskType
 from app.db.models import Organization
-from app.services.ai_provider import ChatMessage, get_provider
+from app.services.ai_provider import ChatMessage
 
 logger = logging.getLogger(__name__)
 
@@ -149,14 +149,6 @@ async def parse_schedule_text(
             assumed_timezone=timezone,
             assumed_reference_date=reference_date,
         )
-    if not ai_settings.api_key_encrypted:
-        return ParseScheduleResult(
-            proposed_tasks=[],
-            warnings=warnings + ["AI API key is not configured"],
-            assumed_timezone=timezone,
-            assumed_reference_date=reference_date,
-        )
-
     # Truncate text to prevent abuse (max 10000 chars)
     text = text[:10000]
 
@@ -170,19 +162,19 @@ async def parse_schedule_text(
         prompt_text = anonymize_text(text, pii_mapping, known_names)
 
     try:
-        # Decrypt API key
-        try:
-            api_key = ai_settings_service.decrypt_api_key(ai_settings.api_key_encrypted)
-        except Exception:
+        provider = ai_settings_service.get_ai_provider_for_settings(ai_settings, org_id)
+        if not provider:
+            missing_message = (
+                "Vertex AI configuration is incomplete"
+                if ai_settings.provider == "vertex_wif"
+                else "AI API key is not configured"
+            )
             return ParseScheduleResult(
                 proposed_tasks=[],
-                warnings=warnings + ["AI API key could not be decrypted"],
+                warnings=warnings + [missing_message],
                 assumed_timezone=timezone,
                 assumed_reference_date=reference_date,
             )
-
-        # Get AI provider
-        provider = get_provider(ai_settings.provider, api_key, ai_settings.model)
 
         # Build messages
         messages = [

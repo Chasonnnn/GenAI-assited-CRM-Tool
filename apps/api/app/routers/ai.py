@@ -75,6 +75,13 @@ By enabling the AI Assistant, you acknowledge that:
 # ============================================================================
 
 
+class VertexWIFConfig(BaseModel):
+    project_id: str | None = None
+    location: str | None = None
+    audience: str | None = None
+    service_account_email: str | None = None
+
+
 class AISettingsResponse(BaseModel):
     """AI settings for display (with masked key)."""
 
@@ -82,6 +89,7 @@ class AISettingsResponse(BaseModel):
     provider: str
     model: str | None
     api_key_masked: str | None
+    vertex_wif: VertexWIFConfig | None = None
     context_notes_limit: int
     conversation_history_limit: int
     # Privacy fields
@@ -96,9 +104,10 @@ class AISettingsUpdate(BaseModel):
     """Update AI settings."""
 
     is_enabled: bool | None = None
-    provider: str | None = Field(None, pattern="^(openai|gemini)$")
+    provider: str | None = Field(None, pattern="^(openai|gemini|vertex_wif)$")
     api_key: str | None = None
     model: str | None = None
+    vertex_wif: VertexWIFConfig | None = None
     context_notes_limit: int | None = Field(None, ge=1, le=20)
     conversation_history_limit: int | None = Field(None, ge=5, le=50)
     anonymize_pii: bool | None = None
@@ -178,6 +187,14 @@ def get_settings(
         provider=settings.provider,
         model=settings.model,
         api_key_masked=ai_settings_service.mask_api_key(settings.api_key_encrypted),
+        vertex_wif=VertexWIFConfig(
+            project_id=settings.vertex_project_id,
+            location=settings.vertex_location,
+            audience=settings.vertex_audience,
+            service_account_email=settings.vertex_service_account_email,
+        )
+        if settings.provider == "vertex_wif"
+        else None,
         context_notes_limit=settings.context_notes_limit or 5,
         conversation_history_limit=settings.conversation_history_limit or 10,
         anonymize_pii=settings.anonymize_pii,
@@ -212,6 +229,12 @@ def update_settings(
             provider=update.provider,
             api_key=update.api_key,
             model=update.model,
+            vertex_project_id=update.vertex_wif.project_id if update.vertex_wif else None,
+            vertex_location=update.vertex_wif.location if update.vertex_wif else None,
+            vertex_audience=update.vertex_wif.audience if update.vertex_wif else None,
+            vertex_service_account_email=update.vertex_wif.service_account_email
+            if update.vertex_wif
+            else None,
             context_notes_limit=update.context_notes_limit,
             conversation_history_limit=update.conversation_history_limit,
             anonymize_pii=update.anonymize_pii,
@@ -229,6 +252,7 @@ def update_settings(
             "provider": update.provider,
             "api_key": update.api_key,
             "model": update.model,
+            "vertex_wif": update.vertex_wif,
             "context_notes_limit": update.context_notes_limit,
             "conversation_history_limit": update.conversation_history_limit,
             "anonymize_pii": update.anonymize_pii,
@@ -261,6 +285,14 @@ def update_settings(
         provider=settings.provider,
         model=settings.model,
         api_key_masked=ai_settings_service.mask_api_key(settings.api_key_encrypted),
+        vertex_wif=VertexWIFConfig(
+            project_id=settings.vertex_project_id,
+            location=settings.vertex_location,
+            audience=settings.vertex_audience,
+            service_account_email=settings.vertex_service_account_email,
+        )
+        if settings.provider == "vertex_wif"
+        else None,
         context_notes_limit=settings.context_notes_limit or 5,
         conversation_history_limit=settings.conversation_history_limit or 10,
         anonymize_pii=settings.anonymize_pii,
@@ -780,6 +812,19 @@ def approve_action(
     if conversation.user_id != session.user_id and not is_manager:
         raise HTTPException(status_code=403, detail="Not authorized to approve this action")
 
+    # Re-check surrogate access before executing actions
+    if conversation.entity_type in ("surrogate", "case"):
+        surrogate = surrogate_service.get_surrogate(db, session.org_id, conversation.entity_id)
+        if not surrogate:
+            raise HTTPException(status_code=404, detail="Surrogate not found")
+        check_surrogate_access(
+            surrogate=surrogate,
+            user_role=session.role,
+            user_id=session.user_id,
+            db=db,
+            org_id=session.org_id,
+        )
+
     # Check status
     if approval.status != "pending":
         raise HTTPException(
@@ -1166,6 +1211,7 @@ async def summarize_surrogate(
     from app.services import ai_settings_service
     from app.services.ai_provider import ChatMessage, get_provider
     from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_data
+    from app.services.ai_usage_service import log_usage
 
     # Check AI is enabled and consent accepted
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
@@ -1293,6 +1339,16 @@ Be concise and professional. Focus on actionable insights."""
     if settings.anonymize_pii and pii_mapping:
         parsed = rehydrate_data(parsed, pii_mapping)
 
+    log_usage(
+        db=db,
+        organization_id=session.org_id,
+        user_id=session.user_id,
+        model=response.model,
+        prompt_tokens=response.prompt_tokens,
+        completion_tokens=response.completion_tokens,
+        estimated_cost_usd=response.estimated_cost_usd,
+    )
+
     # Build key dates
     key_dates = {
         "created": surrogate.created_at.isoformat() if surrogate.created_at else None,
@@ -1340,6 +1396,7 @@ async def draft_email(
     from app.services import ai_settings_service
     from app.services.ai_provider import ChatMessage, get_provider
     from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_data
+    from app.services.ai_usage_service import log_usage
 
     # Check AI is enabled
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
@@ -1446,6 +1503,16 @@ Be professional, warm, and concise."""
     if settings.anonymize_pii and pii_mapping:
         parsed = rehydrate_data(parsed, pii_mapping)
 
+    log_usage(
+        db=db,
+        organization_id=session.org_id,
+        user_id=session.user_id,
+        model=response.model,
+        prompt_tokens=response.prompt_tokens,
+        completion_tokens=response.completion_tokens,
+        estimated_cost_usd=response.estimated_cost_usd,
+    )
+
     return DraftEmailResponse(
         subject=parsed.get("subject", "Following up"),
         body=parsed.get("body", ""),
@@ -1469,6 +1536,7 @@ async def analyze_dashboard(
     """Analyze dashboard data and provide AI-powered insights."""
     from app.services import ai_settings_service
     from app.services.ai_provider import ChatMessage, get_provider
+    from app.services.ai_usage_service import log_usage
 
     # Check AI is enabled
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
@@ -1584,6 +1652,16 @@ Focus on:
             "insights": [response.content[:200]],
             "recommendations": ["Review case statuses regularly"],
         }
+
+    log_usage(
+        db=db,
+        organization_id=session.org_id,
+        user_id=session.user_id,
+        model=response.model,
+        prompt_tokens=response.prompt_tokens,
+        completion_tokens=response.completion_tokens,
+        estimated_cost_usd=response.estimated_cost_usd,
+    )
 
     return AnalyzeDashboardResponse(
         insights=parsed.get("insights", []),

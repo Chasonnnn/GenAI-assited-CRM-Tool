@@ -8,7 +8,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.db.models import AISettings, Job
-from app.services import ai_settings_service
+from app.services import ai_settings_service, ai_chat_service
 from app.services.ai_provider import ChatResponse
 
 
@@ -42,7 +42,7 @@ async def test_ai_chat_async_payload_encrypted_and_scrubbed(
     monkeypatch.setattr(
         ai_settings_service,
         "get_ai_provider_for_org",
-        lambda _db, _org_id: StubProvider(),
+        lambda _db, _org_id, **_kwargs: StubProvider(),
     )
 
     message = "Email Jane Doe at jane.doe@example.com"
@@ -67,3 +67,52 @@ async def test_ai_chat_async_payload_encrypted_and_scrubbed(
     payload = job.payload or {}
     assert "message" not in payload
     assert "message_encrypted" not in payload
+
+
+@pytest.mark.asyncio
+async def test_ai_chat_async_blocks_when_consent_missing(
+    db, test_org, test_user, monkeypatch
+):
+    settings = AISettings(
+        organization_id=test_org.id,
+        is_enabled=True,
+        provider="openai",
+        model="gpt-4o-mini",
+        current_version=1,
+        consent_accepted_at=None,
+        consent_accepted_by=None,
+        api_key_encrypted=ai_settings_service.encrypt_api_key("sk-test"),
+    )
+    db.add(settings)
+    db.flush()
+
+    called = {"chat": False}
+
+    class StubProvider:
+        async def chat(self, messages, **kwargs):  # noqa: ARG002
+            called["chat"] = True
+            return ChatResponse(
+                content="Ok",
+                prompt_tokens=1,
+                completion_tokens=1,
+                total_tokens=2,
+                model="gpt-4o-mini",
+            )
+
+    monkeypatch.setattr(
+        "app.services.ai_provider.get_provider",
+        lambda *_args, **_kwargs: StubProvider(),
+    )
+
+    result = await ai_chat_service.chat_async(
+        db=db,
+        organization_id=test_org.id,
+        user_id=test_user.id,
+        entity_type="global",
+        entity_id=test_user.id,
+        message="Hello there",
+        user_integrations=[],
+    )
+
+    assert "consent" in result["content"].lower()
+    assert called["chat"] is False
