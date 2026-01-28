@@ -124,6 +124,23 @@ resource "google_cloud_run_v2_service" "web" {
         container_port = 3000
       }
 
+      startup_probe {
+        failure_threshold = 18
+        period_seconds    = 10
+        timeout_seconds   = 5
+        http_get {
+          path = "/health"
+          port = 3000
+        }
+      }
+
+      liveness_probe {
+        http_get {
+          path = "/health"
+          port = 3000
+        }
+      }
+
       env {
         name  = "NEXT_PUBLIC_API_BASE_URL"
         value = local.api_url
