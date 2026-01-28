@@ -34,7 +34,7 @@ from app.db.enums import (
     TaskType,
     TaskStatus,
 )
-from app.services import workflow_service, job_service, notification_service
+from app.services import workflow_service, job_service, notification_facade
 from app.services.workflow_action_preview import build_action_preview, render_action_payload
 from app.schemas.workflow import ALLOWED_UPDATE_FIELDS
 from app.core.constants import (
@@ -530,7 +530,7 @@ class WorkflowEngine:
             logger.info(f"Created approval task {task.id} for execution {execution.id}")
 
             # Send notification to owner (respects user settings)
-            notification_service.notify_workflow_approval_requested(
+            notification_facade.notify_workflow_approval_requested(
                 db=db,
                 task_id=task.id,
                 task_title=task.title,
@@ -1208,7 +1208,7 @@ class WorkflowEngine:
 
         # Create notifications
         for user_id in user_ids:
-            notification_service.create_notification(
+            notification_facade.create_notification(
                 db=db,
                 org_id=entity.organization_id,
                 user_id=user_id,

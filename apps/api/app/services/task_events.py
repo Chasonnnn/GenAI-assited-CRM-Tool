@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.db.models import Task, Surrogate, User
-from app.services import notification_service
+from app.services import notification_facade
 
 
 def notify_task_assigned(
@@ -26,7 +26,7 @@ def notify_task_assigned(
         surrogate = db.query(Surrogate).filter(Surrogate.id == task.surrogate_id).first()
         surrogate_number = surrogate.surrogate_number if surrogate else None
 
-    notification_service.notify_task_assigned(
+    notification_facade.notify_task_assigned(
         db=db,
         task_id=task.id,
         task_title=task.title,

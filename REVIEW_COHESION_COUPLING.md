@@ -199,7 +199,8 @@ Coupling notes:
   Create/Delete: create `apps/api/app/services/notification_facade.py` and event helpers; no deletes.
   Expected blast radius: medium (central notifications).
   Test plan: unit tests per event; smoke tests for websocket and in‑app notifications.
-  Status: pending.
+  Status: completed (2026-01-28).
+  Notes: introduced `notification_facade` and switched service-layer callers to use it.
 
 - **R6 — Email sender interface**
   Files to change: `invite_email_service.py`, `email_service.py`, `platform_email_service.py`, `gmail_service.py`.

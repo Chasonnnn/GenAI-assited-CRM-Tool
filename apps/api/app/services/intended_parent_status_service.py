@@ -196,10 +196,10 @@ def change_status(
             )
         db.refresh(request)
 
-        from app.services import notification_service
+        from app.services import notification_facade
 
         requester = _get_org_user(db, ip.organization_id, user_id)
-        notification_service.notify_ip_status_change_request_pending(
+        notification_facade.notify_ip_status_change_request_pending(
             db=db,
             request=request,
             intended_parent=ip,

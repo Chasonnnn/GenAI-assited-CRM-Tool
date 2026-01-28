@@ -533,11 +533,11 @@ def assign_surrogate(
 
         # Send notification to assignee (if not self-assign)
         if surrogate.owner_id != user_id:
-            from app.services import notification_service
+            from app.services import notification_facade
 
             actor = _get_org_user(db, surrogate.organization_id, user_id)
             actor_name = actor.display_name if actor else "Someone"
-            notification_service.notify_surrogate_assigned(
+            notification_facade.notify_surrogate_assigned(
                 db=db,
                 surrogate=surrogate,
                 assignee_id=surrogate.owner_id,

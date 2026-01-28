@@ -1055,10 +1055,10 @@ def expire_approval_task(
     db.commit()
 
     # Notify owner that approval expired
-    from app.services import notification_service
+    from app.services import notification_facade
     from app.db.enums import NotificationType
 
-    notification_service.create_notification(
+    notification_facade.create_notification(
         db=db,
         org_id=task.organization_id,
         user_id=task.owner_id,
