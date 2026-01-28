@@ -6,8 +6,16 @@ from uuid import UUID
 from sqlalchemy import asc, desc, func, and_, or_, text
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.enums import MatchStatus
-from app.db.models import Surrogate, IntendedParent, Match, MatchEvent
+from app.db.enums import MatchStatus, IntendedParentStatus, SurrogateActivityType
+from app.db.models import (
+    Surrogate,
+    IntendedParent,
+    Match,
+    MatchEvent,
+    StatusChangeRequest,
+    IntendedParentStatusHistory,
+)
+from sqlalchemy.exc import IntegrityError
 
 
 def generate_match_number(db: Session, org_id: UUID) -> str:
@@ -306,3 +314,430 @@ def get_match_event(
         )
         .first()
     )
+
+
+def create_match(
+    db: Session,
+    *,
+    org_id: UUID,
+    surrogate_id: UUID,
+    intended_parent_id: UUID,
+    proposed_by_user_id: UUID,
+    compatibility_score: float | None = None,
+    notes: str | None = None,
+) -> Match:
+    """Create a proposed match and log activity."""
+    from app.services import activity_service, note_service
+
+    clean_notes = note_service.sanitize_html(notes) if notes else None
+
+    match = Match(
+        organization_id=org_id,
+        match_number=generate_match_number(db, org_id),
+        surrogate_id=surrogate_id,
+        intended_parent_id=intended_parent_id,
+        status=MatchStatus.PROPOSED.value,
+        compatibility_score=compatibility_score,
+        proposed_by_user_id=proposed_by_user_id,
+        notes=clean_notes,
+    )
+    db.add(match)
+    db.flush()
+
+    activity_service.log_activity(
+        db=db,
+        surrogate_id=surrogate_id,
+        organization_id=org_id,
+        activity_type=SurrogateActivityType.MATCH_PROPOSED,
+        actor_user_id=proposed_by_user_id,
+        details={
+            "match_id": str(match.id),
+            "intended_parent_id": str(intended_parent_id),
+            "compatibility_score": compatibility_score,
+        },
+    )
+
+    db.commit()
+    db.refresh(match)
+    return match
+
+
+def mark_match_reviewing_if_needed(
+    db: Session,
+    match: Match,
+    *,
+    actor_user_id: UUID,
+    org_id: UUID,
+) -> Match:
+    """Auto-transition match to reviewing if viewed by non-proposer."""
+    if (
+        match.status == MatchStatus.PROPOSED.value
+        and match.proposed_by_user_id != actor_user_id
+    ):
+        from app.services import activity_service
+
+        match.status = MatchStatus.REVIEWING.value
+        match.reviewed_by_user_id = actor_user_id
+        match.reviewed_at = datetime.now(timezone.utc)
+        match.updated_at = datetime.now(timezone.utc)
+
+        activity_service.log_activity(
+            db=db,
+            surrogate_id=match.surrogate_id,
+            organization_id=org_id,
+            activity_type=SurrogateActivityType.MATCH_REVIEWING,
+            actor_user_id=actor_user_id,
+            details={
+                "match_id": str(match.id),
+                "intended_parent_id": str(match.intended_parent_id),
+            },
+        )
+
+        db.commit()
+        db.refresh(match)
+
+    return match
+
+
+def accept_match(
+    db: Session,
+    match: Match,
+    *,
+    actor_user_id: UUID,
+    actor_role: str,
+    org_id: UUID,
+    notes: str | None = None,
+) -> Match:
+    """Accept a match and apply related side effects."""
+    if match.status not in [MatchStatus.PROPOSED.value, MatchStatus.REVIEWING.value]:
+        raise ValueError(f"Cannot accept match with status: {match.status}")
+
+    from app.services import (
+        activity_service,
+        dashboard_events,
+        note_service,
+        pipeline_service,
+        surrogate_service,
+    )
+
+    surrogate = get_surrogate_with_stage(db, match.surrogate_id, org_id)
+    if surrogate:
+        current_stage = surrogate.stage
+        pipeline_id = current_stage.pipeline_id if current_stage else None
+        if not pipeline_id:
+            pipeline_id = pipeline_service.get_or_create_default_pipeline(
+                db,
+                org_id,
+                actor_user_id,
+            ).id
+        matched_stage = pipeline_service.get_stage_by_slug(db, pipeline_id, "matched")
+        if matched_stage:
+            surrogate_service.change_status(
+                db=db,
+                surrogate=surrogate,
+                new_stage_id=matched_stage.id,
+                user_id=actor_user_id,
+                user_role=actor_role,
+                reason="Match accepted",
+            )
+
+    match.status = MatchStatus.ACCEPTED.value
+    match.reviewed_by_user_id = actor_user_id
+    match.reviewed_at = datetime.now(timezone.utc)
+    if notes:
+        clean_notes = note_service.sanitize_html(notes)
+        match.notes = (match.notes or "") + "\n\n" + clean_notes
+    match.updated_at = datetime.now(timezone.utc)
+
+    ip = get_intended_parent(db, match.intended_parent_id, org_id)
+    if ip and ip.status != IntendedParentStatus.MATCHED.value:
+        old_status = ip.status
+        ip.status = IntendedParentStatus.MATCHED.value
+        ip.last_activity = datetime.now(timezone.utc)
+        ip.updated_at = datetime.now(timezone.utc)
+        db.add(
+            IntendedParentStatusHistory(
+                intended_parent_id=ip.id,
+                changed_by_user_id=actor_user_id,
+                old_status=old_status,
+                new_status=IntendedParentStatus.MATCHED.value,
+                reason="Match accepted",
+            )
+        )
+
+    other_matches = list_pending_matches_for_surrogate(
+        db=db,
+        surrogate_id=match.surrogate_id,
+        exclude_match_id=match.id,
+    )
+    for other in other_matches:
+        other.status = MatchStatus.CANCELLED.value
+        other.updated_at = datetime.now(timezone.utc)
+
+    activity_service.log_activity(
+        db=db,
+        surrogate_id=match.surrogate_id,
+        organization_id=org_id,
+        activity_type=SurrogateActivityType.MATCH_ACCEPTED,
+        actor_user_id=actor_user_id,
+        details={
+            "match_id": str(match.id),
+            "intended_parent_id": str(match.intended_parent_id),
+            "cancelled_matches": len(other_matches),
+        },
+    )
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise
+
+    db.refresh(match)
+    dashboard_events.push_dashboard_stats(db, org_id)
+    return match
+
+
+def reject_match(
+    db: Session,
+    match: Match,
+    *,
+    actor_user_id: UUID,
+    org_id: UUID,
+    rejection_reason: str,
+    notes: str | None = None,
+) -> Match:
+    """Reject a match with reason and log activity."""
+    if match.status not in [MatchStatus.PROPOSED.value, MatchStatus.REVIEWING.value]:
+        raise ValueError(f"Cannot reject match with status: {match.status}")
+
+    from app.services import activity_service, note_service
+
+    match.status = MatchStatus.REJECTED.value
+    match.reviewed_by_user_id = actor_user_id
+    match.reviewed_at = datetime.now(timezone.utc)
+    match.rejection_reason = rejection_reason
+    if notes:
+        clean_notes = note_service.sanitize_html(notes)
+        match.notes = (match.notes or "") + "\n\n" + clean_notes
+    match.updated_at = datetime.now(timezone.utc)
+
+    activity_service.log_activity(
+        db=db,
+        surrogate_id=match.surrogate_id,
+        organization_id=org_id,
+        activity_type=SurrogateActivityType.MATCH_REJECTED,
+        actor_user_id=actor_user_id,
+        details={
+            "match_id": str(match.id),
+            "intended_parent_id": str(match.intended_parent_id),
+            "rejection_reason": rejection_reason,
+        },
+    )
+
+    db.commit()
+    db.refresh(match)
+    return match
+
+
+def request_cancel_match(
+    db: Session,
+    match: Match,
+    *,
+    actor_user_id: UUID,
+    org_id: UUID,
+    reason: str | None = None,
+) -> Match:
+    """Create a pending cancellation request for an accepted match."""
+    if match.status != MatchStatus.ACCEPTED.value:
+        raise ValueError("Only accepted matches can be cancelled")
+
+    existing_request = (
+        db.query(StatusChangeRequest)
+        .filter(
+            StatusChangeRequest.organization_id == org_id,
+            StatusChangeRequest.entity_type == "match",
+            StatusChangeRequest.entity_id == match.id,
+            StatusChangeRequest.status == "pending",
+        )
+        .first()
+    )
+    if existing_request:
+        raise ValueError("A pending cancellation request already exists for this match")
+
+    now = datetime.now(timezone.utc)
+    request = StatusChangeRequest(
+        organization_id=org_id,
+        entity_type="match",
+        entity_id=match.id,
+        target_status=MatchStatus.CANCELLED.value,
+        effective_at=now,
+        reason=(reason or "").strip(),
+        requested_by_user_id=actor_user_id,
+        requested_at=now,
+        status="pending",
+    )
+    db.add(request)
+
+    match.status = MatchStatus.CANCEL_PENDING.value
+    match.updated_at = now
+
+    db.commit()
+    db.refresh(match)
+    db.refresh(request)
+
+    from app.services import notification_service, user_service
+
+    surrogate = get_surrogate_with_stage(db, match.surrogate_id, org_id)
+    intended_parent = get_intended_parent(db, match.intended_parent_id, org_id)
+    requester = user_service.get_user_by_id(db, actor_user_id)
+    requester_name = requester.display_name if requester else "Someone"
+
+    if surrogate and intended_parent:
+        notification_service.notify_match_cancel_request_pending(
+            db=db,
+            request=request,
+            match=match,
+            surrogate=surrogate,
+            intended_parent=intended_parent,
+            requester_name=requester_name,
+        )
+
+    return match
+
+
+def cancel_match(
+    db: Session,
+    match: Match,
+    *,
+    actor_user_id: UUID,
+    org_id: UUID,
+) -> None:
+    """Cancel a proposed/reviewing match."""
+    if match.status not in [MatchStatus.PROPOSED.value, MatchStatus.REVIEWING.value]:
+        raise ValueError(f"Cannot cancel match with status: {match.status}")
+
+    from app.services import activity_service
+
+    match.status = MatchStatus.CANCELLED.value
+    match.updated_at = datetime.now(timezone.utc)
+
+    activity_service.log_activity(
+        db=db,
+        surrogate_id=match.surrogate_id,
+        organization_id=org_id,
+        activity_type=SurrogateActivityType.MATCH_CANCELLED,
+        actor_user_id=actor_user_id,
+        details={
+            "match_id": str(match.id),
+            "intended_parent_id": str(match.intended_parent_id),
+        },
+    )
+
+    db.commit()
+
+
+def update_match_notes(
+    db: Session,
+    match: Match,
+    *,
+    notes: str,
+) -> Match:
+    """Update match notes."""
+    from app.services import note_service
+
+    match.notes = note_service.sanitize_html(notes)
+    match.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(match)
+    return match
+
+
+def create_match_event(
+    db: Session,
+    *,
+    org_id: UUID,
+    match_id: UUID,
+    created_by_user_id: UUID,
+    person_type: str,
+    event_type: str,
+    title: str,
+    description: str | None,
+    starts_at: datetime | None,
+    ends_at: datetime | None,
+    timezone: str,
+    all_day: bool,
+    start_date: date | None,
+    end_date: date | None,
+) -> MatchEvent:
+    """Create a match event."""
+    event = MatchEvent(
+        organization_id=org_id,
+        match_id=match_id,
+        person_type=person_type,
+        event_type=event_type,
+        title=title,
+        description=description,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        timezone=timezone,
+        all_day=all_day,
+        start_date=start_date,
+        end_date=end_date,
+        created_by_user_id=created_by_user_id,
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+def update_match_event(
+    db: Session,
+    event: MatchEvent,
+    *,
+    person_type: str | None = None,
+    event_type: str | None = None,
+    title: str | None = None,
+    description: str | None = None,
+    timezone: str | None = None,
+    all_day: bool,
+    start_date: date | None,
+    end_date: date | None,
+    starts_at: datetime | None,
+    ends_at: datetime | None,
+) -> MatchEvent:
+    """Update a match event."""
+    if person_type is not None:
+        event.person_type = person_type
+    if event_type is not None:
+        event.event_type = event_type
+    if title is not None:
+        event.title = title
+    if description is not None:
+        event.description = description
+    if timezone is not None:
+        event.timezone = timezone
+
+    event.all_day = all_day
+    if all_day:
+        event.start_date = start_date
+        event.end_date = end_date
+        event.starts_at = None
+        event.ends_at = None
+    else:
+        event.start_date = None
+        event.end_date = None
+        event.starts_at = starts_at
+        event.ends_at = ends_at
+
+    event.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+def delete_match_event(db: Session, event: MatchEvent) -> None:
+    """Delete a match event."""
+    db.delete(event)
+    db.commit()

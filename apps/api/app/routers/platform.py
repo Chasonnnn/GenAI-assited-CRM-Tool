@@ -374,10 +374,9 @@ def update_organization(
     - Users must re-login on the new subdomain
     - Old slug immediately returns 404 (no redirect)
     """
-    from app.db.models import Organization
     from app.services import org_service
 
-    org = db.query(Organization).filter(Organization.id == org_id).first()
+    org = org_service.get_org_by_id(db, org_id, include_deleted=True)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
 
@@ -759,7 +758,6 @@ async def send_test_org_system_email_template(
     db: Session = Depends(get_db),
 ) -> dict:
     """Send a test email using the org-scoped system template + platform sender."""
-    from app.db.models import Organization
     from app.services import (
         audit_service,
         email_service,
@@ -771,7 +769,7 @@ async def send_test_org_system_email_template(
     if not platform_email_service.platform_sender_configured():
         raise HTTPException(status_code=400, detail="Platform email sender is not configured")
 
-    org = db.query(Organization).filter(Organization.id == org_id).first()
+    org = org_service.get_org_by_id(db, org_id, include_deleted=True)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
 

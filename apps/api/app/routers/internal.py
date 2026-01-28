@@ -22,6 +22,7 @@ from app.db.enums import (
 from app.services import (
     alert_service,
     job_service,
+    meta_admin_service,
     meta_page_service,
     ops_service,
     org_service,
@@ -377,14 +378,12 @@ def meta_hierarchy_sync(x_internal_secret: str = Header(...)):
     """
     verify_internal_secret(x_internal_secret)
 
-    from app.db.models import MetaAdAccount
-
     ad_accounts_processed = 0
     jobs_created = 0
 
     with SessionLocal() as db:
         # Get all active ad accounts across all orgs
-        ad_accounts = db.query(MetaAdAccount).filter(MetaAdAccount.is_active.is_(True)).all()
+        ad_accounts = meta_admin_service.list_active_ad_accounts(db)
 
         for ad_account in ad_accounts:
             job_service.schedule_job(
@@ -428,13 +427,11 @@ def meta_spend_sync(
     """
     verify_internal_secret(x_internal_secret)
 
-    from app.db.models import MetaAdAccount
-
     ad_accounts_processed = 0
     jobs_created = 0
 
     with SessionLocal() as db:
-        ad_accounts = db.query(MetaAdAccount).filter(MetaAdAccount.is_active.is_(True)).all()
+        ad_accounts = meta_admin_service.list_active_ad_accounts(db)
 
         for ad_account in ad_accounts:
             job_service.schedule_job(
