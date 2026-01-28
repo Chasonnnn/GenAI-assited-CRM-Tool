@@ -28,8 +28,8 @@ import {
     CheckIcon,
 } from "lucide-react"
 import { useIntegrationHealth } from "@/lib/hooks/use-ops"
-import { useUserIntegrations, useConnectZoom, useConnectGmail, useConnectGoogleCalendar, useDisconnectIntegration } from "@/lib/hooks/use-user-integrations"
-import { useAISettings, useUpdateAISettings, useTestAPIKey } from "@/lib/hooks/use-ai"
+import { useUserIntegrations, useConnectZoom, useConnectGmail, useConnectGoogleCalendar, useConnectGcp, useDisconnectIntegration } from "@/lib/hooks/use-user-integrations"
+import { useAISettings, useUpdateAISettings, useTestAPIKey, useAIConsent, useAcceptConsent } from "@/lib/hooks/use-ai"
 import { useResendSettings, useUpdateResendSettings, useTestResendKey, useRotateWebhook, useEligibleSenders } from "@/lib/hooks/use-resend"
 import { formatDistanceToNow } from "date-fns"
 import { CopyIcon, SendIcon, RotateCwIcon } from "lucide-react"
@@ -74,6 +74,11 @@ const AI_PROVIDERS = [
         label: "Google Gemini",
         models: ["gemini-3-flash-preview", "gemini-2.0-flash-exp", "gemini-1.5-pro"],
     },
+    {
+        value: "vertex_wif",
+        label: "Vertex AI (WIF)",
+        models: ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash"],
+    },
 ] as const
 
 type AiProvider = (typeof AI_PROVIDERS)[number]["value"]
@@ -83,13 +88,22 @@ const isAiProvider = (value: string | null | undefined): value is AiProvider =>
 
 function AIConfigurationSection() {
     const { data: aiSettings, isLoading } = useAISettings()
+    const { data: consentInfo } = useAIConsent()
+    const acceptConsent = useAcceptConsent()
     const updateSettings = useUpdateAISettings()
     const testKey = useTestAPIKey()
+    const { data: userIntegrations } = useUserIntegrations()
+    const connectGcp = useConnectGcp()
+    const disconnectIntegration = useDisconnectIntegration()
 
     const [isEnabled, setIsEnabled] = useState(false)
     const [provider, setProvider] = useState<AiProvider>("openai")
     const [apiKey, setApiKey] = useState("")
     const [model, setModel] = useState("")
+    const [vertexProjectId, setVertexProjectId] = useState("")
+    const [vertexLocation, setVertexLocation] = useState("us-central1")
+    const [vertexAudience, setVertexAudience] = useState("")
+    const [vertexServiceAccount, setVertexServiceAccount] = useState("")
     const [keyTested, setKeyTested] = useState<boolean | null>(null)
     const [saved, setSaved] = useState(false)
 
@@ -103,14 +117,23 @@ function AIConfigurationSection() {
                 setProvider("openai")
             }
             setModel(aiSettings.model || "")
+            setVertexProjectId(aiSettings.vertex_wif?.project_id || "")
+            setVertexLocation(aiSettings.vertex_wif?.location || "us-central1")
+            setVertexAudience(aiSettings.vertex_wif?.audience || "")
+            setVertexServiceAccount(aiSettings.vertex_wif?.service_account_email || "")
         }
     }, [aiSettings])
 
     const selectedProviderModels =
         AI_PROVIDERS.find((providerOption) => providerOption.value === provider)?.models ??
         []
+    const consentAccepted = Boolean(aiSettings?.consent_accepted_at)
+    const gcpIntegration = userIntegrations?.find(i => i.integration_type === "gcp")
+    const vertexReady = provider !== "vertex_wif"
+        || Boolean(vertexProjectId.trim() && vertexLocation.trim() && vertexServiceAccount.trim() && vertexAudience.trim())
 
     const handleTestKey = async () => {
+        if (provider === "vertex_wif") return
         if (!apiKey.trim()) return
         setKeyTested(null)
         try {
@@ -122,7 +145,18 @@ function AIConfigurationSection() {
     }
 
     const handleSave = async () => {
-        const update: { is_enabled?: boolean; provider?: "openai" | "gemini"; api_key?: string; model?: string } = {
+        const update: {
+            is_enabled?: boolean;
+            provider?: "openai" | "gemini" | "vertex_wif";
+            api_key?: string;
+            model?: string;
+            vertex_wif?: {
+                project_id: string | null;
+                location: string | null;
+                audience: string | null;
+                service_account_email: string | null;
+            };
+        } = {
             is_enabled: isEnabled,
             provider,
         }
@@ -132,11 +166,28 @@ function AIConfigurationSection() {
         if (model) {
             update.model = model
         }
+        if (provider === "vertex_wif") {
+            update.vertex_wif = {
+                project_id: vertexProjectId.trim() || null,
+                location: vertexLocation.trim() || null,
+                audience: vertexAudience.trim() || null,
+                service_account_email: vertexServiceAccount.trim() || null,
+            }
+        }
         await updateSettings.mutateAsync(update)
         setApiKey("") // Clear after save
         setKeyTested(null)
         setSaved(true)
         setTimeout(() => setSaved(false), 2000)
+    }
+
+    const handleAcceptConsent = async () => {
+        try {
+            await acceptConsent.mutateAsync()
+            toast.success("AI consent accepted")
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Failed to accept consent")
+        }
     }
 
     if (isLoading) {
@@ -154,8 +205,37 @@ function AIConfigurationSection() {
         <div className="border-t pt-6">
             <h2 className="mb-4 text-lg font-semibold">AI Configuration</h2>
             <p className="mb-4 text-sm text-muted-foreground">
-                Configure AI assistant settings for your organization. Provide your own API key (BYOK).
+                Configure AI assistant settings for your organization. Use BYOK (OpenAI/Gemini) or Vertex AI via Workload Identity Federation.
             </p>
+
+            {!consentAccepted && consentInfo && (
+                <Card className="mb-4 border-yellow-200 bg-yellow-50/60">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-base">AI Consent Required</CardTitle>
+                        <CardDescription className="text-xs text-muted-foreground">
+                            An admin must accept the AI data processing consent before enabling AI features.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                        <div className="max-h-40 overflow-auto rounded-md border border-yellow-200 bg-white p-3 text-xs leading-relaxed text-muted-foreground">
+                            {consentInfo.consent_text}
+                        </div>
+                        <Button
+                            onClick={handleAcceptConsent}
+                            disabled={acceptConsent.isPending}
+                        >
+                            {acceptConsent.isPending ? (
+                                <>
+                                    <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                    Accepting...
+                                </>
+                            ) : (
+                                "Accept Consent"
+                            )}
+                        </Button>
+                    </CardContent>
+                </Card>
+            )}
 
             <Card>
                 <CardHeader className="pb-3">
@@ -179,6 +259,7 @@ function AIConfigurationSection() {
                                 id="ai-enabled"
                                 checked={isEnabled}
                                 onCheckedChange={setIsEnabled}
+                                disabled={!consentAccepted && !isEnabled}
                             />
                         </div>
                     </div>
@@ -210,62 +291,154 @@ function AIConfigurationSection() {
                         </Select>
                     </div>
 
-                    {/* API Key Input */}
-                    <div className="space-y-2">
-                        <Label htmlFor="ai-key">API Key</Label>
-                        <div className="flex gap-2">
-                            <Input
-                                id="ai-key"
-                                type="password"
-                                value={apiKey || (aiSettings?.api_key_masked ? aiSettings.api_key_masked : "")}
-                                onChange={(e) => {
-                                    setApiKey(e.target.value)
-                                    setKeyTested(null)
-                                }}
-                                placeholder="Enter API key"
-                                disabled={!apiKey && !!aiSettings?.api_key_masked}
-                                className="flex-1"
-                            />
-                            {aiSettings?.api_key_masked && !apiKey ? (
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setApiKey("")}
-                                    className="shrink-0"
-                                >
-                                    Change Key
-                                </Button>
-                            ) : (
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={handleTestKey}
-                                    disabled={!apiKey.trim() || testKey.isPending}
-                                >
-                                    {testKey.isPending ? (
-                                        <Loader2Icon className="size-4 animate-spin" />
-                                    ) : keyTested === true ? (
-                                        <CheckIcon className="size-4 text-green-600" />
-                                    ) : keyTested === false ? (
-                                        <XCircleIcon className="size-4 text-red-600" />
-                                    ) : (
-                                        "Test"
-                                    )}
-                                </Button>
+                    {/* API Key Input (OpenAI/Gemini only) */}
+                    {provider !== "vertex_wif" && (
+                        <div className="space-y-2">
+                            <Label htmlFor="ai-key">API Key</Label>
+                            <div className="flex gap-2">
+                                <Input
+                                    id="ai-key"
+                                    type="password"
+                                    value={apiKey || (aiSettings?.api_key_masked ? aiSettings.api_key_masked : "")}
+                                    onChange={(e) => {
+                                        setApiKey(e.target.value)
+                                        setKeyTested(null)
+                                    }}
+                                    placeholder="Enter API key"
+                                    disabled={!apiKey && !!aiSettings?.api_key_masked}
+                                    className="flex-1"
+                                />
+                                {aiSettings?.api_key_masked && !apiKey ? (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setApiKey("")}
+                                        className="shrink-0"
+                                    >
+                                        Change Key
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleTestKey}
+                                        disabled={!apiKey.trim() || testKey.isPending}
+                                    >
+                                        {testKey.isPending ? (
+                                            <Loader2Icon className="size-4 animate-spin" />
+                                        ) : keyTested === true ? (
+                                            <CheckIcon className="size-4 text-green-600" />
+                                        ) : keyTested === false ? (
+                                            <XCircleIcon className="size-4 text-red-600" />
+                                        ) : (
+                                            "Test"
+                                        )}
+                                    </Button>
+                                )}
+                            </div>
+                            {keyTested === true && (
+                                <p className="text-xs text-green-600">API key is valid!</p>
                             )}
+                            {keyTested === false && (
+                                <p className="text-xs text-red-600">API key is invalid. Please check and try again.</p>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                                {provider === "openai"
+                                    ? "Get your key from platform.openai.com"
+                                    : "Get your key from aistudio.google.com"}
+                            </p>
                         </div>
-                        {keyTested === true && (
-                            <p className="text-xs text-green-600">API key is valid!</p>
-                        )}
-                        {keyTested === false && (
-                            <p className="text-xs text-red-600">API key is invalid. Please check and try again.</p>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                            {provider === "openai"
-                                ? "Get your key from platform.openai.com"
-                                : "Get your key from aistudio.google.com"}
-                        </p>
-                    </div>
+                    )}
+
+                    {provider === "vertex_wif" && (
+                        <div className="space-y-4 rounded-lg border p-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-sm font-medium">Vertex AI (WIF)</h3>
+                                    <p className="text-xs text-muted-foreground">
+                                        Uses Workload Identity Federation—no long-lived keys stored.
+                                    </p>
+                                </div>
+                                {gcpIntegration ? (
+                                    <Badge variant="default">GCP Connected</Badge>
+                                ) : (
+                                    <Badge variant="secondary">GCP Not Connected</Badge>
+                                )}
+                            </div>
+
+                            <div className="flex items-center justify-between rounded-md border p-3">
+                                <div className="text-sm">
+                                    {gcpIntegration
+                                        ? `Connected as ${gcpIntegration.account_email ?? "Google account"}`
+                                        : "Connect a Google Cloud account to verify access."}
+                                </div>
+                                {gcpIntegration ? (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => disconnectIntegration.mutate("gcp")}
+                                        disabled={disconnectIntegration.isPending}
+                                    >
+                                        Disconnect
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        size="sm"
+                                        onClick={() => connectGcp.mutate()}
+                                        disabled={connectGcp.isPending}
+                                    >
+                                        {connectGcp.isPending ? (
+                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                        ) : null}
+                                        Connect GCP
+                                    </Button>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="vertex-project">Project ID</Label>
+                                <Input
+                                    id="vertex-project"
+                                    value={vertexProjectId}
+                                    onChange={(e) => setVertexProjectId(e.target.value)}
+                                    placeholder="your-gcp-project-id"
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="vertex-location">Location</Label>
+                                <Input
+                                    id="vertex-location"
+                                    value={vertexLocation}
+                                    onChange={(e) => setVertexLocation(e.target.value)}
+                                    placeholder="us-central1"
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="vertex-service-account">Service Account Email</Label>
+                                <Input
+                                    id="vertex-service-account"
+                                    value={vertexServiceAccount}
+                                    onChange={(e) => setVertexServiceAccount(e.target.value)}
+                                    placeholder="vertex-sa@project.iam.gserviceaccount.com"
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="vertex-audience">Workload Identity Audience</Label>
+                                <Input
+                                    id="vertex-audience"
+                                    value={vertexAudience}
+                                    onChange={(e) => setVertexAudience(e.target.value)}
+                                    placeholder="//iam.googleapis.com/projects/123/locations/global/workloadIdentityPools/pool/providers/provider"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Use the provider resource name or full audience from the Workload Identity Provider.
+                                </p>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Model Selection */}
                     <div className="space-y-2">
@@ -288,7 +461,7 @@ function AIConfigurationSection() {
                     </div>
 
                     {/* Save Button */}
-                    <Button onClick={handleSave} disabled={updateSettings.isPending} className="w-full">
+                    <Button onClick={handleSave} disabled={updateSettings.isPending || !vertexReady} className="w-full">
                         {updateSettings.isPending ? (
                             <>
                                 <Loader2Icon className="mr-2 size-4 animate-spin" />

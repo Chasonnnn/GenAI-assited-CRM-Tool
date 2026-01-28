@@ -7,6 +7,7 @@ const mockUseIntegrationHealth = vi.fn()
 const mockConnectZoom = vi.fn()
 const mockConnectGmail = vi.fn()
 const mockConnectGoogleCalendar = vi.fn()
+const mockConnectGcp = vi.fn()
 const mockDisconnectIntegration = vi.fn()
 
 vi.mock('@/lib/hooks/use-ops', () => ({
@@ -26,6 +27,7 @@ vi.mock('@/lib/hooks/use-user-integrations', () => ({
     useConnectZoom: () => ({ mutate: mockConnectZoom, isPending: false }),
     useConnectGmail: () => ({ mutate: mockConnectGmail, isPending: false }),
     useConnectGoogleCalendar: () => ({ mutate: mockConnectGoogleCalendar, isPending: false }),
+    useConnectGcp: () => ({ mutate: mockConnectGcp, isPending: false }),
     useDisconnectIntegration: () => ({ mutate: mockDisconnectIntegration, isPending: false }),
 }))
 
@@ -54,6 +56,7 @@ describe('IntegrationsPage', () => {
         mockConnectZoom.mockReset()
         mockConnectGmail.mockReset()
         mockConnectGoogleCalendar.mockReset()
+        mockConnectGcp.mockReset()
         mockDisconnectIntegration.mockReset()
     })
 
