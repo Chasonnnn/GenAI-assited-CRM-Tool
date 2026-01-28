@@ -53,3 +53,8 @@ infra/terraform/terraform.tfvars
 infra/terraform/*.auto.tfvars
 infra/terraform/tfplan
 .secrets.env
+
+# Tool caches
+.ruff_cache/
+.uv_cache/
+.uv-cache/
