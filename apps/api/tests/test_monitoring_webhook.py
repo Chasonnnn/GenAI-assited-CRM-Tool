@@ -38,7 +38,7 @@ async def test_gcp_alert_webhook_creates_alert(client, db, test_user, test_org, 
 
 
 @pytest.mark.anyio
-async def test_gcp_alert_webhook_accepts_auth_token_query(
+async def test_gcp_alert_webhook_rejects_auth_token_query(
     client, db, test_user, test_org, monkeypatch
 ):
     from app.core.config import settings
@@ -64,7 +64,7 @@ async def test_gcp_alert_webhook_accepts_auth_token_query(
         json=payload,
     )
 
-    assert res.status_code == 200
+    assert res.status_code == 403
 
     alert = db.query(SystemAlert).filter(SystemAlert.organization_id == test_org.id).first()
-    assert alert is not None
+    assert alert is None

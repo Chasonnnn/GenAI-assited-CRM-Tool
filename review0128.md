@@ -83,12 +83,6 @@
     - Evidence: `apps/web/app/(app)/appointments/page.tsx:26-67`
     - Suggested fix: Add error UI and retry.
 
-14) Subscription model explicitly marked as placeholder (no enforcement)
-    - Risk: Billing/state enforcement is not implemented; features may appear 'enabled' without gating.
-    - Consequence: Revenue leakage and inconsistent expectations around plan‑gated features.
-    - Evidence: `apps/api/app/db/models/auth.py:432-438`, `apps/api/app/services/platform_service.py:403-432`
-    - Suggested fix: Implement enforcement or mark clearly in UI/backoffice.
-
 ## Files Reviewed
 (The list below includes every file in the repository as enumerated by `rg --files`.)
 

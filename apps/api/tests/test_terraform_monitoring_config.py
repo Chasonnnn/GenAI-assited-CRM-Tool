@@ -37,6 +37,7 @@ def test_monitoring_webhook_channel_is_configured() -> None:
     assert 'resource "google_monitoring_notification_channel" "ops_webhook"' in content
     assert "webhook_tokenauth" in content
     assert "url = local.monitoring_webhook_url" in content
+    assert "token = var.monitoring_webhook_token" in content
     assert "notification_channels = local.alert_notification_channels" in content
 
 
@@ -44,4 +45,5 @@ def test_alert_channel_locals_include_webhook() -> None:
     content = _read("infra/terraform/locals.tf")
     assert "alert_notification_channels" in content
     assert "monitoring_webhook_enabled" in content
-    assert "/internal/alerts/gcp?auth_token=" in content
+    assert "/internal/alerts/gcp" in content
+    assert "?auth_token=" not in content

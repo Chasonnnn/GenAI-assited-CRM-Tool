@@ -370,7 +370,7 @@ variable "alert_notification_channel_ids" {
 }
 
 variable "monitoring_webhook_token" {
-  description = "Token appended to the internal monitoring webhook URL (?auth_token=...)."
+  description = "Token for authenticating the internal monitoring webhook (sent via header)."
   type        = string
   default     = ""
   sensitive   = true

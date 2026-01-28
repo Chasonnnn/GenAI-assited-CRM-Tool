@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 import logging
+import time
 from datetime import datetime, timezone
 
 from fastapi import Request
@@ -34,6 +35,15 @@ def _verify_svix_signature(
     svix_signature = headers.get("svix-signature", "")
 
     if not svix_id or not svix_timestamp or not svix_signature:
+        return False
+
+    # Reject stale or malformed timestamps to prevent replay attacks.
+    try:
+        timestamp = int(svix_timestamp)
+    except (TypeError, ValueError):
+        return False
+    now = int(time.time())
+    if abs(now - timestamp) > 300:
         return False
 
     # Build the signed payload

@@ -136,7 +136,7 @@ Provide a Monitoring notification channel ID (Slack/email) via `alert_notificati
 Create the Slack notification channel out-of-band so webhooks never enter Terraform state.
 
 To route GCP Monitoring alerts into the Ops console, set `monitoring_webhook_token`.
-This token is appended to the webhook URL and must match the API's `INTERNAL_SECRET`.
+The token is sent via the webhook auth header and must match the API's `INTERNAL_SECRET`.
 Note: the token will exist in Terraform state (marked sensitive).
 
 Budget alerts use the same channel. Set `billing_account_id` and `billing_budget_amount_usd`.

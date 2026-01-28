@@ -90,6 +90,24 @@ class TestResendWebhookSignature:
         is_valid = _verify_svix_signature(body, headers, "secret")
         assert is_valid is False
 
+    def test_verify_svix_signature_rejects_stale_timestamp(self):
+        from app.services.webhooks.resend import _verify_svix_signature
+
+        body = b'{"type": "email.delivered", "data": {}}'
+        secret = "test_secret_key_for_testing"
+        stale_timestamp = str(int(time.time()) - 3600)
+
+        msg_id, signature = _generate_svix_signature(body, secret, stale_timestamp)
+
+        headers = {
+            "svix-id": msg_id,
+            "svix-timestamp": stale_timestamp,
+            "svix-signature": signature,
+        }
+
+        is_valid = _verify_svix_signature(body, headers, secret)
+        assert is_valid is False
+
 
 class TestResendWebhookHandler:
     """Test webhook event processing."""

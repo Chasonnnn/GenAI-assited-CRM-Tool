@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import get_current_session, get_db, require_permission
+from app.core.deps import get_current_session, get_db, require_permission, require_csrf_header
 from app.core.policies import POLICIES
 from app.db.enums import AuditEventType, Role
 from app.schemas.compliance import ExportJobCreate, ExportJobListResponse, ExportJobRead
@@ -197,7 +197,7 @@ def list_audit_exports(
     return ExportJobListResponse(items=items)
 
 
-@router.post("/exports", response_model=ExportJobRead)
+@router.post("/exports", response_model=ExportJobRead, dependencies=[Depends(require_csrf_header)])
 def create_audit_export(
     payload: ExportJobCreate,
     db: Session = Depends(get_db),

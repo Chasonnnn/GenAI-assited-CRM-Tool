@@ -7,7 +7,7 @@ locals {
   web_image = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}/web:latest"
 
   monitoring_webhook_enabled = var.monitoring_webhook_token != ""
-  monitoring_webhook_url     = "${local.api_url}/internal/alerts/gcp?auth_token=${var.monitoring_webhook_token}"
+  monitoring_webhook_url     = "${local.api_url}/internal/alerts/gcp"
   alert_notification_channels = concat(
     var.alert_notification_channel_ids,
     google_monitoring_notification_channel.ops_webhook[*].name
