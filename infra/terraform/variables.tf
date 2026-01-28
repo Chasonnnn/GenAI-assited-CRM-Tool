@@ -369,6 +369,13 @@ variable "alert_notification_channel_ids" {
   default     = []
 }
 
+variable "monitoring_webhook_token" {
+  description = "Token appended to the internal monitoring webhook URL (?auth_token=...)."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "billing_account_id" {
   description = "Billing account ID for budget alerts and exports."
   type        = string

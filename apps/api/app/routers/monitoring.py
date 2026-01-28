@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -21,10 +21,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/internal/alerts", tags=["internal"])
 
 
-def verify_internal_secret(x_internal_secret: str = Header(...)) -> None:
+def verify_internal_secret(
+    x_internal_secret: str | None = Header(default=None),
+    auth_token: str | None = Query(default=None),
+) -> None:
     expected = settings.INTERNAL_SECRET if hasattr(settings, "INTERNAL_SECRET") else None
     if not expected:
         raise HTTPException(status_code=501, detail="INTERNAL_SECRET not configured")
+    if x_internal_secret == expected or auth_token == expected:
+        return
     if x_internal_secret != expected:
         raise HTTPException(status_code=403, detail="Invalid internal secret")
 
@@ -74,10 +79,11 @@ def _map_severity(value: str | None) -> AlertSeverity:
 @router.post("/gcp")
 def receive_gcp_alert(
     payload: GCPAlertPayload,
-    x_internal_secret: str = Header(...),
+    x_internal_secret: str | None = Header(default=None),
+    auth_token: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
-    verify_internal_secret(x_internal_secret)
+    verify_internal_secret(x_internal_secret, auth_token)
 
     incident = payload.incident
     labels = incident.metric.labels if incident.metric and incident.metric.labels else {}

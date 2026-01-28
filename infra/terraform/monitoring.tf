@@ -1,9 +1,20 @@
+resource "google_monitoring_notification_channel" "ops_webhook" {
+  count = local.monitoring_webhook_enabled ? 1 : 0
+
+  display_name = "Ops internal alerts webhook"
+  type         = "webhook_tokenauth"
+
+  labels = {
+    url = local.monitoring_webhook_url
+  }
+}
+
 resource "google_monitoring_alert_policy" "cloudsql_cpu_high" {
   count = local.alerting_enabled ? 1 : 0
 
   display_name          = "Cloud SQL CPU high"
   combiner              = "OR"
-  notification_channels = var.alert_notification_channel_ids
+  notification_channels = local.alert_notification_channels
 
   conditions {
     display_name = "Cloud SQL CPU > 70% for 15m"
@@ -28,7 +39,7 @@ resource "google_monitoring_alert_policy" "cloudsql_memory_high" {
 
   display_name          = "Cloud SQL memory high"
   combiner              = "OR"
-  notification_channels = var.alert_notification_channel_ids
+  notification_channels = local.alert_notification_channels
 
   conditions {
     display_name = "Cloud SQL memory > 80% for 15m"
@@ -53,7 +64,7 @@ resource "google_monitoring_alert_policy" "cloudsql_disk_high" {
 
   display_name          = "Cloud SQL disk high"
   combiner              = "OR"
-  notification_channels = var.alert_notification_channel_ids
+  notification_channels = local.alert_notification_channels
 
   conditions {
     display_name = "Cloud SQL disk > 80% for 15m"
@@ -78,7 +89,7 @@ resource "google_monitoring_alert_policy" "redis_memory_high" {
 
   display_name          = "Redis memory high"
   combiner              = "OR"
-  notification_channels = var.alert_notification_channel_ids
+  notification_channels = local.alert_notification_channels
 
   conditions {
     display_name = "Redis memory usage > 80% for 15m"
@@ -103,7 +114,7 @@ resource "google_monitoring_alert_policy" "cloud_run_5xx" {
 
   display_name          = "Cloud Run 5xx spike"
   combiner              = "OR"
-  notification_channels = var.alert_notification_channel_ids
+  notification_channels = local.alert_notification_channels
 
   conditions {
     display_name = "Cloud Run 5xx > 5 in 5m"

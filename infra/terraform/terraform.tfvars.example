@@ -30,6 +30,7 @@ enable_domain_mapping = true
 
 # Monitoring + budgets (recommended)
 # alert_notification_channel_ids = ["projects/PROJECT_ID/notificationChannels/CHANNEL_ID"]
+# monitoring_webhook_token = "replace-me"
 # billing_account_id = "000000-000000-000000"
 # billing_budget_amount_usd = 300
 # billing_budget_thresholds = [0.5, 0.75, 0.9, 1.0]
