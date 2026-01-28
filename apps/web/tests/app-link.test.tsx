@@ -11,7 +11,16 @@ vi.mock('next/navigation', () => ({
 }))
 
 vi.mock('next/link', () => ({
-    default: ({ href, children, ...props }: { href: string | { pathname?: string }; children: React.ReactNode }) => (
+    default: ({
+        href,
+        children,
+        prefetch: _prefetch,
+        ...props
+    }: {
+        href: string | { pathname?: string }
+        children: React.ReactNode
+        prefetch?: boolean
+    }) => (
         <a href={typeof href === 'string' ? href : href?.pathname ?? ''} {...props}>
             {children}
         </a>
