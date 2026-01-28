@@ -70,9 +70,7 @@ async def test_ai_chat_async_payload_encrypted_and_scrubbed(
 
 
 @pytest.mark.asyncio
-async def test_ai_chat_async_blocks_when_consent_missing(
-    db, test_org, test_user, monkeypatch
-):
+async def test_ai_chat_async_blocks_when_consent_missing(db, test_org, test_user, monkeypatch):
     settings = AISettings(
         organization_id=test_org.id,
         is_enabled=True,

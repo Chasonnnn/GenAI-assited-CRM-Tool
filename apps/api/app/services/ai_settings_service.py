@@ -343,9 +343,7 @@ def rollback_ai_settings(
     )
     ai_settings.anonymize_pii = payload.get("anonymize_pii", ai_settings.anonymize_pii)
     vertex_payload = payload.get("vertex_wif") or {}
-    ai_settings.vertex_project_id = vertex_payload.get(
-        "project_id", ai_settings.vertex_project_id
-    )
+    ai_settings.vertex_project_id = vertex_payload.get("project_id", ai_settings.vertex_project_id)
     ai_settings.vertex_location = vertex_payload.get("location", ai_settings.vertex_location)
     ai_settings.vertex_audience = vertex_payload.get("audience", ai_settings.vertex_audience)
     ai_settings.vertex_service_account_email = vertex_payload.get(

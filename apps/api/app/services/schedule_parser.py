@@ -4,9 +4,7 @@ Uses AI to parse medication schedules, exam dates, and event text into structure
 """
 
 import hashlib
-import json
 import logging
-import re
 from datetime import date, datetime, time
 from uuid import UUID
 
@@ -17,6 +15,8 @@ from zoneinfo import ZoneInfo
 from app.db.enums import TaskType
 from app.db.models import Organization
 from app.services.ai_provider import ChatMessage
+from app.services.ai_prompt_registry import get_prompt
+from app.services.ai_response_validation import parse_json_array
 
 logger = logging.getLogger(__name__)
 
@@ -57,39 +57,11 @@ class ParseScheduleResult(BaseModel):
 # AI Prompt
 # ============================================================================
 
-PARSE_SCHEDULE_SYSTEM_PROMPT = """You are a schedule parser for a surrogacy agency using Surrogacy Force. 
-Extract tasks from medication schedules, exam dates, and appointment lists.
-
-Return a JSON array with objects containing:
-- title: short task name (max 100 chars)
-- description: additional context (optional)
-- due_date: YYYY-MM-DD format (or null if not specified)
-- due_time: HH:MM format in 24h (or null if not specified)
-- task_type: one of [medication, exam, appointment, follow_up, meeting, contact, review, other]
-- confidence: 0-1 how confident you are in this extraction
-
-Guidelines:
-- Extract ALL dates and events mentioned
-- For recurring items (e.g., "daily"), create ONE task for the start date with description noting recurrence
-- For relative dates like "Day 5" or "CD12", interpret as days from today unless context suggests otherwise
-- "Start [medication]" is a valid task title
-- Include clinic names, times, locations in description, not title
-- If time is ambiguous (e.g., "morning"), use null for due_time
-
-Return ONLY valid JSON array, no markdown or explanation."""
-
 
 def _build_user_prompt(text: str, reference_date: date) -> str:
     """Build the user prompt with context."""
-    return f"""Today's date is {reference_date.isoformat()}.
-
-Parse the following schedule and extract tasks:
-
----
-{text}
----
-
-Return JSON array of tasks."""
+    prompt = get_prompt("schedule_parse")
+    return prompt.render_user(reference_date=reference_date.isoformat(), text=text)
 
 
 # ============================================================================
@@ -177,8 +149,9 @@ async def parse_schedule_text(
             )
 
         # Build messages
+        prompt = get_prompt("schedule_parse")
         messages = [
-            ChatMessage(role="system", content=PARSE_SCHEDULE_SYSTEM_PROMPT),
+            ChatMessage(role="system", content=prompt.system),
             ChatMessage(role="user", content=_build_user_prompt(prompt_text, reference_date)),
         ]
 
@@ -187,8 +160,8 @@ async def parse_schedule_text(
         content = response.content
 
         # Parse response - extract JSON from response (handle markdown code blocks)
-        json_match = re.search(r"\[[\s\S]*\]", content)
-        if not json_match:
+        raw_tasks = parse_json_array(content)
+        if not raw_tasks:
             warnings.append("AI did not return valid JSON. Please try rephrasing.")
             return ParseScheduleResult(
                 proposed_tasks=[],
@@ -197,11 +170,11 @@ async def parse_schedule_text(
                 assumed_reference_date=reference_date,
             )
 
-        json_str = json_match.group()
-        raw_tasks = json.loads(json_str)
-
         # Convert to ProposedTask objects
         for raw_task in raw_tasks:
+            if not isinstance(raw_task, dict):
+                warnings.append("Invalid task item skipped")
+                continue
             try:
                 # Parse date
                 due_date = None
@@ -253,9 +226,6 @@ async def parse_schedule_text(
 
         logger.info(f"Parsed {len(proposed_tasks)} tasks, {len(warnings)} warnings")
 
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON decode error: {e}")
-        warnings.append("AI response was not valid JSON. Please try again.")
     except Exception as e:
         logger.error(f"Schedule parsing error: {e}")
         warnings.append(f"Parsing error: {str(e)}")

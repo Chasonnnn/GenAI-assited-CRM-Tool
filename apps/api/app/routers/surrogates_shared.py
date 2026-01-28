@@ -1,6 +1,5 @@
 """Shared helpers for surrogate routers."""
 
-
 from sqlalchemy.orm import Session
 
 from app.db.enums import OwnerType, SurrogateSource

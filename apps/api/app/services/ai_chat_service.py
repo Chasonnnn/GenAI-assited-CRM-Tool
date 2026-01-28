@@ -3,7 +3,6 @@
 Handles AI conversations with context injection and action parsing.
 """
 
-import json
 import logging
 import re
 import uuid
@@ -27,7 +26,10 @@ from app.db.models import (
 from app.db.enums import TaskType
 from app.services.ai_provider import ChatMessage, ChatResponse
 from app.services import ai_settings_service
+from app.services.ai_prompt_registry import get_prompt
+from app.services.ai_prompt_schemas import AIChatActionProposal
 from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_text
+from app.services.ai_response_validation import parse_json_object, validate_model
 from app.types import JsonObject
 from app.core.async_utils import run_async
 
@@ -41,95 +43,9 @@ SURROGATE_ENTITY_TYPE = "surrogate"
 # System Prompt
 # ============================================================================
 
-SYSTEM_PROMPT = """You are an AI assistant for a surrogacy agency platform called Surrogacy Force. You help staff manage surrogates efficiently.
-
-## Available Actions
-When you want to propose an action, output it as JSON in an <action> tag. You can propose multiple actions.
-
-Action types:
-- send_email: Draft an email (requires user's Gmail to be connected)
-- create_task: Create a follow-up task
-- add_note: Add a note to the surrogate
-- update_status: Suggest a status change
-
-Example action format:
-<action>
-{"type": "send_email", "to": "email@example.com", "subject": "Following up", "body": "Hi..."}
-</action>
-
-<action>
-{"type": "create_task", "title": "Follow up with Sarah", "due_date": "2024-12-20", "description": "Check on application status"}
-</action>
-
-## Guidelines
-- Be concise and professional
-- Always propose actions for approval, never auto-execute
-- Don't provide legal or medical advice
-- Keep responses focused on the current surrogate context
-"""
-
-GLOBAL_SYSTEM_PROMPT = """You are an AI assistant for a surrogacy agency platform called Surrogacy Force. You help staff manage surrogates efficiently.
-
-You are in GLOBAL mode - no specific surrogate is selected. You can:
-- Answer general questions about workflows and processes
-- Help draft messages that the user can copy/paste
-- Suggest next steps based on information the user provides
-- Help parse emails or notes the user pastes to extract relevant information
-- Answer questions about team performance and conversion metrics (if data is provided below)
-
-If the user pastes an email or describes a situation, you can help:
-1. Identify if it relates to an existing surrogate (ask for the person's name or surrogate number)
-2. Suggest what tasks should be created
-3. Draft responses
-4. Recommend next steps
-
-When answering performance questions:
-- Identify top performers (high conversion rates) and those who may need support (low conversion rates)
-- Consider both volume (total surrogates) and efficiency (conversion rate)
-- Application submitted count represents successful outcomes; Lost represents unsuccessful outcomes
-- Conversion rate = (application_submitted / total surrogates) * 100
-
-## Guidelines
-- Be concise and professional
-- If you need a specific surrogate context to take action, ask the user to open that surrogate
-- Don't provide legal or medical advice
-- You cannot execute actions without surrogate context
-"""
-
-TASK_SYSTEM_PROMPT = """You are an AI assistant for a surrogacy agency platform called Surrogacy Force. You help staff manage tasks efficiently.
-
-You are viewing a specific TASK. You can:
-- Answer questions about this task
-- Suggest updates or notes to add
-- Help break down the task into sub-tasks
-- Parse schedules provided by the user into actionable tasks
-
-## Schedule Parsing
-
-When a user provides a medication schedule, exam schedule, or appointment list:
-1. Parse each item for: date, time (if specified), and description
-2. For each item, propose a `create_task` action with:
-   - title: Brief description (e.g., "Take Prenatal Vitamins")
-   - due_date: Parsed date in YYYY-MM-DD format
-   - due_time: Parsed time in HH:MM format (24h), or null if not specified
-   - description: Full details from the schedule
-3. Ask user to confirm before creating tasks
-4. Handle recurring items by creating individual tasks for a reasonable period (up to 7 days for daily items)
-
-Example input: "Prenatal vitamins daily at 9am for the next 7 days"
-→ Propose 7 individual create_task actions, one for each day
-
-Example action:
-<action>
-{"type": "create_task", "title": "Take Prenatal Vitamins", "due_date": "2024-12-21", "due_time": "09:00", "description": "Daily prenatal vitamins"}
-</action>
-
-## Guidelines
-- Be concise and professional
-- Always propose actions for approval, never auto-execute
-- Don't provide legal or medical advice
-- Keep responses focused on the current task context
-"""
+SYSTEM_PROMPT = get_prompt("chat_surrogate").system
+GLOBAL_SYSTEM_PROMPT = get_prompt("chat_global").system
+TASK_SYSTEM_PROMPT = get_prompt("chat_task").system
 
 ENTITY_SUMMARY_TTL_MINUTES = 10
 
@@ -390,11 +306,11 @@ def _parse_actions(content: str) -> list[JsonObject]:
     matches = re.findall(pattern, content, re.DOTALL)
 
     for match in matches:
-        try:
-            action = json.loads(match)
-            if isinstance(action, dict) and "type" in action:
-                actions.append(action)
-        except json.JSONDecodeError:
+        parsed = parse_json_object(match)
+        action = validate_model(AIChatActionProposal, parsed) if parsed else None
+        if action:
+            actions.append(action.model_dump())
+        else:
             logger.warning("Failed to parse action JSON from AI response")
 
     return actions
@@ -665,9 +581,7 @@ async def chat_async(
 
     # Get AI provider
     try:
-        provider = ai_settings_service.get_ai_provider_for_org(
-            db, organization_id, user_id=user_id
-        )
+        provider = ai_settings_service.get_ai_provider_for_org(db, organization_id, user_id=user_id)
     except TypeError:
         # Backwards-compatible for tests that monkeypatch without user_id
         provider = ai_settings_service.get_ai_provider_for_org(db, organization_id)

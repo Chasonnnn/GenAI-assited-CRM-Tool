@@ -20,6 +20,8 @@ from app.db.models import (
     PipelineStage,
 )
 from app.services import ai_settings_service, workflow_service
+from app.services.ai_prompt_registry import get_prompt
+from app.services.ai_response_validation import parse_json_object, validate_model
 from app.schemas.workflow import ALLOWED_CONDITION_FIELDS
 
 
@@ -169,64 +171,6 @@ CONDITION_OPERATORS = [
 # Workflow Generation Prompt
 # =============================================================================
 
-WORKFLOW_GENERATION_PROMPT = """You are a workflow configuration assistant for a surrogacy agency using Surrogacy Force.
-
-Your task is to generate a workflow configuration JSON based on the user's natural language description.
-
-## Available Triggers
-{triggers}
-
-## Available Actions
-{actions}
-
-## Available Email Templates
-{templates}
-
-## Available Users (for assignment)
-{users}
-
-## Available Pipeline Stages (for status changes)
-{stages}
-
-## Condition Operators
-equals, not_equals, contains, not_contains, greater_than, less_than, is_empty, is_not_empty, in_list, not_in_list
-
-## Condition Fields
-status_label, stage_id, source, is_priority, state, created_at, owner_type, owner_id, email, phone, full_name
-
-## User Request
-{user_input}
-
-## Output Format
-Respond with ONLY a valid JSON object (no markdown, no explanation) in this exact format:
-{{
-  "name": "Workflow name (concise, descriptive)",
-  "description": "Brief description of what this workflow does",
-  "icon": "zap",
-  "trigger_type": "one of the available triggers",
-  "trigger_config": {{}},
-  "conditions": [
-    {{"field": "field_name", "operator": "operator", "value": "value"}}
-  ],
-  "condition_logic": "AND",
-  "actions": [
-    {{"action_type": "action_name", "other_required_fields": "..."}}
-  ]
-}}
-
-## Rules
-1. Only use triggers from the available list
-2. Only use actions from the available list
-3. For send_email action, use a real template_id from the list
-4. For assign_surrogate actions, use owner_type ("user" or "queue") and a real owner_id from the list
-5. For send_notification actions, use recipients ("owner", "creator", "all_admins") or a list of user_ids
-6. For update_status actions, use a real stage_id from the list
-6. Keep the workflow simple and focused on the user's request
-7. Add conditions only when the user specifies filtering criteria
-8. Use descriptive but concise names
-"""
-
-
 # =============================================================================
 # Core Functions
 # =============================================================================
@@ -348,7 +292,8 @@ def generate_workflow(
 
     # Build prompt context
     context = _get_context_for_prompt(db, org_id, anonymize_pii=settings.anonymize_pii)
-    prompt = WORKFLOW_GENERATION_PROMPT.format(
+    prompt_template = get_prompt("workflow_generation")
+    prompt = prompt_template.render_user(
         triggers=context["triggers"],
         actions=context["actions"],
         templates=context["templates"],
@@ -364,10 +309,7 @@ def generate_workflow(
         async def _run_chat():
             return await provider.chat(
                 [
-                    ChatMessage(
-                        role="system",
-                        content="You are a workflow configuration generator. Always respond with ONLY valid JSON, no markdown or explanation.",
-                    ),
+                    ChatMessage(role="system", content=prompt_template.system),
                     ChatMessage(role="user", content=prompt),
                 ],
                 temperature=0.3,
@@ -376,25 +318,18 @@ def generate_workflow(
         response = run_async(_run_chat())
 
         # Parse response
-        content = response.content.strip()
-        # Remove markdown code blocks if present
-        if content.startswith("```json"):
-            content = content[7:]
-        if content.startswith("```"):
-            content = content[3:]
-        if content.endswith("```"):
-            content = content[:-3]
-        content = content.strip()
-
-        workflow_data = json.loads(content)
+        workflow_data = parse_json_object(response.content)
+        workflow_model = validate_model(GeneratedWorkflow, workflow_data)
+        if not workflow_model:
+            raise json.JSONDecodeError("Invalid workflow JSON", response.content, 0)
 
         # Validate the generated workflow
-        validation_result = validate_workflow(db, org_id, GeneratedWorkflow(**workflow_data))
+        validation_result = validate_workflow(db, org_id, workflow_model)
 
         if not validation_result.valid:
             return WorkflowGenerationResponse(
                 success=False,
-                workflow=GeneratedWorkflow(**workflow_data),
+                workflow=workflow_model,
                 explanation="Generated workflow has validation errors",
                 validation_errors=validation_result.errors,
                 warnings=validation_result.warnings,
@@ -402,7 +337,7 @@ def generate_workflow(
 
         return WorkflowGenerationResponse(
             success=True,
-            workflow=GeneratedWorkflow(**workflow_data),
+            workflow=workflow_model,
             explanation="Workflow generated successfully. Please review before saving.",
             warnings=validation_result.warnings,
         )
