@@ -16,6 +16,7 @@ DEFAULT_GOOGLE_REDIRECT_URI = "http://localhost:8000/auth/google/callback"
 DEFAULT_ZOOM_REDIRECT_URI = "http://localhost:8000/integrations/zoom/callback"
 DEFAULT_GMAIL_REDIRECT_URI = "http://localhost:8000/integrations/gmail/callback"
 DEFAULT_GOOGLE_CALENDAR_REDIRECT_URI = "http://localhost:8000/integrations/google-calendar/callback"
+DEFAULT_GCP_REDIRECT_URI = "http://localhost:8000/integrations/gcp/callback"
 DEFAULT_DUO_REDIRECT_URI = "http://localhost:3000/auth/duo/callback"
 RELEASE_PLEASE_MANIFEST_NAME = ".release-please-manifest.json"
 FALLBACK_APP_VERSION = "0.20.0"
@@ -177,6 +178,13 @@ class Settings(BaseSettings):
     GMAIL_REDIRECT_URI: str = ""
     # Google Calendar OAuth (per-user, used for Meet + calendar sync)
     GOOGLE_CALENDAR_REDIRECT_URI: str = ""
+    # Google Cloud OAuth (per-user, for Vertex AI setup)
+    GCP_REDIRECT_URI: str = ""
+
+    # Workload Identity Federation (OIDC issuer for Vertex AI)
+    WIF_OIDC_ISSUER: str = ""
+    WIF_OIDC_PRIVATE_KEY: str = ""  # PEM encoded RSA private key
+    WIF_OIDC_KEY_ID: str = ""  # Optional kid for JWKS
 
     # Error Tracking (optional, set in production)
     SENTRY_DSN: str = ""  # Get from https://sentry.io
@@ -231,8 +239,12 @@ class Settings(BaseSettings):
                 self.GMAIL_REDIRECT_URI = DEFAULT_GMAIL_REDIRECT_URI
             if not self.GOOGLE_CALENDAR_REDIRECT_URI:
                 self.GOOGLE_CALENDAR_REDIRECT_URI = DEFAULT_GOOGLE_CALENDAR_REDIRECT_URI
+            if not self.GCP_REDIRECT_URI:
+                self.GCP_REDIRECT_URI = DEFAULT_GCP_REDIRECT_URI
             if not self.DUO_REDIRECT_URI:
                 self.DUO_REDIRECT_URI = DEFAULT_DUO_REDIRECT_URI
+            if not self.WIF_OIDC_ISSUER:
+                self.WIF_OIDC_ISSUER = self.API_BASE_URL
             return
 
         errors: list[str] = []
@@ -252,6 +264,7 @@ class Settings(BaseSettings):
             "FRONTEND_URL",
             "ZOOM_REDIRECT_URI",
             "GMAIL_REDIRECT_URI",
+            "GCP_REDIRECT_URI",
             "DUO_REDIRECT_URI",
         ]
         for field in url_fields:

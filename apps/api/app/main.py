@@ -70,6 +70,7 @@ from app.routers import (
     monitoring,
     notes,
     notifications,
+    oidc,
     ops,
     permissions,
     pipelines,
@@ -392,6 +393,9 @@ async def security_headers_middleware(request: Request, call_next):
 
 # Auth router (always mounted)
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
+
+# OIDC discovery for Workload Identity Federation
+app.include_router(oidc.router)
 
 # Public endpoints (no auth required - for frontend middleware)
 app.include_router(public.router)

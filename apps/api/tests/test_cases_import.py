@@ -61,6 +61,41 @@ async def test_preview_import_success(authed_client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_preview_import_ai_available_requires_consent(
+    authed_client: AsyncClient, db, test_org, test_user
+):
+    from datetime import datetime, timezone
+
+    from app.db.models import AISettings
+    from app.services import ai_settings_service
+
+    settings = AISettings(
+        organization_id=test_org.id,
+        is_enabled=True,
+        provider="openai",
+        model="gpt-4o-mini",
+        current_version=1,
+        consent_accepted_at=None,
+        consent_accepted_by=None,
+        api_key_encrypted=ai_settings_service.encrypt_api_key("sk-test"),
+        updated_at=datetime.now(timezone.utc),
+    )
+    db.add(settings)
+    db.flush()
+
+    csv_data = create_csv_content([{"full_name": "John Doe", "email": "john@test.com"}])
+
+    response = await authed_client.post(
+        "/surrogates/import/preview/enhanced",
+        files={"file": ("test.csv", io.BytesIO(csv_data), "text/csv")},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ai_available"] is False
+
+
+@pytest.mark.asyncio
 async def test_preview_import_detects_duplicates_in_db(
     authed_client: AsyncClient, db, test_org, test_user
 ):

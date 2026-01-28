@@ -15,6 +15,8 @@ from dataclasses import dataclass
 
 import pytest
 from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 # Set test environment variables BEFORE any app imports
 os.environ.setdefault("TESTING", "1")  # Enable test mode (in-memory rate limiter)
@@ -28,6 +30,18 @@ os.environ.setdefault("ZOOM_CLIENT_ID", "test-zoom-client-id")
 os.environ.setdefault("ZOOM_CLIENT_SECRET", "test-zoom-client-secret")
 os.environ.setdefault("GOOGLE_CLIENT_ID", "test-google-client-id")
 os.environ.setdefault("GOOGLE_CLIENT_SECRET", "test-google-client-secret")
+os.environ.setdefault("WIF_OIDC_ISSUER", "https://test")
+
+_oidc_private_key = os.environ.get("WIF_OIDC_PRIVATE_KEY")
+if not _oidc_private_key:
+    _test_oidc_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    _oidc_private_key = _test_oidc_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode()
+    os.environ.setdefault("WIF_OIDC_PRIVATE_KEY", _oidc_private_key)
+os.environ.setdefault("WIF_OIDC_KEY_ID", "test-wif-key")
 
 
 # =============================================================================
