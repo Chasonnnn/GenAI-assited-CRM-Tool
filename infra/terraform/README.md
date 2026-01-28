@@ -70,6 +70,7 @@ enable_domain_mapping = true
 
 # Monitoring + budgets (recommended)
 alert_notification_channel_ids = ["projects/PROJECT_ID/notificationChannels/CHANNEL_ID"]
+monitoring_webhook_token = "replace-me"
 billing_account_id = "000000-000000-000000"
 billing_budget_amount_usd = 300
 billing_budget_thresholds = [0.5, 0.75, 0.9, 1.0]
@@ -133,6 +134,10 @@ Set `private_service_access_address`/`private_service_access_prefix_length` if y
 Terraform creates alert policies for Cloud SQL CPU/memory/disk, Redis memory usage, and Cloud Run 5xx spikes.
 Provide a Monitoring notification channel ID (Slack/email) via `alert_notification_channel_ids`.
 Create the Slack notification channel out-of-band so webhooks never enter Terraform state.
+
+To route GCP Monitoring alerts into the Ops console, set `monitoring_webhook_token`.
+This token is appended to the webhook URL and must match the API's `INTERNAL_SECRET`.
+Note: the token will exist in Terraform state (marked sensitive).
 
 Budget alerts use the same channel. Set `billing_account_id` and `billing_budget_amount_usd`.
 

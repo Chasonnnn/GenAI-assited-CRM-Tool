@@ -6,7 +6,13 @@ locals {
   api_image = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}/api:latest"
   web_image = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}/web:latest"
 
-  alerting_enabled = length(var.alert_notification_channel_ids) > 0
+  monitoring_webhook_enabled = var.monitoring_webhook_token != ""
+  monitoring_webhook_url     = "${local.api_url}/internal/alerts/gcp?auth_token=${var.monitoring_webhook_token}"
+  alert_notification_channels = concat(
+    var.alert_notification_channel_ids,
+    google_monitoring_notification_channel.ops_webhook[*].name
+  )
+  alerting_enabled = length(local.alert_notification_channels) > 0
   cors_origins     = join(",", distinct(compact([local.app_url, local.ops_url])))
 
   optional_env = merge(
