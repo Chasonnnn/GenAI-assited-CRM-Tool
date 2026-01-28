@@ -40,6 +40,16 @@ from app.services import (
     task_service,
     user_service,
 )
+from app.services.ai_prompt_registry import get_prompt
+from app.services.ai_prompt_schemas import (
+    AIDashboardAnalysisOutput,
+    AIDraftEmailOutput,
+    AISurrogateSummaryOutput,
+)
+from app.services.ai_response_validation import (
+    parse_json_object,
+    validate_model,
+)
 
 # Rate limiting
 from app.core.rate_limit import limiter
@@ -1283,18 +1293,7 @@ Pending Tasks:
             known_names.extend(surrogate.full_name.split())
         context = anonymize_text(context, pii_mapping, known_names)
 
-    prompt = f"""Analyze this surrogate and provide a comprehensive summary.
-
-{context}
-
-Respond in this exact JSON format:
-{{
-  "summary": "2-3 sentence overview of the surrogate",
-  "recent_activity": "Brief description of recent activity",
-  "suggested_next_steps": ["step 1", "step 2", "step 3"]
-}}
-
-Be concise and professional. Focus on actionable insights."""
+    prompt = get_prompt("surrogate_summary").render_user(context=context)
 
     # Call AI
     api_key = ai_settings_service.get_decrypted_key(settings)
@@ -1307,29 +1306,16 @@ Be concise and professional. Focus on actionable insights."""
 
     response = await provider.chat(
         [
-            ChatMessage(
-                role="system",
-                content="You are a helpful Surrogacy Force assistant for a surrogacy agency. Always respond with valid JSON.",
-            ),
+            ChatMessage(role="system", content=get_prompt("surrogate_summary").system),
             ChatMessage(role="user", content=prompt),
         ],
         temperature=0.3,
     )
 
-    # Parse response
-    try:
-        import json
-
-        # Extract JSON from response
-        content = response.content.strip()
-        if content.startswith("```json"):
-            content = content[7:]
-        if content.startswith("```"):
-            content = content[3:]
-        if content.endswith("```"):
-            content = content[:-3]
-        parsed = json.loads(content.strip())
-    except json.JSONDecodeError:
+    parsed_model = validate_model(AISurrogateSummaryOutput, parse_json_object(response.content))
+    if parsed_model:
+        parsed = parsed_model.model_dump()
+    else:
         parsed = {
             "summary": response.content[:500],
             "recent_activity": "See notes above",
@@ -1444,22 +1430,14 @@ async def draft_email(
 
     additional = f"\nAdditional context: {additional_context}" if additional_context else ""
 
-    prompt = f"""{email_instruction}
-
-Recipient: {recipient_name}
-Email: {recipient_email}
-Surrogate Status: {surrogate.status_label}
-{additional}
-
-Sender Name: {sender_name}
-
-Respond in this exact JSON format:
-{{
-  "subject": "Email subject line",
-  "body": "Full email body with greeting and signature using the sender name"
-}}
-
-Be professional, warm, and concise."""
+    prompt = get_prompt("email_draft").render_user(
+        email_instruction=email_instruction,
+        recipient_name=recipient_name,
+        recipient_email=recipient_email,
+        surrogate_status=surrogate.status_label,
+        additional_context=additional,
+        sender_name=sender_name,
+    )
 
     # Call AI
     api_key = ai_settings_service.get_decrypted_key(settings)
@@ -1472,29 +1450,16 @@ Be professional, warm, and concise."""
 
     response = await provider.chat(
         [
-            ChatMessage(
-                role="system",
-                content="You are a professional email writer for a surrogacy agency. Always respond with valid JSON.",
-            ),
+            ChatMessage(role="system", content=get_prompt("email_draft").system),
             ChatMessage(role="user", content=prompt),
         ],
         temperature=0.5,
     )
 
-    # Parse response
-    try:
-        import json
-
-        content = response.content.strip()
-        if content.startswith("```json"):
-            content = content[7:]
-        if content.startswith("```"):
-            content = content[3:]
-        if content.endswith("```"):
-            content = content[:-3]
-        parsed = json.loads(content.strip())
-    except json.JSONDecodeError:
-        # Fallback
+    parsed_model = validate_model(AIDraftEmailOutput, parse_json_object(response.content))
+    if parsed_model:
+        parsed = parsed_model.model_dump()
+    else:
         parsed = {
             "subject": "Following up on your application",
             "body": response.content,
@@ -1601,53 +1566,28 @@ async def analyze_dashboard(
             stats=stats,
         )
 
-    prompt = f"""Analyze this Surrogacy Force dashboard data for a surrogacy agency:
-
-Total Active Surrogates: {total_surrogates}
-Surrogates This Week: {surrogates_this_week}
-Surrogates Last Week: {surrogates_last_week}
-Overdue Tasks: {overdue_tasks}
-
-Status Breakdown: {status_summary}
-
-Provide actionable insights in this JSON format:
-{{
-  "insights": ["insight 1", "insight 2", "insight 3"],
-  "recommendations": ["recommendation 1", "recommendation 2", "recommendation 3"]
-}}
-
-Focus on:
-- Workflow efficiency
-- Potential issues to address
-- Opportunities for improvement
-- Staffing or process recommendations"""
+    prompt = get_prompt("dashboard_analysis").render_user(
+        total_surrogates=total_surrogates,
+        surrogates_this_week=surrogates_this_week,
+        surrogates_last_week=surrogates_last_week,
+        overdue_tasks=overdue_tasks,
+        status_summary=status_summary,
+    )
 
     provider = get_provider(settings.provider, api_key, settings.model)
 
     response = await provider.chat(
         [
-            ChatMessage(
-                role="system",
-                content="You are a Surrogacy Force analytics expert for a surrogacy agency. Provide actionable business insights. Always respond with valid JSON.",
-            ),
+            ChatMessage(role="system", content=get_prompt("dashboard_analysis").system),
             ChatMessage(role="user", content=prompt),
         ],
         temperature=0.4,
     )
 
-    # Parse response
-    try:
-        import json
-
-        content = response.content.strip()
-        if content.startswith("```json"):
-            content = content[7:]
-        if content.startswith("```"):
-            content = content[3:]
-        if content.endswith("```"):
-            content = content[:-3]
-        parsed = json.loads(content.strip())
-    except json.JSONDecodeError:
+    parsed_model = validate_model(AIDashboardAnalysisOutput, parse_json_object(response.content))
+    if parsed_model:
+        parsed = parsed_model.model_dump()
+    else:
         parsed = {
             "insights": [response.content[:200]],
             "recommendations": ["Review case statuses regularly"],

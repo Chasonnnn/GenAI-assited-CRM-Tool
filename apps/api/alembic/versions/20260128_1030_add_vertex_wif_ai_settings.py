@@ -16,7 +16,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("ai_settings", sa.Column("vertex_project_id", sa.String(length=128), nullable=True))
+    op.add_column(
+        "ai_settings", sa.Column("vertex_project_id", sa.String(length=128), nullable=True)
+    )
     op.add_column("ai_settings", sa.Column("vertex_location", sa.String(length=64), nullable=True))
     op.add_column("ai_settings", sa.Column("vertex_audience", sa.String(length=255), nullable=True))
     op.add_column(

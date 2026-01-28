@@ -59,9 +59,10 @@ async def test_ai_settings_supports_vertex_wif_config(authed_client: AsyncClient
     assert data["provider"] == "vertex_wif"
     assert data["vertex_wif"]["project_id"] == payload["vertex_wif"]["project_id"]
     assert data["vertex_wif"]["location"] == payload["vertex_wif"]["location"]
-    assert data["vertex_wif"]["service_account_email"] == payload["vertex_wif"][
-        "service_account_email"
-    ]
+    assert (
+        data["vertex_wif"]["service_account_email"]
+        == payload["vertex_wif"]["service_account_email"]
+    )
     assert data["vertex_wif"]["audience"] == payload["vertex_wif"]["audience"]
 
 

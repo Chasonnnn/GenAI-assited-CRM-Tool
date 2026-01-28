@@ -10,7 +10,13 @@ from app.core.policies import POLICIES
 from app.core.surrogate_access import can_modify_surrogate, check_surrogate_access
 from app.db.enums import OwnerType
 from app.schemas.auth import UserSession
-from app.schemas.surrogate import BulkAssign, SurrogateAssign, SurrogateCreate, SurrogateRead, SurrogateUpdate
+from app.schemas.surrogate import (
+    BulkAssign,
+    SurrogateAssign,
+    SurrogateCreate,
+    SurrogateRead,
+    SurrogateUpdate,
+)
 from app.services import membership_service, queue_service, surrogate_service
 
 from .surrogates_shared import _surrogate_to_read

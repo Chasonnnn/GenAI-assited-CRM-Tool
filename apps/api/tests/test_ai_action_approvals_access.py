@@ -60,9 +60,7 @@ async def _authed_client_for_user(db, org_id, user, role):
 
 
 @pytest.mark.asyncio
-async def test_ai_action_approval_requires_surrogate_access(
-    db, test_org, test_user, default_stage
-):
+async def test_ai_action_approval_requires_surrogate_access(db, test_org, test_user, default_stage):
     intake_user = User(
         id=uuid.uuid4(),
         email=f"intake-{uuid.uuid4().hex[:8]}@test.com",

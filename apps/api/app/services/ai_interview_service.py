@@ -156,7 +156,9 @@ async def summarize_interview(
         )
     else:
         api_key = ai_settings_service.get_decrypted_key(ai_settings)
-        provider = get_provider(ai_settings.provider, api_key, ai_settings.model) if api_key else None
+        provider = (
+            get_provider(ai_settings.provider, api_key, ai_settings.model) if api_key else None
+        )
 
     if not provider:
         message = (
@@ -280,7 +282,9 @@ async def summarize_all_interviews(
         )
     else:
         api_key = ai_settings_service.get_decrypted_key(ai_settings)
-        provider = get_provider(ai_settings.provider, api_key, ai_settings.model) if api_key else None
+        provider = (
+            get_provider(ai_settings.provider, api_key, ai_settings.model) if api_key else None
+        )
 
     if not provider:
         message = (

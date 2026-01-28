@@ -17,7 +17,6 @@ PII Hygiene:
 - Never send free-text PII (notes, addresses) to AI
 """
 
-import json
 import logging
 import re
 from dataclasses import dataclass
@@ -27,6 +26,9 @@ from sqlalchemy.orm import Session
 
 from app.services.ai_provider import AIProvider, ChatMessage
 from app.services.ai_settings_service import get_ai_provider_for_org
+from app.services.ai_prompt_registry import get_prompt
+from app.services.ai_prompt_schemas import AIImportMappingSuggestion
+from app.services.ai_response_validation import parse_json_array, validate_model_list
 from app.services.import_detection_service import (
     AVAILABLE_SURROGATE_FIELDS,
     ColumnSuggestion,
@@ -118,45 +120,8 @@ def build_mapping_prompt(
 
     fields_text = ", ".join(available_fields)
 
-    return f"""You are a data mapping assistant for a surrogacy agency CRM.
-Analyze these unmatched CSV columns and suggest mappings.
-
-AVAILABLE DATABASE FIELDS:
-{fields_text}
-
-NOTES ABOUT FIELDS:
-- full_name, email are required fields
-- height_ft is decimal feet (5.33 = 5'4")
-- weight_lb is weight in pounds
-- is_age_eligible, is_citizen_or_pr, has_child, is_non_smoker, has_surrogate_experience are booleans
-- num_deliveries, num_csections are integers (counts)
-- For inverted questions like "Do you smoke?" → map to is_non_smoker with invert=true
-
-UNMATCHED COLUMNS WITH SAMPLE VALUES:
-{columns_text}
-
-For each column, analyze semantically and provide:
-- suggested_field: the database field to map to (from the list above), or null if no match
-- confidence: 0.0 to 1.0 score
-- transformation: one of [date_flexible, height_flexible, state_normalize, phone_normalize, boolean_flexible, boolean_inverted] or null
-- invert: true if the question needs inverted logic (e.g., "Do you smoke?" should invert for is_non_smoker)
-- reasoning: brief explanation
-- action: "map" (map to field), "metadata" (store as import metadata), "custom" (suggest custom field), or "ignore"
-- custom_field: if action is "custom", suggest {{key: "field_key", label: "Display Label", type: "boolean|text|number|date|select"}}
-
-Respond with ONLY valid JSON array, no markdown:
-[
-  {{
-    "column": "original column name",
-    "suggested_field": "field_name or null",
-    "confidence": 0.85,
-    "transformation": "transformer_name or null",
-    "invert": false,
-    "reasoning": "explanation",
-    "action": "map|metadata|custom|ignore",
-    "custom_field": null
-  }}
-]"""
+    prompt = get_prompt("import_mapping")
+    return prompt.render_user(fields_text=fields_text, columns_text=columns_text)
 
 
 # =============================================================================
@@ -184,41 +149,26 @@ def parse_ai_response(response_text: str) -> list[AIMappingSuggestion]:
 
     Handles common JSON issues (markdown code blocks, etc.)
     """
-    # Strip markdown code blocks if present
-    text = response_text.strip()
-    if text.startswith("```"):
-        lines = text.split("\n")
-        text = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
-    text = text.strip()
-
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as e:
-        logger.warning(f"Failed to parse AI response as JSON: {e}")
-        return []
-
-    if not isinstance(data, list):
+    data = parse_json_array(response_text)
+    if data is None:
         logger.warning("AI response is not a list")
         return []
 
-    suggestions = []
-    for item in data:
-        try:
-            suggestions.append(
-                AIMappingSuggestion(
-                    column=item.get("column", ""),
-                    suggested_field=item.get("suggested_field"),
-                    confidence=float(item.get("confidence", 0)),
-                    transformation=item.get("transformation"),
-                    invert=bool(item.get("invert", False)),
-                    reasoning=item.get("reasoning", ""),
-                    action=item.get("action", "ignore"),
-                    custom_field=item.get("custom_field"),
-                )
+    validated = validate_model_list(AIImportMappingSuggestion, data)
+    suggestions: list[AIMappingSuggestion] = []
+    for item in validated:
+        suggestions.append(
+            AIMappingSuggestion(
+                column=item.column,
+                suggested_field=item.suggested_field,
+                confidence=float(item.confidence),
+                transformation=item.transformation,
+                invert=bool(item.invert),
+                reasoning=item.reasoning,
+                action=item.action,
+                custom_field=item.custom_field,
             )
-        except (KeyError, ValueError, TypeError) as e:
-            logger.warning(f"Failed to parse AI suggestion item: {e}")
-            continue
+        )
 
     return suggestions
 
@@ -322,6 +272,7 @@ async def ai_suggest_mappings(
 
     # Call AI
     messages = [
+        ChatMessage(role="system", content=get_prompt("import_mapping").system),
         ChatMessage(role="user", content=prompt),
     ]
 

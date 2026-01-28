@@ -237,9 +237,7 @@ class VertexWIFProvider(AIProvider):
     """Vertex AI provider using Workload Identity Federation (OIDC)."""
 
     STS_TOKEN_URL = "https://sts.googleapis.com/v1/token"
-    IAM_CREDENTIALS_URL = (
-        "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{service_account}:generateAccessToken"
-    )
+    IAM_CREDENTIALS_URL = "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{service_account}:generateAccessToken"
 
     def __init__(self, config: VertexWIFConfig, default_model: str = "gemini-1.5-pro") -> None:
         self.config = config
@@ -293,9 +291,7 @@ class VertexWIFProvider(AIProvider):
 
         async with httpx.AsyncClient(timeout=20.0) as client:
             iam_response = await client.post(
-                self.IAM_CREDENTIALS_URL.format(
-                    service_account=self.config.service_account_email
-                ),
+                self.IAM_CREDENTIALS_URL.format(service_account=self.config.service_account_email),
                 headers={"Authorization": f"Bearer {sts_token}"},
                 json={
                     "scope": ["https://www.googleapis.com/auth/cloud-platform"],
