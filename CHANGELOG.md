@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.42.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.41.0...surrogacy-crm-platform-v0.42.0) (2026-01-28)
+
+
+### Features
+
+* add Vertex AI WIF support and AI service improvements ([ad71a23](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ad71a23dfde9e54d33e81834b896a4043996d7e0))
+* centralize AI prompts and validate outputs ([67bd3ec](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/67bd3ec36ff4a75ab7c7da26065bfad76b249692))
+
+
+### Maintenance
+
+* add ruff and uv cache directories to gitignore ([70b214e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/70b214ead1c3d364c83aba5575688516c80bbf1e))
+* update config, imports, and tests ([71ba4c7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/71ba4c76065fa4c889658753832f0d2057ba4306))
+
 ## [0.41.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.40.1...surrogacy-crm-platform-v0.41.0) (2026-01-28)
 
 
