@@ -527,6 +527,60 @@ class MetaDailySpend(Base):
     ad_account: Mapped["MetaAdAccount"] = relationship()
 
 
+class MetaAdPlatformDaily(Base):
+    """
+    Daily ad-level platform breakdown for deterministic lead attribution.
+
+    Stores publisher_platform breakdown per ad_id per day.
+    """
+
+    __tablename__ = "meta_ad_platform_daily"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "ad_account_id",
+            "ad_external_id",
+            "spend_date",
+            "platform",
+            name="uq_meta_ad_platform_daily",
+        ),
+        Index("idx_meta_ad_platform_date", "organization_id", "spend_date"),
+        Index("idx_meta_ad_platform_ad", "organization_id", "ad_external_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    ad_account_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("meta_ad_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    ad_external_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    ad_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    spend_date: Mapped[date] = mapped_column(Date, nullable=False)
+    platform: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    spend: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
+    impressions: Mapped[int] = mapped_column(BigInteger, server_default=text("0"), nullable=False)
+    clicks: Mapped[int] = mapped_column(BigInteger, server_default=text("0"), nullable=False)
+    leads: Mapped[int] = mapped_column(BigInteger, server_default=text("0"), nullable=False)
+
+    synced_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+
+    # Relationships
+    organization: Mapped["Organization"] = relationship()
+    ad_account: Mapped["MetaAdAccount"] = relationship()
+
+
 class MetaForm(Base):
     """
     Form metadata synced from Meta Lead Ads.

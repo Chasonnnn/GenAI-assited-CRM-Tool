@@ -23,6 +23,7 @@ from app.db.models import (
     MetaAdSet,
     MetaCampaign,
     MetaDailySpend,
+    MetaAdPlatformDaily,
     MetaForm,
     MetaFormVersion,
     MetaPageMapping,
@@ -40,6 +41,9 @@ SPEND_BREAKDOWN_TYPES = [
     "age",  # 18-24, 25-34, 35-44, etc.
     "region",  # US states (no fallback to country)
 ]
+
+# Platform breakdown for deterministic lead attribution
+AD_PLATFORM_BREAKDOWN = ["publisher_platform"]
 
 
 # =============================================================================
@@ -562,6 +566,164 @@ def _upsert_spend_row(
         db.add(row)
         db.flush()
         return row
+
+
+# =============================================================================
+# Ad Platform Breakdown Sync (ad-level publisher_platform)
+# =============================================================================
+
+
+async def sync_ad_platform_breakdown(
+    db: Session,
+    ad_account: MetaAdAccount,
+    date_start: date,
+    date_end: date,
+) -> dict:
+    """
+    Sync ad-level platform breakdown from Meta.
+
+    Uses insights at level=ad with publisher_platform breakdown.
+    Stores per-ad, per-day platform rows for deterministic lead attribution.
+
+    Returns:
+        {"rows_synced": N, "ads": N, "error": str | None, "skipped": bool}
+    """
+    result = {"rows_synced": 0, "ads": 0, "error": None, "skipped": False}
+
+    token_result = meta_token_service.get_token_for_ad_account(db, ad_account)
+    if not token_result.token:
+        logger.debug(
+            "Skipping ad platform sync for account %s - no token", ad_account.id
+        )
+        result["skipped"] = True
+        result["error"] = "no_token"
+        return result
+
+    access_token = token_result.token
+    ad_account_external_id = ad_account.ad_account_external_id
+    org_id = ad_account.organization_id
+    ad_set = set()
+
+    insights, error = await meta_api.fetch_ad_account_insights(
+        ad_account_external_id,
+        access_token,
+        date_start=date_start.isoformat(),
+        date_end=date_end.isoformat(),
+        level="ad",
+        time_increment=1,
+        breakdowns=AD_PLATFORM_BREAKDOWN,
+        fields="ad_id,ad_name,spend,impressions,clicks,actions,date_start,publisher_platform",
+    )
+
+    if error:
+        result["error"] = f"Ad platform fetch failed: {error}"
+        _record_sync_error(db, ad_account, error, token_result.connection_id)
+        return result
+
+    for row in insights or []:
+        platform_row = _upsert_ad_platform_row(db, ad_account, org_id, row)
+        if platform_row:
+            result["rows_synced"] += 1
+            ad_set.add(platform_row.ad_external_id)
+
+    result["ads"] = len(ad_set)
+
+    # Mark OAuth token as valid if using OAuth
+    if token_result.connection_id:
+        meta_token_service.mark_token_valid(db, token_result.connection_id)
+
+    # Backfill platform for recent leads using cached insights
+    if ad_set:
+        from app.services import meta_lead_service
+
+        backfilled = meta_lead_service.backfill_platform_for_date_range(
+            db,
+            org_id,
+            date_start,
+            date_end,
+            ad_ids=ad_set,
+        )
+        if backfilled:
+            logger.info(
+                "Backfilled platform for %s lead(s) in org %s",
+                backfilled,
+                org_id,
+            )
+
+    db.commit()
+
+    logger.info(
+        "Ad platform sync complete for %s: rows=%s, ads=%s",
+        ad_account_external_id,
+        result["rows_synced"],
+        result["ads"],
+    )
+
+    return result
+
+
+def _upsert_ad_platform_row(
+    db: Session,
+    ad_account: MetaAdAccount,
+    org_id: UUID,
+    data: JsonObject,
+) -> MetaAdPlatformDaily | None:
+    """Upsert a daily ad platform row."""
+    ad_external_id = data.get("ad_id")
+    date_str = data.get("date_start")
+    platform = data.get("publisher_platform")
+
+    if not ad_external_id or not date_str or not platform:
+        return None
+
+    try:
+        spend_date = date.fromisoformat(date_str)
+    except ValueError:
+        return None
+
+    spend = Decimal(data.get("spend", "0"))
+    impressions = int(data.get("impressions", 0))
+    clicks = int(data.get("clicks", 0))
+
+    leads = 0
+    for action in data.get("actions", []):
+        if action.get("action_type") in {"lead", "leadgen", "onsite_conversion.lead_grouped"}:
+            leads += int(action.get("value", 0))
+
+    existing = db.scalar(
+        select(MetaAdPlatformDaily).where(
+            MetaAdPlatformDaily.organization_id == org_id,
+            MetaAdPlatformDaily.ad_account_id == ad_account.id,
+            MetaAdPlatformDaily.ad_external_id == str(ad_external_id),
+            MetaAdPlatformDaily.spend_date == spend_date,
+            MetaAdPlatformDaily.platform == str(platform),
+        )
+    )
+
+    if existing:
+        existing.ad_name = data.get("ad_name") or existing.ad_name
+        existing.spend = spend
+        existing.impressions = impressions
+        existing.clicks = clicks
+        existing.leads = leads
+        existing.synced_at = datetime.now(timezone.utc)
+        return existing
+
+    row = MetaAdPlatformDaily(
+        organization_id=org_id,
+        ad_account_id=ad_account.id,
+        ad_external_id=str(ad_external_id),
+        ad_name=data.get("ad_name"),
+        spend_date=spend_date,
+        platform=str(platform),
+        spend=spend,
+        impressions=impressions,
+        clicks=clicks,
+        leads=leads,
+    )
+    db.add(row)
+    db.flush()
+    return row
 
 
 async def run_spend_sync_schedule(

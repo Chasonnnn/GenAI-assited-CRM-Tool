@@ -26,6 +26,21 @@ def _graph_base() -> str:
 HTTPX_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 
 
+def _format_rate_limit_headers(headers: httpx.Headers) -> str | None:
+    keys = [
+        "x-ad-account-usage",
+        "x-business-use-case",
+        "x-fb-ads-insights-throttle",
+        "x-app-usage",
+    ]
+    parts = []
+    for key in keys:
+        value = headers.get(key)
+        if value:
+            parts.append(f"{key}={value}")
+    return "; ".join(parts) if parts else None
+
+
 def verify_signature(payload: bytes, signature: str) -> bool:
     """
     Verify X-Hub-Signature-256 HMAC signature.
@@ -97,6 +112,9 @@ async def fetch_lead_details(
 
             if resp.status_code != 200:
                 error_body = resp.text[:500]
+                header_info = _format_rate_limit_headers(resp.headers)
+                if header_info:
+                    error_body = f"{error_body} | rate_limit_headers={header_info}"
                 return None, f"Meta API {resp.status_code}: {error_body}"
 
             return resp.json(), None
@@ -210,6 +228,7 @@ async def fetch_ad_account_insights(
     max_pages: int = 10,
     time_increment: int | None = None,
     breakdowns: list[str] | None = None,
+    fields: str | None = None,
 ) -> tuple[list[JsonObject] | None, str | None]:
     """
     Fetch ad insights (spend, impressions, etc.) from Meta Marketing API.
@@ -246,7 +265,8 @@ async def fetch_ad_account_insights(
     params = {
         "access_token": access_token,
         "appsecret_proof": proof,
-        "fields": "campaign_id,campaign_name,spend,impressions,reach,clicks,actions",
+        "fields": fields
+        or "campaign_id,campaign_name,spend,impressions,reach,clicks,actions",
         "level": level,
         "time_range": f'{{"since":"{date_start}","until":"{date_end}"}}',
         "limit": 100,  # Request max per page
@@ -266,6 +286,9 @@ async def fetch_ad_account_insights(
 
                 if resp.status_code != 200:
                     error_body = resp.text[:500]
+                    header_info = _format_rate_limit_headers(resp.headers)
+                    if header_info:
+                        error_body = f"{error_body} | rate_limit_headers={header_info}"
                     return None, f"Meta API {resp.status_code}: {error_body}"
 
                 data = resp.json()
@@ -570,6 +593,9 @@ async def _fetch_paginated(
 
                 if resp.status_code != 200:
                     error_body = resp.text[:500]
+                    header_info = _format_rate_limit_headers(resp.headers)
+                    if header_info:
+                        error_body = f"{error_body} | rate_limit_headers={header_info}"
                     return None, f"Meta API {resp.status_code}: {error_body}"
 
                 data = resp.json()

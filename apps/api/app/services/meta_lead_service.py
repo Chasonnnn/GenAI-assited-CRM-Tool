@@ -5,10 +5,11 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.enums import SurrogateSource
-from app.db.models import MetaAd, MetaForm, MetaLead, Organization, Surrogate
+from app.db.models import MetaAd, MetaAdPlatformDaily, MetaForm, MetaLead, Organization, Surrogate
 from app.schemas.surrogate import SurrogateCreate
 from app.services import surrogate_service
 from app.services import custom_field_service
@@ -80,6 +81,109 @@ def store_meta_lead(
     db.commit()
     db.refresh(lead)
     return lead, None
+
+
+def enrich_platform_from_insights(db: Session, meta_lead: MetaLead) -> str | None:
+    """
+    Populate meta_platform on a lead using cached ad-level insights.
+
+    Returns the platform string if set, else None.
+    """
+    fields_raw = meta_lead.field_data_raw or meta_lead.field_data or {}
+    platform = (
+        fields_raw.get("meta_platform")
+        or fields_raw.get("platform")
+        or fields_raw.get("publisher_platform")
+    )
+    if platform:
+        return str(platform)
+
+    ad_id = fields_raw.get("meta_ad_id") or fields_raw.get("ad_id")
+    if not ad_id:
+        return None
+
+    created_at = meta_lead.meta_created_time or meta_lead.received_at
+    if not created_at:
+        return None
+
+    spend_date = created_at.date()
+
+    platform_row = (
+        db.query(MetaAdPlatformDaily)
+        .filter(
+            MetaAdPlatformDaily.organization_id == meta_lead.organization_id,
+            MetaAdPlatformDaily.ad_external_id == str(ad_id),
+            MetaAdPlatformDaily.spend_date == spend_date,
+        )
+        .order_by(MetaAdPlatformDaily.leads.desc(), MetaAdPlatformDaily.impressions.desc())
+        .first()
+    )
+    if not platform_row:
+        return None
+
+    platform_value = platform_row.platform
+
+    raw_updated = dict(meta_lead.field_data_raw or {})
+    raw_updated["meta_platform"] = platform_value
+    meta_lead.field_data_raw = raw_updated
+
+    normalized = dict(meta_lead.field_data or {})
+    normalized.setdefault("meta_platform", platform_value)
+    meta_lead.field_data = normalized
+
+    db.commit()
+    return platform_value
+
+
+def backfill_platform_for_date_range(
+    db: Session,
+    org_id: UUID,
+    date_start: date,
+    date_end: date,
+    ad_ids: set[str] | None = None,
+) -> int:
+    """
+    Backfill meta_platform for leads missing it in a date range.
+
+    Returns number of leads updated.
+    """
+    platform_expr = func.coalesce(
+        MetaLead.field_data_raw["meta_platform"].astext,
+        MetaLead.field_data_raw["platform"].astext,
+        MetaLead.field_data_raw["publisher_platform"].astext,
+        MetaLead.field_data["meta_platform"].astext,
+        MetaLead.field_data["platform"].astext,
+        MetaLead.field_data["publisher_platform"].astext,
+    )
+
+    query = (
+        db.query(MetaLead)
+        .filter(
+            MetaLead.organization_id == org_id,
+            func.coalesce(MetaLead.meta_created_time, MetaLead.received_at)
+            .between(datetime.combine(date_start, datetime.min.time(), tzinfo=timezone.utc),
+                     datetime.combine(date_end, datetime.max.time(), tzinfo=timezone.utc)),
+            func.nullif(platform_expr, "").is_(None),
+        )
+        .order_by(MetaLead.received_at.desc())
+    )
+
+    if ad_ids:
+        ad_id_expr = func.coalesce(
+            MetaLead.field_data_raw["meta_ad_id"].astext,
+            MetaLead.field_data_raw["ad_id"].astext,
+            MetaLead.field_data["meta_ad_id"].astext,
+            MetaLead.field_data["ad_id"].astext,
+        )
+        query = query.filter(ad_id_expr.in_([str(a) for a in ad_ids]))
+
+    leads = query.all()
+    updated = 0
+    for lead in leads:
+        if enrich_platform_from_insights(db, lead):
+            updated += 1
+
+    return updated
 
 
 def convert_to_surrogate(
