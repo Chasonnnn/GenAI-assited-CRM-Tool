@@ -18,6 +18,7 @@ DEFAULT_GMAIL_REDIRECT_URI = "http://localhost:8000/integrations/gmail/callback"
 DEFAULT_GOOGLE_CALENDAR_REDIRECT_URI = "http://localhost:8000/integrations/google-calendar/callback"
 DEFAULT_GCP_REDIRECT_URI = "http://localhost:8000/integrations/gcp/callback"
 DEFAULT_DUO_REDIRECT_URI = "http://localhost:3000/auth/duo/callback"
+DEFAULT_META_OAUTH_REDIRECT_URI = "http://localhost:8000/integrations/meta/callback"
 RELEASE_PLEASE_MANIFEST_NAME = ".release-please-manifest.json"
 FALLBACK_APP_VERSION = "0.20.0"
 
@@ -132,6 +133,8 @@ class Settings(BaseSettings):
 
     # API base URL (for tracking, callbacks)
     API_BASE_URL: str = ""
+    # Unsubscribe token TTL (days)
+    UNSUBSCRIBE_TOKEN_TTL_DAYS: int = 365
 
     # Dev-only
     DEV_SECRET: str = ""
@@ -147,16 +150,11 @@ class Settings(BaseSettings):
     META_ENCRYPTION_KEY: str = ""  # Fernet key for encrypting page tokens
     META_WEBHOOK_MAX_PAYLOAD_BYTES: int = 100000  # 100KB limit
 
-    # Meta Ads Insights (spend/budget data)
-    META_AD_ACCOUNT_ID: str = ""  # Format: act_XXXXXX
-    META_SYSTEM_TOKEN: str = ""  # System user token with ads_read permission
-
     # Meta Conversions API (CAPI) - for sending lead quality signals back to Meta
-    META_PIXEL_ID: str = ""  # Dataset ID for Conversions API
     META_CAPI_ENABLED: bool = False  # Enable sending status updates to Meta
-    META_CAPI_ACCESS_TOKEN: str = (
-        ""  # System user access token for CAPI (optional, falls back to page token)
-    )
+
+    # Meta OAuth (Facebook Login for Business)
+    META_OAUTH_REDIRECT_URI: str = ""  # OAuth callback URL
 
     # Internal scheduled endpoints (cron jobs)
     INTERNAL_SECRET: str = ""  # Secret for /internal/scheduled/* endpoints
@@ -203,6 +201,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_PUBLIC_READ: int = 60  # Public GET endpoints
     RATE_LIMIT_PUBLIC_FORMS: int = 10  # Public form submissions
     RATE_LIMIT_FAIL_OPEN: bool = True
+    REDIS_REQUIRED: bool = False
 
     # Analytics caching
     ANALYTICS_CACHE_TTL_SECONDS: int = 300
@@ -243,6 +242,8 @@ class Settings(BaseSettings):
                 self.GCP_REDIRECT_URI = DEFAULT_GCP_REDIRECT_URI
             if not self.DUO_REDIRECT_URI:
                 self.DUO_REDIRECT_URI = DEFAULT_DUO_REDIRECT_URI
+            if not self.META_OAUTH_REDIRECT_URI:
+                self.META_OAUTH_REDIRECT_URI = DEFAULT_META_OAUTH_REDIRECT_URI
             if not self.WIF_OIDC_ISSUER:
                 self.WIF_OIDC_ISSUER = self.API_BASE_URL
             return

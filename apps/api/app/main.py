@@ -30,7 +30,7 @@ from app.core import migrations as db_migrations
 from app.core.protobuf_guard import apply_protobuf_json_depth_guard
 from app.core.structured_logging import build_log_context
 from app.core.rate_limit import limiter
-from app.core.redis_client import get_sync_redis_client
+from app.core.redis_client import get_redis_url, get_sync_redis_client
 from app.core.telemetry import configure_telemetry
 from app.db.session import SessionLocal, engine
 from app.db.enums import AlertSeverity, AlertType
@@ -65,6 +65,8 @@ from app.routers import (
     jobs,
     journey,
     matches,
+    meta_oauth,
+    meta_forms,
     metadata,
     mfa,
     monitoring,
@@ -455,6 +457,11 @@ app.include_router(dashboard.router)
 # User Integrations (Gmail, Zoom OAuth)
 app.include_router(integrations.router)
 
+# Meta OAuth Integration (Facebook Login for Business)
+app.include_router(meta_oauth.router)
+# Meta Lead Form Mapping
+app.include_router(meta_forms.router)
+
 # Audit Trail (Manager+)
 app.include_router(audit.router)
 
@@ -613,18 +620,34 @@ def _check_db_migrations() -> db_migrations.MigrationStatus | None:
     return migration_status
 
 
-def _check_redis_connection() -> None:
+def _check_redis_connection() -> dict:
+    redis_url = get_redis_url()
+    if not redis_url:
+        if settings.REDIS_REQUIRED and not settings.RATE_LIMIT_FAIL_OPEN:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Redis required but not configured",
+            )
+        return {"status": "disabled", "required": settings.REDIS_REQUIRED}
     try:
         client = get_sync_redis_client()
         if client is None:
-            return
+            if settings.REDIS_REQUIRED and not settings.RATE_LIMIT_FAIL_OPEN:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Redis required but unavailable",
+                )
+            return {"status": "degraded", "required": settings.REDIS_REQUIRED}
         client.ping()
+        return {"status": "ok", "required": settings.REDIS_REQUIRED}
     except Exception as exc:
         logger.warning("Readiness Redis check failed: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Redis unavailable",
-        ) from exc
+        if settings.REDIS_REQUIRED or not settings.RATE_LIMIT_FAIL_OPEN:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Redis unavailable",
+            ) from exc
+        return {"status": "degraded", "required": settings.REDIS_REQUIRED}
 
 
 @app.get("/healthz")
@@ -640,7 +663,7 @@ def readyz():
     """Readiness probe (checks database connectivity)."""
     _check_db_connection()
     migration_status = _check_db_migrations()
-    _check_redis_connection()
+    redis_status = _check_redis_connection()
     response = {"status": "ok", "env": settings.ENV, "version": settings.VERSION}
     if settings.DB_MIGRATION_CHECK:
         response["db_migrations"] = {
@@ -650,6 +673,9 @@ def readyz():
         }
     else:
         response["db_migrations"] = {"status": "skipped"}
+    response["redis"] = redis_status
+    response["redis"]["fail_open"] = settings.RATE_LIMIT_FAIL_OPEN
+    response["redis"]["configured"] = bool(get_redis_url())
     return response
 
 

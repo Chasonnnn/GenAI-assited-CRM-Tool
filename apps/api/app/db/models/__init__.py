@@ -60,6 +60,7 @@ from app.db.models.meta import (
     MetaForm,
     MetaFormVersion,
     MetaLead,
+    MetaOAuthConnection,
     MetaPageMapping,
 )
 from app.db.models.notifications import Notification, UserNotificationSettings
@@ -154,6 +155,7 @@ __all__ = [
     "MetaForm",
     "MetaFormVersion",
     "MetaLead",
+    "MetaOAuthConnection",
     "MetaPageMapping",
     "Notification",
     "OrgCounter",
