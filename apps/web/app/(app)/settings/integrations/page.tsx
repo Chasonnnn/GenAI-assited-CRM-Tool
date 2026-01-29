@@ -78,17 +78,17 @@ const AI_PROVIDERS = [
     {
         value: "gemini",
         label: "Google Gemini",
-        models: ["gemini-3-flash-preview", "gemini-3-pro-preview"],
+        models: ["gemini-3-flash-preview"],
     },
     {
         value: "vertex_api_key",
         label: "Vertex AI (API Key)",
-        models: ["gemini-3-flash-preview", "gemini-3-pro-preview"],
+        models: ["gemini-3-flash-preview"],
     },
     {
         value: "vertex_wif",
         label: "Vertex AI (WIF)",
-        models: ["gemini-3-flash-preview", "gemini-3-pro-preview"],
+        models: ["gemini-3-flash-preview"],
     },
 ] as const
 
@@ -1079,8 +1079,9 @@ function ZapierWebhookSection() {
         setOutboundEnabled(Boolean(settings.outbound_enabled))
         setSendHashedPii(Boolean(settings.send_hashed_pii))
         setEventMapping(settings.event_mapping || [])
-        if (settings.event_mapping?.length) {
-            setSelectedOutboundStage(settings.event_mapping[0].stage_slug)
+        const firstStage = settings.event_mapping?.[0]?.stage_slug
+        if (firstStage) {
+            setSelectedOutboundStage(firstStage)
         }
     }, [settings])
 
@@ -1096,16 +1097,16 @@ function ZapierWebhookSection() {
             const result = await rotateSecret.mutateAsync()
             setWebhookSecret(result.webhook_secret)
             toast.success("Webhook secret rotated")
-        } catch (error) {
+        } catch {
             toast.error("Failed to rotate webhook secret")
         }
     }
 
     const handleTestLead = async () => {
         try {
-            const result = await sendTestLead.mutateAsync({
-                form_id: testFormId.trim() || undefined,
-            })
+            const formId = testFormId.trim()
+            const payload = formId ? { form_id: formId } : {}
+            const result = await sendTestLead.mutateAsync(payload)
             if (result.status === "converted") {
                 toast.success("Test lead converted successfully")
             } else if (result.status === "awaiting_mapping") {
@@ -1113,34 +1114,43 @@ function ZapierWebhookSection() {
             } else {
                 toast.message(`Test lead stored with status: ${result.status}`)
             }
-        } catch (error) {
+        } catch {
             toast.error("Failed to send test lead")
         }
     }
 
     const handleSaveOutbound = async () => {
         try {
-            await updateOutbound.mutateAsync({
+            const payload: {
+                outbound_webhook_url: string | null
+                outbound_webhook_secret?: string | null
+                outbound_enabled: boolean
+                send_hashed_pii: boolean
+                event_mapping: Array<{ stage_slug: string; event_name: string; enabled: boolean }>
+            } = {
                 outbound_webhook_url: outboundUrl.trim() || null,
-                outbound_webhook_secret: outboundSecret.trim() || undefined,
                 outbound_enabled: outboundEnabled,
                 send_hashed_pii: sendHashedPii,
                 event_mapping: eventMapping,
-            })
+            }
+            const secret = outboundSecret.trim()
+            if (secret) {
+                payload.outbound_webhook_secret = secret
+            }
+            await updateOutbound.mutateAsync(payload)
             setOutboundSecret('')
             toast.success("Outbound webhook settings saved")
-        } catch (error) {
+        } catch {
             toast.error("Failed to save outbound settings")
         }
     }
 
     const handleOutboundTest = async () => {
         try {
-            const result = await sendOutboundTest.mutateAsync({
-                stage_slug: selectedOutboundStage || undefined,
-            })
+            const payload = selectedOutboundStage ? { stage_slug: selectedOutboundStage } : {}
+            const result = await sendOutboundTest.mutateAsync(payload)
             toast.success(`Test event queued: ${result.event_name}`)
-        } catch (error) {
+        } catch {
             toast.error("Failed to send outbound test event")
         }
     }
@@ -1333,7 +1343,9 @@ function ZapierWebhookSection() {
                                             value={item.event_name}
                                             onChange={(event) => {
                                                 const next = [...eventMapping]
-                                                next[index] = { ...next[index], event_name: event.target.value }
+                                                const existing = next[index]
+                                                if (!existing) return
+                                                next[index] = { ...existing, event_name: event.target.value }
                                                 setEventMapping(next)
                                             }}
                                             placeholder="Event name"
@@ -1343,7 +1355,9 @@ function ZapierWebhookSection() {
                                                 checked={item.enabled}
                                                 onCheckedChange={(checked) => {
                                                     const next = [...eventMapping]
-                                                    next[index] = { ...next[index], enabled: checked }
+                                                    const existing = next[index]
+                                                    if (!existing) return
+                                                    next[index] = { ...existing, enabled: checked }
                                                     setEventMapping(next)
                                                 }}
                                             />
@@ -1366,7 +1380,10 @@ function ZapierWebhookSection() {
                                 )}
                             </Button>
                             <div className="flex flex-1 items-center gap-2">
-                                <Select value={selectedOutboundStage} onValueChange={setSelectedOutboundStage}>
+                                <Select
+                                    value={selectedOutboundStage}
+                                    onValueChange={(value) => setSelectedOutboundStage(value ?? '')}
+                                >
                                     <SelectTrigger className="w-full md:w-56">
                                         <SelectValue placeholder="Select stage" />
                                     </SelectTrigger>
