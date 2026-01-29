@@ -58,3 +58,5 @@ infra/terraform/tfplan
 .ruff_cache/
 .uv_cache/
 .uv-cache/
+# next-agents-md
+.next-docs/
