@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import select
@@ -74,23 +73,19 @@ def create_ad_account(
     *,
     org_id: UUID,
     ad_account_external_id: str,
-    ad_account_name: str | None,
-    system_token_encrypted: str | None,
-    token_expires_at: datetime | None,
-    pixel_id: str | None,
-    capi_enabled: bool,
-    capi_token_encrypted: str | None,
+    ad_account_name: str | None = None,
+    pixel_id: str | None = None,
+    capi_enabled: bool = False,
+    oauth_connection_id: UUID | None = None,
 ) -> MetaAdAccount:
     """Create a new Meta ad account record."""
     account = MetaAdAccount(
         organization_id=org_id,
         ad_account_external_id=ad_account_external_id,
         ad_account_name=ad_account_name,
-        system_token_encrypted=system_token_encrypted,
-        token_expires_at=token_expires_at,
         pixel_id=pixel_id,
         capi_enabled=capi_enabled,
-        capi_token_encrypted=capi_token_encrypted,
+        oauth_connection_id=oauth_connection_id,
     )
     db.add(account)
     db.commit()
@@ -103,30 +98,20 @@ def update_ad_account(
     account: MetaAdAccount,
     *,
     ad_account_name: str | None = None,
-    system_token_encrypted: str | None = None,
-    token_expires_at: datetime | None = None,
     pixel_id: str | None = None,
     capi_enabled: bool | None = None,
-    capi_token_encrypted: str | None = None,
     is_active: bool | None = None,
 ) -> MetaAdAccount:
     """Update an existing Meta ad account record."""
     if ad_account_name is not None:
         account.ad_account_name = ad_account_name
-    if system_token_encrypted is not None:
-        account.system_token_encrypted = system_token_encrypted
-    if token_expires_at is not None:
-        account.token_expires_at = token_expires_at
     if pixel_id is not None:
         account.pixel_id = pixel_id
     if capi_enabled is not None:
         account.capi_enabled = capi_enabled
-    if capi_token_encrypted is not None:
-        account.capi_token_encrypted = capi_token_encrypted
     if is_active is not None:
         account.is_active = is_active
 
-    account.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(account)
     return account
@@ -135,5 +120,4 @@ def update_ad_account(
 def deactivate_ad_account(db: Session, account: MetaAdAccount) -> None:
     """Soft-delete an ad account (set inactive)."""
     account.is_active = False
-    account.updated_at = datetime.now(timezone.utc)
     db.commit()

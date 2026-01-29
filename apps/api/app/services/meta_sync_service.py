@@ -16,7 +16,6 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.encryption import decrypt_token
 from app.db.models import (
     Surrogate,
     MetaAd,
@@ -28,7 +27,7 @@ from app.db.models import (
     MetaFormVersion,
     MetaPageMapping,
 )
-from app.services import meta_api
+from app.services import meta_api, meta_token_service
 from app.types import JsonObject
 
 logger = logging.getLogger(__name__)
@@ -62,20 +61,21 @@ async def sync_hierarchy(
         full_sync: If True, fetch all entities. If False, delta sync.
 
     Returns:
-        {"campaigns": N, "adsets": N, "ads": N, "error": str | None}
+        {"campaigns": N, "adsets": N, "ads": N, "error": str | None, "skipped": bool}
     """
-    result = {"campaigns": 0, "adsets": 0, "ads": 0, "error": None}
+    result = {"campaigns": 0, "adsets": 0, "ads": 0, "error": None, "skipped": False}
 
-    # Get access token
-    if not ad_account.system_token_encrypted:
-        result["error"] = "No system token configured"
+    # Get access token using centralized token service
+    token_result = meta_token_service.get_token_for_ad_account(db, ad_account)
+
+    # Skip silently if no token (don't log noisy errors)
+    if not token_result.token:
+        logger.debug(f"Skipping hierarchy sync for account {ad_account.id} - no token")
+        result["skipped"] = True
+        result["error"] = "no_token"
         return result
 
-    try:
-        access_token = decrypt_token(ad_account.system_token_encrypted)
-    except Exception as e:
-        result["error"] = f"Failed to decrypt token: {e}"
-        return result
+    access_token = token_result.token
 
     # Determine updated_since for delta sync
     updated_since = None
@@ -91,7 +91,7 @@ async def sync_hierarchy(
     )
     if error:
         result["error"] = f"Campaign fetch failed: {error}"
-        _record_sync_error(db, ad_account, error)
+        _record_sync_error(db, ad_account, error, token_result.connection_id)
         return result
 
     campaign_map = {}  # external_id -> internal_id
@@ -107,7 +107,7 @@ async def sync_hierarchy(
     )
     if error:
         result["error"] = f"AdSet fetch failed: {error}"
-        _record_sync_error(db, ad_account, error)
+        _record_sync_error(db, ad_account, error, token_result.connection_id)
         return result
 
     adset_map = {}  # external_id -> internal_id
@@ -123,7 +123,7 @@ async def sync_hierarchy(
     )
     if error:
         result["error"] = f"Ad fetch failed: {error}"
-        _record_sync_error(db, ad_account, error)
+        _record_sync_error(db, ad_account, error, token_result.connection_id)
         return result
 
     for ad_data in ads_data or []:
@@ -135,6 +135,11 @@ async def sync_hierarchy(
     ad_account.hierarchy_synced_at = datetime.now(timezone.utc)
     ad_account.last_error = None
     ad_account.last_error_at = None
+
+    # Mark OAuth token as valid if using OAuth
+    if token_result.connection_id:
+        meta_token_service.mark_token_valid(db, token_result.connection_id)
+
     db.commit()
 
     logger.info(
@@ -407,19 +412,21 @@ async def sync_spend(
         breakdowns: List of breakdown types to sync (default: all)
 
     Returns:
-        {"rows_synced": N, "campaigns": N, "error": str | None}
+        {"rows_synced": N, "campaigns": N, "error": str | None, "skipped": bool}
     """
-    result = {"rows_synced": 0, "campaigns": 0, "error": None}
+    result = {"rows_synced": 0, "campaigns": 0, "error": None, "skipped": False}
 
-    if not ad_account.system_token_encrypted:
-        result["error"] = "No system token configured"
+    # Get access token using centralized token service
+    token_result = meta_token_service.get_token_for_ad_account(db, ad_account)
+
+    # Skip silently if no token
+    if not token_result.token:
+        logger.debug(f"Skipping spend sync for account {ad_account.id} - no token")
+        result["skipped"] = True
+        result["error"] = "no_token"
         return result
 
-    try:
-        access_token = decrypt_token(ad_account.system_token_encrypted)
-    except Exception as e:
-        result["error"] = f"Failed to decrypt token: {e}"
-        return result
+    access_token = token_result.token
 
     breakdown_types = breakdowns or SPEND_BREAKDOWN_TYPES
     ad_account_external_id = ad_account.ad_account_external_id
@@ -446,7 +453,7 @@ async def sync_spend(
 
         if error:
             result["error"] = f"Spend fetch failed for {breakdown_type}: {error}"
-            _record_sync_error(db, ad_account, error)
+            _record_sync_error(db, ad_account, error, token_result.connection_id)
             return result
 
         # Upsert spend rows
@@ -462,6 +469,11 @@ async def sync_spend(
     ad_account.spend_synced_at = datetime.now(timezone.utc)
     ad_account.last_error = None
     ad_account.last_error_at = None
+
+    # Mark OAuth token as valid if using OAuth
+    if token_result.connection_id:
+        meta_token_service.mark_token_valid(db, token_result.connection_id)
+
     db.commit()
 
     logger.info(
@@ -623,18 +635,17 @@ async def sync_forms(
         return result
 
     for page in pages:
-        if not page.access_token_encrypted:
-            logger.warning(f"No token for page {page.page_id}")
-            continue
+        # Get token using centralized token service
+        token_result = meta_token_service.get_token_for_page(db, page)
 
-        try:
-            access_token = decrypt_token(page.access_token_encrypted)
-        except Exception as e:
-            error_message = f"Token decryption failed: {str(e)[:100]}"
-            logger.error(f"Failed to decrypt token for page {page.page_id}: {e}")
-            page.last_error = error_message
+        # Skip silently if no token
+        if not token_result.token:
+            logger.debug(f"Skipping form sync for page {page.page_id} - no token")
+            page.last_error = "Page token unavailable"
             page.last_error_at = datetime.now(timezone.utc)
             continue
+
+        access_token = token_result.token
 
         # Fetch forms
         forms_data, error = await meta_api.fetch_page_leadgen_forms(page.page_id, access_token)
@@ -643,6 +654,11 @@ async def sync_forms(
             logger.error(f"Form fetch failed for page {page.page_id}: {error}")
             page.last_error = error
             page.last_error_at = datetime.now(timezone.utc)
+            # Mark token error if using OAuth
+            if token_result.connection_id:
+                meta_token_service.mark_token_error(
+                    db, token_result.connection_id, Exception(error)
+                )
             continue
 
         # Process forms
@@ -657,6 +673,10 @@ async def sync_forms(
         page.forms_synced_at = datetime.now(timezone.utc)
         page.last_error = None
         page.last_error_at = None
+
+        # Mark OAuth token as valid if using OAuth
+        if token_result.connection_id:
+            meta_token_service.mark_token_valid(db, token_result.connection_id)
 
     db.commit()
 
@@ -744,7 +764,13 @@ def _upsert_form(
         db.flush()
 
         form.current_version_id = new_version.id
+        # Mark existing mappings as outdated if schema changed
+        if form.mapping_version_id and form.mapping_version_id != new_version.id:
+            form.mapping_status = "outdated"
         version_created = True
+    else:
+        # Ensure current_version points to existing schema version
+        form.current_version_id = existing_version.id
 
     return form, version_created
 
@@ -754,10 +780,20 @@ def _upsert_form(
 # =============================================================================
 
 
-def _record_sync_error(db: Session, ad_account: MetaAdAccount, error: str) -> None:
-    """Record sync error on ad account."""
+def _record_sync_error(
+    db: Session,
+    ad_account: MetaAdAccount,
+    error: str,
+    connection_id: UUID | None = None,
+) -> None:
+    """Record sync error on ad account and OAuth connection."""
     ad_account.last_error = error[:500]
     ad_account.last_error_at = datetime.now(timezone.utc)
+
+    # Also record on OAuth connection for health tracking
+    if connection_id:
+        meta_token_service.mark_token_error(db, connection_id, Exception(error))
+
     db.commit()
 
 

@@ -6,7 +6,7 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_meta_lead_fetch_uses_convert_to_surrogate(db, test_org, monkeypatch):
+async def test_meta_lead_fetch_does_not_auto_convert_without_mapping(db, test_org, monkeypatch):
     from app.core.encryption import encrypt_token
     from app.db.enums import JobType
     from app.db.models import Job, MetaPageMapping
@@ -50,15 +50,17 @@ async def test_meta_lead_fetch_uses_convert_to_surrogate(db, test_org, monkeypat
 
     called = {"value": False}
 
-    def fake_convert(db, meta_lead, user_id=None):
+    def fake_convert(
+        db, meta_lead, mapping_rules, unknown_column_behavior="metadata", user_id=None
+    ):
         called["value"] = True
         return SimpleNamespace(surrogate_number="S10001"), None
 
-    monkeypatch.setattr(meta_lead_service, "convert_to_surrogate", fake_convert)
+    monkeypatch.setattr(meta_lead_service, "convert_to_surrogate_with_mapping", fake_convert)
 
     await process_meta_lead_fetch(db, job)
 
-    assert called["value"] is True
+    assert called["value"] is False
 
 
 @pytest.mark.asyncio
@@ -154,7 +156,7 @@ async def test_meta_form_sync_job_raises_on_error(db, test_org, monkeypatch):
 @pytest.mark.asyncio
 async def test_meta_forms_sync_records_decrypt_error(db, test_org, monkeypatch):
     from app.db.models import MetaPageMapping
-    from app.services import meta_sync_service
+    from app.services import meta_sync_service, meta_token_service
 
     mapping = MetaPageMapping(
         organization_id=test_org.id,
@@ -168,7 +170,7 @@ async def test_meta_forms_sync_records_decrypt_error(db, test_org, monkeypatch):
     def fake_decrypt(_token: str):
         raise Exception("decrypt failed")
 
-    monkeypatch.setattr(meta_sync_service, "decrypt_token", fake_decrypt)
+    monkeypatch.setattr(meta_token_service, "decrypt_token", fake_decrypt)
 
     result = await meta_sync_service.sync_forms(db, test_org.id)
     assert result["error"] is None
@@ -193,7 +195,6 @@ async def test_meta_capi_global_disable_skips(monkeypatch):
     ad_account = SimpleNamespace(
         capi_enabled=True,
         pixel_id="pixel_123",
-        capi_token_encrypted=None,
         ad_account_external_id="act_999",
     )
 

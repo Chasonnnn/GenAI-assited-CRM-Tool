@@ -7,7 +7,7 @@ Includes:
 - Sync triggers (hierarchy, spend, forms)
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -21,8 +21,6 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
-from app.core.encryption import encrypt_token, is_encryption_configured
-
 from app.schemas.auth import UserSession
 from app.services import meta_admin_service, meta_page_service, meta_sync_service
 
@@ -38,6 +36,13 @@ ad_account_router = APIRouter(
     tags=["admin"],
     dependencies=[Depends(require_permission(POLICIES["meta_leads"].default))],
 )
+
+
+def _manual_tokens_disabled() -> None:
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Manual token management has been removed. Connect via Meta OAuth.",
+    )
 
 
 # =============================================================================
@@ -107,35 +112,8 @@ def create_meta_page(
 
     Replaces: python -m app.cli update-meta-page-token
     """
-    # Check encryption configured
-    if not is_encryption_configured():
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="META_ENCRYPTION_KEY not configured. Contact administrator.",
-        )
-
-    # Check for existing mapping
-    existing = meta_page_service.get_mapping_by_page_id_any_org(db, data.page_id)
-
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Page {data.page_id} already exists. Use PUT to update.",
-        )
-
-    # Encrypt token
-    encrypted = encrypt_token(data.access_token)
-    expires_at = datetime.now(timezone.utc) + timedelta(days=data.expires_days)
-
-    # Create mapping
-    return meta_page_service.create_mapping(
-        db=db,
-        org_id=session.org_id,
-        page_id=data.page_id,
-        page_name=data.page_name,
-        access_token_encrypted=encrypted,
-        token_expires_at=expires_at,
-    )
+    _manual_tokens_disabled()
+    return None  # pragma: no cover - unreachable
 
 
 @router.put("/{page_id}", response_model=MetaPageRead)
@@ -147,35 +125,8 @@ def update_meta_page(
     db: Session = Depends(get_db),
 ):
     """Update existing Meta page mapping."""
-    mapping = meta_page_service.get_mapping_by_page_id(db, session.org_id, page_id)
-
-    if not mapping:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
-
-    # Update fields
-    if data.access_token is not None:
-        if not is_encryption_configured():
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="META_ENCRYPTION_KEY not configured",
-            )
-        encrypted = encrypt_token(data.access_token)
-    else:
-        encrypted = None
-
-    if data.expires_days is not None:
-        expires_at = datetime.now(timezone.utc) + timedelta(days=data.expires_days)
-    else:
-        expires_at = None
-
-    return meta_page_service.update_mapping(
-        db=db,
-        mapping=mapping,
-        page_name=data.page_name,
-        access_token_encrypted=encrypted,
-        token_expires_at=expires_at,
-        is_active=data.is_active,
-    )
+    _manual_tokens_disabled()
+    return None  # pragma: no cover - unreachable
 
 
 @router.delete("/{page_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -190,12 +141,8 @@ def delete_meta_page(
 
     Replaces: python -m app.cli deactivate-meta-page
     """
-    mapping = meta_page_service.get_mapping_by_page_id(db, session.org_id, page_id)
-
-    if not mapping:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
-
-    meta_page_service.delete_mapping(db, mapping)
+    _manual_tokens_disabled()
+    return None  # pragma: no cover - unreachable
 
 
 # =============================================================================
@@ -206,20 +153,14 @@ def delete_meta_page(
 class MetaAdAccountCreate(BaseModel):
     ad_account_external_id: str = Field(..., description="Meta Ad Account ID (act_XXXXX)")
     ad_account_name: str | None = Field(None, description="Display name")
-    system_token: str = Field(..., description="System user access token (will be encrypted)")
-    expires_days: int = Field(60, ge=1, le=365, description="Token expiry in days")
     pixel_id: str | None = Field(None, description="Pixel ID for CAPI")
     capi_enabled: bool = Field(False, description="Enable CAPI for this account")
-    capi_token: str | None = Field(None, description="CAPI token if different from system token")
 
 
 class MetaAdAccountUpdate(BaseModel):
     ad_account_name: str | None = None
-    system_token: str | None = Field(None, description="New system token")
-    expires_days: int | None = Field(None, ge=1, le=365)
     pixel_id: str | None = None
     capi_enabled: bool | None = None
-    capi_token: str | None = None
     is_active: bool | None = None
 
 
@@ -230,7 +171,6 @@ class MetaAdAccountRead(BaseModel):
     organization_id: UUID
     ad_account_external_id: str
     ad_account_name: str | None
-    token_expires_at: datetime | None
     pixel_id: str | None
     capi_enabled: bool
     hierarchy_synced_at: datetime | None
@@ -278,38 +218,8 @@ def create_meta_ad_account(
     db: Session = Depends(get_db),
 ):
     """Create a new Meta ad account configuration."""
-    if not is_encryption_configured():
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="META_ENCRYPTION_KEY not configured. Contact administrator.",
-        )
-
-    # Check for existing
-    existing = meta_admin_service.get_ad_account_by_external_id(
-        db, session.org_id, data.ad_account_external_id
-    )
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Ad account {data.ad_account_external_id} already exists.",
-        )
-
-    # Encrypt tokens
-    system_token_encrypted = encrypt_token(data.system_token)
-    capi_token_encrypted = encrypt_token(data.capi_token) if data.capi_token else None
-    expires_at = datetime.now(timezone.utc) + timedelta(days=data.expires_days)
-
-    return meta_admin_service.create_ad_account(
-        db=db,
-        org_id=session.org_id,
-        ad_account_external_id=data.ad_account_external_id,
-        ad_account_name=data.ad_account_name,
-        system_token_encrypted=system_token_encrypted,
-        token_expires_at=expires_at,
-        pixel_id=data.pixel_id,
-        capi_enabled=data.capi_enabled,
-        capi_token_encrypted=capi_token_encrypted,
-    )
+    _manual_tokens_disabled()
+    return None  # pragma: no cover - unreachable
 
 
 @ad_account_router.get("/{account_id}", response_model=MetaAdAccountRead)
@@ -338,33 +248,15 @@ def update_meta_ad_account(
     if not account:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ad account not found")
 
-    system_token_encrypted = None
-    if data.system_token is not None:
-        if not is_encryption_configured():
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="META_ENCRYPTION_KEY not configured",
-            )
-        system_token_encrypted = encrypt_token(data.system_token)
-    capi_token_encrypted = None
-    if data.capi_token is not None:
-        capi_token_encrypted = encrypt_token(data.capi_token)
-    expires_at = (
-        datetime.now(timezone.utc) + timedelta(days=data.expires_days)
-        if data.expires_days is not None
-        else None
-    )
-    return meta_admin_service.update_ad_account(
-        db=db,
-        account=account,
+    account = meta_admin_service.update_ad_account(
+        db,
+        account,
         ad_account_name=data.ad_account_name,
-        system_token_encrypted=system_token_encrypted,
-        token_expires_at=expires_at,
         pixel_id=data.pixel_id,
         capi_enabled=data.capi_enabled,
-        capi_token_encrypted=capi_token_encrypted,
         is_active=data.is_active,
     )
+    return account
 
 
 @ad_account_router.delete("/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -382,8 +274,8 @@ def delete_meta_ad_account(
     account = meta_admin_service.get_ad_account(db, account_id, session.org_id)
     if not account:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ad account not found")
-
     meta_admin_service.deactivate_ad_account(db, account)
+    return None
 
 
 # =============================================================================
