@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import Link from "@/components/app-link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
 import {
     Table,
     TableBody,
@@ -24,184 +25,412 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import {
-    Loader2Icon,
-    PlusIcon,
-    RefreshCwIcon,
-    TrashIcon,
-    FacebookIcon,
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+    AlertTriangleIcon,
     CheckCircleIcon,
-    XCircleIcon,
-    CalendarIcon,
+    FacebookIcon,
+    Loader2Icon,
     PencilIcon,
+    SearchIcon,
+    TrashIcon,
+    UnlinkIcon,
 } from "lucide-react"
 import {
-    useMetaPages,
-    useCreateMetaPage,
-    useDeleteMetaPage,
-    useAdminMetaAdAccounts,
-    useCreateMetaAdAccount,
-    useUpdateMetaAdAccount,
-    useDeleteMetaAdAccount,
-} from "@/lib/hooks/use-admin-meta"
-import type { MetaAdAccount, MetaAdAccountCreate, MetaAdAccountUpdate } from "@/lib/api/admin-meta"
+    useMetaConnections,
+    useMetaConnectUrl,
+    useDisconnectMetaConnection,
+    useMetaAvailableAssetsInfinite,
+    useConnectMetaAssets,
+    useMetaConnectionsNeedingReauth,
+    useMetaConnectionsWithErrors,
+} from "@/lib/hooks/use-meta-oauth"
+import {
+    getConnectionHealthStatus,
+    parseMetaError,
+    type AdAccountOption,
+    type MetaOAuthConnection,
+    type PageOption,
+} from "@/lib/api/meta-oauth"
+import { useAdminMetaAdAccounts, useDeleteMetaAdAccount, useUpdateMetaAdAccount } from "@/lib/hooks/use-admin-meta"
+import type { MetaAdAccount, MetaAdAccountUpdate } from "@/lib/api/admin-meta"
 import { formatDistanceToNow } from "date-fns"
 
-export default function MetaLeadsAdminPage() {
-    const { data: pages = [], isLoading, refetch, isFetching } = useMetaPages()
-    const createMutation = useCreateMetaPage()
-    const deleteMutation = useDeleteMetaPage()
+// Connection health badge component
+function ConnectionHealthBadge({ connection }: { connection: MetaOAuthConnection }) {
+    const status = getConnectionHealthStatus(connection)
+
+    if (status === "healthy") {
+        return (
+            <Badge variant="default" className="gap-1 bg-green-500/10 text-green-600 border-green-500/20">
+                <CheckCircleIcon className="size-3" />
+                Healthy
+            </Badge>
+        )
+    }
+
+    if (status === "needs_reauth") {
+        return (
+            <Tooltip>
+                <TooltipTrigger>
+                    <Badge variant="destructive" className="gap-1">
+                        <AlertTriangleIcon className="size-3" />
+                        Needs Reauth
+                    </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                    Token expired or revoked. Click Reconnect to fix.
+                </TooltipContent>
+            </Tooltip>
+        )
+    }
+
+    if (status === "rate_limited") {
+        return (
+            <Tooltip>
+                <TooltipTrigger>
+                    <Badge variant="secondary" className="gap-1 bg-yellow-500/10 text-yellow-600 border-yellow-500/20">
+                        <AlertTriangleIcon className="size-3" />
+                        Rate Limited
+                    </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                    Temporarily rate limited. Will retry automatically.
+                </TooltipContent>
+            </Tooltip>
+        )
+    }
+
+    if (status === "permission_error") {
+        return (
+            <Tooltip>
+                <TooltipTrigger>
+                    <Badge variant="destructive" className="gap-1">
+                        <AlertTriangleIcon className="size-3" />
+                        Permission Error
+                    </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                    Check Lead Access Manager in Meta Business Settings.
+                </TooltipContent>
+            </Tooltip>
+        )
+    }
+
+    return (
+        <Tooltip>
+            <TooltipTrigger>
+                <Badge variant="secondary" className="gap-1 bg-yellow-500/10 text-yellow-600 border-yellow-500/20">
+                    <AlertTriangleIcon className="size-3" />
+                    Error
+                </Badge>
+            </TooltipTrigger>
+            <TooltipContent>{parseMetaError(connection.last_error)}</TooltipContent>
+        </Tooltip>
+    )
+}
+
+// Asset selection component for OAuth flow
+function MetaAssetSelection({
+    connectionId,
+    connectionName,
+    onClose,
+}: {
+    connectionId: string
+    connectionName: string
+    onClose: () => void
+}) {
+    const router = useRouter()
+    const [search, setSearch] = useState("")
+    const [selectedAdAccounts, setSelectedAdAccounts] = useState<string[]>([])
+    const [selectedPages, setSelectedPages] = useState<string[]>([])
+    const [conflicts, setConflicts] = useState<Array<AdAccountOption | PageOption>>([])
+    const [showOverwriteDialog, setShowOverwriteDialog] = useState(false)
+
     const {
-        data: adAccounts = [],
-        isLoading: adAccountsLoading,
-        refetch: refetchAdAccounts,
-        isFetching: adAccountsFetching,
-    } = useAdminMetaAdAccounts()
-    const createAccountMutation = useCreateMetaAdAccount()
-    const updateAccountMutation = useUpdateMetaAdAccount()
-    const deleteAccountMutation = useDeleteMetaAdAccount()
+        data,
+        fetchNextPage,
+        hasNextPage,
+        isFetchingNextPage,
+        isLoading,
+    } = useMetaAvailableAssetsInfinite(connectionId, search)
 
-    const [showAddDialog, setShowAddDialog] = useState(false)
-    const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
-    const [showAddAccountDialog, setShowAddAccountDialog] = useState(false)
-    const [editAccount, setEditAccount] = useState<MetaAdAccount | null>(null)
-    const [deleteAccountConfirm, setDeleteAccountConfirm] = useState<string | null>(null)
+    const connectMutation = useConnectMetaAssets(connectionId)
 
-    // Form state
-    const [pageId, setPageId] = useState("")
-    const [pageName, setPageName] = useState("")
-    const [accessToken, setAccessToken] = useState("")
-    const [expiresDays, setExpiresDays] = useState("60")
-    const [formError, setFormError] = useState("")
-
-    const [adAccountId, setAdAccountId] = useState("")
-    const [adAccountName, setAdAccountName] = useState("")
-    const [systemToken, setSystemToken] = useState("")
-    const [accountExpiresDays, setAccountExpiresDays] = useState("60")
-    const [pixelId, setPixelId] = useState("")
-    const [capiEnabled, setCapiEnabled] = useState(false)
-    const [useSystemTokenForCapi, setUseSystemTokenForCapi] = useState(true)
-    const [capiToken, setCapiToken] = useState("")
-    const [accountActive, setAccountActive] = useState(true)
-    const [accountFormError, setAccountFormError] = useState("")
-
-    const handleAddPage = async (e: React.FormEvent) => {
-        e.preventDefault()
-        setFormError("")
-
-        if (!pageId || !accessToken) {
-            setFormError("Page ID and Access Token are required")
-            return
+    const allAssets = useMemo(() => {
+        if (!data?.pages) return { ad_accounts: [], pages: [] }
+        return {
+            ad_accounts: data.pages.flatMap((p) => p.ad_accounts),
+            pages: data.pages.flatMap((p) => p.pages),
         }
+    }, [data])
 
-        if (!/^\d+$/.test(pageId)) {
-            setFormError("Page ID must be numeric")
-            return
-        }
-
-        try {
-            await createMutation.mutateAsync({
-                page_id: pageId,
-                access_token: accessToken,
-                expires_days: parseInt(expiresDays),
-                ...(pageName.trim() ? { page_name: pageName.trim() } : {}),
-            })
-
-            // Reset form
-            setPageId("")
-            setPageName("")
-            setAccessToken("")
-            setExpiresDays("60")
-            setShowAddDialog(false)
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : "Failed to add page"
-            setFormError(message)
+    const toggleAdAccount = (id: string, checked: boolean) => {
+        if (checked) {
+            setSelectedAdAccounts((prev) => [...prev, id])
+        } else {
+            setSelectedAdAccounts((prev) => prev.filter((a) => a !== id))
         }
     }
 
-    const handleDelete = async (pageId: string) => {
-        try {
-            await deleteMutation.mutateAsync(pageId)
-            setDeleteConfirm(null)
-        } catch (error) {
-            console.error("Failed to delete page:", error)
+    const togglePage = (id: string, checked: boolean) => {
+        if (checked) {
+            setSelectedPages((prev) => [...prev, id])
+        } else {
+            setSelectedPages((prev) => prev.filter((p) => p !== id))
         }
     }
 
-    const resetAccountForm = () => {
-        setAdAccountId("")
-        setAdAccountName("")
-        setSystemToken("")
-        setAccountExpiresDays("60")
-        setPixelId("")
-        setCapiEnabled(false)
-        setUseSystemTokenForCapi(true)
-        setCapiToken("")
-        setAccountActive(true)
-        setAccountFormError("")
-    }
+    const handleConnect = async (overwrite = false) => {
+        if (!overwrite) {
+            const conflicting = [
+                ...allAssets.ad_accounts.filter(
+                    (a) =>
+                        selectedAdAccounts.includes(a.id) &&
+                        a.connected_by_connection_id &&
+                        a.connected_by_connection_id !== connectionId
+                ),
+                ...allAssets.pages.filter(
+                    (p) =>
+                        selectedPages.includes(p.id) &&
+                        p.connected_by_connection_id &&
+                        p.connected_by_connection_id !== connectionId
+                ),
+            ]
 
-    const openEditAccount = (account: MetaAdAccount) => {
-        setEditAccount(account)
-        setAdAccountId(account.ad_account_external_id)
-        setAdAccountName(account.ad_account_name || "")
-        setSystemToken("")
-        setAccountExpiresDays("")
-        setPixelId(account.pixel_id || "")
-        setCapiEnabled(account.capi_enabled)
-        setUseSystemTokenForCapi(true)
-        setCapiToken("")
-        setAccountActive(account.is_active)
-        setAccountFormError("")
-    }
-
-    const handleAddAdAccount = async (e: React.FormEvent) => {
-        e.preventDefault()
-        setAccountFormError("")
-
-        if (!adAccountId || !systemToken) {
-            setAccountFormError("Ad account ID and system token are required")
-            return
-        }
-
-        if (!/^act_\d+$/.test(adAccountId)) {
-            setAccountFormError("Ad account ID must be in the format act_123456789")
-            return
-        }
-
-        const expiresDaysValue = accountExpiresDays ? parseInt(accountExpiresDays, 10) : undefined
-        if (expiresDaysValue !== undefined && Number.isNaN(expiresDaysValue)) {
-            setAccountFormError("Token expiry must be a number of days")
-            return
-        }
-
-        const payload: MetaAdAccountCreate = {
-            ad_account_external_id: adAccountId.trim(),
-            system_token: systemToken,
-            ...(adAccountName.trim() ? { ad_account_name: adAccountName.trim() } : {}),
-            ...(expiresDaysValue !== undefined ? { expires_days: expiresDaysValue } : {}),
-            ...(pixelId.trim() ? { pixel_id: pixelId.trim() } : {}),
-            ...(capiEnabled ? { capi_enabled: true } : {}),
-        }
-
-        if (capiEnabled) {
-            if (useSystemTokenForCapi) {
-                Object.assign(payload, { capi_token: systemToken })
-            } else if (capiToken.trim()) {
-                Object.assign(payload, { capi_token: capiToken.trim() })
-            } else {
-                setAccountFormError("Provide a CAPI token or enable Use system token for CAPI")
+            if (conflicting.length > 0) {
+                setConflicts(conflicting)
+                setShowOverwriteDialog(true)
                 return
             }
         }
 
         try {
-            await createAccountMutation.mutateAsync(payload)
-            resetAccountForm()
-            setShowAddAccountDialog(false)
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : "Failed to add ad account"
-            setAccountFormError(message)
+            await connectMutation.mutateAsync({
+                ad_account_ids: selectedAdAccounts,
+                page_ids: selectedPages,
+                overwrite_existing: overwrite,
+            })
+            onClose()
+            router.push("/settings/integrations/meta")
+        } catch {
+            // Error handled by mutation
         }
+    }
+
+    return (
+        <>
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-lg">Select Assets for {connectionName}</CardTitle>
+                    <CardDescription>
+                        Choose ad accounts and pages to connect using this Facebook account.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="relative">
+                        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search ad accounts or pages"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="pl-9"
+                        />
+                    </div>
+
+                    <div className="space-y-4">
+                        <div>
+                            <h3 className="font-medium text-sm">Ad Accounts</h3>
+                            {isLoading ? (
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                    <Loader2Icon className="size-4 animate-spin" />
+                                    Loading...
+                                </div>
+                            ) : allAssets.ad_accounts.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No ad accounts available</p>
+                            ) : (
+                                <div className="space-y-2">
+                                    {allAssets.ad_accounts.map((account) => (
+                                        <div key={account.id} className="flex items-center gap-2">
+                                            <Checkbox
+                                                checked={selectedAdAccounts.includes(account.id)}
+                                                onCheckedChange={(checked) =>
+                                                    toggleAdAccount(account.id, !!checked)
+                                                }
+                                            />
+                                            <div className="text-sm">
+                                                <span className="font-mono">{account.id}</span>
+                                                {account.name && (
+                                                    <span className="text-muted-foreground">
+                                                        {" "}
+                                                        — {account.name}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div>
+                            <h3 className="font-medium text-sm">Pages</h3>
+                            {isLoading ? (
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                    <Loader2Icon className="size-4 animate-spin" />
+                                    Loading...
+                                </div>
+                            ) : allAssets.pages.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No pages available</p>
+                            ) : (
+                                <div className="space-y-2">
+                                    {allAssets.pages.map((page) => (
+                                        <div key={page.id} className="flex items-center gap-2">
+                                            <Checkbox
+                                                checked={selectedPages.includes(page.id)}
+                                                onCheckedChange={(checked) =>
+                                                    togglePage(page.id, !!checked)
+                                                }
+                                            />
+                                            <div className="text-sm">
+                                                <span className="font-mono">{page.id}</span>
+                                                {page.name && (
+                                                    <span className="text-muted-foreground">
+                                                        {" "}
+                                                        — {page.name}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {hasNextPage && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => fetchNextPage()}
+                            disabled={isFetchingNextPage}
+                        >
+                            {isFetchingNextPage ? (
+                                <>
+                                    <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                    Loading...
+                                </>
+                            ) : (
+                                "Load more"
+                            )}
+                        </Button>
+                    )}
+                </CardContent>
+                <CardContent className="flex justify-end gap-2 pt-0">
+                    <Button variant="outline" onClick={onClose}>
+                        Cancel
+                    </Button>
+                    <Button onClick={() => handleConnect(false)} disabled={connectMutation.isPending}>
+                        {connectMutation.isPending ? (
+                            <>
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                Connecting...
+                            </>
+                        ) : (
+                            "Connect Selected"
+                        )}
+                    </Button>
+                </CardContent>
+            </Card>
+
+            <AlertDialog open={showOverwriteDialog} onOpenChange={setShowOverwriteDialog}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Overwrite existing connections?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Some selected assets are already connected by another user. Overwriting will transfer
+                            ownership to this connection.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="space-y-2">
+                        {conflicts.map((conflict) => (
+                            <div key={`${conflict.id}`} className="text-sm text-muted-foreground">
+                                {conflict.id} — connected by {conflict.connected_by_meta_user || "Unknown"}
+                            </div>
+                        ))}
+                    </div>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => handleConnect(true)}>Overwrite</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
+    )
+}
+
+export default function MetaIntegrationPage() {
+    const searchParams = useSearchParams()
+    const router = useRouter()
+    const step = searchParams.get("step")
+    const activeConnectionId = searchParams.get("connection")
+
+    const { data: connections = [], isLoading: connectionsLoading } = useMetaConnections()
+    const connectUrlMutation = useMetaConnectUrl()
+    const disconnectMutation = useDisconnectMetaConnection()
+    const connectionsNeedingReauth = useMetaConnectionsNeedingReauth()
+    const connectionsWithErrors = useMetaConnectionsWithErrors()
+
+    const { data: adAccounts = [], isLoading: adAccountsLoading } = useAdminMetaAdAccounts()
+    const updateAccountMutation = useUpdateMetaAdAccount()
+    const deleteAccountMutation = useDeleteMetaAdAccount()
+
+    const [editAccount, setEditAccount] = useState<MetaAdAccount | null>(null)
+    const [disconnectConnectionId, setDisconnectConnectionId] = useState<string | null>(null)
+    const [accountFormError, setAccountFormError] = useState("")
+    const [adAccountName, setAdAccountName] = useState("")
+    const [pixelId, setPixelId] = useState("")
+    const [capiEnabled, setCapiEnabled] = useState(false)
+    const [accountActive, setAccountActive] = useState(true)
+
+    const activeConnection = connections.find((c) => c.id === activeConnectionId)
+
+    const handleConnectWithFacebook = async () => {
+        try {
+            const result = await connectUrlMutation.mutateAsync()
+            window.location.href = result.auth_url
+        } catch {
+            // Error handled by mutation
+        }
+    }
+
+    const handleDisconnect = async (connectionId: string) => {
+        try {
+            await disconnectMutation.mutateAsync(connectionId)
+            setDisconnectConnectionId(null)
+        } catch {
+            // Error handled by mutation
+        }
+    }
+
+    const openEditAccount = (account: MetaAdAccount) => {
+        setEditAccount(account)
+        setAdAccountName(account.ad_account_name || "")
+        setPixelId(account.pixel_id || "")
+        setCapiEnabled(account.capi_enabled)
+        setAccountActive(account.is_active)
+        setAccountFormError("")
     }
 
     const handleUpdateAdAccount = async (e: React.FormEvent) => {
@@ -209,34 +438,15 @@ export default function MetaLeadsAdminPage() {
         if (!editAccount) return
         setAccountFormError("")
 
-        const expiresDaysValue = accountExpiresDays ? parseInt(accountExpiresDays, 10) : undefined
-        if (accountExpiresDays && Number.isNaN(expiresDaysValue)) {
-            setAccountFormError("Token expiry must be a number of days")
-            return
-        }
-
         const payload: MetaAdAccountUpdate = {
             capi_enabled: capiEnabled,
             is_active: accountActive,
         }
-
         if (adAccountName.trim() !== (editAccount.ad_account_name || "")) {
             payload.ad_account_name = adAccountName.trim()
         }
         if (pixelId.trim() !== (editAccount.pixel_id || "")) {
             payload.pixel_id = pixelId.trim()
-        }
-        if (expiresDaysValue !== undefined) {
-            payload.expires_days = expiresDaysValue
-        }
-        if (systemToken.trim()) {
-            payload.system_token = systemToken.trim()
-            if (capiEnabled && useSystemTokenForCapi) {
-                payload.capi_token = systemToken.trim()
-            }
-        }
-        if (capiEnabled && !useSystemTokenForCapi && capiToken.trim()) {
-            payload.capi_token = capiToken.trim()
         }
 
         try {
@@ -245,7 +455,6 @@ export default function MetaLeadsAdminPage() {
                 data: payload,
             })
             setEditAccount(null)
-            resetAccountForm()
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : "Failed to update ad account"
             setAccountFormError(message)
@@ -255,672 +464,340 @@ export default function MetaLeadsAdminPage() {
     const handleDeleteAdAccount = async (accountId: string) => {
         try {
             await deleteAccountMutation.mutateAsync(accountId)
-            setDeleteAccountConfirm(null)
         } catch (error) {
             console.error("Failed to delete ad account:", error)
         }
     }
 
-    const closeAddAccountDialog = () => {
-        setShowAddAccountDialog(false)
-        resetAccountForm()
-    }
-
-    const closeEditAccountDialog = () => {
-        setEditAccount(null)
-        resetAccountForm()
-    }
-
-    const getTokenStatus = (expiresAt: string | null) => {
-        if (!expiresAt) return { label: "Active", variant: "default" as const, color: "text-green-600" }
-
-        const expiryDate = new Date(expiresAt)
-        const now = new Date()
-        const daysUntilExpiry = Math.floor((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-
-        if (daysUntilExpiry < 0) {
-            return { label: "Expired", variant: "destructive" as const, color: "text-red-600" }
-        }
-        if (daysUntilExpiry < 7) {
-            return { label: "Expires Soon", variant: "secondary" as const, color: "text-amber-600" }
-        }
-        return { label: "Active", variant: "default" as const, color: "text-green-600" }
-    }
-
-    const formatRelative = (value: string | null) => {
-        if (!value) return "Never"
-        return formatDistanceToNow(new Date(value), { addSuffix: true })
-    }
-
-    const isRefreshing = isFetching || adAccountsFetching
-
-    const handleRefresh = () => {
-        refetch()
-        refetchAdAccounts()
-    }
-
     return (
         <div className="flex min-h-screen flex-col">
-            {/* Page Header */}
             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <div className="flex h-16 items-center justify-between px-6">
                     <div>
-                        <h1 className="text-2xl font-semibold">Meta Lead Ads Configuration</h1>
+                        <h1 className="text-2xl font-semibold">Meta Integration</h1>
                         <p className="text-sm text-muted-foreground">
-                            Manage page tokens and ad accounts for lead capture, spend sync, and CAPI.
+                            Connect Meta accounts to sync lead forms and conversions.
                         </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing}>
-                            <RefreshCwIcon className={`mr-2 size-4 ${isRefreshing ? "animate-spin" : ""}`} />
-                            Refresh
-                        </Button>
-                        <Button onClick={() => setShowAddDialog(true)}>
-                            <PlusIcon className="mr-2 size-4" />
-                            Add Page
-                        </Button>
-                    </div>
+                    <Button render={<Link href="/settings/integrations/meta/forms" />} variant="outline">
+                        Manage lead forms
+                    </Button>
                 </div>
             </div>
 
-            {/* Main Content */}
             <div className="flex-1 space-y-6 p-6">
-                {isLoading ? (
-                    <Card>
-                        <CardContent className="flex items-center justify-center py-12">
-                            <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
-                        </CardContent>
-                    </Card>
-                ) : pages.length === 0 ? (
-                    <Card>
-                        <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                            <FacebookIcon className="mb-4 size-12" />
-                            <p className="text-lg font-medium">No pages configured yet</p>
-                            <p className="text-sm">Add a Meta page to start capturing leads from Facebook/Instagram ads</p>
-                            <Button className="mt-4" onClick={() => setShowAddDialog(true)}>
-                                <PlusIcon className="mr-2 size-4" />
-                                Add Your First Page
-                            </Button>
-                        </CardContent>
-                    </Card>
-                ) : (
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Configured Pages</CardTitle>
-                            <CardDescription>Manage Meta page access tokens and monitor sync status</CardDescription>
-                        </CardHeader>
-                        <CardContent>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                        <div>
+                            <CardTitle>Connections</CardTitle>
+                            <CardDescription>
+                                Connect Meta accounts and manage assets for lead ads.
+                            </CardDescription>
+                        </div>
+                        <Button onClick={handleConnectWithFacebook} disabled={connectUrlMutation.isPending}>
+                            {connectUrlMutation.isPending ? (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            ) : (
+                                <FacebookIcon className="mr-2 size-4" />
+                            )}
+                            Connect with Facebook
+                        </Button>
+                    </CardHeader>
+                    <CardContent>
+                        {connectionsLoading ? (
+                            <div className="flex items-center justify-center py-12">
+                                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : connections.length === 0 ? (
+                            <div className="text-sm text-muted-foreground">No connections yet.</div>
+                        ) : (
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Page ID</TableHead>
-                                        <TableHead>Page Name</TableHead>
+                                        <TableHead>Account</TableHead>
                                         <TableHead>Status</TableHead>
-                                        <TableHead>Token Expires</TableHead>
-                                        <TableHead>Last Sync</TableHead>
+                                        <TableHead>Last validated</TableHead>
                                         <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {pages.map((page) => {
-                                        const status = getTokenStatus(page.token_expires_at)
-                                        return (
-                                            <TableRow key={page.id}>
-                                                <TableCell className="font-mono">{page.page_id}</TableCell>
-                                                <TableCell>{page.page_name || <span className="text-muted-foreground italic">Unnamed</span>}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant={status.variant} className="gap-1">
-                                                        {page.is_active ? (
-                                                            <CheckCircleIcon className="size-3" />
-                                                        ) : (
-                                                            <XCircleIcon className="size-3" />
-                                                        )}
-                                                        {status.label}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell>
-                                                    {page.token_expires_at ? (
-                                                        <div className="flex items-center gap-2 text-sm">
-                                                            <CalendarIcon className="size-4 text-muted-foreground" />
-                                                            <span className={status.color}>
-                                                                {formatDistanceToNow(new Date(page.token_expires_at), { addSuffix: true })}
-                                                            </span>
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-muted-foreground">—</span>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {page.last_success_at ? (
-                                                        <span className="text-sm text-muted-foreground">
-                                                            {formatDistanceToNow(new Date(page.last_success_at), { addSuffix: true })}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-muted-foreground">Never</span>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => setDeleteConfirm(page.page_id)}
-                                                        disabled={deleteMutation.isPending}
-                                                    >
-                                                        <TrashIcon className="size-4" />
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        )
-                                    })}
+                                    {connections.map((connection) => (
+                                        <TableRow key={connection.id}>
+                                            <TableCell>
+                                                <div className="font-medium">
+                                                    {connection.meta_user_name || "Meta user"}
+                                                </div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    {connection.meta_user_id}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <ConnectionHealthBadge connection={connection} />
+                                            </TableCell>
+                                            <TableCell className="text-sm text-muted-foreground">
+                                                {connection.last_validated_at
+                                                    ? formatDistanceToNow(new Date(connection.last_validated_at), {
+                                                          addSuffix: true,
+                                                      })
+                                                    : "—"}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        router.push(
+                                                            `/settings/integrations/meta?step=select-assets&connection=${connection.id}`
+                                                        )
+                                                    }
+                                                >
+                                                    Manage assets
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => setDisconnectConnectionId(connection.id)}
+                                                >
+                                                    <UnlinkIcon className="size-4" />
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
                                 </TableBody>
                             </Table>
-                        </CardContent>
-                    </Card>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {connectionsNeedingReauth.length > 0 && (
+                    <Alert>
+                        <AlertTitle>Reconnect required</AlertTitle>
+                        <AlertDescription>
+                            <div className="space-y-3">
+                                <p>
+                                    Some connections need reauthorization. Click Connect with Facebook to refresh
+                                    tokens.
+                                </p>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={handleConnectWithFacebook}
+                                    disabled={connectUrlMutation.isPending}
+                                >
+                                    {connectUrlMutation.isPending ? (
+                                        <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                    ) : (
+                                        <FacebookIcon className="mr-2 size-4" />
+                                    )}
+                                    Reconnect
+                                </Button>
+                            </div>
+                        </AlertDescription>
+                    </Alert>
                 )}
 
-                {adAccountsLoading ? (
-                    <Card>
-                        <CardContent className="flex items-center justify-center py-12">
-                            <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
-                        </CardContent>
-                    </Card>
-                ) : adAccounts.length === 0 ? (
-                    <Card>
-                        <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                            <p className="text-lg font-medium">No ad accounts configured yet</p>
-                            <p className="text-sm">
-                                Add a Meta ad account to sync spend data and enable CAPI status updates.
-                            </p>
-                            <Button className="mt-4" onClick={() => setShowAddAccountDialog(true)}>
-                                <PlusIcon className="mr-2 size-4" />
-                                Add Ad Account
-                            </Button>
-                        </CardContent>
-                    </Card>
-                ) : (
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                            <div>
-                                <CardTitle>Meta Ad Accounts</CardTitle>
-                                <CardDescription>Manage ad accounts for spend sync and CAPI</CardDescription>
+                {connectionsWithErrors.length > 0 && (
+                    <Alert variant="destructive">
+                        <AlertTitle>Connection errors</AlertTitle>
+                        <AlertDescription>
+                            Some connections are returning errors. Review their status and reconnect if needed.
+                        </AlertDescription>
+                    </Alert>
+                )}
+
+                {step === "select-assets" && activeConnection && (
+                    <MetaAssetSelection
+                        connectionId={activeConnection.id}
+                        connectionName={activeConnection.meta_user_name || "Meta user"}
+                        onClose={() => router.push("/settings/integrations/meta")}
+                    />
+                )}
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Ad Accounts</CardTitle>
+                        <CardDescription>Configure CAPI settings and sync visibility.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {adAccountsLoading ? (
+                            <div className="flex items-center justify-center py-12">
+                                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                             </div>
-                            <Button size="sm" onClick={() => setShowAddAccountDialog(true)}>
-                                <PlusIcon className="mr-2 size-4" />
-                                Add Ad Account
-                            </Button>
-                        </CardHeader>
-                        <CardContent>
+                        ) : adAccounts.length === 0 ? (
+                            <div className="text-sm text-muted-foreground">No ad accounts connected yet.</div>
+                        ) : (
                             <Table>
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Ad Account</TableHead>
                                         <TableHead>Name</TableHead>
                                         <TableHead>CAPI</TableHead>
-                                        <TableHead>Token Expires</TableHead>
                                         <TableHead>Sync</TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {adAccounts.map((account) => {
-                                        const status = getTokenStatus(account.token_expires_at)
-                                        return (
-                                            <TableRow key={account.id}>
-                                                <TableCell className="font-mono">
-                                                    {account.ad_account_external_id}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="font-medium">
-                                                        {account.ad_account_name || (
-                                                            <span className="text-muted-foreground italic">Unnamed</span>
-                                                        )}
+                                    {adAccounts.map((account) => (
+                                        <TableRow key={account.id}>
+                                            <TableCell className="font-mono">
+                                                {account.ad_account_external_id}
+                                            </TableCell>
+                                            <TableCell>{account.ad_account_name || "—"}</TableCell>
+                                            <TableCell>
+                                                <Badge variant={account.capi_enabled ? "default" : "secondary"}>
+                                                    {account.capi_enabled ? "Enabled" : "Disabled"}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="text-sm text-muted-foreground">
+                                                    <div>
+                                                        Hierarchy:{" "}
+                                                        {account.hierarchy_synced_at
+                                                            ? formatDistanceToNow(
+                                                                  new Date(account.hierarchy_synced_at),
+                                                                  { addSuffix: true }
+                                                              )
+                                                            : "—"}
                                                     </div>
-                                                    {account.last_error && (
-                                                        <div className="text-xs text-destructive">
-                                                            {account.last_error}
-                                                        </div>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge variant={account.capi_enabled ? "default" : "secondary"}>
-                                                        {account.capi_enabled ? "Enabled" : "Disabled"}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell>
-                                                    {account.token_expires_at ? (
-                                                        <div className="flex items-center gap-2 text-sm">
-                                                            <CalendarIcon className="size-4 text-muted-foreground" />
-                                                            <span className={status.color}>
-                                                                {formatRelative(account.token_expires_at)}
-                                                            </span>
-                                                        </div>
+                                                    <div>
+                                                        Spend:{" "}
+                                                        {account.spend_synced_at
+                                                            ? formatDistanceToNow(
+                                                                  new Date(account.spend_synced_at),
+                                                                  { addSuffix: true }
+                                                              )
+                                                            : "—"}
+                                                    </div>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant={account.is_active ? "default" : "secondary"} className="gap-1">
+                                                    {account.is_active ? (
+                                                        <CheckCircleIcon className="size-3" />
                                                     ) : (
-                                                        <span className="text-muted-foreground">—</span>
+                                                        <AlertTriangleIcon className="size-3" />
                                                     )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="text-sm text-muted-foreground">
-                                                        <div>Hierarchy: {formatRelative(account.hierarchy_synced_at)}</div>
-                                                        <div>Spend: {formatRelative(account.spend_synced_at)}</div>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge variant={account.is_active ? "default" : "secondary"} className="gap-1">
-                                                        {account.is_active ? (
-                                                            <CheckCircleIcon className="size-3" />
-                                                        ) : (
-                                                            <XCircleIcon className="size-3" />
-                                                        )}
-                                                        {account.is_active ? "Active" : "Inactive"}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => openEditAccount(account)}
-                                                    >
-                                                        <PencilIcon className="size-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => setDeleteAccountConfirm(account.id)}
-                                                        disabled={deleteAccountMutation.isPending}
-                                                    >
-                                                        <TrashIcon className="size-4" />
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        )
-                                    })}
+                                                    {account.is_active ? "Active" : "Inactive"}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => openEditAccount(account)}
+                                                >
+                                                    <PencilIcon className="size-4" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => handleDeleteAdAccount(account.id)}
+                                                    disabled={deleteAccountMutation.isPending}
+                                                >
+                                                    <TrashIcon className="size-4" />
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
                                 </TableBody>
                             </Table>
-                        </CardContent>
-                    </Card>
-                )}
+                        )}
+                    </CardContent>
+                </Card>
             </div>
 
-            {/* Add Page Dialog */}
-            <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+            <Dialog open={!!editAccount} onOpenChange={(open) => !open && setEditAccount(null)}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Add Meta Page</DialogTitle>
-                        <DialogDescription>
-                            Add a Facebook/Instagram page for lead ads integration. The access token will be encrypted.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <form onSubmit={handleAddPage}>
-                        <div className="space-y-4 py-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="pageId">Page ID *</Label>
-                                <Input
-                                    id="pageId"
-                                    placeholder="123456789"
-                                    value={pageId}
-                                    onChange={(e) => setPageId(e.target.value)}
-                                    required
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="pageName">Page Name (Optional)</Label>
-                                <Input
-                                    id="pageName"
-                                    placeholder="My Business Page"
-                                    value={pageName}
-                                    onChange={(e) => setPageName(e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="accessToken">Page Access Token *</Label>
-                                <Input
-                                    id="accessToken"
-                                    type="password"
-                                    placeholder="EAAxx..."
-                                    value={accessToken}
-                                    onChange={(e) => setAccessToken(e.target.value)}
-                                    required
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="expiresDays">Token Expiry (days)</Label>
-                                <Input
-                                    id="expiresDays"
-                                    type="number"
-                                    min="1"
-                                    max="365"
-                                    value={expiresDays}
-                                    onChange={(e) => setExpiresDays(e.target.value)}
-                                />
-                            </div>
-                            {formError && (
-                                <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg">
-                                    {formError}
-                                </div>
-                            )}
-                            {createMutation.isSuccess && (
-                                <div className="text-sm text-green-600 bg-green-500/10 px-3 py-2 rounded-lg">
-                                    Page added successfully!
-                                </div>
-                            )}
-                        </div>
-                        <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setShowAddDialog(false)}>
-                                Cancel
-                            </Button>
-                            <Button type="submit" disabled={createMutation.isPending}>
-                                {createMutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
-                                Add Page
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
-
-            {/* Add Ad Account Dialog */}
-            <Dialog
-                open={showAddAccountDialog}
-                onOpenChange={(open) => {
-                    if (!open) {
-                        closeAddAccountDialog()
-                    } else {
-                        setShowAddAccountDialog(true)
-                    }
-                }}
-            >
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Add Meta Ad Account</DialogTitle>
-                        <DialogDescription>
-                            Configure an ad account for spend sync and CAPI. Tokens are encrypted at rest.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <form onSubmit={handleAddAdAccount}>
-                        <div className="space-y-4 py-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="adAccountId">Ad Account ID *</Label>
-                                <Input
-                                    id="adAccountId"
-                                    placeholder="act_123456789"
-                                    value={adAccountId}
-                                    onChange={(e) => setAdAccountId(e.target.value)}
-                                    required
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="adAccountName">Account Name (Optional)</Label>
-                                <Input
-                                    id="adAccountName"
-                                    placeholder="Primary Ads Account"
-                                    value={adAccountName}
-                                    onChange={(e) => setAdAccountName(e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="systemToken">System Token *</Label>
-                                <Input
-                                    id="systemToken"
-                                    type="password"
-                                    placeholder="EAA..."
-                                    value={systemToken}
-                                    onChange={(e) => setSystemToken(e.target.value)}
-                                    required
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="accountExpiresDays">Token Expiry (days)</Label>
-                                <Input
-                                    id="accountExpiresDays"
-                                    type="number"
-                                    min="1"
-                                    max="365"
-                                    value={accountExpiresDays}
-                                    onChange={(e) => setAccountExpiresDays(e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="pixelId">Pixel ID (Optional)</Label>
-                                <Input
-                                    id="pixelId"
-                                    placeholder="1234567890"
-                                    value={pixelId}
-                                    onChange={(e) => setPixelId(e.target.value)}
-                                />
-                            </div>
-                            <div className="flex items-center justify-between rounded-lg border border-border p-3">
-                                <div>
-                                    <Label className="text-sm font-medium">Enable CAPI</Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        Send lead status updates back to Meta.
-                                    </p>
-                                </div>
-                                <Switch checked={capiEnabled} onCheckedChange={setCapiEnabled} />
-                            </div>
-                            {capiEnabled && (
-                                <div className="space-y-3 rounded-lg border border-border p-3">
-                                    <div className="flex items-center justify-between">
-                                        <Label className="text-sm">Use system token for CAPI</Label>
-                                        <Switch
-                                            checked={useSystemTokenForCapi}
-                                            onCheckedChange={setUseSystemTokenForCapi}
-                                        />
-                                    </div>
-                                    {!useSystemTokenForCapi && (
-                                        <div className="space-y-2">
-                                            <Label htmlFor="capiToken">CAPI Token</Label>
-                                            <Input
-                                                id="capiToken"
-                                                type="password"
-                                                placeholder="EAA..."
-                                                value={capiToken}
-                                                onChange={(e) => setCapiToken(e.target.value)}
-                                            />
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                            {accountFormError && (
-                                <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg">
-                                    {accountFormError}
-                                </div>
-                            )}
-                            {createAccountMutation.isSuccess && (
-                                <div className="text-sm text-green-600 bg-green-500/10 px-3 py-2 rounded-lg">
-                                    Ad account added successfully!
-                                </div>
-                            )}
-                        </div>
-                        <DialogFooter>
-                            <Button type="button" variant="outline" onClick={closeAddAccountDialog}>
-                                Cancel
-                            </Button>
-                            <Button type="submit" disabled={createAccountMutation.isPending}>
-                                {createAccountMutation.isPending && (
-                                    <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                )}
-                                Add Ad Account
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
-
-            {/* Edit Ad Account Dialog */}
-            <Dialog
-                open={!!editAccount}
-                onOpenChange={(open) => {
-                    if (!open) {
-                        closeEditAccountDialog()
-                    }
-                }}
-            >
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Edit Meta Ad Account</DialogTitle>
-                        <DialogDescription>
-                            Update tokens, CAPI configuration, or status for this ad account.
-                        </DialogDescription>
+                        <DialogTitle>Edit Ad Account</DialogTitle>
+                        <DialogDescription>Update CAPI and account settings.</DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleUpdateAdAccount}>
                         <div className="space-y-4 py-4">
                             <div className="space-y-2">
-                                <Label htmlFor="editAdAccountId">Ad Account ID</Label>
-                                <Input id="editAdAccountId" value={adAccountId} disabled />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="editAdAccountName">Account Name</Label>
+                                <Label htmlFor="adAccountName">Ad account name</Label>
                                 <Input
-                                    id="editAdAccountName"
-                                    placeholder="Primary Ads Account"
+                                    id="adAccountName"
                                     value={adAccountName}
                                     onChange={(e) => setAdAccountName(e.target.value)}
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="editSystemToken">System Token (optional)</Label>
+                                <Label htmlFor="pixelId">Pixel ID</Label>
                                 <Input
-                                    id="editSystemToken"
-                                    type="password"
-                                    placeholder="Leave blank to keep current token"
-                                    value={systemToken}
-                                    onChange={(e) => setSystemToken(e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="editAccountExpiresDays">Token Expiry (days)</Label>
-                                <Input
-                                    id="editAccountExpiresDays"
-                                    type="number"
-                                    min="1"
-                                    max="365"
-                                    placeholder="Leave blank to keep current expiry"
-                                    value={accountExpiresDays}
-                                    onChange={(e) => setAccountExpiresDays(e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="editPixelId">Pixel ID</Label>
-                                <Input
-                                    id="editPixelId"
-                                    placeholder="1234567890"
+                                    id="pixelId"
                                     value={pixelId}
                                     onChange={(e) => setPixelId(e.target.value)}
                                 />
                             </div>
-                            <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                            <div className="flex items-center justify-between">
                                 <div>
-                                    <Label className="text-sm font-medium">Active</Label>
+                                    <Label htmlFor="capiEnabled">Enable CAPI</Label>
                                     <p className="text-xs text-muted-foreground">
-                                        Inactive accounts stop syncs and CAPI.
+                                        Send lead status updates to Meta.
                                     </p>
                                 </div>
-                                <Switch checked={accountActive} onCheckedChange={setAccountActive} />
+                                <Checkbox
+                                    checked={capiEnabled}
+                                    onCheckedChange={(checked) => setCapiEnabled(!!checked)}
+                                    id="capiEnabled"
+                                />
                             </div>
-                            <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                            <div className="flex items-center justify-between">
                                 <div>
-                                    <Label className="text-sm font-medium">Enable CAPI</Label>
+                                    <Label htmlFor="accountActive">Active</Label>
                                     <p className="text-xs text-muted-foreground">
-                                        Send lead status updates back to Meta.
+                                        Disable to pause sync and CAPI for this account.
                                     </p>
                                 </div>
-                                <Switch checked={capiEnabled} onCheckedChange={setCapiEnabled} />
+                                <Checkbox
+                                    checked={accountActive}
+                                    onCheckedChange={(checked) => setAccountActive(!!checked)}
+                                    id="accountActive"
+                                />
                             </div>
-                            {capiEnabled && (
-                                <div className="space-y-3 rounded-lg border border-border p-3">
-                                    <div className="flex items-center justify-between">
-                                        <Label className="text-sm">Use system token for CAPI</Label>
-                                        <Switch
-                                            checked={useSystemTokenForCapi}
-                                            onCheckedChange={setUseSystemTokenForCapi}
-                                        />
-                                    </div>
-                                    {!useSystemTokenForCapi && (
-                                        <div className="space-y-2">
-                                            <Label htmlFor="editCapiToken">CAPI Token (optional)</Label>
-                                            <Input
-                                                id="editCapiToken"
-                                                type="password"
-                                                placeholder="Leave blank to keep current token"
-                                                value={capiToken}
-                                                onChange={(e) => setCapiToken(e.target.value)}
-                                            />
-                                        </div>
-                                    )}
-                                </div>
-                            )}
                             {accountFormError && (
-                                <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg">
-                                    {accountFormError}
-                                </div>
+                                <p className="text-sm text-destructive">{accountFormError}</p>
                             )}
                         </div>
                         <DialogFooter>
-                            <Button type="button" variant="outline" onClick={closeEditAccountDialog}>
+                            <Button variant="outline" onClick={() => setEditAccount(null)} type="button">
                                 Cancel
                             </Button>
                             <Button type="submit" disabled={updateAccountMutation.isPending}>
-                                {updateAccountMutation.isPending && (
-                                    <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                {updateAccountMutation.isPending ? (
+                                    <>
+                                        <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                        Saving...
+                                    </>
+                                ) : (
+                                    "Save changes"
                                 )}
-                                Save Changes
                             </Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
             </Dialog>
 
-            {/* Delete Page Dialog */}
-            <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Delete Page Mapping?</DialogTitle>
-                        <DialogDescription>
-                            Are you sure you want to remove this page? Lead capture webhooks will stop working for this page.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setDeleteConfirm(null)}>
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            onClick={() => deleteConfirm && handleDelete(deleteConfirm)}
-                            disabled={deleteMutation.isPending}
+            <AlertDialog open={!!disconnectConnectionId} onOpenChange={(open) => !open && setDisconnectConnectionId(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Disconnect Meta account?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will unlink all ad accounts and pages connected through this Facebook account.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => disconnectConnectionId && handleDisconnect(disconnectConnectionId)}
                         >
-                            {deleteMutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
-                            Delete
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            {/* Delete Ad Account Dialog */}
-            <Dialog open={!!deleteAccountConfirm} onOpenChange={() => setDeleteAccountConfirm(null)}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Deactivate Ad Account?</DialogTitle>
-                        <DialogDescription>
-                            This will disable syncs and CAPI for this ad account. You can re-enable it later.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setDeleteAccountConfirm(null)}>
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            onClick={() => deleteAccountConfirm && handleDeleteAdAccount(deleteAccountConfirm)}
-                            disabled={deleteAccountMutation.isPending}
-                        >
-                            {deleteAccountMutation.isPending && (
-                                <Loader2Icon className="mr-2 size-4 animate-spin" />
-                            )}
-                            Deactivate
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                            Disconnect
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }

@@ -1,5 +1,6 @@
 """Meta Lead service - ingestion and conversion to surrogates."""
 
+import logging
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID
@@ -7,10 +8,14 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.db.enums import SurrogateSource
-from app.db.models import MetaLead, Surrogate
+from app.db.models import MetaAd, MetaLead, Surrogate
 from app.schemas.surrogate import SurrogateCreate
 from app.services import surrogate_service
+from app.services import custom_field_service
+from app.services.import_transformers import transform_value
 from app.utils.normalization import normalize_phone, normalize_state
+
+logger = logging.getLogger(__name__)
 
 
 def store_meta_lead(
@@ -212,6 +217,93 @@ def convert_to_surrogate(
         return None, f"Conversion failed: {e}"
 
 
+def convert_to_surrogate_with_mapping(
+    db: Session,
+    meta_lead: MetaLead,
+    mapping_rules: list[dict],
+    unknown_column_behavior: str = "metadata",
+    user_id: UUID | None = None,
+) -> tuple[Surrogate | None, str | None]:
+    """
+    Convert a Meta lead using explicit mapping rules.
+
+    Args:
+        meta_lead: Lead to convert
+        mapping_rules: List of column mapping dicts
+        unknown_column_behavior: ignore|metadata|warn for unmapped columns
+    """
+    # Prevent double conversion
+    if meta_lead.is_converted:
+        return None, "Meta lead already converted"
+    if meta_lead.converted_surrogate_id:
+        return None, "Meta lead already has a linked surrogate"
+
+    field_data = meta_lead.field_data_raw or meta_lead.field_data or {}
+    row_data, custom_values, import_metadata, unmapped_fields = _apply_mapping_rules(
+        field_data, mapping_rules, unknown_column_behavior
+    )
+
+    # Ensure required fields exist (fallback placeholders)
+    full_name = str(row_data.get("full_name") or "").strip()
+    email = str(row_data.get("email") or "").strip().lower()
+
+    if not full_name or len(full_name) < 2:
+        row_data["full_name"] = f"Meta Lead {meta_lead.meta_lead_id[:8]}"
+
+    if not email or "@" not in email:
+        row_data["email"] = f"meta-{meta_lead.meta_lead_id[:16]}@placeholder.invalid"
+    else:
+        row_data["email"] = email
+
+    row_data.setdefault("source", SurrogateSource.META.value)
+
+    try:
+        surrogate_data = SurrogateCreate(**row_data)
+        surrogate = surrogate_service.create_surrogate(
+            db=db,
+            org_id=meta_lead.organization_id,
+            user_id=user_id,
+            data=surrogate_data,
+        )
+
+        if import_metadata:
+            surrogate.import_metadata = import_metadata
+
+        # Link surrogate back to meta lead and add campaign tracking
+        surrogate.meta_lead_id = meta_lead.id
+        surrogate.meta_form_id = meta_lead.meta_form_id
+        _apply_meta_tracking(db, meta_lead, surrogate)
+
+        # Save custom field values
+        if custom_values:
+            custom_field_service.set_bulk_custom_values(
+                db,
+                meta_lead.organization_id,
+                surrogate.id,
+                custom_values,
+            )
+
+        # Update meta lead
+        meta_lead.is_converted = True
+        meta_lead.converted_surrogate_id = surrogate.id
+        meta_lead.converted_at = datetime.now(timezone.utc)
+        meta_lead.conversion_error = None
+        meta_lead.unmapped_fields = unmapped_fields or None
+
+        db.commit()
+
+        if unmapped_fields and unknown_column_behavior != "ignore":
+            _notify_unmapped_fields(db, meta_lead)
+
+        return surrogate, None
+
+    except Exception as e:
+        meta_lead.conversion_error = str(e)[:500]
+        meta_lead.unmapped_fields = unmapped_fields or None
+        db.commit()
+        return None, f"Conversion failed: {e}"
+
+
 def get_unconverted(db: Session, org_id: UUID) -> list[MetaLead]:
     """Get unconverted Meta leads for an org."""
     return (
@@ -235,6 +327,116 @@ def get_meta_lead(db: Session, meta_lead_id: UUID, org_id: UUID) -> MetaLead | N
         )
         .first()
     )
+
+
+def _apply_mapping_rules(
+    field_data: dict,
+    mapping_rules: list[dict],
+    unknown_column_behavior: str,
+) -> tuple[dict, dict, dict, dict]:
+    """Apply mapping rules to raw field data."""
+    row_data: dict = {}
+    custom_values: dict = {}
+    import_metadata: dict = {}
+    unmapped_fields: dict = {}
+
+    mapping_by_column = {_normalize_key(m.get("csv_column", "")): m for m in mapping_rules}
+
+    for raw_key, raw_value in field_data.items():
+        key = _normalize_key(str(raw_key))
+        if raw_value is None or raw_value == "":
+            continue
+
+        mapping = mapping_by_column.get(key)
+        value = _stringify_value(raw_value)
+
+        if not mapping:
+            if unknown_column_behavior == "metadata":
+                import_metadata[raw_key] = value
+            if unknown_column_behavior in ("warn", "metadata", "ignore"):
+                unmapped_fields[raw_key] = value
+            continue
+
+        action = mapping.get("action")
+        if action == "ignore":
+            continue
+        if action == "metadata":
+            import_metadata[raw_key] = value
+            continue
+        if action == "custom" and mapping.get("custom_field_key"):
+            custom_key = mapping.get("custom_field_key")
+            transformed = _apply_transform(mapping, value)
+            custom_values[custom_key] = transformed
+            continue
+        if action == "map" and mapping.get("surrogate_field"):
+            field_name = mapping.get("surrogate_field")
+            row_data[field_name] = _apply_transform(mapping, value)
+            continue
+
+    return row_data, custom_values, import_metadata, unmapped_fields
+
+
+def _apply_transform(mapping: dict, value: str) -> object:
+    transformation = mapping.get("transformation")
+    if transformation:
+        result = transform_value(transformation, value)
+        if result.success:
+            return result.value
+    return value
+
+
+def _normalize_key(value: str) -> str:
+    return value.strip().lower().replace(" ", "_")
+
+
+def _stringify_value(value: object) -> str:
+    if isinstance(value, list):
+        return ", ".join(str(v) for v in value if v is not None)
+    return str(value)
+
+
+def _apply_meta_tracking(db: Session, meta_lead: MetaLead, surrogate: Surrogate) -> None:
+    """Attach campaign hierarchy details to surrogate if available."""
+    fields = meta_lead.field_data or {}
+    raw_fields = meta_lead.field_data_raw or {}
+    meta_ad_id = raw_fields.get("meta_ad_id") or fields.get("meta_ad_id")
+    if meta_ad_id:
+        surrogate.meta_ad_external_id = str(meta_ad_id)
+        meta_ad = (
+            db.query(MetaAd)
+            .filter(
+                MetaAd.organization_id == meta_lead.organization_id,
+                MetaAd.ad_external_id == str(meta_ad_id),
+            )
+            .first()
+        )
+        if meta_ad:
+            surrogate.meta_campaign_external_id = meta_ad.campaign_external_id
+            surrogate.meta_adset_external_id = meta_ad.adset_external_id
+
+
+def _notify_unmapped_fields(db: Session, meta_lead: MetaLead) -> None:
+    """Create a review task when new unmapped fields appear."""
+    if not meta_lead.meta_form_id:
+        return
+    try:
+        from app.services import meta_form_mapping_service
+
+        form = meta_form_mapping_service.get_form_by_external_id(
+            db,
+            meta_lead.organization_id,
+            meta_lead.meta_form_id,
+        )
+        if not form:
+            return
+
+        meta_form_mapping_service.ensure_mapping_review_task(
+            db,
+            form,
+            reason="Unmapped fields detected in recent Meta lead(s).",
+        )
+    except Exception as exc:
+        logger.warning(f"Failed to create mapping review task: {exc}")
 
 
 # =============================================================================
