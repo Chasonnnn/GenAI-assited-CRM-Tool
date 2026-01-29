@@ -258,6 +258,28 @@ export function useFormPerformance(params: DateRangeParams = {}) {
 }
 
 /**
+ * Fetch Meta platform distribution.
+ */
+export function useMetaPlatformBreakdown(params: DateRangeParams = {}) {
+    return useQuery({
+        queryKey: [...analyticsKeys.all, 'meta-platforms', params] as const,
+        queryFn: () => analyticsApi.getMetaPlatformBreakdown(params),
+        staleTime: 60 * 1000,
+    });
+}
+
+/**
+ * Fetch Meta ad performance.
+ */
+export function useMetaAdPerformance(params: DateRangeParams = {}) {
+    return useQuery({
+        queryKey: [...analyticsKeys.all, 'meta-ads', params] as const,
+        queryFn: () => analyticsApi.getMetaAdPerformance(params),
+        staleTime: 60 * 1000,
+    });
+}
+
+/**
  * Fetch synced campaigns for filter dropdown.
  */
 export function useMetaCampaignList(params: { ad_account_id?: string } = {}) {

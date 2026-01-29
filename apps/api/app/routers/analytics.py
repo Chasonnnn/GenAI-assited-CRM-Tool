@@ -296,11 +296,29 @@ class FormPerformanceItem(BaseModel):
 
     form_external_id: str
     form_name: str
+    mapping_status: str
     lead_count: int
     surrogate_count: int
     qualified_count: int
     conversion_rate: float
     qualified_rate: float
+
+
+class MetaPlatformBreakdownItem(BaseModel):
+    """Meta platform breakdown item."""
+
+    platform: str
+    lead_count: int
+
+
+class MetaAdPerformanceItem(BaseModel):
+    """Meta ad performance metrics."""
+
+    ad_id: str
+    ad_name: str
+    lead_count: int
+    surrogate_count: int
+    conversion_rate: float
 
 
 class MetaCampaignListItem(BaseModel):
@@ -459,6 +477,44 @@ def get_form_performance(
         end_date=end.date() if end else None,
     )
     return {"data": [FormPerformanceItem(**item).model_dump() for item in data]}
+
+
+@router.get("/meta/platforms")
+def get_meta_platform_breakdown(
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Get Meta platform distribution from lead data."""
+    start, end = analytics_service.parse_date_range(from_date, to_date)
+
+    data = analytics_service.get_cached_meta_platform_breakdown(
+        db=db,
+        organization_id=session.org_id,
+        start_date=start.date() if start else None,
+        end_date=end.date() if end else None,
+    )
+    return {"data": [MetaPlatformBreakdownItem(**item).model_dump() for item in data]}
+
+
+@router.get("/meta/ads")
+def get_meta_ad_performance(
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Get Meta ad performance grouped by ad ID."""
+    start, end = analytics_service.parse_date_range(from_date, to_date)
+
+    data = analytics_service.get_cached_leads_by_ad(
+        db=db,
+        organization_id=session.org_id,
+        start_date=start.date() if start else None,
+        end_date=end.date() if end else None,
+    )
+    return {"data": [MetaAdPerformanceItem(**item).model_dump() for item in data]}
 
 
 @router.get("/meta/campaigns")

@@ -32,6 +32,8 @@ import {
     useSpendByBreakdown,
     useSpendTrend,
     useFormPerformance,
+    useMetaPlatformBreakdown,
+    useMetaAdPerformance,
 } from "@/lib/hooks/use-analytics"
 import type { DateRangeParams, BreakdownParams } from "@/lib/api/analytics"
 import { cn } from "@/lib/utils"
@@ -390,6 +392,7 @@ function FormPerformanceTable({
     data: Array<{
         form_external_id: string
         form_name: string
+        mapping_status: string
         lead_count: number
         surrogate_count: number
         qualified_count: number
@@ -432,6 +435,7 @@ function FormPerformanceTable({
                 <thead>
                     <tr className="border-b border-border/50 bg-muted/30">
                         <th className="px-4 py-3 text-left font-medium text-muted-foreground">Form</th>
+                        <th className="px-4 py-3 text-left font-medium text-muted-foreground">Mapping</th>
                         <th className="px-4 py-3 text-right font-medium text-muted-foreground">Leads</th>
                         <th className="px-4 py-3 text-right font-medium text-muted-foreground">Surrogates</th>
                         <th className="px-4 py-3 text-right font-medium text-muted-foreground hidden sm:table-cell">Qualified</th>
@@ -450,6 +454,20 @@ function FormPerformanceTable({
                         >
                             <td className="px-4 py-3">
                                 <p className="font-medium truncate max-w-[200px]">{form.form_name}</p>
+                            </td>
+                            <td className="px-4 py-3">
+                                <Badge
+                                    variant={
+                                        form.mapping_status === "mapped"
+                                            ? "default"
+                                            : form.mapping_status === "outdated"
+                                              ? "destructive"
+                                              : "secondary"
+                                    }
+                                    className="text-xs"
+                                >
+                                    {form.mapping_status.replace(/_/g, " ")}
+                                </Badge>
                             </td>
                             <td className="px-4 py-3 text-right font-medium">
                                 {formatNumber(form.lead_count)}
@@ -504,6 +522,8 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
     })
     const { data: trend, isLoading: trendLoading, isError: trendError } = useSpendTrend(spendParams)
     const { data: forms, isLoading: formsLoading, isError: formsError } = useFormPerformance(dateParams)
+    const { data: platforms, isLoading: platformsLoading, isError: platformsError } = useMetaPlatformBreakdown(dateParams)
+    const { data: ads, isLoading: adsLoading, isError: adsError } = useMetaAdPerformance(dateParams)
 
     // Transform trend data for chart
     const trendChartData = useMemo(() => {
@@ -514,6 +534,25 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
             leads: point.leads,
         }))
     }, [trend])
+
+    const platformChartData = useMemo(() => {
+        if (!platforms) return []
+        return platforms.map((item, idx) => ({
+            platform: item.platform.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+            leads: item.lead_count,
+            fill: BREAKDOWN_COLORS[idx % BREAKDOWN_COLORS.length],
+        }))
+    }, [platforms])
+
+    const adChartData = useMemo(() => {
+        if (!ads) return []
+        return ads.slice(0, 8).map((item, idx) => ({
+            ad: item.ad_name,
+            leads: item.lead_count,
+            surrogates: item.surrogate_count,
+            fill: BREAKDOWN_COLORS[idx % BREAKDOWN_COLORS.length],
+        }))
+    }, [ads])
 
     return (
         <div className="space-y-6">
@@ -713,6 +752,115 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
                             <FormPerformanceTable data={forms} loading={formsLoading} error={formsError} />
                         </CardContent>
                     </Card>
+
+                    {/* Platform + Ad Performance */}
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <Card>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-base flex items-center gap-2">
+                                    <LayoutGridIcon className="size-4 text-muted-foreground" />
+                                    Meta Platforms
+                                </CardTitle>
+                                <CardDescription>Lead distribution by platform</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {platformsLoading ? (
+                                    <div className="flex items-center justify-center h-[220px]">
+                                        <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                                    </div>
+                                ) : platformsError ? (
+                                    <div className="flex items-center justify-center h-[220px] text-destructive">
+                                        <AlertCircleIcon className="size-4 mr-2" />
+                                        Unable to load platform data
+                                    </div>
+                                ) : platformChartData.length > 0 ? (
+                                    <ChartContainer config={{ leads: { label: "Leads" } }} className="h-[220px] w-full">
+                                        <BarChart data={platformChartData} layout="vertical">
+                                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" opacity={0.5} />
+                                            <XAxis type="number" tickLine={false} axisLine={false} fontSize={11} />
+                                            <YAxis dataKey="platform" type="category" tickLine={false} axisLine={false} width={110} fontSize={11} />
+                                            <ChartTooltip
+                                                content={({ payload }) => {
+                                                    if (!payload?.length) return null
+                                                    const d = payload[0].payload
+                                                    return (
+                                                        <div className="rounded-lg border bg-background/95 backdrop-blur p-2 shadow-lg text-xs">
+                                                            <p className="font-medium">{d.platform}</p>
+                                                            <p className="text-muted-foreground">Leads: {formatNumber(d.leads)}</p>
+                                                        </div>
+                                                    )
+                                                }}
+                                            />
+                                            <Bar dataKey="leads" radius={[0, 4, 4, 0]}>
+                                                {platformChartData.map((entry, index) => (
+                                                    <Cell key={index} fill={entry.fill ?? "hsl(var(--primary))"} />
+                                                ))}
+                                            </Bar>
+                                        </BarChart>
+                                    </ChartContainer>
+                                ) : (
+                                    <div className="flex items-center justify-center h-[220px] text-muted-foreground text-sm">
+                                        No platform data yet
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-base flex items-center gap-2">
+                                    <BarChart3Icon className="size-4 text-muted-foreground" />
+                                    Ads Performance
+                                </CardTitle>
+                                <CardDescription>Top ads by lead volume</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {adsLoading ? (
+                                    <div className="flex items-center justify-center h-[220px]">
+                                        <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                                    </div>
+                                ) : adsError ? (
+                                    <div className="flex items-center justify-center h-[220px] text-destructive">
+                                        <AlertCircleIcon className="size-4 mr-2" />
+                                        Unable to load ad performance
+                                    </div>
+                                ) : adChartData.length > 0 ? (
+                                    <ChartContainer
+                                        config={{
+                                            leads: { label: "Leads", color: CHART_COLORS.primary },
+                                            surrogates: { label: "Surrogates", color: CHART_COLORS.accent },
+                                        }}
+                                        className="h-[220px] w-full"
+                                    >
+                                        <BarChart data={adChartData} layout="vertical">
+                                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" opacity={0.5} />
+                                            <XAxis type="number" tickLine={false} axisLine={false} fontSize={11} />
+                                            <YAxis dataKey="ad" type="category" tickLine={false} axisLine={false} width={140} fontSize={11} />
+                                            <ChartTooltip
+                                                content={({ payload }) => {
+                                                    if (!payload?.length) return null
+                                                    const d = payload[0].payload
+                                                    return (
+                                                        <div className="rounded-lg border bg-background/95 backdrop-blur p-2 shadow-lg text-xs">
+                                                            <p className="font-medium truncate max-w-[220px]">{d.ad}</p>
+                                                            <p className="text-muted-foreground">Leads: {formatNumber(d.leads)}</p>
+                                                            <p className="text-muted-foreground">Surrogates: {formatNumber(d.surrogates)}</p>
+                                                        </div>
+                                                    )
+                                                }}
+                                            />
+                                            <Bar dataKey="leads" fill={CHART_COLORS.primary} radius={[0, 4, 4, 0]} />
+                                            <Bar dataKey="surrogates" fill={CHART_COLORS.accent} radius={[0, 4, 4, 0]} />
+                                        </BarChart>
+                                    </ChartContainer>
+                                ) : (
+                                    <div className="flex items-center justify-center h-[220px] text-muted-foreground text-sm">
+                                        No ad performance data yet
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
                 </>
             )}
         </div>

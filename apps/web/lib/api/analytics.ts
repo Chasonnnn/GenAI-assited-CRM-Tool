@@ -404,11 +404,25 @@ export interface SpendTotals extends SpendSyncStatus {
 export interface FormPerformance {
     form_external_id: string;
     form_name: string;
+    mapping_status: string;
     lead_count: number;
     surrogate_count: number;
     qualified_count: number;
     conversion_rate: number;
     qualified_rate: number;
+}
+
+export interface MetaPlatformBreakdownItem {
+    platform: string;
+    lead_count: number;
+}
+
+export interface MetaAdPerformanceItem {
+    ad_id: string;
+    ad_name: string;
+    lead_count: number;
+    surrogate_count: number;
+    conversion_rate: number;
 }
 
 export interface MetaCampaignListItem {
@@ -482,6 +496,26 @@ export async function getSpendTrend(params: SpendTrendParams = {}): Promise<Spen
 
     const query = searchParams.toString();
     const res = await api.get<{ data: SpendTrendPoint[] }>(`/analytics/meta/spend/trend${query ? `?${query}` : ''}`);
+    return res.data;
+}
+
+export async function getMetaPlatformBreakdown(params: DateRangeParams = {}): Promise<MetaPlatformBreakdownItem[]> {
+    const searchParams = new URLSearchParams();
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+
+    const query = searchParams.toString();
+    const res = await api.get<{ data: MetaPlatformBreakdownItem[] }>(`/analytics/meta/platforms${query ? `?${query}` : ''}`);
+    return res.data;
+}
+
+export async function getMetaAdPerformance(params: DateRangeParams = {}): Promise<MetaAdPerformanceItem[]> {
+    const searchParams = new URLSearchParams();
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+
+    const query = searchParams.toString();
+    const res = await api.get<{ data: MetaAdPerformanceItem[] }>(`/analytics/meta/ads${query ? `?${query}` : ''}`);
     return res.data;
 }
 

@@ -8,11 +8,12 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.db.enums import SurrogateSource
-from app.db.models import MetaAd, MetaLead, Surrogate
+from app.db.models import MetaAd, MetaForm, MetaLead, Organization, Surrogate
 from app.schemas.surrogate import SurrogateCreate
 from app.services import surrogate_service
 from app.services import custom_field_service
 from app.services.import_transformers import transform_value
+from app.utils.datetime_parsing import parse_datetime_with_timezone
 from app.utils.normalization import normalize_phone, normalize_state
 
 logger = logging.getLogger(__name__)
@@ -110,6 +111,7 @@ def convert_to_surrogate(
         return None, "Meta lead already has a linked surrogate"
 
     fields = meta_lead.field_data or {}
+    tracking_fields = _build_meta_tracking_fields(db, meta_lead)
 
     # Map field names (adjust based on actual Meta form fields)
     full_name = fields.get("full_name") or fields.get("name") or ""
@@ -195,11 +197,16 @@ def convert_to_surrogate(
             data=surrogate_data,
         )
 
+        if tracking_fields:
+            surrogate.import_metadata = {**(surrogate.import_metadata or {}), **tracking_fields}
+
         # Link surrogate back to meta lead and add campaign tracking
         surrogate.meta_lead_id = meta_lead.id
         surrogate.meta_form_id = meta_lead.meta_form_id
         # Get ad_id from field_data if available (stored during fetch)
-        surrogate.meta_ad_external_id = fields.get("meta_ad_id")
+        surrogate.meta_ad_external_id = tracking_fields.get("meta_ad_id") or fields.get(
+            "meta_ad_id"
+        )
 
         # Update meta lead
         meta_lead.is_converted = True
@@ -238,10 +245,40 @@ def convert_to_surrogate_with_mapping(
     if meta_lead.converted_surrogate_id:
         return None, "Meta lead already has a linked surrogate"
 
-    field_data = meta_lead.field_data_raw or meta_lead.field_data or {}
+    field_data = dict(meta_lead.field_data_raw or meta_lead.field_data or {})
+    tracking_fields = _build_meta_tracking_fields(db, meta_lead)
+    for key, value in tracking_fields.items():
+        field_data.setdefault(key, value)
+    if "created_time" not in field_data:
+        created_value = meta_lead.meta_created_time or meta_lead.received_at
+        if created_value:
+            field_data["created_time"] = created_value.isoformat()
     row_data, custom_values, import_metadata, unmapped_fields = _apply_mapping_rules(
         field_data, mapping_rules, unknown_column_behavior
     )
+
+    created_at_override: datetime | None = None
+    if "created_at" in row_data:
+        raw_created_at = row_data.pop("created_at")
+        org_timezone = None
+        org = db.get(Organization, meta_lead.organization_id)
+        if org:
+            org_timezone = org.timezone
+
+        if isinstance(raw_created_at, datetime):
+            created_at_override = (
+                raw_created_at.astimezone(timezone.utc)
+                if raw_created_at.tzinfo
+                else parse_datetime_with_timezone(
+                    raw_created_at.isoformat(sep=" "), org_timezone
+                ).value
+            )
+        else:
+            parsed = parse_datetime_with_timezone(str(raw_created_at), org_timezone)
+            created_at_override = parsed.value
+            if parsed.value is None:
+                import_metadata = import_metadata or {}
+                import_metadata["created_time"] = str(raw_created_at)
 
     # Ensure required fields exist (fallback placeholders)
     full_name = str(row_data.get("full_name") or "").strip()
@@ -264,8 +301,12 @@ def convert_to_surrogate_with_mapping(
             org_id=meta_lead.organization_id,
             user_id=user_id,
             data=surrogate_data,
+            created_at_override=created_at_override,
         )
 
+        if tracking_fields:
+            tracking_fields.update(import_metadata or {})
+            import_metadata = tracking_fields
         if import_metadata:
             surrogate.import_metadata = import_metadata
 
@@ -399,7 +440,12 @@ def _apply_meta_tracking(db: Session, meta_lead: MetaLead, surrogate: Surrogate)
     """Attach campaign hierarchy details to surrogate if available."""
     fields = meta_lead.field_data or {}
     raw_fields = meta_lead.field_data_raw or {}
-    meta_ad_id = raw_fields.get("meta_ad_id") or fields.get("meta_ad_id")
+    meta_ad_id = (
+        raw_fields.get("meta_ad_id")
+        or raw_fields.get("ad_id")
+        or fields.get("meta_ad_id")
+        or fields.get("ad_id")
+    )
     if meta_ad_id:
         surrogate.meta_ad_external_id = str(meta_ad_id)
         meta_ad = (
@@ -413,6 +459,50 @@ def _apply_meta_tracking(db: Session, meta_lead: MetaLead, surrogate: Surrogate)
         if meta_ad:
             surrogate.meta_campaign_external_id = meta_ad.campaign_external_id
             surrogate.meta_adset_external_id = meta_ad.adset_external_id
+
+
+def _build_meta_tracking_fields(db: Session, meta_lead: MetaLead) -> dict[str, str]:
+    fields = meta_lead.field_data_raw or meta_lead.field_data or {}
+    tracking: dict[str, str] = {}
+
+    ad_id = fields.get("meta_ad_id") or fields.get("ad_id")
+    if ad_id:
+        tracking["meta_ad_id"] = _stringify_value(ad_id)
+
+    ad_name = fields.get("meta_ad_name") or fields.get("ad_name")
+    if not ad_name and ad_id:
+        meta_ad = (
+            db.query(MetaAd)
+            .filter(
+                MetaAd.organization_id == meta_lead.organization_id,
+                MetaAd.ad_external_id == str(ad_id),
+            )
+            .first()
+        )
+        if meta_ad:
+            ad_name = meta_ad.ad_name
+    if ad_name:
+        tracking["meta_ad_name"] = _stringify_value(ad_name)
+
+    if meta_lead.meta_form_id:
+        form = (
+            db.query(MetaForm)
+            .filter(
+                MetaForm.organization_id == meta_lead.organization_id,
+                MetaForm.form_external_id == meta_lead.meta_form_id,
+            )
+            .first()
+        )
+        if form and form.form_name:
+            tracking["meta_form_name"] = form.form_name
+
+    platform = (
+        fields.get("meta_platform") or fields.get("platform") or fields.get("publisher_platform")
+    )
+    if platform:
+        tracking["meta_platform"] = _stringify_value(platform)
+
+    return tracking
 
 
 def _notify_unmapped_fields(db: Session, meta_lead: MetaLead) -> None:

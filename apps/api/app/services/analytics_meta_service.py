@@ -10,6 +10,7 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.db.models import (
+    MetaAd,
     MetaAdAccount,
     MetaCampaign,
     MetaDailySpend,
@@ -173,15 +174,89 @@ def get_cached_meta_performance(
     )
 
 
+def get_meta_platform_breakdown(
+    db: Session,
+    organization_id: uuid.UUID,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> list[dict[str, Any]]:
+    """Lead counts grouped by platform (facebook/instagram/etc.)."""
+    lead_time = func.coalesce(MetaLead.meta_created_time, MetaLead.received_at)
+    platform_expr = func.coalesce(
+        MetaLead.field_data_raw["meta_platform"].astext,
+        MetaLead.field_data_raw["platform"].astext,
+        MetaLead.field_data_raw["publisher_platform"].astext,
+        MetaLead.field_data["meta_platform"].astext,
+        MetaLead.field_data["platform"].astext,
+        MetaLead.field_data["publisher_platform"].astext,
+    )
+    platform_expr = func.nullif(func.lower(platform_expr), "")
+    platform_label = func.coalesce(platform_expr, "unknown")
+
+    query = (
+        db.query(
+            platform_label.label("platform"),
+            func.count(MetaLead.id).label("lead_count"),
+        )
+        .filter(MetaLead.organization_id == organization_id)
+        .group_by(platform_label)
+        .order_by(func.count(MetaLead.id).desc())
+    )
+    query = _apply_date_range_filters(query, lead_time, start_date, end_date)
+
+    results = []
+    for row in query.all():
+        platform = row.platform or "unknown"
+        results.append(
+            {
+                "platform": "Unknown" if platform == "unknown" else platform,
+                "lead_count": int(row.lead_count or 0),
+            }
+        )
+    return results
+
+
+def get_cached_meta_platform_breakdown(
+    db: Session,
+    organization_id: uuid.UUID,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> list[dict[str, Any]]:
+    params = {
+        "start_date": start_date.isoformat() if start_date else None,
+        "end_date": end_date.isoformat() if end_date else None,
+    }
+    range_start = (
+        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+        if start_date
+        else None
+    )
+    range_end = (
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
+    )
+    return _get_or_compute_snapshot(
+        db,
+        organization_id,
+        "meta_platform_breakdown",
+        params,
+        lambda: get_meta_platform_breakdown(db, organization_id, start_date, end_date),
+        range_start=range_start,
+        range_end=range_end,
+    )
+
+
 def get_campaigns(
     db: Session,
     organization_id: uuid.UUID,
 ) -> list[dict[str, Any]]:
     """Get unique meta_ad_external_id values for campaign filter dropdown."""
+    meta_name_expr = Surrogate.import_metadata["meta_ad_name"].astext
+
     results = (
         db.query(
             Surrogate.meta_ad_external_id,
             func.count(Surrogate.id).label("surrogate_count"),
+            func.max(meta_name_expr).label("meta_ad_name"),
         )
         .filter(
             Surrogate.organization_id == organization_id,
@@ -193,16 +268,129 @@ def get_campaigns(
         .all()
     )
 
+    ad_ids = [r.meta_ad_external_id for r in results if r.meta_ad_external_id]
+    ad_names: dict[str, str] = {}
+    if ad_ids:
+        for ad in (
+            db.query(MetaAd.ad_external_id, MetaAd.ad_name)
+            .filter(
+                MetaAd.organization_id == organization_id,
+                MetaAd.ad_external_id.in_(ad_ids),
+            )
+            .all()
+        ):
+            ad_names[ad.ad_external_id] = ad.ad_name
+
     return [
         {
             "ad_id": r.meta_ad_external_id,
-            "ad_name": f"Campaign {r.meta_ad_external_id[:8]}..."
-            if len(r.meta_ad_external_id) > 8
-            else r.meta_ad_external_id,
+            "ad_name": ad_names.get(r.meta_ad_external_id)
+            or r.meta_ad_name
+            or (
+                f"Campaign {r.meta_ad_external_id[:8]}..."
+                if len(r.meta_ad_external_id) > 8
+                else r.meta_ad_external_id
+            ),
             "lead_count": r.surrogate_count,
         }
         for r in results
     ]
+
+
+def get_leads_by_ad(
+    db: Session,
+    organization_id: uuid.UUID,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> list[dict[str, Any]]:
+    """Lead counts grouped by ad ID with conversion rate."""
+    lead_time = func.coalesce(MetaLead.meta_created_time, MetaLead.received_at)
+    ad_id_expr = func.coalesce(
+        MetaLead.field_data_raw["meta_ad_id"].astext,
+        MetaLead.field_data_raw["ad_id"].astext,
+        MetaLead.field_data["meta_ad_id"].astext,
+        MetaLead.field_data["ad_id"].astext,
+    )
+    ad_id_expr = func.nullif(ad_id_expr, "")
+
+    lead_counts_query = (
+        db.query(
+            ad_id_expr.label("ad_id"),
+            func.count(MetaLead.id).label("lead_count"),
+            func.count(MetaLead.converted_surrogate_id).label("surrogate_count"),
+        )
+        .filter(
+            MetaLead.organization_id == organization_id,
+            ad_id_expr.isnot(None),
+        )
+        .group_by(ad_id_expr)
+    )
+    lead_counts_query = _apply_date_range_filters(
+        lead_counts_query, lead_time, start_date, end_date
+    )
+
+    lead_counts = lead_counts_query.all()
+    ad_ids = [row.ad_id for row in lead_counts if row.ad_id]
+
+    ad_names: dict[str, str] = {}
+    if ad_ids:
+        for ad in (
+            db.query(MetaAd.ad_external_id, MetaAd.ad_name)
+            .filter(
+                MetaAd.organization_id == organization_id,
+                MetaAd.ad_external_id.in_(ad_ids),
+            )
+            .all()
+        ):
+            ad_names[ad.ad_external_id] = ad.ad_name
+
+    result: list[dict[str, Any]] = []
+    for counts in lead_counts:
+        lead_count = int(counts.lead_count or 0)
+        surrogate_count = int(counts.surrogate_count or 0)
+        conversion_rate = round(surrogate_count / lead_count * 100, 1) if lead_count > 0 else 0.0
+        ad_id = counts.ad_id
+        result.append(
+            {
+                "ad_id": ad_id,
+                "ad_name": ad_names.get(ad_id) or f"Ad {ad_id[:8]}...",
+                "lead_count": lead_count,
+                "surrogate_count": surrogate_count,
+                "conversion_rate": conversion_rate,
+            }
+        )
+
+    result.sort(key=lambda x: x["lead_count"], reverse=True)
+    return result
+
+
+def get_cached_leads_by_ad(
+    db: Session,
+    organization_id: uuid.UUID,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> list[dict[str, Any]]:
+    params = {
+        "start_date": start_date.isoformat() if start_date else None,
+        "end_date": end_date.isoformat() if end_date else None,
+    }
+    range_start = (
+        datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+        if start_date
+        else None
+    )
+    range_end = (
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) if end_date else None
+    )
+    return _get_or_compute_snapshot(
+        db,
+        organization_id,
+        "meta_ads_performance",
+        params,
+        lambda: get_leads_by_ad(db, organization_id, start_date, end_date),
+        range_start=range_start,
+        range_end=range_end,
+    )
 
 
 def get_cached_campaigns(
@@ -945,13 +1133,15 @@ def get_leads_by_form(
             qualified_counts[r.form_external_id] = r.qualified_count
 
     form_names: dict[str, str] = {}
+    form_statuses: dict[str, str] = {}
     forms = (
-        db.query(MetaForm.form_external_id, MetaForm.form_name)
+        db.query(MetaForm.form_external_id, MetaForm.form_name, MetaForm.mapping_status)
         .filter(MetaForm.organization_id == organization_id)
         .all()
     )
     for f in forms:
         form_names[f.form_external_id] = f.form_name
+        form_statuses[f.form_external_id] = f.mapping_status
 
     result = []
     for form_external_id, counts in lead_counts.items():
@@ -968,6 +1158,7 @@ def get_leads_by_form(
             {
                 "form_external_id": form_external_id,
                 "form_name": form_names.get(form_external_id, f"Form {form_external_id[:8]}..."),
+                "mapping_status": form_statuses.get(form_external_id, "unknown"),
                 "lead_count": lead_count,
                 "surrogate_count": surrogate_count,
                 "qualified_count": qualified_count,
