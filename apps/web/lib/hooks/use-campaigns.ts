@@ -13,6 +13,7 @@ import {
     previewFilters,
     sendCampaign,
     cancelCampaign,
+    retryFailedCampaignRun,
     listCampaignRuns,
     getCampaignRun,
     listRunRecipients,
@@ -37,8 +38,10 @@ export const campaignKeys = {
     preview: (id: string) => [...campaignKeys.detail(id), "preview"] as const,
     runs: (id: string) => [...campaignKeys.detail(id), "runs"] as const,
     run: (campaignId: string, runId: string) => [...campaignKeys.runs(campaignId), runId] as const,
-    runRecipients: (campaignId: string, runId: string) =>
-        [...campaignKeys.run(campaignId, runId), "recipients"] as const,
+    runRecipients: (campaignId: string, runId: string, params?: { status?: string; limit?: number }) => {
+        const base = [...campaignKeys.run(campaignId, runId), "recipients"] as const
+        return params ? [...base, params] : base
+    },
     suppressions: ["suppressions"] as const,
 };
 
@@ -122,7 +125,7 @@ export function useRunRecipients(
     params?: { status?: string; limit?: number }
 ) {
     return useQuery({
-        queryKey: campaignKeys.runRecipients(campaignId!, runId!),
+        queryKey: campaignKeys.runRecipients(campaignId!, runId!, params),
         queryFn: () => listRunRecipients(campaignId!, runId!, params),
         enabled: !!campaignId && !!runId,
     });
@@ -199,6 +202,21 @@ export function useCancelCampaign() {
         onSuccess: (_, id) => {
             queryClient.invalidateQueries({ queryKey: campaignKeys.detail(id) });
             queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
+        },
+    });
+}
+
+export function useRetryFailedCampaignRun() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ campaignId, runId }: { campaignId: string; runId: string }) =>
+            retryFailedCampaignRun(campaignId, runId),
+        onSuccess: (_, { campaignId, runId }) => {
+            queryClient.invalidateQueries({ queryKey: campaignKeys.runs(campaignId) });
+            queryClient.invalidateQueries({ queryKey: campaignKeys.run(campaignId, runId) });
+            queryClient.invalidateQueries({ queryKey: campaignKeys.runRecipients(campaignId, runId) });
+            queryClient.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
         },
     });
 }

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     Table,
     TableBody,
@@ -37,6 +38,7 @@ import {
     ChevronDownIcon,
     ChevronUpIcon,
     MailIcon,
+    RefreshCcwIcon,
 } from "lucide-react"
 import { format } from "date-fns"
 import { toast } from "sonner"
@@ -46,6 +48,7 @@ import {
     useRunRecipients,
     useDeleteCampaign,
     useDuplicateCampaign,
+    useRetryFailedCampaignRun,
 } from "@/lib/hooks/use-campaigns"
 import { NotFoundState } from "@/components/not-found-state"
 import { useEmailTemplate } from "@/lib/hooks/use-email-templates"
@@ -89,6 +92,8 @@ export default function CampaignDetailPage() {
               : ""
 
     const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+    const [showRetryDialog, setShowRetryDialog] = useState(false)
+    const [recipientFilter, setRecipientFilter] = useState("all")
     const [showTemplatePreview, setShowTemplatePreview] = useState(true)
 
     // API hooks
@@ -98,12 +103,16 @@ export default function CampaignDetailPage() {
     const { data: recipients } = useRunRecipients(
         campaignId,
         latestRun?.id,
-        { limit: 50 }
+        {
+            limit: 50,
+            status: recipientFilter === "all" ? undefined : recipientFilter,
+        }
     )
     const { data: template } = useEmailTemplate(campaign?.email_template_id ?? null)
 
     const deleteCampaign = useDeleteCampaign()
     const duplicateCampaign = useDuplicateCampaign()
+    const retryFailed = useRetryFailedCampaignRun()
 
     const handleDelete = async () => {
         try {
@@ -124,6 +133,22 @@ export default function CampaignDetailPage() {
         } catch {
             toast.error("Failed to duplicate campaign")
         }
+    }
+
+    const handleRetryFailed = async () => {
+        if (!latestRun) {
+            return
+        }
+        try {
+            const result = await retryFailed.mutateAsync({
+                campaignId,
+                runId: latestRun.id,
+            })
+            toast.success(result.message)
+        } catch {
+            toast.error("Failed to retry failed recipients")
+        }
+        setShowRetryDialog(false)
     }
 
     if (isLoading) {
@@ -297,14 +322,47 @@ export default function CampaignDetailPage() {
                 {/* Recipients Table */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>Recipients</CardTitle>
-                        <CardDescription>
-                            {latestRun
-                                ? `Last run: ${format(new Date(latestRun.started_at), "MMM d, yyyy 'at' h:mm a")}`
-                                : "No runs yet"}
-                        </CardDescription>
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <CardTitle>Recipients</CardTitle>
+                                <CardDescription>
+                                    {latestRun
+                                        ? `Last run: ${format(new Date(latestRun.started_at), "MMM d, yyyy 'at' h:mm a")}`
+                                        : "No runs yet"}
+                                </CardDescription>
+                            </div>
+                            {latestRun && latestRun.failed_count > 0 && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setShowRetryDialog(true)}
+                                    disabled={retryFailed.isPending}
+                                >
+                                    {retryFailed.isPending ? (
+                                        <Loader2Icon className="size-4 animate-spin" />
+                                    ) : (
+                                        <RefreshCcwIcon className="size-4" />
+                                    )}
+                                    Retry failed
+                                </Button>
+                            )}
+                        </div>
                     </CardHeader>
                     <CardContent>
+                        {latestRun && (
+                            <Tabs
+                                value={recipientFilter}
+                                onValueChange={setRecipientFilter}
+                                className="mb-4"
+                            >
+                                <TabsList>
+                                    <TabsTrigger value="all">All</TabsTrigger>
+                                    <TabsTrigger value="failed">
+                                        Failed{latestRun.failed_count ? ` (${latestRun.failed_count})` : ""}
+                                    </TabsTrigger>
+                                </TabsList>
+                            </Tabs>
+                        )}
                         {recipients && recipients.length > 0 ? (
                             <Table>
                                 <TableHeader>
@@ -366,6 +424,23 @@ export default function CampaignDetailPage() {
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                             Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={showRetryDialog} onOpenChange={setShowRetryDialog}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Retry failed recipients</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will retry sending to recipients that previously failed in the latest run.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleRetryFailed}>
+                            Retry failed
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
