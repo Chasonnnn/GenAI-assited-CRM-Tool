@@ -75,6 +75,13 @@ def handle_status_changed(
             pass  # Best-effort: don't block status change
 
     _maybe_send_capi_event(db, surrogate, old_slug or "", new_stage.slug)
+    _maybe_send_zapier_stage_event(
+        db,
+        surrogate,
+        new_stage_slug=new_stage.slug,
+        new_stage_label=new_stage.label,
+        effective_at=effective_at,
+    )
 
     workflow_triggers.trigger_status_changed(
         db=db,
@@ -141,6 +148,29 @@ def _maybe_send_capi_event(
                 "meta_page_id": meta_lead.meta_page_id,
             },
             idempotency_key=idempotency_key,
+        )
+    except Exception:
+        return
+
+
+def _maybe_send_zapier_stage_event(
+    db: Session,
+    surrogate: Surrogate,
+    *,
+    new_stage_slug: str,
+    new_stage_label: str | None,
+    effective_at: datetime,
+) -> None:
+    """Send stage changes to Zapier when outbound integration is configured."""
+    from app.services import zapier_outbound_service
+
+    try:
+        zapier_outbound_service.enqueue_stage_event(
+            db=db,
+            surrogate=surrogate,
+            stage_slug=new_stage_slug,
+            stage_label=new_stage_label,
+            effective_at=effective_at,
         )
     except Exception:
         return

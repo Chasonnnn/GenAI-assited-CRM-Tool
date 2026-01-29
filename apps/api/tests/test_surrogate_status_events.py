@@ -6,7 +6,7 @@ import uuid
 
 
 from app.db.enums import JobType, Role, SurrogateSource
-from app.db.models import MetaLead
+from app.db.models import MetaLead, Job
 from app.schemas.surrogate import SurrogateCreate
 from app.services import (
     pipeline_service,
@@ -34,6 +34,20 @@ def _create_surrogate(db, org_id, user_id, source=SurrogateSource.MANUAL):
             source=source,
         ),
     )
+
+
+def _create_meta_lead(db, org_id) -> MetaLead:
+    lead = MetaLead(
+        organization_id=org_id,
+        meta_lead_id=f"lead-{uuid.uuid4().hex[:8]}",
+        meta_form_id="form_1",
+        meta_page_id="page_1",
+        field_data={"full_name": "Meta Lead", "email": "meta@example.com"},
+        field_data_raw={"full_name": "Meta Lead", "email": "meta@example.com"},
+    )
+    db.add(lead)
+    db.commit()
+    return lead
 
 
 def _event_kwargs(surrogate, new_stage, old_stage=None, user_id=None):
@@ -143,6 +157,101 @@ def test_event_bus_assigns_pool_queue_on_approved(monkeypatch, db, test_org, tes
 
     assert called["assign"] is True
     assert called["ready"] is True
+
+
+def test_status_change_enqueues_zapier_stage_event(monkeypatch, db, test_org, test_user):
+    from app.services import zapier_settings_service
+
+    settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    settings.outbound_webhook_url = "https://hooks.zapier.com/hooks/catch/123/abc"
+    settings.outbound_webhook_secret_encrypted = zapier_settings_service.encrypt_secret(
+        "zapier-secret"
+    )
+    settings.outbound_enabled = True
+    settings.outbound_send_hashed_pii = False
+    settings.outbound_event_mapping = [
+        {"stage_slug": "qualified", "event_name": "QualifiedLead", "enabled": True}
+    ]
+    db.commit()
+
+    lead = _create_meta_lead(db, test_org.id)
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, source=SurrogateSource.META)
+    surrogate.meta_lead_id = lead.id
+    surrogate.meta_form_id = lead.meta_form_id
+    surrogate.meta_ad_external_id = "ad_123"
+    surrogate.meta_campaign_external_id = "camp_123"
+    db.commit()
+
+    new_stage = _get_stage(db, test_org.id, "qualified")
+
+    monkeypatch.setattr(surrogate_events, "_maybe_send_capi_event", lambda *_args, **_kwargs: None)
+    from app.services import notification_facade, workflow_triggers
+
+    monkeypatch.setattr(
+        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
+
+    event_kwargs = _event_kwargs(surrogate, new_stage, user_id=test_user.id)
+    event_kwargs["db"] = db
+    surrogate_events.handle_status_changed(**event_kwargs)
+
+    job = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.ZAPIER_STAGE_EVENT.value,
+        )
+        .order_by(Job.created_at.desc())
+        .first()
+    )
+    assert job is not None
+    data = job.payload["data"]
+    assert data["event_name"] == "QualifiedLead"
+    assert data["lead_id"] == lead.meta_lead_id
+    assert data["stage_slug"] == "qualified"
+    assert data["meta_ad_id"] == "ad_123"
+    assert data["meta_campaign_id"] == "camp_123"
+
+
+def test_status_change_skips_zapier_event_without_meta_lead(monkeypatch, db, test_org, test_user):
+    from app.services import zapier_settings_service
+
+    settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    settings.outbound_webhook_url = "https://hooks.zapier.com/hooks/catch/123/abc"
+    settings.outbound_webhook_secret_encrypted = zapier_settings_service.encrypt_secret(
+        "zapier-secret"
+    )
+    settings.outbound_enabled = True
+    settings.outbound_event_mapping = [
+        {"stage_slug": "qualified", "event_name": "QualifiedLead", "enabled": True}
+    ]
+    db.commit()
+
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, source=SurrogateSource.META)
+    new_stage = _get_stage(db, test_org.id, "qualified")
+
+    monkeypatch.setattr(surrogate_events, "_maybe_send_capi_event", lambda *_args, **_kwargs: None)
+    from app.services import notification_facade, workflow_triggers
+
+    monkeypatch.setattr(
+        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
+
+    event_kwargs = _event_kwargs(surrogate, new_stage, user_id=test_user.id)
+    event_kwargs["db"] = db
+    surrogate_events.handle_status_changed(**event_kwargs)
+
+    job = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.ZAPIER_STAGE_EVENT.value,
+        )
+        .first()
+    )
+    assert job is None
 
 
 def test_event_bus_schedules_meta_capi_job(monkeypatch, db, test_org, test_user):

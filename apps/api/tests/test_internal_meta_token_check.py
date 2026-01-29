@@ -57,9 +57,5 @@ async def test_internal_token_check_tracks_oauth_expiry(client, db, monkeypatch,
     assert data["oauth_expiring_soon"] == 1
     assert data["oauth_alerts_created"] == 2
 
-    alerts = (
-        db.query(SystemAlert)
-        .filter(SystemAlert.organization_id == test_auth.org.id)
-        .all()
-    )
+    alerts = db.query(SystemAlert).filter(SystemAlert.organization_id == test_auth.org.id).all()
     assert len(alerts) >= 2

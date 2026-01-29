@@ -150,9 +150,7 @@ def check_meta_tokens(x_internal_secret: str = Header(...)):
         from app.db.models import MetaOAuthConnection
 
         connections = (
-            db.query(MetaOAuthConnection)
-            .filter(MetaOAuthConnection.is_active.is_(True))
-            .all()
+            db.query(MetaOAuthConnection).filter(MetaOAuthConnection.is_active.is_(True)).all()
         )
 
         for connection in connections:
