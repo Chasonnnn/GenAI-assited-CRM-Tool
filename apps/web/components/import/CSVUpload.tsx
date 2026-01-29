@@ -122,6 +122,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
     const [unknownColumnBehavior, setUnknownColumnBehavior] = useState<UnknownColumnBehavior>("ignore")
     const [touchedColumns, setTouchedColumns] = useState<Set<string>>(new Set())
     const [backdateCreatedAt, setBackdateCreatedAt] = useState(false)
+    const [backdateTouched, setBackdateTouched] = useState(false)
     const [allowAiAssist, setAllowAiAssist] = useState(false)
     const [defaultSource, setDefaultSource] = useState<SurrogateSource>("manual")
     const [error, setError] = useState<string>("")
@@ -140,10 +141,20 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
     )
 
     useEffect(() => {
-        if (!hasCreatedAtMapping && backdateCreatedAt) {
-            setBackdateCreatedAt(false)
+        if (!hasCreatedAtMapping) {
+            if (backdateCreatedAt) {
+                setBackdateCreatedAt(false)
+            }
+            if (backdateTouched) {
+                setBackdateTouched(false)
+            }
+            return
         }
-    }, [hasCreatedAtMapping, backdateCreatedAt])
+
+        if (!backdateTouched && !backdateCreatedAt) {
+            setBackdateCreatedAt(true)
+        }
+    }, [hasCreatedAtMapping, backdateCreatedAt, backdateTouched])
 
     const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
         e.preventDefault()
@@ -178,6 +189,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         setSubmitMessage(null)
         setApproveMessage(null)
         setBackdateCreatedAt(false)
+        setBackdateTouched(false)
         setDefaultSource("manual")
         setTemplateCleared(false)
         setFile(selectedFile)
@@ -223,9 +235,15 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         setMappings([])
         setTouchedColumns(new Set())
         setBackdateCreatedAt(false)
+        setBackdateTouched(false)
         setError("")
         setSubmitMessage(null)
         setApproveMessage(null)
+    }
+
+    const handleBackdateToggle = (checked: boolean) => {
+        setBackdateTouched(true)
+        setBackdateCreatedAt(checked)
     }
 
     const updateMapping = (csvColumn: string, patch: Partial<ColumnMappingDraft>) => {
@@ -569,8 +587,8 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                             )}
                                         >
                                             {backdateCreatedAt
-                                                ? "Created_at will be backdated using the org timezone when no timezone is provided."
-                                                : "Created_at mapping will be stored as metadata unless backdating is enabled."}
+                                                ? "Created_at will use the CSV timestamp (org timezone fallback if none is provided)."
+                                                : "Created_at will use import time; CSV values are stored as metadata unless backdating is enabled."}
                                         </p>
                                     )}
                                 </div>
@@ -611,17 +629,17 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <Switch
-                                            id="backdate-created-at"
-                                            checked={backdateCreatedAt}
-                                            onCheckedChange={setBackdateCreatedAt}
-                                            disabled={!hasCreatedAtMapping}
-                                        />
-                                        <Label htmlFor="backdate-created-at">
-                                            Use submission time as created_at
-                                        </Label>
-                                    </div>
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <Switch
+                                                    id="backdate-created-at"
+                                                    checked={backdateCreatedAt}
+                                                    onCheckedChange={handleBackdateToggle}
+                                                    disabled={!hasCreatedAtMapping}
+                                                />
+                                                <Label htmlFor="backdate-created-at">
+                                            Use CSV created_at values
+                                                </Label>
+                                            </div>
                                     {preview.ai_available && (
                                         <Button
                                             variant="outline"

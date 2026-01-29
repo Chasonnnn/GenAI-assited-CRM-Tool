@@ -73,7 +73,11 @@ export interface ImportHistoryItem {
 }
 
 export interface ImportDetail extends ImportHistoryItem {
-    errors: Array<{ row: number; errors: string[] }> | null
+    errors: Array<{
+        row?: number
+        errors?: string[]
+        message?: string
+    }> | null
 }
 
 export interface ImportSubmitResponse {

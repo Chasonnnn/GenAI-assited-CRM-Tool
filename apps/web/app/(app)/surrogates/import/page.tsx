@@ -22,6 +22,14 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
+import {
     Table,
     TableBody,
     TableCell,
@@ -39,11 +47,13 @@ import {
     Trash2Icon,
     RefreshCcwIcon,
     PlayIcon,
+    AlertTriangleIcon,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import {
     useCancelImport,
     useImports,
+    useImportDetails,
     useRetryImport,
     useRunImportInline,
     type ImportActionResponse,
@@ -59,6 +69,12 @@ export default function CSVImportPage() {
     const retryMutation = useRetryImport()
     const runInlineMutation = useRunImportInline()
     const [deleteTarget, setDeleteTarget] = useState<ImportHistoryItem | null>(null)
+    const [errorTarget, setErrorTarget] = useState<ImportHistoryItem | null>(null)
+    const {
+        data: importDetails,
+        isLoading: isImportDetailsLoading,
+        isError: isImportDetailsError,
+    } = useImportDetails(errorTarget?.id ?? null)
 
     const getStatusBadge = (status: string) => {
         switch (status) {
@@ -117,6 +133,26 @@ export default function CSVImportPage() {
         }
     }
 
+    const normalizedErrors = (importDetails?.errors ?? []).map((entry, index) => {
+        const row = typeof entry.row === "number" ? entry.row : null
+        const messages = Array.isArray(entry.errors) ? entry.errors.filter(Boolean) : []
+        if (messages.length === 0 && typeof entry.message === "string" && entry.message.trim()) {
+            messages.push(entry.message)
+        }
+        if (messages.length === 0) {
+            messages.push("Unknown error")
+        }
+        return {
+            id: `${row ?? "general"}-${index}`,
+            row,
+            messages,
+        }
+    })
+    const errorCount =
+        importDetails?.error_count ??
+        errorTarget?.error_count ??
+        normalizedErrors.length
+
     return (
         <div className="flex min-h-screen flex-col">
             {/* Page Header */}
@@ -172,6 +208,7 @@ export default function CSVImportPage() {
                                         const showRetry = canRetry(imp)
                                         const showRunInline = canRunInline(imp)
                                         const showDelete = canDelete(imp)
+                                        const showErrors = (imp.error_count ?? 0) > 0
                                         return (
                                             <TableRow key={imp.id}>
                                                 <TableCell className="font-medium">{imp.filename}</TableCell>
@@ -211,7 +248,7 @@ export default function CSVImportPage() {
                                                     )}
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    {showRetry || showRunInline || showDelete ? (
+                                                    {showRetry || showRunInline || showDelete || showErrors ? (
                                                         <DropdownMenu>
                                                             <DropdownMenuTrigger
                                                                 render={(props) => (
@@ -230,6 +267,14 @@ export default function CSVImportPage() {
                                                                 )}
                                                             />
                                                             <DropdownMenuContent align="end">
+                                                                {showErrors && (
+                                                                    <DropdownMenuItem
+                                                                        onClick={() => setErrorTarget(imp)}
+                                                                    >
+                                                                        <AlertTriangleIcon className="mr-2 size-4" />
+                                                                        View errors
+                                                                    </DropdownMenuItem>
+                                                                )}
                                                                 {showRunInline && (
                                                                     <DropdownMenuItem
                                                                         onClick={() => handleRunInline(imp)}
@@ -289,6 +334,64 @@ export default function CSVImportPage() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            <Dialog open={!!errorTarget} onOpenChange={(open) => !open && setErrorTarget(null)}>
+                <DialogContent className="sm:max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Import errors</DialogTitle>
+                        <DialogDescription>
+                            {errorTarget
+                                ? `Showing ${errorCount} error${errorCount === 1 ? "" : "s"} for ${errorTarget.filename}.`
+                                : "Review errors for this import."}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {isImportDetailsLoading ? (
+                        <div className="flex items-center justify-center py-10">
+                            <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : isImportDetailsError ? (
+                        <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
+                            Failed to load import errors. Please try again.
+                        </div>
+                    ) : normalizedErrors.length === 0 ? (
+                        <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                            No errors were logged for this import.
+                        </div>
+                    ) : (
+                        <div className="max-h-[420px] overflow-auto rounded-lg border border-border">
+                            <Table>
+                                <TableHeader className="sticky top-0 bg-background">
+                                    <TableRow>
+                                        <TableHead className="w-[140px]">Row</TableHead>
+                                        <TableHead>Reason</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {normalizedErrors.map((error) => (
+                                        <TableRow key={error.id}>
+                                            <TableCell className="font-medium">
+                                                {error.row !== null ? `Row ${error.row}` : "General"}
+                                            </TableCell>
+                                            <TableCell>
+                                                <ul className="list-disc pl-5 space-y-1">
+                                                    {error.messages.map((message, idx) => (
+                                                        <li key={`${error.id}-${idx}`} className="text-sm">
+                                                            {message}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
+
+                    <DialogFooter showCloseButton />
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
