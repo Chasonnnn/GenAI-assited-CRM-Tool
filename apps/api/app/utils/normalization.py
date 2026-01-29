@@ -1,6 +1,7 @@
 """Data normalization utilities for consistent data quality."""
 
 import re
+import unicodedata
 from typing import Optional
 
 
@@ -238,3 +239,65 @@ def normalize_name(name: Optional[str]) -> Optional[str]:
         return None
     # Strip leading/trailing whitespace and collapse internal spaces
     return " ".join(name.split())
+
+
+def _strip_accents(value: str) -> str:
+    """Remove diacritics for accent-insensitive matching."""
+    return "".join(
+        ch for ch in unicodedata.normalize("NFKD", value) if not unicodedata.combining(ch)
+    )
+
+
+def normalize_search_text(value: Optional[str]) -> Optional[str]:
+    """
+    Normalize free-text for search matching.
+
+    - Strip accents
+    - Lowercase
+    - Collapse whitespace
+    """
+    if not value:
+        return None
+    collapsed = " ".join(value.split())
+    if not collapsed:
+        return None
+    return _strip_accents(collapsed).lower()
+
+
+def normalize_identifier(value: Optional[str]) -> Optional[str]:
+    """
+    Normalize identifier-like strings (numbers/short codes) for search.
+
+    - Remove whitespace
+    - Lowercase
+    """
+    if not value:
+        return None
+    collapsed = re.sub(r"\s+", "", value)
+    if not collapsed:
+        return None
+    return collapsed.lower()
+
+
+def extract_email_domain(email: Optional[str]) -> Optional[str]:
+    """
+    Extract lowercased email domain for ops filtering.
+
+    Expects a normalized email, but will normalize if needed.
+    """
+    normalized = normalize_email(email)
+    if not normalized or "@" not in normalized:
+        return None
+    return normalized.split("@", 1)[1]
+
+
+def extract_phone_last4(phone: Optional[str]) -> Optional[str]:
+    """
+    Extract last 4 digits from a normalized phone number.
+    """
+    if not phone:
+        return None
+    digits = re.sub(r"\D", "", phone)
+    if not digits:
+        return None
+    return digits[-4:] if len(digits) >= 4 else digits

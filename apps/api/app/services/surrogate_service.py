@@ -17,7 +17,15 @@ from app.db.enums import (
 from app.db.models import Surrogate, SurrogateStatusHistory, User
 from app.schemas.surrogate import SurrogateCreate, SurrogateUpdate
 from app.services.surrogate_status_service import StatusChangeResult
-from app.utils.normalization import normalize_email, normalize_name, normalize_phone
+from app.utils.normalization import (
+    extract_email_domain,
+    extract_phone_last4,
+    normalize_email,
+    normalize_identifier,
+    normalize_name,
+    normalize_phone,
+    normalize_search_text,
+)
 
 
 def generate_surrogate_number(db: Session, org_id: UUID) -> str:
@@ -106,10 +114,15 @@ def create_surrogate(
 
     normalized_email = normalize_email(data.email)
     normalized_phone = data.phone
+    email_domain = extract_email_domain(normalized_email)
+    phone_last4 = extract_phone_last4(normalized_phone)
     surrogate = None
     for attempt in range(3):
+        surrogate_number = generate_surrogate_number(db, org_id)
+        normalized_full_name = normalize_name(data.full_name)
         surrogate = Surrogate(
-            surrogate_number=generate_surrogate_number(db, org_id),
+            surrogate_number=surrogate_number,
+            surrogate_number_normalized=normalize_identifier(surrogate_number),
             organization_id=org_id,
             created_by_user_id=user_id,
             owner_type=owner_type,
@@ -118,11 +131,14 @@ def create_surrogate(
             stage_id=default_stage.id,
             status_label=default_stage.label,
             source=data.source.value,
-            full_name=normalize_name(data.full_name),
+            full_name=normalized_full_name,
+            full_name_normalized=normalize_search_text(normalized_full_name),
             email=normalized_email,
             email_hash=hash_email(normalized_email),
+            email_domain=email_domain,
             phone=normalized_phone,  # Already normalized by schema
             phone_hash=hash_phone(normalized_phone) if normalized_phone else None,
+            phone_last4=phone_last4,
             state=data.state,  # Already normalized by schema
             date_of_birth=data.date_of_birth,
             race=data.race,
@@ -326,6 +342,7 @@ def update_surrogate(
                 continue
             value = normalize_email(value)
             email_hash = hash_email(value)
+            email_domain = extract_email_domain(value)
         elif field == "phone":
             if value:
                 try:
@@ -333,6 +350,7 @@ def update_surrogate(
                 except ValueError:
                     pass
             phone_hash = hash_phone(value) if value else None
+            phone_last4 = extract_phone_last4(value)
 
         # Check if value actually changed
         current_value = getattr(surrogate, field, None)
@@ -354,8 +372,14 @@ def update_surrogate(
             setattr(surrogate, field, value)
             if field == "email":
                 surrogate.email_hash = email_hash
+                surrogate.email_domain = email_domain
             elif field == "phone":
                 surrogate.phone_hash = phone_hash
+                surrogate.phone_last4 = phone_last4
+            elif field == "full_name":
+                surrogate.full_name_normalized = normalize_search_text(value)
+            elif field == "surrogate_number":
+                surrogate.surrogate_number_normalized = normalize_identifier(value)
 
     if commit:
         db.commit()
@@ -873,11 +897,15 @@ def list_surrogates(
 
     # Search (name, email, phone)
     if q:
-        search = f"%{q}%"
-        filters = [
-            Surrogate.full_name.ilike(search),
-            Surrogate.surrogate_number.ilike(search),
-        ]
+        normalized_text = normalize_search_text(q)
+        normalized_identifier = normalize_identifier(q)
+        filters = []
+        if normalized_text:
+            filters.append(Surrogate.full_name_normalized.ilike(f"%{normalized_text}%"))
+        if normalized_identifier:
+            filters.append(
+                Surrogate.surrogate_number_normalized.ilike(f"%{normalized_identifier}%")
+            )
         if "@" in q:
             try:
                 filters.append(Surrogate.email_hash == hash_email(q))
@@ -888,7 +916,8 @@ def list_surrogates(
             filters.append(Surrogate.phone_hash == hash_phone(normalized_phone))
         except Exception:
             pass
-        query = query.filter(or_(*filters))
+        if filters:
+            query = query.filter(or_(*filters))
 
     # Dynamic sorting
     order_func = asc if sort_order == "asc" else desc

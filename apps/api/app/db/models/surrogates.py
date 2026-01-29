@@ -100,6 +100,33 @@ class Surrogate(Base):
         ),
         # PII hash index for phone lookups
         Index("idx_surrogates_org_phone_hash", "organization_id", "phone_hash"),
+        # Trigram indexes for identity search (active only)
+        Index(
+            "idx_surrogates_active_full_name_trgm",
+            "full_name_normalized",
+            postgresql_using="gin",
+            postgresql_ops={"full_name_normalized": "gin_trgm_ops"},
+            postgresql_where=text("is_archived = FALSE"),
+        ),
+        Index(
+            "idx_surrogates_active_number_trgm",
+            "surrogate_number_normalized",
+            postgresql_using="gin",
+            postgresql_ops={"surrogate_number_normalized": "gin_trgm_ops"},
+            postgresql_where=text("is_archived = FALSE"),
+        ),
+        Index(
+            "idx_surrogates_active_email_domain",
+            "organization_id",
+            "email_domain",
+            postgresql_where=text("is_archived = FALSE"),
+        ),
+        Index(
+            "idx_surrogates_active_phone_last4",
+            "organization_id",
+            "phone_last4",
+            postgresql_where=text("is_archived = FALSE"),
+        ),
         # Contact reminder check index for efficient daily job queries
         Index(
             "idx_surrogates_reminder_check",
@@ -114,6 +141,7 @@ class Surrogate(Base):
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
     surrogate_number: Mapped[str] = mapped_column(String(10), nullable=False)
+    surrogate_number_normalized: Mapped[str | None] = mapped_column(String(20), nullable=True)
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
@@ -161,10 +189,13 @@ class Surrogate(Base):
 
     # Contact (normalized: E.164 phone, 2-letter state)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    full_name_normalized: Mapped[str | None] = mapped_column(String(255), nullable=True)
     email: Mapped[str] = mapped_column(EncryptedString, nullable=False)
     email_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    email_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
     phone: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     phone_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    phone_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
     state: Mapped[str | None] = mapped_column(String(2), nullable=True)
 
     # Demographics

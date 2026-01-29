@@ -11,7 +11,14 @@ from sqlalchemy.orm import Session
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import IntendedParentStatus
 from app.db.models import IntendedParent, IntendedParentStatusHistory
-from app.utils.normalization import normalize_email, normalize_phone
+from app.utils.normalization import (
+    extract_email_domain,
+    extract_phone_last4,
+    normalize_email,
+    normalize_identifier,
+    normalize_phone,
+    normalize_search_text,
+)
 
 
 # =============================================================================
@@ -98,11 +105,15 @@ def list_intended_parents(
 
     # Search filter (name, number, email, phone)
     if q:
-        search_term = f"%{q}%"
-        filters = [
-            IntendedParent.full_name.ilike(search_term),
-            IntendedParent.intended_parent_number.ilike(search_term),
-        ]
+        normalized_text = normalize_search_text(q)
+        normalized_identifier = normalize_identifier(q)
+        filters = []
+        if normalized_text:
+            filters.append(IntendedParent.full_name_normalized.ilike(f"%{normalized_text}%"))
+        if normalized_identifier:
+            filters.append(
+                IntendedParent.intended_parent_number_normalized.ilike(f"%{normalized_identifier}%")
+            )
         if "@" in q:
             try:
                 filters.append(IntendedParent.email_hash == hash_email(q))
@@ -113,7 +124,8 @@ def list_intended_parents(
             filters.append(IntendedParent.phone_hash == hash_phone(normalized_phone))
         except Exception:
             pass
-        query = query.filter(or_(*filters))
+        if filters:
+            query = query.filter(or_(*filters))
 
     # Owner filter
     if owner_id:
@@ -187,14 +199,22 @@ def create_intended_parent(
     now = datetime.now(timezone.utc)
     normalized_email = normalize_email(email)
     normalized_phone = normalize_phone(phone) if phone else None
+    email_domain = extract_email_domain(normalized_email)
+    phone_last4 = extract_phone_last4(normalized_phone)
+    intended_parent_number = generate_intended_parent_number(db, org_id)
+    normalized_full_name = normalize_search_text(full_name)
     ip = IntendedParent(
-        intended_parent_number=generate_intended_parent_number(db, org_id),
+        intended_parent_number=intended_parent_number,
+        intended_parent_number_normalized=normalize_identifier(intended_parent_number),
         organization_id=org_id,
         full_name=full_name,
+        full_name_normalized=normalized_full_name,
         email=normalized_email,
         email_hash=hash_email(normalized_email),
+        email_domain=email_domain,
         phone=normalized_phone,
         phone_hash=hash_phone(normalized_phone) if normalized_phone else None,
+        phone_last4=phone_last4,
         state=state,
         budget=budget,
         notes_internal=notes_internal,
@@ -237,14 +257,17 @@ def update_intended_parent(
     """Update intended parent fields and bump last_activity."""
     if full_name is not None:
         ip.full_name = full_name
+        ip.full_name_normalized = normalize_search_text(full_name)
     if email is not None:
         normalized_email = normalize_email(email)
         ip.email = normalized_email
         ip.email_hash = hash_email(normalized_email)
+        ip.email_domain = extract_email_domain(normalized_email)
     if phone is not None:
         normalized_phone = normalize_phone(phone) if phone else None
         ip.phone = normalized_phone
         ip.phone_hash = hash_phone(normalized_phone) if normalized_phone else None
+        ip.phone_last4 = extract_phone_last4(normalized_phone)
     if state is not None:
         ip.state = state
     if budget is not None:

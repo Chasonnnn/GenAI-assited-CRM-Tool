@@ -65,6 +65,33 @@ class IntendedParent(Base):
         ),
         # PII hash index for phone lookups
         Index("idx_ip_org_phone_hash", "organization_id", "phone_hash"),
+        # Trigram indexes for identity search (active only)
+        Index(
+            "idx_ip_active_full_name_trgm",
+            "full_name_normalized",
+            postgresql_using="gin",
+            postgresql_ops={"full_name_normalized": "gin_trgm_ops"},
+            postgresql_where=text("is_archived = FALSE"),
+        ),
+        Index(
+            "idx_ip_active_number_trgm",
+            "intended_parent_number_normalized",
+            postgresql_using="gin",
+            postgresql_ops={"intended_parent_number_normalized": "gin_trgm_ops"},
+            postgresql_where=text("is_archived = FALSE"),
+        ),
+        Index(
+            "idx_ip_active_email_domain",
+            "organization_id",
+            "email_domain",
+            postgresql_where=text("is_archived = FALSE"),
+        ),
+        Index(
+            "idx_ip_active_phone_last4",
+            "organization_id",
+            "phone_last4",
+            postgresql_where=text("is_archived = FALSE"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -76,13 +103,17 @@ class IntendedParent(Base):
         nullable=False,
     )
     intended_parent_number: Mapped[str] = mapped_column(String(10), nullable=False)
+    intended_parent_number_normalized: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Contact info
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    full_name_normalized: Mapped[str | None] = mapped_column(String(255), nullable=True)
     email: Mapped[str] = mapped_column(EncryptedString, nullable=False)
     email_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    email_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
     phone: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     phone_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    phone_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
 
     # Location (state only)
     state: Mapped[str | None] = mapped_column(String(100), nullable=True)
