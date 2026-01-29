@@ -601,6 +601,11 @@ export default function TasksPage() {
                                                         <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-xs">
                                                             Awaiting Approval
                                                         </Badge>
+                                                        {item.backdate_created_at && (
+                                                            <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-xs">
+                                                                Backdated
+                                                            </Badge>
+                                                        )}
                                                     </div>
                                                     <p className="text-sm text-muted-foreground">
                                                         {item.filename}
