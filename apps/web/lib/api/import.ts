@@ -3,6 +3,7 @@
  */
 
 import api from './index'
+import type { SurrogateSource } from '@/lib/types/surrogate'
 
 export type ColumnAction = 'map' | 'metadata' | 'custom' | 'ignore'
 export type ConfidenceLevel = 'high' | 'medium' | 'low' | 'none'
@@ -146,6 +147,7 @@ export async function submitImport(
         unknown_column_behavior?: 'ignore' | 'metadata' | 'warn'
         save_as_template_name?: string | null
         backdate_created_at?: boolean
+        default_source?: SurrogateSource | null
     }
 ): Promise<ImportSubmitResponse> {
     return api.post<ImportSubmitResponse>(`/surrogates/import/${importId}/submit`, payload)

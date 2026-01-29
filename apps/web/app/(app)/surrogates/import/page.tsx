@@ -213,19 +213,22 @@ export default function CSVImportPage() {
                                                 <TableCell className="text-right">
                                                     {showRetry || showRunInline || showDelete ? (
                                                         <DropdownMenu>
-                                                            <DropdownMenuTrigger asChild>
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    disabled={
-                                                                        cancelMutation.isPending ||
-                                                                        retryMutation.isPending ||
-                                                                        runInlineMutation.isPending
-                                                                    }
-                                                                >
-                                                                    <MoreHorizontalIcon className="size-4" />
-                                                                </Button>
-                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuTrigger
+                                                                render={(props) => (
+                                                                    <Button
+                                                                        {...props}
+                                                                        variant="ghost"
+                                                                        size="icon"
+                                                                        disabled={
+                                                                            cancelMutation.isPending ||
+                                                                            retryMutation.isPending ||
+                                                                            runInlineMutation.isPending
+                                                                        }
+                                                                    >
+                                                                        <MoreHorizontalIcon className="size-4" />
+                                                                    </Button>
+                                                                )}
+                                                            />
                                                             <DropdownMenuContent align="end">
                                                                 {showRunInline && (
                                                                     <DropdownMenuItem

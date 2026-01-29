@@ -16,8 +16,8 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { CheckIcon, XIcon, Loader2Icon } from "lucide-react"
-import { useApproveImport, useRejectImport } from "@/lib/hooks/use-import"
+import { CheckIcon, XIcon, Loader2Icon, PlayIcon } from "lucide-react"
+import { useApproveImport, useRejectImport, useRunImportInline } from "@/lib/hooks/use-import"
 
 interface ImportApprovalActionsProps {
     importId: string
@@ -36,9 +36,16 @@ export function ImportApprovalActions({
 
     const approveImport = useApproveImport()
     const rejectImport = useRejectImport()
+    const runInlineImport = useRunImportInline()
 
     const handleApprove = async () => {
         await approveImport.mutateAsync(importId)
+        onResolved?.()
+    }
+
+    const handleApproveAndRun = async () => {
+        await approveImport.mutateAsync(importId)
+        await runInlineImport.mutateAsync(importId)
         onResolved?.()
     }
 
@@ -55,7 +62,7 @@ export function ImportApprovalActions({
         onResolved?.()
     }
 
-    const isPending = approveImport.isPending || rejectImport.isPending
+    const isPending = approveImport.isPending || rejectImport.isPending || runInlineImport.isPending
 
     return (
         <>
@@ -73,6 +80,20 @@ export function ImportApprovalActions({
                         <CheckIcon className="mr-1 size-4" />
                     )}
                     Approve
+                </Button>
+                <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 sm:flex-none"
+                    onClick={handleApproveAndRun}
+                    disabled={disabled || isPending}
+                >
+                    {runInlineImport.isPending ? (
+                        <Loader2Icon className="mr-1 size-4 animate-spin" />
+                    ) : (
+                        <PlayIcon className="mr-1 size-4" />
+                    )}
+                    Run now
                 </Button>
                 <Button
                     size="sm"

@@ -24,6 +24,7 @@ import {
     type ImportApprovalResponse,
     type ImportActionResponse,
 } from '@/lib/api/import'
+import type { SurrogateSource } from '@/lib/types/surrogate'
 
 // Re-export types for convenience
 export type { EnhancedImportPreview, ColumnMappingItem, ImportApprovalItem, ImportSubmitResponse, ImportApprovalResponse, ImportActionResponse }
@@ -64,13 +65,16 @@ export function usePendingImportApprovals(enabled = true) {
 
 export function usePreviewImport() {
     return useMutation({
-        mutationFn: (params: { file: File; applyTemplate?: boolean; enableAi?: boolean }) =>
-            previewImport(
-                params.file,
-                params.applyTemplate !== undefined || params.enableAi !== undefined
-                    ? { applyTemplate: params.applyTemplate, enableAi: params.enableAi }
-                    : undefined
-            ),
+        mutationFn: (params: { file: File; applyTemplate?: boolean; enableAi?: boolean }) => {
+            const options: { applyTemplate?: boolean; enableAi?: boolean } = {}
+            if (params.applyTemplate !== undefined) {
+                options.applyTemplate = params.applyTemplate
+            }
+            if (params.enableAi !== undefined) {
+                options.enableAi = params.enableAi
+            }
+            return previewImport(params.file, Object.keys(options).length > 0 ? options : undefined)
+        },
     })
 }
 
@@ -85,6 +89,7 @@ export function useSubmitImport() {
                 unknown_column_behavior?: 'ignore' | 'metadata' | 'warn'
                 save_as_template_name?: string | null
                 backdate_created_at?: boolean
+                default_source?: SurrogateSource | null
             }
         }) =>
             submitImport(params.importId, params.payload),

@@ -532,6 +532,67 @@ def test_execute_import_warns_on_unmapped_columns(db, test_org, test_user):
     assert warnings[0]["column"] == "unmapped_col"
 
 
+def test_execute_import_uses_default_source(db, test_org, test_user):
+    """Default source should be applied when CSV lacks a source column."""
+    from app.db.enums import SurrogateSource
+    from app.db.models import Surrogate
+    from app.services import import_service
+    from app.services.import_service import ColumnMapping
+
+    csv_data = create_csv_content(
+        [
+            {"full_name": "Source User", "email": "source@test.com"},
+        ]
+    )
+
+    import_record = import_service.create_import_job(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        filename="source.csv",
+        total_rows=1,
+        file_content=csv_data,
+        status="pending",
+    )
+    import_record.default_source = SurrogateSource.REFERRAL.value
+    db.commit()
+
+    mappings = [
+        ColumnMapping(
+            csv_column="full_name",
+            surrogate_field="full_name",
+            transformation=None,
+            action="map",
+        ),
+        ColumnMapping(
+            csv_column="email",
+            surrogate_field="email",
+            transformation=None,
+            action="map",
+        ),
+    ]
+
+    import_service.execute_import_with_mappings(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        import_id=import_record.id,
+        file_content=csv_data,
+        column_mappings=mappings,
+        default_source=SurrogateSource.REFERRAL,
+    )
+
+    db.expire_all()
+    surrogate = (
+        db.query(Surrogate)
+        .filter(Surrogate.organization_id == test_org.id)
+        .order_by(Surrogate.created_at.desc())
+        .first()
+    )
+    assert surrogate is not None
+    assert surrogate.source == SurrogateSource.REFERRAL.value
+
+
 def test_execute_import_backdates_created_at(db, test_org, test_user):
     """Backdate created_at from submission time using org timezone."""
     from datetime import datetime, timezone

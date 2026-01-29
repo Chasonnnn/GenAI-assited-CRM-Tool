@@ -36,6 +36,7 @@ import {
     useAiMapImport,
     type EnhancedImportPreview,
 } from "@/lib/hooks/use-import"
+import type { SurrogateSource } from "@/lib/types/surrogate"
 import {
     applyUnknownColumnBehavior,
     buildColumnMappingsFromSuggestions,
@@ -60,6 +61,15 @@ const ACTION_OPTIONS = [
     { value: "metadata", label: "Metadata" },
     { value: "ignore", label: "Ignore" },
     { value: "custom", label: "Custom" },
+]
+
+const SOURCE_OPTIONS: Array<{ value: SurrogateSource; label: string }> = [
+    { value: "manual", label: "Manual" },
+    { value: "import", label: "Import" },
+    { value: "referral", label: "Referral" },
+    { value: "website", label: "Website" },
+    { value: "meta", label: "Meta" },
+    { value: "agency", label: "Agency" },
 ]
 
 interface CSVUploadProps {
@@ -113,6 +123,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
     const [touchedColumns, setTouchedColumns] = useState<Set<string>>(new Set())
     const [backdateCreatedAt, setBackdateCreatedAt] = useState(false)
     const [allowAiAssist, setAllowAiAssist] = useState(false)
+    const [defaultSource, setDefaultSource] = useState<SurrogateSource>("manual")
     const [error, setError] = useState<string>("")
     const [submitMessage, setSubmitMessage] = useState<string | null>(null)
     const [approveMessage, setApproveMessage] = useState<string | null>(null)
@@ -167,6 +178,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         setSubmitMessage(null)
         setApproveMessage(null)
         setBackdateCreatedAt(false)
+        setDefaultSource("manual")
         setTemplateCleared(false)
         setFile(selectedFile)
 
@@ -318,7 +330,8 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
             mappings,
             unknownColumnBehavior,
             touchedColumns,
-            backdateCreatedAt
+            backdateCreatedAt,
+            defaultSource
         )
 
         try {
@@ -328,6 +341,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                     column_mappings: payload.column_mappings,
                     unknown_column_behavior: payload.unknown_column_behavior,
                     backdate_created_at: payload.backdate_created_at,
+                    default_source: payload.default_source,
                 },
             })
 
@@ -561,6 +575,24 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                     )}
                                 </div>
                                 <div className="flex flex-wrap items-center gap-3">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <span>Default source:</span>
+                                        <Select
+                                            value={defaultSource}
+                                            onValueChange={(value) => setDefaultSource(value as SurrogateSource)}
+                                        >
+                                            <SelectTrigger className="h-8 w-[140px]">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {SOURCE_OPTIONS.map((option) => (
+                                                    <SelectItem key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                         <span>Unknown columns:</span>
                                         <Select

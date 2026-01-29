@@ -1,4 +1,5 @@
 import type { ColumnAction, ColumnMappingItem, ColumnSuggestion, ConfidenceLevel } from '@/lib/api/import'
+import type { SurrogateSource } from '@/lib/types/surrogate'
 
 export interface ColumnMappingDraft extends ColumnMappingItem {
     custom_field_key: string | null
@@ -86,11 +87,13 @@ export function buildImportSubmitPayload(
     mappings: ColumnMappingDraft[],
     behavior: UnknownColumnBehavior,
     touchedColumns: Set<string>,
-    backdateCreatedAt = false
+    backdateCreatedAt = false,
+    defaultSource: SurrogateSource = 'manual'
 ): {
     column_mappings: ColumnMappingItem[]
     unknown_column_behavior: UnknownColumnBehavior
     backdate_created_at: boolean
+    default_source: SurrogateSource
 } {
     const column_mappings = mappings
         .filter((mapping) => {
@@ -111,5 +114,6 @@ export function buildImportSubmitPayload(
         column_mappings,
         unknown_column_behavior: behavior,
         backdate_created_at: backdateCreatedAt,
+        default_source: defaultSource,
     }
 }

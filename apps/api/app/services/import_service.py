@@ -83,6 +83,9 @@ COLUMN_MAPPING = {
     "birthdate": "date_of_birth",
     # source
     "source": "source",
+    # created time variations
+    "created_at": "created_at",
+    "created_time": "created_at",
 }
 
 
@@ -294,16 +297,22 @@ def _row_to_dict(row: list[str], column_map: dict[int, str]) -> dict[str, str]:
     return result
 
 
-def _validate_row(row_data: dict[str, str]) -> SurrogateCreate:
+def _validate_row(
+    row_data: dict[str, str],
+    default_source: SurrogateSource | str | None = None,
+) -> SurrogateCreate:
     """
     Validate row data using SurrogateCreate schema.
 
     Raises:
         ValidationError if invalid
     """
-    # Set defaults for required fields not in CSV
-    if "source" not in row_data:
-        row_data["source"] = SurrogateSource.IMPORT.value
+    # Apply default source if CSV didn't provide one
+    if "source" not in row_data and default_source is not None:
+        if isinstance(default_source, SurrogateSource):
+            row_data["source"] = default_source.value
+        else:
+            row_data["source"] = str(default_source)
 
     return SurrogateCreate(**row_data)
 
@@ -332,6 +341,7 @@ def execute_import(
     import_id: UUID,
     file_content: bytes | str,
     dedupe_action: str = "skip",  # "skip" or "update" (future)
+    default_source: SurrogateSource | str | None = None,
 ) -> ImportResult:
     """
     Execute CSV import.
@@ -402,7 +412,7 @@ def execute_import(
 
         # Validate
         try:
-            surrogate_data = _validate_row(row_data)
+            surrogate_data = _validate_row(row_data, default_source)
         except ValidationError as e:
             result.errors.append(
                 {
@@ -469,6 +479,7 @@ def create_import_job(
     file_content: bytes | None = None,
     status: str = "pending",
     file_hash: str | None = None,
+    default_source: SurrogateSource | str | None = None,
 ) -> SurrogateImport:
     """Create an import job record."""
     if file_content and not file_hash:
@@ -480,6 +491,9 @@ def create_import_job(
         filename=filename,
         file_content=file_content,
         file_hash=file_hash,
+        default_source=default_source.value
+        if isinstance(default_source, SurrogateSource)
+        else default_source,
         status=status,
         total_rows=total_rows,
     )
@@ -752,7 +766,7 @@ async def preview_import_enhanced(
                     if value:
                         row_data[req_field] = value
             try:
-                _validate_row(row_data)
+                _validate_row(row_data, None)
             except Exception:
                 validation_errors += 1
 
@@ -918,6 +932,7 @@ def execute_import_with_mappings(
     column_mappings: list[ColumnMapping],
     unknown_column_behavior: str = "ignore",
     backdate_created_at: bool = False,
+    default_source: SurrogateSource | str | None = None,
 ) -> ImportResult:
     """
     Execute import with user-specified column mappings.
@@ -1076,13 +1091,9 @@ def execute_import_with_mappings(
                 continue
             seen_emails.add(email_hash)
 
-        # Set default source
-        if "source" not in row_data:
-            row_data["source"] = SurrogateSource.IMPORT.value
-
         # Validate and create surrogate
         try:
-            surrogate_data = SurrogateCreate(**row_data)
+            surrogate_data = _validate_row(row_data, default_source)
             surrogate = surrogate_service.create_surrogate(
                 db=db,
                 org_id=org_id,
@@ -1329,6 +1340,7 @@ def submit_for_approval(
     dedup_stats: dict,
     unknown_column_behavior: str = "ignore",
     backdate_created_at: bool = False,
+    default_source: SurrogateSource | str | None = None,
 ) -> SurrogateImport:
     """
     Submit an import for admin approval.
@@ -1356,6 +1368,12 @@ def submit_for_approval(
     import_record.deduplication_stats = dedup_stats
     import_record.unknown_column_behavior = unknown_column_behavior
     import_record.backdate_created_at = backdate_created_at
+    if default_source is None:
+        import_record.default_source = SurrogateSource.MANUAL.value
+    elif isinstance(default_source, SurrogateSource):
+        import_record.default_source = default_source.value
+    else:
+        import_record.default_source = str(default_source)
 
     db.commit()
     db.refresh(import_record)
@@ -1500,6 +1518,7 @@ def run_import_execution(
         resolved_unknown_behavior = (
             unknown_column_behavior or import_record.unknown_column_behavior or "ignore"
         )
+        resolved_default_source = getattr(import_record, "default_source", None)
 
         if resolved_use_mappings and isinstance(mapping_snapshot, list) and mapping_snapshot:
             mappings = build_column_mappings_from_snapshot(mapping_snapshot)
@@ -1513,6 +1532,7 @@ def run_import_execution(
                 column_mappings=mappings,
                 unknown_column_behavior=resolved_unknown_behavior,
                 backdate_created_at=bool(getattr(import_record, "backdate_created_at", False)),
+                default_source=resolved_default_source,
             )
         else:
             execute_import(
@@ -1522,6 +1542,7 @@ def run_import_execution(
                 import_id=import_record.id,
                 file_content=import_record.file_content,
                 dedupe_action=dedupe_action,
+                default_source=resolved_default_source,
             )
 
         import_record.file_content = None
@@ -1648,6 +1669,7 @@ def create_import_with_template(
     template_id: UUID | None = None,
     detected_encoding: str | None = None,
     detected_delimiter: str | None = None,
+    default_source: SurrogateSource | str | None = None,
 ) -> SurrogateImport:
     """Create an import job record with template reference."""
     file_hash = compute_file_hash(file_content)
@@ -1657,6 +1679,9 @@ def create_import_with_template(
         filename=filename,
         file_content=file_content,
         file_hash=file_hash,
+        default_source=default_source.value
+        if isinstance(default_source, SurrogateSource)
+        else default_source,
         status="pending",
         total_rows=total_rows,
         template_id=template_id,

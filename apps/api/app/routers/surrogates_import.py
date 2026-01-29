@@ -29,7 +29,7 @@ from app.core.deps import (
     require_roles,
 )
 from app.core.policies import POLICIES
-from app.db.enums import Role
+from app.db.enums import Role, SurrogateSource
 from app.schemas.auth import UserSession
 from app.services import import_service
 
@@ -489,6 +489,7 @@ class ImportSubmitRequest(BaseModel):
     unknown_column_behavior: Literal["ignore", "metadata", "warn"] = "ignore"
     save_as_template_name: str | None = None
     backdate_created_at: bool = False
+    default_source: SurrogateSource | None = None
 
 
 @router.post(
@@ -551,6 +552,7 @@ def submit_import_for_approval(
             dedup_stats=dedup_stats,
             unknown_column_behavior=data.unknown_column_behavior,
             backdate_created_at=data.backdate_created_at,
+            default_source=data.default_source,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

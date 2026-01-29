@@ -568,19 +568,20 @@ def _apply_mapping_rules(
 
         mapping = mapping_by_column.get(key)
         value = _stringify_value(raw_value)
+        metadata_value = _coerce_metadata_value(raw_value, value)
 
         if not mapping:
             if unknown_column_behavior == "metadata":
-                import_metadata[raw_key] = value
+                import_metadata[raw_key] = metadata_value
             if unknown_column_behavior in ("warn", "metadata", "ignore"):
-                unmapped_fields[raw_key] = value
+                unmapped_fields[raw_key] = metadata_value
             continue
 
         action = mapping.get("action")
         if action == "ignore":
             continue
         if action == "metadata":
-            import_metadata[raw_key] = value
+            import_metadata[raw_key] = metadata_value
             continue
         if action == "custom" and mapping.get("custom_field_key"):
             custom_key = mapping.get("custom_field_key")
@@ -612,6 +613,12 @@ def _stringify_value(value: object) -> str:
     if isinstance(value, list):
         return ", ".join(str(v) for v in value if v is not None)
     return str(value)
+
+
+def _coerce_metadata_value(raw_value: object, string_value: str) -> object:
+    if isinstance(raw_value, bool):
+        return raw_value
+    return string_value
 
 
 def _apply_meta_tracking(db: Session, meta_lead: MetaLead, surrogate: Surrogate) -> None:

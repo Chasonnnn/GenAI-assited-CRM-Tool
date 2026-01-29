@@ -96,3 +96,29 @@ async def test_preview_returns_date_ambiguity_warnings(authed_client: AsyncClien
     data = response.json()
     assert "date_ambiguity_warnings" in data
     assert len(data["date_ambiguity_warnings"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_preview_maps_created_time_variants(authed_client: AsyncClient):
+    rows = [
+        {
+            "full_name": "Created Time User",
+            "email": "created@example.com",
+            "created time": "2025-01-01 08:30:00",
+        }
+    ]
+    csv_data = make_delimited_content(rows, delimiter=",", encoding="utf-8")
+
+    response = await authed_client.post(
+        "/surrogates/import/preview/enhanced",
+        files={"file": ("created-time.csv", io.BytesIO(csv_data), "text/csv")},
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    created_suggestion = next(
+        (s for s in data["column_suggestions"] if s.get("csv_column") == "created time"),
+        None,
+    )
+    assert created_suggestion is not None
+    assert created_suggestion.get("suggested_field") == "created_at"

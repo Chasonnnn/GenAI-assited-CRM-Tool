@@ -603,6 +603,7 @@ class SurrogateImport(Base):
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_content: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    default_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Status: pending, processing, completed, failed
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
