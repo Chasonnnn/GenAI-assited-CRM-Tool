@@ -29,12 +29,13 @@ from app.db.models import ImportTemplate, Surrogate, SurrogateImport
 from app.schemas.surrogate import SurrogateCreate
 from app.services import surrogate_service
 from app.services.import_detection_service import (
-    AVAILABLE_SURROGATE_FIELDS,
+    AVAILABLE_IMPORT_FIELDS,
     ColumnSuggestion,
     analyze_columns,
     detect_file_format,
 )
 from app.services.import_transformers import transform_value
+from app.utils.datetime_parsing import parse_datetime_with_timezone
 
 
 # =============================================================================
@@ -552,7 +553,11 @@ def preview_import_enhanced(
     detection = detect_file_format(file_content)
 
     # Analyze columns
-    column_suggestions = analyze_columns(detection.headers, detection.sample_rows)
+    column_suggestions = analyze_columns(
+        detection.headers,
+        detection.sample_rows,
+        allowed_fields=AVAILABLE_IMPORT_FIELDS,
+    )
 
     # Count matched/unmatched
     matched = sum(1 for s in column_suggestions if s.confidence >= 0.5)
@@ -659,7 +664,7 @@ def preview_import_enhanced(
         validation_errors=validation_errors,
         date_ambiguity_warnings=date_warnings,
         matching_templates=matching_templates,
-        available_fields=AVAILABLE_SURROGATE_FIELDS,
+        available_fields=AVAILABLE_IMPORT_FIELDS,
         ai_available=ai_available,
     )
 
@@ -728,6 +733,7 @@ def execute_import_with_mappings(
     file_content: bytes,
     column_mappings: list[ColumnMapping],
     unknown_column_behavior: str = "ignore",
+    backdate_created_at: bool = False,
 ) -> ImportResult:
     """
     Execute import with user-specified column mappings.
@@ -736,10 +742,25 @@ def execute_import_with_mappings(
     - Custom column mappings with transformations
     - Custom field value storage
     - Import metadata storage for unmapped columns
+    - Optional backdating of created_at from mapped submission time
     """
     from app.services import custom_field_service
 
     result = ImportResult()
+    from app.db.models import Organization
+
+    org_timezone: str | None = None
+    org = db.get(Organization, org_id)
+    if org:
+        org_timezone = org.timezone
+
+    now_utc = datetime.now(timezone.utc)
+    created_at_backdated = 0
+    created_at_future = 0
+    created_at_invalid = 0
+    created_at_date_only = 0
+    created_at_disabled = 0
+    created_at_timezone_fallback = 0
 
     # Detect encoding and delimiter
     detection = detect_file_format(file_content)
@@ -779,6 +800,7 @@ def execute_import_with_mappings(
         row_data: dict[str, Any] = {}
         custom_values: dict[str, Any] = {}
         import_metadata: dict[str, str] = {}
+        row_created_at: datetime | None = None
 
         # Process each column
         for header, idx in header_to_idx.items():
@@ -817,6 +839,27 @@ def execute_import_with_mappings(
                 continue
 
             if mapping.action == "map" and mapping.surrogate_field:
+                if mapping.surrogate_field == "created_at":
+                    if not backdate_created_at:
+                        created_at_disabled += 1
+                        import_metadata[detection.headers[idx]] = raw_value
+                        continue
+
+                    parsed = parse_datetime_with_timezone(raw_value, org_timezone)
+                    if parsed.used_fallback_timezone:
+                        created_at_timezone_fallback += 1
+                    if parsed.date_only:
+                        created_at_date_only += 1
+                    if parsed.value is None:
+                        created_at_invalid += 1
+                    else:
+                        row_created_at = parsed.value
+                        if row_created_at > now_utc:
+                            created_at_future += 1
+                        elif row_created_at < now_utc:
+                            created_at_backdated += 1
+                    continue
+
                 # Apply transformation if specified
                 if mapping.transformation:
                     transform_result = transform_value(mapping.transformation, raw_value)
@@ -861,6 +904,7 @@ def execute_import_with_mappings(
                 org_id=org_id,
                 user_id=user_id,
                 data=surrogate_data,
+                created_at_override=row_created_at,
             )
             result.imported += 1
 
@@ -902,6 +946,60 @@ def execute_import_with_mappings(
                     "message": "Unmapped column ignored",
                 }
             )
+    if created_at_disabled:
+        result.warnings.append(
+            {
+                "level": "warning",
+                "code": "created_at_disabled",
+                "count": created_at_disabled,
+                "message": "Created_at mapping ignored because backdating is disabled.",
+            }
+        )
+    if created_at_invalid:
+        result.warnings.append(
+            {
+                "level": "warning",
+                "code": "created_at_invalid",
+                "count": created_at_invalid,
+                "message": "Created_at could not be parsed; used import time instead.",
+            }
+        )
+    if created_at_date_only:
+        result.warnings.append(
+            {
+                "level": "warning",
+                "code": "created_at_date_only",
+                "count": created_at_date_only,
+                "message": "Created_at date-only values assumed 12:00 local time.",
+            }
+        )
+    if created_at_timezone_fallback:
+        result.warnings.append(
+            {
+                "level": "warning",
+                "code": "created_at_timezone_fallback",
+                "count": created_at_timezone_fallback,
+                "message": "Organization timezone invalid; default timezone applied.",
+            }
+        )
+    if created_at_backdated:
+        result.warnings.append(
+            {
+                "level": "warning",
+                "code": "created_at_backdated",
+                "count": created_at_backdated,
+                "message": "Created_at backdated from submission time.",
+            }
+        )
+    if created_at_future:
+        result.warnings.append(
+            {
+                "level": "warning",
+                "code": "created_at_future",
+                "count": created_at_future,
+                "message": "Created_at is in the future for some rows.",
+            }
+        )
     _update_import_completed(db, org_id, import_id, result)
 
     return result
@@ -960,6 +1058,7 @@ def submit_for_approval(
     column_mappings: list[ColumnMapping],
     dedup_stats: dict,
     unknown_column_behavior: str = "ignore",
+    backdate_created_at: bool = False,
 ) -> SurrogateImport:
     """
     Submit an import for admin approval.
@@ -986,6 +1085,7 @@ def submit_for_approval(
     ]
     import_record.deduplication_stats = dedup_stats
     import_record.unknown_column_behavior = unknown_column_behavior
+    import_record.backdate_created_at = backdate_created_at
 
     db.commit()
     db.refresh(import_record)

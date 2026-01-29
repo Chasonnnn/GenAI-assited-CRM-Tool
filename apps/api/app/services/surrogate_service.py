@@ -79,6 +79,7 @@ def create_surrogate(
     data: SurrogateCreate,
     *,
     emit_events: bool = False,
+    created_at_override: datetime | None = None,
 ) -> Surrogate:
     """
     Create a new surrogatewith generated surrogatenumber.
@@ -88,6 +89,7 @@ def create_surrogate(
         org_id: Organization ID
         user_id: User ID for created_by (None for auto-created surrogates like Meta leads)
         data: Surrogatecreation data
+        created_at_override: Optional created_at for backdated imports
 
     Phone and state are validated in schema layer.
     """
@@ -120,7 +122,7 @@ def create_surrogate(
     for attempt in range(3):
         surrogate_number = generate_surrogate_number(db, org_id)
         normalized_full_name = normalize_name(data.full_name)
-        surrogate = Surrogate(
+        surrogate_kwargs = dict(
             surrogate_number=surrogate_number,
             surrogate_number_normalized=normalize_identifier(surrogate_number),
             organization_id=org_id,
@@ -203,6 +205,9 @@ def create_surrogate(
             actual_delivery_date=data.actual_delivery_date,
             is_priority=data.is_priority if hasattr(data, "is_priority") else False,
         )
+        if created_at_override is not None:
+            surrogate_kwargs["created_at"] = created_at_override
+        surrogate = Surrogate(**surrogate_kwargs)
         db.add(surrogate)
         try:
             db.commit()

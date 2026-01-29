@@ -5,6 +5,7 @@ normalized formats suitable for the Surrogate model.
 
 Features:
 - date_flexible: Parses multiple date formats (MM/DD/YYYY, YYYY-MM-DD, ISO)
+- datetime_flexible: Parses multiple datetime formats (YYYY-MM-DD HH:MM, ISO)
 - height_flexible: Parses height formats ("5'4", "5.6", "5ft 2in", inches)
 - state_normalize: Normalizes to 2-letter state codes
 - phone_normalize: Normalizes to E.164 format
@@ -143,6 +144,71 @@ def transform_date_flexible(raw_value: str) -> TransformOutput:
         success=False,
         warnings=[],
         error=f"Unrecognized date format: {value}",
+    )
+
+
+# =============================================================================
+# Datetime Transformer
+# =============================================================================
+
+
+DATETIME_PATTERNS = [
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%d %H:%M",
+    "%Y/%m/%d %H:%M:%S",
+    "%Y/%m/%d %H:%M",
+    "%m/%d/%Y %H:%M:%S",
+    "%m/%d/%Y %H:%M",
+    "%m/%d/%Y %I:%M %p",
+    "%m-%d-%Y %H:%M:%S",
+    "%m-%d-%Y %H:%M",
+    "%m-%d-%Y %I:%M %p",
+    "%Y-%m-%d",
+    "%Y/%m/%d",
+    "%m/%d/%Y",
+    "%m-%d-%Y",
+]
+
+DATETIME_DATE_ONLY = {"%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%m-%d-%Y"}
+
+
+def transform_datetime_flexible(raw_value: str) -> TransformOutput:
+    """
+    Parse datetime from various formats.
+
+    Supported formats:
+    - ISO 8601 timestamps (2025-11-19T17:10:38-08:00)
+    - YYYY-MM-DD HH:MM[:SS]
+    - MM/DD/YYYY HH:MM[:SS] (US format)
+    - Date-only values return midnight (00:00)
+    """
+    value = raw_value.strip()
+    if not value:
+        return TransformOutput(value=None, success=True, warnings=[])
+
+    # ISO 8601 timestamp first
+    try:
+        if "T" in value:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return TransformOutput(value=dt, success=True, warnings=[])
+    except ValueError:
+        pass
+
+    warnings: list[str] = []
+    for fmt in DATETIME_PATTERNS:
+        try:
+            dt = datetime.strptime(value, fmt)
+            if fmt in DATETIME_DATE_ONLY:
+                warnings.append("Date-only value; using 00:00 time.")
+            return TransformOutput(value=dt, success=True, warnings=warnings)
+        except ValueError:
+            continue
+
+    return TransformOutput(
+        value=None,
+        success=False,
+        warnings=[],
+        error=f"Unrecognized datetime format: {value}",
     )
 
 
@@ -398,6 +464,7 @@ def transform_boolean_inverted(raw_value: str) -> TransformOutput:
 
 TRANSFORMERS: dict[str, Callable[[str], TransformOutput]] = {
     "date_flexible": transform_date_flexible,
+    "datetime_flexible": transform_datetime_flexible,
     "height_flexible": transform_height_flexible,
     "state_normalize": transform_state_normalize,
     "phone_normalize": transform_phone_normalize,
@@ -439,6 +506,7 @@ def transform_value(transformer_name: str, raw_value: str) -> TransformOutput:
 # Auto-suggest transformers based on target field
 FIELD_TRANSFORMERS: dict[str, str] = {
     "date_of_birth": "date_flexible",
+    "created_at": "datetime_flexible",
     "height_ft": "height_flexible",
     "state": "state_normalize",
     "phone": "phone_normalize",

@@ -626,6 +626,9 @@ class SurrogateImport(Base):
     unknown_column_behavior: Mapped[str] = mapped_column(
         String(20), default="ignore", nullable=False
     )
+    backdate_created_at: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )
 
     # Admin approval workflow
     # Status values: 'pending', 'awaiting_approval', 'approved', 'processing', 'completed', 'rejected', 'failed'

@@ -241,6 +241,7 @@ async def _send_via_org_provider(db, email_log: EmailLog, provider: str, org_id)
             raise Exception("Gmail sender not configured for organization")
 
         from app.services import unsubscribe_service
+
         headers = unsubscribe_service.build_list_unsubscribe_headers(
             org_id=org_id,
             email=email_log.recipient_email,
@@ -1150,6 +1151,7 @@ async def process_workflow_email(db, job) -> None:
     # Send via resolved provider
     try:
         from app.services import unsubscribe_service
+
         headers = unsubscribe_service.build_list_unsubscribe_headers(
             org_id=job.organization_id,
             email=recipient_email,
@@ -1299,6 +1301,7 @@ async def process_csv_import(db, job) -> None:
                 file_content=import_record.file_content,
                 column_mappings=mappings,
                 unknown_column_behavior=unknown_column_behavior,
+                backdate_created_at=bool(getattr(import_record, "backdate_created_at", False)),
             )
         else:
             import_service.execute_import(
@@ -1521,6 +1524,7 @@ async def process_campaign_send(db, job) -> None:
     payload = job.payload or {}
     campaign_id = payload.get("campaign_id")
     run_id = payload.get("run_id")
+    retry_failed_only = bool(payload.get("retry_failed_only"))
 
     if not campaign_id or not run_id:
         raise Exception("Missing campaign_id or run_id in campaign send job")
@@ -1540,20 +1544,37 @@ async def process_campaign_send(db, job) -> None:
             logger.info(f"Campaign {campaign_id} was cancelled, skipping execution")
             return  # Don't execute cancelled campaigns
 
-        # Execute the campaign send
-        result = campaign_service.execute_campaign_run(
-            db=db,
-            org_id=job.organization_id,
-            campaign_id=UUID(campaign_id),
-            run_id=UUID(run_id),
-        )
+        # Execute the campaign send (full run or retry failed only)
+        if retry_failed_only:
+            result = campaign_service.retry_failed_campaign_run(
+                db=db,
+                org_id=job.organization_id,
+                campaign_id=UUID(campaign_id),
+                run_id=UUID(run_id),
+            )
+        else:
+            result = campaign_service.execute_campaign_run(
+                db=db,
+                org_id=job.organization_id,
+                campaign_id=UUID(campaign_id),
+                run_id=UUID(run_id),
+            )
 
-        logger.info(
-            f"Campaign send completed: campaign={campaign_id}, "
-            f"sent={result.get('sent_count', 0)}, "
-            f"failed={result.get('failed_count', 0)}, "
-            f"skipped={result.get('skipped_count', 0)}"
-        )
+        if retry_failed_only:
+            logger.info(
+                "Campaign retry completed: campaign=%s run=%s retried=%s skipped=%s",
+                campaign_id,
+                run_id,
+                result.get("retried_count", 0),
+                result.get("skipped_count", 0),
+            )
+        else:
+            logger.info(
+                f"Campaign send completed: campaign={campaign_id}, "
+                f"sent={result.get('sent_count', 0)}, "
+                f"failed={result.get('failed_count', 0)}, "
+                f"skipped={result.get('skipped_count', 0)}"
+            )
     except Exception as e:
         logger.error(
             "Campaign send failed: campaign=%s error=%s",

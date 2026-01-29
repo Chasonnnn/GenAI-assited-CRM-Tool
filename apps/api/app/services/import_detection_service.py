@@ -138,6 +138,16 @@ EXACT_COLUMN_MAPPING: dict[str, str] = {
     # Source
     "source": "source",
     "lead_source": "source",
+    # Created time variations
+    "created_at": "created_at",
+    "created_time": "created_at",
+    "submission_time": "created_at",
+    "submitted_at": "created_at",
+    "submitted_time": "created_at",
+    "date_submitted": "created_at",
+    "time_submitted": "created_at",
+    "lead_created_time": "created_at",
+    "lead_submitted_at": "created_at",
 }
 
 
@@ -190,6 +200,15 @@ KEYWORD_PATTERNS: dict[str, list[str]] = {
     "phone": ["phone", "mobile", "cell", "contact number"],
     "full_name": ["full.*name", "your name"],
     "state": ["state", "where.*live", "location"],
+    "created_at": [
+        "submitted",
+        "submission",
+        "created",
+        "timestamp",
+        "lead time",
+        "time submitted",
+        "date submitted",
+    ],
 }
 
 # Patterns that should BLOCK mapping to certain fields (guards)
@@ -635,7 +654,12 @@ def analyze_column(column: str, col_idx: int, sample_rows: list[list[str]]) -> C
     )
 
 
-def analyze_columns(headers: list[str], sample_rows: list[list[str]]) -> list[ColumnSuggestion]:
+def analyze_columns(
+    headers: list[str],
+    sample_rows: list[list[str]],
+    *,
+    allowed_fields: list[str] | None = None,
+) -> list[ColumnSuggestion]:
     """
     Analyze all columns and generate mapping suggestions.
 
@@ -647,8 +671,20 @@ def analyze_columns(headers: list[str], sample_rows: list[list[str]]) -> list[Co
         List of ColumnSuggestion for each header
     """
     suggestions = []
+    allowed = set(allowed_fields) if allowed_fields else None
     for idx, header in enumerate(headers):
         suggestion = analyze_column(header, idx, sample_rows)
+        if allowed is not None and suggestion.suggested_field not in allowed:
+            suggestion = ColumnSuggestion(
+                csv_column=suggestion.csv_column,
+                suggested_field=None,
+                confidence=0.0,
+                confidence_level=ConfidenceLevel.NONE,
+                transformation=None,
+                sample_values=suggestion.sample_values,
+                reason="Field not available for this import type",
+                default_action="ignore",
+            )
         suggestions.append(suggestion)
     return suggestions
 
@@ -760,3 +796,6 @@ AVAILABLE_SURROGATE_FIELDS = [
     # Source
     "source",
 ]
+
+# CSV import-only fields (not shown in Meta lead mapping)
+AVAILABLE_IMPORT_FIELDS = [*AVAILABLE_SURROGATE_FIELDS, "created_at"]

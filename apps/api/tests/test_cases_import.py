@@ -228,6 +228,7 @@ async def test_submit_import_updates_status_and_snapshot(authed_client: AsyncCli
                 {"csv_column": "email", "surrogate_field": "email"},
             ],
             "unknown_column_behavior": "metadata",
+            "backdate_created_at": True,
         },
     )
     assert submit.status_code == 200
@@ -243,6 +244,7 @@ async def test_submit_import_updates_status_and_snapshot(authed_client: AsyncCli
     assert import_record.status == "awaiting_approval"
     assert import_record.column_mapping_snapshot is not None
     assert import_record.unknown_column_behavior == "metadata"
+    assert import_record.backdate_created_at is True
 
 
 @pytest.mark.asyncio
@@ -374,6 +376,164 @@ def test_execute_import_warns_on_unmapped_columns(db, test_org, test_user):
     warnings = [entry for entry in (stored.errors or []) if entry.get("level") == "warning"]
     assert warnings
     assert warnings[0]["column"] == "unmapped_col"
+
+
+def test_execute_import_backdates_created_at(db, test_org, test_user):
+    """Backdate created_at from submission time using org timezone."""
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+
+    from app.db.models import Surrogate, SurrogateImport
+    from app.services import import_service
+    from app.services.import_service import ColumnMapping
+
+    test_org.timezone = "America/New_York"
+    db.commit()
+
+    csv_data = create_csv_content(
+        [
+            {
+                "full_name": "Timed User",
+                "email": "timed@test.com",
+                "submitted_at": "2026-01-02 09:30",
+            }
+        ]
+    )
+
+    import_record = import_service.create_import_job(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        filename="timed.csv",
+        total_rows=1,
+        file_content=csv_data,
+        status="pending",
+    )
+
+    mappings = [
+        ColumnMapping(
+            csv_column="full_name",
+            surrogate_field="full_name",
+            transformation=None,
+            action="map",
+        ),
+        ColumnMapping(
+            csv_column="email",
+            surrogate_field="email",
+            transformation=None,
+            action="map",
+        ),
+        ColumnMapping(
+            csv_column="submitted_at",
+            surrogate_field="created_at",
+            transformation="datetime_flexible",
+            action="map",
+        ),
+    ]
+
+    import_service.execute_import_with_mappings(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        import_id=import_record.id,
+        file_content=csv_data,
+        column_mappings=mappings,
+        unknown_column_behavior="ignore",
+        backdate_created_at=True,
+    )
+
+    surrogate = (
+        db.query(Surrogate)
+        .filter(
+            Surrogate.organization_id == test_org.id,
+            Surrogate.email_hash.isnot(None),
+        )
+        .first()
+    )
+    assert surrogate is not None
+
+    expected = datetime(2026, 1, 2, 9, 30, tzinfo=ZoneInfo("America/New_York")).astimezone(
+        timezone.utc
+    )
+    stored_created_at = surrogate.created_at
+    if stored_created_at.tzinfo is None:
+        stored_created_at = stored_created_at.replace(tzinfo=timezone.utc)
+    assert stored_created_at == expected
+
+    stored_import = db.query(SurrogateImport).filter(SurrogateImport.id == import_record.id).first()
+    warnings = [
+        entry
+        for entry in (stored_import.errors or [])
+        if entry.get("code") == "created_at_backdated"
+    ]
+    assert warnings
+    assert warnings[0]["count"] == 1
+
+
+def test_execute_import_backdate_invalid_datetime_warns(db, test_org, test_user):
+    """Warn when created_at values cannot be parsed."""
+    from app.db.models import SurrogateImport
+    from app.services import import_service
+    from app.services.import_service import ColumnMapping
+
+    csv_data = create_csv_content(
+        [
+            {
+                "full_name": "Bad Date",
+                "email": "bad@test.com",
+                "submitted_at": "not-a-date",
+            }
+        ]
+    )
+
+    import_record = import_service.create_import_job(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        filename="bad-date.csv",
+        total_rows=1,
+        file_content=csv_data,
+        status="pending",
+    )
+
+    mappings = [
+        ColumnMapping(
+            csv_column="full_name",
+            surrogate_field="full_name",
+            transformation=None,
+            action="map",
+        ),
+        ColumnMapping(
+            csv_column="email",
+            surrogate_field="email",
+            transformation=None,
+            action="map",
+        ),
+        ColumnMapping(
+            csv_column="submitted_at",
+            surrogate_field="created_at",
+            transformation="datetime_flexible",
+            action="map",
+        ),
+    ]
+
+    import_service.execute_import_with_mappings(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        import_id=import_record.id,
+        file_content=csv_data,
+        column_mappings=mappings,
+        unknown_column_behavior="ignore",
+        backdate_created_at=True,
+    )
+
+    stored = db.query(SurrogateImport).filter(SurrogateImport.id == import_record.id).first()
+    warnings = [
+        entry for entry in (stored.errors or []) if entry.get("code") == "created_at_invalid"
+    ]
+    assert warnings
+    assert warnings[0]["count"] == 1
 
 
 @pytest.mark.asyncio

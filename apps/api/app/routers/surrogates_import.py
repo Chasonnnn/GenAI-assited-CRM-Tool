@@ -161,6 +161,7 @@ def list_pending_approvals(
                 created_by_name=imp.created_by.display_name if imp.created_by else None,
                 deduplication_stats=dedup_stats,
                 column_mapping_snapshot=imp.column_mapping_snapshot,
+                backdate_created_at=imp.backdate_created_at,
             )
         )
 
@@ -438,6 +439,7 @@ class ImportSubmitRequest(BaseModel):
     column_mappings: list[ColumnMappingItem] = Field(default_factory=list)
     unknown_column_behavior: Literal["ignore", "metadata", "warn"] = "ignore"
     save_as_template_name: str | None = None
+    backdate_created_at: bool = False
 
 
 @router.post(
@@ -499,6 +501,7 @@ def submit_import_for_approval(
             column_mappings=mappings,
             dedup_stats=dedup_stats,
             unknown_column_behavior=data.unknown_column_behavior,
+            backdate_created_at=data.backdate_created_at,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

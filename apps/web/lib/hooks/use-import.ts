@@ -68,7 +68,15 @@ export function useSubmitImport() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: (params: { importId: string; payload: { column_mappings: ColumnMappingItem[]; unknown_column_behavior?: 'ignore' | 'metadata' | 'warn'; save_as_template_name?: string | null } }) =>
+        mutationFn: (params: {
+            importId: string
+            payload: {
+                column_mappings: ColumnMappingItem[]
+                unknown_column_behavior?: 'ignore' | 'metadata' | 'warn'
+                save_as_template_name?: string | null
+                backdate_created_at?: boolean
+            }
+        }) =>
             submitImport(params.importId, params.payload),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: importKeys.lists() })

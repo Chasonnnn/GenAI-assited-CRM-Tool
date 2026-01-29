@@ -193,6 +193,7 @@ class ImportApprovalItem(BaseModel):
     created_by_name: str | None
     deduplication_stats: DeduplicationStats | None
     column_mapping_snapshot: list[ColumnMappingItem] | None
+    backdate_created_at: bool = False
 
 
 class ImportApproveRequest(BaseModel):

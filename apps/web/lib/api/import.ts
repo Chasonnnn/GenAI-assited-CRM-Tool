@@ -92,6 +92,7 @@ export interface ImportApprovalItem {
     created_by_name: string | null
     deduplication_stats: DeduplicationStats | null
     column_mapping_snapshot: ColumnMappingItem[] | null
+    backdate_created_at?: boolean
 }
 
 export interface AiMapRequest {
@@ -116,6 +117,7 @@ export async function submitImport(
         column_mappings: ColumnMappingItem[]
         unknown_column_behavior?: 'ignore' | 'metadata' | 'warn'
         save_as_template_name?: string | null
+        backdate_created_at?: boolean
     }
 ): Promise<ImportSubmitResponse> {
     return api.post<ImportSubmitResponse>(`/surrogates/import/${importId}/submit`, payload)

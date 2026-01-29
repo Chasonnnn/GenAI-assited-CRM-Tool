@@ -140,9 +140,10 @@ describe('buildImportSubmitPayload', () => {
             },
         ]
 
-        const payload = buildImportSubmitPayload(mappings, 'warn', new Set())
+        const payload = buildImportSubmitPayload(mappings, 'warn', new Set(), true)
         const columns = payload.column_mappings.map((item) => item.csv_column)
         expect(columns).toEqual(['Email'])
         expect(payload.unknown_column_behavior).toBe('warn')
+        expect(payload.backdate_created_at).toBe(true)
     })
 })

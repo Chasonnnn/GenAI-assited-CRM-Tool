@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useCallback, type DragEvent } from "react"
+import { useEffect, useState, useCallback, type DragEvent } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
     Select,
     SelectContent,
@@ -12,6 +13,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
     UploadIcon,
@@ -42,6 +44,7 @@ import {
 const TRANSFORM_OPTIONS = [
     { value: "", label: "None" },
     { value: "date_flexible", label: "Date (flexible)" },
+    { value: "datetime_flexible", label: "Date/Time (flexible)" },
     { value: "height_flexible", label: "Height (flexible)" },
     { value: "state_normalize", label: "State normalize" },
     { value: "phone_normalize", label: "Phone normalize" },
@@ -68,6 +71,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
     const [mappings, setMappings] = useState<ColumnMappingDraft[]>([])
     const [unknownColumnBehavior, setUnknownColumnBehavior] = useState<UnknownColumnBehavior>("ignore")
     const [touchedColumns, setTouchedColumns] = useState<Set<string>>(new Set())
+    const [backdateCreatedAt, setBackdateCreatedAt] = useState(false)
     const [error, setError] = useState<string>("")
     const [submitMessage, setSubmitMessage] = useState<string | null>(null)
     const [approveMessage, setApproveMessage] = useState<string | null>(null)
@@ -78,6 +82,15 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
     const aiMapMutation = useAiMapImport()
 
     const canApprove = user?.role === "admin" || user?.role === "developer"
+    const hasCreatedAtMapping = mappings.some(
+        (mapping) => mapping.action === "map" && mapping.surrogate_field === "created_at"
+    )
+
+    useEffect(() => {
+        if (!hasCreatedAtMapping && backdateCreatedAt) {
+            setBackdateCreatedAt(false)
+        }
+    }, [hasCreatedAtMapping, backdateCreatedAt])
 
     const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
         e.preventDefault()
@@ -111,6 +124,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         setError("")
         setSubmitMessage(null)
         setApproveMessage(null)
+        setBackdateCreatedAt(false)
         setFile(selectedFile)
 
         try {
@@ -141,6 +155,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         setPreview(null)
         setMappings([])
         setTouchedColumns(new Set())
+        setBackdateCreatedAt(false)
         setError("")
         setSubmitMessage(null)
         setApproveMessage(null)
@@ -244,7 +259,12 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
 
         if (!ensureRequiredMappings()) return
 
-        const payload = buildImportSubmitPayload(mappings, unknownColumnBehavior, touchedColumns)
+        const payload = buildImportSubmitPayload(
+            mappings,
+            unknownColumnBehavior,
+            touchedColumns,
+            backdateCreatedAt
+        )
 
         try {
             const response = await submitMutation.mutateAsync({
@@ -252,6 +272,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                 payload: {
                     column_mappings: payload.column_mappings,
                     unknown_column_behavior: payload.unknown_column_behavior,
+                    backdate_created_at: payload.backdate_created_at,
                 },
             })
 
@@ -403,6 +424,18 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                     <CardDescription>
                                         Review column mappings before submitting the import.
                                     </CardDescription>
+                                    {hasCreatedAtMapping && (
+                                        <p
+                                            className={cn(
+                                                "mt-2 text-xs",
+                                                backdateCreatedAt ? "text-muted-foreground" : "text-amber-600"
+                                            )}
+                                        >
+                                            {backdateCreatedAt
+                                                ? "Created_at will be backdated using the org timezone when no timezone is provided."
+                                                : "Created_at mapping will be stored as metadata unless backdating is enabled."}
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="flex flex-wrap items-center gap-3">
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -422,6 +455,17 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                                 <SelectItem value="warn">Warn only</SelectItem>
                                             </SelectContent>
                                         </Select>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <Switch
+                                            id="backdate-created-at"
+                                            checked={backdateCreatedAt}
+                                            onCheckedChange={setBackdateCreatedAt}
+                                            disabled={!hasCreatedAtMapping}
+                                        />
+                                        <Label htmlFor="backdate-created-at">
+                                            Use submission time as created_at
+                                        </Label>
                                     </div>
                                     {preview.ai_available && (
                                         <Button

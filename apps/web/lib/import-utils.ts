@@ -85,8 +85,13 @@ export function applyUnknownColumnBehavior(
 export function buildImportSubmitPayload(
     mappings: ColumnMappingDraft[],
     behavior: UnknownColumnBehavior,
-    touchedColumns: Set<string>
-): { column_mappings: ColumnMappingItem[]; unknown_column_behavior: UnknownColumnBehavior } {
+    touchedColumns: Set<string>,
+    backdateCreatedAt = false
+): {
+    column_mappings: ColumnMappingItem[]
+    unknown_column_behavior: UnknownColumnBehavior
+    backdate_created_at: boolean
+} {
     const column_mappings = mappings
         .filter((mapping) => {
             if (behavior !== 'warn') return true
@@ -105,5 +110,6 @@ export function buildImportSubmitPayload(
     return {
         column_mappings,
         unknown_column_behavior: behavior,
+        backdate_created_at: backdateCreatedAt,
     }
 }
