@@ -4,6 +4,7 @@ v2: With version control for templates.
 """
 
 from email.utils import parseaddr
+from html import escape as html_escape
 import re
 from datetime import datetime, timezone
 from uuid import UUID
@@ -19,6 +20,7 @@ from app.db.enums import EmailStatus, JobType
 from app.services.job_service import enqueue_job
 from app.services import email_sender, version_service
 from app.types import JsonObject
+from app.utils.normalization import normalize_email
 
 
 # Variable pattern for template substitution: {{variable_name}}
@@ -386,26 +388,61 @@ def delete_template(db: Session, template: EmailTemplate) -> None:
     db.commit()
 
 
+def is_email_suppressed(db: Session, org_id: UUID, recipient_email: str) -> bool:
+    """Check if recipient is suppressed for the org."""
+    email_norm = normalize_email(recipient_email) or ""
+    if not email_norm:
+        return False
+    from app.services import campaign_service
+
+    return campaign_service.is_email_suppressed(db, org_id, email_norm)
+
+
 def render_template(
     subject: str,
     body: str,
     variables: dict[str, str],
+    safe_html_vars: set[str] | None = None,
 ) -> tuple[str, str]:
     """
     Render a template with variable substitution.
 
     Variables in format {{variable_name}} are replaced with values.
     Missing variables are replaced with empty string.
+    safe_html_vars allows selected variables to render as raw HTML in the body.
 
     Returns (rendered_subject, rendered_body).
     """
 
-    def replace_var(match: re.Match) -> str:
-        var_name = match.group(1)
-        return variables.get(var_name, "")
+    def normalize_value(value: object) -> str:
+        if value is None:
+            return ""
+        return str(value)
 
-    rendered_subject = VARIABLE_PATTERN.sub(replace_var, subject)
-    rendered_body = VARIABLE_PATTERN.sub(replace_var, body)
+    def sanitize_subject_value(value: object) -> str:
+        text = normalize_value(value)
+        return re.sub(r"[\\r\\n]+", " ", text).strip()
+
+    subject_vars = {k: sanitize_subject_value(v) for k, v in variables.items()}
+    safe_html_vars = safe_html_vars or set()
+    body_vars: dict[str, str] = {}
+    for key, value in variables.items():
+        text = normalize_value(value)
+        if key in safe_html_vars:
+            body_vars[key] = text
+        else:
+            body_vars[key] = html_escape(text, quote=True)
+
+    def replace_subject_var(match: re.Match) -> str:
+        var_name = match.group(1)
+        return subject_vars.get(var_name, "")
+
+    def replace_body_var(match: re.Match) -> str:
+        var_name = match.group(1)
+        return body_vars.get(var_name, "")
+
+    rendered_subject = VARIABLE_PATTERN.sub(replace_subject_var, subject)
+    rendered_body = VARIABLE_PATTERN.sub(replace_body_var, body)
     return rendered_subject, rendered_body
 
 
@@ -424,15 +461,68 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
         queue = db.query(Queue).filter(Queue.id == surrogate.owner_id).first()
         owner_name = queue.name if queue else ""
 
+    full_name = surrogate.full_name or ""
+    first_name = full_name.split()[0] if full_name else ""
+    email = surrogate.email or ""
+    unsubscribe_url = ""
+    if email:
+        from app.services import unsubscribe_service
+
+        unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
+            org_id=surrogate.organization_id, email=email
+        )
+
     return {
-        "full_name": surrogate.full_name or "",
-        "email": surrogate.email or "",
+        "first_name": first_name,
+        "full_name": full_name,
+        "email": email,
         "phone": surrogate.phone or "",
         "surrogate_number": surrogate.surrogate_number or "",
         "status_label": surrogate.status_label or "",
         "state": surrogate.state or "",
         "owner_name": owner_name,
         "org_name": org.name if org else "",
+        "unsubscribe_url": unsubscribe_url,
+    }
+
+
+def build_intended_parent_template_variables(db: Session, intended_parent) -> dict[str, str]:
+    """Build flat template variables for an intended parent context."""
+    from app.db.enums import OwnerType
+    from app.db.models import Organization, Queue, User
+
+    org = db.query(Organization).filter(Organization.id == intended_parent.organization_id).first()
+
+    owner_name = ""
+    if intended_parent.owner_type == OwnerType.USER.value and intended_parent.owner_id:
+        owner = db.query(User).filter(User.id == intended_parent.owner_id).first()
+        owner_name = owner.display_name if owner else ""
+    elif intended_parent.owner_type == OwnerType.QUEUE.value and intended_parent.owner_id:
+        queue = db.query(Queue).filter(Queue.id == intended_parent.owner_id).first()
+        owner_name = queue.name if queue else ""
+
+    full_name = intended_parent.full_name or ""
+    first_name = full_name.split()[0] if full_name else ""
+    email = intended_parent.email or ""
+    unsubscribe_url = ""
+    if email:
+        from app.services import unsubscribe_service
+
+        unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
+            org_id=intended_parent.organization_id, email=email
+        )
+
+    return {
+        "first_name": first_name,
+        "full_name": full_name,
+        "email": email,
+        "phone": intended_parent.phone or "",
+        "intended_parent_number": intended_parent.intended_parent_number or "",
+        "status_label": intended_parent.status or "",
+        "state": intended_parent.state or "",
+        "owner_name": owner_name,
+        "org_name": org.name if org else "",
+        "unsubscribe_url": unsubscribe_url,
     }
 
 
@@ -503,13 +593,32 @@ def send_email(
     surrogate_id: UUID | None = None,
     schedule_at: datetime | None = None,
     commit: bool = True,
-) -> tuple[EmailLog, Job]:
+) -> tuple[EmailLog, Job | None]:
     """
     Queue an email for sending.
 
     Creates an EmailLog record and schedules a job to send it.
     Returns (email_log, job).
     """
+    if is_email_suppressed(db, org_id, recipient_email):
+        email_log = EmailLog(
+            organization_id=org_id,
+            template_id=template_id,
+            surrogate_id=surrogate_id,
+            recipient_email=recipient_email,
+            subject=subject,
+            body=body,
+            status=EmailStatus.SKIPPED.value,
+            error="suppressed",
+        )
+        db.add(email_log)
+        if commit:
+            db.commit()
+            db.refresh(email_log)
+        else:
+            db.flush()
+        return email_log, None
+
     # Create email log
     email_log = EmailLog(
         organization_id=org_id,
@@ -564,6 +673,22 @@ async def send_immediate_email(
 
     This bypasses the queued SEND_EMAIL job and is intended for system/admin flows.
     """
+    if is_email_suppressed(db, org_id, recipient_email):
+        email_log = EmailLog(
+            organization_id=org_id,
+            template_id=template_id,
+            surrogate_id=surrogate_id,
+            recipient_email=recipient_email,
+            subject=subject,
+            body=body,
+            status=EmailStatus.SKIPPED.value,
+            error="suppressed",
+        )
+        db.add(email_log)
+        db.commit()
+        db.refresh(email_log)
+        return {"success": False, "error": "Email suppressed", "email_log_id": email_log.id}
+
     selection = email_sender.select_sender(
         prefer_platform=prefer_platform,
         sender_user_id=sender_user_id,
@@ -593,7 +718,7 @@ def send_from_template(
     variables: dict[str, str],
     surrogate_id: UUID | None = None,
     schedule_at: datetime | None = None,
-) -> tuple[EmailLog, Job] | None:
+) -> tuple[EmailLog, Job | None] | None:
     """
     Queue an email using a template.
 
@@ -635,6 +760,16 @@ def mark_email_failed(db: Session, email_log: EmailLog, error: str) -> EmailLog:
     db.commit()
     db.refresh(email_log)
     _sync_campaign_recipient(db, email_log, EmailStatus.FAILED.value, error=error)
+    return email_log
+
+
+def mark_email_skipped(db: Session, email_log: EmailLog, reason: str) -> EmailLog:
+    """Mark an email as skipped (suppressed)."""
+    email_log.status = EmailStatus.SKIPPED.value
+    email_log.error = reason
+    db.commit()
+    db.refresh(email_log)
+    _sync_campaign_recipient(db, email_log, EmailStatus.SKIPPED.value, error=reason)
     return email_log
 
 
@@ -689,6 +824,9 @@ def _sync_campaign_recipient(
         if not cr.sent_at:
             cr.sent_at = datetime.now(timezone.utc)
         cr.error = None
+    elif status == EmailStatus.SKIPPED.value:
+        cr.status = CampaignRecipientStatus.SKIPPED.value
+        cr.skip_reason = (error or "suppressed")[:100]
     else:
         cr.status = CampaignRecipientStatus.FAILED.value
         cr.error = (error or email_log.error or "Send failed")[:500]

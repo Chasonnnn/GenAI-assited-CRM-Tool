@@ -48,6 +48,7 @@ async def send_campaign_email(
     subject: str,
     body: str,
     settings: ResendSettings,
+    unsubscribe_url: str | None = None,
 ) -> tuple[bool, str | None]:
     """
     Send a campaign email via Resend API.
@@ -102,6 +103,11 @@ async def send_campaign_email(
     # Add reply-to if configured
     if settings.reply_to_email:
         payload["reply_to"] = settings.reply_to_email
+    if unsubscribe_url:
+        payload["headers"] = {
+            "List-Unsubscribe": f"<{unsubscribe_url}>",
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        }
 
     # 4. Build headers with idempotency key
     headers = {
@@ -206,6 +212,7 @@ async def send_email_direct(
     from_name: str | None = None,
     reply_to: str | None = None,
     idempotency_key: str | None = None,
+    unsubscribe_url: str | None = None,
 ) -> tuple[bool, str | None, str | None]:
     """
     Send an email directly via Resend (no campaign context).
@@ -238,6 +245,11 @@ async def send_email_direct(
 
     if reply_to:
         payload["reply_to"] = reply_to
+    if unsubscribe_url:
+        payload["headers"] = {
+            "List-Unsubscribe": f"<{unsubscribe_url}>",
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        }
 
     headers = {
         "Authorization": f"Bearer {api_key}",

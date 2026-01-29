@@ -133,6 +133,7 @@ async def send_invite_email(
         subject_template,
         body_template,
         variables,
+        safe_html_vars={"expires_block"},
     )
 
     sender_selection = email_sender.select_sender(

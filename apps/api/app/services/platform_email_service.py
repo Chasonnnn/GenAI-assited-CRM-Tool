@@ -74,6 +74,7 @@ async def _send_resend_email(
     html: str,
     text: str | None,
     idempotency_key: str | None,
+    headers: dict[str, str] | None = None,
 ) -> JsonObject:
     api_key = settings.PLATFORM_RESEND_API_KEY
     resolved_from = (from_email or "").strip() or (settings.PLATFORM_EMAIL_FROM or "").strip()
@@ -96,6 +97,8 @@ async def _send_resend_email(
     }
     if text:
         payload["text"] = text
+    if headers:
+        payload["headers"] = headers
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -169,6 +172,8 @@ async def send_email_logged(
     idempotency_key: str | None = None,
 ) -> JsonObject:
     """Send a platform/system email with EmailLog tracking + idempotency."""
+    from app.services import email_service, unsubscribe_service
+
     if idempotency_key:
         existing = (
             db.query(EmailLog)
@@ -177,6 +182,27 @@ async def send_email_logged(
         )
         if existing:
             return _result_from_log(existing)
+
+    if email_service.is_email_suppressed(db, org_id, to_email):
+        email_log = EmailLog(
+            organization_id=org_id,
+            template_id=template_id,
+            surrogate_id=surrogate_id,
+            recipient_email=to_email,
+            subject=subject,
+            body=html,
+            status=EmailStatus.SKIPPED.value,
+            error="suppressed",
+            idempotency_key=idempotency_key,
+        )
+        db.add(email_log)
+        db.commit()
+        db.refresh(email_log)
+        return {
+            "success": False,
+            "error": "Email suppressed",
+            "email_log_id": email_log.id,
+        }
 
     email_log = EmailLog(
         organization_id=org_id,
@@ -209,6 +235,8 @@ async def send_email_logged(
     if not (resolved_text or "").strip() and html:
         resolved_text = _html_to_text(html)
 
+    headers = unsubscribe_service.build_list_unsubscribe_headers(org_id=org_id, email=to_email)
+
     try:
         result = await _send_resend_email(
             to_email=to_email,
@@ -217,6 +245,7 @@ async def send_email_logged(
             html=html,
             text=resolved_text,
             idempotency_key=idempotency_key,
+            headers=headers,
         )
     except Exception as exc:
         email_log.status = EmailStatus.FAILED.value

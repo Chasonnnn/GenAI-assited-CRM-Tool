@@ -46,6 +46,7 @@ async def send_email(
     subject: str,
     body: str,
     html: bool = False,
+    headers: dict[str, str] | None = None,
 ) -> JsonObject:
     """Send an email via Gmail API.
 
@@ -80,6 +81,10 @@ async def send_email(
         msg["To"] = to
         msg["From"] = sender_email
         msg["Subject"] = subject
+        if headers:
+            for key, value in headers.items():
+                if key and value:
+                    msg[key] = value
 
         # Encode message
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
@@ -147,8 +152,11 @@ async def send_email_logged(
     template_id: uuid.UUID | None = None,
     surrogate_id: uuid.UUID | None = None,
     idempotency_key: str | None = None,
+    headers: dict[str, str] | None = None,
 ) -> JsonObject:
     """Send a Gmail email with EmailLog tracking + idempotency."""
+    from app.services import email_service, unsubscribe_service
+
     if idempotency_key:
         existing = (
             db.query(EmailLog)
@@ -160,6 +168,27 @@ async def send_email_logged(
         )
         if existing:
             return _result_from_log(existing)
+
+    if email_service.is_email_suppressed(db, org_id, to):
+        email_log = EmailLog(
+            organization_id=org_id,
+            template_id=template_id,
+            surrogate_id=surrogate_id,
+            recipient_email=to,
+            subject=subject,
+            body=body,
+            status=EmailStatus.SKIPPED.value,
+            error="suppressed",
+            idempotency_key=idempotency_key,
+        )
+        db.add(email_log)
+        db.commit()
+        db.refresh(email_log)
+        return {
+            "success": False,
+            "error": "Email suppressed",
+            "email_log_id": email_log.id,
+        }
 
     email_log = EmailLog(
         organization_id=org_id,
@@ -189,6 +218,9 @@ async def send_email_logged(
         raise
     db.refresh(email_log)
 
+    if headers is None:
+        headers = unsubscribe_service.build_list_unsubscribe_headers(org_id=org_id, email=to)
+
     result = await send_email(
         db=db,
         user_id=user_id,
@@ -196,6 +228,7 @@ async def send_email_logged(
         subject=subject,
         body=body,
         html=html,
+        headers=headers,
     )
 
     if result.get("success"):

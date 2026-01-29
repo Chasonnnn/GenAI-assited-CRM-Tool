@@ -242,7 +242,7 @@ def _build_recipient_query(db: Session, org_id: UUID, recipient_type: str, filte
         )
 
         if criteria.stage_ids:
-            query = query.filter(Surrogate.stage_id.in_([UUID(s) for s in criteria.stage_ids]))
+            query = query.filter(Surrogate.stage_id.in_(criteria.stage_ids))
 
         if criteria.stage_slugs:
             # IMPORTANT: Scope stages to org's pipelines to prevent cross-tenant leakage
@@ -798,21 +798,13 @@ def execute_campaign_run(
 
             seen_emails[email_norm] = None
 
-            # Build email from template with variable substitution
-            subject = template.subject
-            body = template.body
+            # Build email from template with shared variable builder
+            if campaign.recipient_type == "case":
+                variables = email_service.build_surrogate_template_variables(db, recipient)
+            else:
+                variables = email_service.build_intended_parent_template_variables(db, recipient)
 
-            # Basic variable replacement
-            variables = {
-                "first_name": name.split()[0] if name else "",
-                "full_name": name or "",
-                "email": email,
-            }
-
-            for key, value in variables.items():
-                placeholder = "{{" + key + "}}"
-                subject = subject.replace(placeholder, str(value) if value else "")
-                body = body.replace(placeholder, str(value) if value else "")
+            subject, body = email_service.render_template(template.subject, template.body, variables)
 
             # Create recipient record
             cr = existing
@@ -830,7 +822,10 @@ def execute_campaign_run(
                 )
                 db.add(cr)
             elif cr.status in (
+                CampaignRecipientStatus.PENDING.value,
                 CampaignRecipientStatus.SENT.value,
+                CampaignRecipientStatus.DELIVERED.value,
+                CampaignRecipientStatus.FAILED.value,
                 CampaignRecipientStatus.SKIPPED.value,
             ):
                 continue

@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 class FilterCriteria(BaseModel):
     """Filter criteria for campaign recipients."""
 
-    stage_ids: list[str] | None = None
+    stage_ids: list[UUID] | None = None
     stage_slugs: list[str] | None = None
     states: list[str] | None = None
     created_after: datetime | None = None

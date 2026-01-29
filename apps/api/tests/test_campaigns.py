@@ -527,6 +527,79 @@ def test_campaign_run_skips_existing_recipient(
     assert result["total_count"] == 1
 
 
+@pytest.mark.parametrize("status", ["pending", "failed"])
+def test_campaign_run_skips_existing_recipient_on_retry(
+    db, test_org, test_user, test_template, default_stage, monkeypatch, status
+):
+    """Retry should not requeue pending/failed recipients without explicit retry action."""
+    from app.db.models import Surrogate, CampaignRun, CampaignRecipient
+    from app.schemas.campaign import CampaignCreate
+    from app.services import campaign_service, email_service
+
+    normalized_email = normalize_email(f"{status}-retry@example.com")
+    case = Surrogate(
+        id=uuid4(),
+        organization_id=test_org.id,
+        stage_id=default_stage.id,
+        full_name="Case Retry",
+        status_label=default_stage.label,
+        email=normalized_email,
+        email_hash=hash_email(normalized_email),
+        source="manual",
+        surrogate_number=f"S{uuid4().int % 90000 + 10000:05d}",
+        owner_type="user",
+        owner_id=test_user.id,
+    )
+    db.add(case)
+    db.flush()
+
+    create_data = CampaignCreate(
+        name="Retry Campaign",
+        email_template_id=test_template.id,
+        recipient_type="case",
+        filter_criteria={"stage_ids": [str(default_stage.id)]},
+    )
+    campaign = campaign_service.create_campaign(db, test_org.id, test_user.id, create_data)
+
+    run = CampaignRun(
+        id=uuid4(),
+        organization_id=test_org.id,
+        campaign_id=campaign.id,
+        status="pending",
+        total_count=0,
+        sent_count=0,
+        failed_count=0,
+        skipped_count=0,
+    )
+    db.add(run)
+    db.flush()
+
+    existing = CampaignRecipient(
+        run_id=run.id,
+        entity_type="case",
+        entity_id=case.id,
+        recipient_email=case.email,
+        recipient_name=case.full_name,
+        status=status,
+    )
+    db.add(existing)
+    db.flush()
+
+    def should_not_send(*args, **kwargs):
+        raise AssertionError("send_email should not be called for existing recipients")
+
+    monkeypatch.setattr(email_service, "send_email", should_not_send)
+
+    result = campaign_service.execute_campaign_run(
+        db=db,
+        org_id=test_org.id,
+        campaign_id=campaign.id,
+        run_id=run.id,
+    )
+
+    assert result["total_count"] == 1
+
+
 def test_campaign_response_uses_display_name(db, test_org, test_user, test_template):
     """Campaign response should use User.display_name (no User.full_name field)."""
     from app.db.models import Campaign
@@ -548,6 +621,19 @@ def test_campaign_response_uses_display_name(db, test_org, test_user, test_templ
 
     response = _campaign_to_response(db, campaign)
     assert response.created_by_name == test_user.display_name
+
+
+@pytest.mark.asyncio
+async def test_preview_filters_invalid_stage_ids_returns_422(authed_client):
+    response = await authed_client.post(
+        "/campaigns/preview-filters",
+        json={
+            "recipient_type": "case",
+            "filter_criteria": {"stage_ids": ["not-a-uuid"]},
+        },
+    )
+
+    assert response.status_code == 422
 
 
 def test_execute_campaign_run_streams_recipients(

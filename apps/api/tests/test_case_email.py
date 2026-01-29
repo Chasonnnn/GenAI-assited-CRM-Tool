@@ -92,3 +92,44 @@ async def test_send_email_no_provider_returns_error(
     data = response.json()
     assert data["success"] is False
     assert "no email provider" in data["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_send_email_suppressed_returns_error(authed_client: AsyncClient, db, test_org, test_user):
+    """Suppressed recipients should be skipped before provider selection."""
+    from app.services import surrogate_service, email_service, campaign_service
+    from app.schemas.surrogate import SurrogateCreate
+    from app.db.enums import SurrogateSource
+
+    case_data = SurrogateCreate(
+        full_name="Suppressed Case",
+        email="suppressed@example.com",
+        source=SurrogateSource.MANUAL,
+    )
+    case = surrogate_service.create_surrogate(db, test_org.id, test_user.id, case_data)
+
+    template = email_service.create_template(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        name="Suppressed Template",
+        subject="Hello {{full_name}}",
+        body="<p>Welcome {{full_name}}!</p>",
+    )
+
+    campaign_service.add_to_suppression(
+        db,
+        org_id=test_org.id,
+        email="suppressed@example.com",
+        reason="opt_out",
+    )
+
+    response = await authed_client.post(
+        f"/surrogates/{case.id}/send-email",
+        json={"template_id": str(template.id), "provider": "auto"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is False
+    assert "suppressed" in (data.get("error") or "").lower()
