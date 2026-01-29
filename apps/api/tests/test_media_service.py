@@ -1,3 +1,4 @@
+from app.core.config import settings
 from app.services import media_service
 
 
@@ -12,7 +13,11 @@ def test_get_signed_media_url_non_s3():
 
 def test_get_signed_media_url_local():
     url = "/static/logos/org.png"
-    assert media_service.get_signed_media_url(url) == url
+    expected = (
+        f"{settings.API_BASE_URL.rstrip('/')}"
+        "/settings/organization/signature/logo/local/logos/org.png"
+    )
+    assert media_service.get_signed_media_url(url) == expected
 
 
 def test_get_signed_media_url_s3_virtual(monkeypatch):

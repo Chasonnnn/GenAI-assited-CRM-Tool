@@ -22,11 +22,11 @@
    - Evidence: `apps/api/app/services/webhooks/resend.py:22-80`
    - Suggested fix: Enforce `svix-timestamp` within a short tolerance window (e.g., 5 minutes).
 
-4) Local org logo storage returns `/static/*` without a static file server
+4) Local org logo storage returns `/static/*` without a static file server — FIXED
    - Risk: Broken logo URLs in local storage mode (default), and potential production misconfig if S3 is not used.
    - Consequence: Org logo uploads appear successful but will not render; UX regression and support churn.
    - Evidence: `apps/api/app/routers/settings.py:497-505` (returns `/static/...`); no StaticFiles mount in API startup (`apps/api/app/main.py` has no `StaticFiles` usage).
-   - Suggested fix: Mount `StaticFiles` for the logo directory or serve via a dedicated API route (similar to `/attachments/local/...`).
+   - Fix applied: Added a dedicated local-logo route with safe path validation and updated local logo URL generation to use it; legacy `/static/` URLs are now translated to the new route.
 
 5) Ops layout makes sequential API calls (waterfall)
    - Risk: Slower initial ops load due to unnecessary serialization.

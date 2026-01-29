@@ -1,6 +1,7 @@
 """Settings endpoints for organization and user preferences."""
 
 import io
+import mimetypes
 import os
 import re
 import uuid as uuid_lib
@@ -19,6 +20,7 @@ from app.core.deps import (
     require_roles,
 )
 from app.core.policies import POLICIES
+from app.db.models import Organization
 from app.db.enums import Role
 from app.schemas.auth import UserSession
 from app.services import (
@@ -448,6 +450,7 @@ MAX_LOGO_UPLOAD_BYTES = 1 * 1024 * 1024  # 1MB
 MAX_LOGO_WIDTH = 200
 MAX_LOGO_HEIGHT = 80
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}
+LOCAL_LOGO_URL_PREFIX = "/settings/organization/signature/logo/local/"
 
 
 class LogoUploadResponse(BaseModel):
@@ -475,6 +478,18 @@ def _get_local_logo_path() -> str:
     return path
 
 
+def _build_local_logo_url(storage_key: str) -> str:
+    return f"{LOCAL_LOGO_URL_PREFIX}{storage_key}"
+
+
+def _extract_local_logo_storage_key(logo_url: str) -> str | None:
+    if logo_url.startswith(LOCAL_LOGO_URL_PREFIX):
+        return logo_url.replace(LOCAL_LOGO_URL_PREFIX, "", 1)
+    if logo_url.startswith("/static/"):
+        return logo_url.replace("/static/", "", 1)
+    return None
+
+
 def _upload_logo_to_storage(org_id: uuid_lib.UUID, file_bytes: bytes, extension: str) -> str:
     """
     Upload logo to storage and return public URL.
@@ -495,13 +510,12 @@ def _upload_logo_to_storage(org_id: uuid_lib.UUID, file_bytes: bytes, extension:
         )
         return storage_url_service.build_public_url(bucket, filename)
     else:
-        # Local storage - serve from public directory or temp
+        # Local storage - serve from API route
         local_path = os.path.join(_get_local_logo_path(), filename)
         os.makedirs(os.path.dirname(local_path), exist_ok=True)
         with open(local_path, "wb") as f:
             f.write(file_bytes)
-        # Return relative path (assumes static file serving is configured)
-        return f"/static/{filename}"
+        return _build_local_logo_url(filename)
 
 
 def _delete_logo_from_storage(logo_url: str) -> None:
@@ -521,13 +535,53 @@ def _delete_logo_from_storage(logo_url: str) -> None:
                 return
             s3 = storage_client.get_s3_client()
             s3.delete_object(Bucket=bucket, Key=key)
-        elif logo_url.startswith("/static/"):
-            # Local file
-            local_path = os.path.join(_get_local_logo_path(), logo_url.replace("/static/", ""))
-            if os.path.exists(local_path):
-                os.remove(local_path)
+        else:
+            storage_key = _extract_local_logo_storage_key(logo_url)
+            if storage_key:
+                local_path = os.path.join(_get_local_logo_path(), storage_key)
+                if os.path.exists(local_path):
+                    os.remove(local_path)
     except Exception:
         pass  # Best effort delete
+
+
+@router.get("/organization/signature/logo/local/{storage_key:path}")
+async def get_org_logo_local(
+    storage_key: str,
+    db: Session = Depends(get_db),
+):
+    """Serve org signature logo from local storage (dev only)."""
+    from fastapi.responses import FileResponse
+
+    if "\\" in storage_key:
+        raise HTTPException(status_code=404, detail="Logo not found")
+
+    normalized = os.path.normpath(storage_key)
+    if not normalized.startswith("logos/"):
+        raise HTTPException(status_code=404, detail="Logo not found")
+    if normalized.startswith("..") or normalized.startswith("/"):
+        raise HTTPException(status_code=404, detail="Logo not found")
+
+    expected_url = _build_local_logo_url(normalized)
+    legacy_url = f"/static/{normalized}"
+    org = (
+        db.query(Organization)
+        .filter(Organization.signature_logo_url.in_([expected_url, legacy_url]))
+        .first()
+    )
+    if not org:
+        raise HTTPException(status_code=404, detail="Logo not found")
+
+    base_dir = _get_local_logo_path()
+    file_path = os.path.abspath(os.path.join(base_dir, normalized))
+    base_abs = os.path.abspath(base_dir)
+    if os.path.commonpath([file_path, base_abs]) != base_abs:
+        raise HTTPException(status_code=404, detail="Logo not found")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Logo not found")
+
+    media_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
+    return FileResponse(file_path, media_type=media_type)
 
 
 @router.post(
