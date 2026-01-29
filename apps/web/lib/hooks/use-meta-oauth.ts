@@ -17,7 +17,7 @@ import {
     listMetaConnections,
     type ConnectAssetsRequest,
 } from '@/lib/api/meta-oauth'
-import { adminMetaAdAccountKeys, adminMetaKeys } from './use-admin-meta'
+import { adminMetaAdAccountKeys } from './use-admin-meta'
 
 // Query keys
 export const metaOAuthKeys = {
@@ -78,7 +78,6 @@ export function useDisconnectMetaConnection() {
             // Invalidate connections and assets lists
             queryClient.invalidateQueries({ queryKey: metaOAuthKeys.connections() })
             queryClient.invalidateQueries({ queryKey: adminMetaAdAccountKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: adminMetaKeys.lists() })
         },
     })
 }
@@ -128,7 +127,6 @@ export function useConnectMetaAssets(connectionId: string) {
                 queryKey: metaOAuthKeys.availableAssets(connectionId),
             })
             queryClient.invalidateQueries({ queryKey: adminMetaAdAccountKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: adminMetaKeys.lists() })
         },
     })
 }

@@ -61,6 +61,7 @@ const chartColors = [
     "#06b6d4",
     "#ef4444",
 ]
+const chartFallbackColor = "#3b82f6"
 
 // AI Usage Stats sub-component
 function AIUsageStats() {
@@ -188,7 +189,7 @@ export default function ReportsPage() {
     const statusChartData = (byStatus || []).map((item, i) => ({
         status: item.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
         count: item.count,
-        fill: chartColors[i % chartColors.length],
+        fill: chartColors[i % chartColors.length] ?? chartFallbackColor,
     }))
 
     const assigneeChartData = (byAssignee || [])
@@ -197,7 +198,7 @@ export default function ReportsPage() {
         .map((item, i) => ({
             member: item.user_email?.split('@')[0] || 'Unassigned',
             count: item.count,
-            fill: chartColors[i % chartColors.length],
+            fill: chartColors[i % chartColors.length] ?? chartFallbackColor,
         }))
 
     const trendChartData = (trend || []).map(item => ({
@@ -583,7 +584,7 @@ export default function ReportsPage() {
                     topPerformer={topPerformer}
                     totalSurrogatesInPeriod={totalSurrogatesInPeriod}
                     computeTrendPercentage={computeTrendPercentage}
-                    metaPerf={metaPerf}
+                    metaPerf={metaPerf ?? null}
                     byStatusLoading={byStatusLoading}
                     byStatusError={byStatusError}
                     trendLoading={trendLoading}

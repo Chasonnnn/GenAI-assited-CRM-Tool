@@ -5,7 +5,7 @@ resource "google_monitoring_notification_channel" "ops_webhook" {
   type         = "webhook_tokenauth"
 
   labels = {
-    url = local.monitoring_webhook_url
+    url   = local.monitoring_webhook_url
     token = var.monitoring_webhook_token
   }
 }
