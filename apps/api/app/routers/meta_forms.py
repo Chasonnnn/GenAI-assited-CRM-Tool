@@ -184,6 +184,19 @@ def update_meta_form_mapping(
     if not form:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
 
+    # Get original suggestions for learning
+    try:
+        preview = meta_form_mapping_service.build_mapping_preview(db, form)
+        original_suggestions = [
+            {
+                "csv_column": s.csv_column,
+                "suggested_field": s.suggested_field,
+            }
+            for s in preview["column_suggestions"]
+        ]
+    except Exception:
+        original_suggestions = None
+
     try:
         meta_form_mapping_service.save_mapping(
             db,
@@ -191,6 +204,7 @@ def update_meta_form_mapping(
             column_mappings=[m.model_dump() for m in data.column_mappings],
             unknown_column_behavior=data.unknown_column_behavior,
             user_id=session.user_id,
+            original_suggestions=original_suggestions,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
