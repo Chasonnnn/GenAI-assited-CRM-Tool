@@ -10,9 +10,9 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test": "NODE_OPTIONS=--localstorage-file=/tmp/vitest-localstorage vitest run",
+    "test:watch": "NODE_OPTIONS=--localstorage-file=/tmp/vitest-localstorage vitest",
+    "test:integration": "NODE_OPTIONS=--localstorage-file=/tmp/vitest-localstorage vitest run --config vitest.integration.config.ts",
     "test:all": "pnpm run test && pnpm run test:integration",
     "check": "pnpm run typecheck && pnpm run lint && pnpm run test",
     "analyze": "next experimental-analyze"

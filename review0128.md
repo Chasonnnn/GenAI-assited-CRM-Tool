@@ -34,11 +34,11 @@
    - Evidence: `apps/web/app/ops/layout.tsx:54-60`
    - Fix applied: Start stats fetch immediately and await it alongside the auth check to avoid a waterfall.
 
-6) Large client bundles loaded eagerly in reports + ops agency detail
+6) Large client bundles loaded eagerly in reports + ops agency detail — FIXED
    - Risk: Increased JS bundle size and slower TTI; violates bundle-size best practices for client pages.
    - Consequence: Slower page loads and degraded UX on lower‑end devices; higher bandwidth usage.
    - Evidence: `apps/web/app/(app)/reports/page.tsx:7-22` (recharts + dashboards), `apps/web/app/ops/agencies/[orgId]/page.tsx:96` (RichTextEditor)
-   - Suggested fix: Use `next/dynamic` for charts/editor or load only when the relevant tab/section is active.
+   - Fix applied: Lazy‑loaded report visualization blocks and ops rich text editor with `next/dynamic` and lightweight skeleton fallbacks.
 
 7) Org settings load errors are silent and can lead to accidental overwrites — FIXED
    - Risk: If the initial fetch fails, fields remain empty and a save can overwrite real data.

@@ -1,6 +1,19 @@
 import type { PropsWithChildren } from "react"
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+
+const dynamicState = vi.hoisted(() => ({
+    calls: [] as Array<{ options?: { ssr?: boolean } }>,
+}))
+
+vi.mock('next/dynamic', () => ({
+    __esModule: true,
+    default: (_loader: unknown, options: { ssr?: boolean; loading?: () => unknown } = {}) => {
+        dynamicState.calls.push({ options })
+        return () => (options.loading ? options.loading() : null)
+    },
+}))
+
 import ReportsPage from '../app/(app)/reports/page'
 
 vi.mock('@/lib/auth-context', () => ({
@@ -78,6 +91,11 @@ vi.mock('@/lib/hooks/use-analytics', () => ({
 }))
 
 describe('ReportsPage', () => {
+    it('lazy loads report visualizations', () => {
+        expect(dynamicState.calls.length).toBeGreaterThan(0)
+        expect(dynamicState.calls.some((call) => call.options?.ssr === false)).toBe(true)
+    })
+
     it('renders report summary cards', () => {
         render(<ReportsPage />)
         expect(screen.getByText('Reports')).toBeInTheDocument()

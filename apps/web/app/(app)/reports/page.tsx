@@ -1,25 +1,15 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import dynamic from "next/dynamic"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { TrendingUpIcon, TrendingDownIcon, SparklesIcon, UsersIcon, CheckCircle2Icon, Loader2Icon, AlertCircleIcon, FacebookIcon, DollarSignIcon } from "lucide-react"
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Line, LineChart, Pie, PieChart } from "recharts"
-import {
-    ChartContainer,
-    ChartTooltip,
-    ChartTooltipContent,
-    ChartLegend,
-    ChartLegendContent,
-} from "@/components/ui/chart"
+import { TrendingUpIcon, SparklesIcon, UsersIcon, CheckCircle2Icon, Loader2Icon, AlertCircleIcon, FacebookIcon, DollarSignIcon } from "lucide-react"
 import { useAnalyticsSummary, useSurrogatesByStatus, useSurrogatesByAssignee, useSurrogatesTrend, useMetaPerformance, useFunnelCompare, useSurrogatesByStateCompare, useCampaigns, useSpendTotals, usePerformanceByUser } from "@/lib/hooks/use-analytics"
-import { FunnelChart } from "@/components/charts/funnel-chart"
-import { USMapChart } from "@/components/charts/us-map-chart"
 import { TeamPerformanceTable } from "@/components/reports/TeamPerformanceTable"
-import { TeamPerformanceChart } from "@/components/reports/TeamPerformanceChart"
-import { MetaSpendDashboard } from "@/components/reports/MetaSpendDashboard"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/lib/auth-context"
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { useAIUsageSummary } from "@/lib/hooks/use-ai"
@@ -27,18 +17,40 @@ import { toast } from "sonner"
 import { formatLocalDate } from "@/lib/utils/date"
 import { getCsrfHeaders } from "@/lib/csrf"
 
-// Chart configs
-const surrogatesOverviewConfig = {
-    count: { label: "Surrogates" },
-}
+const ReportsChartsGrid = dynamic(
+    () => import("./components/ReportsChartsGrid").then((mod) => mod.ReportsChartsGrid),
+    {
+        ssr: false,
+        loading: () => (
+            <div className="grid gap-6 md:grid-cols-2">
+                <Skeleton className="h-[380px] w-full rounded-lg" />
+                <Skeleton className="h-[380px] w-full rounded-lg" />
+                <Skeleton className="h-[380px] w-full rounded-lg" />
+                <Skeleton className="h-[380px] w-full rounded-lg" />
+            </div>
+        ),
+    }
+)
 
-const monthlyTrendsConfig = {
-    count: { label: "Surrogates", color: "#3b82f6" },
-}
+const FunnelChart = dynamic(
+    () => import("@/components/charts/funnel-chart").then((mod) => mod.FunnelChart),
+    { ssr: false, loading: () => <Skeleton className="h-[320px] w-full rounded-lg" /> }
+)
 
-const surrogatesByAssigneeConfig = {
-    count: { label: "Surrogates" },
-}
+const USMapChart = dynamic(
+    () => import("@/components/charts/us-map-chart").then((mod) => mod.USMapChart),
+    { ssr: false, loading: () => <Skeleton className="h-[320px] w-full rounded-lg" /> }
+)
+
+const TeamPerformanceChart = dynamic(
+    () => import("@/components/reports/TeamPerformanceChart").then((mod) => mod.TeamPerformanceChart),
+    { ssr: false, loading: () => <Skeleton className="h-[320px] w-full rounded-lg" /> }
+)
+
+const MetaSpendDashboard = dynamic(
+    () => import("@/components/reports/MetaSpendDashboard").then((mod) => mod.MetaSpendDashboard),
+    { ssr: false, loading: () => <Skeleton className="h-[360px] w-full rounded-lg" /> }
+)
 
 // Color palette for charts
 const chartColors = [
@@ -562,216 +574,25 @@ export default function ReportsPage() {
                     </CardContent>
                 </Card>
 
-                {/* Charts Grid */}
-                <div className="grid gap-6 md:grid-cols-2">
-                    {/* Surrogates by Stage */}
-                    <Card className="animate-in fade-in-50 duration-500 delay-400">
-                        <CardHeader>
-                            <CardTitle>Surrogates by Stage</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {byStatusLoading ? (
-                                <div className="flex h-[300px] items-center justify-center">
-                                    <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
-                                </div>
-                            ) : byStatusError ? (
-                                <div className="flex h-[300px] items-center justify-center text-destructive">
-                                    <AlertCircleIcon className="mr-2 size-4" /> Unable to load data
-                                </div>
-                            ) : statusChartData.length > 0 ? (
-                                <ChartContainer config={surrogatesOverviewConfig} className="h-[300px] w-full">
-                                    <BarChart data={statusChartData}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                        <XAxis dataKey="status" tickLine={false} axisLine={false} fontSize={12} />
-                                        <YAxis tickLine={false} axisLine={false} />
-                                        <ChartTooltip content={<ChartTooltipContent />} />
-                                        <Bar dataKey="count" radius={[8, 8, 0, 0]} />
-                                    </BarChart>
-                                </ChartContainer>
-                            ) : (
-                                <div className="flex h-[300px] items-center justify-center text-muted-foreground">
-                                    <AlertCircleIcon className="mr-2 size-4" /> No data available
-                                </div>
-                            )}
-                        </CardContent>
-                        <CardFooter className="flex-col items-start gap-2">
-                            <div className="flex gap-2 leading-none font-medium">
-                                {aiEnabled && <SparklesIcon className="size-4 text-primary" />}
-                                {byStatusError ? 'Unable to load status data' : topStatus ? `${topStatus.status}: ${topStatus.count} surrogates` : 'No data yet'}
-                            </div>
-                            <div className="text-muted-foreground leading-none">
-                                {byStatusError ? 'Please try again later' : 'Current distribution by stage'}
-                            </div>
-                        </CardFooter>
-                    </Card>
-
-                    {/* Surrogates Trend */}
-                    <Card className="animate-in fade-in-50 duration-500 delay-500">
-                        <CardHeader>
-                            <CardTitle>Surrogates Trend</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {trendLoading ? (
-                                <div className="flex h-[300px] items-center justify-center">
-                                    <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
-                                </div>
-                            ) : trendError ? (
-                                <div className="flex h-[300px] items-center justify-center text-destructive">
-                                    <AlertCircleIcon className="mr-2 size-4" /> Unable to load data
-                                </div>
-                            ) : trendChartData.length > 0 ? (
-                                <ChartContainer config={monthlyTrendsConfig} className="h-[300px] w-full">
-                                    <LineChart data={trendChartData}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                        <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={12} />
-                                        <YAxis tickLine={false} axisLine={false} />
-                                        <ChartTooltip content={<ChartTooltipContent />} />
-                                        <Line
-                                            type="monotone"
-                                            dataKey="count"
-                                            stroke="#3b82f6"
-                                            strokeWidth={2}
-                                            dot={{ r: 4 }}
-                                        />
-                                    </LineChart>
-                                </ChartContainer>
-                            ) : (
-                                <div className="flex h-[300px] items-center justify-center text-muted-foreground">
-                                    <AlertCircleIcon className="mr-2 size-4" /> No data available
-                                </div>
-                            )}
-                        </CardContent>
-                        <CardFooter className="flex-col items-start gap-2">
-                            <div className="flex gap-2 leading-none font-medium">
-                                {aiEnabled && <SparklesIcon className="size-4 text-primary" />}
-                                {trendError ? (
-                                    'Unable to load trend data'
-                                ) : computeTrendPercentage !== null ? (
-                                    <>
-                                        {computeTrendPercentage >= 0 ? 'Trending up' : 'Trending down'} by {Math.abs(computeTrendPercentage)}%
-                                        {computeTrendPercentage >= 0 ? <TrendingUpIcon className="size-4" /> : <TrendingDownIcon className="size-4" />}
-                                    </>
-                                ) : (
-                                    `${totalSurrogatesInPeriod} surrogates in period`
-                                )}
-                            </div>
-                            <div className="text-muted-foreground leading-none">
-                                {trendError ? 'Please try again later' : `${trendChartData.length} data points`}
-                            </div>
-                        </CardFooter>
-                    </Card>
-
-                    {/* Team Performance */}
-                    <Card className="animate-in fade-in-50 duration-500 delay-[600ms]">
-                        <CardHeader>
-                            <CardTitle>Team Performance</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {byAssigneeLoading ? (
-                                <div className="flex h-[300px] items-center justify-center">
-                                    <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
-                                </div>
-                            ) : byAssigneeError ? (
-                                <div className="flex h-[300px] items-center justify-center text-destructive">
-                                    <AlertCircleIcon className="mr-2 size-4" /> Unable to load data
-                                </div>
-                            ) : assigneeChartData.length > 0 ? (
-                                <ChartContainer config={surrogatesByAssigneeConfig} className="h-[300px] w-full">
-                                    <BarChart data={assigneeChartData} layout="vertical">
-                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                                        <XAxis type="number" tickLine={false} axisLine={false} />
-                                        <YAxis dataKey="member" type="category" tickLine={false} axisLine={false} width={100} fontSize={12} />
-                                        <ChartTooltip content={<ChartTooltipContent />} />
-                                        <Bar dataKey="count" radius={[0, 8, 8, 0]} />
-                                    </BarChart>
-                                </ChartContainer>
-                            ) : (
-                                <div className="flex h-[300px] items-center justify-center text-muted-foreground">
-                                    <AlertCircleIcon className="mr-2 size-4" /> No assigned surrogates
-                                </div>
-                            )}
-                        </CardContent>
-                        <CardFooter className="flex-col items-start gap-2">
-                            <div className="flex gap-2 leading-none font-medium">
-                                {aiEnabled && <SparklesIcon className="size-4 text-primary" />}
-                                {byAssigneeError ? 'Unable to load team data' : topPerformer ? `Top: ${topPerformer.member} (${topPerformer.count} surrogates)` : 'No assignments yet'}
-                                {!byAssigneeError && topPerformer && <TrendingUpIcon className="size-4" />}
-                            </div>
-                            <div className="text-muted-foreground leading-none">
-                                {byAssigneeError ? 'Please try again later' : `${assigneeChartData.length} team members`}
-                            </div>
-                        </CardFooter>
-                    </Card>
-
-                    {/* Meta Performance */}
-                    <Card className="animate-in fade-in-50 duration-500 delay-700">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <FacebookIcon className="size-5 text-blue-600" />
-                                Meta Lead Ads Performance
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {metaLoading ? (
-                                <div className="flex h-[300px] items-center justify-center">
-                                    <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
-                                </div>
-                            ) : metaError ? (
-                                <div className="flex h-[300px] items-center justify-center text-destructive">
-                                    <AlertCircleIcon className="mr-2 size-4" /> Unable to load data
-                                </div>
-                            ) : (
-                                <ChartContainer config={{
-                                    notQualified: { label: "Not Qualified", color: "#94a3b8" },
-                                    qualified: { label: "Qualified Only", color: "#3b82f6" },
-                                    converted: { label: "Converted", color: "#22c55e" },
-                                }} className="h-[300px] w-full">
-                                    <PieChart>
-                                        <ChartTooltip content={<ChartTooltipContent />} />
-                                        <Pie
-                                            data={[
-                                                {
-                                                    name: "Not Qualified",
-                                                    value: Math.max(0, (metaPerf?.leads_received ?? 0) - (metaPerf?.leads_qualified ?? 0)),
-                                                    fill: "#94a3b8"
-                                                },
-                                                {
-                                                    name: "Qualified Only",
-                                                    value: Math.max(0, (metaPerf?.leads_qualified ?? 0) - (metaPerf?.leads_converted ?? 0)),
-                                                    fill: "#3b82f6"
-                                                },
-                                                {
-                                                    name: "Converted",
-                                                    value: metaPerf?.leads_converted ?? 0,
-                                                    fill: "#22c55e"
-                                                },
-                                            ]}
-                                            dataKey="value"
-                                            nameKey="name"
-                                            cx="50%"
-                                            cy="50%"
-                                            innerRadius={60}
-                                            outerRadius={100}
-                                            label={({ name, value }) => value > 0 ? `${name}: ${value}` : ''}
-                                        />
-                                        <ChartLegend content={<ChartLegendContent />} />
-                                    </PieChart>
-                                </ChartContainer>
-                            )}
-                        </CardContent>
-                        <CardFooter className="flex-col items-start gap-2">
-                            <div className="flex gap-2 leading-none font-medium">
-                                {metaError ? 'Unable to load performance data' : metaPerf?.avg_time_to_convert_hours
-                                    ? `Avg ${Math.round(metaPerf.avg_time_to_convert_hours / 24)} days to convert`
-                                    : 'No conversion data yet'
-                                }
-                            </div>
-                            <div className="text-muted-foreground leading-none">
-                                {metaError ? 'Please try again later' : `${metaPerf?.leads_received ?? 0} leads received • ${metaPerf?.conversion_rate ?? 0}% conversion rate`}
-                            </div>
-                        </CardFooter>
-                    </Card>
-                </div>
+                <ReportsChartsGrid
+                    aiEnabled={aiEnabled}
+                    statusChartData={statusChartData}
+                    trendChartData={trendChartData}
+                    assigneeChartData={assigneeChartData}
+                    topStatus={topStatus}
+                    topPerformer={topPerformer}
+                    totalSurrogatesInPeriod={totalSurrogatesInPeriod}
+                    computeTrendPercentage={computeTrendPercentage}
+                    metaPerf={metaPerf}
+                    byStatusLoading={byStatusLoading}
+                    byStatusError={byStatusError}
+                    trendLoading={trendLoading}
+                    trendError={trendError}
+                    byAssigneeLoading={byAssigneeLoading}
+                    byAssigneeError={byAssigneeError}
+                    metaLoading={metaLoading}
+                    metaError={metaError}
+                />
 
                 {/* Funnel & Map Charts */}
                 <div className="mt-6 grid gap-6 lg:grid-cols-2">

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import Link from "@/components/app-link";
 import {
@@ -93,7 +94,17 @@ import {
 import { format, formatDistanceToNow } from 'date-fns';
 import DOMPurify from 'dompurify';
 import { toast } from 'sonner';
-import { RichTextEditor } from '@/components/rich-text-editor';
+const RichTextEditor = dynamic(
+    () => import('@/components/rich-text-editor').then((mod) => mod.RichTextEditor),
+    {
+        ssr: false,
+        loading: () => (
+            <div className="rounded-md border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+                Loading editor...
+            </div>
+        ),
+    }
+);
 
 const STATUS_BADGE_VARIANTS: Record<string, string> = {
     active: 'bg-green-500/10 text-green-600 border-green-500/20',
