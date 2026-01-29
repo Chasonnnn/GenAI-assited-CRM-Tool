@@ -142,6 +142,7 @@ def update_ai_settings(
 ) -> AISettings:
     """Update AI settings with version control."""
     ai_settings = get_or_create_ai_settings(db, organization_id, user_id)
+    gemini_only_models = {"gemini-3-flash-preview"}
 
     # Optimistic locking
     if expected_version is not None:
@@ -153,8 +154,14 @@ def update_ai_settings(
         ai_settings.provider = provider
     if api_key is not None:
         ai_settings.api_key_encrypted = encrypt_api_key(api_key)
-    if model is not None:
-        ai_settings.model = model
+    if ai_settings.provider in ("gemini", "vertex_wif", "vertex_api_key"):
+        if model is not None and model not in gemini_only_models:
+            raise ValueError("Only gemini-3-flash-preview is supported for this provider.")
+        if model is None and ai_settings.model not in gemini_only_models:
+            ai_settings.model = "gemini-3-flash-preview"
+    else:
+        if model is not None:
+            ai_settings.model = model
     if vertex_project_id is not None:
         ai_settings.vertex_project_id = vertex_project_id
     if vertex_location is not None:

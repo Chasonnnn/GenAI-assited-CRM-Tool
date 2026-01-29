@@ -60,7 +60,7 @@ async def test_ai_settings_supports_vertex_wif_config(authed_client: AsyncClient
 
     payload = {
         "provider": "vertex_wif",
-        "model": "gemini-3-pro-preview",
+        "model": "gemini-3-flash-preview",
         "is_enabled": False,
         "expected_version": current_version,
         "vertex_wif": {
@@ -107,6 +107,27 @@ async def test_ai_settings_supports_vertex_api_key_config(authed_client: AsyncCl
     assert data["provider"] == "vertex_api_key"
     assert data["vertex_api_key"]["project_id"] == payload["vertex_api_key"]["project_id"]
     assert data["vertex_api_key"]["location"] == payload["vertex_api_key"]["location"]
+
+
+@pytest.mark.asyncio
+async def test_ai_settings_rejects_non_flash_gemini_models(authed_client: AsyncClient):
+    settings_response = await authed_client.get("/ai/settings")
+    assert settings_response.status_code == 200
+    current_version = settings_response.json()["current_version"]
+
+    response = await authed_client.patch(
+        "/ai/settings",
+        json={
+            "provider": "gemini",
+            "model": "gemini-3-pro-preview",
+            "is_enabled": False,
+            "expected_version": current_version,
+        },
+    )
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"] == "Only gemini-3-flash-preview is supported for this provider."
+    )
 
 
 @pytest.mark.asyncio

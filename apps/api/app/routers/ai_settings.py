@@ -158,6 +158,8 @@ def update_settings(
             status_code=409,
             detail=f"Version conflict: expected {e.expected}, got {e.actual}",
         )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     changed_fields = [
         field

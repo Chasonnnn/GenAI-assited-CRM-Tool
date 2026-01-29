@@ -46,10 +46,6 @@ class ChatResponse:
                 "input": Decimal("0.10"),
                 "output": Decimal("0.40"),
             },  # Gemini 3.0 Flash
-            "gemini-3-pro-preview": {
-                "input": Decimal("0.0"),
-                "output": Decimal("0.0"),
-            },
         }
 
         model_pricing = pricing.get(self.model, {"input": Decimal("0"), "output": Decimal("0")})
