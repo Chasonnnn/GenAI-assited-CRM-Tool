@@ -18,7 +18,7 @@ from app.db.models import (
     Job,
     PipelineStage,
 )
-from app.db.enums import CampaignStatus, CampaignRecipientStatus, JobType, JobStatus
+from app.db.enums import CampaignStatus, CampaignRecipientStatus, JobType, JobStatus, EmailStatus
 from app.schemas.campaign import (
     CampaignCreate,
     CampaignUpdate,
@@ -153,7 +153,9 @@ def create_campaign(db: Session, org_id: UUID, user_id: UUID, data: CampaignCrea
         description=data.description,
         email_template_id=data.email_template_id,
         recipient_type=data.recipient_type,
-        filter_criteria=data.filter_criteria.model_dump(mode="json") if data.filter_criteria else {},
+        filter_criteria=data.filter_criteria.model_dump(mode="json")
+        if data.filter_criteria
+        else {},
         scheduled_at=data.scheduled_at,
         status=CampaignStatus.DRAFT.value,
         created_by_user_id=user_id,
@@ -486,6 +488,85 @@ def enqueue_campaign_send(
     return "Campaign scheduled", run.id, campaign.scheduled_at
 
 
+def enqueue_campaign_retry_failed(
+    db: Session,
+    org_id: UUID,
+    campaign_id: UUID,
+    run_id: UUID,
+    user_id: UUID,
+) -> tuple[str, UUID, UUID | None, int]:
+    """Enqueue a retry for failed recipients in a run."""
+    campaign = (
+        db.query(Campaign)
+        .filter(
+            Campaign.id == campaign_id,
+            Campaign.organization_id == org_id,
+        )
+        .first()
+    )
+    if not campaign:
+        raise ValueError("Campaign not found")
+    if campaign.status == CampaignStatus.CANCELLED.value:
+        raise ValueError("Cannot retry a cancelled campaign")
+
+    run = (
+        db.query(CampaignRun)
+        .filter(
+            CampaignRun.organization_id == org_id,
+            CampaignRun.id == run_id,
+            CampaignRun.campaign_id == campaign_id,
+        )
+        .first()
+    )
+    if not run:
+        raise ValueError("Run not found")
+
+    failed_count = (
+        db.query(CampaignRecipient)
+        .filter(
+            CampaignRecipient.run_id == run_id,
+            CampaignRecipient.status == CampaignRecipientStatus.FAILED.value,
+        )
+        .count()
+    )
+    if failed_count == 0:
+        raise ValueError("No failed recipients to retry")
+
+    existing = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == org_id,
+            Job.job_type == JobType.CAMPAIGN_SEND.value,
+            Job.status.in_([JobStatus.PENDING.value, JobStatus.RUNNING.value]),
+            Job.payload["run_id"].astext == str(run_id),
+            Job.payload["retry_failed_only"].astext == "true",
+        )
+        .first()
+    )
+    if existing:
+        return "Retry already queued", run_id, existing.id, failed_count
+
+    job = Job(
+        organization_id=org_id,
+        job_type=JobType.CAMPAIGN_SEND.value,
+        status=JobStatus.PENDING.value,
+        payload={
+            "campaign_id": str(campaign_id),
+            "run_id": str(run_id),
+            "user_id": str(user_id),
+            "retry_failed_only": True,
+        },
+        idempotency_key=None,
+    )
+    db.add(job)
+    db.flush()
+
+    run.status = "running"
+    campaign.status = CampaignStatus.SENDING.value
+
+    return "Retry queued", run_id, job.id, failed_count
+
+
 def cancel_campaign(db: Session, org_id: UUID, campaign_id: UUID) -> bool:
     """Cancel a scheduled campaign."""
     campaign = (
@@ -804,7 +885,9 @@ def execute_campaign_run(
             else:
                 variables = email_service.build_intended_parent_template_variables(db, recipient)
 
-            subject, body = email_service.render_template(template.subject, template.body, variables)
+            subject, body = email_service.render_template(
+                template.subject, template.body, variables
+            )
 
             # Create recipient record
             cr = existing
@@ -911,4 +994,221 @@ def execute_campaign_run(
         "failed_count": run.failed_count,
         "skipped_count": run.skipped_count,
         "total_count": run.total_count,
+    }
+
+
+def retry_failed_campaign_run(
+    db: Session,
+    org_id: UUID,
+    campaign_id: UUID,
+    run_id: UUID,
+) -> dict:
+    """Retry failed recipients for an existing campaign run."""
+    from app.services import email_service
+
+    campaign = (
+        db.query(Campaign)
+        .filter(
+            Campaign.id == campaign_id,
+            Campaign.organization_id == org_id,
+        )
+        .first()
+    )
+    if not campaign:
+        raise Exception(f"Campaign {campaign_id} not found")
+
+    run = (
+        db.query(CampaignRun)
+        .filter(
+            CampaignRun.id == run_id,
+            CampaignRun.campaign_id == campaign_id,
+        )
+        .first()
+    )
+    if not run:
+        raise Exception(f"Campaign run {run_id} not found")
+
+    template = (
+        db.query(EmailTemplate).filter(EmailTemplate.id == campaign.email_template_id).first()
+    )
+    if not template:
+        raise Exception(f"Email template {campaign.email_template_id} not found")
+
+    failed_recipients = (
+        db.query(CampaignRecipient)
+        .filter(
+            CampaignRecipient.run_id == run_id,
+            CampaignRecipient.status == CampaignRecipientStatus.FAILED.value,
+        )
+        .order_by(func.lower(CampaignRecipient.recipient_email), CampaignRecipient.id)
+        .all()
+    )
+    if not failed_recipients:
+        return {
+            "sent_count": run.sent_count,
+            "failed_count": run.failed_count,
+            "skipped_count": run.skipped_count,
+            "total_count": run.total_count,
+            "retried_count": 0,
+        }
+
+    campaign.status = CampaignStatus.SENDING.value
+    run.status = "running"
+    db.commit()
+
+    suppressed_emails = _load_suppressed_emails(db, org_id)
+    seen_emails: dict[str, str | None] = {}
+    retried_count = 0
+    skipped_count = 0
+
+    for recipient in failed_recipients:
+        if campaign.recipient_type == "case":
+            entity = (
+                db.query(Surrogate)
+                .filter(
+                    Surrogate.id == recipient.entity_id,
+                    Surrogate.organization_id == org_id,
+                    Surrogate.is_archived.is_(False),
+                )
+                .first()
+            )
+        else:
+            entity = (
+                db.query(IntendedParent)
+                .filter(
+                    IntendedParent.id == recipient.entity_id,
+                    IntendedParent.organization_id == org_id,
+                    IntendedParent.is_archived.is_(False),
+                )
+                .first()
+            )
+
+        if not entity or not getattr(entity, "email", None):
+            recipient.status = CampaignRecipientStatus.SKIPPED.value
+            recipient.skip_reason = "missing_recipient"
+            recipient.error = None
+            recipient.external_message_id = None
+            skipped_count += 1
+            continue
+
+        email = entity.email
+        email_norm = email.strip().lower() if email else ""
+        if not email_norm:
+            recipient.status = CampaignRecipientStatus.SKIPPED.value
+            recipient.skip_reason = "missing_recipient"
+            recipient.error = None
+            recipient.external_message_id = None
+            skipped_count += 1
+            continue
+
+        if email_norm in seen_emails:
+            recipient.status = CampaignRecipientStatus.SKIPPED.value
+            recipient.skip_reason = seen_emails[email_norm] or "duplicate_email"
+            recipient.error = None
+            recipient.external_message_id = None
+            skipped_count += 1
+            continue
+
+        if email_norm in suppressed_emails:
+            seen_emails[email_norm] = "suppressed"
+            recipient.status = CampaignRecipientStatus.SKIPPED.value
+            recipient.skip_reason = "suppressed"
+            recipient.error = None
+            recipient.external_message_id = None
+            skipped_count += 1
+            continue
+
+        seen_emails[email_norm] = None
+
+        recipient.recipient_email = email
+        recipient.recipient_name = getattr(entity, "full_name", None) or ""
+
+        if campaign.recipient_type == "case":
+            variables = email_service.build_surrogate_template_variables(db, entity)
+        else:
+            variables = email_service.build_intended_parent_template_variables(db, entity)
+
+        subject, body = email_service.render_template(template.subject, template.body, variables)
+
+        if run.email_provider == "resend":
+            tracked_body = body
+        else:
+            from app.services import tracking_service
+
+            if not recipient.tracking_token:
+                recipient.tracking_token = tracking_service.generate_tracking_token()
+            tracked_body = tracking_service.prepare_email_for_tracking(
+                body, recipient.tracking_token
+            )
+
+        try:
+            email_log, _job = email_service.send_email(
+                db=db,
+                org_id=org_id,
+                template_id=template.id,
+                recipient_email=email,
+                subject=subject,
+                body=tracked_body,
+                commit=False,
+            )
+        except Exception as exc:
+            recipient.status = CampaignRecipientStatus.FAILED.value
+            recipient.error = str(exc)[:500]
+            recipient.skip_reason = None
+            recipient.external_message_id = None
+            continue
+
+        if email_log.status == EmailStatus.SKIPPED.value:
+            recipient.status = CampaignRecipientStatus.SKIPPED.value
+            recipient.skip_reason = "suppressed"
+            recipient.error = None
+            recipient.external_message_id = None
+            skipped_count += 1
+            continue
+
+        recipient.status = CampaignRecipientStatus.PENDING.value
+        recipient.error = None
+        recipient.skip_reason = None
+        recipient.external_message_id = str(email_log.id)
+        retried_count += 1
+
+    db.commit()
+
+    status_rows = (
+        db.query(CampaignRecipient.status, func.count(CampaignRecipient.id))
+        .filter(CampaignRecipient.run_id == run_id)
+        .group_by(CampaignRecipient.status)
+        .all()
+    )
+    status_counts = {status: count for status, count in status_rows}
+
+    pending_count = status_counts.get(CampaignRecipientStatus.PENDING.value, 0)
+    run.sent_count = status_counts.get(CampaignRecipientStatus.SENT.value, 0)
+    run.failed_count = status_counts.get(CampaignRecipientStatus.FAILED.value, 0)
+    run.skipped_count = status_counts.get(CampaignRecipientStatus.SKIPPED.value, 0)
+    run.completed_at = datetime.now(timezone.utc) if pending_count == 0 else None
+    run.status = (
+        "completed"
+        if pending_count == 0 and run.failed_count == 0
+        else ("failed" if pending_count == 0 else "running")
+    )
+
+    campaign.sent_count = run.sent_count
+    campaign.failed_count = run.failed_count
+    campaign.skipped_count = run.skipped_count
+    campaign.total_recipients = run.total_count
+    campaign.status = (
+        CampaignStatus.COMPLETED.value
+        if pending_count == 0 and run.failed_count == 0
+        else (CampaignStatus.FAILED.value if pending_count == 0 else CampaignStatus.SENDING.value)
+    )
+
+    db.commit()
+
+    return {
+        "sent_count": run.sent_count,
+        "failed_count": run.failed_count,
+        "skipped_count": run.skipped_count,
+        "total_count": run.total_count,
+        "retried_count": retried_count,
     }

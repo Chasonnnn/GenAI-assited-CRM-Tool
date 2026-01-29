@@ -24,6 +24,7 @@ from app.schemas.surrogate import SurrogateUpdate
 from app.services.attachment_service import (
     calculate_checksum,
     generate_signed_url,
+    register_storage_cleanup_on_rollback,
     store_file,
     strip_exif_data,
 )
@@ -316,6 +317,7 @@ def add_submission_file(
     )
 
     store_file(storage_key, processed_file)
+    register_storage_cleanup_on_rollback(db, storage_key)
 
     record = FormSubmissionFile(
         organization_id=submission.organization_id,
@@ -744,6 +746,7 @@ def _store_submission_file(
     )
 
     store_file(storage_key, processed_file)
+    register_storage_cleanup_on_rollback(db, storage_key)
 
     record = FormSubmissionFile(
         organization_id=submission.organization_id,

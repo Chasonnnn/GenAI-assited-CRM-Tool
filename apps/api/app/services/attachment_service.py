@@ -10,6 +10,7 @@ from typing import BinaryIO
 from botocore.client import BaseClient
 from botocore.exceptions import ClientError
 from sqlalchemy.orm import Session
+from sqlalchemy import event
 
 from app.core.config import settings
 from app.db.enums import AuditEventType, JobType
@@ -199,6 +200,37 @@ def delete_file(storage_key: str) -> None:
             os.remove(path)
 
 
+def _cleanup_storage_keys(session: Session, delete_files: bool) -> None:
+    keys = session.info.pop("storage_cleanup_keys", set())
+    session.info.pop("storage_cleanup_listener", None)
+    if not delete_files:
+        return
+    for key in keys:
+        try:
+            delete_file(key)
+        except Exception:
+            pass
+
+
+def _after_commit_cleanup(session: Session) -> None:
+    _cleanup_storage_keys(session, delete_files=False)
+
+
+def _after_rollback_cleanup(session: Session) -> None:
+    _cleanup_storage_keys(session, delete_files=True)
+
+
+def register_storage_cleanup_on_rollback(db: Session, storage_key: str) -> None:
+    """Delete stored files if the enclosing transaction rolls back."""
+    keys = db.info.setdefault("storage_cleanup_keys", set())
+    keys.add(storage_key)
+    if db.info.get("storage_cleanup_listener"):
+        return
+    db.info["storage_cleanup_listener"] = True
+    event.listen(db, "after_commit", _after_commit_cleanup, once=True)
+    event.listen(db, "after_rollback", _after_rollback_cleanup, once=True)
+
+
 # =============================================================================
 # Service Functions
 # =============================================================================
@@ -250,6 +282,7 @@ def upload_attachment(
 
     # Store file
     store_file(storage_key, processed_file)
+    register_storage_cleanup_on_rollback(db, storage_key)
 
     # Create record
     attachment = Attachment(

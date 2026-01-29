@@ -73,6 +73,33 @@ def _seed_org2_request(db):
     return org2, surrogate, request
 
 
+def _create_stage(db, org_id: uuid.UUID, label: str) -> PipelineStage:
+    pipeline = Pipeline(
+        id=uuid.uuid4(),
+        organization_id=org_id,
+        name=f"{label} Pipeline",
+        is_default=True,
+        current_version=1,
+    )
+    db.add(pipeline)
+    db.flush()
+
+    stage = PipelineStage(
+        id=uuid.uuid4(),
+        pipeline_id=pipeline.id,
+        slug="new_unread",
+        label=label,
+        color="#3B82F6",
+        stage_type="intake",
+        order=1,
+        is_active=True,
+        is_intake_stage=True,
+    )
+    db.add(stage)
+    db.flush()
+    return stage
+
+
 def test_status_change_request_get_scoped_to_org(db, test_auth):
     _, _, request = _seed_org2_request(db)
 
@@ -108,3 +135,51 @@ def test_status_change_request_approve_scoped_to_org(db, test_auth):
             admin_role=Role.DEVELOPER,
             org_id=test_auth.org.id,
         )
+
+
+def test_status_change_request_target_stage_scoped_to_org(db, test_auth, default_stage):
+    org2 = Organization(
+        id=uuid.uuid4(),
+        name="Org 2",
+        slug=f"org2-{uuid.uuid4().hex[:8]}",
+    )
+    db.add(org2)
+    db.flush()
+
+    foreign_stage = _create_stage(db, org2.id, "Foreign Stage")
+
+    email = f"org1-{uuid.uuid4().hex[:8]}@example.com"
+    surrogate = Surrogate(
+        surrogate_number=f"S{uuid.uuid4().int % 90000 + 10000:05d}",
+        organization_id=test_auth.org.id,
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
+        owner_type="user",
+        owner_id=uuid.uuid4(),
+        full_name="Org 1 Surrogate",
+        email=normalize_email(email),
+        email_hash=hash_email(email),
+    )
+    db.add(surrogate)
+    db.flush()
+
+    request = StatusChangeRequest(
+        organization_id=test_auth.org.id,
+        entity_type="surrogate",
+        entity_id=surrogate.id,
+        target_stage_id=foreign_stage.id,
+        effective_at=datetime.now(timezone.utc),
+        reason="Regression request",
+        status="pending",
+    )
+    db.add(request)
+    db.flush()
+
+    details = status_change_request_service.get_request_with_details(
+        db=db,
+        request_id=request.id,
+        org_id=test_auth.org.id,
+    )
+
+    assert details is not None
+    assert details["target_stage_label"] is None

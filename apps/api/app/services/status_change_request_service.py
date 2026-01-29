@@ -11,6 +11,7 @@ from app.db.models import (
     Surrogate,
     User,
     PipelineStage,
+    Pipeline,
     IntendedParent,
     Match,
 )
@@ -545,7 +546,11 @@ def get_request_with_details(
             if request.target_stage_id:
                 target_stage = (
                     db.query(PipelineStage)
-                    .filter(PipelineStage.id == request.target_stage_id)
+                    .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
+                    .filter(
+                        PipelineStage.id == request.target_stage_id,
+                        Pipeline.organization_id == org_id,
+                    )
                     .first()
                 )
                 if target_stage:

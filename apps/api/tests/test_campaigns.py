@@ -636,6 +636,129 @@ async def test_preview_filters_invalid_stage_ids_returns_422(authed_client):
     assert response.status_code == 422
 
 
+@pytest.mark.asyncio
+async def test_retry_failed_campaign_run_enqueues_job(
+    authed_client, db, test_org, test_user, test_template, default_stage
+):
+    """Explicit retry should enqueue a job for failed recipients only."""
+    from app.db.models import Surrogate, CampaignRun, CampaignRecipient, Job
+    from app.db.enums import JobType, JobStatus
+    from app.schemas.campaign import CampaignCreate
+    from app.services import campaign_service
+
+    normalized_email = normalize_email("failed-retry@example.com")
+    case = Surrogate(
+        id=uuid4(),
+        organization_id=test_org.id,
+        stage_id=default_stage.id,
+        full_name="Failed Retry",
+        status_label=default_stage.label,
+        email=normalized_email,
+        email_hash=hash_email(normalized_email),
+        source="manual",
+        surrogate_number=f"S{uuid4().int % 90000 + 10000:05d}",
+        owner_type="user",
+        owner_id=test_user.id,
+    )
+    db.add(case)
+    db.flush()
+
+    campaign = campaign_service.create_campaign(
+        db,
+        test_org.id,
+        test_user.id,
+        CampaignCreate(
+            name="Retry Campaign",
+            email_template_id=test_template.id,
+            recipient_type="case",
+            filter_criteria={"stage_ids": [str(default_stage.id)]},
+        ),
+    )
+
+    run = CampaignRun(
+        id=uuid4(),
+        organization_id=test_org.id,
+        campaign_id=campaign.id,
+        status="failed",
+        total_count=1,
+        sent_count=0,
+        failed_count=1,
+        skipped_count=0,
+    )
+    db.add(run)
+    db.flush()
+
+    recipient = CampaignRecipient(
+        run_id=run.id,
+        entity_type="case",
+        entity_id=case.id,
+        recipient_email=case.email,
+        recipient_name=case.full_name,
+        status="failed",
+        error="Simulated failure",
+    )
+    db.add(recipient)
+    db.commit()
+
+    response = await authed_client.post(f"/campaigns/{campaign.id}/runs/{run.id}/retry-failed")
+
+    assert response.status_code == 202
+    data = response.json()
+    assert data["run_id"] == str(run.id)
+
+    job = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.CAMPAIGN_SEND.value,
+            Job.status == JobStatus.PENDING.value,
+        )
+        .order_by(Job.created_at.desc())
+        .first()
+    )
+    assert job is not None
+    assert job.payload.get("retry_failed_only") is True
+    assert job.payload.get("run_id") == str(run.id)
+
+
+@pytest.mark.asyncio
+async def test_retry_failed_campaign_run_requires_failed_recipients(
+    authed_client, db, test_org, test_user, test_template, default_stage
+):
+    from app.db.models import CampaignRun
+    from app.schemas.campaign import CampaignCreate
+    from app.services import campaign_service
+
+    campaign = campaign_service.create_campaign(
+        db,
+        test_org.id,
+        test_user.id,
+        CampaignCreate(
+            name="Retry Empty",
+            email_template_id=test_template.id,
+            recipient_type="case",
+            filter_criteria={"stage_ids": [str(default_stage.id)]},
+        ),
+    )
+
+    run = CampaignRun(
+        id=uuid4(),
+        organization_id=test_org.id,
+        campaign_id=campaign.id,
+        status="completed",
+        total_count=0,
+        sent_count=0,
+        failed_count=0,
+        skipped_count=0,
+    )
+    db.add(run)
+    db.commit()
+
+    response = await authed_client.post(f"/campaigns/{campaign.id}/runs/{run.id}/retry-failed")
+
+    assert response.status_code == 400
+
+
 def test_execute_campaign_run_streams_recipients(
     db, test_org, test_user, test_template, monkeypatch
 ):
@@ -711,7 +834,11 @@ def test_execute_campaign_run_streams_recipients(
     )
 
     def fake_build_variables(*args, **kwargs):
-        return {"first_name": "Stream", "full_name": "Stream Recipient", "email": "stream@example.com"}
+        return {
+            "first_name": "Stream",
+            "full_name": "Stream Recipient",
+            "email": "stream@example.com",
+        }
 
     monkeypatch.setattr(email_service, "build_surrogate_template_variables", fake_build_variables)
 
