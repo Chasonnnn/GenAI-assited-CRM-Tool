@@ -33,6 +33,8 @@ async def test_platform_get_system_email_template_creates_default(
     assert data["from_email"] is None
     assert "{{org_name}}" in data["subject"]
     assert "invite_url" in data["body"]
+    assert "Accept Invitation" in data["body"]
+    assert "background-color:#f4f4f5" in data["body"]
 
 
 @pytest.mark.asyncio

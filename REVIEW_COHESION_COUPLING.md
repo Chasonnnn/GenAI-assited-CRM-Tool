@@ -245,6 +245,7 @@ Coupling notes:
   Create/Delete: move fallback HTML into system template defaults; remove duplicate HTML builder.
   Expected blast radius: low (invite email only).
   Test plan: unit test for template rendering; smoke test for invite send.
+  Status: completed (2026-01-29).
 
 ## Prioritized Plan
 
@@ -268,3 +269,4 @@ Coupling notes:
 ## Progress Log
 - 2026-01-28: Split `routers/surrogates.py` into sub-routers; list/create routes stay on the aggregator to preserve `/surrogates`.
 - 2026-01-28: Split `surrogates/[id]/page.tsx` by extracting the header, history tab, and AI tab components.
+- 2026-01-29: Consolidated org invite fallback HTML into system template defaults (R11).

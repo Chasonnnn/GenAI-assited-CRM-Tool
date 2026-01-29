@@ -25,64 +25,6 @@ def _build_invite_url(invite_id: UUID, base_url: str) -> str:
     return f"{base_url.rstrip('/')}/invite/{invite_id}"
 
 
-def _build_invite_html(
-    org_name: str,
-    inviter_name: str | None,
-    role: str,
-    invite_url: str,
-    expires_at: str | None,
-) -> str:
-    """Build HTML email body for invite."""
-    inviter_text = f" by {inviter_name}" if inviter_name else ""
-    expiry_text = (
-        f"<p style='color: #666; font-size: 13px;'>This invitation expires {expires_at}.</p>"
-        if expires_at
-        else ""
-    )
-
-    return f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-             background-color: #f4f4f5; margin: 0; padding: 20px;">
-    <div style="max-width: 560px; margin: 0 auto; background: white; 
-                border-radius: 12px; padding: 40px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-        
-        <h1 style="font-size: 24px; font-weight: 600; color: #18181b; margin: 0 0 24px 0;">
-            You're invited to join {org_name}
-        </h1>
-        
-        <p style="font-size: 16px; color: #3f3f46; line-height: 1.6; margin: 0 0 16px 0;">
-            You've been invited{inviter_text} to join <strong>{org_name}</strong> as a <strong>{role.title()}</strong>.
-        </p>
-        
-        <p style="font-size: 16px; color: #3f3f46; line-height: 1.6; margin: 0 0 32px 0;">
-            Click the button below to accept the invitation and set up your account.
-        </p>
-        
-        <a href="{invite_url}" 
-           style="display: inline-block; background-color: #18181b; color: white; 
-                  text-decoration: none; font-weight: 500; font-size: 15px; 
-                  padding: 12px 24px; border-radius: 8px;">
-            Accept Invitation
-        </a>
-        
-        <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #e4e4e7;">
-            {expiry_text}
-            <p style="color: #a1a1aa; font-size: 13px; margin: 8px 0 0 0;">
-                If you didn't expect this invitation, you can safely ignore this email.
-            </p>
-        </div>
-    </div>
-</body>
-</html>
-"""
-
-
 def _build_invite_text(
     org_name: str,
     inviter_name: str | None,
@@ -152,33 +94,46 @@ async def send_invite_email(
         org_id=invite.organization_id,
         system_key=system_email_template_service.ORG_INVITE_SYSTEM_KEY,
     )
+    if not template:
+        template = system_email_template_service.ensure_system_template(
+            db,
+            org_id=invite.organization_id,
+            system_key=system_email_template_service.ORG_INVITE_SYSTEM_KEY,
+        )
 
     # Always allow the system template to define the sender, even if the body is
     # disabled (in that case we fall back to the built-in HTML, but still need a
     # From address for platform/system sending).
     template_from_email = template.from_email if template else None
 
+    inviter_text = f" by {inviter_name}" if inviter_name else ""
+    expires_block = f"<p>This invitation expires {expires_at}.</p>" if expires_at else ""
+    variables = {
+        "org_name": org_name,
+        "inviter_text": inviter_text,
+        "role_title": invite.role.title(),
+        "invite_url": invite_url,
+        "expires_block": expires_block,
+    }
+
     if template and template.is_active:
-        inviter_text = f" by {inviter_name}" if inviter_name else ""
-        expires_block = f"<p>This invitation expires {expires_at}.</p>" if expires_at else ""
-        variables = {
-            "org_name": org_name,
-            "inviter_text": inviter_text,
-            "role_title": invite.role.title(),
-            "invite_url": invite_url,
-            "expires_block": expires_block,
-        }
-        subject, html_body = email_service.render_template(
-            template.subject,
-            template.body,
-            variables,
-        )
+        subject_template = template.subject
+        body_template = template.body
         template_id = template.id
     else:
-        subject = f"You're invited to join {org_name}"
-        html_body = _build_invite_html(org_name, inviter_name, invite.role, invite_url, expires_at)
+        defaults = system_email_template_service.get_system_template_defaults(
+            system_email_template_service.ORG_INVITE_SYSTEM_KEY
+        )
+        subject_template = defaults["subject"]
+        body_template = defaults["body"]
         template_id = None
         # template_from_email already set from the system template (if any)
+
+    subject, html_body = email_service.render_template(
+        subject_template,
+        body_template,
+        variables,
+    )
 
     sender_selection = email_sender.select_sender(
         prefer_platform=True,
