@@ -9,6 +9,7 @@ class EmailStatus(str, Enum):
     PENDING = "pending"
     SENT = "sent"
     FAILED = "failed"
+    SKIPPED = "skipped"
 
 
 class SuppressionReason(str, Enum):
