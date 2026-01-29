@@ -12,6 +12,7 @@ export interface AISettings {
     model: string | null;
     api_key_masked: string | null;
     vertex_wif: VertexWIFConfig | null;
+    vertex_api_key?: VertexAPIKeyConfig | null;
     context_notes_limit: number;
     conversation_history_limit: number;
     anonymize_pii: boolean;
@@ -26,12 +27,18 @@ export interface VertexWIFConfig {
     service_account_email: string | null;
 }
 
+export interface VertexAPIKeyConfig {
+    project_id: string | null;
+    location: string | null;
+}
+
 export interface AISettingsUpdate {
     is_enabled?: boolean;
-    provider?: 'openai' | 'gemini' | 'vertex_wif';
+    provider?: 'openai' | 'gemini' | 'vertex_wif' | 'vertex_api_key';
     api_key?: string;
     model?: string;
     vertex_wif?: VertexWIFConfig;
+    vertex_api_key?: VertexAPIKeyConfig;
     context_notes_limit?: number;
     conversation_history_limit?: number;
     anonymize_pii?: boolean;
@@ -132,8 +139,12 @@ export async function updateAISettings(update: AISettingsUpdate): Promise<AISett
     return api.patch<AISettings>('/ai/settings', update);
 }
 
-export async function testAPIKey(provider: 'openai' | 'gemini', api_key: string): Promise<{ valid: boolean }> {
-    return api.post<{ valid: boolean }>('/ai/settings/test', { provider, api_key });
+export async function testAPIKey(
+    provider: 'openai' | 'gemini' | 'vertex_api_key',
+    api_key: string,
+    vertex_api_key?: VertexAPIKeyConfig
+): Promise<{ valid: boolean }> {
+    return api.post<{ valid: boolean }>('/ai/settings/test', { provider, api_key, vertex_api_key });
 }
 
 // ============================================================================

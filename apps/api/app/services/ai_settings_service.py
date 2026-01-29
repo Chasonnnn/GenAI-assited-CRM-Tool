@@ -12,7 +12,13 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import AISettings
-from app.services.ai_provider import AIProvider, VertexWIFConfig, VertexWIFProvider
+from app.services.ai_provider import (
+    AIProvider,
+    VertexAPIKeyConfig,
+    VertexAPIKeyProvider,
+    VertexWIFConfig,
+    VertexWIFProvider,
+)
 from app.services import version_service
 
 
@@ -62,6 +68,10 @@ def _ai_settings_payload(ai_settings: AISettings) -> dict:
             "location": ai_settings.vertex_location,
             "audience": ai_settings.vertex_audience,
             "service_account_email": ai_settings.vertex_service_account_email,
+        },
+        "vertex_api_key": {
+            "project_id": ai_settings.vertex_project_id,
+            "location": ai_settings.vertex_location,
         },
         "context_notes_limit": ai_settings.context_notes_limit,
         "conversation_history_limit": ai_settings.conversation_history_limit,
@@ -244,7 +254,25 @@ def get_ai_provider_for_settings(
             organization_id=organization_id,
             user_id=user_id,
         )
-        return VertexWIFProvider(config, default_model=ai_settings.model or "gemini-1.5-pro")
+        return VertexWIFProvider(
+            config, default_model=ai_settings.model or "gemini-3-flash-preview"
+        )
+
+    if ai_settings.provider == "vertex_api_key":
+        if not ai_settings.api_key_encrypted:
+            return None
+        try:
+            api_key = decrypt_api_key(ai_settings.api_key_encrypted)
+        except Exception:
+            return None
+        config = VertexAPIKeyConfig(
+            api_key=api_key,
+            project_id=ai_settings.vertex_project_id,
+            location=ai_settings.vertex_location,
+        )
+        return VertexAPIKeyProvider(
+            config, default_model=ai_settings.model or "gemini-3-flash-preview"
+        )
 
     if not ai_settings.api_key_encrypted:
         return None
@@ -258,12 +286,20 @@ def get_ai_provider_for_settings(
     return ai_provider_module.get_provider(ai_settings.provider, api_key, ai_settings.model)
 
 
-async def test_api_key(provider: str, api_key: str) -> bool:
+async def test_api_key(
+    provider: str,
+    api_key: str,
+    *,
+    project_id: str | None = None,
+    location: str | None = None,
+) -> bool:
     """Test if an API key is valid."""
     from app.services import ai_provider as ai_provider_module
 
     try:
-        ai_provider = ai_provider_module.get_provider(provider, api_key)
+        ai_provider = ai_provider_module.get_provider(
+            provider, api_key, project_id=project_id, location=location
+        )
         return await ai_provider.validate_key()
     except Exception:
         return False
@@ -342,7 +378,7 @@ def rollback_ai_settings(
         "conversation_history_limit", ai_settings.conversation_history_limit
     )
     ai_settings.anonymize_pii = payload.get("anonymize_pii", ai_settings.anonymize_pii)
-    vertex_payload = payload.get("vertex_wif") or {}
+    vertex_payload = payload.get("vertex_wif") or payload.get("vertex_api_key") or {}
     ai_settings.vertex_project_id = vertex_payload.get("project_id", ai_settings.vertex_project_id)
     ai_settings.vertex_location = vertex_payload.get("location", ai_settings.vertex_location)
     ai_settings.vertex_audience = vertex_payload.get("audience", ai_settings.vertex_audience)

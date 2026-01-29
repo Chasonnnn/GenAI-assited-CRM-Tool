@@ -40,8 +40,15 @@ export function useUpdateAISettings() {
 
 export function useTestAPIKey() {
     return useMutation({
-        mutationFn: ({ provider, api_key }: { provider: 'openai' | 'gemini'; api_key: string }) =>
-            aiApi.testAPIKey(provider, api_key),
+        mutationFn: ({
+            provider,
+            api_key,
+            vertex_api_key,
+        }: {
+            provider: 'openai' | 'gemini' | 'vertex_api_key';
+            api_key: string;
+            vertex_api_key?: aiApi.VertexAPIKeyConfig;
+        }) => aiApi.testAPIKey(provider, api_key, vertex_api_key),
     });
 }
 

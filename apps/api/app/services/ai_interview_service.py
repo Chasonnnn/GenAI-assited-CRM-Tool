@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import SurrogateInterview, InterviewNote, Surrogate
-from app.services.ai_provider import ChatMessage, get_provider
+from app.services.ai_provider import ChatMessage
 from app.services import ai_settings_service
 from app.services.ai_settings_service import get_ai_settings, is_consent_required
 from app.services.ai_usage_service import log_usage
@@ -69,6 +69,11 @@ class AIInterviewError(Exception):
     """Error during AI interview analysis."""
 
     pass
+
+
+def get_provider(ai_settings, org_id: UUID, user_id: UUID):
+    """Return the configured AI provider (test hook)."""
+    return ai_settings_service.get_ai_provider_for_settings(ai_settings, org_id, user_id=user_id)
 
 
 def _truncate_text(text: str, max_chars: int = 50000) -> str:
@@ -150,15 +155,7 @@ async def summarize_interview(
     if is_consent_required(ai_settings):
         raise AIInterviewError("AI consent has not been accepted for this organization")
 
-    if ai_settings.provider == "vertex_wif":
-        provider = ai_settings_service.get_ai_provider_for_settings(
-            ai_settings, org_id, user_id=user_id
-        )
-    else:
-        api_key = ai_settings_service.get_decrypted_key(ai_settings)
-        provider = (
-            get_provider(ai_settings.provider, api_key, ai_settings.model) if api_key else None
-        )
+    provider = get_provider(ai_settings, org_id, user_id)
 
     if not provider:
         message = (
@@ -276,15 +273,7 @@ async def summarize_all_interviews(
     if is_consent_required(ai_settings):
         raise AIInterviewError("AI consent has not been accepted for this organization")
 
-    if ai_settings.provider == "vertex_wif":
-        provider = ai_settings_service.get_ai_provider_for_settings(
-            ai_settings, org_id, user_id=user_id
-        )
-    else:
-        api_key = ai_settings_service.get_decrypted_key(ai_settings)
-        provider = (
-            get_provider(ai_settings.provider, api_key, ai_settings.model) if api_key else None
-        )
+    provider = get_provider(ai_settings, org_id, user_id)
 
     if not provider:
         message = (

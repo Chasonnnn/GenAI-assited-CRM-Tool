@@ -20,7 +20,7 @@ from app.utils.normalization import normalize_email
 
 @pytest.mark.asyncio
 async def test_ai_settings_test_contract(authed_client: AsyncClient, monkeypatch):
-    async def fake_test_api_key(provider: str, api_key: str) -> bool:  # noqa: ARG001
+    async def fake_test_api_key(provider: str, api_key: str, **_kwargs) -> bool:  # noqa: ARG001
         return True
 
     monkeypatch.setattr(ai_settings_service, "test_api_key", fake_test_api_key)
@@ -34,6 +34,25 @@ async def test_ai_settings_test_contract(authed_client: AsyncClient, monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_ai_settings_test_accepts_vertex_api_key(authed_client: AsyncClient, monkeypatch):
+    async def fake_test_api_key(provider: str, api_key: str, **_kwargs) -> bool:  # noqa: ARG001
+        return provider == "vertex_api_key" and api_key == "vertex-key"
+
+    monkeypatch.setattr(ai_settings_service, "test_api_key", fake_test_api_key)
+
+    response = await authed_client.post(
+        "/ai/settings/test",
+        json={
+            "provider": "vertex_api_key",
+            "api_key": "vertex-key",
+            "vertex_api_key": {"project_id": None, "location": None},
+        },
+    )
+    assert response.status_code == 200
+    assert response.json() == {"valid": True}
+
+
+@pytest.mark.asyncio
 async def test_ai_settings_supports_vertex_wif_config(authed_client: AsyncClient):
     settings_response = await authed_client.get("/ai/settings")
     assert settings_response.status_code == 200
@@ -41,7 +60,7 @@ async def test_ai_settings_supports_vertex_wif_config(authed_client: AsyncClient
 
     payload = {
         "provider": "vertex_wif",
-        "model": "gemini-1.5-pro",
+        "model": "gemini-3-pro-preview",
         "is_enabled": False,
         "expected_version": current_version,
         "vertex_wif": {
@@ -64,6 +83,30 @@ async def test_ai_settings_supports_vertex_wif_config(authed_client: AsyncClient
         == payload["vertex_wif"]["service_account_email"]
     )
     assert data["vertex_wif"]["audience"] == payload["vertex_wif"]["audience"]
+
+
+@pytest.mark.asyncio
+async def test_ai_settings_supports_vertex_api_key_config(authed_client: AsyncClient):
+    settings_response = await authed_client.get("/ai/settings")
+    assert settings_response.status_code == 200
+    current_version = settings_response.json()["current_version"]
+
+    payload = {
+        "provider": "vertex_api_key",
+        "model": "gemini-3-flash-preview",
+        "is_enabled": False,
+        "expected_version": current_version,
+        "api_key": "vertex-key",
+        "vertex_api_key": {"project_id": "demo-project", "location": "us-central1"},
+    }
+
+    response = await authed_client.patch("/ai/settings", json=payload)
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["provider"] == "vertex_api_key"
+    assert data["vertex_api_key"]["project_id"] == payload["vertex_api_key"]["project_id"]
+    assert data["vertex_api_key"]["location"] == payload["vertex_api_key"]["location"]
 
 
 @pytest.mark.asyncio

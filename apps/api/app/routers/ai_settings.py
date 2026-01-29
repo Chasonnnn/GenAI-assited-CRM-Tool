@@ -18,6 +18,11 @@ class VertexWIFConfig(BaseModel):
     service_account_email: str | None = None
 
 
+class VertexAPIKeyConfig(BaseModel):
+    project_id: str | None = None
+    location: str | None = None
+
+
 class AISettingsResponse(BaseModel):
     """AI settings for display (with masked key)."""
 
@@ -26,6 +31,7 @@ class AISettingsResponse(BaseModel):
     model: str | None
     api_key_masked: str | None
     vertex_wif: VertexWIFConfig | None = None
+    vertex_api_key: VertexAPIKeyConfig | None = None
     context_notes_limit: int
     conversation_history_limit: int
     # Privacy fields
@@ -40,10 +46,11 @@ class AISettingsUpdate(BaseModel):
     """Update AI settings."""
 
     is_enabled: bool | None = None
-    provider: str | None = Field(None, pattern="^(openai|gemini|vertex_wif)$")
+    provider: str | None = Field(None, pattern="^(openai|gemini|vertex_wif|vertex_api_key)$")
     api_key: str | None = None
     model: str | None = None
     vertex_wif: VertexWIFConfig | None = None
+    vertex_api_key: VertexAPIKeyConfig | None = None
     context_notes_limit: int | None = Field(None, ge=1, le=20)
     conversation_history_limit: int | None = Field(None, ge=5, le=50)
     anonymize_pii: bool | None = None
@@ -53,8 +60,9 @@ class AISettingsUpdate(BaseModel):
 class TestKeyRequest(BaseModel):
     """Test an API key."""
 
-    provider: str = Field(..., pattern="^(openai|gemini)$")
+    provider: str = Field(..., pattern="^(openai|gemini|vertex_api_key)$")
     api_key: str
+    vertex_api_key: VertexAPIKeyConfig | None = None
 
 
 class TestKeyResponse(BaseModel):
@@ -85,6 +93,12 @@ def get_settings(
             service_account_email=settings.vertex_service_account_email,
         )
         if settings.provider == "vertex_wif"
+        else None,
+        vertex_api_key=VertexAPIKeyConfig(
+            project_id=settings.vertex_project_id,
+            location=settings.vertex_location,
+        )
+        if settings.provider == "vertex_api_key"
         else None,
         context_notes_limit=settings.context_notes_limit or 5,
         conversation_history_limit=settings.conversation_history_limit or 10,
@@ -120,8 +134,16 @@ def update_settings(
             provider=update.provider,
             api_key=update.api_key,
             model=update.model,
-            vertex_project_id=update.vertex_wif.project_id if update.vertex_wif else None,
-            vertex_location=update.vertex_wif.location if update.vertex_wif else None,
+            vertex_project_id=update.vertex_wif.project_id
+            if update.vertex_wif
+            else update.vertex_api_key.project_id
+            if update.vertex_api_key
+            else None,
+            vertex_location=update.vertex_wif.location
+            if update.vertex_wif
+            else update.vertex_api_key.location
+            if update.vertex_api_key
+            else None,
             vertex_audience=update.vertex_wif.audience if update.vertex_wif else None,
             vertex_service_account_email=update.vertex_wif.service_account_email
             if update.vertex_wif
@@ -145,6 +167,7 @@ def update_settings(
             "api_key": update.api_key,
             "model": update.model,
             "vertex_wif": update.vertex_wif,
+            "vertex_api_key": update.vertex_api_key,
             "context_notes_limit": update.context_notes_limit,
             "conversation_history_limit": update.conversation_history_limit,
             "anonymize_pii": update.anonymize_pii,
@@ -185,6 +208,12 @@ def update_settings(
         )
         if settings.provider == "vertex_wif"
         else None,
+        vertex_api_key=VertexAPIKeyConfig(
+            project_id=settings.vertex_project_id,
+            location=settings.vertex_location,
+        )
+        if settings.provider == "vertex_api_key"
+        else None,
         context_notes_limit=settings.context_notes_limit or 5,
         conversation_history_limit=settings.conversation_history_limit or 10,
         anonymize_pii=settings.anonymize_pii,
@@ -208,5 +237,10 @@ async def test_api_key(
     """Test if an API key is valid."""
     from app.services import ai_settings_service
 
-    valid = await ai_settings_service.test_api_key(request.provider, request.api_key)
+    valid = await ai_settings_service.test_api_key(
+        request.provider,
+        request.api_key,
+        project_id=request.vertex_api_key.project_id if request.vertex_api_key else None,
+        location=request.vertex_api_key.location if request.vertex_api_key else None,
+    )
     return TestKeyResponse(valid=valid)

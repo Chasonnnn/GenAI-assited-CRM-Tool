@@ -221,7 +221,12 @@ class WorkflowExecution(Base):
     paused_at_action_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
     paused_task_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("tasks.id", ondelete="SET NULL"),
+        ForeignKey(
+            "tasks.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_workflow_executions_paused_task_id",
+        ),
         nullable=True,
     )
 
