@@ -23,7 +23,6 @@ async def process_meta_lead_fetch(db, job) -> None:
     from app.services import (
         meta_api,
         meta_lead_service,
-        meta_form_mapping_service,
         meta_token_service,
     )
 
@@ -121,54 +120,7 @@ async def process_meta_lead_fetch(db, job) -> None:
 
     logger.info(f"Meta lead {leadgen_id} stored successfully for org {mapping.organization_id}")
 
-    # Enrich platform attribution if missing (uses cached ad-level insights)
-    try:
-        meta_lead_service.enrich_platform_from_insights(db, meta_lead)
-    except Exception as exc:
-        logger.warning(f"Platform enrichment failed for lead {leadgen_id}: {exc}")
-
-    # Auto-convert only if mapping is ready
-    if meta_lead.is_converted:
-        meta_lead.status = "converted"
-        db.commit()
-        return "sent"
-
-    form = meta_form_mapping_service.get_form_by_external_id(
-        db, mapping.organization_id, meta_lead.meta_form_id
-    )
-    if not form:
-        meta_lead.status = "awaiting_mapping"
-        db.commit()
-        logger.info(f"Meta lead {leadgen_id} awaiting mapping (form not found)")
-        return
-
-    if form.mapping_status != "mapped" or form.mapping_version_id != form.current_version_id:
-        meta_lead.status = "awaiting_mapping"
-        db.commit()
-        reason = "Mapping missing" if form.mapping_status != "mapped" else "Mapping outdated"
-        meta_form_mapping_service.ensure_mapping_review_task(db, form, reason=reason)
-        logger.info(f"Meta lead {leadgen_id} awaiting mapping for form {form.form_external_id}")
-        return
-
-    meta_lead.status = "stored"
-    db.commit()
-
-    surrogate, convert_error = meta_lead_service.convert_to_surrogate_with_mapping(
-        db=db,
-        meta_lead=meta_lead,
-        mapping_rules=form.mapping_rules or [],
-        unknown_column_behavior=form.unknown_column_behavior or "metadata",
-        user_id=None,
-    )
-
-    if convert_error:
-        logger.warning(f"Meta lead auto-conversion failed: {convert_error}")
-        meta_lead.status = "convert_failed"
-        db.commit()
-    else:
-        meta_lead.status = "converted"
-        db.commit()
-        logger.info(f"Meta lead {leadgen_id} auto-converted to case {surrogate.surrogate_number}")
+    meta_lead_service.process_stored_meta_lead(db, meta_lead)
 
 
 async def process_meta_lead_reprocess_form(db, job) -> None:

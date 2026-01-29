@@ -592,9 +592,7 @@ async def sync_ad_platform_breakdown(
 
     token_result = meta_token_service.get_token_for_ad_account(db, ad_account)
     if not token_result.token:
-        logger.debug(
-            "Skipping ad platform sync for account %s - no token", ad_account.id
-        )
+        logger.debug("Skipping ad platform sync for account %s - no token", ad_account.id)
         result["skipped"] = True
         result["error"] = "no_token"
         return result

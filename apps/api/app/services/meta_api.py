@@ -265,8 +265,7 @@ async def fetch_ad_account_insights(
     params = {
         "access_token": access_token,
         "appsecret_proof": proof,
-        "fields": fields
-        or "campaign_id,campaign_name,spend,impressions,reach,clicks,actions",
+        "fields": fields or "campaign_id,campaign_name,spend,impressions,reach,clicks,actions",
         "level": level,
         "time_range": f'{{"since":"{date_start}","until":"{date_end}"}}',
         "limit": 100,  # Request max per page

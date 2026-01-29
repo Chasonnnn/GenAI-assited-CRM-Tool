@@ -160,9 +160,10 @@ def backfill_platform_for_date_range(
         db.query(MetaLead)
         .filter(
             MetaLead.organization_id == org_id,
-            func.coalesce(MetaLead.meta_created_time, MetaLead.received_at)
-            .between(datetime.combine(date_start, datetime.min.time(), tzinfo=timezone.utc),
-                     datetime.combine(date_end, datetime.max.time(), tzinfo=timezone.utc)),
+            func.coalesce(MetaLead.meta_created_time, MetaLead.received_at).between(
+                datetime.combine(date_start, datetime.min.time(), tzinfo=timezone.utc),
+                datetime.combine(date_end, datetime.max.time(), tzinfo=timezone.utc),
+            ),
             func.nullif(platform_expr, "").is_(None),
         )
         .order_by(MetaLead.received_at.desc())
@@ -447,6 +448,79 @@ def convert_to_surrogate_with_mapping(
         meta_lead.unmapped_fields = unmapped_fields or None
         db.commit()
         return None, f"Conversion failed: {e}"
+
+
+def process_stored_meta_lead(
+    db: Session,
+    meta_lead: MetaLead,
+) -> tuple[str, Surrogate | None]:
+    """
+    Process a stored Meta lead using the standard mapping pipeline.
+
+    Returns a tuple of (status, surrogate or None).
+    """
+    from app.services import meta_form_mapping_service
+
+    # Enrich platform attribution if missing (uses cached ad-level insights)
+    try:
+        enrich_platform_from_insights(db, meta_lead)
+    except Exception as exc:
+        logger.warning("Platform enrichment failed for lead %s: %s", meta_lead.meta_lead_id, exc)
+
+    if meta_lead.is_converted:
+        meta_lead.status = "converted"
+        db.commit()
+        return meta_lead.status, db.get(Surrogate, meta_lead.converted_surrogate_id)
+
+    form = meta_form_mapping_service.get_form_by_external_id(
+        db, meta_lead.organization_id, meta_lead.meta_form_id
+    )
+    if not form:
+        meta_lead.status = "awaiting_mapping"
+        db.commit()
+        logger.info(
+            "Meta lead %s awaiting mapping (form not found)",
+            meta_lead.meta_lead_id,
+        )
+        return meta_lead.status, None
+
+    if form.mapping_status != "mapped" or form.mapping_version_id != form.current_version_id:
+        meta_lead.status = "awaiting_mapping"
+        db.commit()
+        reason = "Mapping missing" if form.mapping_status != "mapped" else "Mapping outdated"
+        meta_form_mapping_service.ensure_mapping_review_task(db, form, reason=reason)
+        logger.info(
+            "Meta lead %s awaiting mapping for form %s",
+            meta_lead.meta_lead_id,
+            form.form_external_id,
+        )
+        return meta_lead.status, None
+
+    meta_lead.status = "stored"
+    db.commit()
+
+    surrogate, convert_error = convert_to_surrogate_with_mapping(
+        db=db,
+        meta_lead=meta_lead,
+        mapping_rules=form.mapping_rules or [],
+        unknown_column_behavior=form.unknown_column_behavior or "metadata",
+        user_id=None,
+    )
+
+    if convert_error:
+        logger.warning("Meta lead auto-conversion failed: %s", convert_error)
+        meta_lead.status = "convert_failed"
+        db.commit()
+        return meta_lead.status, None
+
+    meta_lead.status = "converted"
+    db.commit()
+    logger.info(
+        "Meta lead %s converted to surrogate %s",
+        meta_lead.meta_lead_id,
+        surrogate.surrogate_number if surrogate else None,
+    )
+    return meta_lead.status, surrogate
 
 
 def get_unconverted(db: Session, org_id: UUID) -> list[MetaLead]:
