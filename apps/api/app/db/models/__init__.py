@@ -47,7 +47,7 @@ from app.db.models.forms import (
     FormSubmissionToken,
 )
 from app.db.models.integration_health import IntegrationErrorRollup, IntegrationHealth, SystemAlert
-from app.db.models.integrations import ResendSettings, UserIntegration
+from app.db.models.integrations import ResendSettings, UserIntegration, ZapierWebhookSettings
 from app.db.models.intended_parents import IntendedParent, IntendedParentStatusHistory
 from app.db.models.jobs import ExportJob, Job
 from app.db.models.matches import Match, MatchEvent
@@ -172,6 +172,7 @@ __all__ = [
     "QueueMember",
     "RequestMetricsRollup",
     "ResendSettings",
+    "ZapierWebhookSettings",
     "RolePermission",
     "StatusChangeRequest",
     "SupportSession",
