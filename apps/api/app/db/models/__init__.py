@@ -70,6 +70,7 @@ from app.db.models.status_changes import StatusChangeRequest
 from app.db.models.surrogates import (
     CustomField,
     CustomFieldValue,
+    ImportMappingCorrection,
     ImportTemplate,
     InterviewAttachment,
     InterviewNote,
@@ -121,6 +122,7 @@ __all__ = [
     "CustomField",
     "CustomFieldValue",
     "DataRetentionPolicy",
+    "ImportMappingCorrection",
     "EmailLog",
     "EmailSuppression",
     "EmailTemplate",

@@ -6,19 +6,31 @@ Provides smart detection of:
 - Column analysis (pattern matching, semantic matching, data-type inference)
 
 Features:
-- Two-layer matching: keyword-based first, AI as opt-in second pass
+- Three-layer matching: exact/alias, keyword-based, fuzzy (for unmatched only)
+- Learning from corrections: org-specific overrides from previous imports
 - Confidence scoring for all suggestions
 - Transformation recommendations based on data patterns
 """
+
+from __future__ import annotations
 
 import csv
 import io
 import re
 from dataclasses import dataclass, field
 from decimal import Decimal
+from difflib import SequenceMatcher
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from app.services.import_transformers import get_suggested_transformer
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from sqlalchemy.orm import Session
+
+    from app.db.models.surrogates import ImportMappingCorrection
 
 
 # =============================================================================
@@ -270,6 +282,76 @@ META_TRACKING_PATTERNS: list[str] = [
 
 
 # =============================================================================
+# Fuzzy Matching (Fallback for typos/abbreviations)
+# =============================================================================
+
+# Higher threshold to reduce false positives
+FUZZY_MATCH_THRESHOLD = 0.85
+FUZZY_MIN_LENGTH = 4  # Skip very short column names
+
+# Stop-list for ambiguous short words
+FUZZY_STOP_LIST = {"id", "name", "type", "status", "state", "date", "time", "value", "data"}
+
+# Canonical names for fuzzy matching - ONLY for fields in AVAILABLE_IMPORT_FIELDS
+# Maps field name -> list of human-readable variants
+CANONICAL_NAMES: dict[str, list[str]] = {
+    "full_name": ["full name", "fullname", "complete name"],
+    "email": ["email address", "e-mail address", "emal", "emial", "e mail"],
+    "phone": ["phone number", "telephone", "mobile number", "cell phone", "fone"],
+    "date_of_birth": ["date of birth", "birth date", "birthday", "dob date"],
+    "state": ["state province", "province"],
+    "race": ["race ethnicity", "ethnicity"],
+    "height_ft": ["height feet", "height in feet"],
+    "weight_lb": ["weight pounds", "weight lbs"],
+    "source": ["lead source", "source name", "referral source", "agency name"],
+    "created_at": ["created time", "submission time", "submitted at"],
+    "is_age_eligible": ["age eligible", "age eligibility"],
+    "is_citizen_or_pr": ["citizen permanent resident", "citizenship status"],
+    "has_child": ["has children", "have children", "parenting experience"],
+    "is_non_smoker": ["non smoker", "nonsmoker", "smoking status"],
+    "has_surrogate_experience": ["surrogate experience", "prior surrogacy"],
+    "num_deliveries": ["number deliveries", "delivery count", "birth count"],
+    "num_csections": ["number csections", "cesarean count"],
+}
+
+
+def fuzzy_match_column(
+    column: str, allowed_fields: list[str] | None = None
+) -> tuple[str | None, float]:
+    """
+    Match column name using string similarity.
+
+    Returns (field, score) or (None, 0.0).
+    Only considers fields in allowed_fields AND CANONICAL_NAMES.
+    Only use as fallback AFTER keyword matching fails.
+    """
+    normalized = column.lower().strip().replace("_", " ").replace("-", " ")
+
+    # Skip short or ambiguous names
+    if len(normalized) < FUZZY_MIN_LENGTH:
+        return None, 0.0
+    if normalized in FUZZY_STOP_LIST:
+        return None, 0.0
+
+    fields_to_check = allowed_fields if allowed_fields else list(CANONICAL_NAMES.keys())
+
+    best_match: str | None = None
+    best_score = 0.0
+
+    for field_name, variants in CANONICAL_NAMES.items():
+        # MUST be in allowed_fields to avoid dead matches
+        if field_name not in fields_to_check:
+            continue
+        for variant in variants:
+            score = SequenceMatcher(None, normalized, variant).ratio()
+            if score > best_score and score >= FUZZY_MATCH_THRESHOLD:
+                best_score = score
+                best_match = field_name
+
+    return best_match, best_score
+
+
+# =============================================================================
 # Encoding Detection
 # =============================================================================
 
@@ -504,13 +586,19 @@ def suggest_custom_field(column: str) -> dict[str, object] | None:
     return None
 
 
-def analyze_column(column: str, col_idx: int, sample_rows: list[list[str]]) -> ColumnSuggestion:
+def analyze_column(
+    column: str,
+    col_idx: int,
+    sample_rows: list[list[str]],
+    allowed_fields: list[str] | None = None,
+) -> ColumnSuggestion:
     """
     Analyze a single column and generate a mapping suggestion.
 
-    Uses two-layer matching:
+    Uses three-layer matching:
     1. Exact/alias matching
     2. Keyword-based semantic matching
+    3. Fuzzy matching (only for unmatched, as fallback for typos)
 
     AI-powered matching is handled separately (opt-in).
     """
@@ -599,6 +687,42 @@ def analyze_column(column: str, col_idx: int, sample_rows: list[list[str]]) -> C
             default_action=default_action,
         )
 
+    # Layer 3: Fuzzy matching (ONLY if no keyword match found)
+    fields = allowed_fields or list(CANONICAL_NAMES.keys())
+    fuzzy_field, fuzzy_score = fuzzy_match_column(column, fields)
+    if fuzzy_field:
+        # Check mapping guard (same as exact/keyword)
+        blocked, alt_field, block_reason = check_mapping_guard(column, fuzzy_field)
+        if blocked:
+            warnings.append(block_reason or "")
+            return ColumnSuggestion(
+                csv_column=column,
+                suggested_field=alt_field,
+                confidence=0.5,
+                confidence_level=ConfidenceLevel.MEDIUM,
+                transformation=None,
+                sample_values=samples,
+                reason=f"Fuzzy match blocked: {block_reason}",
+                warnings=warnings,
+                default_action="custom" if (alt_field or "").startswith("custom.") else None,
+            )
+
+        transformation = get_suggested_transformer(fuzzy_field)
+        needs_inversion = check_inverted_pattern(column, fuzzy_field)
+        if needs_inversion and transformation == "boolean_flexible":
+            transformation = "boolean_inverted"
+
+        return ColumnSuggestion(
+            csv_column=column,
+            suggested_field=fuzzy_field,
+            confidence=fuzzy_score,
+            confidence_level=ConfidenceLevel.from_score(fuzzy_score),
+            transformation=transformation,
+            sample_values=samples,
+            reason=f"Similar column name match ({int(fuzzy_score * 100)}% similarity)",
+            needs_inversion=needs_inversion,
+        )
+
     # Check if it's Meta tracking data
     if is_meta_tracking_column(column):
         return ColumnSuggestion(
@@ -666,6 +790,7 @@ def analyze_columns(
     Args:
         headers: List of CSV column headers
         sample_rows: First N rows of data for type inference
+        allowed_fields: List of allowed field names (for fuzzy matching filtering)
 
     Returns:
         List of ColumnSuggestion for each header
@@ -673,19 +798,140 @@ def analyze_columns(
     suggestions = []
     allowed = set(allowed_fields) if allowed_fields else None
     for idx, header in enumerate(headers):
-        suggestion = analyze_column(header, idx, sample_rows)
-        if allowed is not None and suggestion.suggested_field not in allowed:
-            suggestion = ColumnSuggestion(
-                csv_column=suggestion.csv_column,
-                suggested_field=None,
-                confidence=0.0,
-                confidence_level=ConfidenceLevel.NONE,
-                transformation=None,
-                sample_values=suggestion.sample_values,
-                reason="Field not available for this import type",
-                default_action="ignore",
-            )
+        suggestion = analyze_column(header, idx, sample_rows, allowed_fields)
+        # Post-filter: if suggestion is for a field not in allowed, reset
+        if allowed is not None and suggestion.suggested_field:
+            # Allow custom. fields through, only filter standard fields
+            if not suggestion.suggested_field.startswith("custom."):
+                if suggestion.suggested_field not in allowed:
+                    suggestion = ColumnSuggestion(
+                        csv_column=suggestion.csv_column,
+                        suggested_field=None,
+                        confidence=0.0,
+                        confidence_level=ConfidenceLevel.NONE,
+                        transformation=None,
+                        sample_values=suggestion.sample_values,
+                        reason="Field not available for this import type",
+                        default_action="ignore",
+                    )
         suggestions.append(suggestion)
+    return suggestions
+
+
+# =============================================================================
+# Learning from Corrections
+# =============================================================================
+
+
+def get_org_corrections(db: Session, org_id: UUID) -> dict[str, ImportMappingCorrection]:
+    """
+    Load all corrections for an org, keyed by normalized column name.
+
+    Returns:
+        Dict of {normalized_column_name: ImportMappingCorrection}
+    """
+    from app.db.models.surrogates import ImportMappingCorrection
+
+    corrections = (
+        db.query(ImportMappingCorrection)
+        .filter(ImportMappingCorrection.organization_id == org_id)
+        .all()
+    )
+    return {c.column_name_normalized: c for c in corrections}
+
+
+def analyze_column_with_learning(
+    column: str,
+    col_idx: int,
+    sample_rows: list[list[str]],
+    org_corrections: dict[str, ImportMappingCorrection],
+    allowed_fields: list[str] | None = None,
+) -> ColumnSuggestion:
+    """
+    Enhanced analyze_column that checks org corrections first.
+
+    Priority order:
+    1. Learned corrections (highest priority)
+    2. Exact/alias match
+    3. Keyword match
+    4. Fuzzy match
+    5. Custom field/data-type inference
+    """
+    normalized = normalize_column_name(column)
+    samples = get_sample_values(sample_rows, col_idx)
+
+    # Layer 0: Check learned corrections FIRST (highest priority)
+    if correction := org_corrections.get(normalized):
+        # Confidence increases with usage (0.7 base + 0.05 per use, max 0.95)
+        confidence = min(0.95, 0.7 + (correction.times_used * 0.05))
+        transformation = correction.corrected_transformation
+        if not transformation and correction.corrected_field:
+            if not correction.corrected_field.startswith("custom."):
+                transformation = get_suggested_transformer(correction.corrected_field)
+
+        return ColumnSuggestion(
+            csv_column=column,
+            suggested_field=correction.corrected_field if correction.corrected_field else None,
+            confidence=confidence,
+            confidence_level=ConfidenceLevel.from_score(confidence),
+            transformation=transformation,
+            sample_values=samples,
+            reason=f"Learned from {correction.times_used} previous import(s)",
+            default_action=correction.corrected_action,
+        )
+
+    # Fall back to normal analysis (layers 1-4)
+    return analyze_column(column, col_idx, sample_rows, allowed_fields)
+
+
+def analyze_columns_with_learning(
+    db: Session,
+    org_id: UUID,
+    headers: list[str],
+    sample_rows: list[list[str]],
+    allowed_fields: list[str] | None = None,
+) -> list[ColumnSuggestion]:
+    """
+    Analyze all columns with org-specific learned corrections.
+
+    Args:
+        db: Database session
+        org_id: Organization ID
+        headers: List of CSV column headers
+        sample_rows: First N rows of data for type inference
+        allowed_fields: List of allowed field names
+
+    Returns:
+        List of ColumnSuggestion for each header
+    """
+    org_corrections = get_org_corrections(db, org_id)
+
+    suggestions = []
+    allowed = set(allowed_fields) if allowed_fields else None
+    for idx, header in enumerate(headers):
+        if org_corrections:
+            suggestion = analyze_column_with_learning(
+                header, idx, sample_rows, org_corrections, allowed_fields
+            )
+        else:
+            suggestion = analyze_column(header, idx, sample_rows, allowed_fields)
+
+        # Post-filter: if suggestion is for a field not in allowed, reset
+        if allowed is not None and suggestion.suggested_field:
+            if not suggestion.suggested_field.startswith("custom."):
+                if suggestion.suggested_field not in allowed:
+                    suggestion = ColumnSuggestion(
+                        csv_column=suggestion.csv_column,
+                        suggested_field=None,
+                        confidence=0.0,
+                        confidence_level=ConfidenceLevel.NONE,
+                        transformation=None,
+                        sample_values=suggestion.sample_values,
+                        reason="Field not available for this import type",
+                        default_action="ignore",
+                    )
+        suggestions.append(suggestion)
+
     return suggestions
 
 
@@ -795,7 +1041,9 @@ AVAILABLE_SURROGATE_FIELDS = [
     "num_csections",
     # Source
     "source",
+    # Timestamps
+    "created_at",
 ]
 
-# CSV import-only fields (not shown in Meta lead mapping)
-AVAILABLE_IMPORT_FIELDS = [*AVAILABLE_SURROGATE_FIELDS, "created_at"]
+# CSV import fields (may include fields also used in Meta lead mapping)
+AVAILABLE_IMPORT_FIELDS = list(dict.fromkeys([*AVAILABLE_SURROGATE_FIELDS, "created_at"]))

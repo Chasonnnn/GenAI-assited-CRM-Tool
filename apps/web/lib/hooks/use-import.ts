@@ -60,7 +60,11 @@ export function usePendingImportApprovals(enabled = true) {
 
 export function usePreviewImport() {
     return useMutation({
-        mutationFn: (file: File) => previewImport(file),
+        mutationFn: (params: { file: File; applyTemplate?: boolean }) =>
+            previewImport(
+                params.file,
+                params.applyTemplate !== undefined ? { applyTemplate: params.applyTemplate } : undefined
+            ),
     })
 }
 

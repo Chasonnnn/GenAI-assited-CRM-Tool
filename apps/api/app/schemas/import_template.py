@@ -165,6 +165,20 @@ class EnhancedImportPreviewResponse(BaseModel):
     # AI availability
     ai_available: bool = Field(description="Whether AI help is available for this org")
 
+    # Auto-applied template (if >80% match)
+    auto_applied_template: MatchingTemplate | None = Field(
+        default=None, description="Template that was auto-applied (>80% match)"
+    )
+    template_unknown_column_behavior: str | None = Field(
+        default=None, description="Template's default for unknown columns (user can override)"
+    )
+
+    # AI auto-trigger results
+    ai_auto_triggered: bool = Field(default=False, description="Whether AI was auto-triggered")
+    ai_mapped_columns: list[str] = Field(
+        default_factory=list, description="Columns that were mapped by auto-AI"
+    )
+
 
 # =============================================================================
 # Import Approval Schemas

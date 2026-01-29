@@ -14,7 +14,7 @@ Features:
 
 import csv
 import io
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -31,8 +31,9 @@ from app.services import surrogate_service
 from app.services.import_detection_service import (
     AVAILABLE_IMPORT_FIELDS,
     ColumnSuggestion,
-    analyze_columns,
+    analyze_columns_with_learning,
     detect_file_format,
+    normalize_column_name,
 )
 from app.services.import_transformers import transform_value
 from app.utils.datetime_parsing import parse_datetime_with_timezone
@@ -70,11 +71,6 @@ COLUMN_MAPPING = {
     # source
     "source": "source",
 }
-
-
-def normalize_column_name(col: str) -> str:
-    """Normalize column name for matching."""
-    return col.lower().strip().replace(" ", "_").replace("-", "_")
 
 
 def map_columns(headers: list[str]) -> dict[int, str]:
@@ -254,11 +250,11 @@ def _compute_dedup_stats(
 def _row_to_dict(row: list[str], column_map: dict[int, str]) -> dict[str, str]:
     """Convert CSV row to dict using column mapping."""
     result = {}
-    for idx, field in column_map.items():
+    for idx, field_name in column_map.items():
         if idx < len(row):
             value = row[idx].strip()
             if value:
-                result[field] = value
+                result[field_name] = value
     return result
 
 
@@ -535,11 +531,21 @@ class EnhancedImportPreview:
     # AI availability
     ai_available: bool
 
+    # Auto-applied template (if >80% match)
+    auto_applied_template: dict | None = None  # {id, name, match_score}
+    template_unknown_column_behavior: str | None = None  # "ignore", "metadata", "warn"
 
-def preview_import_enhanced(
+    # AI auto-trigger results
+    ai_auto_triggered: bool = False
+    ai_mapped_columns: list[str] = field(default_factory=list)
+
+
+async def preview_import_enhanced(
     db: Session,
     org_id: UUID,
     file_content: bytes,
+    *,
+    apply_template: bool = True,
 ) -> EnhancedImportPreview:
     """
     Generate enhanced preview with smart detection and suggestions.
@@ -547,19 +553,86 @@ def preview_import_enhanced(
     Uses the detection service for:
     - Encoding detection (UTF-8, UTF-16, etc.)
     - Delimiter detection (comma, tab, etc.)
-    - Column analysis with confidence scoring
+    - Column analysis with confidence scoring (including learning)
+    - Template auto-apply (>80% match)
+    - AI auto-trigger for unmatched columns (non-blocking)
     """
+    import asyncio
+    import logging
+
+    logger = logging.getLogger(__name__)
+
     # Detect file format
     detection = detect_file_format(file_content)
 
-    # Analyze columns
-    column_suggestions = analyze_columns(
+    # Analyze columns WITH learning from previous corrections
+    column_suggestions = analyze_columns_with_learning(
+        db,
+        org_id,
         detection.headers,
         detection.sample_rows,
         allowed_fields=AVAILABLE_IMPORT_FIELDS,
     )
 
-    # Count matched/unmatched
+    # Find matching templates
+    matching_templates = _find_matching_templates(db, org_id, detection.headers)
+
+    # Auto-apply best template if score >= 0.8 (FULL OVERRIDE)
+    auto_applied_template: dict | None = None
+    template_unknown_behavior: str | None = None
+    if apply_template and matching_templates and matching_templates[0]["match_score"] >= 0.8:
+        best_template = matching_templates[0]
+        template = db.get(ImportTemplate, UUID(best_template["id"]))
+        if template and template.column_mappings:
+            # Apply full template payload - OVERRIDES existing suggestions
+            column_suggestions = _apply_template_to_suggestions(
+                column_suggestions,
+                template.column_mappings,
+            )
+            auto_applied_template = best_template
+            # Carry template's unknown_column_behavior as default (user can override)
+            template_unknown_behavior = template.unknown_column_behavior
+
+    # Check AI availability
+    from app.services.import_ai_mapper_service import is_ai_available
+
+    ai_available = is_ai_available(db, org_id)
+
+    # Identify low-confidence columns after template application
+    low_confidence_cols = [
+        s for s in column_suggestions if s.confidence < 0.5 and s.suggested_field is None
+    ]
+
+    # Auto-trigger AI for unmatched columns (limit 20, non-blocking with 2s timeout)
+    ai_mapped_columns: list[str] = []
+    ai_auto_triggered = False
+    if low_confidence_cols and len(low_confidence_cols) <= 20 and ai_available:
+        ai_auto_triggered = True
+        try:
+            from app.services.import_ai_mapper_service import ai_suggest_mappings
+
+            ai_suggestions = await asyncio.wait_for(
+                ai_suggest_mappings(db, org_id, low_confidence_cols),
+                timeout=2.0,
+            )
+
+            # AI returns list[ColumnSuggestion] directly
+            for ai_suggestion in ai_suggestions:
+                if ai_suggestion.suggested_field and ai_suggestion.confidence > 0.3:
+                    # Find and update matching column in original list
+                    for idx, orig in enumerate(column_suggestions):
+                        if orig.csv_column == ai_suggestion.csv_column:
+                            # Replace with AI suggestion (already has reason set)
+                            column_suggestions[idx] = ai_suggestion
+                            ai_mapped_columns.append(ai_suggestion.csv_column)
+                            break
+        except asyncio.TimeoutError:
+            logger.warning("AI auto-mapping timed out (non-blocking)")
+        except Exception as e:
+            logger.warning(f"AI auto-mapping failed (non-blocking): {e}")
+            # Continue without AI - non-blocking failure
+
+    # RECOMPUTE all derived values after template/AI overrides
     matched = sum(1 for s in column_suggestions if s.confidence >= 0.5)
     unmatched = len(column_suggestions) - matched
 
@@ -568,7 +641,7 @@ def preview_import_enhanced(
     rows = list(reader)
     data_rows = rows[1:] if detection.has_header else rows
 
-    # Check for email column and duplicates
+    # Check for email column and duplicates (recompute in case email mapping changed)
     email_col_idx = None
     for idx, suggestion in enumerate(column_suggestions):
         if suggestion.suggested_field == "email":
@@ -604,7 +677,7 @@ def preview_import_enhanced(
                 row_dict[detection.headers[idx]] = value
         sample_rows_dict.append(row_dict)
 
-    # Check date ambiguity warnings in data (only for date-like fields)
+    # Check date ambiguity warnings in data (recompute for date columns)
     date_column_map: dict[int, str] = {}
     for idx, suggestion in enumerate(column_suggestions):
         if (
@@ -620,14 +693,6 @@ def preview_import_enhanced(
         date_column_map,
     )
 
-    # Find matching templates
-    matching_templates = _find_matching_templates(db, org_id, detection.headers)
-
-    # Check AI availability
-    from app.services.import_ai_mapper_service import is_ai_available
-
-    ai_available = is_ai_available(db, org_id)
-
     # Basic validation errors (focus on required fields only)
     validation_errors = 0
     required_map: dict[int, str] = {}
@@ -638,11 +703,11 @@ def preview_import_enhanced(
     if required_map:
         for row in detection.sample_rows[:5]:
             row_data: dict[str, str] = {}
-            for idx, field in required_map.items():
+            for idx, req_field in required_map.items():
                 if idx < len(row):
                     value = row[idx].strip()
                     if value:
-                        row_data[field] = value
+                        row_data[req_field] = value
             try:
                 _validate_row(row_data)
             except Exception:
@@ -666,7 +731,64 @@ def preview_import_enhanced(
         matching_templates=matching_templates,
         available_fields=AVAILABLE_IMPORT_FIELDS,
         ai_available=ai_available,
+        auto_applied_template=auto_applied_template,
+        template_unknown_column_behavior=template_unknown_behavior,
+        ai_auto_triggered=ai_auto_triggered,
+        ai_mapped_columns=ai_mapped_columns,
     )
+
+
+def _apply_template_to_suggestions(
+    suggestions: list[ColumnSuggestion],
+    template_mappings: list[dict],
+) -> list[ColumnSuggestion]:
+    """
+    Apply template mappings to column suggestions.
+
+    OVERRIDES existing suggestions (not just fills blanks).
+    Applies full payload: surrogate_field, transformation, action, custom_field_key.
+    """
+    from app.services.import_detection_service import ConfidenceLevel
+    from app.services.import_transformers import get_suggested_transformer
+
+    # Build lookup using normalize_column_name() for consistent matching
+    template_map = {normalize_column_name(m.get("csv_column", "")): m for m in template_mappings}
+
+    result = []
+    for suggestion in suggestions:
+        normalized = normalize_column_name(suggestion.csv_column)
+        if normalized in template_map:
+            mapping = template_map[normalized]
+            action = mapping.get("action", "map")
+
+            # For custom fields, set suggested_field="custom.<key>" so UI can infer
+            suggested_field = mapping.get("surrogate_field")
+            if action == "custom" and mapping.get("custom_field_key"):
+                suggested_field = f"custom.{mapping['custom_field_key']}"
+
+            # Get transformation from template or infer from field
+            transformation = mapping.get("transformation")
+            if not transformation and suggested_field and not suggested_field.startswith("custom."):
+                transformation = get_suggested_transformer(suggested_field)
+
+            # Apply FULL template payload (override whatever was detected)
+            result.append(
+                ColumnSuggestion(
+                    csv_column=suggestion.csv_column,
+                    suggested_field=suggested_field,
+                    confidence=0.95,  # High confidence from template
+                    confidence_level=ConfidenceLevel.HIGH,
+                    transformation=transformation,
+                    sample_values=suggestion.sample_values,
+                    reason="Matched from saved template",
+                    default_action=action,
+                )
+            )
+        else:
+            # Keep original suggestion for columns not in template
+            result.append(suggestion)
+
+    return result
 
 
 def _find_matching_templates(
@@ -1047,6 +1169,92 @@ def _update_import_completed(
 
 
 # =============================================================================
+# Learning from Corrections
+# =============================================================================
+
+
+def store_mapping_corrections(
+    db: Session,
+    org_id: UUID,
+    original_suggestions: list[dict],
+    final_mappings: list[ColumnMapping],
+) -> None:
+    """
+    Compare original suggestions to final mappings and store corrections.
+    Called when import is confirmed/approved.
+
+    SKIPS action="ignore" to avoid teaching the system to hide columns permanently.
+    """
+    from sqlalchemy import func
+
+    from app.db.models.surrogates import ImportMappingCorrection
+    from app.services.import_detection_service import normalize_column_name
+
+    # Build lookup of original suggestions using normalize_column_name()
+    original_map = {normalize_column_name(s["csv_column"]): s for s in original_suggestions}
+
+    for final in final_mappings:
+        # SKIP ignore - don't teach system to hide columns
+        if final.action == "ignore":
+            continue
+
+        normalized = normalize_column_name(final.csv_column)
+
+        # Skip empty or invalid column names
+        if not normalized:
+            continue
+
+        original = original_map.get(normalized)
+
+        corrected_field = final.surrogate_field
+        if final.action == "custom":
+            if not final.custom_field_key:
+                continue
+            corrected_field = f"custom.{final.custom_field_key}"
+
+        # Skip if no change from original suggestion (and transformation unchanged)
+        if final.action == "map" and original:
+            if (
+                original.get("suggested_field") == corrected_field
+                and original.get("transformation") == final.transformation
+            ):
+                continue
+
+        # Upsert correction
+        existing = (
+            db.query(ImportMappingCorrection)
+            .filter(
+                ImportMappingCorrection.organization_id == org_id,
+                ImportMappingCorrection.column_name_normalized == normalized,
+            )
+            .first()
+        )
+
+        if existing:
+            if existing.corrected_field == corrected_field:
+                # Same correction, increment count
+                existing.times_used += 1
+            else:
+                # Different correction, reset
+                existing.corrected_field = corrected_field
+                existing.corrected_transformation = final.transformation
+                existing.corrected_action = final.action
+                existing.times_used = 1
+            existing.last_used_at = func.now()
+        else:
+            db.add(
+                ImportMappingCorrection(
+                    organization_id=org_id,
+                    column_name_normalized=normalized,
+                    original_suggestion=original.get("suggested_field") if original else None,
+                    corrected_field=corrected_field,
+                    corrected_transformation=final.transformation,
+                    corrected_action=final.action,
+                )
+            )
+
+
+# =============================================================================
 # Approval Workflow
 # =============================================================================
 
@@ -1102,6 +1310,7 @@ def approve_import(
     Approve an import for execution.
 
     Changes status to 'approved' and queues the background job.
+    Also stores mapping corrections for learning.
     """
     import_record = get_import(db, org_id, import_id)
     if not import_record:
@@ -1109,6 +1318,25 @@ def approve_import(
 
     if import_record.status != "awaiting_approval":
         raise ValueError(f"Import is not awaiting approval (current: {import_record.status})")
+
+    # Store corrections for learning (before approval to ensure data is captured)
+    if import_record.original_suggestions_snapshot and import_record.column_mapping_snapshot:
+        final_mappings = [
+            ColumnMapping(
+                csv_column=m["csv_column"],
+                surrogate_field=m.get("surrogate_field"),
+                transformation=m.get("transformation"),
+                action=m.get("action", "map"),
+                custom_field_key=m.get("custom_field_key"),
+            )
+            for m in import_record.column_mapping_snapshot
+        ]
+        store_mapping_corrections(
+            db,
+            org_id,
+            import_record.original_suggestions_snapshot,
+            final_mappings,
+        )
 
     import_record.status = "approved"
     import_record.approved_by_user_id = approved_by_user_id

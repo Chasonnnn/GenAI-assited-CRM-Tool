@@ -231,6 +231,7 @@ def get_import_details(
 async def preview_csv_enhanced(
     request: Request,
     file: UploadFile = File(..., description="CSV file to preview"),
+    apply_template: bool = True,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
@@ -253,10 +254,11 @@ async def preview_csv_enhanced(
         )
 
     try:
-        preview = import_service.preview_import_enhanced(
+        preview = await import_service.preview_import_enhanced(
             db=db,
             org_id=session.org_id,
             file_content=content,
+            apply_template=apply_template,
         )
     except Exception as e:
         raise HTTPException(
@@ -285,6 +287,18 @@ async def preview_csv_enhanced(
         "duplicate_emails_db": preview.duplicate_emails_db,
         "duplicate_emails_csv": preview.duplicate_emails_csv,
     }
+    # Store original suggestions for learning (post-auto, pre-user correction)
+    import_record.original_suggestions_snapshot = [
+        {
+            "csv_column": s.csv_column,
+            "suggested_field": s.suggested_field,
+            "confidence": s.confidence,
+            "reason": s.reason,
+            "transformation": s.transformation,
+            "default_action": s.default_action,
+        }
+        for s in preview.column_suggestions
+    ]
     db.commit()
 
     audit_service.log_phi_access(
@@ -341,6 +355,20 @@ async def preview_csv_enhanced(
         validation_errors=preview.validation_errors,
         date_ambiguity_warnings=preview.date_ambiguity_warnings,
         ai_available=preview.ai_available,
+        # Auto-apply template results
+        auto_applied_template=(
+            MatchingTemplate(
+                id=preview.auto_applied_template["id"],
+                name=preview.auto_applied_template["name"],
+                match_score=preview.auto_applied_template["match_score"],
+            )
+            if preview.auto_applied_template
+            else None
+        ),
+        template_unknown_column_behavior=preview.template_unknown_column_behavior,
+        # AI auto-trigger results
+        ai_auto_triggered=preview.ai_auto_triggered,
+        ai_mapped_columns=preview.ai_mapped_columns,
     )
 
 

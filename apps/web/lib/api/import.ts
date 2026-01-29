@@ -20,6 +20,12 @@ export interface ColumnSuggestion {
     needs_inversion: boolean
 }
 
+export interface MatchingTemplate {
+    id: string
+    name: string
+    match_score: number
+}
+
 export interface EnhancedImportPreview {
     import_id: string
     total_rows: number
@@ -30,13 +36,19 @@ export interface EnhancedImportPreview {
     column_suggestions: ColumnSuggestion[]
     matched_count: number
     unmatched_count: number
-    matching_templates: Array<{ id: string; name: string; match_score: number }>
+    matching_templates: MatchingTemplate[]
     available_fields: string[]
     duplicate_emails_db: number
     duplicate_emails_csv: number
     validation_errors: number
     date_ambiguity_warnings: Array<Record<string, unknown>>
     ai_available: boolean
+    // Auto-applied template (if >80% match)
+    auto_applied_template: MatchingTemplate | null
+    template_unknown_column_behavior: string | null
+    // AI auto-trigger results
+    ai_auto_triggered: boolean
+    ai_mapped_columns: string[]
 }
 
 export interface ColumnMappingItem {
@@ -104,11 +116,19 @@ export interface AiMapResponse {
     suggestions: ColumnSuggestion[]
 }
 
-export async function previewImport(file: File): Promise<EnhancedImportPreview> {
+export async function previewImport(
+    file: File,
+    options?: { applyTemplate?: boolean }
+): Promise<EnhancedImportPreview> {
     const formData = new FormData()
     formData.append('file', file)
+    const applyTemplate =
+        typeof options?.applyTemplate === 'boolean' ? options.applyTemplate : true
 
-    return api.post<EnhancedImportPreview>('/surrogates/import/preview/enhanced', formData)
+    return api.post<EnhancedImportPreview>(
+        `/surrogates/import/preview/enhanced?apply_template=${applyTemplate}`,
+        formData
+    )
 }
 
 export async function submitImport(

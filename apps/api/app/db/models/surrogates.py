@@ -576,6 +576,9 @@ class SurrogateImport(Base):
     Dedupe:
     - Matches by email against all surrogates (including archived)
     - Also checks for duplicates within the CSV itself
+
+    Learning:
+    - original_suggestions_snapshot stores initial suggestions for correction learning
     """
 
     __tablename__ = "surrogate_imports"
@@ -629,6 +632,9 @@ class SurrogateImport(Base):
     backdate_created_at: Mapped[bool] = mapped_column(
         Boolean, server_default=text("false"), nullable=False
     )
+
+    # Learning: store original suggestions for correction learning
+    original_suggestions_snapshot: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     # Admin approval workflow
     # Status values: 'pending', 'awaiting_approval', 'approved', 'processing', 'completed', 'rejected', 'failed'
@@ -1273,3 +1279,55 @@ class JourneyFeaturedImage(Base):
     attachment: Mapped["Attachment"] = relationship()
     created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
     updated_by: Mapped["User | None"] = relationship(foreign_keys=[updated_by_user_id])
+
+
+# =============================================================================
+# Import Mapping Corrections (Learning System)
+# =============================================================================
+
+
+class ImportMappingCorrection(Base):
+    """
+    Stores column mapping corrections per organization for learning.
+
+    When users correct the auto-detected column mappings during import,
+    those corrections are stored here so future imports can learn from them.
+    Also used for Meta lead form mapping corrections.
+
+    Key is normalized using normalize_column_name() for consistent matching.
+    """
+
+    __tablename__ = "import_mapping_corrections"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "column_name_normalized", name="uq_import_correction_org_col"
+        ),
+        Index("idx_import_corrections_org", "organization_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # Key: uses normalize_column_name() output for consistent matching
+    column_name_normalized: Mapped[str] = mapped_column(String(255), nullable=False)
+    original_suggestion: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    # Nullable for metadata/custom actions (no surrogate_field)
+    corrected_field: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    corrected_transformation: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    corrected_action: Mapped[str] = mapped_column(
+        String(20), server_default=text("'map'"), nullable=False
+    )
+
+    times_used: Mapped[int] = mapped_column(server_default=text("1"), nullable=False)
+    last_used_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+
+    # Relationships
+    organization: Mapped["Organization"] = relationship()

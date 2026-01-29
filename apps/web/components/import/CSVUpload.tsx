@@ -23,7 +23,10 @@ import {
     FileIcon,
     Loader2Icon,
     SparklesIcon,
+    BookOpenIcon,
+    SearchIcon,
 } from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import {
@@ -63,6 +66,43 @@ interface CSVUploadProps {
     onImportComplete?: () => void
 }
 
+/** Get badge info based on suggestion reason */
+function getReasonBadge(reason: string): {
+    icon: React.ReactNode
+    label: string
+    variant: "secondary" | "outline"
+} | null {
+    if (reason.startsWith("Learned")) {
+        return {
+            icon: <BookOpenIcon className="size-3 mr-1" />,
+            label: "Learned",
+            variant: "secondary",
+        }
+    }
+    if (reason.startsWith("AI:")) {
+        return {
+            icon: <SparklesIcon className="size-3 mr-1" />,
+            label: "AI",
+            variant: "outline",
+        }
+    }
+    if (reason.includes("Matched from saved template")) {
+        return {
+            icon: <FileIcon className="size-3 mr-1" />,
+            label: "Template",
+            variant: "outline",
+        }
+    }
+    if (reason.includes("similarity")) {
+        return {
+            icon: <SearchIcon className="size-3 mr-1" />,
+            label: "Similar",
+            variant: "outline",
+        }
+    }
+    return null
+}
+
 export function CSVUpload({ onImportComplete }: CSVUploadProps) {
     const { user } = useAuth()
     const [file, setFile] = useState<File | null>(null)
@@ -75,6 +115,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
     const [error, setError] = useState<string>("")
     const [submitMessage, setSubmitMessage] = useState<string | null>(null)
     const [approveMessage, setApproveMessage] = useState<string | null>(null)
+    const [templateCleared, setTemplateCleared] = useState(false)
 
     const previewMutation = usePreviewImport()
     const submitMutation = useSubmitImport()
@@ -125,15 +166,27 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         setSubmitMessage(null)
         setApproveMessage(null)
         setBackdateCreatedAt(false)
+        setTemplateCleared(false)
         setFile(selectedFile)
 
         try {
-            const previewData = await previewMutation.mutateAsync(selectedFile)
+            const previewData = await previewMutation.mutateAsync({
+                file: selectedFile,
+                applyTemplate: true,
+            })
             setPreview(previewData)
             const baseMappings = buildColumnMappingsFromSuggestions(previewData.column_suggestions)
             const nextTouched = new Set<string>()
             setTouchedColumns(nextTouched)
-            setMappings(applyUnknownColumnBehavior(baseMappings, unknownColumnBehavior, nextTouched))
+
+            // Use template's unknown_column_behavior if auto-applied, otherwise default
+            const effectiveBehavior = previewData.template_unknown_column_behavior as UnknownColumnBehavior | null
+            const behavior = effectiveBehavior || unknownColumnBehavior
+            if (effectiveBehavior) {
+                setUnknownColumnBehavior(effectiveBehavior)
+            }
+
+            setMappings(applyUnknownColumnBehavior(baseMappings, behavior, nextTouched))
         } catch (err: unknown) {
             setError(resolveErrorDetail(err, "Failed to preview CSV"))
             setFile(null)
@@ -416,6 +469,64 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                         </div>
                     </Card>
 
+                    {/* Auto-applied template banner */}
+                    {preview.auto_applied_template && !templateCleared && (
+                        <Alert>
+                            <CheckIcon className="size-4" />
+                            <AlertTitle>Template auto-applied</AlertTitle>
+                            <AlertDescription className="flex items-center justify-between">
+                                <span>
+                                    &ldquo;{preview.auto_applied_template.name}&rdquo; matched{" "}
+                                    {Math.round(preview.auto_applied_template.match_score * 100)}% of columns.
+                                    {preview.template_unknown_column_behavior && (
+                                        <span className="text-muted-foreground ml-2">
+                                            Unknown columns: {preview.template_unknown_column_behavior}
+                                        </span>
+                                    )}
+                                </span>
+                                <Button
+                                    variant="link"
+                                    size="sm"
+                                    className="h-auto p-0"
+                                    onClick={async () => {
+                                        if (!file) return
+                                        setTemplateCleared(true)
+                                        try {
+                                            const previewData = await previewMutation.mutateAsync({
+                                                file,
+                                                applyTemplate: false,
+                                            })
+                                            setPreview(previewData)
+                                            const baseMappings = buildColumnMappingsFromSuggestions(
+                                                previewData.column_suggestions
+                                            )
+                                            const nextTouched = new Set<string>()
+                                            setTouchedColumns(nextTouched)
+                                            setMappings(
+                                                applyUnknownColumnBehavior(baseMappings, "ignore", nextTouched)
+                                            )
+                                            setUnknownColumnBehavior("ignore")
+                                        } catch (err: unknown) {
+                                            setError(
+                                                resolveErrorDetail(err, "Failed to clear template mappings")
+                                            )
+                                        }
+                                    }}
+                                >
+                                    Clear and map manually
+                                </Button>
+                            </AlertDescription>
+                        </Alert>
+                    )}
+
+                    {/* AI auto-trigger indicator */}
+                    {preview.ai_auto_triggered && preview.ai_mapped_columns.length > 0 && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <SparklesIcon className="size-4" />
+                            AI suggested mappings for {preview.ai_mapped_columns.length} unmatched column(s)
+                        </div>
+                    )}
+
                     <Card className="overflow-hidden">
                         <CardHeader>
                             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -498,13 +609,31 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {mappings.map((mapping) => (
+                                        {mappings.map((mapping) => {
+                                            // Get reason from original suggestion for badge
+                                            const originalSuggestion = preview.column_suggestions.find(
+                                                (s) => s.csv_column === mapping.csv_column
+                                            )
+                                            const reasonBadge = originalSuggestion
+                                                ? getReasonBadge(originalSuggestion.reason)
+                                                : null
+
+                                            return (
                                             <TableRow key={mapping.csv_column}>
                                                 <TableCell className="font-medium">
                                                     <div className="space-y-1">
                                                         <div className="flex items-center gap-2">
                                                             <span>{mapping.csv_column}</span>
-                                                            {mapping.confidence_level !== "none" && (
+                                                            {reasonBadge && (
+                                                                <Badge
+                                                                    variant={reasonBadge.variant}
+                                                                    className="text-xs flex items-center"
+                                                                >
+                                                                    {reasonBadge.icon}
+                                                                    {reasonBadge.label}
+                                                                </Badge>
+                                                            )}
+                                                            {!reasonBadge && mapping.confidence_level !== "none" && (
                                                                 <Badge
                                                                     variant="secondary"
                                                                     className="text-xs capitalize"
@@ -617,7 +746,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                                     </Select>
                                                 </TableCell>
                                             </TableRow>
-                                        ))}
+                                        )})}
                                     </TableBody>
                                 </Table>
                             </div>

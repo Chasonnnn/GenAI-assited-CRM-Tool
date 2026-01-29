@@ -10,9 +10,17 @@ from sqlalchemy.orm import Session
 
 from app.core.constants import SYSTEM_USER_ID
 from app.db.enums import OwnerType, Role, TaskType
-from app.db.models import Membership, MetaForm, MetaFormVersion, MetaLead, Task
+from app.db.models import Membership, MetaAd, MetaForm, MetaFormVersion, MetaLead, Task
 from app.schemas.task import TaskCreate
 from app.services import import_detection_service, queue_service, task_service
+
+
+META_SYSTEM_COLUMNS: list[tuple[str, str]] = [
+    ("meta_ad_id", "Ad ID"),
+    ("meta_ad_name", "Ad name"),
+    ("meta_form_name", "Form name"),
+    ("meta_platform", "Platform"),
+]
 
 
 def get_form(db: Session, org_id: UUID, form_id: UUID) -> MetaForm | None:
@@ -100,6 +108,29 @@ def build_mapping_preview(
         keys.append(key)
         analysis_headers.append(label or key)
 
+    if "created_time" not in keys:
+        columns.append(
+            {
+                "key": "created_time",
+                "label": "Lead created time",
+                "question_type": "meta",
+            }
+        )
+        keys.append("created_time")
+        analysis_headers.append("Lead created time")
+
+    for key, label in META_SYSTEM_COLUMNS:
+        if key not in keys:
+            columns.append(
+                {
+                    "key": key,
+                    "label": label,
+                    "question_type": "meta",
+                }
+            )
+            keys.append(key)
+            analysis_headers.append(label)
+
     # Pull sample rows from live leads if available
     leads = (
         db.query(MetaLead)
@@ -120,8 +151,37 @@ def build_mapping_preview(
             raw = lead.field_data_raw or lead.field_data or {}
             row: dict[str, str] = {}
             for key in keys:
-                value = raw.get(key)
-                row[key] = _format_sample_value(value)
+                if key == "created_time":
+                    value = lead.meta_created_time or lead.received_at
+                    row[key] = value.isoformat() if value else ""
+                elif key == "meta_ad_id":
+                    row[key] = _format_sample_value(raw.get("meta_ad_id") or raw.get("ad_id"))
+                elif key == "meta_ad_name":
+                    ad_name = raw.get("meta_ad_name") or raw.get("ad_name")
+                    if not ad_name:
+                        ad_id = raw.get("meta_ad_id") or raw.get("ad_id")
+                        if ad_id:
+                            meta_ad = (
+                                db.query(MetaAd)
+                                .filter(
+                                    MetaAd.organization_id == form.organization_id,
+                                    MetaAd.ad_external_id == str(ad_id),
+                                )
+                                .first()
+                            )
+                            ad_name = meta_ad.ad_name if meta_ad else None
+                    row[key] = _format_sample_value(ad_name)
+                elif key == "meta_form_name":
+                    row[key] = form.form_name or ""
+                elif key == "meta_platform":
+                    row[key] = _format_sample_value(
+                        raw.get("meta_platform")
+                        or raw.get("platform")
+                        or raw.get("publisher_platform")
+                    )
+                else:
+                    value = raw.get(key)
+                    row[key] = _format_sample_value(value)
             sample_rows.append(row)
     else:
         # Generate dummy rows for mapping/testing (Zapier-style)
@@ -132,22 +192,39 @@ def build_mapping_preview(
                 if not key:
                     continue
                 row[key] = _generate_dummy_value(question, idx)
+            if "created_time" in keys:
+                row["created_time"] = (datetime.now(timezone.utc) - timedelta(days=idx)).isoformat()
+            if "meta_ad_id" in keys:
+                row["meta_ad_id"] = f"ad_{1000 + idx}"
+            if "meta_ad_name" in keys:
+                row["meta_ad_name"] = f"Sample Ad {idx + 1}"
+            if "meta_form_name" in keys:
+                row["meta_form_name"] = form.form_name
+            if "meta_platform" in keys:
+                row["meta_platform"] = "facebook" if idx % 2 == 0 else "instagram"
             if row:
                 sample_rows.append(row)
 
     # Build sample matrix for column analysis
     sample_matrix = [[row.get(key, "") for key in keys] for row in sample_rows]
 
-    suggestions = import_detection_service.analyze_columns(
+    # Analyze columns with learning from previous corrections
+    suggestions = import_detection_service.analyze_columns_with_learning(
+        db,
+        form.organization_id,
         analysis_headers,
         sample_matrix,
         allowed_fields=import_detection_service.AVAILABLE_SURROGATE_FIELDS,
     )
 
+    system_keys = {key for key, _ in META_SYSTEM_COLUMNS}
+
     # Override csv_column to use question keys
     for idx, suggestion in enumerate(suggestions):
         if idx < len(keys):
             suggestion.csv_column = keys[idx]
+            if keys[idx] in system_keys:
+                suggestion.default_action = "metadata"
 
     # AI availability (for optional AI mapping)
     from app.services.import_ai_mapper_service import is_ai_available
@@ -171,11 +248,52 @@ def save_mapping(
     column_mappings: list[dict],
     unknown_column_behavior: str,
     user_id: UUID,
+    original_suggestions: list[dict] | None = None,
 ) -> None:
+    """
+    Save Meta form mapping and store corrections for learning.
+
+    Args:
+        db: Database session
+        form: MetaForm to update
+        column_mappings: Final user-approved mappings
+        unknown_column_behavior: How to handle unknown columns
+        user_id: User saving the mapping
+        original_suggestions: Optional list of original suggestions for learning
+    """
     _validate_required_mappings(column_mappings)
 
     if not form.current_version_id:
         raise ValueError("Form has no schema version yet. Sync forms first.")
+
+    # Store corrections for learning (before saving)
+    if original_suggestions:
+        from app.services.import_service import ColumnMapping, store_mapping_corrections
+
+        # Convert final mappings to ColumnMapping format
+        # column_mappings can use csv_column (from API) or key (from form schema)
+        final_mappings = [
+            ColumnMapping(
+                csv_column=m.get("csv_column", m.get("form_field", m.get("key", ""))),
+                surrogate_field=m.get("surrogate_field"),
+                transformation=m.get("transformation"),
+                action=m.get("action", "map"),
+                custom_field_key=m.get("custom_field_key"),
+            )
+            for m in column_mappings
+        ]
+
+        # Convert original suggestions to dict format
+        # original_suggestions use csv_column (from analyze_columns)
+        original_dicts = [
+            {
+                "csv_column": s.get("csv_column", s.get("form_field", s.get("key", ""))),
+                "suggested_field": s.get("suggested_field"),
+            }
+            for s in original_suggestions
+        ]
+
+        store_mapping_corrections(db, form.organization_id, original_dicts, final_mappings)
 
     form.mapping_rules = column_mappings
     form.unknown_column_behavior = unknown_column_behavior
