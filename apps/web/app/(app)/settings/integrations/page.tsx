@@ -72,12 +72,17 @@ const AI_PROVIDERS = [
     {
         value: "gemini",
         label: "Google Gemini",
-        models: ["gemini-3-flash-preview", "gemini-2.0-flash-exp", "gemini-1.5-pro"],
+        models: ["gemini-3-flash-preview", "gemini-3-pro-preview"],
+    },
+    {
+        value: "vertex_api_key",
+        label: "Vertex AI (API Key)",
+        models: ["gemini-3-flash-preview", "gemini-3-pro-preview"],
     },
     {
         value: "vertex_wif",
         label: "Vertex AI (WIF)",
-        models: ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash"],
+        models: ["gemini-3-flash-preview", "gemini-3-pro-preview"],
     },
 ] as const
 
@@ -104,6 +109,7 @@ function AIConfigurationSection() {
     const [vertexLocation, setVertexLocation] = useState("us-central1")
     const [vertexAudience, setVertexAudience] = useState("")
     const [vertexServiceAccount, setVertexServiceAccount] = useState("")
+    const [vertexUseExpress, setVertexUseExpress] = useState(true)
     const [keyTested, setKeyTested] = useState<boolean | null>(null)
     const [saved, setSaved] = useState(false)
 
@@ -117,10 +123,23 @@ function AIConfigurationSection() {
                 setProvider("openai")
             }
             setModel(aiSettings.model || "")
-            setVertexProjectId(aiSettings.vertex_wif?.project_id || "")
-            setVertexLocation(aiSettings.vertex_wif?.location || "us-central1")
+            setVertexProjectId(
+                aiSettings.vertex_wif?.project_id ||
+                aiSettings.vertex_api_key?.project_id ||
+                ""
+            )
+            setVertexLocation(
+                aiSettings.vertex_wif?.location ||
+                aiSettings.vertex_api_key?.location ||
+                "us-central1"
+            )
             setVertexAudience(aiSettings.vertex_wif?.audience || "")
             setVertexServiceAccount(aiSettings.vertex_wif?.service_account_email || "")
+            setVertexUseExpress(
+                aiSettings.provider === "vertex_api_key" &&
+                !aiSettings.vertex_api_key?.project_id &&
+                !aiSettings.vertex_api_key?.location
+            )
         }
     }, [aiSettings])
 
@@ -130,14 +149,33 @@ function AIConfigurationSection() {
     const consentAccepted = Boolean(aiSettings?.consent_accepted_at)
     const gcpIntegration = userIntegrations?.find(i => i.integration_type === "gcp")
     const vertexReady = provider !== "vertex_wif"
-        || Boolean(vertexProjectId.trim() && vertexLocation.trim() && vertexServiceAccount.trim() && vertexAudience.trim())
+        || Boolean(
+            vertexProjectId.trim() &&
+            vertexLocation.trim() &&
+            vertexServiceAccount.trim() &&
+            vertexAudience.trim()
+        )
 
     const handleTestKey = async () => {
         if (provider === "vertex_wif") return
         if (!apiKey.trim()) return
         setKeyTested(null)
         try {
-            const result = await testKey.mutateAsync({ provider, api_key: apiKey })
+            const payload: {
+                provider: "openai" | "gemini" | "vertex_api_key";
+                api_key: string;
+                vertex_api_key?: { project_id: string | null; location: string | null };
+            } = {
+                provider,
+                api_key: apiKey,
+            }
+            if (provider === "vertex_api_key") {
+                payload.vertex_api_key = {
+                    project_id: vertexUseExpress ? null : vertexProjectId.trim() || null,
+                    location: vertexUseExpress ? null : vertexLocation.trim() || null,
+                }
+            }
+            const result = await testKey.mutateAsync(payload)
             setKeyTested(result.valid)
         } catch {
             setKeyTested(false)
@@ -147,7 +185,7 @@ function AIConfigurationSection() {
     const handleSave = async () => {
         const update: {
             is_enabled?: boolean;
-            provider?: "openai" | "gemini" | "vertex_wif";
+            provider?: "openai" | "gemini" | "vertex_wif" | "vertex_api_key";
             api_key?: string;
             model?: string;
             vertex_wif?: {
@@ -155,6 +193,10 @@ function AIConfigurationSection() {
                 location: string | null;
                 audience: string | null;
                 service_account_email: string | null;
+            };
+            vertex_api_key?: {
+                project_id: string | null;
+                location: string | null;
             };
         } = {
             is_enabled: isEnabled,
@@ -172,6 +214,12 @@ function AIConfigurationSection() {
                 location: vertexLocation.trim() || null,
                 audience: vertexAudience.trim() || null,
                 service_account_email: vertexServiceAccount.trim() || null,
+            }
+        }
+        if (provider === "vertex_api_key") {
+            update.vertex_api_key = {
+                project_id: vertexUseExpress ? null : vertexProjectId.trim() || null,
+                location: vertexUseExpress ? null : vertexLocation.trim() || null,
             }
         }
         await updateSettings.mutateAsync(update)
@@ -205,7 +253,7 @@ function AIConfigurationSection() {
         <div className="border-t pt-6">
             <h2 className="mb-4 text-lg font-semibold">AI Configuration</h2>
             <p className="mb-4 text-sm text-muted-foreground">
-                Configure AI assistant settings for your organization. Use BYOK (OpenAI/Gemini) or Vertex AI via Workload Identity Federation.
+                Configure AI assistant settings for your organization. Use BYOK (OpenAI/Gemini), Vertex API key (express mode), or Vertex AI via Workload Identity Federation.
             </p>
 
             {!consentAccepted && consentInfo && (
@@ -345,8 +393,58 @@ function AIConfigurationSection() {
                             <p className="text-xs text-muted-foreground">
                                 {provider === "openai"
                                     ? "Get your key from platform.openai.com"
-                                    : "Get your key from aistudio.google.com"}
+                                    : provider === "gemini"
+                                      ? "Get your key from aistudio.google.com"
+                                      : "Create a Vertex AI API key in Google Cloud"}
                             </p>
+                        </div>
+                    )}
+
+                    {provider === "vertex_api_key" && (
+                        <div className="space-y-4 rounded-lg border p-4">
+                            <div>
+                                <h3 className="text-sm font-medium">Vertex AI (API Key)</h3>
+                                <p className="text-xs text-muted-foreground">
+                                    Express mode works without project or location. Add them to use project-scoped endpoints.
+                                </p>
+                            </div>
+                            <div className="flex items-center justify-between rounded-md border p-3">
+                                <div className="text-sm">
+                                    {vertexUseExpress ? "Express mode active" : "Project-scoped mode"}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Label htmlFor="vertex-express" className="text-xs text-muted-foreground">
+                                        Use express mode
+                                    </Label>
+                                    <Switch
+                                        id="vertex-express"
+                                        checked={vertexUseExpress}
+                                        onCheckedChange={(checked) => setVertexUseExpress(checked)}
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid gap-3 md:grid-cols-2">
+                                <div className="space-y-2">
+                                    <Label htmlFor="vertex-project-key">Project ID (optional)</Label>
+                                    <Input
+                                        id="vertex-project-key"
+                                        value={vertexProjectId}
+                                        onChange={(e) => setVertexProjectId(e.target.value)}
+                                        placeholder="your-gcp-project-id"
+                                        disabled={vertexUseExpress}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="vertex-location-key">Location (optional)</Label>
+                                    <Input
+                                        id="vertex-location-key"
+                                        value={vertexLocation}
+                                        onChange={(e) => setVertexLocation(e.target.value)}
+                                        placeholder="us-central1"
+                                        disabled={vertexUseExpress}
+                                    />
+                                </div>
+                            </div>
                         </div>
                     )}
 

@@ -100,13 +100,14 @@ export default function CampaignDetailPage() {
     const { data: campaign, isLoading } = useCampaign(campaignId)
     const { data: runs } = useCampaignRuns(campaignId)
     const latestRun = runs?.[0]
+    const recipientQuery = {
+        limit: 50,
+        ...(recipientFilter === "all" ? {} : { status: recipientFilter }),
+    }
     const { data: recipients } = useRunRecipients(
         campaignId,
         latestRun?.id,
-        {
-            limit: 50,
-            status: recipientFilter === "all" ? undefined : recipientFilter,
-        }
+        recipientQuery
     )
     const { data: template } = useEmailTemplate(campaign?.email_template_id ?? null)
 

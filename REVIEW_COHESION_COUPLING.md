@@ -135,7 +135,7 @@ Coupling notes:
 | `apps/api/app/services/form_service.py` | Builder + submissions + auto‑mapping | `routers/forms*.py`, workflows | Surrogate, audit, notification, attachments | D (builder + ingestion) | D | Form changes can mutate surrogates incorrectly | Split builder vs submission pipeline |
 | `apps/api/app/services/appointment_service.py` | Scheduling + integrations in one file | `routers/appointments.py`, booking | Integrations, models, async utils | C (core + integrations) | C/D | Integration changes regress scheduling | Extract `appointment_integrations` module |
 | `apps/api/app/services/platform_service.py` | Platform admin operations across orgs | `routers/platform.py`, internal | Org, security, models | C (multi‑concern admin) | C | Cross‑org changes risk isolation | Split by concern (orgs/invites/billing) |
-| `apps/api/app/worker.py` | 1.7k LOC job switchboard | Scheduled triggers/internal | Many services + integrations | D (multi‑domain handlers) | D | Adding jobs risks regressions | Per‑domain worker handlers + registry |
+| `apps/api/app/worker.py` | 1.7k LOC job switchboard | Scheduled triggers/internal | Many services + integrations | D (multi‑domain handlers) | D | Adding jobs risks regressions | ✅ Completed: per-domain job handlers + registry (2026-01-29) |
 | `apps/api/app/routers/surrogates.py` | 1.4k LOC router; direct model use + side‑effects | main app | Surrogate services + models + dashboard | C (many endpoints + logic) | C/D | Endpoint changes ripple across domain | Split into sub‑routers; move model access to services |
 | `apps/api/app/routers/ai.py` | 2.1k LOC router; heavy orchestration | main app | AI services + models + rate limits | D (router + logic) | D | AI changes impact tasks/workflows | Split into smaller routers + move logic to services |
 | `apps/api/app/routers/integrations.py` | Multi‑provider flows in one file | main app | OAuth/Gmail/Zoom/Meta services | C (multiple integrations) | C/D | Integration changes affect all providers | Split routers per integration |
@@ -272,3 +272,4 @@ Coupling notes:
 - 2026-01-29: Consolidated org invite fallback HTML into system template defaults (R11).
 - 2026-01-29: Split `routers/ai.py` into sub-routers for settings, chat, actions, usage, workflows, schedule parsing, and bulk tasks.
 - 2026-01-29: Split workflow engine into core (`workflow_engine_core`) and domain adapter (`workflow_engine_adapters`) modules.
+- 2026-01-29: Split worker jobs into per-domain handlers with a central registry.

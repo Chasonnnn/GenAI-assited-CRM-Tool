@@ -36,6 +36,7 @@ import {
 const TRANSFORM_OPTIONS = [
     { value: "", label: "None" },
     { value: "date_flexible", label: "Date (flexible)" },
+    { value: "datetime_flexible", label: "Date/Time (flexible)" },
     { value: "height_flexible", label: "Height (flexible)" },
     { value: "state_normalize", label: "State normalize" },
     { value: "phone_normalize", label: "Phone normalize" },
