@@ -289,6 +289,10 @@ async def test_learning_applies_to_csv_imports(
     approve = await authed_client.post(f"/surrogates/import/{import_id}/approve")
     assert approve.status_code == 200, approve.text
 
+    # Cancel the approved import so duplicate-file guard doesn't block re-preview
+    cancel = await authed_client.delete(f"/surrogates/import/{import_id}")
+    assert cancel.status_code == 200, cancel.text
+
     preview_again = await authed_client.post(
         "/surrogates/import/preview/enhanced",
         files={"file": ("preview.csv", io.BytesIO(csv_data), "text/csv")},

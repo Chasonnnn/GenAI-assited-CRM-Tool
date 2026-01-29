@@ -60,6 +60,7 @@ vi.mock('@/lib/hooks/use-import', () => ({
     usePendingImportApprovals: () => mockUsePendingImportApprovals(),
     useApproveImport: () => ({ mutateAsync: mockApproveImport, isPending: false }),
     useRejectImport: () => ({ mutateAsync: mockRejectImport, isPending: false }),
+    useRunImportInline: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 vi.mock('@/lib/hooks/use-status-change-requests', () => ({
