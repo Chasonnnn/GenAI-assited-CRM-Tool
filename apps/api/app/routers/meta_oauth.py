@@ -421,12 +421,19 @@ def disconnect_connection(
         .all()
     )
 
-    # Unlink pages
+    # Unlink pages and disable lead ingestion
     unlinked_pages = (
         db.execute(
             update(MetaPageMapping)
             .where(MetaPageMapping.oauth_connection_id == connection_id)
-            .values(oauth_connection_id=None)
+            .values(
+                oauth_connection_id=None,
+                access_token_encrypted=None,
+                token_expires_at=None,
+                is_active=False,
+                last_error=None,
+                last_error_at=None,
+            )
             .returning(MetaPageMapping.id)
         )
         .scalars()
@@ -635,8 +642,32 @@ async def connect_assets(
 
     # Connect pages with webhook subscription
     # Fetch page tokens from /me/accounts (need page token for webhook)
-    pages_response = await meta_oauth_service.fetch_user_pages(token)
-    page_tokens = {p["id"]: p.get("access_token") for p in pages_response.data}
+    page_tokens: dict[str, str | None] = {}
+    page_names: dict[str, str | None] = {}
+    if data.page_ids:
+        remaining = set(data.page_ids)
+        cursor: str | None = None
+
+        while remaining:
+            pages_response = await meta_oauth_service.fetch_user_pages(token, cursor)
+            for page in pages_response.data:
+                page_id = str(page.get("id", ""))
+                if not page_id:
+                    continue
+                if page_id in remaining:
+                    page_tokens[page_id] = page.get("access_token")
+                    page_names[page_id] = page.get("name")
+                    remaining.discard(page_id)
+
+            cursor = pages_response.next_cursor
+            if not cursor:
+                break
+
+        if remaining:
+            logger.warning(
+                "Meta OAuth connect-assets: missing page tokens for %s",
+                ",".join(sorted(remaining)),
+            )
 
     for page_id in data.page_ids:
         page_token = page_tokens.get(page_id)
@@ -651,9 +682,7 @@ async def connect_assets(
                 logger.warning(f"Webhook subscription failed for {page_id}: {e}")
                 # Continue - page still linked, webhook can be retried
 
-        # Get page name from response
-        page_info = next((p for p in pages_response.data if p.get("id") == page_id), {})
-        page_name = page_info.get("name")
+        page_name = page_names.get(page_id)
 
         # Create/update mapping
         existing = meta_page_service.get_mapping_by_page_id(db, session.org_id, page_id)
@@ -682,6 +711,9 @@ async def connect_assets(
                 existing.page_name = page_name
             if encrypted_page_token:
                 existing.access_token_encrypted = encrypted_page_token
+            existing.is_active = True
+            existing.last_error = None
+            existing.last_error_at = None
         else:
             # Create new page mapping
             new_page = MetaPageMapping(

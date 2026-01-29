@@ -146,7 +146,7 @@ class Settings(BaseSettings):
     META_APP_ID: str = ""
     META_APP_SECRET: str = ""
     META_TEST_MODE: bool = False  # Set to True only for local testing
-    META_API_VERSION: str = "v21.0"
+    META_API_VERSION: str = "v24.0"
     META_ENCRYPTION_KEY: str = ""  # Fernet key for encrypting page tokens
     META_WEBHOOK_MAX_PAYLOAD_BYTES: int = 100000  # 100KB limit
 

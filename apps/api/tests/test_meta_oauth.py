@@ -299,6 +299,7 @@ async def test_meta_oauth_disconnect_unlinks_assets(authed_client: AsyncClient, 
         page_id="page_2",
         page_name="Page Two",
         oauth_connection_id=conn.id,
+        access_token_encrypted=encrypt_token("page-token"),
         is_active=True,
     )
     db.add_all([account, page])
@@ -316,6 +317,8 @@ async def test_meta_oauth_disconnect_unlinks_assets(authed_client: AsyncClient, 
     assert conn.is_active is False
     assert account.oauth_connection_id is None
     assert page.oauth_connection_id is None
+    assert page.is_active is False
+    assert page.access_token_encrypted is None
 
 
 @pytest.mark.asyncio

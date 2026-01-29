@@ -35,7 +35,7 @@ def _graph_base() -> str:
 HTTPX_TIMEOUT = httpx.Timeout(15.0, connect=5.0)
 
 # OAuth URLs
-META_OAUTH_URL = "https://www.facebook.com/v21.0/dialog/oauth"
+META_OAUTH_URL = f"https://www.facebook.com/{settings.META_API_VERSION}/dialog/oauth"
 META_TOKEN_URL = f"{_graph_base()}/oauth/access_token"
 
 # Required scopes - HARD FAIL if any missing

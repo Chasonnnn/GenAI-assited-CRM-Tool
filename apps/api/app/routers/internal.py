@@ -47,6 +47,10 @@ class TokenCheckResponse(BaseModel):
     expiring_soon: int
     expired: int
     alerts_created: int
+    oauth_connections_checked: int = 0
+    oauth_expiring_soon: int = 0
+    oauth_expired: int = 0
+    oauth_alerts_created: int = 0
 
 
 @router.post("/token-check", response_model=TokenCheckResponse)
@@ -67,6 +71,10 @@ def check_meta_tokens(x_internal_secret: str = Header(...)):
     expiring_soon = 0
     expired = 0
     alerts_created = 0
+    oauth_connections_checked = 0
+    oauth_expiring_soon = 0
+    oauth_expired = 0
+    oauth_alerts_created = 0
 
     with SessionLocal() as db:
         # Get all active page mappings
@@ -138,11 +146,92 @@ def check_meta_tokens(x_internal_secret: str = Header(...)):
                 )
                 alerts_created += 1
 
+        # Check OAuth connection tokens for expiry
+        from app.db.models import MetaOAuthConnection
+
+        connections = (
+            db.query(MetaOAuthConnection)
+            .filter(MetaOAuthConnection.is_active.is_(True))
+            .all()
+        )
+
+        for connection in connections:
+            oauth_connections_checked += 1
+
+            if not connection.token_expires_at:
+                continue
+
+            token_expires = connection.token_expires_at
+            if token_expires.tzinfo is None:
+                token_expires = token_expires.replace(tzinfo=timezone.utc)
+
+            connection_key = str(connection.id)
+            user_label = connection.meta_user_name or connection.meta_user_id
+
+            if token_expires < now:
+                oauth_expired += 1
+
+                ops_service.update_config_status(
+                    db=db,
+                    org_id=connection.organization_id,
+                    integration_type=IntegrationType.META_LEADS,
+                    config_status=ConfigStatus.EXPIRED_TOKEN,
+                    integration_key=connection_key,
+                )
+
+                alert_service.create_or_update_alert(
+                    db=db,
+                    org_id=connection.organization_id,
+                    alert_type=AlertType.META_TOKEN_EXPIRED,
+                    severity=AlertSeverity.CRITICAL,
+                    title=f"Meta OAuth token expired for {user_label}",
+                    message=(
+                        f"Token expired on {token_expires.strftime('%Y-%m-%d')}. "
+                        "Reconnect to resume Meta sync."
+                    ),
+                    integration_key=connection_key,
+                    details={"connection_id": connection_key},
+                )
+                oauth_alerts_created += 1
+
+            elif token_expires < expiry_threshold:
+                oauth_expiring_soon += 1
+                days_until = (token_expires - now).days
+
+                health = ops_service.get_or_create_health(
+                    db=db,
+                    org_id=connection.organization_id,
+                    integration_type=IntegrationType.META_LEADS,
+                    integration_key=connection_key,
+                )
+                if health.status != "error":
+                    health.status = "degraded"
+                    db.commit()
+
+                alert_service.create_or_update_alert(
+                    db=db,
+                    org_id=connection.organization_id,
+                    alert_type=AlertType.META_TOKEN_EXPIRING,
+                    severity=AlertSeverity.WARN,
+                    title=f"Meta OAuth token expiring in {days_until} days",
+                    message=(
+                        f"Token for {user_label} expires on {token_expires.strftime('%Y-%m-%d')}. "
+                        "Reconnect to avoid disruption."
+                    ),
+                    integration_key=connection_key,
+                    details={"connection_id": connection_key},
+                )
+                oauth_alerts_created += 1
+
     return TokenCheckResponse(
         pages_checked=pages_checked,
         expiring_soon=expiring_soon,
         expired=expired,
         alerts_created=alerts_created,
+        oauth_connections_checked=oauth_connections_checked,
+        oauth_expiring_soon=oauth_expiring_soon,
+        oauth_expired=oauth_expired,
+        oauth_alerts_created=oauth_alerts_created,
     )
 
 
@@ -430,10 +519,17 @@ def meta_spend_sync(
     ad_accounts_processed = 0
     jobs_created = 0
 
+    def _jitter_seconds_for_account(account_id) -> int:
+        # Deterministic jitter to avoid bursty syncs (0-15 minutes)
+        return int(account_id.int % 900)
+
     with SessionLocal() as db:
         ad_accounts = meta_admin_service.list_active_ad_accounts(db)
 
         for ad_account in ad_accounts:
+            run_at = datetime.now(timezone.utc) + timedelta(
+                seconds=_jitter_seconds_for_account(ad_account.id)
+            )
             job_service.schedule_job(
                 db=db,
                 job_type=JobType.META_SPEND_SYNC,
@@ -442,6 +538,7 @@ def meta_spend_sync(
                     "ad_account_id": str(ad_account.id),
                     "sync_type": sync_type,
                 },
+                run_at=run_at,
             )
             ad_accounts_processed += 1
             jobs_created += 1
