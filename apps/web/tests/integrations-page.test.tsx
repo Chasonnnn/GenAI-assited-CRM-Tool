@@ -14,6 +14,21 @@ const mockZapierTestLead = vi.fn()
 const mockZapierOutboundUpdate = vi.fn()
 const mockZapierOutboundTest = vi.fn()
 
+const zapierSettingsData = {
+    webhook_url: 'https://api.test/webhooks/zapier/abc',
+    is_active: true,
+    secret_configured: true,
+    outbound_webhook_url: null,
+    outbound_enabled: false,
+    outbound_secret_configured: false,
+    send_hashed_pii: false,
+    event_mapping: [
+        { stage_slug: 'new_unread', event_name: 'Lead', enabled: true },
+        { stage_slug: 'qualified', event_name: 'QualifiedLead', enabled: true },
+        { stage_slug: 'matched', event_name: 'ConvertedLead', enabled: true },
+    ],
+} as const
+
 vi.mock('@/lib/hooks/use-ops', () => ({
     useIntegrationHealth: () => mockUseIntegrationHealth(),
 }))
@@ -37,20 +52,7 @@ vi.mock('@/lib/hooks/use-user-integrations', () => ({
 
 vi.mock('@/lib/hooks/use-zapier', () => ({
     useZapierSettings: () => ({
-        data: {
-            webhook_url: 'https://api.test/webhooks/zapier/abc',
-            is_active: true,
-            secret_configured: true,
-            outbound_webhook_url: null,
-            outbound_enabled: false,
-            outbound_secret_configured: false,
-            send_hashed_pii: false,
-            event_mapping: [
-                { stage_slug: 'new_unread', event_name: 'Lead', enabled: true },
-                { stage_slug: 'qualified', event_name: 'QualifiedLead', enabled: true },
-                { stage_slug: 'matched', event_name: 'ConvertedLead', enabled: true },
-            ],
-        },
+        data: zapierSettingsData,
         isLoading: false,
     }),
     useRotateZapierSecret: () => ({ mutateAsync: mockZapierRotate, isPending: false }),
