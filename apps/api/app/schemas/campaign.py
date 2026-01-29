@@ -125,6 +125,15 @@ class CampaignRunResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CampaignRetryResponse(BaseModel):
+    """Campaign retry response."""
+
+    message: str
+    run_id: UUID
+    job_id: UUID | None = None
+    failed_count: int = 0
+
+
 class CampaignRecipientResponse(BaseModel):
     """Campaign recipient response."""
 

@@ -119,6 +119,13 @@ export interface CampaignSendResponse {
     scheduled_at: string | null
 }
 
+export interface CampaignRetryResponse {
+    message: string
+    run_id: string
+    job_id: string | null
+    failed_count: number
+}
+
 export interface Suppression {
     id: string
     email: string
@@ -209,6 +216,13 @@ export async function sendCampaign(
 
 export async function cancelCampaign(campaignId: string): Promise<{ message: string }> {
     return api.post<{ message: string }>(`/campaigns/${campaignId}/cancel`)
+}
+
+export async function retryFailedCampaignRun(
+    campaignId: string,
+    runId: string
+): Promise<CampaignRetryResponse> {
+    return api.post<CampaignRetryResponse>(`/campaigns/${campaignId}/runs/${runId}/retry-failed`)
 }
 
 // Runs

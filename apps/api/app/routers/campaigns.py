@@ -24,6 +24,7 @@ from app.schemas.campaign import (
     PreviewFiltersRequest,
     CampaignSendRequest,
     CampaignSendResponse,
+    CampaignRetryResponse,
     SuppressionCreate,
     SuppressionResponse,
 )
@@ -260,6 +261,40 @@ def get_campaign_run(
         raise HTTPException(status_code=404, detail="Run not found")
 
     return CampaignRunResponse.model_validate(run)
+
+
+@router.post(
+    "/{campaign_id}/runs/{run_id}/retry-failed",
+    response_model=CampaignRetryResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_csrf_header)],
+)
+def retry_failed_campaign_run(
+    campaign_id: UUID,
+    run_id: UUID,
+    db: Session = Depends(get_db),
+    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
+):
+    """Retry failed recipients for a campaign run."""
+    try:
+        message, resolved_run_id, job_id, failed_count = (
+            campaign_service.enqueue_campaign_retry_failed(
+                db=db,
+                org_id=session.org_id,
+                campaign_id=campaign_id,
+                run_id=run_id,
+                user_id=session.user_id,
+            )
+        )
+        db.commit()
+        return CampaignRetryResponse(
+            message=message,
+            run_id=resolved_run_id,
+            job_id=job_id,
+            failed_count=failed_count,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get(
