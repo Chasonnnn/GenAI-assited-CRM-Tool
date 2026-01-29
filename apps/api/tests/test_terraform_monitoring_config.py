@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -36,8 +37,8 @@ def test_monitoring_webhook_channel_is_configured() -> None:
     content = _read("infra/terraform/monitoring.tf")
     assert 'resource "google_monitoring_notification_channel" "ops_webhook"' in content
     assert "webhook_tokenauth" in content
-    assert "url = local.monitoring_webhook_url" in content
-    assert "token = var.monitoring_webhook_token" in content
+    assert re.search(r"url\s*=\s*local\.monitoring_webhook_url", content)
+    assert re.search(r"token\s*=\s*var\.monitoring_webhook_token", content)
     assert "notification_channels = local.alert_notification_channels" in content
 
 
