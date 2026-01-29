@@ -184,7 +184,7 @@ function AppointmentDetailDialog({
     open: boolean
     onOpenChange: (open: boolean) => void
 }) {
-    const { data: appointment, isLoading } = useAppointment(appointmentId || "")
+    const { data: appointment, isLoading, isError, refetch } = useAppointment(appointmentId || "")
     const approveMutation = useApproveAppointment()
     const cancelMutation = useCancelAppointment()
     const [cancelReason, setCancelReason] = useState("")
@@ -212,6 +212,25 @@ function AppointmentDetailDialog({
                 <DialogContent>
                     <div className="py-12 flex items-center justify-center">
                         <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                    </div>
+                </DialogContent>
+            </Dialog>
+        )
+    }
+
+    if (isError) {
+        return (
+            <Dialog open={open} onOpenChange={onOpenChange}>
+                <DialogContent>
+                    <div className="py-10 text-center space-y-4">
+                        <AlertCircleIcon className="size-10 mx-auto text-muted-foreground/60" />
+                        <div>
+                            <p className="font-medium">Unable to load appointment details</p>
+                            <p className="text-sm text-muted-foreground">Please retry in a moment.</p>
+                        </div>
+                        <Button variant="outline" onClick={() => refetch()}>
+                            Retry
+                        </Button>
                     </div>
                 </DialogContent>
             </Dialog>
@@ -394,6 +413,21 @@ function EmptyState({ message }: { message: string }) {
     )
 }
 
+function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+    return (
+        <div className="text-center py-12 space-y-4">
+            <AlertCircleIcon className="size-12 mx-auto text-muted-foreground/50" />
+            <div className="space-y-1">
+                <p className="font-medium">{message}</p>
+                <p className="text-sm text-muted-foreground">Please try again.</p>
+            </div>
+            <Button variant="outline" onClick={onRetry}>
+                Retry
+            </Button>
+        </div>
+    )
+}
+
 // =============================================================================
 // Appointments List Tab Content
 // =============================================================================
@@ -405,7 +439,7 @@ function AppointmentsTabContent({
     status: string
     emptyMessage: string
 }) {
-    const { data, isLoading } = useAppointments({ status, per_page: 50 })
+    const { data, isLoading, isError, refetch } = useAppointments({ status, per_page: 50 })
     const approveMutation = useApproveAppointment()
     const cancelMutation = useCancelAppointment()
     const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -417,6 +451,10 @@ function AppointmentsTabContent({
                 <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
             </div>
         )
+    }
+
+    if (isError) {
+        return <ErrorState message="Unable to load appointments" onRetry={() => refetch()} />
     }
 
     if (!data?.items.length) {

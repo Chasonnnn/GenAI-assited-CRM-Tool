@@ -53,14 +53,11 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
 
         async function checkPlatformAdmin() {
             try {
+                const statsPromise = getPlatformStats().catch(() => null);
                 const data = await getPlatformMe();
                 setUser(data);
-                try {
-                    const stats = await getPlatformStats();
-                    setOpenAlertCount(stats.open_alerts ?? 0);
-                } catch {
-                    setOpenAlertCount(0);
-                }
+                const stats = await statsPromise;
+                setOpenAlertCount(stats?.open_alerts ?? 0);
             } catch (error) {
                 if (error instanceof ApiError && error.status === 403) {
                     const message = (error.message || '').toLowerCase();

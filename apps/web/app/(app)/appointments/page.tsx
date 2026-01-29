@@ -24,7 +24,7 @@ import { LinkIcon, CopyIcon, CheckIcon, Loader2Icon } from "lucide-react"
 import { useBookingLink } from "@/lib/hooks/use-appointments"
 
 function BookingLinkButton() {
-    const { data: link, isLoading } = useBookingLink()
+    const { data: link, isLoading, isError, refetch } = useBookingLink()
     const [open, setOpen] = useState(false)
     const [copied, setCopied] = useState(false)
 
@@ -42,6 +42,17 @@ function BookingLinkButton() {
                 <Loader2Icon className="size-4 mr-2 animate-spin" />
                 Loading...
             </Button>
+        )
+    }
+
+    if (isError) {
+        return (
+            <div className="flex items-center gap-3">
+                <span className="text-sm text-destructive">Unable to load booking link</span>
+                <Button variant="outline" size="sm" onClick={() => refetch()}>
+                    Retry
+                </Button>
+            </div>
         )
     }
 

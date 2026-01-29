@@ -5,6 +5,7 @@ import "@testing-library/jest-dom"
 import { AppointmentSettings } from "../components/appointments/AppointmentSettings"
 import { PublicBookingPage } from "../components/appointments/PublicBookingPage"
 import { AppointmentsList } from "../components/appointments/AppointmentsList"
+import AppointmentsPage from "../app/(app)/appointments/page"
 
 const mockUseAppointmentTypes = vi.fn()
 const mockUseCreateAppointmentType = vi.fn()
@@ -284,5 +285,88 @@ describe("Appointments Google Meet UI", () => {
         fireEvent.click(screen.getAllByText("Casey Client")[0])
 
         expect(screen.getByText(/Join Google Meet/i)).toBeInTheDocument()
+    })
+
+    it("renders appointments list error state with retry", () => {
+        const refetch = vi.fn()
+        mockUseAppointments.mockReturnValue({
+            data: null,
+            isLoading: false,
+            isError: true,
+            error: new Error("Network error"),
+            refetch,
+        })
+
+        render(<AppointmentsList />)
+
+        expect(screen.getAllByText(/Unable to load appointments/i).length).toBeGreaterThan(0)
+        fireEvent.click(screen.getAllByRole("button", { name: /retry/i })[0])
+        expect(refetch).toHaveBeenCalled()
+    })
+
+    it("shows appointment detail error state", () => {
+        const scheduledStart = new Date("2024-02-01T18:00:00Z").toISOString()
+        const scheduledEnd = new Date("2024-02-01T18:30:00Z").toISOString()
+        const refetch = vi.fn()
+        mockUseAppointments.mockReturnValue({
+            data: {
+                items: [
+                    {
+                        id: "appt1",
+                        appointment_type_name: "Intro Call",
+                        client_name: "Casey Client",
+                        client_email: "casey@example.com",
+                        client_phone: "555-0100",
+                        client_timezone: "America/Los_Angeles",
+                        scheduled_start: scheduledStart,
+                        scheduled_end: scheduledEnd,
+                        duration_minutes: 30,
+                        meeting_mode: "google_meet",
+                        status: "confirmed",
+                        surrogate_id: null,
+                        surrogate_number: null,
+                        intended_parent_id: null,
+                        intended_parent_name: null,
+                        created_at: scheduledStart,
+                    },
+                ],
+                total: 1,
+                page: 1,
+                per_page: 50,
+                pages: 1,
+            },
+            isLoading: false,
+        })
+        mockUseAppointment.mockReturnValue({
+            data: null,
+            isLoading: false,
+            isError: true,
+            error: new Error("Detail error"),
+            refetch,
+        })
+
+        render(<AppointmentsList />)
+        fireEvent.click(screen.getAllByText("Casey Client")[0])
+
+        expect(screen.getByText(/Unable to load appointment details/i)).toBeInTheDocument()
+        fireEvent.click(screen.getAllByRole("button", { name: /retry/i })[0])
+        expect(refetch).toHaveBeenCalled()
+    })
+
+    it("renders booking link error state with retry", () => {
+        const refetch = vi.fn()
+        mockUseBookingLink.mockReturnValue({
+            data: null,
+            isLoading: false,
+            isError: true,
+            error: new Error("Booking link error"),
+            refetch,
+        })
+
+        render(<AppointmentsPage />)
+
+        expect(screen.getByText(/Unable to load booking link/i)).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: /retry/i }))
+        expect(refetch).toHaveBeenCalled()
     })
 })

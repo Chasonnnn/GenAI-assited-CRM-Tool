@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -376,31 +376,44 @@ function OrganizationSection() {
   const [orgSaving, setOrgSaving] = useState(false)
   const [orgSaved, setOrgSaved] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const isMountedRef = useRef(true)
 
   useEffect(() => {
-    let isMounted = true
-    const loadOrgSettings = async () => {
-      try {
-        const settings = await getOrgSettings()
-        if (!isMounted) return
-        setOrgName(settings.name || "")
-        setOrgAddress(settings.address || "")
-        setOrgPhone(settings.phone || "")
-        setOrgEmail(settings.email || "")
-        setPortalBaseUrl(settings.portal_base_url || "")
-      } catch (error) {
-        console.error("Failed to load organization settings:", error)
-      } finally {
-        if (isMounted) setIsLoading(false)
-      }
-    }
-    if (user?.org_id) {
-      loadOrgSettings()
-    }
     return () => {
-      isMounted = false
+      isMountedRef.current = false
+    }
+  }, [])
+
+  const loadOrgSettings = useCallback(async () => {
+    if (!user?.org_id) return
+    setIsLoading(true)
+    setLoadError(null)
+    try {
+      const settings = await getOrgSettings()
+      if (!isMountedRef.current) return
+      setOrgName(settings.name || "")
+      setOrgAddress(settings.address || "")
+      setOrgPhone(settings.phone || "")
+      setOrgEmail(settings.email || "")
+      setPortalBaseUrl(settings.portal_base_url || "")
+    } catch (error) {
+      console.error("Failed to load organization settings:", error)
+      if (!isMountedRef.current) return
+      setLoadError("Unable to load organization settings. Please retry.")
+    } finally {
+      if (isMountedRef.current) setIsLoading(false)
     }
   }, [user?.org_id])
+
+  useEffect(() => {
+    if (user?.org_id) {
+      loadOrgSettings()
+    } else {
+      setIsLoading(false)
+    }
+  }, [user?.org_id, loadOrgSettings])
 
   const handleSaveOrg = async () => {
     setOrgSaving(true)
@@ -444,7 +457,18 @@ function OrganizationSection() {
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      {loadError && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span>{loadError}</span>
+            <Button variant="outline" onClick={loadOrgSettings}>
+              Retry
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <fieldset disabled={!!loadError} className="grid gap-6 md:grid-cols-2">
         <div className="space-y-2 md:col-span-2">
           <Label htmlFor="orgName">Organization Name</Label>
           <Input id="orgName" value={orgName} onChange={(e) => setOrgName(e.target.value)} />
@@ -498,9 +522,9 @@ function OrganizationSection() {
             </p>
           </div>
         )}
-      </div>
+      </fieldset>
 
-      <Button onClick={handleSaveOrg} disabled={orgSaving}>
+      <Button onClick={handleSaveOrg} disabled={orgSaving || isLoading || !!loadError}>
         {orgSaving ? (
           <>
             <Loader2Icon className="mr-2 size-4 animate-spin" /> Saving...

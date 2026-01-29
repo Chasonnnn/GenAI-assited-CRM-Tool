@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import SettingsPage from '../app/(app)/settings/page'
 
 const mockReplace = vi.fn()
@@ -35,8 +35,29 @@ vi.mock('@/components/version-history-modal', () => ({
 }))
 
 vi.mock('@/lib/auth-context', () => ({
-    useAuth: () => ({ user: { role: 'developer' } }),
+    useAuth: () => ({
+        user: {
+            role: 'developer',
+            org_id: 'org-1',
+            org_name: 'Test Organization',
+        },
+        refetch: vi.fn(),
+    }),
 }))
+
+const mockGetOrgSettings = vi.fn()
+const mockUpdateOrgSettings = vi.fn()
+const mockUpdateProfile = vi.fn()
+
+vi.mock('@/lib/api/settings', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@/lib/api/settings')>()
+    return {
+        ...actual,
+        getOrgSettings: () => mockGetOrgSettings(),
+        updateOrgSettings: (payload: unknown) => mockUpdateOrgSettings(payload),
+        updateProfile: (payload: unknown) => mockUpdateProfile(payload),
+    }
+})
 
 vi.mock('@/lib/hooks/use-notifications', () => ({
     useNotificationSettings: () => ({
@@ -132,6 +153,15 @@ describe('SettingsPage', () => {
         mockRollbackTemplate.mockReset()
         versionModalSpy.mockClear()
         mockSearchParams = new URLSearchParams()
+        mockGetOrgSettings.mockResolvedValue({
+            name: 'Test Organization',
+            address: '123 Main St',
+            phone: '(555) 123-4567',
+            email: 'contact@example.com',
+            portal_base_url: 'https://test-org.surrogacyforce.com',
+        })
+        mockUpdateOrgSettings.mockResolvedValue({})
+        mockUpdateProfile.mockResolvedValue({})
     })
 
     it('renders general tab by default', () => {
@@ -140,6 +170,24 @@ describe('SettingsPage', () => {
         expect(screen.getAllByText('General').length).toBeGreaterThan(0)
         expect(screen.getByText('Profile and access settings')).toBeDefined()
         expect(screen.getByText('v0.16.0')).toBeDefined()
+    })
+
+    it('shows org settings load error and disables save until retry succeeds', async () => {
+        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        mockSearchParams = new URLSearchParams('tab=email-signature')
+        mockGetOrgSettings.mockRejectedValueOnce(new Error('boom'))
+        render(<SettingsPage />)
+
+        expect(await screen.findByText(/Unable to load organization settings/i)).toBeInTheDocument()
+
+        const saveButton = screen.getByRole('button', { name: /save changes/i })
+        expect(saveButton).toBeDisabled()
+
+        const retryButton = screen.getByRole('button', { name: /retry/i })
+        fireEvent.click(retryButton)
+
+        await waitFor(() => expect(mockGetOrgSettings).toHaveBeenCalledTimes(2))
+        consoleSpy.mockRestore()
     })
 
     // Note: Pipeline version history test removed - pipelines moved to dedicated /settings/pipelines page

@@ -28,11 +28,11 @@
    - Evidence: `apps/api/app/routers/settings.py:497-505` (returns `/static/...`); no StaticFiles mount in API startup (`apps/api/app/main.py` has no `StaticFiles` usage).
    - Fix applied: Added a dedicated local-logo route with safe path validation and updated local logo URL generation to use it; legacy `/static/` URLs are now translated to the new route.
 
-5) Ops layout makes sequential API calls (waterfall)
+5) Ops layout makes sequential API calls (waterfall) — FIXED
    - Risk: Slower initial ops load due to unnecessary serialization.
    - Consequence: Higher time‑to‑interactive for ops users, especially on high‑latency connections.
    - Evidence: `apps/web/app/ops/layout.tsx:54-60`
-   - Suggested fix: Fetch `getPlatformMe` and `getPlatformStats` in parallel when independent (e.g., `Promise.all`).
+   - Fix applied: Start stats fetch immediately and await it alongside the auth check to avoid a waterfall.
 
 6) Large client bundles loaded eagerly in reports + ops agency detail
    - Risk: Increased JS bundle size and slower TTI; violates bundle-size best practices for client pages.
@@ -40,17 +40,17 @@
    - Evidence: `apps/web/app/(app)/reports/page.tsx:7-22` (recharts + dashboards), `apps/web/app/ops/agencies/[orgId]/page.tsx:96` (RichTextEditor)
    - Suggested fix: Use `next/dynamic` for charts/editor or load only when the relevant tab/section is active.
 
-7) Org settings load errors are silent and can lead to accidental overwrites
+7) Org settings load errors are silent and can lead to accidental overwrites — FIXED
    - Risk: If the initial fetch fails, fields remain empty and a save can overwrite real data.
    - Consequence: Org profile data can be unintentionally cleared or partially lost.
    - Evidence: `apps/web/app/(app)/settings/page.tsx:380-395`
-   - Suggested fix: Show an error state, disable save until load succeeds, and offer retry.
+   - Fix applied: Added an error banner with retry, disabled the form when load fails, and keep save disabled until load succeeds.
 
-8) Appointments list/detail lack explicit error UI
+8) Appointments list/detail lack explicit error UI — FIXED
    - Risk: Failed requests render empty UI with no feedback; users cannot distinguish 'no data' vs 'load failed.'
    - Consequence: Users may assume there are no appointments and miss time‑sensitive actions.
    - Evidence: `apps/web/components/appointments/AppointmentsList.tsx:187-221`, `apps/web/components/appointments/AppointmentsList.tsx:408-424`
-   - Suggested fix: Render error states with retry actions.
+   - Fix applied: Added list and detail error states with retry actions.
 
 ### Low
 9) Public invite details expose org identifiers and inviter name to anyone with UUID
@@ -71,17 +71,17 @@
     - Evidence: `apps/api/app/services/attachment_service.py:246-253`, `apps/api/app/services/form_submission_service.py:742-748`
     - Suggested fix: Store after DB commit or add cleanup on transaction failure.
 
-12) MSW test handlers use a different env var name than app code
-    - Risk: Test mocks may not intercept requests when `NEXT_PUBLIC_API_BASE_URL` is overridden, causing flaky tests.
-    - Consequence: Non‑deterministic test failures and false negatives in CI.
-    - Evidence: `apps/web/tests/mocks/handlers.ts:10`
-    - Suggested fix: Use `NEXT_PUBLIC_API_BASE_URL` consistently.
+12) MSW test handlers use a different env var name than app code — FIXED
+   - Risk: Test mocks may not intercept requests when `NEXT_PUBLIC_API_BASE_URL` is overridden, causing flaky tests.
+   - Consequence: Non‑deterministic test failures and false negatives in CI.
+   - Evidence: `apps/web/tests/mocks/handlers.ts:10`
+   - Fix applied: Updated MSW handlers to read `NEXT_PUBLIC_API_BASE_URL`.
 
-13) Booking link load has no error state
-    - Risk: Failure produces a blank link without user feedback.
-    - Consequence: Staff cannot share booking links and may assume the feature is broken or misconfigured.
-    - Evidence: `apps/web/app/(app)/appointments/page.tsx:26-67`
-    - Suggested fix: Add error UI and retry.
+13) Booking link load has no error state — FIXED
+   - Risk: Failure produces a blank link without user feedback.
+   - Consequence: Staff cannot share booking links and may assume the feature is broken or misconfigured.
+   - Evidence: `apps/web/app/(app)/appointments/page.tsx:26-67`
+   - Fix applied: Added error UI with retry for booking link load failures.
 
 ## Files Reviewed
 (The list below includes every file in the repository as enumerated by `rg --files`.)
