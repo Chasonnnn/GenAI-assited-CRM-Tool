@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.42.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.41.0...surrogacy-crm-platform-v0.42.0) (2026-01-29)
+
+
+### Features
+
+* add email domain and phone last4 helpers for ops filtering ([aee5387](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/aee538729c5072b31402997ec827194841f7dc08))
+* add email unsubscribe and suppression handling ([b83f4c6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b83f4c6e861e21f403867f3480cd2af07e911d6d))
+* add Meta form mapping and lead conversion UI ([c098794](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c09879468b46038b8a49ea6d15644a74e09c6b9a))
+* add Meta integration audit logging and sync enhancements ([7415853](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/74158536e00972dc5ae625348808c9afe00ccf9a))
+* add Meta OAuth infrastructure for Facebook Login for Business ([9e88bad](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9e88bade81728b25810937fbb2c117203b053330))
+* add normalized identity fields for search ([78ec227](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/78ec2272f82f2869267f614394a57835baac54f7))
+* add retry-failed endpoint for campaign runs ([d6118d1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d6118d1d6c28c8b96153c71d9b942caf8125597e))
+* add Vertex AI WIF support and AI service improvements ([7bb9c33](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7bb9c3342a46fc9da45520db86c47aa89cbccf5d))
+* centralize AI prompts and validate outputs ([8477b33](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8477b3393f5f7b04cd09cb81b1c306e96bb21f4d))
+* CSV import backdating support for submission timestamps ([8ad5011](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8ad5011bdd7f97af5f85b4ff026d0f553a4b8cc7))
+* enhance Meta performance analytics and automated reporting ([7591940](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7591940d7401dbe05ade7e56ba0e2d2b194dd59d))
+* improve CSV import with auto-match and mapping correction system ([66f6861](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/66f6861d88ab509f2e6dcc1ef5cfe223093af2d5))
+* **web:** add Failed recipients tab to campaign detail view ([d6c5701](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d6c570120c2dac122e3208160e61e27c03b9753d))
+* **web:** show backdated badge in tasks awaiting approval ([f547792](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f547792ac47320c4783a6cbda976c9a4781640d4))
+
+
+### Bug Fixes
+
+* add local org logo serving route (review finding [#4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/4)) ([0cfeb96](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0cfeb96fb6aa5ef5a5d1b44d6f952151e8f064e5))
+* **api:** fix column analysis in meta form mapping service and standardize ai_focus imports ([b44b58a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b44b58a3b1b38b9a560f5bda0def317d189b1f9a))
+* **api:** fix workflow pause FK and enhance AI interview service ([7f895a4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7f895a4fa5befefa108f60c2484b389355e51813))
+* **api:** track original suggestions during Meta form mapping updates ([e9314c9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e9314c913338e0c08db3862dbd16e8841605d603))
+* campaign filter_criteria UUID serialization and test mocks ([5e2ad1d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5e2ad1dc17412114164742234bccbd45a30a4570))
+* Meta reauth button, reports type errors, and terraform formatting ([4f19b54](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4f19b540abb2bc77892e110b1ce46afb6f25a866))
+* org-scoped status change lookup and storage rollback cleanup ([9ac90ff](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9ac90ffdd3a6ea95bbb33027bbea305a4ddea3bb))
+* rate limiter fail-open and websocket redis fallback ([e56211f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e56211ff7048426fae2451f253c4823d6485e658))
+* **test:** make terraform monitoring config regex whitespace-tolerant ([dd052b1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dd052b1f6fc9431267c3ca167cf5a6b5cdb6ec02))
+* **web:** add error states and parallel fetch for review findings [#5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/5),7,8,12,13 ([2e54925](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2e549256b9c50b4afcf2860b175bc98d114ebf8f))
+
+
+### Maintenance
+
+* add ruff and uv cache directories to gitignore ([bbd7a22](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bbd7a2294272e1122976d1a36c7709e83b755b2e))
+* miscellaneous updates and cleanups ([89bfa86](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/89bfa864392e3b2e74fd6bbab89ceb9a48a62330))
+* update config, imports, and tests ([273679f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/273679fe41fb2805f2ce7365d451be1bfcc7cf30))
+* update refactor logs and fix UI bugs ([a15499d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a15499dc02874d9af446f9a7bc9186e00ec389a1))
+
 ## [0.41.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.40.1...surrogacy-crm-platform-v0.41.0) (2026-01-28)
 
 
