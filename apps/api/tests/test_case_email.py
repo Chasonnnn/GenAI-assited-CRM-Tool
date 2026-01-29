@@ -95,7 +95,9 @@ async def test_send_email_no_provider_returns_error(
 
 
 @pytest.mark.asyncio
-async def test_send_email_suppressed_returns_error(authed_client: AsyncClient, db, test_org, test_user):
+async def test_send_email_suppressed_returns_error(
+    authed_client: AsyncClient, db, test_org, test_user
+):
     """Suppressed recipients should be skipped before provider selection."""
     from app.services import surrogate_service, email_service, campaign_service
     from app.schemas.surrogate import SurrogateCreate

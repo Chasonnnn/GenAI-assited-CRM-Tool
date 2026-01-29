@@ -8,16 +8,26 @@ from enum import Enum
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_ai_enabled, require_all_permissions, require_csrf_header, require_permission
+from app.core.deps import (
+    get_db,
+    require_ai_enabled,
+    require_all_permissions,
+    require_csrf_header,
+    require_permission,
+)
 from app.core.permissions import PermissionKey as P
 from app.core.rate_limit import limiter
 from app.core.surrogate_access import check_surrogate_access
 from app.schemas.auth import UserSession
 from app.services.ai_prompt_registry import get_prompt
-from app.services.ai_prompt_schemas import AIDashboardAnalysisOutput, AIDraftEmailOutput, AISurrogateSummaryOutput
+from app.services.ai_prompt_schemas import (
+    AIDashboardAnalysisOutput,
+    AIDraftEmailOutput,
+    AISurrogateSummaryOutput,
+)
 from app.services.ai_response_validation import parse_json_object, validate_model
 
 router = APIRouter()

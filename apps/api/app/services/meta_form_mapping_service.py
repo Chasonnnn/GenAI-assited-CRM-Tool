@@ -138,7 +138,11 @@ def build_mapping_preview(
     # Build sample matrix for column analysis
     sample_matrix = [[row.get(key, "") for key in keys] for row in sample_rows]
 
-    suggestions = import_detection_service.analyze_columns(analysis_headers, sample_matrix)
+    suggestions = import_detection_service.analyze_columns(
+        analysis_headers,
+        sample_matrix,
+        allowed_fields=import_detection_service.AVAILABLE_SURROGATE_FIELDS,
+    )
 
     # Override csv_column to use question keys
     for idx, suggestion in enumerate(suggestions):
