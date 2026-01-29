@@ -273,3 +273,4 @@ Coupling notes:
 - 2026-01-29: Split `routers/ai.py` into sub-routers for settings, chat, actions, usage, workflows, schedule parsing, and bulk tasks.
 - 2026-01-29: Split workflow engine into core (`workflow_engine_core`) and domain adapter (`workflow_engine_adapters`) modules.
 - 2026-01-29: Split worker jobs into per-domain handlers with a central registry.
+- 2026-01-29: Added surrogate status side-effects event bus (`surrogate_events`) and moved notifications/queues/workflows/Meta CAPI hooks into it.

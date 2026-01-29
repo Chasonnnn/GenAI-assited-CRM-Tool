@@ -341,59 +341,16 @@ def apply_status_change(
     db.commit()
     db.refresh(surrogate)
 
-    # Send notifications
-    from app.services import notification_facade
+    from app.services import surrogate_events
 
-    actor = _get_org_user(db, surrogate.organization_id, user_id)
-    actor_name = actor.display_name if actor else "Someone"
-
-    notification_facade.notify_surrogate_status_changed(
+    surrogate_events.handle_status_changed(
         db=db,
         surrogate=surrogate,
-        from_status=old_label,
-        to_status=new_stage.label,
-        actor_id=user_id or surrogate.created_by_user_id or surrogate.owner_id,
-        actor_name=actor_name,
-    )
-
-    # If transitioning to approved, auto-assign to Surrogate Pool queue
-    if new_stage.slug == "approved":
-        from app.services import queue_service
-
-        try:
-            pool_queue = queue_service.get_or_create_surrogate_pool_queue(
-                db, surrogate.organization_id
-            )
-            if pool_queue and (
-                surrogate.owner_type != OwnerType.QUEUE.value or surrogate.owner_id != pool_queue.id
-            ):
-                surrogate = queue_service.assign_surrogate_to_queue(
-                    db=db,
-                    org_id=surrogate.organization_id,
-                    surrogate_id=surrogate.id,
-                    queue_id=pool_queue.id,
-                    assigner_user_id=user_id,
-                )
-                db.commit()
-                db.refresh(surrogate)
-            if pool_queue:
-                notification_facade.notify_surrogate_ready_for_claim(db=db, surrogate=surrogate)
-        except Exception:
-            pass  # Best-effort: don't block status change
-
-    # Meta CAPI: Send lead quality signal for Meta-sourced surrogates
-    _maybe_send_capi_event(db, surrogate, old_slug or "", new_stage.slug)
-
-    # Trigger workflows with effective_at in payload
-    from app.services import workflow_triggers
-
-    workflow_triggers.trigger_status_changed(
-        db=db,
-        surrogate=surrogate,
+        new_stage=new_stage,
         old_stage_id=old_stage_id,
-        new_stage_id=new_stage.id,
-        old_stage_slug=old_slug,
-        new_stage_slug=new_stage.slug,
+        old_label=old_label,
+        old_slug=old_slug,
+        user_id=user_id,
         effective_at=effective_at,
         recorded_at=recorded_at,
         is_undo=is_undo,
@@ -401,7 +358,6 @@ def apply_status_change(
         approved_by_user_id=approved_by_user_id,
         approved_at=approved_at,
         requested_at=requested_at,
-        changed_by_user_id=user_id,
     )
 
     return StatusChangeResult(
@@ -410,69 +366,3 @@ def apply_status_change(
         request_id=None,
         message=None,
     )
-
-
-def _maybe_send_capi_event(
-    db: Session, surrogate: Surrogate, old_status: str, new_status: str
-) -> None:
-    """
-    Send Meta Conversions API event if applicable.
-
-    Triggers when:
-    - Surrogatesource is META
-    - Status changes into a different Meta status bucket
-
-    Note: Per-account CAPI enablement is checked in the worker handler,
-    allowing us to skip surrogates without an ad account or where CAPI is disabled.
-    """
-    from app.db.enums import SurrogateSource, JobType
-    from app.services import job_service
-
-    # Only for Meta-sourced surrogates
-    if surrogate.source != SurrogateSource.META.value:
-        return
-
-    # Check if this status change should trigger CAPI
-    from app.services.meta_capi import should_send_capi_event
-
-    if not should_send_capi_event(old_status, new_status):
-        return
-
-    # Need the original meta_lead_id
-    if not surrogate.meta_lead_id:
-        return
-
-    # Get the meta lead to get the original Meta leadgen_id
-    from app.db.models import MetaLead
-
-    meta_lead = (
-        db.query(MetaLead)
-        .filter(
-            MetaLead.id == surrogate.meta_lead_id,
-            MetaLead.organization_id == surrogate.organization_id,
-        )
-        .first()
-    )
-    if not meta_lead:
-        return
-
-    try:
-        # Offload to worker for reliability (no event-loop assumptions, retries supported)
-        idempotency_key = f"meta_capi:{meta_lead.meta_lead_id}:{new_status}"
-        job_service.schedule_job(
-            db=db,
-            org_id=surrogate.organization_id,
-            job_type=JobType.META_CAPI_EVENT,
-            payload={
-                "meta_lead_id": meta_lead.meta_lead_id,
-                "meta_ad_external_id": surrogate.meta_ad_external_id,  # For per-account CAPI
-                "surrogate_status": new_status,
-                "email": surrogate.email,
-                "phone": surrogate.phone,
-                "meta_page_id": meta_lead.meta_page_id,
-            },
-            idempotency_key=idempotency_key,
-        )
-    except Exception:
-        # Best-effort: never block status change on CAPI scheduling.
-        return
