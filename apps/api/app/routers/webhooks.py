@@ -86,3 +86,19 @@ async def resend_platform_webhook(
 ):
     handler = get_handler("resend_platform")
     return await handler.handle(request, db)
+
+
+# =============================================================================
+# Zapier Webhooks (Inbound leads)
+# =============================================================================
+
+
+@router.post("/zapier/{webhook_id}")
+@limiter.limit(f"{settings.RATE_LIMIT_WEBHOOK}/minute")
+async def zapier_webhook(
+    webhook_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    handler = get_handler("zapier")
+    return await handler.handle(request, db, webhook_id=webhook_id)

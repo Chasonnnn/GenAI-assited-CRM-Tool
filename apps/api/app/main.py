@@ -88,6 +88,7 @@ from app.routers import (
     templates,
     tracking,
     unsubscribe,
+    zapier,
     webhooks,
     websocket as ws_router,
     workflows,
@@ -528,6 +529,9 @@ app.include_router(settings_router.router, tags=["settings"])
 
 # Resend Email Configuration (Admin)
 app.include_router(resend.router)
+
+# Zapier Webhook Configuration (Admin)
+app.include_router(zapier.router)
 
 # Appointments (internal, authenticated)
 app.include_router(appointments.router, prefix="/appointments", tags=["appointments"])

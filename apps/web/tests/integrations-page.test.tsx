@@ -9,6 +9,10 @@ const mockConnectGmail = vi.fn()
 const mockConnectGoogleCalendar = vi.fn()
 const mockConnectGcp = vi.fn()
 const mockDisconnectIntegration = vi.fn()
+const mockZapierRotate = vi.fn()
+const mockZapierTestLead = vi.fn()
+const mockZapierOutboundUpdate = vi.fn()
+const mockZapierOutboundTest = vi.fn()
 
 vi.mock('@/lib/hooks/use-ops', () => ({
     useIntegrationHealth: () => mockUseIntegrationHealth(),
@@ -29,6 +33,30 @@ vi.mock('@/lib/hooks/use-user-integrations', () => ({
     useConnectGoogleCalendar: () => ({ mutate: mockConnectGoogleCalendar, isPending: false }),
     useConnectGcp: () => ({ mutate: mockConnectGcp, isPending: false }),
     useDisconnectIntegration: () => ({ mutate: mockDisconnectIntegration, isPending: false }),
+}))
+
+vi.mock('@/lib/hooks/use-zapier', () => ({
+    useZapierSettings: () => ({
+        data: {
+            webhook_url: 'https://api.test/webhooks/zapier/abc',
+            is_active: true,
+            secret_configured: true,
+            outbound_webhook_url: null,
+            outbound_enabled: false,
+            outbound_secret_configured: false,
+            send_hashed_pii: false,
+            event_mapping: [
+                { stage_slug: 'new_unread', event_name: 'Lead', enabled: true },
+                { stage_slug: 'qualified', event_name: 'QualifiedLead', enabled: true },
+                { stage_slug: 'matched', event_name: 'ConvertedLead', enabled: true },
+            ],
+        },
+        isLoading: false,
+    }),
+    useRotateZapierSecret: () => ({ mutateAsync: mockZapierRotate, isPending: false }),
+    useZapierTestLead: () => ({ mutateAsync: mockZapierTestLead, isPending: false }),
+    useUpdateZapierOutboundSettings: () => ({ mutateAsync: mockZapierOutboundUpdate, isPending: false }),
+    useZapierOutboundTest: () => ({ mutateAsync: mockZapierOutboundTest, isPending: false }),
 }))
 
 describe('IntegrationsPage', () => {
@@ -65,6 +93,8 @@ describe('IntegrationsPage', () => {
 
         expect(screen.getByText('Integrations')).toBeInTheDocument()
         expect(screen.getByText('Meta Lead Ads')).toBeInTheDocument()
+        expect(screen.getByText('Zapier Webhook')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /send test lead/i })).toBeInTheDocument()
 
         fireEvent.click(screen.getByRole('button', { name: /refresh/i }))
         expect(mockRefetch).toHaveBeenCalled()

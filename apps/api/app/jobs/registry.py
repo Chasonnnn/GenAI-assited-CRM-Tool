@@ -20,6 +20,7 @@ from app.jobs.handlers import (
     reminders,
     webhooks,
     workflows,
+    zapier,
 )
 
 JobHandler = Callable[[object, object], Awaitable[None]]
@@ -48,6 +49,7 @@ JOB_HANDLERS: Mapping[str, JobHandler] = {
     JobType.META_SPEND_SYNC.value: meta.process_meta_spend_sync,
     JobType.META_FORM_SYNC.value: meta.process_meta_form_sync,
     JobType.ORG_DELETE.value: orgs.process_org_delete,
+    JobType.ZAPIER_STAGE_EVENT.value: zapier.process_zapier_stage_event,
 }
 
 

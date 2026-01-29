@@ -16,6 +16,7 @@ class JobType(str, Enum):
     META_HIERARCHY_SYNC = "meta_hierarchy_sync"  # Sync campaigns/adsets/ads
     META_SPEND_SYNC = "meta_spend_sync"  # Sync daily spend data
     META_FORM_SYNC = "meta_form_sync"  # Sync form metadata
+    ZAPIER_STAGE_EVENT = "zapier_stage_event"
     WORKFLOW_SWEEP = "workflow_sweep"
     WORKFLOW_EMAIL = "workflow_email"
     CSV_IMPORT = "csv_import"  # Background CSV imports for large files

@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     ForeignKey,
     Index,
     String,
@@ -16,7 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -84,6 +85,54 @@ class ResendSettings(Base):
     default_sender: Mapped["User | None"] = relationship()
 
     __table_args__ = (Index("idx_resend_settings_webhook_id", "webhook_id", unique=True),)
+
+
+class ZapierWebhookSettings(Base):
+    """
+    Org-level Zapier webhook configuration.
+
+    Stores a per-org webhook ID for routing and an encrypted shared secret.
+    """
+
+    __tablename__ = "zapier_webhook_settings"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
+
+    webhook_id: Mapped[str] = mapped_column(
+        String(36), server_default=text("gen_random_uuid()::text"), nullable=False
+    )
+    webhook_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(nullable=False, server_default=text("true"))
+
+    # Outbound webhook configuration (CRM -> Zapier)
+    outbound_webhook_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    outbound_webhook_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    outbound_enabled: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )
+    outbound_send_hashed_pii: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )
+    outbound_event_mapping: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+
+    organization: Mapped["Organization"] = relationship()
+
+    __table_args__ = (Index("idx_zapier_webhook_settings_webhook_id", "webhook_id", unique=True),)
 
 
 class UserIntegration(Base):

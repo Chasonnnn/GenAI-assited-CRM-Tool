@@ -9,12 +9,14 @@ from app.services.webhooks.resend import (
     ResendWebhookHandler,
 )
 from app.services.webhooks.zoom import ZoomWebhookHandler
+from app.services.webhooks.zapier import ZapierWebhookHandler
 
 _HANDLERS: dict[str, WebhookHandler] = {
     "meta": MetaWebhookHandler(),
     "zoom": ZoomWebhookHandler(),
     "resend": ResendWebhookHandler(),
     "resend_platform": PlatformResendWebhookHandler(),
+    "zapier": ZapierWebhookHandler(),
 }
 
 

@@ -141,6 +141,13 @@ def _resolve_integration_keys(db, job, integration_type) -> list[str]:
         if isinstance(page_ids, list):
             keys.extend(str(page_id) for page_id in page_ids if page_id)
 
+    elif integration_type == IntegrationType.ZAPIER:
+        webhook_id = payload.get("webhook_id")
+        if webhook_id:
+            keys.append(str(webhook_id))
+        else:
+            keys.append("outbound")
+
     else:
         page_id = payload.get("page_id") or payload.get("meta_page_id")
         if page_id:
@@ -163,6 +170,7 @@ def _record_job_success(db, job) -> None:
         JobType.META_HIERARCHY_SYNC.value: IntegrationType.META_HIERARCHY,
         JobType.META_SPEND_SYNC.value: IntegrationType.META_SPEND,
         JobType.META_FORM_SYNC.value: IntegrationType.META_FORMS,
+        JobType.ZAPIER_STAGE_EVENT.value: IntegrationType.ZAPIER,
     }
 
     integration_type = job_to_integration.get(job.job_type)
@@ -205,6 +213,7 @@ def _record_job_failure(db, job, error_msg: str, exception: Exception | None = N
             JobType.META_HIERARCHY_SYNC.value: IntegrationType.META_HIERARCHY,
             JobType.META_SPEND_SYNC.value: IntegrationType.META_SPEND,
             JobType.META_FORM_SYNC.value: IntegrationType.META_FORMS,
+            JobType.ZAPIER_STAGE_EVENT.value: IntegrationType.ZAPIER,
         }
 
         integration_keys: list[str] = []
@@ -243,6 +252,7 @@ def _record_job_failure(db, job, error_msg: str, exception: Exception | None = N
                 JobType.WEBHOOK_RETRY.value: AlertType.WEBHOOK_DELIVERY_FAILED,
                 JobType.AI_CHAT.value: AlertType.AI_PROVIDER_ERROR,
                 JobType.INTERVIEW_TRANSCRIPTION.value: AlertType.TRANSCRIPTION_FAILED,
+                JobType.ZAPIER_STAGE_EVENT.value: AlertType.WEBHOOK_DELIVERY_FAILED,
             }
             alert_type = alert_type_map.get(job.job_type, AlertType.WORKER_JOB_FAILED)
 
@@ -348,9 +358,8 @@ async def worker_loop() -> None:
                         logger.error("Job %s failed: %s", job.id, type(e).__name__)
 
                         # Apply rate limit backoff for Meta throttling errors
-                        if (
-                            job.status == JobStatus.PENDING.value
-                            and _is_meta_rate_limit_error(job, error_msg)
+                        if job.status == JobStatus.PENDING.value and _is_meta_rate_limit_error(
+                            job, error_msg
                         ):
                             delay = _rate_limit_backoff_seconds(job.attempts)
                             job.run_at = datetime.now(timezone.utc) + timedelta(seconds=delay)
