@@ -270,3 +270,4 @@ Coupling notes:
 - 2026-01-28: Split `routers/surrogates.py` into sub-routers; list/create routes stay on the aggregator to preserve `/surrogates`.
 - 2026-01-28: Split `surrogates/[id]/page.tsx` by extracting the header, history tab, and AI tab components.
 - 2026-01-29: Consolidated org invite fallback HTML into system template defaults (R11).
+- 2026-01-29: Split `routers/ai.py` into sub-routers for settings, chat, actions, usage, workflows, schedule parsing, and bulk tasks.
