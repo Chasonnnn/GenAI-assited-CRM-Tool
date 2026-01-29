@@ -11,7 +11,7 @@ from cryptography.fernet import Fernet
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.models import AISettings
+from app.db.models import AISettings, Organization
 from app.services.ai_provider import (
     AIProvider,
     VertexAPIKeyConfig,
@@ -150,6 +150,10 @@ def update_ai_settings(
 
     if is_enabled is not None:
         ai_settings.is_enabled = is_enabled
+        org = db.query(Organization).filter(Organization.id == organization_id).first()
+        if org:
+            org.ai_enabled = is_enabled
+            org.updated_at = datetime.now(timezone.utc)
     if provider is not None:
         ai_settings.provider = provider
     if api_key is not None:

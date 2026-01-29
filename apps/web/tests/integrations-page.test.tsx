@@ -33,6 +33,10 @@ vi.mock('@/lib/hooks/use-ops', () => ({
     useIntegrationHealth: () => mockUseIntegrationHealth(),
 }))
 
+vi.mock('@/lib/auth-context', () => ({
+    useAuth: () => ({ user: { role: 'admin', user_id: 'u1' } }),
+}))
+
 vi.mock('next/navigation', () => ({
     useRouter: () => ({
         push: vi.fn(),

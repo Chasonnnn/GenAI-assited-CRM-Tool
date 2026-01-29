@@ -28,6 +28,7 @@ import {
     CheckIcon,
 } from "lucide-react"
 import { useIntegrationHealth } from "@/lib/hooks/use-ops"
+import { useAuth } from "@/lib/auth-context"
 import { useUserIntegrations, useConnectZoom, useConnectGmail, useConnectGoogleCalendar, useConnectGcp, useDisconnectIntegration } from "@/lib/hooks/use-user-integrations"
 import { useAISettings, useUpdateAISettings, useTestAPIKey, useAIConsent, useAcceptConsent } from "@/lib/hooks/use-ai"
 import { useResendSettings, useUpdateResendSettings, useTestResendKey, useRotateWebhook, useEligibleSenders } from "@/lib/hooks/use-resend"
@@ -106,6 +107,7 @@ function AIConfigurationSection() {
     const { data: userIntegrations } = useUserIntegrations()
     const connectGcp = useConnectGcp()
     const disconnectIntegration = useDisconnectIntegration()
+    const { refetch: refetchAuth } = useAuth()
 
     const [isEnabled, setIsEnabled] = useState(false)
     const [provider, setProvider] = useState<AiProvider>("openai")
@@ -118,6 +120,7 @@ function AIConfigurationSection() {
     const [vertexUseExpress, setVertexUseExpress] = useState(true)
     const [keyTested, setKeyTested] = useState<boolean | null>(null)
     const [saved, setSaved] = useState(false)
+    const [editingKey, setEditingKey] = useState(false)
 
     // Sync state with fetched settings
     useEffect(() => {
@@ -129,6 +132,7 @@ function AIConfigurationSection() {
                 setProvider("openai")
             }
             setModel(aiSettings.model || "")
+            setEditingKey(false)
             setVertexProjectId(
                 aiSettings.vertex_wif?.project_id ||
                 aiSettings.vertex_api_key?.project_id ||
@@ -232,6 +236,8 @@ function AIConfigurationSection() {
         setApiKey("") // Clear after save
         setKeyTested(null)
         setSaved(true)
+        setEditingKey(false)
+        refetchAuth()
         setTimeout(() => setSaved(false), 2000)
     }
 
@@ -330,6 +336,7 @@ function AIConfigurationSection() {
                                 }
                                 setModel("") // Reset model when provider changes
                                 setKeyTested(null)
+                                setEditingKey(false)
                             }
                         }}>
                             <SelectTrigger id="ai-provider">
@@ -353,20 +360,26 @@ function AIConfigurationSection() {
                                 <Input
                                     id="ai-key"
                                     type="password"
-                                    value={apiKey || (aiSettings?.api_key_masked ? aiSettings.api_key_masked : "")}
+                                    value={editingKey
+                                        ? apiKey
+                                        : apiKey || (aiSettings?.api_key_masked ? aiSettings.api_key_masked : "")
+                                    }
                                     onChange={(e) => {
                                         setApiKey(e.target.value)
                                         setKeyTested(null)
                                     }}
                                     placeholder="Enter API key"
-                                    disabled={!apiKey && !!aiSettings?.api_key_masked}
+                                    disabled={!editingKey && !apiKey && !!aiSettings?.api_key_masked}
                                     className="flex-1"
                                 />
-                                {aiSettings?.api_key_masked && !apiKey ? (
+                                {aiSettings?.api_key_masked && !apiKey && !editingKey ? (
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        onClick={() => setApiKey("")}
+                                        onClick={() => {
+                                            setApiKey("")
+                                            setEditingKey(true)
+                                        }}
                                         className="shrink-0"
                                     >
                                         Change Key
@@ -429,28 +442,28 @@ function AIConfigurationSection() {
                                     />
                                 </div>
                             </div>
-                            <div className="grid gap-3 md:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label htmlFor="vertex-project-key">Project ID (optional)</Label>
-                                    <Input
-                                        id="vertex-project-key"
-                                        value={vertexProjectId}
-                                        onChange={(e) => setVertexProjectId(e.target.value)}
-                                        placeholder="your-gcp-project-id"
-                                        disabled={vertexUseExpress}
-                                    />
+                            {!vertexUseExpress && (
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="vertex-project-key">Project ID (optional)</Label>
+                                        <Input
+                                            id="vertex-project-key"
+                                            value={vertexProjectId}
+                                            onChange={(e) => setVertexProjectId(e.target.value)}
+                                            placeholder="your-gcp-project-id"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="vertex-location-key">Location (optional)</Label>
+                                        <Input
+                                            id="vertex-location-key"
+                                            value={vertexLocation}
+                                            onChange={(e) => setVertexLocation(e.target.value)}
+                                            placeholder="us-central1"
+                                        />
+                                    </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="vertex-location-key">Location (optional)</Label>
-                                    <Input
-                                        id="vertex-location-key"
-                                        value={vertexLocation}
-                                        onChange={(e) => setVertexLocation(e.target.value)}
-                                        placeholder="us-central1"
-                                        disabled={vertexUseExpress}
-                                    />
-                                </div>
-                            </div>
+                            )}
                         </div>
                     )}
 
