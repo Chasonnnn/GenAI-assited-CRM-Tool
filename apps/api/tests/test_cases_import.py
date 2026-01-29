@@ -152,6 +152,38 @@ async def test_preview_import_detects_duplicates_in_csv(authed_client: AsyncClie
 
 
 @pytest.mark.asyncio
+async def test_preview_import_blocks_duplicate_file(
+    authed_client: AsyncClient, db, test_org, test_user
+):
+    """Uploading the exact same file while an import is active should be blocked."""
+    from app.db.models import SurrogateImport
+    from app.services import import_service
+
+    csv_data = create_csv_content([{"full_name": "Dupe User", "email": "dupe@test.com"}])
+    file_hash = import_service.compute_file_hash(csv_data)
+
+    import_record = SurrogateImport(
+        organization_id=test_org.id,
+        created_by_user_id=test_user.id,
+        filename="dupe.csv",
+        file_content=csv_data,
+        file_hash=file_hash,
+        status="pending",
+        total_rows=1,
+    )
+    db.add(import_record)
+    db.commit()
+
+    response = await authed_client.post(
+        "/surrogates/import/preview/enhanced",
+        files={"file": ("dupe.csv", io.BytesIO(csv_data), "text/csv")},
+    )
+
+    assert response.status_code == 409
+    assert "already" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
 async def test_preview_import_detects_unmapped_columns(authed_client: AsyncClient):
     """Test enhanced preview identifies unmapped columns."""
     csv_data = create_csv_content(
@@ -296,6 +328,128 @@ async def test_approve_import_queues_job(authed_client: AsyncClient, db, test_or
     assert job.payload["import_id"] == str(import_id)
     assert job.payload["use_mappings"] is True
     assert job.payload["unknown_column_behavior"] == "metadata"
+
+
+@pytest.mark.asyncio
+async def test_retry_import_queues_job(authed_client: AsyncClient, db, test_org, test_user):
+    """Retrying an approved import should enqueue a CSV import job."""
+    from app.db.enums import JobType
+    from app.db.models import Job, SurrogateImport
+
+    import_record = SurrogateImport(
+        organization_id=test_org.id,
+        created_by_user_id=test_user.id,
+        filename="retry.csv",
+        file_content=b"full_name,email\nRetry User,retry@test.com\n",
+        status="approved",
+        total_rows=1,
+    )
+    db.add(import_record)
+    db.commit()
+
+    response = await authed_client.post(f"/surrogates/import/{import_record.id}/retry")
+    assert response.status_code == 200
+
+    job = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.CSV_IMPORT.value,
+        )
+        .order_by(Job.created_at.desc())
+        .first()
+    )
+    assert job is not None
+    assert job.payload["import_id"] == str(import_record.id)
+
+
+@pytest.mark.asyncio
+async def test_run_inline_import_completes(authed_client: AsyncClient, db, test_org, test_user):
+    """Approved imports can be executed inline when the worker is unavailable."""
+    from app.db.models import SurrogateImport
+
+    csv_data = create_csv_content([{"full_name": "Inline User", "email": "inline@test.com"}])
+
+    import_record = SurrogateImport(
+        organization_id=test_org.id,
+        created_by_user_id=test_user.id,
+        filename="inline.csv",
+        file_content=csv_data,
+        status="approved",
+        total_rows=1,
+        column_mapping_snapshot=[
+            {
+                "csv_column": "full_name",
+                "surrogate_field": "full_name",
+                "transformation": None,
+                "action": "map",
+            },
+            {
+                "csv_column": "email",
+                "surrogate_field": "email",
+                "transformation": None,
+                "action": "map",
+            },
+        ],
+    )
+    db.add(import_record)
+    db.commit()
+
+    response = await authed_client.post(f"/surrogates/import/{import_record.id}/run-inline")
+    assert response.status_code == 200
+
+    db.refresh(import_record)
+    assert import_record.status == "completed"
+    assert import_record.imported_count == 1
+    assert import_record.file_content is None
+
+
+@pytest.mark.asyncio
+async def test_cancel_import_marks_cancelled_and_clears_file(
+    authed_client: AsyncClient, db, test_org, test_user
+):
+    from app.db.models import SurrogateImport
+
+    import_record = SurrogateImport(
+        organization_id=test_org.id,
+        created_by_user_id=test_user.id,
+        filename="cancel.csv",
+        file_content=b"full_name,email\nCancel User,cancel@test.com\n",
+        status="pending",
+        total_rows=1,
+    )
+    db.add(import_record)
+    db.commit()
+
+    response = await authed_client.delete(f"/surrogates/import/{import_record.id}")
+    assert response.status_code == 200
+
+    db.refresh(import_record)
+    assert import_record.status == "cancelled"
+    assert import_record.file_content is None
+
+    list_response = await authed_client.get("/surrogates/import")
+    assert list_response.status_code == 200
+    assert str(import_record.id) not in {item["id"] for item in list_response.json()}
+
+
+@pytest.mark.asyncio
+async def test_cancel_import_blocks_running(authed_client: AsyncClient, db, test_org, test_user):
+    from app.db.models import SurrogateImport
+
+    import_record = SurrogateImport(
+        organization_id=test_org.id,
+        created_by_user_id=test_user.id,
+        filename="running.csv",
+        file_content=b"full_name,email\nRun User,run@test.com\n",
+        status="running",
+        total_rows=1,
+    )
+    db.add(import_record)
+    db.commit()
+
+    response = await authed_client.delete(f"/surrogates/import/{import_record.id}")
+    assert response.status_code == 409
 
 
 @pytest.mark.asyncio

@@ -13,10 +13,11 @@ Features:
 """
 
 import csv
+import hashlib
 import io
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -37,6 +38,18 @@ from app.services.import_detection_service import (
 )
 from app.services.import_transformers import transform_value
 from app.utils.datetime_parsing import parse_datetime_with_timezone
+
+if TYPE_CHECKING:
+    from app.db.models import Job
+
+
+ACTIVE_IMPORT_STATUSES = {
+    "pending",
+    "awaiting_approval",
+    "approved",
+    "processing",
+    "running",
+}
 
 
 # =============================================================================
@@ -161,6 +174,29 @@ def _parse_csv_with_detection(
         headers[0] = headers[0].lstrip("\ufeff")
     data_rows = rows[1:]
     return headers, data_rows, encoding, delimiter
+
+
+def compute_file_hash(file_content: bytes | str) -> str:
+    """Compute a stable hash for a CSV file to detect duplicate uploads."""
+    if isinstance(file_content, str):
+        payload = file_content.encode("utf-8")
+    else:
+        payload = file_content
+    return hashlib.sha256(payload).hexdigest()
+
+
+def find_active_import_by_hash(db: Session, org_id: UUID, file_hash: str) -> SurrogateImport | None:
+    """Find an active import with the same file hash for an org."""
+    return (
+        db.query(SurrogateImport)
+        .filter(
+            SurrogateImport.organization_id == org_id,
+            SurrogateImport.file_hash == file_hash,
+            SurrogateImport.status.in_(list(ACTIVE_IMPORT_STATUSES)),
+        )
+        .order_by(SurrogateImport.created_at.desc())
+        .first()
+    )
 
 
 def _detect_date_ambiguity_warnings(
@@ -432,13 +468,18 @@ def create_import_job(
     total_rows: int,
     file_content: bytes | None = None,
     status: str = "pending",
+    file_hash: str | None = None,
 ) -> SurrogateImport:
     """Create an import job record."""
+    if file_content and not file_hash:
+        file_hash = compute_file_hash(file_content)
+
     import_record = SurrogateImport(
         organization_id=org_id,
         created_by_user_id=user_id,
         filename=filename,
         file_content=file_content,
+        file_hash=file_hash,
         status=status,
         total_rows=total_rows,
     )
@@ -470,6 +511,7 @@ def list_imports(
         db.query(SurrogateImport)
         .filter(
             SurrogateImport.organization_id == org_id,
+            SurrogateImport.status != "cancelled",
         )
         .order_by(SurrogateImport.created_at.desc())
         .limit(limit)
@@ -546,6 +588,7 @@ async def preview_import_enhanced(
     file_content: bytes,
     *,
     apply_template: bool = True,
+    enable_ai: bool = False,
 ) -> EnhancedImportPreview:
     """
     Generate enhanced preview with smart detection and suggestions.
@@ -603,10 +646,10 @@ async def preview_import_enhanced(
         s for s in column_suggestions if s.confidence < 0.5 and s.suggested_field is None
     ]
 
-    # Auto-trigger AI for unmatched columns (limit 20, non-blocking with 2s timeout)
+    # Auto-trigger AI for unmatched columns (explicit opt-in, limit 20, non-blocking)
     ai_mapped_columns: list[str] = []
     ai_auto_triggered = False
-    if low_confidence_cols and len(low_confidence_cols) <= 20 and ai_available:
+    if enable_ai and low_confidence_cols and len(low_confidence_cols) <= 20 and ai_available:
         ai_auto_triggered = True
         try:
             from app.services.import_ai_mapper_service import ai_suggest_mappings
@@ -845,6 +888,25 @@ class ColumnMapping:
     transformation: str | None
     action: str  # 'map', 'metadata', 'custom', 'ignore'
     custom_field_key: str | None = None
+
+
+def build_column_mappings_from_snapshot(snapshot: list[dict]) -> list[ColumnMapping]:
+    """Build ColumnMapping objects from a stored mapping snapshot."""
+    mappings: list[ColumnMapping] = []
+    for item in snapshot:
+        if not isinstance(item, dict):
+            continue
+        action = item.get("action") or ("map" if item.get("surrogate_field") else "ignore")
+        mappings.append(
+            ColumnMapping(
+                csv_column=item.get("csv_column", ""),
+                surrogate_field=item.get("surrogate_field"),
+                transformation=item.get("transformation"),
+                action=action,
+                custom_field_key=item.get("custom_field_key"),
+            )
+        )
+    return mappings
 
 
 def execute_import_with_mappings(
@@ -1347,6 +1409,162 @@ def approve_import(
     return import_record
 
 
+def queue_import_job(
+    db: Session,
+    org_id: UUID,
+    import_record: SurrogateImport,
+    *,
+    dedupe_action: str = "skip",
+    use_mappings: bool = True,
+    unknown_column_behavior: str | None = None,
+) -> tuple["Job", bool]:
+    """
+    Queue a CSV import job for an approved/failed import.
+
+    Returns:
+        (job, already_queued)
+    """
+    from app.db.enums import JobStatus, JobType
+    from app.db.models import Job
+    from app.services import job_service
+
+    if import_record.organization_id != org_id:
+        raise ValueError("Import not found")
+
+    if import_record.status in {"running", "processing"}:
+        raise ValueError("Import is already running")
+    if import_record.status == "cancelled":
+        raise ValueError("Import was cancelled")
+    if import_record.status not in {"approved", "failed"}:
+        raise ValueError(f"Import is not approved for processing (current: {import_record.status})")
+    if not import_record.file_content:
+        raise ValueError("Import file missing; re-upload to retry")
+
+    existing = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == org_id,
+            Job.job_type == JobType.CSV_IMPORT.value,
+            Job.status.in_([JobStatus.PENDING.value, JobStatus.RUNNING.value]),
+            Job.payload["import_id"].astext == str(import_record.id),
+        )
+        .first()
+    )
+    if existing:
+        return existing, True
+
+    if import_record.status == "failed":
+        import_record.status = "approved"
+        import_record.completed_at = None
+        import_record.error_count = 0
+        import_record.errors = None
+        import_record.imported_count = 0
+        import_record.skipped_count = 0
+        db.commit()
+
+    job = job_service.schedule_job(
+        db=db,
+        org_id=org_id,
+        job_type=JobType.CSV_IMPORT,
+        payload={
+            "import_id": str(import_record.id),
+            "dedupe_action": dedupe_action,
+            "use_mappings": use_mappings,
+            "unknown_column_behavior": unknown_column_behavior
+            or import_record.unknown_column_behavior
+            or "ignore",
+        },
+    )
+    return job, False
+
+
+def run_import_execution(
+    db: Session,
+    org_id: UUID,
+    import_record: SurrogateImport,
+    *,
+    use_mappings: bool | None = None,
+    dedupe_action: str = "skip",
+    unknown_column_behavior: str | None = None,
+) -> None:
+    """Execute an import immediately using stored content and mappings."""
+    if not import_record.file_content:
+        raise ValueError("Import record missing file content")
+
+    import_record.status = "running"
+    db.commit()
+
+    try:
+        mapping_snapshot = import_record.column_mapping_snapshot or []
+        resolved_use_mappings = use_mappings if use_mappings is not None else bool(mapping_snapshot)
+        resolved_unknown_behavior = (
+            unknown_column_behavior or import_record.unknown_column_behavior or "ignore"
+        )
+
+        if resolved_use_mappings and isinstance(mapping_snapshot, list) and mapping_snapshot:
+            mappings = build_column_mappings_from_snapshot(mapping_snapshot)
+
+            execute_import_with_mappings(
+                db=db,
+                org_id=org_id,
+                user_id=import_record.created_by_user_id,
+                import_id=import_record.id,
+                file_content=import_record.file_content,
+                column_mappings=mappings,
+                unknown_column_behavior=resolved_unknown_behavior,
+                backdate_created_at=bool(getattr(import_record, "backdate_created_at", False)),
+            )
+        else:
+            execute_import(
+                db=db,
+                org_id=org_id,
+                user_id=import_record.created_by_user_id,
+                import_id=import_record.id,
+                file_content=import_record.file_content,
+                dedupe_action=dedupe_action,
+            )
+
+        import_record.file_content = None
+        db.commit()
+    except Exception as e:
+        import_record.status = "failed"
+        import_record.errors = import_record.errors or []
+        import_record.errors.append({"message": str(e)})
+        db.commit()
+        raise
+
+
+def run_import_inline(
+    db: Session,
+    org_id: UUID,
+    import_id: UUID,
+    *,
+    dedupe_action: str = "skip",
+) -> SurrogateImport:
+    """Run an approved/failed import inline (no worker)."""
+    import_record = get_import(db, org_id, import_id)
+    if not import_record:
+        raise ValueError("Import not found")
+
+    if import_record.status in {"running", "processing"}:
+        raise ValueError("Import is already running")
+    if import_record.status == "cancelled":
+        raise ValueError("Import was cancelled")
+    if import_record.status not in {"approved", "failed"}:
+        raise ValueError(f"Import is not approved for processing (current: {import_record.status})")
+
+    run_import_execution(
+        db=db,
+        org_id=org_id,
+        import_record=import_record,
+        use_mappings=True,
+        dedupe_action=dedupe_action,
+        unknown_column_behavior=import_record.unknown_column_behavior,
+    )
+    db.refresh(import_record)
+    return import_record
+
+
 def reject_import(
     db: Session,
     org_id: UUID,
@@ -1371,6 +1589,27 @@ def reject_import(
     import_record.rejection_reason = reason
     import_record.completed_at = datetime.now(timezone.utc)
 
+    db.commit()
+    db.refresh(import_record)
+    return import_record
+
+
+def cancel_import(
+    db: Session,
+    org_id: UUID,
+    import_id: UUID,
+) -> SurrogateImport:
+    """Cancel an import and remove its stored file content."""
+    import_record = get_import(db, org_id, import_id)
+    if not import_record:
+        raise ValueError("Import not found")
+
+    if import_record.status in {"running", "processing"}:
+        raise ValueError("Import is running and cannot be cancelled")
+
+    import_record.status = "cancelled"
+    import_record.file_content = None
+    import_record.completed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(import_record)
     return import_record
@@ -1411,11 +1650,13 @@ def create_import_with_template(
     detected_delimiter: str | None = None,
 ) -> SurrogateImport:
     """Create an import job record with template reference."""
+    file_hash = compute_file_hash(file_content)
     import_record = SurrogateImport(
         organization_id=org_id,
         created_by_user_id=user_id,
         filename=filename,
         file_content=file_content,
+        file_hash=file_hash,
         status="pending",
         total_rows=total_rows,
         template_id=template_id,

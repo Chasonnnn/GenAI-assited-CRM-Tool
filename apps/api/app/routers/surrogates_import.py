@@ -92,6 +92,13 @@ class ImportApprovalResponse(BaseModel):
     message: str | None = None
 
 
+class ImportActionResponse(BaseModel):
+    import_id: UUID
+    status: str
+    message: str | None = None
+    job_id: UUID | None = None
+
+
 # =============================================================================
 # Endpoints
 # =============================================================================
@@ -232,6 +239,7 @@ async def preview_csv_enhanced(
     request: Request,
     file: UploadFile = File(..., description="CSV file to preview"),
     apply_template: bool = True,
+    enable_ai: bool = False,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
@@ -253,12 +261,24 @@ async def preview_csv_enhanced(
             detail="File must be a CSV or TSV file",
         )
 
+    file_hash = import_service.compute_file_hash(content)
+    existing = import_service.find_active_import_by_hash(db, session.org_id, file_hash)
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This file is already uploaded and still active "
+                f"(status: {existing.status}). Cancel it or wait for completion."
+            ),
+        )
+
     try:
         preview = await import_service.preview_import_enhanced(
             db=db,
             org_id=session.org_id,
             file_content=content,
             apply_template=apply_template,
+            enable_ai=enable_ai,
         )
     except Exception as e:
         raise HTTPException(
@@ -275,6 +295,7 @@ async def preview_csv_enhanced(
         filename=file.filename,
         total_rows=preview.total_rows,
         file_content=content,
+        file_hash=file_hash,
         status="pending",
     )
     import_record.detected_encoding = preview.detected_encoding
@@ -575,9 +596,6 @@ def approve_import(
 
     Requires admin role. After approval, the import will be queued for processing.
     """
-    from app.db.enums import JobType
-    from app.services import job_service
-
     import_record = import_service.get_import(db, session.org_id, import_id)
     if not import_record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Import not found")
@@ -593,22 +611,82 @@ def approve_import(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     # Queue background job for processing
-    job_service.schedule_job(
+    job, already_queued = import_service.queue_import_job(
         db=db,
         org_id=session.org_id,
-        job_type=JobType.CSV_IMPORT,
-        payload={
-            "import_id": str(updated.id),
-            "dedupe_action": "skip",
-            "use_mappings": True,
-            "unknown_column_behavior": import_record.unknown_column_behavior,
-        },
+        import_record=import_record,
+        dedupe_action="skip",
+        use_mappings=True,
+        unknown_column_behavior=import_record.unknown_column_behavior,
     )
 
     return ImportApprovalResponse(
         import_id=updated.id,
         status=updated.status,
-        message="Import approved and queued for processing",
+        message="Import already queued"
+        if already_queued
+        else "Import approved and queued for processing",
+    )
+
+
+@router.post(
+    "/{import_id:uuid}/retry",
+    response_model=ImportActionResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+def retry_import(
+    import_id: UUID,
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    db: Session = Depends(get_db),
+):
+    """Retry a failed/approved import by queueing a new job."""
+    import_record = import_service.get_import(db, session.org_id, import_id)
+    if not import_record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Import not found")
+
+    try:
+        job, already_queued = import_service.queue_import_job(
+            db=db,
+            org_id=session.org_id,
+            import_record=import_record,
+            dedupe_action="skip",
+            use_mappings=True,
+            unknown_column_behavior=import_record.unknown_column_behavior,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+
+    return ImportActionResponse(
+        import_id=import_record.id,
+        status=import_record.status,
+        job_id=job.id,
+        message="Import already queued" if already_queued else "Import queued for processing",
+    )
+
+
+@router.post(
+    "/{import_id:uuid}/run-inline",
+    response_model=ImportActionResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+def run_import_inline(
+    import_id: UUID,
+    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    db: Session = Depends(get_db),
+):
+    """Run an approved import inline (no background worker)."""
+    try:
+        import_record = import_service.run_import_inline(db, session.org_id, import_id)
+    except ValueError as e:
+        detail = str(e)
+        if detail == "Import not found":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+
+    return ImportActionResponse(
+        import_id=import_record.id,
+        status=import_record.status,
+        message="Import processed inline",
     )
 
 
@@ -648,4 +726,30 @@ def reject_import(
         status=updated.status,
         rejection_reason=updated.rejection_reason,
         message=f"Import rejected: {data.reason}",
+    )
+
+
+@router.delete(
+    "/{import_id:uuid}",
+    response_model=ImportActionResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+def cancel_import(
+    import_id: UUID,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """Cancel an import request and remove it from history."""
+    try:
+        import_record = import_service.cancel_import(db, session.org_id, import_id)
+    except ValueError as e:
+        detail = str(e)
+        if detail == "Import not found":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+
+    return ImportActionResponse(
+        import_id=import_record.id,
+        status=import_record.status,
+        message="Import cancelled",
     )

@@ -112,6 +112,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
     const [unknownColumnBehavior, setUnknownColumnBehavior] = useState<UnknownColumnBehavior>("ignore")
     const [touchedColumns, setTouchedColumns] = useState<Set<string>>(new Set())
     const [backdateCreatedAt, setBackdateCreatedAt] = useState(false)
+    const [allowAiAssist, setAllowAiAssist] = useState(false)
     const [error, setError] = useState<string>("")
     const [submitMessage, setSubmitMessage] = useState<string | null>(null)
     const [approveMessage, setApproveMessage] = useState<string | null>(null)
@@ -173,6 +174,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
             const previewData = await previewMutation.mutateAsync({
                 file: selectedFile,
                 applyTemplate: true,
+                enableAi: allowAiAssist,
             })
             setPreview(previewData)
             const baseMappings = buildColumnMappingsFromSuggestions(previewData.column_suggestions)
@@ -191,7 +193,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
             setError(resolveErrorDetail(err, "Failed to preview CSV"))
             setFile(null)
         }
-    }, [previewMutation, unknownColumnBehavior])
+    }, [previewMutation, unknownColumnBehavior, allowAiAssist])
 
     const handleDrop = useCallback((e: DragEvent<HTMLDivElement>) => {
         e.preventDefault()
@@ -393,19 +395,28 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                 <h3 className="mb-2 text-lg font-semibold">
                                     {isDragging ? "Drop CSV file here" : "Drag CSV here or click to browse"}
                                 </h3>
-                                <p className="text-sm text-muted-foreground">Upload a CSV file to import surrogates</p>
-                            </>
-                        )}
+                        <p className="text-sm text-muted-foreground">Upload a CSV file to import surrogates</p>
+                    </>
+                )}
 
-                        {error && (
+                {error && (
                             <div className="mt-4 flex items-center gap-2 text-sm text-destructive">
                                 <XCircleIcon className="size-4" />
                                 {error}
-                            </div>
-                        )}
+                        </div>
+                    )}
+
+                    <div className="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
+                        <Switch
+                            id="ai-auto-map"
+                            checked={allowAiAssist}
+                            onCheckedChange={setAllowAiAssist}
+                        />
+                        <Label htmlFor="ai-auto-map">Allow AI to auto-suggest mappings</Label>
                     </div>
-                </Card>
-            )}
+                </div>
+            </Card>
+        )}
 
             {preview && (
                 <>
@@ -495,6 +506,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                             const previewData = await previewMutation.mutateAsync({
                                                 file,
                                                 applyTemplate: false,
+                                                enableAi: allowAiAssist,
                                             })
                                             setPreview(previewData)
                                             const baseMappings = buildColumnMappingsFromSuggestions(

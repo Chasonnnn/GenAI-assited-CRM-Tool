@@ -582,7 +582,10 @@ class SurrogateImport(Base):
     """
 
     __tablename__ = "surrogate_imports"
-    __table_args__ = (Index("idx_surrogate_imports_org_created", "organization_id", "created_at"),)
+    __table_args__ = (
+        Index("idx_surrogate_imports_org_created", "organization_id", "created_at"),
+        Index("idx_surrogate_imports_org_file_hash", "organization_id", "file_hash"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
@@ -599,6 +602,7 @@ class SurrogateImport(Base):
     # File info
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_content: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Status: pending, processing, completed, failed
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)

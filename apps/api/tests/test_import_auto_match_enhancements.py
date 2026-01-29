@@ -204,7 +204,7 @@ async def test_ai_auto_triggered_for_unmatched_columns(
     csv_data = make_csv([{"Mystery Column": "foo"}])
 
     preview = await authed_client.post(
-        "/surrogates/import/preview/enhanced",
+        "/surrogates/import/preview/enhanced?enable_ai=true",
         files={"file": ("preview.csv", io.BytesIO(csv_data), "text/csv")},
     )
     assert preview.status_code == 200, preview.text
@@ -217,6 +217,39 @@ async def test_ai_auto_triggered_for_unmatched_columns(
         item for item in data["column_suggestions"] if item["csv_column"] == "Mystery Column"
     )
     assert mystery["suggested_field"] == "source"
+
+
+@pytest.mark.asyncio
+async def test_preview_import_ai_not_auto_triggered_by_default(
+    authed_client: AsyncClient,
+    monkeypatch,
+    db,
+    test_org,
+):
+    from app.services import import_ai_mapper_service
+
+    called = {"ai": False}
+
+    monkeypatch.setattr(import_ai_mapper_service, "is_ai_available", lambda *_: True)
+
+    async def fake_ai_suggest_mappings(*_args, **_kwargs):
+        called["ai"] = True
+        return []
+
+    monkeypatch.setattr(import_ai_mapper_service, "ai_suggest_mappings", fake_ai_suggest_mappings)
+
+    csv_data = make_csv([{"Mystery Column": "foo"}])
+
+    preview = await authed_client.post(
+        "/surrogates/import/preview/enhanced",
+        files={"file": ("preview.csv", io.BytesIO(csv_data), "text/csv")},
+    )
+    assert preview.status_code == 200, preview.text
+
+    data = preview.json()
+    assert data["ai_auto_triggered"] is False
+    assert data["ai_mapped_columns"] == []
+    assert called["ai"] is False
 
 
 @pytest.mark.asyncio

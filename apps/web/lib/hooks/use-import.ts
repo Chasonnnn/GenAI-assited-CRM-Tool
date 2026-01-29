@@ -8,6 +8,9 @@ import {
     submitImport,
     approveImport,
     rejectImport,
+    retryImport,
+    runImportInline,
+    cancelImport,
     listPendingImportApprovals,
     aiMapColumns,
     listImports,
@@ -19,10 +22,11 @@ import {
     type ImportApprovalItem,
     type ImportSubmitResponse,
     type ImportApprovalResponse,
+    type ImportActionResponse,
 } from '@/lib/api/import'
 
 // Re-export types for convenience
-export type { EnhancedImportPreview, ColumnMappingItem, ImportApprovalItem, ImportSubmitResponse, ImportApprovalResponse }
+export type { EnhancedImportPreview, ColumnMappingItem, ImportApprovalItem, ImportSubmitResponse, ImportApprovalResponse, ImportActionResponse }
 
 // Query keys
 export const importKeys = {
@@ -60,10 +64,12 @@ export function usePendingImportApprovals(enabled = true) {
 
 export function usePreviewImport() {
     return useMutation({
-        mutationFn: (params: { file: File; applyTemplate?: boolean }) =>
+        mutationFn: (params: { file: File; applyTemplate?: boolean; enableAi?: boolean }) =>
             previewImport(
                 params.file,
-                params.applyTemplate !== undefined ? { applyTemplate: params.applyTemplate } : undefined
+                params.applyTemplate !== undefined || params.enableAi !== undefined
+                    ? { applyTemplate: params.applyTemplate, enableAi: params.enableAi }
+                    : undefined
             ),
     })
 }
@@ -107,6 +113,42 @@ export function useRejectImport() {
     return useMutation({
         mutationFn: (params: { importId: string; reason: string }) =>
             rejectImport(params.importId, params.reason),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: importKeys.lists() })
+            queryClient.invalidateQueries({ queryKey: importKeys.pending() })
+        },
+    })
+}
+
+export function useRetryImport() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (importId: string) => retryImport(importId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: importKeys.lists() })
+            queryClient.invalidateQueries({ queryKey: importKeys.pending() })
+        },
+    })
+}
+
+export function useRunImportInline() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (importId: string) => runImportInline(importId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: importKeys.lists() })
+            queryClient.invalidateQueries({ queryKey: importKeys.pending() })
+        },
+    })
+}
+
+export function useCancelImport() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (importId: string) => cancelImport(importId),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: importKeys.lists() })
             queryClient.invalidateQueries({ queryKey: importKeys.pending() })

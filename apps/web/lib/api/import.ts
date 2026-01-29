@@ -89,6 +89,13 @@ export interface ImportApprovalResponse {
     rejection_reason?: string
 }
 
+export interface ImportActionResponse {
+    import_id: string
+    status: string
+    message?: string
+    job_id?: string | null
+}
+
 export interface DeduplicationStats {
     total: number
     new_records: number
@@ -118,15 +125,16 @@ export interface AiMapResponse {
 
 export async function previewImport(
     file: File,
-    options?: { applyTemplate?: boolean }
+    options?: { applyTemplate?: boolean; enableAi?: boolean }
 ): Promise<EnhancedImportPreview> {
     const formData = new FormData()
     formData.append('file', file)
     const applyTemplate =
         typeof options?.applyTemplate === 'boolean' ? options.applyTemplate : true
+    const enableAi = typeof options?.enableAi === 'boolean' ? options.enableAi : false
 
     return api.post<EnhancedImportPreview>(
-        `/surrogates/import/preview/enhanced?apply_template=${applyTemplate}`,
+        `/surrogates/import/preview/enhanced?apply_template=${applyTemplate}&enable_ai=${enableAi}`,
         formData
     )
 }
@@ -149,6 +157,18 @@ export async function approveImport(importId: string): Promise<ImportApprovalRes
 
 export async function rejectImport(importId: string, reason: string): Promise<ImportApprovalResponse> {
     return api.post<ImportApprovalResponse>(`/surrogates/import/${importId}/reject`, { reason })
+}
+
+export async function retryImport(importId: string): Promise<ImportActionResponse> {
+    return api.post<ImportActionResponse>(`/surrogates/import/${importId}/retry`)
+}
+
+export async function runImportInline(importId: string): Promise<ImportActionResponse> {
+    return api.post<ImportActionResponse>(`/surrogates/import/${importId}/run-inline`)
+}
+
+export async function cancelImport(importId: string): Promise<ImportActionResponse> {
+    return api.delete<ImportActionResponse>(`/surrogates/import/${importId}`)
 }
 
 export async function listPendingImportApprovals(): Promise<ImportApprovalItem[]> {
