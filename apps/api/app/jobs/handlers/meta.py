@@ -121,6 +121,12 @@ async def process_meta_lead_fetch(db, job) -> None:
 
     logger.info(f"Meta lead {leadgen_id} stored successfully for org {mapping.organization_id}")
 
+    # Enrich platform attribution if missing (uses cached ad-level insights)
+    try:
+        meta_lead_service.enrich_platform_from_insights(db, meta_lead)
+    except Exception as exc:
+        logger.warning(f"Platform enrichment failed for lead {leadgen_id}: {exc}")
+
     # Auto-convert only if mapping is ready
     if meta_lead.is_converted:
         meta_lead.status = "converted"
@@ -462,6 +468,22 @@ async def process_meta_spend_sync(db, job) -> None:
         "Spend sync complete: rows_synced=%s, campaigns=%s",
         result.get("rows_synced", 0),
         result.get("campaigns", 0),
+    )
+
+    # Sync ad-level platform breakdown for deterministic attribution
+    platform_result = await meta_sync_service.sync_ad_platform_breakdown(
+        db=db,
+        ad_account=ad_account,
+        date_start=date_start,
+        date_end=date_end,
+    )
+    if platform_result.get("error"):
+        raise Exception(platform_result["error"])
+
+    logger.info(
+        "Ad platform sync complete: rows_synced=%s, ads=%s",
+        platform_result.get("rows_synced", 0),
+        platform_result.get("ads", 0),
     )
 
     # Note: Health recording handled centrally by _record_job_success

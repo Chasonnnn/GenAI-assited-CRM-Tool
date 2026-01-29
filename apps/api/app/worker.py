@@ -11,6 +11,7 @@ For production, run this as a separate process (e.g., systemd service, Docker co
 import asyncio
 import logging
 import os
+import random
 import sys
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
@@ -262,6 +263,30 @@ def _record_job_failure(db, job, error_msg: str, exception: Exception | None = N
         logger.warning("Failed to record job failure: %s", e)
 
 
+def _is_meta_rate_limit_error(job, error_msg: str) -> bool:
+    from app.services import meta_token_service
+    from app.db.enums import JobType
+
+    if job.job_type not in (
+        JobType.META_SPEND_SYNC.value,
+        JobType.META_HIERARCHY_SYNC.value,
+        JobType.META_FORM_SYNC.value,
+        JobType.META_LEAD_FETCH.value,
+    ):
+        return False
+
+    category = meta_token_service.classify_meta_error(Exception(error_msg))
+    return category == meta_token_service.ErrorCategory.RATE_LIMIT
+
+
+def _rate_limit_backoff_seconds(attempts: int) -> int:
+    # Exponential backoff with jitter, capped at 1 hour
+    base = 60
+    delay = min(3600, base * (2 ** max(attempts - 1, 0)))
+    jitter = random.randint(0, 30)
+    return delay + jitter
+
+
 async def worker_loop() -> None:
     """Main worker loop - polls for and processes pending jobs."""
     if WORKER_JOB_TYPES is None:
@@ -321,6 +346,20 @@ async def worker_loop() -> None:
                         error_msg = str(e)
                         job_service.mark_job_failed(db, job, error_msg)
                         logger.error("Job %s failed: %s", job.id, type(e).__name__)
+
+                        # Apply rate limit backoff for Meta throttling errors
+                        if (
+                            job.status == JobStatus.PENDING.value
+                            and _is_meta_rate_limit_error(job, error_msg)
+                        ):
+                            delay = _rate_limit_backoff_seconds(job.attempts)
+                            job.run_at = datetime.now(timezone.utc) + timedelta(seconds=delay)
+                            db.commit()
+                            logger.warning(
+                                "Rate limit backoff applied for job %s: retrying in %ss",
+                                job.id,
+                                delay,
+                            )
 
                         # Record failure for integration health and alerts
                         _record_job_failure(db, job, error_msg, exception=e)
