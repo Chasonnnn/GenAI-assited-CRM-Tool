@@ -62,6 +62,7 @@ class AuditEventType(str, Enum):
     INTEGRATION_CONNECTED = "integration_connected"
     INTEGRATION_DISCONNECTED = "integration_disconnected"
     INTEGRATION_TOKEN_REFRESHED = "integration_token_refreshed"
+    META_ASSETS_CONNECTED = "meta_assets_connected"
 
     # User management
     USER_INVITED = "user_invited"

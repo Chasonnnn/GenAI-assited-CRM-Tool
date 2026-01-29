@@ -790,7 +790,35 @@ ORDER BY ts_rank(search_vector, query) DESC
 
 ### Health Probes
 - `/health/live` — Liveness probe
-- `/health/ready` — Readiness probe (checks DB connection)
+- `/health/ready` — Readiness probe (checks DB + optional Redis)
+
+#### Readiness Payload (v0.16.x)
+`/health/ready` returns:
+```json
+{
+  "status": "ok",
+  "env": "prod",
+  "version": "0.16.0",
+  "db_migrations": {
+    "status": "ok",
+    "current_heads": ["..."],
+    "head_revisions": ["..."]
+  },
+  "redis": {
+    "status": "ok | degraded | disabled",
+    "required": false,
+    "fail_open": true,
+    "configured": true
+  }
+}
+```
+
+**Redis semantics**
+- `status="ok"`: Redis reachable.
+- `status="disabled"`: `REDIS_URL` unset.
+- `status="degraded"`: Redis unavailable but service can operate with fail‑open.
+
+Readiness only fails on Redis when `REDIS_REQUIRED=true` or `RATE_LIMIT_FAIL_OPEN=false`.
 
 ### Cloud Monitoring
 - Structured logging for Cloud Logging
@@ -799,4 +827,4 @@ ORDER BY ts_rank(search_vector, query) DESC
 
 ---
 
-*Last updated: 2025-12-29 (v0.16.00)*
+*Last updated: 2026-01-29 (v0.16.00)*

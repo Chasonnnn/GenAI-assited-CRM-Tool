@@ -1,5 +1,3 @@
-import os
-
 import pytest
 
 from app.core.config import settings
@@ -28,7 +26,9 @@ async def test_local_org_logo_route_serves_file(client, db, test_org, monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_local_org_logo_route_404_for_unknown_logo(client, db, test_org, monkeypatch, tmp_path):
+async def test_local_org_logo_route_404_for_unknown_logo(
+    client, db, test_org, monkeypatch, tmp_path
+):
     monkeypatch.setattr(settings, "STORAGE_BACKEND", "local", raising=False)
     monkeypatch.setattr(settings, "LOCAL_STORAGE_PATH", str(tmp_path), raising=False)
 

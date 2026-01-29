@@ -15,6 +15,7 @@ from app.db.models import (
     StatusChangeRequest,
     IntendedParentStatusHistory,
 )
+from app.utils.normalization import normalize_identifier, normalize_search_text
 from sqlalchemy.exc import IntegrityError
 
 
@@ -139,7 +140,8 @@ def list_matches(
         query = query.filter(Match.intended_parent_id == intended_parent_id)
 
     if q:
-        search_term = f"%{q}%"
+        normalized_text = normalize_search_text(q)
+        normalized_identifier = normalize_identifier(q) or q
         query = (
             query.join(Surrogate, Match.surrogate_id == Surrogate.id, isouter=True)
             .join(
@@ -149,11 +151,17 @@ def list_matches(
             )
             .filter(
                 or_(
-                    Match.match_number.ilike(search_term),
-                    Surrogate.full_name.ilike(search_term),
-                    Surrogate.surrogate_number.ilike(search_term),
-                    IntendedParent.full_name.ilike(search_term),
-                    IntendedParent.intended_parent_number.ilike(search_term),
+                    Match.match_number.ilike(f"%{normalized_identifier}%"),
+                    Surrogate.full_name_normalized.ilike(
+                        f"%{normalized_text or normalized_identifier}%"
+                    ),
+                    Surrogate.surrogate_number_normalized.ilike(f"%{normalized_identifier}%"),
+                    IntendedParent.full_name_normalized.ilike(
+                        f"%{normalized_text or normalized_identifier}%"
+                    ),
+                    IntendedParent.intended_parent_number_normalized.ilike(
+                        f"%{normalized_identifier}%"
+                    ),
                 )
             )
         )

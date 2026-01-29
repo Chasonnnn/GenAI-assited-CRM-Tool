@@ -6,7 +6,23 @@ This document records database optimization opportunities identified during a co
 
 ## Completed Optimizations
 
-*To be updated as changes are implemented*
+### 1. Campaign Service N+1 Fix
+
+**Status**: ✅ Implemented
+
+**File**: `apps/api/app/services/campaign_service.py`
+
+**Current Implementation**: Uses a window-function subquery + LEFT JOIN to fetch latest run stats per campaign (no N+1).
+
+---
+
+### 2. Admin Import Query Consolidation
+
+**Status**: ✅ Implemented
+
+**File**: `apps/api/app/services/admin_import_service.py`
+
+**Current Implementation**: Single OR query for user IDs/emails; builds maps from one result set.
 
 ---
 
@@ -14,7 +30,7 @@ This document records database optimization opportunities identified during a co
 
 ### 1. Row Level Security (RLS) Implementation
 
-**Status**: Deferred - Major blockers identified
+**Status**: Deferred - Major blockers identified (no code changes detected)
 
 **Original Proposal**: Add RLS policies to all multi-tenant tables using session variables (`SET app.current_org_id`) to enforce organization isolation at the database level.
 
@@ -50,7 +66,7 @@ This document records database optimization opportunities identified during a co
 
 ### 2. Intended Parents Full-Text Search
 
-**Status**: Deferred - Semantic behavior change requires design decision
+**Status**: Deferred - Semantic behavior change requires design decision (current ILIKE remains)
 
 **Original Proposal**: Replace ILIKE substring search with PostgreSQL full-text search using existing `search_vector` column.
 
@@ -154,27 +170,7 @@ The following indexes were initially proposed but determined to be unnecessary:
 
 ## Validated Optimizations (Ready to Implement)
 
-### 1. Campaign Service N+1 Fix
-
-**File**: `apps/api/app/services/campaign_service.py` (lines 62-70)
-
-**Problem**: Classic N+1 query - 1 query for campaigns + 1 per campaign for latest run stats
-
-**Solution**: Rewrite with window function subquery and LEFT JOIN
-
-**Impact**: Reduces queries from N+1 to 2
-
-### 2. Admin Import Query Consolidation
-
-**File**: `apps/api/app/services/admin_import_service.py` (lines 238-244)
-
-**Problem**: Two separate queries to User table for ID and email lookups
-
-**Solution**: Single query with OR condition, build both maps from result
-
-**Impact**: 2 queries to 1 (modest improvement for large imports)
-
-### 3. meta_leads Composite Index
+### 1. meta_leads Composite Index
 
 **Pre-requisite**: Run EXPLAIN ANALYZE to verify benefit
 
@@ -191,6 +187,18 @@ ON meta_leads(organization_id, meta_form_id, is_converted);
 ## Analysis Date
 
 2026-01-22
+
+## Re-Validation Date
+
+2026-01-29
+
+## Current Status Summary (2026-01-29)
+
+- ✅ Campaign Service N+1 fix implemented (window-function subquery + LEFT JOIN).
+- ✅ Admin import query consolidation implemented (single OR query).
+- ⏳ RLS remains deferred (no RLS/GUC/bypass code detected).
+- ⏳ Intended Parent FTS remains deferred (ILIKE search still used).
+- ⏳ meta_leads composite index not yet added (no migration/index present).
 
 ## Review Methodology
 

@@ -87,6 +87,7 @@ from app.routers import (
     tasks,
     templates,
     tracking,
+    unsubscribe,
     webhooks,
     websocket as ws_router,
     workflows,
@@ -430,6 +431,7 @@ app.include_router(notifications.router, prefix="/me", tags=["notifications"])
 
 # Email and jobs routers
 app.include_router(email_templates.router, prefix="/email-templates", tags=["email"])
+app.include_router(unsubscribe.router)
 app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
 
 # Webhooks (Meta Lead Ads webhook handler)

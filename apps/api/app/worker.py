@@ -112,13 +112,30 @@ def _ensure_attachment_scanner_available() -> None:
         logger.info("Attachment scanning enabled; using %s", scanner)
 
 
-async def send_email_async(email_log: EmailLog, db=None) -> None:
+async def send_email_async(email_log: EmailLog, db=None) -> str:
     """
     Send an email using the appropriate provider.
 
     For campaign emails: uses the org's configured provider (Resend/Gmail).
     For other emails: uses the global RESEND_API_KEY if available.
     """
+    # Global suppression check (best-effort)
+    if db:
+        try:
+            if email_service.is_email_suppressed(
+                db,
+                email_log.organization_id,
+                email_log.recipient_email,
+            ):
+                logger.info(
+                    "Email suppressed for email_log=%s recipient=%s",
+                    email_log.id,
+                    _mask_email(email_log.recipient_email),
+                )
+                return "skipped"
+        except Exception as exc:
+            logger.warning("Suppression check failed: %s", exc)
+
     # Check if this is a campaign email and get the provider
     campaign_provider = None
     campaign_run = None
@@ -141,12 +158,12 @@ async def send_email_async(email_log: EmailLog, db=None) -> None:
     # Use org-level provider for campaigns
     if campaign_provider and db:
         await _send_via_org_provider(db, email_log, campaign_provider, campaign_run.organization_id)
-        return
+        return "sent"
 
     # Fallback to global RESEND_API_KEY for non-campaign emails
     if not RESEND_API_KEY:
         logger.info("[DRY RUN] Email send skipped for email_log=%s", email_log.id)
-        return
+        return "sent"
 
     try:
         import resend
@@ -167,6 +184,7 @@ async def send_email_async(email_log: EmailLog, db=None) -> None:
             _mask_email(email_log.recipient_email),
             result.get("id"),
         )
+        return "sent"
     except ImportError:
         logger.warning("resend package not installed, skipping email send")
         raise Exception("resend package not installed")
@@ -187,6 +205,12 @@ async def _send_via_org_provider(db, email_log: EmailLog, provider: str, org_id)
         api_key = resend_settings_service.decrypt_api_key(settings.api_key_encrypted)
 
         from app.services import resend_email_service
+        from app.services import unsubscribe_service
+
+        unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
+            org_id=org_id,
+            email=email_log.recipient_email,
+        )
 
         success, error, message_id = await resend_email_service.send_email_direct(
             api_key=api_key,
@@ -197,6 +221,7 @@ async def _send_via_org_provider(db, email_log: EmailLog, provider: str, org_id)
             from_name=settings.from_name,
             reply_to=settings.reply_to_email,
             idempotency_key=f"email-log/{email_log.id}",
+            unsubscribe_url=unsubscribe_url,
         )
 
         if success:
@@ -215,6 +240,12 @@ async def _send_via_org_provider(db, email_log: EmailLog, provider: str, org_id)
         if not settings or not settings.default_sender_user_id:
             raise Exception("Gmail sender not configured for organization")
 
+        from app.services import unsubscribe_service
+        headers = unsubscribe_service.build_list_unsubscribe_headers(
+            org_id=org_id,
+            email=email_log.recipient_email,
+        )
+
         result = await gmail_service.send_email(
             db=db,
             user_id=str(settings.default_sender_user_id),
@@ -222,6 +253,7 @@ async def _send_via_org_provider(db, email_log: EmailLog, provider: str, org_id)
             subject=email_log.subject,
             body=email_log.body,
             html=True,
+            headers=headers,
         )
 
         if result.get("success"):
@@ -251,8 +283,11 @@ async def process_job(db, job) -> None:
         if not email_log:
             raise Exception(f"EmailLog {email_log_id} not found")
 
-        await send_email_async(email_log, db=db)
-        email_service.mark_email_sent(db, email_log)
+        result = await send_email_async(email_log, db=db)
+        if result == "skipped":
+            email_service.mark_email_skipped(db, email_log, "suppressed")
+        else:
+            email_service.mark_email_sent(db, email_log)
 
     elif job.job_type == JobType.REMINDER.value:
         # Process reminder - create notification and/or send email
@@ -342,6 +377,9 @@ async def process_job(db, job) -> None:
 
     elif job.job_type == JobType.META_LEAD_FETCH.value:
         await process_meta_lead_fetch(db, job)
+
+    elif job.job_type == JobType.META_LEAD_REPROCESS_FORM.value:
+        await process_meta_lead_reprocess_form(db, job)
 
     elif job.job_type == JobType.META_CAPI_EVENT.value:
         await process_meta_capi_event(db, job)
@@ -455,6 +493,7 @@ def _record_job_success(db, job) -> None:
     # Map job types to integration types
     job_to_integration = {
         JobType.META_LEAD_FETCH.value: IntegrationType.META_LEADS,
+        JobType.META_LEAD_REPROCESS_FORM.value: IntegrationType.META_LEADS,
         JobType.META_CAPI_EVENT.value: IntegrationType.META_CAPI,
         JobType.META_HIERARCHY_SYNC.value: IntegrationType.META_HIERARCHY,
         JobType.META_SPEND_SYNC.value: IntegrationType.META_SPEND,
@@ -555,12 +594,13 @@ def _record_job_failure(db, job, error_msg: str, exception: Exception | None = N
     from app.db.enums import IntegrationType, AlertType, AlertSeverity
 
     if not job.organization_id:
-        return
+        return "sent"
 
     try:
         # Map job types to integration types (for health tracking)
         job_to_integration = {
             JobType.META_LEAD_FETCH.value: IntegrationType.META_LEADS,
+            JobType.META_LEAD_REPROCESS_FORM.value: IntegrationType.META_LEADS,
             JobType.META_CAPI_EVENT.value: IntegrationType.META_CAPI,
             JobType.META_HIERARCHY_SYNC.value: IntegrationType.META_HIERARCHY,
             JobType.META_SPEND_SYNC.value: IntegrationType.META_SPEND,
@@ -634,8 +674,12 @@ async def process_meta_lead_fetch(db, job) -> None:
     5. Update status on success/failure
     """
     from app.db.models import MetaPageMapping, MetaLead
-    from app.core.encryption import decrypt_token
-    from app.services import meta_api, meta_lead_service
+    from app.services import (
+        meta_api,
+        meta_lead_service,
+        meta_form_mapping_service,
+        meta_token_service,
+    )
 
     leadgen_id = job.payload.get("leadgen_id")
     page_id = job.payload.get("page_id")
@@ -656,16 +700,14 @@ async def process_meta_lead_fetch(db, job) -> None:
     if not mapping:
         raise Exception(f"No active mapping for page {page_id}")
 
-    # Decrypt access token
-    try:
-        access_token = (
-            decrypt_token(mapping.access_token_encrypted) if mapping.access_token_encrypted else ""
-        )
-    except Exception as e:
-        mapping.last_error = f"Token decryption failed: {str(e)[:100]}"
+    # Resolve access token (page token preferred)
+    token_result = meta_token_service.get_token_for_page(db, mapping)
+    access_token = token_result.token or ""
+    if not access_token:
+        mapping.last_error = "No page token available for Meta lead fetch"
         mapping.last_error_at = datetime.now(timezone.utc)
         db.commit()
-        raise Exception(f"Token decryption failed: {e}")
+        raise Exception("No page token available for Meta lead fetch")
 
     # Fetch lead from Meta API
     lead_data, error = await meta_api.fetch_lead_details(leadgen_id, access_token)
@@ -675,6 +717,8 @@ async def process_meta_lead_fetch(db, job) -> None:
         mapping.last_error = error
         mapping.last_error_at = datetime.now(timezone.utc)
         db.commit()
+        if token_result.connection_id:
+            meta_token_service.mark_token_error(db, token_result.connection_id, Exception(error))
 
         # Check if we have an existing meta_lead to update
         existing = (
@@ -726,22 +770,43 @@ async def process_meta_lead_fetch(db, job) -> None:
     mapping.last_success_at = datetime.now(timezone.utc)
     mapping.last_error = None
     db.commit()
+    if token_result.connection_id:
+        meta_token_service.mark_token_valid(db, token_result.connection_id)
 
     logger.info(f"Meta lead {leadgen_id} stored successfully for org {mapping.organization_id}")
 
-    # Auto-convert to surrogate so it appears in Cases list immediately
+    # Auto-convert only if mapping is ready
     if meta_lead.is_converted:
         meta_lead.status = "converted"
         db.commit()
+        return "sent"
+
+    form = meta_form_mapping_service.get_form_by_external_id(
+        db, mapping.organization_id, meta_lead.meta_form_id
+    )
+    if not form:
+        meta_lead.status = "awaiting_mapping"
+        db.commit()
+        logger.info(f"Meta lead {leadgen_id} awaiting mapping (form not found)")
+        return
+
+    if form.mapping_status != "mapped" or form.mapping_version_id != form.current_version_id:
+        meta_lead.status = "awaiting_mapping"
+        db.commit()
+        reason = "Mapping missing" if form.mapping_status != "mapped" else "Mapping outdated"
+        meta_form_mapping_service.ensure_mapping_review_task(db, form, reason=reason)
+        logger.info(f"Meta lead {leadgen_id} awaiting mapping for form {form.form_external_id}")
         return
 
     meta_lead.status = "stored"
     db.commit()
 
-    surrogate, convert_error = meta_lead_service.convert_to_surrogate(
+    surrogate, convert_error = meta_lead_service.convert_to_surrogate_with_mapping(
         db=db,
         meta_lead=meta_lead,
-        user_id=None,  # No assignee - managers can bulk-assign later
+        mapping_rules=form.mapping_rules or [],
+        unknown_column_behavior=form.unknown_column_behavior or "metadata",
+        user_id=None,
     )
 
     if convert_error:
@@ -751,9 +816,61 @@ async def process_meta_lead_fetch(db, job) -> None:
     else:
         meta_lead.status = "converted"
         db.commit()
-        logger.info(
-            f"Meta lead {leadgen_id} auto-converted to case {surrogate.surrogate_number}"
+        logger.info(f"Meta lead {leadgen_id} auto-converted to case {surrogate.surrogate_number}")
+
+
+async def process_meta_lead_reprocess_form(db, job) -> None:
+    """
+    Reprocess unconverted Meta leads for a specific form after mapping changes.
+
+    Payload:
+      - form_id (internal UUID)
+    """
+    from app.db.models import MetaLead
+    from app.services import meta_form_mapping_service, meta_lead_service
+
+    payload = job.payload or {}
+    form_id = payload.get("form_id")
+    if not form_id:
+        raise Exception("Missing form_id in job payload")
+
+    form = meta_form_mapping_service.get_form(db, job.organization_id, UUID(form_id))
+    if not form:
+        raise Exception(f"Meta form {form_id} not found")
+
+    if form.mapping_status != "mapped" or form.mapping_version_id != form.current_version_id:
+        raise Exception("Form mapping is not ready for reprocessing")
+
+    leads = (
+        db.query(MetaLead)
+        .filter(
+            MetaLead.organization_id == job.organization_id,
+            MetaLead.meta_form_id == form.form_external_id,
+            MetaLead.is_converted.is_(False),
         )
+        .order_by(MetaLead.received_at.asc())
+        .all()
+    )
+
+    for lead in leads:
+        lead.status = "stored"
+        db.commit()
+        surrogate, error = meta_lead_service.convert_to_surrogate_with_mapping(
+            db=db,
+            meta_lead=lead,
+            mapping_rules=form.mapping_rules or [],
+            unknown_column_behavior=form.unknown_column_behavior or "metadata",
+            user_id=None,
+        )
+        if error:
+            lead.status = "convert_failed"
+            db.commit()
+            logger.warning(f"Reprocess failed for lead {lead.meta_lead_id}: {error}")
+            continue
+
+        lead.status = "converted"
+        db.commit()
+        logger.info(f"Reprocessed lead {lead.meta_lead_id} to {surrogate.surrogate_number}")
 
 
 async def process_meta_capi_event(db, job) -> None:
@@ -769,7 +886,7 @@ async def process_meta_capi_event(db, job) -> None:
 
     Ad account resolution:
       meta_ad_external_id → MetaAd → MetaAdAccount
-      Uses per-account CAPI config (pixel_id, capi_token_encrypted, capi_enabled).
+      Uses per-account CAPI config (pixel_id, capi_enabled) + OAuth token.
       Skips if no ad account found or CAPI is disabled for that account.
     """
     from app.db.models import MetaAd, MetaAdAccount
@@ -988,13 +1105,8 @@ async def process_workflow_email(db, job) -> None:
     if not template:
         raise Exception(f"Email template {template_id} not found")
 
-    # Resolve subject and body with variables
-    subject = template.subject
-    body = template.body
-    for key, value in variables.items():
-        placeholder = "{{" + key + "}}"
-        subject = subject.replace(placeholder, str(value) if value else "")
-        body = body.replace(placeholder, str(value) if value else "")
+    # Resolve subject and body with variables (escaped)
+    subject, body = email_service.render_template(template.subject, template.body, variables)
 
     # Create email log
     email_log = EmailLog(
@@ -1009,6 +1121,16 @@ async def process_workflow_email(db, job) -> None:
     )
     db.add(email_log)
     db.commit()
+
+    # Suppression check (global)
+    if email_service.is_email_suppressed(db, job.organization_id, recipient_email):
+        email_service.mark_email_skipped(db, email_log, "suppressed")
+        logger.info(
+            "Workflow email suppressed for org=%s recipient=%s",
+            job.organization_id,
+            _mask_email(recipient_email),
+        )
+        return
 
     # Resolve email provider based on workflow scope (NO FALLBACK)
     try:
@@ -1027,6 +1149,12 @@ async def process_workflow_email(db, job) -> None:
 
     # Send via resolved provider
     try:
+        from app.services import unsubscribe_service
+        headers = unsubscribe_service.build_list_unsubscribe_headers(
+            org_id=job.organization_id,
+            email=recipient_email,
+        )
+
         if provider == "user_gmail":
             # Personal workflow: send via user's Gmail
             result = await gmail_service.send_email(
@@ -1036,6 +1164,7 @@ async def process_workflow_email(db, job) -> None:
                 subject=subject,
                 body=body,
                 html=True,
+                headers=headers,
             )
             if not result.get("success"):
                 raise Exception(f"Gmail send failed: {result.get('error')}")
@@ -1050,6 +1179,7 @@ async def process_workflow_email(db, job) -> None:
                 subject=subject,
                 body=body,
                 html=True,
+                headers=headers,
             )
             if not result.get("success"):
                 raise Exception(f"Gmail send failed: {result.get('error')}")
@@ -1061,6 +1191,10 @@ async def process_workflow_email(db, job) -> None:
             from_email = template.from_email or config["from_email"]
 
             api_key = resend_settings_service.decrypt_api_key(config["api_key_encrypted"])
+            unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
+                org_id=job.organization_id,
+                email=recipient_email,
+            )
             success, error, message_id = await resend_email_service.send_email_direct(
                 api_key=api_key,
                 to_email=recipient_email,
@@ -1070,6 +1204,7 @@ async def process_workflow_email(db, job) -> None:
                 from_name=config.get("from_name"),
                 reply_to=config.get("reply_to"),
                 idempotency_key=f"workflow-email/{email_log.id}",
+                unsubscribe_url=unsubscribe_url,
             )
             if not success:
                 raise Exception(f"Resend send failed: {error}")

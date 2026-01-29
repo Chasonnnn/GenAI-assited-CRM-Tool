@@ -68,6 +68,22 @@ async def send_surrogate_email(
     body_template = data.body if data.body is not None else template.body
     subject, body = email_service.render_template(subject_template, body_template, variables)
 
+    if email_service.is_email_suppressed(db, session.org_id, surrogate.email):
+        email_log, _job = email_service.send_email(
+            db=db,
+            org_id=session.org_id,
+            template_id=data.template_id,
+            recipient_email=surrogate.email,
+            subject=subject,
+            body=body,
+            surrogate_id=surrogate_id,
+        )
+        return SendEmailResponse(
+            success=False,
+            email_log_id=email_log.id,
+            error="Email suppressed",
+        )
+
     provider = data.provider
     gmail_connected = oauth_service.get_user_integration(db, session.user_id, "gmail") is not None
     resend_configured = bool(os.getenv("RESEND_API_KEY"))

@@ -799,7 +799,10 @@ async def send_test_org_system_email_template(
     }
 
     rendered_subject, rendered_body = email_service.render_template(
-        template.subject, template.body, variables
+        template.subject,
+        template.body,
+        variables,
+        safe_html_vars={"expires_block"},
     )
 
     result = await platform_email_service.send_email_logged(

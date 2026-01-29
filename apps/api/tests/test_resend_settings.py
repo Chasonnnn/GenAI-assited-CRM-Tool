@@ -398,3 +398,28 @@ class TestResendEmailService:
         assert "Hello" in captured_payload["text"]
         assert "World" in captured_payload["text"]
         assert "<" not in captured_payload["text"]  # No HTML tags
+
+    @pytest.mark.asyncio
+    async def test_send_email_direct_sets_list_unsubscribe(self, monkeypatch):
+        from app.services import resend_email_service
+
+        captured_payload = {}
+
+        async def capture_post(self, url, **kwargs):
+            captured_payload.update(kwargs.get("json", {}))
+            return httpx.Response(200, json={"id": "msg_unsub"})
+
+        monkeypatch.setattr(httpx.AsyncClient, "post", capture_post)
+
+        await resend_email_service.send_email_direct(
+            api_key="re_test_key",
+            to_email="recipient@example.com",
+            subject="Test Subject",
+            body="<p>Hello World</p>",
+            from_email="sender@example.com",
+            unsubscribe_url="https://example.com/email/unsubscribe/abc123",
+        )
+
+        headers = captured_payload.get("headers") or {}
+        assert headers.get("List-Unsubscribe") == "<https://example.com/email/unsubscribe/abc123>"
+        assert headers.get("List-Unsubscribe-Post") == "List-Unsubscribe=One-Click"

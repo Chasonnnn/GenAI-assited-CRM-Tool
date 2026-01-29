@@ -291,16 +291,19 @@ function SignaturePreviewComponent() {
 // =============================================================================
 
 const TEMPLATE_VARIABLES = [
+    { name: "first_name", description: "Contact first name" },
     { name: "full_name", description: "Contact full name" },
     { name: "email", description: "Contact email" },
     { name: "phone", description: "Contact phone" },
     { name: "surrogate_number", description: "Surrogate number" },
+    { name: "intended_parent_number", description: "Intended parent number" },
     { name: "status_label", description: "Current status" },
     { name: "owner_name", description: "Surrogate owner name" },
     { name: "org_name", description: "Organization name" },
     { name: "appointment_date", description: "Appointment date" },
     { name: "appointment_time", description: "Appointment time" },
     { name: "appointment_location", description: "Appointment location" },
+    { name: "unsubscribe_url", description: "Unsubscribe link" },
 ]
 
 // =============================================================================

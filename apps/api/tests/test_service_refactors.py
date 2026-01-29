@@ -20,13 +20,11 @@ def test_meta_admin_service_list_and_get_ad_accounts(db, test_org):
         organization_id=test_org.id,
         ad_account_external_id="act_123",
         ad_account_name="Org Account",
-        system_token_encrypted="token",
     )
     account_other = MetaAdAccount(
         organization_id=other_org.id,
         ad_account_external_id="act_456",
         ad_account_name="Other Account",
-        system_token_encrypted="token",
     )
     db.add_all([account_org, account_other])
     db.commit()

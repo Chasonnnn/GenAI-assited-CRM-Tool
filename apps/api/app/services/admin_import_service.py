@@ -46,7 +46,14 @@ from app.db.models import (
     UserPermissionOverride,
     WorkflowTemplate,
 )
-from app.utils.normalization import normalize_email, normalize_phone
+from app.utils.normalization import (
+    extract_email_domain,
+    extract_phone_last4,
+    normalize_email,
+    normalize_phone,
+    normalize_search_text,
+    normalize_identifier,
+)
 
 
 def _parse_uuid(value: str | None) -> UUID | None:
@@ -914,6 +921,10 @@ def import_surrogates_csv(db: Session, org_id: UUID, content: bytes) -> int:
                 normalized_phone = raw_phone.strip()
         else:
             normalized_phone = None
+        normalized_full_name = normalize_search_text(row.get("full_name"))
+        normalized_number = normalize_identifier(row.get("surrogate_number"))
+        email_domain = extract_email_domain(normalized_email)
+        phone_last4 = extract_phone_last4(normalized_phone)
 
         if meta_lead_id and meta_lead_external_id:
             meta_leads_to_link.append((meta_lead_id, surrogate_id))
@@ -921,6 +932,7 @@ def import_surrogates_csv(db: Session, org_id: UUID, content: bytes) -> int:
         surrogate = Surrogate(
             id=surrogate_id,
             surrogate_number=row.get("surrogate_number"),
+            surrogate_number_normalized=normalized_number,
             organization_id=org_id,
             status_label=row.get("status_label"),
             stage_id=stage_id,
@@ -933,10 +945,13 @@ def import_surrogates_csv(db: Session, org_id: UUID, content: bytes) -> int:
             meta_ad_external_id=row.get("meta_ad_external_id"),
             meta_form_id=row.get("meta_form_id"),
             full_name=row.get("full_name"),
+            full_name_normalized=normalized_full_name,
             email=normalized_email,
             email_hash=hash_email(normalized_email),
+            email_domain=email_domain,
             phone=normalized_phone,
             phone_hash=hash_phone(normalized_phone) if normalized_phone else None,
+            phone_last4=phone_last4,
             state=row.get("state"),
             date_of_birth=_parse_date(row.get("date_of_birth")),
             race=row.get("race"),
