@@ -695,9 +695,13 @@ def test_execute_campaign_run_streams_recipients(
 
     recipient = SimpleNamespace(
         id=uuid4(),
+        organization_id=test_org.id,
         email="stream@example.com",
         full_name="Stream Recipient",
         first_name="Stream",
+        owner_type=None,
+        owner_id=None,
+        stage_id=None,
     )
 
     monkeypatch.setattr(
@@ -705,6 +709,11 @@ def test_execute_campaign_run_streams_recipients(
         "_build_recipient_query",
         lambda *args, **kwargs: FakeQuery([recipient]),
     )
+
+    def fake_build_variables(*args, **kwargs):
+        return {"first_name": "Stream", "full_name": "Stream Recipient", "email": "stream@example.com"}
+
+    monkeypatch.setattr(email_service, "build_surrogate_template_variables", fake_build_variables)
 
     def fake_send_email(*args, **kwargs):
         return SimpleNamespace(id=uuid4()), None
@@ -777,9 +786,13 @@ def test_execute_campaign_run_uses_bulk_suppression(
 
     recipient = SimpleNamespace(
         id=uuid4(),
+        organization_id=test_org.id,
         email="bulk@example.com",
         full_name="Bulk Recipient",
         first_name="Bulk",
+        owner_type=None,
+        owner_id=None,
+        stage_id=None,
     )
 
     monkeypatch.setattr(
@@ -787,6 +800,11 @@ def test_execute_campaign_run_uses_bulk_suppression(
         "_build_recipient_query",
         lambda *args, **kwargs: FakeQuery([recipient]),
     )
+
+    def fake_build_variables(*args, **kwargs):
+        return {"first_name": "Bulk", "full_name": "Bulk Recipient", "email": "bulk@example.com"}
+
+    monkeypatch.setattr(email_service, "build_surrogate_template_variables", fake_build_variables)
 
     def fake_send_email(*args, **kwargs):
         return SimpleNamespace(id=uuid4()), None

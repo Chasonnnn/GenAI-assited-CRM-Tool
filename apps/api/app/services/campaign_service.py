@@ -153,7 +153,7 @@ def create_campaign(db: Session, org_id: UUID, user_id: UUID, data: CampaignCrea
         description=data.description,
         email_template_id=data.email_template_id,
         recipient_type=data.recipient_type,
-        filter_criteria=data.filter_criteria.model_dump() if data.filter_criteria else {},
+        filter_criteria=data.filter_criteria.model_dump(mode="json") if data.filter_criteria else {},
         scheduled_at=data.scheduled_at,
         status=CampaignStatus.DRAFT.value,
         created_by_user_id=user_id,
@@ -201,7 +201,7 @@ def update_campaign(
     if data.recipient_type is not None:
         campaign.recipient_type = data.recipient_type
     if data.filter_criteria is not None:
-        campaign.filter_criteria = data.filter_criteria.model_dump()
+        campaign.filter_criteria = data.filter_criteria.model_dump(mode="json")
     if data.scheduled_at is not None:
         campaign.scheduled_at = data.scheduled_at
 
