@@ -15,7 +15,7 @@ from app.db.enums import Role
 from app.db.models import Surrogate, IntendedParent, Match, Membership, Task, User
 from app.main import app
 from app.routers.ai_schedule import ParseScheduleRequest
-from app.routers.ai_tasks import BulkTaskCreateRequest
+from app.schemas.ai_tasks import BulkTaskCreateRequest
 from app.utils.normalization import normalize_email
 
 
