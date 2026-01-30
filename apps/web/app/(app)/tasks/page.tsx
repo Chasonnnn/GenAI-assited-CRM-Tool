@@ -7,22 +7,15 @@
  */
 
 import { useState, useEffect, useCallback } from "react"
-import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { PlusIcon, Loader2Icon, ListIcon, CalendarIcon, ShieldCheckIcon, ClockIcon } from "lucide-react"
-import { UnifiedCalendar } from "@/components/appointments/UnifiedCalendar"
+import { PlusIcon, Loader2Icon, ListIcon, CalendarIcon } from "lucide-react"
+import { TasksCalendarView } from "@/components/tasks/TasksCalendarView"
+import { TasksListView } from "@/components/tasks/TasksListView"
+import { TasksApprovalsSection } from "@/components/tasks/TasksApprovalsSection"
 import { TaskEditModal } from "@/components/tasks/TaskEditModal"
 import { AddTaskDialog, type TaskFormData } from "@/components/tasks/AddTaskDialog"
-import { ApprovalTaskActions } from "@/components/tasks/ApprovalTaskActions"
-import { ApprovalStatusBadge } from "@/components/tasks/ApprovalStatusBadge"
-import { StatusChangeRequestActions } from "@/components/status-change-requests/StatusChangeRequestActions"
-import { ImportApprovalActions } from "@/components/import/ImportApprovalActions"
 import { useTasks, useCompleteTask, useUncompleteTask, useUpdateTask, useCreateTask, useDeleteTask } from "@/lib/hooks/use-tasks"
 import { useStatusChangeRequests } from "@/lib/hooks/use-status-change-requests"
 import { usePendingImportApprovals } from "@/lib/hooks/use-import"
@@ -30,14 +23,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useAIContext } from "@/lib/context/ai-context"
 import type { TaskListItem } from "@/lib/types/task"
 import { buildRecurringDates, MAX_TASK_OCCURRENCES } from "@/lib/utils/task-recurrence"
-import { categoryColors, categoryLabels, getDueCategory, type DueCategory } from "@/lib/utils/task-due"
 import { format, parseISO } from "date-fns"
-
-// Get initials from name
-function getInitials(name: string | null): string {
-    if (!name) return "?"
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-}
 
 type FilterType = "all" | "my_tasks"
 const isFilterType = (value: string | null): value is FilterType =>
@@ -280,102 +266,6 @@ export default function TasksPage() {
         }
     }
 
-    // Group tasks by due category
-    const groupedTasks = {
-        overdue: [] as TaskListItem[],
-        today: [] as TaskListItem[],
-        tomorrow: [] as TaskListItem[],
-        'this-week': [] as TaskListItem[],
-        later: [] as TaskListItem[],
-        'no-date': [] as TaskListItem[],
-    }
-
-    incompleteTasks?.items.forEach((task: TaskListItem) => {
-        const category = getDueCategory(task)
-        groupedTasks[category].push(task)
-    })
-
-    const renderTaskItem = (task: TaskListItem, showCategory = true) => {
-        const category = getDueCategory(task)
-        const colors = categoryColors[category]
-
-        return (
-            <div
-                key={task.id}
-                className={`flex items-start gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-accent/50 ${task.is_completed ? 'opacity-60' : ''}`}
-                role="button"
-                tabIndex={0}
-                onClick={() => handleTaskClick(task)}
-                onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault()
-                        handleTaskClick(task)
-                    }
-                }}
-            >
-                <Checkbox
-                    className="mt-0.5"
-                    checked={task.is_completed}
-                    onCheckedChange={() => handleTaskToggle(task.id, task.is_completed)}
-                    onClick={(event) => event.stopPropagation()}
-                />
-                <div className="flex-1 space-y-1">
-                    <div className="flex items-center gap-2">
-                        <span className={`font-medium ${task.is_completed ? 'line-through' : ''}`}>{task.title}</span>
-                        {showCategory && !task.is_completed && (
-                            <Badge variant="secondary" className={colors.badge}>
-                                {categoryLabels[category]}
-                            </Badge>
-                        )}
-                    </div>
-                    {task.surrogate_id && (
-                        <Link
-                            href={`/surrogates/${task.surrogate_id}`}
-                            className="text-sm text-muted-foreground hover:underline"
-                            onClick={(event) => event.stopPropagation()}
-                        >
-                            Surrogate #{task.surrogate_number}
-                        </Link>
-                    )}
-                </div>
-                {task.owner_name && (
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger>
-                                <Avatar className="size-8">
-                                    <AvatarFallback>{getInitials(task.owner_name)}</AvatarFallback>
-                                </Avatar>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>{task.owner_name}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-                )}
-            </div>
-        )
-    }
-
-    const renderSection = (category: DueCategory, tasks: TaskListItem[]) => {
-        if (tasks.length === 0) return null
-        const colors = categoryColors[category]
-
-        return (
-            <div key={category} id={`tasks-${category}`} className="space-y-3">
-                <div className="flex items-center gap-3">
-                    <div className={`h-px flex-1 ${category === 'overdue' ? 'bg-destructive' : 'bg-border'}`} />
-                    <h3 className={`text-sm font-medium ${colors.text}`}>
-                        {categoryLabels[category]} ({tasks.length})
-                    </h3>
-                    <div className={`h-px flex-1 ${category === 'overdue' ? 'bg-destructive' : 'bg-border'}`} />
-                </div>
-                <div className="space-y-2">
-                    {tasks.map(task => renderTaskItem(task, false))}
-                </div>
-            </div>
-        )
-    }
-
     const isLoading = loadingIncomplete
     const hasError = incompleteError || completedError
     const handleRetry = () => {
@@ -492,259 +382,36 @@ export default function TasksPage() {
 
                 {/* Calendar View */}
                 {!isLoading && !hasError && view === "calendar" && (
-                    <UnifiedCalendar
-                        taskFilter={{ my_tasks: filter === "my_tasks" }}
-                        onTaskClick={handleTaskClick}
-                    />
+                    <TasksCalendarView filter={filter} onTaskClick={handleTaskClick} />
                 )}
 
                 {/* Pending Approvals Section */}
                 {!isLoading && !hasError && (
-                    <Card
-                        id="tasks-approvals"
-                        className="overflow-hidden border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-transparent"
-                    >
-                        <div className="border-b border-amber-500/20 bg-amber-500/5 px-4 py-3 sm:px-6 sm:py-4">
-                            <div className="flex items-center gap-3">
-                                <div className="flex size-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 sm:size-9">
-                                    <ShieldCheckIcon className="size-4 sm:size-5" />
-                                </div>
-                                <div>
-                                    <h2 className="text-sm font-semibold text-amber-700 dark:text-amber-500 sm:text-base">
-                                        Pending Approvals
-                                    </h2>
-                                    <p className="text-xs text-amber-600/80 dark:text-amber-500/70 sm:text-sm">
-                                        {(pendingApprovals?.items?.length || 0) + (pendingStatusRequests?.items?.length || 0) + (pendingImportApprovals?.length || 0)} item{(pendingApprovals?.items?.length || 0) + (pendingStatusRequests?.items?.length || 0) + (pendingImportApprovals?.length || 0) !== 1 ? 's' : ''} awaiting review
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="divide-y divide-border">
-                            {(loadingApprovals || loadingStatusRequests || loadingImportApprovals) ? (
-                                <div className="flex items-center justify-center py-8">
-                                    <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
-                                </div>
-                            ) : (
-                                <>
-                                    {/* Stage Regression Requests (Admin Only) */}
-                                    {pendingStatusRequests?.items?.map((item) => {
-                                        const isIpRequest = item.request.entity_type === "intended_parent"
-                                        const isMatchRequest = item.request.entity_type === "match"
-                                        const requestLabel = isMatchRequest
-                                            ? "Match Cancellation Request"
-                                            : isIpRequest
-                                                ? "Status Regression Request"
-                                                : "Stage Regression Request"
-                                        const entityHref = isMatchRequest
-                                            ? `/intended-parents/matches/${item.request.entity_id}`
-                                            : isIpRequest
-                                                ? `/intended-parents/${item.request.entity_id}`
-                                                : `/surrogates/${item.request.entity_id}`
-                                        return (
-                                            <div
-                                                key={`scr-${item.request.id}`}
-                                                className="group flex flex-col gap-3 p-3 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4"
-                                            >
-                                                <div className="flex-1 space-y-2">
-                                                    <div className="flex flex-wrap items-center gap-2">
-                                                        <span className="font-medium">{requestLabel}</span>
-                                                        <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-xs">
-                                                            {isMatchRequest ? "Cancellation" : "Regression"}
-                                                        </Badge>
-                                                    </div>
-                                                    <p className="text-sm text-muted-foreground">
-                                                        {item.current_stage_label} → {item.target_stage_label}
-                                                        {item.request.reason && ` • ${item.request.reason}`}
-                                                    </p>
-                                                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                                        <Link
-                                                            href={entityHref}
-                                                            className="hover:text-foreground hover:underline"
-                                                        >
-                                                            {item.entity_name || 'Unknown'} ({item.entity_number})
-                                                        </Link>
-                                                        <span>
-                                                            Requested by {item.requester_name || 'Unknown'}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div className="flex-shrink-0">
-                                                    <StatusChangeRequestActions
-                                                        requestId={item.request.id}
-                                                        onResolved={() => refetchStatusRequests()}
-                                                    />
-                                                </div>
-                                            </div>
-                                        )
-                                    })}
-
-                                    {/* Import Approvals (Admin Only) */}
-                                    {pendingImportApprovals?.map((item) => {
-                                        const dedupe = item.deduplication_stats
-                                        const duplicateCount = dedupe?.duplicates?.length ?? 0
-                                        const newRecords =
-                                            typeof dedupe?.new_records === "number"
-                                                ? dedupe.new_records
-                                                : Math.max(item.total_rows - duplicateCount, 0)
-                                        const createdAtLabel = item.created_at
-                                            ? format(new Date(item.created_at), "MMM d, yyyy h:mm a")
-                                            : "Unknown time"
-
-                                        return (
-                                            <div
-                                                key={`import-${item.id}`}
-                                                className="group flex flex-col gap-3 p-3 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4"
-                                            >
-                                                <div className="flex-1 space-y-2">
-                                                    <div className="flex flex-wrap items-center gap-2">
-                                                        <span className="font-medium">Import Approval</span>
-                                                        <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-xs">
-                                                            Awaiting Approval
-                                                        </Badge>
-                                                        {item.backdate_created_at && (
-                                                            <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-xs">
-                                                                Backdated
-                                                            </Badge>
-                                                        )}
-                                                    </div>
-                                                    <p className="text-sm text-muted-foreground">
-                                                        {item.filename}
-                                                    </p>
-                                                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                                        <span>{item.total_rows} rows</span>
-                                                        <span>{newRecords} new</span>
-                                                        <span>{duplicateCount} duplicate{duplicateCount === 1 ? "" : "s"}</span>
-                                                        <span>
-                                                            Submitted by {item.created_by_name || "Unknown"}
-                                                        </span>
-                                                        <span>{createdAtLabel}</span>
-                                                    </div>
-                                                </div>
-                                                <div className="flex-shrink-0">
-                                                    <ImportApprovalActions
-                                                        importId={item.id}
-                                                        onResolved={() => refetchImportApprovals()}
-                                                    />
-                                                </div>
-                                            </div>
-                                        )
-                                    })}
-
-                                    {/* Workflow Approvals */}
-                                    {pendingApprovals?.items?.map((approval: TaskListItem) => {
-                                        const isOwner = currentUser?.user_id === approval.owner_id
-                                        const dueAt = approval.due_at ? new Date(approval.due_at) : null
-                                        const now = new Date()
-                                        const hoursRemaining = dueAt ? Math.max(0, Math.round((dueAt.getTime() - now.getTime()) / (1000 * 60 * 60))) : null
-                                        const isUrgent = hoursRemaining !== null && hoursRemaining < 8
-
-                                        return (
-                                            <div
-                                                key={approval.id}
-                                                className="group flex flex-col gap-3 p-3 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4"
-                                            >
-                                                <div className="flex-1 space-y-2">
-                                                    <div className="flex flex-wrap items-center gap-2">
-                                                        <span className="font-medium">{approval.title}</span>
-                                                        <ApprovalStatusBadge status={approval.status || 'pending'} />
-                                                    </div>
-                                                    {approval.workflow_action_preview && (
-                                                        <p className="text-sm text-muted-foreground">
-                                                            {approval.workflow_action_preview}
-                                                        </p>
-                                                    )}
-                                                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                                        {approval.surrogate_id && (
-                                                            <Link
-                                                                href={`/surrogates/${approval.surrogate_id}`}
-                                                                className="hover:text-foreground hover:underline"
-                                                            >
-                                                                Surrogate #{approval.surrogate_number}
-                                                            </Link>
-                                                        )}
-                                                        {hoursRemaining !== null && (
-                                                            <span className={`flex items-center gap-1 ${isUrgent ? 'text-amber-600 font-medium' : ''}`}>
-                                                                <ClockIcon className="size-3" />
-                                                                {hoursRemaining > 24
-                                                                    ? `${Math.floor(hoursRemaining / 24)}d ${hoursRemaining % 24}h remaining`
-                                                                    : hoursRemaining > 0
-                                                                        ? `${hoursRemaining}h remaining`
-                                                                        : 'Due now'
-                                                                }
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <div className="flex-shrink-0">
-                                                    <ApprovalTaskActions
-                                                        taskId={approval.id}
-                                                        isOwner={isOwner}
-                                                    />
-                                                </div>
-                                            </div>
-                                        )
-                                    })}
-
-                                    {/* Empty State */}
-                                    {!(pendingApprovals?.items?.length || pendingStatusRequests?.items?.length || pendingImportApprovals?.length) && (
-                                        <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-                                            No pending approvals right now.
-                                        </div>
-                                    )}
-                                </>
-                            )}
-                        </div>
-                    </Card>
+                    <TasksApprovalsSection
+                        pendingApprovals={pendingApprovals?.items ?? []}
+                        pendingStatusRequests={pendingStatusRequests?.items ?? []}
+                        pendingImportApprovals={pendingImportApprovals ?? []}
+                        loadingApprovals={loadingApprovals}
+                        loadingStatusRequests={loadingStatusRequests}
+                        loadingImportApprovals={loadingImportApprovals}
+                        onResolvedStatusRequests={refetchStatusRequests}
+                        onResolvedImportApprovals={refetchImportApprovals}
+                        currentUserId={currentUser?.user_id}
+                    />
                 )}
 
                 {/* List View */}
                 {!isLoading && !hasError && view === "list" && (
-                    <Card id="tasks-list" className="p-6">
-                        <div className="space-y-6">
-                            {/* Task sections by due date */}
-                            {renderSection('overdue', groupedTasks.overdue)}
-                            {renderSection('today', groupedTasks.today)}
-                            {renderSection('tomorrow', groupedTasks.tomorrow)}
-                            {renderSection('this-week', groupedTasks['this-week'])}
-                            {renderSection('later', groupedTasks.later)}
-                            {renderSection('no-date', groupedTasks['no-date'])}
-
-                            {/* Empty state */}
-                            {incompleteTasks?.items.length === 0 && (
-                                <p className="text-center text-muted-foreground py-8">
-                                    No pending tasks. Nice work!
-                                </p>
-                            )}
-
-                            {/* Completed Tasks Section */}
-                            <div className="border-t border-border pt-4">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setShowCompleted(!showCompleted)}
-                                    className="w-full justify-center"
-                                >
-                                    {showCompleted ? "Hide" : "Show"} completed tasks ({completedTasks?.total || 0})
-                                </Button>
-
-                                {showCompleted && completedTasks && (
-                                    <div className="mt-4 space-y-2">
-                                        {loadingCompleted ? (
-                                            <div className="flex items-center justify-center py-4">
-                                                <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
-                                            </div>
-                                        ) : completedError ? (
-                                            <p className="text-center text-destructive py-4">Unable to load completed tasks</p>
-                                        ) : completedTasks.items.length === 0 ? (
-                                            <p className="text-center text-muted-foreground py-4">No completed tasks</p>
-                                        ) : (
-                                            completedTasks.items.map((task: TaskListItem) => renderTaskItem(task))
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </Card>
+                    <TasksListView
+                        incompleteTasks={incompleteTasks?.items ?? []}
+                        completedTasks={completedTasks ?? null}
+                        showCompleted={showCompleted}
+                        loadingCompleted={loadingCompleted}
+                        completedError={!!completedError}
+                        onToggleShowCompleted={() => setShowCompleted((prev) => !prev)}
+                        onTaskToggle={handleTaskToggle}
+                        onTaskClick={handleTaskClick}
+                    />
                 )}
 
                 {/* Edit Modal */}

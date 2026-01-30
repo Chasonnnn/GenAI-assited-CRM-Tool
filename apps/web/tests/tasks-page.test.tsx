@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import TasksPage from '../app/(app)/tasks/page'
+import { TasksListView } from '@/components/tasks/TasksListView'
+import { TasksCalendarView } from '@/components/tasks/TasksCalendarView'
+import { TasksApprovalsSection } from '@/components/tasks/TasksApprovalsSection'
+import type { TaskListItem } from '@/lib/types/task'
+import type { StatusChangeRequestDetail } from '@/lib/api/status-change-requests'
+import type { ImportApprovalItem } from '@/lib/api/import'
 
 vi.mock('next/link', () => ({
     default: ({ children, href }: { children: React.ReactNode; href: string }) => (
@@ -45,6 +51,8 @@ const mockUseStatusChangeRequests = vi.fn(() => ({
     isLoading: false,
     refetch: vi.fn(),
 }))
+const mockApproveStatusChange = vi.fn()
+const mockRejectStatusChange = vi.fn()
 
 vi.mock('@/lib/hooks/use-tasks', () => ({
     useTasks: (params: unknown) => mockUseTasks(params),
@@ -65,6 +73,8 @@ vi.mock('@/lib/hooks/use-import', () => ({
 
 vi.mock('@/lib/hooks/use-status-change-requests', () => ({
     useStatusChangeRequests: (...args: unknown[]) => mockUseStatusChangeRequests(...args),
+    useApproveStatusChangeRequest: () => ({ mutateAsync: mockApproveStatusChange, isPending: false }),
+    useRejectStatusChangeRequest: () => ({ mutateAsync: mockRejectStatusChange, isPending: false }),
 }))
 
 // Mock auth context
@@ -82,7 +92,7 @@ vi.mock('@/lib/context/ai-context', () => ({
 }))
 
 // Mock the UnifiedCalendar component to render nothing in tests
-vi.mock('@/components/appointments', () => ({
+vi.mock('@/components/appointments/UnifiedCalendar', () => ({
     UnifiedCalendar: () => <div>Calendar View</div>,
 }))
 
@@ -224,5 +234,133 @@ describe('TasksPage', () => {
         expect(screen.getByText('surrogates.csv')).toBeInTheDocument()
         expect(screen.getByText(/120 rows/i)).toBeInTheDocument()
         expect(screen.getByText(/1 duplicate/i)).toBeInTheDocument()
+    })
+})
+
+describe('TasksListView', () => {
+    it('renders tasks and toggles completion', () => {
+        const onTaskToggle = vi.fn()
+        const onTaskClick = vi.fn()
+        render(
+            <TasksListView
+                incompleteTasks={[
+                    {
+                        id: 't1',
+                        title: 'Follow up with surrogate',
+                        is_completed: false,
+                        due_date: null,
+                        surrogate_id: 's1',
+                        surrogate_number: 'S12345',
+                        owner_type: 'user',
+                        owner_id: 'u1',
+                        owner_name: 'Jane Doe',
+                    } as TaskListItem,
+                ]}
+                completedTasks={{ items: [], total: 0 }}
+                showCompleted={false}
+                loadingCompleted={false}
+                completedError={false}
+                onToggleShowCompleted={() => {}}
+                onTaskToggle={onTaskToggle}
+                onTaskClick={onTaskClick}
+            />
+        )
+
+        expect(screen.getByText('Follow up with surrogate')).toBeInTheDocument()
+        const checkbox = screen.getAllByRole('checkbox')[0]
+        fireEvent.click(checkbox)
+        expect(onTaskToggle).toHaveBeenCalledWith('t1', false)
+    })
+})
+
+describe('TasksCalendarView', () => {
+    it('renders calendar view', () => {
+        render(<TasksCalendarView filter="my_tasks" onTaskClick={() => {}} />)
+        expect(screen.getByText('Calendar View')).toBeInTheDocument()
+    })
+})
+
+describe('TasksApprovalsSection', () => {
+    it('renders approvals, status requests, and import approvals', () => {
+        const pendingApprovals: TaskListItem[] = [
+            {
+                id: 'approval-1',
+                title: 'Approve: Assign surrogate to John',
+                task_type: 'workflow_approval',
+                status: 'pending',
+                is_completed: false,
+                due_date: null,
+                due_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+                surrogate_id: 's1',
+                surrogate_number: 'S12345',
+                owner_type: 'user',
+                owner_id: 'u1',
+                owner_name: 'Test User',
+                workflow_action_preview: 'Assign surrogate to John Smith',
+            } as TaskListItem,
+        ]
+        const pendingStatusRequests: StatusChangeRequestDetail[] = [
+            {
+                request: {
+                    id: 'req-1',
+                    organization_id: 'org-1',
+                    entity_type: 'surrogate',
+                    entity_id: 's1',
+                    target_stage_id: 'stage-2',
+                    target_status: null,
+                    effective_at: new Date().toISOString(),
+                    reason: 'Needs regression',
+                    requested_by_user_id: 'u2',
+                    requested_at: new Date().toISOString(),
+                    status: 'pending',
+                    approved_by_user_id: null,
+                    approved_at: null,
+                    rejected_by_user_id: null,
+                    rejected_at: null,
+                    cancelled_by_user_id: null,
+                    cancelled_at: null,
+                },
+                entity_name: 'Jane Applicant',
+                entity_number: 'S12345',
+                requester_name: 'Admin User',
+                target_stage_label: 'Qualified',
+                current_stage_label: 'Approved',
+            },
+        ]
+        const pendingImportApprovals: ImportApprovalItem[] = [
+            {
+                id: 'import-1',
+                filename: 'surrogates.csv',
+                status: 'awaiting_approval',
+                total_rows: 120,
+                created_at: new Date().toISOString(),
+                created_by_name: 'Admin User',
+                deduplication_stats: {
+                    total: 120,
+                    new_records: 115,
+                    duplicates: [{ email: 'dup@example.com', existing_id: 's1' }],
+                },
+                column_mapping_snapshot: [],
+            },
+        ]
+
+        render(
+            <TasksApprovalsSection
+                pendingApprovals={pendingApprovals}
+                pendingStatusRequests={pendingStatusRequests}
+                pendingImportApprovals={pendingImportApprovals}
+                loadingApprovals={false}
+                loadingStatusRequests={false}
+                loadingImportApprovals={false}
+                onResolvedStatusRequests={() => {}}
+                onResolvedImportApprovals={() => {}}
+                currentUserId="u1"
+            />
+        )
+
+        expect(screen.getByText('Pending Approvals')).toBeInTheDocument()
+        expect(screen.getByText('Stage Regression Request')).toBeInTheDocument()
+        expect(screen.getByText('Import Approval')).toBeInTheDocument()
+        expect(screen.getByText('Approve: Assign surrogate to John')).toBeInTheDocument()
     })
 })
