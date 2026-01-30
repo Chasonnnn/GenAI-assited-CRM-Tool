@@ -1,16 +1,24 @@
 "use client"
 
 import { useState, useCallback } from "react"
-import { DownloadIcon, Loader2Icon, SparklesIcon } from "lucide-react"
+import { ChevronDownIcon, DownloadIcon, Loader2Icon, SparklesIcon } from "lucide-react"
 import { format } from "date-fns"
 import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useSurrogateJourney } from "@/lib/hooks/use-journey"
 import { exportJourneyPdf } from "@/lib/api/journey"
+import type { JourneyExportVariant } from "@/lib/api/journey"
 import { useAuth } from "@/lib/auth-context"
 import { JourneyTimeline } from "./JourneyTimeline"
 import { MilestoneImageSelector } from "./MilestoneImageSelector"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 
 // Roles that can edit journey images
 const CAN_EDIT_ROLES = ["case_manager", "admin", "developer"]
@@ -34,18 +42,19 @@ export function SurrogateJourneyTab({ surrogateId }: SurrogateJourneyTabProps) {
     // Check if user can edit images
     const canEditImages = user?.role ? CAN_EDIT_ROLES.includes(user.role) : false
 
-    const [isExporting, setIsExporting] = useState(false)
+    const [exportingVariant, setExportingVariant] = useState<JourneyExportVariant | null>(null)
+    const isExporting = exportingVariant !== null
 
-    const handleExport = useCallback(async () => {
-        setIsExporting(true)
+    const handleExport = useCallback(async (variant: JourneyExportVariant) => {
+        setExportingVariant(variant)
         try {
-            await exportJourneyPdf(surrogateId)
+            await exportJourneyPdf(surrogateId, variant)
             toast.success("Journey exported as PDF")
         } catch (err) {
             const message = err instanceof Error ? err.message : "Failed to export journey"
             toast.error(message)
         } finally {
-            setIsExporting(false)
+            setExportingVariant(null)
         }
     }, [surrogateId])
 
@@ -120,20 +129,42 @@ export function SurrogateJourneyTab({ surrogateId }: SurrogateJourneyTabProps) {
             {/* Document-style header */}
             <div className="relative border-b border-stone-200/80 px-6 py-8 dark:border-stone-700/50 print:py-6">
                 <div className="absolute right-6 top-6 print:hidden">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="gap-2"
-                        onClick={handleExport}
-                        disabled={isExporting}
-                    >
-                        {isExporting ? (
-                            <Loader2Icon className="size-4 animate-spin" />
-                        ) : (
-                            <DownloadIcon className="size-4" />
-                        )}
-                        {isExporting ? "Exporting" : "Export"}
-                    </Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger
+                            disabled={isExporting}
+                            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "gap-2")}
+                        >
+                            {isExporting ? (
+                                <Loader2Icon className="size-4 animate-spin" />
+                            ) : (
+                                <DownloadIcon className="size-4" />
+                            )}
+                            {isExporting ? "Exporting" : "Export"}
+                            <ChevronDownIcon className="size-4 text-muted-foreground" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-64">
+                            <DropdownMenuItem
+                                onClick={() => handleExport("internal")}
+                                disabled={isExporting}
+                                className="flex flex-col items-start gap-0.5"
+                            >
+                                <span className="text-sm font-medium">Internal Use (Full)</span>
+                                <span className="text-xs text-muted-foreground">
+                                    Includes surrogate name and full timeline
+                                </span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => handleExport("client")}
+                                disabled={isExporting}
+                                className="flex flex-col items-start gap-0.5"
+                            >
+                                <span className="text-sm font-medium">Client Share (Redacted)</span>
+                                <span className="text-xs text-muted-foreground">
+                                    Name hidden · starts at Match Confirmed
+                                </span>
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
                 <div className="mx-auto max-w-[900px] text-center">
                     <h2 className="text-2xl font-semibold tracking-tight text-foreground">

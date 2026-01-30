@@ -66,9 +66,7 @@ def change_status(
         if result["surrogate"].actual_delivery_date is None:
             if data.effective_at:
                 delivery_date = (
-                    data.effective_at.date()
-                    if hasattr(data.effective_at, "date")
-                    else date.today()
+                    data.effective_at.date() if hasattr(data.effective_at, "date") else date.today()
                 )
             else:
                 delivery_date = date.today()

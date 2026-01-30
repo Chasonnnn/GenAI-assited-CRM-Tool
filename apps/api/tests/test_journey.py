@@ -228,17 +228,22 @@ async def test_journey_completed_milestones_do_not_roll_back(authed_client, db, 
 @pytest.mark.asyncio
 async def test_journey_export_pdf_returns_pdf(authed_client, monkeypatch):
     surrogate = await _create_surrogate(authed_client)
+    captured = {}
 
     def fake_export_journey_pdf(*_args, **_kwargs):
+        captured["variant"] = _kwargs.get("variant")
         return b"%PDF-1.4\njourney"
 
     monkeypatch.setattr(pdf_export_service, "export_journey_pdf", fake_export_journey_pdf)
 
-    response = await authed_client.get(f"/journey/surrogates/{surrogate['id']}/export")
+    response = await authed_client.get(
+        f"/journey/surrogates/{surrogate['id']}/export?variant=client"
+    )
     assert response.status_code == 200, response.text
     assert response.headers["content-type"].startswith("application/pdf")
     assert response.headers["content-disposition"].startswith("attachment;")
     assert response.content.startswith(b"%PDF")
+    assert captured["variant"] == "client"
 
 
 @pytest.mark.asyncio
@@ -263,3 +268,22 @@ async def test_journey_export_view_returns_payload(authed_client, test_auth):
     payload = response.json()
     assert payload["surrogate_id"] == surrogate["id"]
     assert payload["phases"]
+
+
+@pytest.mark.asyncio
+async def test_journey_export_view_client_variant_redacts_and_truncates(authed_client, test_auth):
+    surrogate = await _create_surrogate(authed_client)
+    token = create_export_token(test_auth.org.id, UUID(surrogate["id"]), variant="client")
+
+    response = await authed_client.get(
+        f"/journey/surrogates/{surrogate['id']}/export-view?export_token={token}"
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["surrogate_name"] == ""
+
+    milestone_slugs = [
+        milestone["slug"] for phase in payload["phases"] for milestone in phase["milestones"]
+    ]
+    assert "match_confirmed" in milestone_slugs
+    assert "application_intake" not in milestone_slugs

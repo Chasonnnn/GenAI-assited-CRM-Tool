@@ -104,6 +104,7 @@ def create_export_token(
     org_id: UUID,
     surrogate_id: UUID,
     ttl_minutes: int = 5,
+    variant: str | None = None,
 ) -> str:
     """
     Create a short-lived export token for Journey PDF rendering.
@@ -117,6 +118,8 @@ def create_export_token(
         "iat": datetime.now(timezone.utc),
         "exp": datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes),
     }
+    if variant:
+        payload["variant"] = variant
     return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
 
 

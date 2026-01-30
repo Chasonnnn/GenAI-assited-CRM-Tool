@@ -31,6 +31,10 @@ JOURNEY_VERSION = 1
 # Terminal stage slugs (journey ended early)
 TERMINAL_STAGE_SLUGS = {"lost", "disqualified"}
 
+# Export variants for journey PDF
+EXPORT_VARIANTS = {"internal", "client"}
+CLIENT_EXPORT_START_MILESTONE = "match_confirmed"
+
 
 def get_default_image_url(milestone_slug: str) -> str:
     """Build absolute URL for default milestone image from frontend public folder."""
@@ -215,6 +219,50 @@ class JourneyResponse:
     phases: list[JourneyPhase]
     organization_name: str
     organization_logo_url: str | None
+
+
+def _filter_phases_from_milestone(
+    phases: list[JourneyPhase],
+    start_milestone_slug: str,
+) -> list[JourneyPhase]:
+    started = False
+    filtered_phases: list[JourneyPhase] = []
+
+    for phase in phases:
+        milestones: list[JourneyMilestone] = []
+        for milestone in phase.milestones:
+            if not started:
+                if milestone.slug != start_milestone_slug:
+                    continue
+                started = True
+            milestones.append(milestone)
+        if milestones:
+            filtered_phases.append(
+                JourneyPhase(
+                    slug=phase.slug,
+                    label=phase.label,
+                    milestones=milestones,
+                )
+            )
+    return filtered_phases
+
+
+def apply_export_variant(journey: JourneyResponse, variant: str | None) -> JourneyResponse:
+    if variant != "client":
+        return journey
+
+    phases = _filter_phases_from_milestone(journey.phases, CLIENT_EXPORT_START_MILESTONE)
+    return JourneyResponse(
+        surrogate_id=journey.surrogate_id,
+        surrogate_name="",
+        journey_version=journey.journey_version,
+        is_terminal=journey.is_terminal,
+        terminal_message=journey.terminal_message,
+        terminal_date=journey.terminal_date,
+        phases=phases,
+        organization_name=journey.organization_name,
+        organization_logo_url=journey.organization_logo_url,
+    )
 
 
 def update_milestone_featured_image(

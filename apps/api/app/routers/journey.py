@@ -165,9 +165,15 @@ def get_surrogate_journey_export_view(
     if not org_id:
         raise HTTPException(status_code=401, detail="Invalid export token")
 
+    variant = payload.get("variant")
+    if variant and variant not in journey_service.EXPORT_VARIANTS:
+        raise HTTPException(status_code=401, detail="Invalid export token")
+
     journey = journey_service.get_journey(db, org_id, surrogate_id)
     if not journey:
         raise HTTPException(status_code=404, detail="Surrogate not found")
+
+    journey = journey_service.apply_export_variant(journey, variant)
 
     phases = [
         JourneyPhaseResponse(
@@ -207,6 +213,7 @@ def get_surrogate_journey_export_view(
 @router.get("/surrogates/{surrogate_id}/export")
 def export_surrogate_journey(
     surrogate_id: UUID,
+    variant: str | None = Query(None),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
@@ -218,11 +225,16 @@ def export_surrogate_journey(
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
 
+    variant_value = variant or "internal"
+    if variant_value not in journey_service.EXPORT_VARIANTS:
+        raise HTTPException(status_code=400, detail="Invalid export variant")
+
     try:
         pdf_bytes = pdf_export_service.export_journey_pdf(
             db=db,
             org_id=session.org_id,
             surrogate_id=surrogate_id,
+            variant=variant_value,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

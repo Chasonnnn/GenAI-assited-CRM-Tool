@@ -10,6 +10,7 @@ import { getCsrfHeaders } from '@/lib/csrf';
 // ============================================================================
 
 export type JourneyMilestoneStatus = 'completed' | 'current' | 'upcoming';
+export type JourneyExportVariant = 'internal' | 'client';
 
 export interface JourneyMilestone {
     slug: string;
@@ -82,9 +83,12 @@ export async function updateMilestoneFeaturedImage(
     );
 }
 
-export async function exportJourneyPdf(surrogateId: string): Promise<void> {
+export async function exportJourneyPdf(
+    surrogateId: string,
+    variant: JourneyExportVariant = 'internal',
+): Promise<void> {
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
-    const url = `${baseUrl}/journey/surrogates/${surrogateId}/export`;
+    const url = `${baseUrl}/journey/surrogates/${surrogateId}/export?variant=${encodeURIComponent(variant)}`;
 
     const response = await fetch(url, {
         method: 'GET',
@@ -114,7 +118,7 @@ export async function exportJourneyPdf(surrogateId: string): Promise<void> {
     const objectUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = objectUrl;
-    link.download = `journey_${surrogateId}.pdf`;
+    link.download = variant === 'client' ? 'journey_shared.pdf' : `journey_${surrogateId}.pdf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

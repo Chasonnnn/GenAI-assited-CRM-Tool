@@ -53,9 +53,11 @@ export function JourneyPrintView({ journey }: JourneyPrintViewProps) {
                         <h2 className="text-2xl font-semibold tracking-tight text-foreground">
                             Surrogacy Journey
                         </h2>
-                        <p className="mt-1 text-base text-muted-foreground">
-                            {journey.surrogate_name}
-                        </p>
+                        {journey.surrogate_name ? (
+                            <p className="mt-1 text-base text-muted-foreground">
+                                {journey.surrogate_name}
+                            </p>
+                        ) : null}
                         <p className="mt-3 text-xs text-muted-foreground/70">
                             Generated {generatedDate}
                         </p>

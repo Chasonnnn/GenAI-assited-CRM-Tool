@@ -2127,6 +2127,7 @@ def export_journey_pdf(
     db: Session,
     org_id: uuid.UUID,
     surrogate_id: uuid.UUID,
+    variant: str = "internal",
 ) -> bytes:
     journey = journey_service.get_journey(db, org_id, surrogate_id)
     if not journey:
@@ -2135,7 +2136,7 @@ def export_journey_pdf(
     if not settings.FRONTEND_URL:
         raise ValueError("FRONTEND_URL is not configured")
 
-    export_token = create_export_token(org_id, surrogate_id)
+    export_token = create_export_token(org_id, surrogate_id, variant=variant)
     token_param = quote(export_token)
     frontend_base = settings.FRONTEND_URL.rstrip("/")
     print_url = (
