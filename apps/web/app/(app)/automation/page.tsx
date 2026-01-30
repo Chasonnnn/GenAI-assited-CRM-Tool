@@ -473,6 +473,26 @@ export default function AutomationPage() {
     const deleteWorkflow = useDeleteWorkflow()
     const testWorkflowMutation = useTestWorkflow()
 
+    const parseServerErrors = (error: unknown): string[] => {
+        if (error instanceof ApiError) {
+            if (error.message) {
+                return error.message
+                    .split(";")
+                    .map((message) => message.trim())
+                    .filter(Boolean)
+            }
+            return ["An unexpected error occurred."]
+        }
+        if (error instanceof Error) {
+            return [error.message]
+        }
+        return ["An unexpected error occurred."]
+    }
+
+    useEffect(() => {
+        setServerErrors([])
+    }, [workflowName, workflowDescription, triggerType, triggerConfig, conditions, actions])
+
     // Email template hooks
     const createTemplate = useCreateEmailTemplate()
     const updateTemplate = useUpdateEmailTemplate()
@@ -612,6 +632,7 @@ export default function AutomationPage() {
         setActions([])
         setHydratedWorkflowId(null)
         setValidationError(null)
+        setServerErrors([])
     }
 
     const resetWizard = () => {
