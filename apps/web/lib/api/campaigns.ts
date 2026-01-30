@@ -52,6 +52,7 @@ export interface Campaign {
     updated_at: string
     total_recipients: number
     sent_count: number
+    delivered_count: number
     failed_count: number
     skipped_count: number
     opened_count: number
@@ -67,6 +68,7 @@ export interface CampaignListItem {
     scheduled_at: string | null
     total_recipients: number
     sent_count: number
+    delivered_count: number
     failed_count: number
     opened_count: number
     clicked_count: number
@@ -82,6 +84,7 @@ export interface CampaignRun {
     error_message: string | null
     total_count: number
     sent_count: number
+    delivered_count: number
     failed_count: number
     skipped_count: number
     opened_count: number

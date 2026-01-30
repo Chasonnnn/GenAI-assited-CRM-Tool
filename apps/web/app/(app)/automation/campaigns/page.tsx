@@ -93,6 +93,16 @@ const statusLabels: Record<string, string> = {
     cancelled: "Cancelled",
 }
 
+const toLocalDateTimeInput = (date: Date) => {
+    const pad = (value: number) => String(value).padStart(2, "0")
+    const year = date.getFullYear()
+    const month = pad(date.getMonth() + 1)
+    const day = pad(date.getDate())
+    const hours = pad(date.getHours())
+    const minutes = pad(date.getMinutes())
+    return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
 const INTENDED_PARENT_STAGE_OPTIONS = [
     { id: "new", label: "New", color: "#3B82F6" },
     { id: "ready_to_match", label: "Ready to Match", color: "#F59E0B" },
@@ -123,6 +133,7 @@ export default function CampaignsPage() {
     const [scheduleFor, setScheduleFor] = useState<"now" | "later">("now")
     const [scheduledDate, setScheduledDate] = useState("")
     const [deleteDialogId, setDeleteDialogId] = useState<string | null>(null)
+    const minScheduleDate = toLocalDateTimeInput(new Date())
 
     // API hooks
     const { data: campaigns, isLoading } = useCampaigns(statusFilter)
@@ -188,6 +199,10 @@ export default function CampaignsPage() {
             const parsedDate = new Date(scheduledDate)
             if (Number.isNaN(parsedDate.getTime())) {
                 toast.error("Scheduled date is invalid")
+                return
+            }
+            if (parsedDate <= new Date()) {
+                toast.error("Scheduled date must be in the future")
                 return
             }
         }
@@ -758,6 +773,7 @@ export default function CampaignsPage() {
                                         <Input
                                             id="scheduled-date"
                                             type="datetime-local"
+                                            min={minScheduleDate}
                                             value={scheduledDate}
                                             onChange={(e) => setScheduledDate(e.target.value)}
                                         />

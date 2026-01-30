@@ -142,6 +142,7 @@ class CampaignRun(Base):
     # Counts
     total_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     sent_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    delivered_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     skipped_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     opened_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

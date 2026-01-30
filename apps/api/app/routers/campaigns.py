@@ -404,6 +404,7 @@ def _campaign_to_response(db: Session, campaign) -> CampaignResponse:
         updated_at=campaign.updated_at,
         total_recipients=latest_run.total_count if latest_run else 0,
         sent_count=latest_run.sent_count if latest_run else 0,
+        delivered_count=latest_run.delivered_count if latest_run else 0,
         failed_count=latest_run.failed_count if latest_run else 0,
         skipped_count=latest_run.skipped_count if latest_run else 0,
         opened_count=latest_run.opened_count if latest_run else 0,

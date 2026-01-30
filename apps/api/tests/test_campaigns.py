@@ -5,6 +5,7 @@ Tests the campaign model creation and service logic.
 """
 
 from uuid import uuid4
+from datetime import datetime, timezone, timedelta
 
 import pytest
 
@@ -221,6 +222,42 @@ def test_campaign_service_create(db, test_org, test_user, test_template):
     assert campaign.status == "draft"
 
 
+def test_campaign_service_create_rejects_past_scheduled_at(
+    db, test_org, test_user, test_template
+):
+    """Campaign create should reject scheduled_at in the past."""
+    from app.services import campaign_service
+    from app.schemas.campaign import CampaignCreate
+
+    past_time = datetime.now(timezone.utc) - timedelta(minutes=5)
+    create_data = CampaignCreate(
+        name="Past Scheduled Campaign",
+        email_template_id=test_template.id,
+        recipient_type="case",
+        filter_criteria={},
+        scheduled_at=past_time,
+    )
+
+    with pytest.raises(ValueError, match="scheduled_at must be in the future"):
+        campaign_service.create_campaign(db, test_org.id, test_user.id, create_data)
+
+
+def test_campaign_service_update_rejects_past_scheduled_at(
+    db, test_org, test_user, test_campaign
+):
+    """Campaign update should reject scheduled_at in the past."""
+    from app.services import campaign_service
+    from app.schemas.campaign import CampaignUpdate
+
+    past_time = datetime.now(timezone.utc) - timedelta(minutes=5)
+    update_data = CampaignUpdate(scheduled_at=past_time)
+
+    with pytest.raises(ValueError, match="scheduled_at must be in the future"):
+        campaign_service.update_campaign(
+            db, org_id=test_org.id, campaign_id=test_campaign.id, data=update_data
+        )
+
+
 def test_campaign_preview_filters_intended_parent_status(db, test_org):
     from app.db.enums import IntendedParentStatus
     from app.db.models import IntendedParent
@@ -396,6 +433,28 @@ def test_campaign_send_requires_scheduled_at_when_send_now_false(
     with pytest.raises(ValueError, match="scheduled_at"):
         campaign_service.enqueue_campaign_send(
             db=db,
+            org_id=test_org.id,
+            campaign_id=test_campaign.id,
+            user_id=test_user.id,
+            send_now=False,
+        )
+
+
+def test_campaign_send_rejects_past_scheduled_at(
+    db, test_org, test_user, test_campaign
+):
+    """send_now=False should reject scheduled_at in the past."""
+    from app.services import campaign_service
+
+    _configure_resend_provider(db, test_org.id)
+
+    past_time = datetime.now(timezone.utc) - timedelta(minutes=5)
+    test_campaign.scheduled_at = past_time
+    db.commit()
+
+    with pytest.raises(ValueError, match="scheduled_at must be in the future"):
+        campaign_service.enqueue_campaign_send(
+            db,
             org_id=test_org.id,
             campaign_id=test_campaign.id,
             user_id=test_user.id,

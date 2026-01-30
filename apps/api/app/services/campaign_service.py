@@ -33,6 +33,16 @@ from app.schemas.campaign import (
 CAMPAIGN_SEND_BATCH_SIZE = int(os.getenv("CAMPAIGN_SEND_BATCH_SIZE", "200"))
 
 
+def _ensure_future_datetime(value: datetime | None, field_name: str) -> None:
+    """Ensure a datetime is in the future (UTC)."""
+    if not value:
+        return
+    now = datetime.now(timezone.utc)
+    candidate = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if candidate <= now:
+        raise ValueError(f"{field_name} must be in the future")
+
+
 # =============================================================================
 # Campaign CRUD
 # =============================================================================
@@ -61,6 +71,7 @@ def list_campaigns(
             CampaignRun.campaign_id,
             CampaignRun.total_count,
             CampaignRun.sent_count,
+            CampaignRun.delivered_count,
             CampaignRun.failed_count,
             CampaignRun.opened_count,
             CampaignRun.clicked_count,
@@ -81,6 +92,7 @@ def list_campaigns(
             Campaign,
             run_subq.c.total_count,
             run_subq.c.sent_count,
+            run_subq.c.delivered_count,
             run_subq.c.failed_count,
             run_subq.c.opened_count,
             run_subq.c.clicked_count,
@@ -112,6 +124,7 @@ def list_campaigns(
                 scheduled_at=c.scheduled_at,
                 total_recipients=row.total_count or 0,
                 sent_count=row.sent_count or 0,
+                delivered_count=row.delivered_count or 0,
                 failed_count=row.failed_count or 0,
                 opened_count=row.opened_count or 0,
                 clicked_count=row.clicked_count or 0,
@@ -146,6 +159,8 @@ def create_campaign(db: Session, org_id: UUID, user_id: UUID, data: CampaignCrea
 
     if not template:
         raise ValueError("Email template not found")
+
+    _ensure_future_datetime(data.scheduled_at, "scheduled_at")
 
     campaign = Campaign(
         organization_id=org_id,
@@ -205,6 +220,7 @@ def update_campaign(
     if data.filter_criteria is not None:
         campaign.filter_criteria = data.filter_criteria.model_dump(mode="json")
     if data.scheduled_at is not None:
+        _ensure_future_datetime(data.scheduled_at, "scheduled_at")
         campaign.scheduled_at = data.scheduled_at
 
     db.flush()
@@ -424,6 +440,7 @@ def enqueue_campaign_send(
             email_provider=provider_type,  # Lock provider at creation
             total_count=0,
             sent_count=0,
+            delivered_count=0,
             failed_count=0,
             skipped_count=0,
         )
@@ -452,6 +469,7 @@ def enqueue_campaign_send(
 
     if not campaign.scheduled_at:
         raise ValueError("scheduled_at is required when send_now is false")
+    _ensure_future_datetime(campaign.scheduled_at, "scheduled_at")
 
     # Schedule for later - still create the run and job, but with run_at
     run = CampaignRun(
@@ -461,6 +479,7 @@ def enqueue_campaign_send(
         email_provider=provider_type,  # Lock provider at creation
         total_count=0,
         sent_count=0,
+        delivered_count=0,
         failed_count=0,
         skipped_count=0,
     )
@@ -785,6 +804,7 @@ def execute_campaign_run(
     if run.status == "completed":
         return {
             "sent_count": run.sent_count,
+            "delivered_count": run.delivered_count,
             "failed_count": run.failed_count,
             "skipped_count": run.skipped_count,
             "total_count": run.total_count,
@@ -966,7 +986,9 @@ def execute_campaign_run(
     status_counts = {status: count for status, count in status_rows}
 
     pending_count = status_counts.get(CampaignRecipientStatus.PENDING.value, 0)
-    run.sent_count = status_counts.get(CampaignRecipientStatus.SENT.value, 0)
+    delivered_count = status_counts.get(CampaignRecipientStatus.DELIVERED.value, 0)
+    run.sent_count = status_counts.get(CampaignRecipientStatus.SENT.value, 0) + delivered_count
+    run.delivered_count = delivered_count
     run.failed_count = status_counts.get(CampaignRecipientStatus.FAILED.value, 0)
     run.skipped_count = status_counts.get(CampaignRecipientStatus.SKIPPED.value, 0)
     run.completed_at = datetime.now(timezone.utc) if pending_count == 0 else None
@@ -977,6 +999,7 @@ def execute_campaign_run(
     )
 
     campaign.sent_count = run.sent_count
+    campaign.delivered_count = run.delivered_count
     campaign.failed_count = run.failed_count
     campaign.skipped_count = run.skipped_count
     campaign.total_recipients = run.total_count
@@ -991,6 +1014,7 @@ def execute_campaign_run(
 
     return {
         "sent_count": run.sent_count,
+        "delivered_count": run.delivered_count,
         "failed_count": run.failed_count,
         "skipped_count": run.skipped_count,
         "total_count": run.total_count,
@@ -1046,6 +1070,7 @@ def retry_failed_campaign_run(
     if not failed_recipients:
         return {
             "sent_count": run.sent_count,
+            "delivered_count": run.delivered_count,
             "failed_count": run.failed_count,
             "skipped_count": run.skipped_count,
             "total_count": run.total_count,
@@ -1183,7 +1208,9 @@ def retry_failed_campaign_run(
     status_counts = {status: count for status, count in status_rows}
 
     pending_count = status_counts.get(CampaignRecipientStatus.PENDING.value, 0)
-    run.sent_count = status_counts.get(CampaignRecipientStatus.SENT.value, 0)
+    delivered_count = status_counts.get(CampaignRecipientStatus.DELIVERED.value, 0)
+    run.sent_count = status_counts.get(CampaignRecipientStatus.SENT.value, 0) + delivered_count
+    run.delivered_count = delivered_count
     run.failed_count = status_counts.get(CampaignRecipientStatus.FAILED.value, 0)
     run.skipped_count = status_counts.get(CampaignRecipientStatus.SKIPPED.value, 0)
     run.completed_at = datetime.now(timezone.utc) if pending_count == 0 else None
@@ -1194,6 +1221,7 @@ def retry_failed_campaign_run(
     )
 
     campaign.sent_count = run.sent_count
+    campaign.delivered_count = run.delivered_count
     campaign.failed_count = run.failed_count
     campaign.skipped_count = run.skipped_count
     campaign.total_recipients = run.total_count
@@ -1207,6 +1235,7 @@ def retry_failed_campaign_run(
 
     return {
         "sent_count": run.sent_count,
+        "delivered_count": run.delivered_count,
         "failed_count": run.failed_count,
         "skipped_count": run.skipped_count,
         "total_count": run.total_count,

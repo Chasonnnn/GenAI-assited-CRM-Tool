@@ -71,6 +71,7 @@ class CampaignResponse(BaseModel):
     # Stats
     total_recipients: int = 0
     sent_count: int = 0
+    delivered_count: int = 0
     failed_count: int = 0
     skipped_count: int = 0
     opened_count: int = 0
@@ -92,6 +93,7 @@ class CampaignListItem(BaseModel):
     # Latest run stats
     total_recipients: int = 0
     sent_count: int = 0
+    delivered_count: int = 0
     failed_count: int = 0
     opened_count: int = 0
     clicked_count: int = 0
@@ -117,6 +119,7 @@ class CampaignRunResponse(BaseModel):
     error_message: str | None
     total_count: int
     sent_count: int
+    delivered_count: int
     failed_count: int
     skipped_count: int
     opened_count: int
