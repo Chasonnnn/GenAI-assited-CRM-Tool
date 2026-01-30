@@ -21,6 +21,9 @@ export interface Workflow {
     condition_logic: "AND" | "OR"
     actions: ActionConfig[]
     is_enabled: boolean
+    scope: WorkflowScope
+    owner_user_id: string | null
+    owner_name: string | null
     run_count: number
     last_run_at: string | null
     last_error: string | null

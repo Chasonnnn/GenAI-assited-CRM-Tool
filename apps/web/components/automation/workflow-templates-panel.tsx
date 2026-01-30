@@ -176,7 +176,7 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
 
     const { data: emailTemplates = [], isLoading: isLoadingEmailTemplates } = useEmailTemplates({
         activeOnly: true,
-        scope: workflowScope === "org" ? "org" : undefined,
+        scope: workflowScope === "org" ? "org" : null,
     })
 
     const { data: categoriesData } = useQuery({
