@@ -81,7 +81,7 @@ def create_workflow(
 
     # Validate actions
     for action in data.actions:
-        _validate_action_config(db, org_id, action)
+        _validate_action_config(db, org_id, action, data.scope, user_id)
 
     # Determine owner_user_id based on scope
     owner_user_id = user_id if data.scope == "personal" else None
@@ -136,7 +136,13 @@ def update_workflow(
 
     if data.actions is not None:
         for action in data.actions:
-            _validate_action_config(db, workflow.organization_id, action)
+            _validate_action_config(
+                db,
+                workflow.organization_id,
+                action,
+                workflow.scope,
+                workflow.owner_user_id,
+            )
         if _has_send_email_action(data.actions):
             is_valid, error = validate_email_provider(
                 db,
@@ -511,7 +517,12 @@ def get_workflow_stats(db: Session, org_id: UUID) -> WorkflowStats:
     )
 
 
-def get_workflow_options(db: Session, org_id: UUID) -> WorkflowOptions:
+def get_workflow_options(
+    db: Session,
+    org_id: UUID,
+    workflow_scope: str | None = None,
+    user_id: UUID | None = None,
+) -> WorkflowOptions:
     """Get available options for workflow builder UI."""
     # Trigger types with descriptions
     trigger_types = [
@@ -648,16 +659,39 @@ def get_workflow_options(db: Session, org_id: UUID) -> WorkflowOptions:
         {"value": "less_than", "label": "Less than"},
     ]
 
-    # Email templates
-    templates = (
-        db.query(EmailTemplate)
-        .filter(
-            EmailTemplate.organization_id == org_id,
-            EmailTemplate.is_active.is_(True),
-        )
-        .all()
+    # Email templates - scope-aware filtering
+    # For org workflows: only org + system templates
+    # For personal workflows: personal (user's own) + org + system templates
+    from sqlalchemy import or_, and_
+
+    template_query = db.query(EmailTemplate).filter(
+        EmailTemplate.organization_id == org_id,
+        EmailTemplate.is_active.is_(True),
     )
-    email_templates = [{"id": str(t.id), "name": t.name} for t in templates]
+
+    if workflow_scope == "org":
+        # Org workflows can only use org templates (including system templates)
+        template_query = template_query.filter(EmailTemplate.scope == "org")
+    elif workflow_scope == "personal" and user_id:
+        # Personal workflows can use user's personal templates + org templates
+        template_query = template_query.filter(
+            or_(
+                EmailTemplate.scope == "org",
+                and_(
+                    EmailTemplate.scope == "personal",
+                    EmailTemplate.owner_user_id == user_id,
+                ),
+            )
+        )
+    else:
+        # Default: show all org templates (for backward compatibility)
+        template_query = template_query.filter(EmailTemplate.scope == "org")
+
+    templates = template_query.order_by(EmailTemplate.scope.desc(), EmailTemplate.name).all()
+    email_templates = [
+        {"id": str(t.id), "name": t.name, "scope": t.scope}
+        for t in templates
+    ]
 
     # Users in org
     from app.db.models import Membership
@@ -1011,7 +1045,13 @@ def _validate_trigger_config(trigger_type: WorkflowTriggerType, config: dict) ->
         validator.model_validate(config)
 
 
-def _validate_action_config(db: Session, org_id: UUID, action: dict) -> None:
+def _validate_action_config(
+    db: Session,
+    org_id: UUID,
+    action: dict,
+    workflow_scope: str | None = None,
+    owner_user_id: UUID | None = None,
+) -> None:
     """Validate action config and referenced entities exist in org."""
     action_type = action.get("action_type")
 
@@ -1038,6 +1078,13 @@ def _validate_action_config(db: Session, org_id: UUID, action: dict) -> None:
         )
         if not template:
             raise ValueError(f"Email template {config.template_id} not found in organization")
+        # Enforce scope rules for workflow email templates
+        if workflow_scope == "org":
+            if template.scope != "org":
+                raise ValueError("Org workflows cannot use personal email templates")
+        elif workflow_scope == "personal":
+            if template.scope == "personal" and template.owner_user_id != owner_user_id:
+                raise ValueError("Personal email templates must be owned by the workflow owner")
 
     elif action_type == "create_task":
         config = CreateTaskActionConfig.model_validate(action)

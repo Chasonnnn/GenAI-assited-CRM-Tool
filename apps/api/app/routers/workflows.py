@@ -89,11 +89,28 @@ def list_workflows(
 
 @router.get("/options", response_model=WorkflowOptions)
 def get_workflow_options(
+    workflow_scope: Literal["org", "personal"] | None = Query(
+        default=None,
+        description="Filter email templates by workflow scope",
+    ),
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
 ):
-    """Get available options for workflow builder UI."""
-    return workflow_service.get_workflow_options(db, session.org_id)
+    """
+    Get available options for workflow builder UI.
+
+    Args:
+        workflow_scope: Filter email templates based on workflow scope.
+            - 'org': Returns only org templates (for org workflows)
+            - 'personal': Returns user's personal + org templates (for personal workflows)
+            - None: Returns org templates (default for backward compatibility)
+    """
+    return workflow_service.get_workflow_options(
+        db=db,
+        org_id=session.org_id,
+        workflow_scope=workflow_scope,
+        user_id=session.user_id,
+    )
 
 
 @router.get("/stats", response_model=WorkflowStats)
