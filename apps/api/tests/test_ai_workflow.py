@@ -199,6 +199,19 @@ class TestWorkflowValidation:
         assert not result.valid
         assert any("condition_logic" in e.lower() for e in result.errors)
 
+    def test_validate_in_list_operator_normalizes(self, db, test_org):
+        """in_list operator should normalize to in."""
+        workflow = GeneratedWorkflow(
+            name="In List",
+            trigger_type="surrogate_created",
+            conditions=[{"field": "state", "operator": "in_list", "value": ["CA", "TX"]}],
+            actions=[{"action_type": "add_note", "content": "test"}],
+        )
+        result = validate_workflow(db, test_org.id, workflow)
+        assert result.valid
+        assert not any("unknown operator" in w.lower() for w in result.warnings)
+        assert workflow.conditions[0]["operator"] == "in"
+
     def test_validate_nonexistent_template_id(self, db, test_org):
         """Should fail with non-existent template ID."""
         workflow = GeneratedWorkflow(
@@ -222,6 +235,18 @@ class TestWorkflowValidation:
         )
         db.add(template)
         db.flush()
+
+    def test_validate_update_status_action_normalizes(self, db, test_org, default_stage):
+        """update_status should normalize to update_field stage_id."""
+        workflow = GeneratedWorkflow(
+            name="Update Status",
+            trigger_type="surrogate_created",
+            actions=[{"action_type": "update_status", "stage_id": str(default_stage.id)}],
+        )
+        result = validate_workflow(db, test_org.id, workflow)
+        assert result.valid
+        assert workflow.actions[0]["action_type"] == "update_field"
+        assert workflow.actions[0]["field"] == "stage_id"
 
         workflow = GeneratedWorkflow(
             name="Valid Template",

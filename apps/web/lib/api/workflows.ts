@@ -28,6 +28,7 @@ export interface Workflow {
     updated_by_name: string | null
     created_at: string
     updated_at: string
+    can_edit?: boolean
 }
 
 export interface WorkflowListItem {
@@ -41,6 +42,7 @@ export interface WorkflowListItem {
     last_run_at: string | null
     last_error: string | null
     created_at: string
+    can_edit?: boolean
 }
 
 export interface Condition {
@@ -114,6 +116,8 @@ export interface WorkflowStats {
 export interface WorkflowOptions {
     trigger_types: { value: string; label: string; description: string }[]
     action_types: { value: string; label: string; description: string }[]
+    action_types_by_trigger?: Record<string, string[]>
+    trigger_entity_types?: Record<string, string>
     condition_operators: { value: string; label: string }[]
     condition_fields: string[]
     update_fields: string[]

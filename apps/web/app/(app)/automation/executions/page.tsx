@@ -25,15 +25,16 @@ import { parseDateInput } from "@/lib/utils/date"
 
 // Types for executions
 interface ExecutionAction {
-    name: string
-    status: "success" | "failed"
-    duration: string
+    success: boolean
+    action_type?: string
+    description?: string
+    duration_ms?: number
     error?: string
 }
 
 interface Execution {
     id: string
-    status: "success" | "failed" | "partial" | "skipped"
+    status: "success" | "failed" | "partial" | "skipped" | "paused" | "canceled" | "expired"
     workflow_id: string
     workflow_name: string
     entity_type: string
@@ -74,6 +75,21 @@ const statusConfig = {
         label: "Skipped",
         color: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
         icon: MinusCircleIcon,
+    },
+    paused: {
+        label: "Paused",
+        color: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+        icon: AlertCircleIcon,
+    },
+    canceled: {
+        label: "Canceled",
+        color: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+        icon: MinusCircleIcon,
+    },
+    expired: {
+        label: "Expired",
+        color: "bg-orange-500/10 text-orange-500 border-orange-500/20",
+        icon: AlertCircleIcon,
     },
 }
 
@@ -188,7 +204,7 @@ export default function WorkflowExecutionsPage() {
                     <div>
                         <h1 className="text-2xl font-semibold">Workflow Executions</h1>
                         <p className="text-xs text-muted-foreground">
-                            {totalExecutions.toLocaleString()} executions in last 7 days
+                            {totalExecutions.toLocaleString()} executions in last 24 hours
                         </p>
                     </div>
                 </div>
@@ -359,7 +375,12 @@ export default function WorkflowExecutionsPage() {
                                                 onClick={() => toggleRow(execution.id)}
                                             >
                                                 <TableCell>
-                                                    <Button variant="ghost" size="sm" className="size-8 p-0">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="size-8 p-0"
+                                                        aria-label={isExpanded ? "Collapse row" : "Expand row"}
+                                                    >
                                                         {isExpanded ? (
                                                             <ChevronDownIcon className="size-4" />
                                                         ) : (
@@ -415,13 +436,22 @@ export default function WorkflowExecutionsPage() {
                                                                 <div>
                                                                     <h4 className="mb-3 font-semibold">Actions Executed</h4>
                                                                     <div className="space-y-3">
-                                                                        {execution.actions_executed.map((action, index) => (
+                                                                        {execution.actions_executed.map((action, index) => {
+                                                                            const status = action.success ? "success" : "failed"
+                                                                            const name =
+                                                                                action.description ||
+                                                                                action.action_type ||
+                                                                                "Action"
+                                                                            const duration = action.duration_ms
+                                                                                ? formatDuration(action.duration_ms)
+                                                                                : "—"
+                                                                            return (
                                                                             <div key={index} className="flex items-start gap-3">
                                                                                 <div
-                                                                                    className={`mt-1 flex size-6 shrink-0 items-center justify-center rounded-full ${action.status === "success" ? "bg-green-500/20" : "bg-red-500/20"
+                                                                                    className={`mt-1 flex size-6 shrink-0 items-center justify-center rounded-full ${status === "success" ? "bg-green-500/20" : "bg-red-500/20"
                                                                                         }`}
                                                                                 >
-                                                                                    {action.status === "success" ? (
+                                                                                    {status === "success" ? (
                                                                                         <CheckCircle2Icon className="size-3 text-green-500" />
                                                                                     ) : (
                                                                                         <XCircleIcon className="size-3 text-red-500" />
@@ -429,9 +459,9 @@ export default function WorkflowExecutionsPage() {
                                                                                 </div>
                                                                                 <div className="flex-1">
                                                                                     <div className="flex items-center justify-between">
-                                                                                        <p className="font-medium">{action.name}</p>
+                                                                                        <p className="font-medium">{name}</p>
                                                                                         <span className="text-xs text-muted-foreground">
-                                                                                            {action.duration}
+                                                                                            {duration}
                                                                                         </span>
                                                                                     </div>
                                                                                     {action.error && (
@@ -439,7 +469,8 @@ export default function WorkflowExecutionsPage() {
                                                                                     )}
                                                                                 </div>
                                                                             </div>
-                                                                        ))}
+                                                                            )
+                                                                        })}
                                                                     </div>
                                                                 </div>
                                                             )}

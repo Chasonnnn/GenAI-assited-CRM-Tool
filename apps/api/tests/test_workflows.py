@@ -229,7 +229,7 @@ def test_ai_workflow_service_actions():
         "send_email",
         "create_task",
         "assign_surrogate",
-        "update_status",
+        "update_field",
         "add_note",
         "send_notification",
     ]
@@ -257,7 +257,7 @@ def test_generated_workflow_model():
         description="A complete workflow",
         icon="sparkles",
         trigger_type="status_changed",
-        trigger_config={"from_status": "new"},
+        trigger_config={"to_stage_id": str(uuid4())},
         conditions=[{"field": "state", "operator": "equals", "value": "CA"}],
         condition_logic="OR",
         actions=[

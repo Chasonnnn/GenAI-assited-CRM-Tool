@@ -224,56 +224,69 @@ class DefaultWorkflowDomainAdapter:
         action_type = action.get("action_type")
         action_entity = entity
 
+        def _with_action_type(result: dict) -> dict:
+            if action_type and "action_type" not in result:
+                result["action_type"] = action_type
+            return result
+
         # Validate entity type for Surrogate-only actions, map tasks to surrogates when possible
         if action_type in self.SURROGATE_ONLY_ACTIONS:
             if entity_type == "task":
                 surrogate_id = getattr(entity, "surrogate_id", None)
                 if not surrogate_id:
-                    return {
+                    return _with_action_type({
                         "success": False,
                         "error": "Task is not linked to a surrogate",
                         "skipped": True,
-                    }
+                    })
                 action_entity = db.query(Surrogate).filter(Surrogate.id == surrogate_id).first()
                 if not action_entity:
-                    return {
+                    return _with_action_type({
                         "success": False,
                         "error": "Surrogate not found for task",
                         "skipped": True,
-                    }
+                    })
             elif entity_type != "surrogate":
-                return {
+                return _with_action_type({
                     "success": False,
                     "error": f"Action '{action_type}' only supports Surrogate entities, got '{entity_type}'",
                     "skipped": True,
-                }
+                })
 
         try:
             if action_type == WorkflowActionType.SEND_EMAIL.value:
-                return self._action_send_email(
+                result = self._action_send_email(
                     db, action, action_entity, event_id, workflow_scope, workflow_owner_id
                 )
+                return _with_action_type(result)
 
             if action_type == WorkflowActionType.CREATE_TASK.value:
-                return self._action_create_task(db, action, action_entity)
+                result = self._action_create_task(db, action, action_entity)
+                return _with_action_type(result)
 
             if action_type == WorkflowActionType.ASSIGN_SURROGATE.value:
-                return self._action_assign_surrogate(
+                result = self._action_assign_surrogate(
                     db, action, action_entity, event_id, depth, trigger_callback
                 )
+                return _with_action_type(result)
 
             if action_type == WorkflowActionType.SEND_NOTIFICATION.value:
-                return self._action_send_notification(db, action, entity)
+                result = self._action_send_notification(db, action, entity)
+                return _with_action_type(result)
 
             if action_type == WorkflowActionType.UPDATE_FIELD.value:
-                return self._action_update_field(
+                result = self._action_update_field(
                     db, action, action_entity, event_id, depth, trigger_callback
                 )
+                return _with_action_type(result)
 
             if action_type == WorkflowActionType.ADD_NOTE.value:
-                return self._action_add_note(db, action, action_entity)
+                result = self._action_add_note(db, action, action_entity)
+                return _with_action_type(result)
 
-            return {"success": False, "error": f"Unknown action type: {action_type}"}
+            return _with_action_type(
+                {"success": False, "error": f"Unknown action type: {action_type}"}
+            )
 
         except Exception as e:
             logger.exception(f"Action {action_type} failed: {e}")
@@ -296,7 +309,7 @@ class DefaultWorkflowDomainAdapter:
                     )
             except Exception as alert_err:
                 logger.warning(f"Failed to create workflow alert: {alert_err}")
-            return {"success": False, "error": str(e)}
+            return _with_action_type({"success": False, "error": str(e)})
 
     # =========================================================================
     # Action Executors
@@ -471,17 +484,25 @@ class DefaultWorkflowDomainAdapter:
         body = action.get("body", "")
         recipients = action.get("recipients", "owner")
 
+        target = entity
+        if not hasattr(entity, "owner_type"):
+            surrogate_id = getattr(entity, "surrogate_id", None)
+            if surrogate_id:
+                target = db.query(Surrogate).filter(Surrogate.id == surrogate_id).first()
+        if not target or not hasattr(target, "organization_id"):
+            return {"success": False, "error": "No related surrogate for notification recipients"}
+
         # Determine recipient user IDs
         user_ids = []
-        if recipients == "owner" and entity.owner_type == OwnerType.USER.value:
-            user_ids = [entity.owner_id]
+        if recipients == "owner" and target.owner_type == OwnerType.USER.value:
+            user_ids = [target.owner_id]
         elif recipients == "creator":
-            user_ids = [entity.created_by_user_id] if entity.created_by_user_id else []
+            user_ids = [target.created_by_user_id] if target.created_by_user_id else []
         elif recipients == "all_admins":
             memberships = (
                 db.query(Membership)
                 .filter(
-                    Membership.organization_id == entity.organization_id,
+                    Membership.organization_id == target.organization_id,
                     Membership.role.in_([Role.ADMIN.value, Role.DEVELOPER.value]),
                     Membership.is_active.is_(True),
                 )
@@ -495,13 +516,13 @@ class DefaultWorkflowDomainAdapter:
         for user_id in user_ids:
             notification_facade.create_notification(
                 db=db,
-                org_id=entity.organization_id,
+                org_id=target.organization_id,
                 user_id=user_id,
                 type=NotificationType.SURROGATE_STATUS_CHANGED,  # Generic type
                 title=title,
                 body=body if body else None,
                 entity_type="surrogate",
-                entity_id=entity.id,
+                entity_id=target.id,
             )
 
         return {

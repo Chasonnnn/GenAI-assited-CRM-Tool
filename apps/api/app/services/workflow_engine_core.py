@@ -150,10 +150,16 @@ class WorkflowEngineCore:
         if trigger_type == WorkflowTriggerType.STATUS_CHANGED:
             to_stage_id = config.get("to_stage_id")
             from_stage_id = config.get("from_stage_id")
+            to_status = config.get("to_status")
+            from_status = config.get("from_status")
 
             if to_stage_id and str(event_data.get("new_stage_id")) != str(to_stage_id):
                 return False
             if from_stage_id and str(event_data.get("old_stage_id")) != str(from_stage_id):
+                return False
+            if to_status and str(event_data.get("new_status")) != str(to_status):
+                return False
+            if from_status and str(event_data.get("old_status")) != str(from_status):
                 return False
             return True
 
@@ -385,6 +391,7 @@ class WorkflowEngineCore:
                 action_results.append(
                     {
                         "success": False,
+                        "action_type": action.get("action_type"),
                         "error": "Failed to create approval task",
                         "skipped": True,
                     }
@@ -749,6 +756,15 @@ class WorkflowEngineCore:
         condition_value: Any,
     ) -> bool:
         """Evaluate a single condition."""
+        def _normalize_list_value(value: Any) -> list[str]:
+            if value is None:
+                return []
+            if isinstance(value, list):
+                return [str(v).strip() for v in value if str(v).strip()]
+            if isinstance(value, str):
+                return [v.strip() for v in value.split(",") if v.strip()]
+            return [str(value).strip()] if str(value).strip() else []
+
         if operator == WorkflowConditionOperator.EQUALS.value:
             return str(entity_value) == str(condition_value)
 
@@ -768,10 +784,16 @@ class WorkflowEngineCore:
             return entity_value is not None and entity_value != ""
 
         if operator == WorkflowConditionOperator.IN.value:
-            return str(entity_value) in [str(v) for v in condition_value]
+            values = _normalize_list_value(condition_value)
+            if not values:
+                return False
+            return str(entity_value) in values
 
         if operator == WorkflowConditionOperator.NOT_IN.value:
-            return str(entity_value) not in [str(v) for v in condition_value]
+            values = _normalize_list_value(condition_value)
+            if not values:
+                return True
+            return str(entity_value) not in values
 
         if operator == WorkflowConditionOperator.GREATER_THAN.value:
             try:

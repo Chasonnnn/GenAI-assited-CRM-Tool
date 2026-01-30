@@ -692,6 +692,11 @@ def _should_run_cron(cron: str, now, tz: str) -> bool:
 
     minute, hour, dom, month, dow = parts
 
+    def _cron_dow_to_py(value: int) -> int:
+        if value in (0, 7):
+            return 6
+        return (value - 1) % 7
+
     # Check hour (simple exact match)
     if hour != "*" and int(hour) != local_now.hour:
         return False
@@ -704,9 +709,11 @@ def _should_run_cron(cron: str, now, tz: str) -> bool:
     if dow != "*":
         if "-" in dow:
             start, end = map(int, dow.split("-"))
-            if not (start <= local_now.weekday() <= end):
+            cron_range = range(start, end + 1)
+            valid_days = {_cron_dow_to_py(value) for value in cron_range}
+            if local_now.weekday() not in valid_days:
                 return False
-        elif int(dow) != local_now.weekday():
+        elif _cron_dow_to_py(int(dow)) != local_now.weekday():
             return False
 
     return True

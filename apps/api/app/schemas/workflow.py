@@ -381,6 +381,8 @@ class WorkflowOptions(BaseModel):
 
     trigger_types: list[dict]  # {value, label, description}
     action_types: list[dict]
+    action_types_by_trigger: dict[str, list[str]] | None = None
+    trigger_entity_types: dict[str, str] | None = None
     condition_operators: list[dict]
     condition_fields: list[str]
     update_fields: list[str]

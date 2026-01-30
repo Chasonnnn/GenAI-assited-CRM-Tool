@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
@@ -21,6 +22,7 @@ import {
 } from "@/components/ui/dialog"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
     PlusIcon,
     MoreVerticalIcon,
@@ -38,7 +40,9 @@ import {
     FileTextIcon,
     Loader2Icon,
     AlertCircleIcon,
+    ChevronDownIcon,
 } from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
 import {
     useWorkflows,
     useWorkflow,
@@ -52,9 +56,23 @@ import {
     useDuplicateWorkflow,
     useTestWorkflow,
 } from "@/lib/hooks/use-workflows"
-import type { WorkflowListItem, Condition, ActionConfig, WorkflowCreate, WorkflowTestResponse } from "@/lib/api/workflows"
+import type {
+    WorkflowListItem,
+    Condition,
+    ActionConfig,
+    WorkflowCreate,
+    WorkflowTestResponse,
+    WorkflowOptions,
+} from "@/lib/api/workflows"
 import { useCreateEmailTemplate, useUpdateEmailTemplate, useDeleteEmailTemplate } from "@/lib/hooks/use-email-templates"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
+import { ApiError } from "@/lib/api"
+import { globalSearch } from "@/lib/api/search"
+import { getAppointments } from "@/lib/api/appointments"
+import { listMatches } from "@/lib/api/matches"
+import { getTasks } from "@/lib/api/tasks"
+import { getSurrogates } from "@/lib/api/surrogates"
+import { US_STATES } from "@/lib/constants/us-states"
 import { parseDateInput } from "@/lib/utils/date"
 import type { JsonObject, JsonValue } from "@/lib/types/json"
 
@@ -68,6 +86,13 @@ const triggerIcons: Record<string, React.ElementType> = {
     task_overdue: AlertCircleIcon,
     scheduled: CalendarIcon,
     inactivity: ClockIcon,
+    match_proposed: ActivityIcon,
+    match_accepted: CheckCircle2Icon,
+    match_rejected: XIcon,
+    appointment_scheduled: CalendarIcon,
+    appointment_completed: CheckCircle2Icon,
+    note_added: FileTextIcon,
+    document_uploaded: FileTextIcon,
 }
 
 const triggerLabels: Record<string, string> = {
@@ -79,11 +104,18 @@ const triggerLabels: Record<string, string> = {
     task_overdue: "Task Overdue",
     scheduled: "Scheduled",
     inactivity: "Inactivity",
+    match_proposed: "Match Proposed",
+    match_accepted: "Match Accepted",
+    match_rejected: "Match Rejected",
+    appointment_scheduled: "Appointment Scheduled",
+    appointment_completed: "Appointment Completed",
+    note_added: "Note Added",
+    document_uploaded: "Document Uploaded",
 }
 
 // Labels for condition fields
 const conditionFieldLabels: Record<string, string> = {
-    status: "Stage",
+    status_label: "Stage",
     stage_id: "Stage",
     source: "Source",
     is_priority: "Is Priority",
@@ -94,6 +126,53 @@ const conditionFieldLabels: Record<string, string> = {
     full_name: "Full Name",
     email: "Email",
     phone: "Phone",
+}
+
+type SelectOption = { value: string; label: string }
+
+const BOOLEAN_FIELDS = new Set([
+    "is_priority",
+    "has_child",
+    "is_citizen_or_pr",
+    "is_non_smoker",
+    "has_surrogate_experience",
+    "is_age_eligible",
+])
+
+const NUMBER_FIELDS = new Set([
+    "age",
+    "bmi",
+    "height_ft",
+    "weight_lb",
+    "num_deliveries",
+    "num_csections",
+])
+
+const DATE_FIELDS = new Set(["created_at", "date_of_birth"])
+
+const MULTISELECT_FIELDS = new Set(["stage_id", "status_label", "owner_id", "state", "source"])
+
+const SOURCE_OPTIONS: SelectOption[] = [
+    { value: "manual", label: "Manual" },
+    { value: "meta", label: "Meta" },
+    { value: "website", label: "Website" },
+    { value: "referral", label: "Referral" },
+    { value: "import", label: "Import" },
+    { value: "agency", label: "Agency" },
+]
+
+const OWNER_TYPE_OPTIONS: SelectOption[] = [
+    { value: "user", label: "User" },
+    { value: "queue", label: "Queue" },
+]
+
+const ENTITY_LABELS: Record<string, string> = {
+    surrogate: "Surrogate ID",
+    task: "Task ID",
+    match: "Match ID",
+    appointment: "Appointment ID",
+    note: "Note ID",
+    document: "Document ID",
 }
 
 function formatRelativeTime(dateString: string | null): string {
@@ -109,6 +188,186 @@ function formatRelativeTime(dateString: string | null): string {
     if (diffHours < 24) return `${diffHours}h ago`
     if (diffDays === 1) return "Yesterday"
     return `${diffDays}d ago`
+}
+
+const LIST_OPERATORS = new Set(["in", "not_in"])
+const VALUELESS_OPERATORS = new Set(["is_empty", "is_not_empty"])
+type StatusOption = WorkflowOptions["statuses"][number]
+const EMPTY_STATUS_OPTIONS: StatusOption[] = []
+
+function normalizeConditionsForUi(conditions: Condition[]): Condition[] {
+    return conditions.map((condition) => {
+        if (!LIST_OPERATORS.has(condition.operator)) {
+            return condition
+        }
+        if (MULTISELECT_FIELDS.has(condition.field)) {
+            if (Array.isArray(condition.value)) {
+                return condition
+            }
+            if (typeof condition.value === "string") {
+                const values = condition.value
+                    .split(",")
+                    .map((value) => value.trim())
+                    .filter(Boolean)
+                return { ...condition, value: values }
+            }
+            return { ...condition, value: [] }
+        }
+        if (Array.isArray(condition.value)) {
+            return { ...condition, value: condition.value.join(", ") }
+        }
+        return condition
+    })
+}
+
+function normalizeConditionsForSave(conditions: Condition[]): Condition[] {
+    return conditions.map((condition) => {
+        if (VALUELESS_OPERATORS.has(condition.operator)) {
+            return { ...condition, value: null }
+        }
+        if (LIST_OPERATORS.has(condition.operator)) {
+            const raw =
+                typeof condition.value === "string"
+                    ? condition.value
+                    : Array.isArray(condition.value)
+                        ? condition.value.join(", ")
+                        : ""
+            const values = raw
+                .split(",")
+                .map((value) => value.trim())
+                .filter(Boolean)
+            return { ...condition, value: values }
+        }
+        return condition
+    })
+}
+
+function normalizeActionsForUi(actions: ActionConfig[]): ActionConfig[] {
+    return actions.map((action) => {
+        if (action.action_type === "update_status" && action.stage_id) {
+            const normalized = {
+                ...action,
+                action_type: "update_field",
+                field: "stage_id",
+                value: action.stage_id,
+            }
+            delete normalized.stage_id
+            return normalized
+        }
+        return action
+    })
+}
+
+function toListArray(value: JsonValue): string[] {
+    if (Array.isArray(value)) {
+        return value.map((item) => String(item).trim()).filter(Boolean)
+    }
+    if (typeof value === "string") {
+        return value
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean)
+    }
+    if (value === null || value === undefined) {
+        return []
+    }
+    const asString = String(value).trim()
+    return asString ? [asString] : []
+}
+
+function MultiSelect({
+    options,
+    value,
+    onChange,
+    placeholder = "Select values",
+}: {
+    options: SelectOption[]
+    value: string[]
+    onChange: (next: string[]) => void
+    placeholder?: string
+}) {
+    const selectedValues = new Set(value)
+    const selectedLabels = options
+        .filter((option) => selectedValues.has(option.value))
+        .map((option) => option.label)
+    const label =
+        selectedLabels.length > 0
+            ? `${selectedLabels.length} selected`
+            : placeholder
+
+    return (
+        <Popover>
+            <PopoverTrigger asChild>
+                <Button variant="outline" className="flex-1 justify-between">
+                    <span className="truncate">{label}</span>
+                    <ChevronDownIcon className="size-4 text-muted-foreground" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72">
+                <ScrollArea className="h-48">
+                    <div className="space-y-2">
+                        {options.map((option) => {
+                            const checked = selectedValues.has(option.value)
+                            return (
+                                <label
+                                    key={option.value}
+                                    className="flex items-center gap-2 text-sm"
+                                >
+                                    <Checkbox
+                                        checked={checked}
+                                        onCheckedChange={(next) => {
+                                            const nextChecked = next === true
+                                            const updated = new Set(selectedValues)
+                                            if (nextChecked) {
+                                                updated.add(option.value)
+                                            } else {
+                                                updated.delete(option.value)
+                                            }
+                                            onChange(Array.from(updated))
+                                        }}
+                                    />
+                                    <span>{option.label}</span>
+                                </label>
+                            )
+                        })}
+                        {options.length === 0 && (
+                            <p className="text-xs text-muted-foreground">No options available.</p>
+                        )}
+                    </div>
+                </ScrollArea>
+            </PopoverContent>
+        </Popover>
+    )
+}
+
+function normalizeTriggerConfigForUi(
+    triggerType: string,
+    triggerConfig: JsonObject,
+    statuses: StatusOption[],
+): JsonObject {
+    if (triggerType !== "status_changed") return { ...triggerConfig }
+    const next: JsonObject = { ...triggerConfig }
+    if (
+        (typeof next.to_stage_id !== "string" || !next.to_stage_id) &&
+        typeof next.to_status === "string"
+    ) {
+        const match = statuses.find((status) => status.value === next.to_status)
+        if (match?.id) {
+            next.to_stage_id = match.id
+            delete next.to_status
+        }
+    }
+    if (
+        (typeof next.from_stage_id !== "string" || !next.from_stage_id) &&
+        typeof next.from_status === "string"
+    ) {
+        const match = statuses.find((status) => status.value === next.from_status)
+        if (match?.id) {
+            next.from_stage_id = match.id
+            delete next.from_status
+        }
+    }
+    return next
 }
 
 export default function AutomationPage() {
@@ -128,11 +387,13 @@ export default function AutomationPage() {
     const [hydratedWorkflowId, setHydratedWorkflowId] = useState<string | null>(null)
     const [wizardStep, setWizardStep] = useState(1)
     const [validationError, setValidationError] = useState<string | null>(null)
+    const [serverErrors, setServerErrors] = useState<string[]>([])
 
     // Test workflow state
     const [showTestModal, setShowTestModal] = useState(false)
     const [testWorkflowId, setTestWorkflowId] = useState<string | null>(null)
-    const [testSurrogateId, setTestSurrogateId] = useState("")
+    const [testEntityId, setTestEntityId] = useState("")
+    const [testEntityQuery, setTestEntityQuery] = useState("")
     const [testResult, setTestResult] = useState<WorkflowTestResponse | null>(null)
 
     // Form state
@@ -155,9 +416,55 @@ export default function AutomationPage() {
     const { data: workflows, isLoading: workflowsLoading } = useWorkflows()
     const { data: stats, isLoading: statsLoading } = useWorkflowStats()
     const { data: options } = useWorkflowOptions()
-    const statusOptions = options?.statuses ?? []
+    const statusOptions = options?.statuses ?? EMPTY_STATUS_OPTIONS
     const activeStatusOptions = statusOptions.filter((status) => status.is_active !== false)
+    const actionTypeOptions = options?.action_types ?? []
+    const actionTypeValuesForTrigger = triggerType && options?.action_types_by_trigger?.[triggerType]
+        ? new Set(options.action_types_by_trigger[triggerType])
+        : null
+    const filteredActionTypes = actionTypeValuesForTrigger
+        ? actionTypeOptions.filter((action) => actionTypeValuesForTrigger.has(action.value))
+        : actionTypeOptions
+    const userOptions = options?.users ?? []
+    const queueOptions = options?.queues ?? []
+    const updateFields = options?.update_fields ?? []
+    const conditionOperators = options?.condition_operators ?? []
     const { data: executions } = useWorkflowExecutions(selectedWorkflowId || "", { limit: 20 })
+
+    const stageIdOptions = useMemo<SelectOption[]>(
+        () =>
+            statusOptions.map((status) => ({
+                value: status.id ?? status.value,
+                label: status.label,
+            })),
+        [statusOptions]
+    )
+
+    const stageLabelOptions = useMemo<SelectOption[]>(
+        () => statusOptions.map((status) => ({ value: status.label, label: status.label })),
+        [statusOptions]
+    )
+
+    const ownerOptions = useMemo<SelectOption[]>(
+        () => [
+            ...userOptions.map((user) => ({ value: user.id, label: user.display_name })),
+            ...queueOptions.map((queue) => ({ value: queue.id, label: `Queue: ${queue.name}` })),
+        ],
+        [userOptions, queueOptions]
+    )
+
+    const stateOptions = useMemo<SelectOption[]>(
+        () => US_STATES.map((state) => ({ value: state.value, label: state.label })),
+        []
+    )
+
+    const triggerEntityTypes = options?.trigger_entity_types ?? {}
+    const selectedTestWorkflow = useMemo(
+        () => workflows?.find((workflow) => workflow.id === testWorkflowId),
+        [testWorkflowId, workflows]
+    )
+    const testTriggerType = selectedTestWorkflow?.trigger_type
+    const testEntityType = testTriggerType ? triggerEntityTypes[testTriggerType] ?? "surrogate" : "surrogate"
 
     const createWorkflow = useCreateWorkflow()
     const updateWorkflow = useUpdateWorkflow()
@@ -171,6 +478,9 @@ export default function AutomationPage() {
     const updateTemplate = useUpdateEmailTemplate()
     const deleteTemplate = useDeleteEmailTemplate()
 
+    const selectedTriggerFields = Array.isArray(triggerConfig.fields) ? triggerConfig.fields : []
+    const availableConditionFields = options?.condition_fields ?? []
+
     const getActionValidationError = (action: ActionConfig): string | null => {
         const title = typeof action.title === "string" ? action.title : ""
         const content = typeof action.content === "string" ? action.content : ""
@@ -183,6 +493,19 @@ export default function AutomationPage() {
         }
         if (action.action_type === "send_notification" && !title.trim()) {
             return "Notification actions need a title."
+        }
+        if (action.action_type === "send_notification" && Array.isArray(action.recipients) && action.recipients.length === 0) {
+            return "Select at least one recipient."
+        }
+        if (action.action_type === "assign_surrogate") {
+            if (!action.owner_type) return "Assign actions need an owner type."
+            if (!action.owner_id) return "Assign actions need a target owner."
+        }
+        if (action.action_type === "update_field") {
+            if (!action.field) return "Select a field to update."
+            if (action.value === undefined || action.value === null || action.value === "") {
+                return "Update actions need a value."
+            }
         }
         if (action.action_type === "add_note" && !content.trim()) {
             return "Note actions need content."
@@ -199,9 +522,35 @@ export default function AutomationPage() {
         return null
     }
 
+    const getTriggerConfigValidationError = (): string | null => {
+        if (triggerType === "status_changed") {
+            const toStage = triggerConfig.to_stage_id
+            if (!toStage || typeof toStage !== "string") return "Select a target stage."
+        }
+        if (triggerType === "scheduled") {
+            const cron = triggerConfig.cron
+            if (!cron || typeof cron !== "string") return "Cron schedule is required."
+        }
+        if (triggerType === "inactivity") {
+            const days = triggerConfig.days
+            if (!days || typeof days !== "number") return "Inactivity days are required."
+        }
+        if (triggerType === "task_due") {
+            const hours = triggerConfig.hours_before
+            if (!hours || typeof hours !== "number") return "Hours before due is required."
+        }
+        if (triggerType === "surrogate_updated") {
+            const fields = triggerConfig.fields
+            if (!Array.isArray(fields) || fields.length === 0) return "Select at least one field to watch."
+        }
+        return null
+    }
+
     const getWorkflowValidationError = (): string | null => {
         if (!workflowName.trim()) return "Workflow name is required."
         if (!triggerType) return "Trigger type is required."
+        const triggerError = getTriggerConfigValidationError()
+        if (triggerError) return triggerError
         return getActionsValidationError()
     }
 
@@ -209,6 +558,8 @@ export default function AutomationPage() {
         if (step === 1) {
             if (!workflowName.trim()) return "Workflow name is required."
             if (!triggerType) return "Trigger type is required."
+            const triggerError = getTriggerConfigValidationError()
+            if (triggerError) return triggerError
         }
         if (step === 3) {
             return getActionsValidationError()
@@ -291,16 +642,65 @@ export default function AutomationPage() {
         setWorkflowName(editingWorkflow.name)
         setWorkflowDescription(editingWorkflow.description || "")
         setTriggerType(editingWorkflow.trigger_type)
-        setTriggerConfig(editingWorkflow.trigger_config || {})
-        setConditions(editingWorkflow.conditions || [])
+        setTriggerConfig(
+            normalizeTriggerConfigForUi(
+                editingWorkflow.trigger_type,
+                editingWorkflow.trigger_config || {},
+                statusOptions,
+            )
+        )
+        setConditions(normalizeConditionsForUi(editingWorkflow.conditions || []))
         const logic =
             editingWorkflow.condition_logic === "AND" || editingWorkflow.condition_logic === "OR"
                 ? editingWorkflow.condition_logic
                 : "AND"
         setConditionLogic(logic)
-        setActions(editingWorkflow.actions || [])
+        setActions(normalizeActionsForUi(editingWorkflow.actions || []))
         setHydratedWorkflowId(editingWorkflowId)
-    }, [editingWorkflow, editingWorkflowId, hydratedWorkflowId, showCreateModal])
+    }, [editingWorkflow, editingWorkflowId, hydratedWorkflowId, showCreateModal, statusOptions])
+
+    useEffect(() => {
+        if (triggerType !== "status_changed" || statusOptions.length === 0) return
+        setTriggerConfig((prev) => normalizeTriggerConfigForUi(triggerType, prev, statusOptions))
+    }, [triggerType, statusOptions])
+
+    useEffect(() => {
+        if (!triggerType) return
+        setTriggerConfig((prev) => {
+            const next: JsonObject = { ...prev }
+            if (triggerType === "status_changed") {
+                if (typeof next.to_stage_id !== "string") next.to_stage_id = ""
+                if (typeof next.from_stage_id !== "string") delete next.from_stage_id
+            }
+            if (triggerType === "scheduled") {
+                if (typeof next.cron !== "string") next.cron = ""
+                if (typeof next.timezone !== "string") next.timezone = "America/Los_Angeles"
+            }
+            if (triggerType === "inactivity") {
+                if (typeof next.days === "string") {
+                    const parsed = Number(next.days)
+                    next.days = Number.isFinite(parsed) ? parsed : 7
+                } else if (typeof next.days !== "number") {
+                    next.days = 7
+                }
+            }
+            if (triggerType === "task_due") {
+                if (typeof next.hours_before === "string") {
+                    const parsed = Number(next.hours_before)
+                    next.hours_before = Number.isFinite(parsed) ? parsed : 24
+                } else if (typeof next.hours_before !== "number") {
+                    next.hours_before = 24
+                }
+            }
+            if (triggerType === "surrogate_updated") {
+                if (!Array.isArray(next.fields)) next.fields = []
+            }
+            if (triggerType === "surrogate_assigned") {
+                if (typeof next.to_user_id !== "string") delete next.to_user_id
+            }
+            return next
+        })
+    }, [triggerType])
 
     const handleNextStep = () => {
         const error = getStepValidationError(wizardStep)
@@ -320,11 +720,40 @@ export default function AutomationPage() {
         }
         setValidationError(null)
 
+        const buildTriggerConfig = (): JsonObject => {
+            const next: JsonObject = { ...triggerConfig }
+            if (triggerType === "status_changed") {
+                if (typeof next.to_stage_id !== "string" || !next.to_stage_id) delete next.to_stage_id
+                if (typeof next.from_stage_id !== "string" || !next.from_stage_id) delete next.from_stage_id
+                delete next.to_status
+                delete next.from_status
+            }
+            if (triggerType === "scheduled") {
+                if (typeof next.cron !== "string") next.cron = ""
+                if (typeof next.timezone !== "string") next.timezone = "America/Los_Angeles"
+            }
+            if (triggerType === "inactivity") {
+                const days = Number(next.days)
+                next.days = Number.isFinite(days) ? days : 7
+            }
+            if (triggerType === "task_due") {
+                const hours = Number(next.hours_before)
+                next.hours_before = Number.isFinite(hours) ? hours : 24
+            }
+            if (triggerType === "surrogate_updated") {
+                if (!Array.isArray(next.fields)) next.fields = []
+            }
+            if (triggerType === "surrogate_assigned") {
+                if (typeof next.to_user_id !== "string") delete next.to_user_id
+            }
+            return next
+        }
+
         const data: WorkflowCreate = {
             name: workflowName,
             trigger_type: triggerType,
-            trigger_config: triggerConfig,
-            conditions,
+            trigger_config: buildTriggerConfig(),
+            conditions: normalizeConditionsForSave(conditions),
             condition_logic: conditionLogic,
             actions,
             is_enabled: true,
@@ -351,7 +780,24 @@ export default function AutomationPage() {
     }
 
     const updateCondition = (index: number, updates: Partial<Condition>) => {
-        setConditions(conditions.map((c, i) => i === index ? { ...c, ...updates } : c))
+        setConditions(
+            conditions.map((condition, i) => {
+                if (i !== index) return condition
+                const next = { ...condition, ...updates }
+                if (updates.operator && LIST_OPERATORS.has(updates.operator)) {
+                    if (Array.isArray(next.value)) {
+                        next.value = next.value.join(", ")
+                    }
+                    if (typeof next.value !== "string") {
+                        next.value = ""
+                    }
+                }
+                if (updates.operator && VALUELESS_OPERATORS.has(updates.operator)) {
+                    next.value = ""
+                }
+                return next
+            })
+        )
     }
 
     const addAction = () => {
@@ -523,6 +969,7 @@ export default function AutomationPage() {
                                 return a.name.localeCompare(b.name)
                             }).map((workflow: WorkflowListItem) => {
                                 const IconComponent = triggerIcons[workflow.trigger_type] || WorkflowIcon
+                                const canEdit = workflow.can_edit !== false
                                 return (
                                     <Card key={workflow.id}>
                                         <CardContent className="flex items-center justify-between p-6">
@@ -552,7 +999,8 @@ export default function AutomationPage() {
                                                 <Switch
                                                     checked={workflow.is_enabled}
                                                     onCheckedChange={() => handleToggle(workflow.id)}
-                                                    disabled={toggleWorkflow.isPending}
+                                                    disabled={toggleWorkflow.isPending || !canEdit}
+                                                    aria-label={`Toggle workflow ${workflow.name}`}
                                                 />
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger>
@@ -562,7 +1010,9 @@ export default function AutomationPage() {
                                                         </span>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
-                                                        <DropdownMenuItem onClick={() => handleEdit(workflow.id)}>Edit</DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => handleEdit(workflow.id)} disabled={!canEdit}>
+                                                            Edit
+                                                        </DropdownMenuItem>
                                                         <DropdownMenuItem onClick={() => handleDuplicate(workflow.id)}>
                                                             Duplicate
                                                         </DropdownMenuItem>
@@ -574,6 +1024,7 @@ export default function AutomationPage() {
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem
                                                             className="text-destructive"
+                                                            disabled={!canEdit}
                                                             onClick={() => handleDelete(workflow.id)}
                                                         >
                                                             Delete
@@ -648,24 +1099,172 @@ export default function AutomationPage() {
                                     </Select>
                                 </div>
                                 {triggerType === "status_changed" && (
+                                    <div className="grid gap-4 md:grid-cols-2">
+                                        <div>
+                                            <Label>To Stage *</Label>
+                                            <Select
+                                                value={typeof triggerConfig.to_stage_id === "string" ? triggerConfig.to_stage_id : ""}
+                                                onValueChange={(v) => v && setTriggerConfig({ ...triggerConfig, to_stage_id: v })}
+                                            >
+                                                <SelectTrigger className="mt-1.5">
+                                                    <SelectValue placeholder="Select stage">
+                                                        {(value: string | null) => {
+                                                            if (!value) return "Select stage"
+                                                            const status = statusOptions.find((s) => s.id === value)
+                                                            return status?.label ?? value
+                                                        }}
+                                                    </SelectValue>
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {activeStatusOptions.map((s) => (
+                                                        <SelectItem key={s.id ?? s.value} value={s.id ?? s.value}>{s.label}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div>
+                                            <Label>From Stage (Optional)</Label>
+                                            <Select
+                                                value={typeof triggerConfig.from_stage_id === "string" ? triggerConfig.from_stage_id : ""}
+                                                onValueChange={(v) => setTriggerConfig({ ...triggerConfig, from_stage_id: v })}
+                                            >
+                                                <SelectTrigger className="mt-1.5">
+                                                    <SelectValue placeholder="Any stage">
+                                                        {(value: string | null) => {
+                                                            if (!value) return "Any stage"
+                                                            const status = statusOptions.find((s) => s.id === value)
+                                                            return status?.label ?? value
+                                                        }}
+                                                    </SelectValue>
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="">Any stage</SelectItem>
+                                                    {statusOptions.map((s) => (
+                                                        <SelectItem key={s.id ?? s.value} value={s.id ?? s.value}>{s.label}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
+                                )}
+                                {triggerType === "scheduled" && (
+                                    <div className="grid gap-4 md:grid-cols-2">
+                                        <div>
+                                            <Label>Cron Schedule *</Label>
+                                            <Input
+                                                placeholder="0 9 * * 1"
+                                                className="mt-1.5"
+                                                value={typeof triggerConfig.cron === "string" ? triggerConfig.cron : ""}
+                                                onChange={(e) => setTriggerConfig({ ...triggerConfig, cron: e.target.value })}
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label>Timezone</Label>
+                                            <Input
+                                                placeholder="America/Los_Angeles"
+                                                className="mt-1.5"
+                                                value={typeof triggerConfig.timezone === "string" ? triggerConfig.timezone : "America/Los_Angeles"}
+                                                onChange={(e) => setTriggerConfig({ ...triggerConfig, timezone: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                                {triggerType === "inactivity" && (
                                     <div>
-                                        <Label>To Status</Label>
+                                        <Label>Days Inactive *</Label>
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            max={90}
+                                            className="mt-1.5"
+                                            value={typeof triggerConfig.days === "number" ? triggerConfig.days : 7}
+                                            onChange={(e) => setTriggerConfig({ ...triggerConfig, days: Number(e.target.value) })}
+                                        />
+                                    </div>
+                                )}
+                                {triggerType === "task_due" && (
+                                    <div>
+                                        <Label>Hours Before Due *</Label>
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            max={168}
+                                            className="mt-1.5"
+                                            value={typeof triggerConfig.hours_before === "number" ? triggerConfig.hours_before : 24}
+                                            onChange={(e) => setTriggerConfig({ ...triggerConfig, hours_before: Number(e.target.value) })}
+                                        />
+                                    </div>
+                                )}
+                                {triggerType === "surrogate_updated" && (
+                                    <div className="space-y-3">
+                                        <Label>Fields to Watch *</Label>
+                                        <div className="flex items-center gap-3">
+                                            <Select
+                                                value=""
+                                                onValueChange={(value) => {
+                                                    if (!value || selectedTriggerFields.includes(value)) return
+                                                    setTriggerConfig({
+                                                        ...triggerConfig,
+                                                        fields: [...selectedTriggerFields, value],
+                                                    })
+                                                }}
+                                            >
+                                                <SelectTrigger className="flex-1">
+                                                    <SelectValue placeholder="Select field to add" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {availableConditionFields.map((field) => (
+                                                        <SelectItem key={field} value={field}>
+                                                            {conditionFieldLabels[field] || field}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        {selectedTriggerFields.length > 0 && (
+                                            <div className="flex flex-wrap gap-2">
+                                                {selectedTriggerFields.map((field) => (
+                                                    <Badge key={field} variant="secondary" className="gap-1">
+                                                        {conditionFieldLabels[field] || field}
+                                                        <button
+                                                            type="button"
+                                                            className="ml-1 text-xs"
+                                                            aria-label="Remove field"
+                                                            onClick={() =>
+                                                                setTriggerConfig({
+                                                                    ...triggerConfig,
+                                                                    fields: selectedTriggerFields.filter((f) => f !== field),
+                                                                })
+                                                            }
+                                                        >
+                                                            <XIcon className="size-3" />
+                                                        </button>
+                                                    </Badge>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                {triggerType === "surrogate_assigned" && (
+                                    <div>
+                                        <Label>Assigned To (Optional)</Label>
                                         <Select
-                                            value={typeof triggerConfig.to_status === "string" ? triggerConfig.to_status : ""}
-                                            onValueChange={(v) => v && setTriggerConfig({ ...triggerConfig, to_status: v })}
+                                            value={typeof triggerConfig.to_user_id === "string" ? triggerConfig.to_user_id : ""}
+                                            onValueChange={(value) => setTriggerConfig({ ...triggerConfig, to_user_id: value || undefined })}
                                         >
                                             <SelectTrigger className="mt-1.5">
-                                                <SelectValue placeholder="Select status">
+                                                <SelectValue placeholder="Any user">
                                                     {(value: string | null) => {
-                                                        if (!value) return "Select status"
-                                                        const status = statusOptions.find((s) => s.value === value)
-                                                        return status?.label ?? value
+                                                        if (!value) return "Any user"
+                                                        const user = userOptions.find((u) => u.id === value)
+                                                        return user?.display_name ?? value
                                                     }}
                                                 </SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {activeStatusOptions.map((s) => (
-                                                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                                                <SelectItem value="">Any user</SelectItem>
+                                                {userOptions.map((user) => (
+                                                    <SelectItem key={user.id} value={user.id}>{user.display_name}</SelectItem>
                                                 ))}
                                             </SelectContent>
                                         </Select>
@@ -714,7 +1313,7 @@ export default function AutomationPage() {
                                                                 </SelectValue>
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                                {options?.condition_fields.map((f) => (
+                                                                {availableConditionFields.map((f) => (
                                                                     <SelectItem key={f} value={f}>{conditionFieldLabels[f] || f}</SelectItem>
                                                                 ))}
                                                             </SelectContent>
@@ -727,24 +1326,30 @@ export default function AutomationPage() {
                                                                 <SelectValue placeholder="Operator">
                                                                     {(value: string | null) => {
                                                                         if (!value) return "Operator"
-                                                                        const operator = options?.condition_operators.find(o => o.value === value)
+                                                                        const operator = conditionOperators.find(o => o.value === value)
                                                                         return operator?.label ?? value
                                                                     }}
                                                                 </SelectValue>
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                                {options?.condition_operators.map((o) => (
+                                                                {conditionOperators.map((o) => (
                                                                     <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                                                                 ))}
                                                             </SelectContent>
                                                         </Select>
                                                         <Input
-                                                            placeholder="Value"
+                                                            placeholder={LIST_OPERATORS.has(condition.operator) ? "Comma-separated values" : "Value"}
                                                             className="flex-1"
                                                             value={typeof condition.value === "string" ? condition.value : ""}
+                                                            disabled={VALUELESS_OPERATORS.has(condition.operator)}
                                                             onChange={(e) => updateCondition(index, { value: e.target.value })}
                                                         />
-                                                        <Button size="icon" variant="ghost" onClick={() => removeCondition(index)}>
+                                                        <Button
+                                                            size="icon"
+                                                            variant="ghost"
+                                                            aria-label="Remove condition"
+                                                            onClick={() => removeCondition(index)}
+                                                        >
                                                             <XIcon className="size-4" />
                                                         </Button>
                                                     </div>
@@ -793,18 +1398,23 @@ export default function AutomationPage() {
                                                             <SelectValue placeholder="Action type">
                                                                 {(value: string | null) => {
                                                                     if (!value) return "Action type"
-                                                                    const actionType = options?.action_types.find(a => a.value === value)
+                                                                    const actionType = actionTypeOptions.find(a => a.value === value)
                                                                     return actionType?.label ?? value
                                                                 }}
                                                             </SelectValue>
                                                         </SelectTrigger>
                                                         <SelectContent>
-                                                            {options?.action_types.map((a) => (
+                                                            {filteredActionTypes.map((a) => (
                                                                 <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
                                                             ))}
                                                         </SelectContent>
                                                     </Select>
-                                                    <Button size="icon" variant="ghost" onClick={() => removeAction(index)}>
+                                                    <Button
+                                                        size="icon"
+                                                        variant="ghost"
+                                                        aria-label="Remove action"
+                                                        onClick={() => removeAction(index)}
+                                                    >
                                                         <XIcon className="size-4" />
                                                     </Button>
                                                 </div>
@@ -830,18 +1440,219 @@ export default function AutomationPage() {
                                                     </Select>
                                                 )}
                                                 {action.action_type === "create_task" && (
-                                                    <Input
-                                                        placeholder="Task title"
-                                                        value={typeof action.title === "string" ? action.title : ""}
-                                                        onChange={(e) => updateAction(index, { title: e.target.value })}
-                                                    />
+                                                    <div className="space-y-3">
+                                                        <Input
+                                                            placeholder="Task title"
+                                                            value={typeof action.title === "string" ? action.title : ""}
+                                                            onChange={(e) => updateAction(index, { title: e.target.value })}
+                                                        />
+                                                        <Textarea
+                                                            placeholder="Task description (optional)"
+                                                            value={typeof action.description === "string" ? action.description : ""}
+                                                            onChange={(e) => updateAction(index, { description: e.target.value })}
+                                                            rows={2}
+                                                        />
+                                                        <div className="grid gap-3 md:grid-cols-2">
+                                                            <Input
+                                                                type="number"
+                                                                min={0}
+                                                                max={365}
+                                                                placeholder="Due in days"
+                                                                value={typeof action.due_days === "number" ? action.due_days : 1}
+                                                                onChange={(e) =>
+                                                                    updateAction(index, { due_days: Number(e.target.value) })
+                                                                }
+                                                            />
+                                                            <Select
+                                                                value={typeof action.assignee === "string" ? action.assignee : "owner"}
+                                                                onValueChange={(v) => v && updateAction(index, { assignee: v })}
+                                                            >
+                                                                <SelectTrigger>
+                                                                    <SelectValue placeholder="Assignee" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    <SelectItem value="owner">Case Owner</SelectItem>
+                                                                    <SelectItem value="creator">Creator</SelectItem>
+                                                                    <SelectItem value="admin">Admin</SelectItem>
+                                                                    {userOptions.map((user) => (
+                                                                        <SelectItem key={user.id} value={user.id}>
+                                                                            {user.display_name}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                    </div>
                                                 )}
                                                 {action.action_type === "send_notification" && (
-                                                    <Input
-                                                        placeholder="Notification title"
-                                                        value={typeof action.title === "string" ? action.title : ""}
-                                                        onChange={(e) => updateAction(index, { title: e.target.value })}
-                                                    />
+                                                    <div className="space-y-3">
+                                                        <Input
+                                                            placeholder="Notification title"
+                                                            value={typeof action.title === "string" ? action.title : ""}
+                                                            onChange={(e) => updateAction(index, { title: e.target.value })}
+                                                        />
+                                                        <Textarea
+                                                            placeholder="Notification body (optional)"
+                                                            value={typeof action.body === "string" ? action.body : ""}
+                                                            onChange={(e) => updateAction(index, { body: e.target.value })}
+                                                            rows={2}
+                                                        />
+                                                        <Select
+                                                            value={
+                                                                Array.isArray(action.recipients)
+                                                                    ? action.recipients[0] ?? "owner"
+                                                                    : typeof action.recipients === "string"
+                                                                        ? action.recipients
+                                                                        : "owner"
+                                                            }
+                                                            onValueChange={(value) => {
+                                                                if (!value) return
+                                                                if (value === "owner" || value === "creator" || value === "all_admins") {
+                                                                    updateAction(index, { recipients: value })
+                                                                    return
+                                                                }
+                                                                updateAction(index, { recipients: [value] })
+                                                            }}
+                                                        >
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Recipients" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="owner">Owner</SelectItem>
+                                                                <SelectItem value="creator">Creator</SelectItem>
+                                                                <SelectItem value="all_admins">All Admins</SelectItem>
+                                                                {userOptions.map((user) => (
+                                                                    <SelectItem key={user.id} value={user.id}>
+                                                                        {user.display_name}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                )}
+                                                {action.action_type === "assign_surrogate" && (
+                                                    <div className="space-y-3">
+                                                        <Select
+                                                            value={typeof action.owner_type === "string" ? action.owner_type : "user"}
+                                                            onValueChange={(value) =>
+                                                                updateAction(index, { owner_type: value, owner_id: "" })
+                                                            }
+                                                        >
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Owner type" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="user">User</SelectItem>
+                                                                <SelectItem value="queue">Queue</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <Select
+                                                            value={typeof action.owner_id === "string" ? action.owner_id : ""}
+                                                            onValueChange={(value) => value && updateAction(index, { owner_id: value })}
+                                                        >
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Select owner" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {(action.owner_type === "queue" ? queueOptions : userOptions).map(
+                                                                    (owner) => (
+                                                                        <SelectItem key={owner.id} value={owner.id}>
+                                                                            {"name" in owner ? owner.name : owner.display_name}
+                                                                        </SelectItem>
+                                                                    )
+                                                                )}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                )}
+                                                {action.action_type === "update_field" && (
+                                                    <div className="space-y-3">
+                                                        <Select
+                                                            value={typeof action.field === "string" ? action.field : ""}
+                                                            onValueChange={(value) => value && updateAction(index, { field: value, value: "" })}
+                                                        >
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Select field" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {updateFields.map((field) => (
+                                                                    <SelectItem key={field} value={field}>
+                                                                        {conditionFieldLabels[field] || field}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        {action.field === "stage_id" ? (
+                                                            <Select
+                                                                value={typeof action.value === "string" ? action.value : ""}
+                                                                onValueChange={(value) => value && updateAction(index, { value })}
+                                                            >
+                                                                <SelectTrigger>
+                                                                    <SelectValue placeholder="Select stage" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {statusOptions.map((stage) => (
+                                                                        <SelectItem key={stage.id ?? stage.value} value={stage.id ?? stage.value}>
+                                                                            {stage.label}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        ) : action.field === "is_priority" ? (
+                                                            <Select
+                                                                value={typeof action.value === "boolean" ? String(action.value) : ""}
+                                                                onValueChange={(value) => updateAction(index, { value: value === "true" })}
+                                                            >
+                                                                <SelectTrigger>
+                                                                    <SelectValue placeholder="Select priority" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    <SelectItem value="true">Priority</SelectItem>
+                                                                    <SelectItem value="false">Normal</SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                        ) : action.field === "owner_type" ? (
+                                                            <Select
+                                                                value={typeof action.value === "string" ? action.value : ""}
+                                                                onValueChange={(value) => value && updateAction(index, { value })}
+                                                            >
+                                                                <SelectTrigger>
+                                                                    <SelectValue placeholder="Select owner type" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    <SelectItem value="user">User</SelectItem>
+                                                                    <SelectItem value="queue">Queue</SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                        ) : action.field === "owner_id" ? (
+                                                            <Select
+                                                                value={typeof action.value === "string" ? action.value : ""}
+                                                                onValueChange={(value) => value && updateAction(index, { value })}
+                                                            >
+                                                                <SelectTrigger>
+                                                                    <SelectValue placeholder="Select owner" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {userOptions.map((user) => (
+                                                                        <SelectItem key={user.id} value={user.id}>
+                                                                            {user.display_name}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                    {queueOptions.map((queue) => (
+                                                                        <SelectItem key={queue.id} value={queue.id}>
+                                                                            {queue.name}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        ) : (
+                                                            <Input
+                                                                placeholder="Value"
+                                                                value={typeof action.value === "string" ? action.value : ""}
+                                                                onChange={(e) => updateAction(index, { value: e.target.value })}
+                                                            />
+                                                        )}
+                                                    </div>
                                                 )}
                                                 {action.action_type === "add_note" && (
                                                     <Textarea

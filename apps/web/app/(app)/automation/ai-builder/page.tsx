@@ -41,7 +41,7 @@ const ACTION_LABELS: Record<string, string> = {
     send_email: "Send Email",
     create_task: "Create Task",
     assign_surrogate: "Assign Surrogate",
-    update_status: "Update Stage",
+    update_field: "Update Field",
     add_note: "Add Note",
     send_notification: "Send Notification",
 }

@@ -602,6 +602,32 @@ def get_workflow_options(db: Session, org_id: UUID) -> WorkflowOptions:
         },
     ]
 
+    trigger_entity_types = {
+        "surrogate_created": "surrogate",
+        "status_changed": "surrogate",
+        "surrogate_assigned": "surrogate",
+        "surrogate_updated": "surrogate",
+        "task_due": "task",
+        "task_overdue": "task",
+        "scheduled": "surrogate",
+        "inactivity": "surrogate",
+        "match_proposed": "match",
+        "match_accepted": "match",
+        "match_rejected": "match",
+        "appointment_scheduled": "appointment",
+        "appointment_completed": "appointment",
+        "note_added": "note",
+        "document_uploaded": "document",
+    }
+
+    action_values = [action["value"] for action in action_types]
+    action_types_by_trigger: dict[str, list[str]] = {}
+    for trigger, entity_type in trigger_entity_types.items():
+        if entity_type in ("surrogate", "task"):
+            action_types_by_trigger[trigger] = action_values
+        else:
+            action_types_by_trigger[trigger] = ["send_notification"]
+
     # Condition operators
     condition_operators = [
         {"value": "equals", "label": "Equals"},
@@ -660,6 +686,8 @@ def get_workflow_options(db: Session, org_id: UUID) -> WorkflowOptions:
     return WorkflowOptions(
         trigger_types=trigger_types,
         action_types=action_types,
+        action_types_by_trigger=action_types_by_trigger,
+        trigger_entity_types=trigger_entity_types,
         condition_operators=condition_operators,
         condition_fields=list(ALLOWED_CONDITION_FIELDS),
         update_fields=list(ALLOWED_UPDATE_FIELDS),
@@ -980,6 +1008,16 @@ def _validate_trigger_config(trigger_type: WorkflowTriggerType, config: dict) ->
 def _validate_action_config(db: Session, org_id: UUID, action: dict) -> None:
     """Validate action config and referenced entities exist in org."""
     action_type = action.get("action_type")
+
+    if action_type == "update_status":
+        stage_id = action.get("stage_id")
+        if not stage_id:
+            raise ValueError("update_status requires stage_id")
+        action["action_type"] = "update_field"
+        action["field"] = "stage_id"
+        action["value"] = stage_id
+        action.pop("stage_id", None)
+        action_type = action.get("action_type")
 
     if action_type == "send_email":
         config = SendEmailActionConfig.model_validate(action)
