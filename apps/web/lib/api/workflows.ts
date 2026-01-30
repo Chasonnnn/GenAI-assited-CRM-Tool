@@ -130,6 +130,7 @@ export interface WorkflowOptions {
 
 export interface WorkflowTestRequest {
     entity_id: string
+    entity_type?: string
 }
 
 export interface WorkflowTestResponse {
@@ -195,8 +196,15 @@ export async function duplicateWorkflow(id: string): Promise<Workflow> {
     return api.post<Workflow>(`/workflows/${id}/duplicate`)
 }
 
-export async function testWorkflow(id: string, entityId: string): Promise<WorkflowTestResponse> {
-    return api.post<WorkflowTestResponse>(`/workflows/${id}/test`, { entity_id: entityId })
+export async function testWorkflow(
+    id: string,
+    entityId: string,
+    entityType?: string
+): Promise<WorkflowTestResponse> {
+    return api.post<WorkflowTestResponse>(`/workflows/${id}/test`, {
+        entity_id: entityId,
+        ...(entityType ? { entity_type: entityType } : {}),
+    })
 }
 
 export async function getWorkflowStats(): Promise<WorkflowStats> {

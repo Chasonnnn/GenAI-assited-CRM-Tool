@@ -162,8 +162,15 @@ export function useDuplicateWorkflow() {
 
 export function useTestWorkflow() {
     return useMutation({
-        mutationFn: ({ id, entityId }: { id: string; entityId: string }) =>
-            testWorkflow(id, entityId),
+        mutationFn: ({
+            id,
+            entityId,
+            entityType,
+        }: {
+            id: string
+            entityId: string
+            entityType?: string
+        }) => testWorkflow(id, entityId, entityType),
     })
 }
 

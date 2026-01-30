@@ -236,6 +236,15 @@ class TestWorkflowValidation:
         db.add(template)
         db.flush()
 
+        workflow = GeneratedWorkflow(
+            name="Valid Template",
+            trigger_type="surrogate_created",
+            actions=[{"action_type": "send_email", "template_id": str(template.id)}],
+        )
+        result = validate_workflow(db, test_org.id, workflow)
+        assert result.valid
+        assert not any("Template ID does not exist" in e for e in result.errors)
+
     def test_validate_update_status_action_normalizes(self, db, test_org, default_stage):
         """update_status should normalize to update_field stage_id."""
         workflow = GeneratedWorkflow(
@@ -247,14 +256,6 @@ class TestWorkflowValidation:
         assert result.valid
         assert workflow.actions[0]["action_type"] == "update_field"
         assert workflow.actions[0]["field"] == "stage_id"
-
-        workflow = GeneratedWorkflow(
-            name="Valid Template",
-            trigger_type="surrogate_created",
-            actions=[{"action_type": "send_email", "template_id": str(template.id)}],
-        )
-        result = validate_workflow(db, test_org.id, workflow)
-        assert not any("Template ID does not exist" in e for e in result.errors)
 
 
 # =============================================================================

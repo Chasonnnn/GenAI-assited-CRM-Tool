@@ -41,6 +41,30 @@ from app.services.workflow_email_provider import validate_email_provider
 
 
 # =============================================================================
+# Constants
+# =============================================================================
+
+
+TRIGGER_ENTITY_TYPES = {
+    "surrogate_created": "surrogate",
+    "status_changed": "surrogate",
+    "surrogate_assigned": "surrogate",
+    "surrogate_updated": "surrogate",
+    "task_due": "task",
+    "task_overdue": "task",
+    "scheduled": "surrogate",
+    "inactivity": "surrogate",
+    "match_proposed": "match",
+    "match_accepted": "match",
+    "match_rejected": "match",
+    "appointment_scheduled": "appointment",
+    "appointment_completed": "appointment",
+    "note_added": "note",
+    "document_uploaded": "document",
+}
+
+
+# =============================================================================
 # CRUD Operations
 # =============================================================================
 
@@ -602,27 +626,9 @@ def get_workflow_options(db: Session, org_id: UUID) -> WorkflowOptions:
         },
     ]
 
-    trigger_entity_types = {
-        "surrogate_created": "surrogate",
-        "status_changed": "surrogate",
-        "surrogate_assigned": "surrogate",
-        "surrogate_updated": "surrogate",
-        "task_due": "task",
-        "task_overdue": "task",
-        "scheduled": "surrogate",
-        "inactivity": "surrogate",
-        "match_proposed": "match",
-        "match_accepted": "match",
-        "match_rejected": "match",
-        "appointment_scheduled": "appointment",
-        "appointment_completed": "appointment",
-        "note_added": "note",
-        "document_uploaded": "document",
-    }
-
     action_values = [action["value"] for action in action_types]
     action_types_by_trigger: dict[str, list[str]] = {}
-    for trigger, entity_type in trigger_entity_types.items():
+    for trigger, entity_type in TRIGGER_ENTITY_TYPES.items():
         if entity_type in ("surrogate", "task"):
             action_types_by_trigger[trigger] = action_values
         else:
@@ -687,7 +693,7 @@ def get_workflow_options(db: Session, org_id: UUID) -> WorkflowOptions:
         trigger_types=trigger_types,
         action_types=action_types,
         action_types_by_trigger=action_types_by_trigger,
-        trigger_entity_types=trigger_entity_types,
+        trigger_entity_types=TRIGGER_ENTITY_TYPES,
         condition_operators=condition_operators,
         condition_fields=list(ALLOWED_CONDITION_FIELDS),
         update_fields=list(ALLOWED_UPDATE_FIELDS),

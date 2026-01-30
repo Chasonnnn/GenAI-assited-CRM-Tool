@@ -311,10 +311,45 @@ def test_workflow(
     if not workflow_access.can_view(db, session, workflow):
         raise HTTPException(status_code=403, detail="Cannot view this workflow")
 
-    # Get entity
-    entity = surrogate_service.get_surrogate(db, session.org_id, request.entity_id)
+    expected_entity_type = workflow_service.TRIGGER_ENTITY_TYPES.get(
+        workflow.trigger_type, "surrogate"
+    )
+    entity_type = request.entity_type or expected_entity_type
+    if entity_type != expected_entity_type:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Entity type must be '{expected_entity_type}' for trigger '{workflow.trigger_type}'",
+        )
+
+    # Get entity scoped to org
+    if entity_type == "surrogate":
+        entity = surrogate_service.get_surrogate(db, session.org_id, request.entity_id)
+    else:
+        from app.db.models import Task, Match, Appointment, EntityNote, Attachment
+
+        model = None
+        if entity_type == "task":
+            model = Task
+        elif entity_type == "match":
+            model = Match
+        elif entity_type == "appointment":
+            model = Appointment
+        elif entity_type == "note":
+            model = EntityNote
+        elif entity_type == "document":
+            model = Attachment
+
+        if model is None:
+            raise HTTPException(status_code=422, detail="Unsupported entity type for test")
+
+        entity = (
+            db.query(model)
+            .filter(model.id == request.entity_id, model.organization_id == session.org_id)
+            .first()
+        )
+
     if not entity:
-        raise HTTPException(status_code=404, detail="Surrogate not found")
+        raise HTTPException(status_code=404, detail=f"{entity_type.capitalize()} not found")
 
     # Evaluate conditions
     conditions_evaluated = []

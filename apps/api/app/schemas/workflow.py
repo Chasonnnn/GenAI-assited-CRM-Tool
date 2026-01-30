@@ -424,6 +424,7 @@ class WorkflowTestRequest(BaseModel):
     """Request to test a workflow (dry run)."""
 
     entity_id: UUID
+    entity_type: str | None = None
 
 
 class WorkflowTestResponse(BaseModel):
