@@ -54,9 +54,9 @@ def get_surrogate_stats(
         this_week=stats["this_week"],
         last_week=stats["last_week"],
         week_change_pct=stats["week_change_pct"],
-        this_month=stats["this_month"],
-        last_month=stats["last_month"],
-        month_change_pct=stats["month_change_pct"],
+        new_leads_24h=stats["new_leads_24h"],
+        new_leads_prev_24h=stats["new_leads_prev_24h"],
+        new_leads_change_pct=stats["new_leads_change_pct"],
         pending_tasks=stats["pending_tasks"],
     )
 

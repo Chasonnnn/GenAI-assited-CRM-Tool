@@ -170,7 +170,7 @@ def get_upcoming(
 def get_attention(
     request: Request,
     days_unreached: int = Query(
-        7, ge=1, le=30, description="Days without contact for unreached leads"
+        7, ge=1, le=30, description="Days without contact or updates for unreached leads"
     ),
     days_stuck: int = Query(14, ge=1, le=60, description="Days in same stage for stuck surrogates"),
     pipeline_id: UUID | None = Query(None, description="Filter by pipeline UUID"),
@@ -183,7 +183,7 @@ def get_attention(
     Get items needing attention for dashboard KPI.
 
     Returns:
-    - unreached_leads: Surrogates in early intake stages with no contact in X days
+    - unreached_leads: Surrogates in early intake stages with no contact or updates in X days
     - overdue_tasks: User's tasks past due date
     - stuck_surrogates: Surrogates that haven't moved stages in X days
     - total_count: Sum of all attention items

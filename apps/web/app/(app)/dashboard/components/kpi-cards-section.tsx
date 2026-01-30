@@ -105,15 +105,15 @@ export function KPICardsSection({
             <KPICard
                 title="New Leads"
                 icon={<UserPlusIcon className="size-3.5" />}
-                value={stats?.this_month || 0}
-                subtitle="This month"
+                value={stats?.new_leads_24h || 0}
+                subtitle="Last 24h"
                 change={
-                    stats?.month_change_pct !== null && stats?.month_change_pct !== undefined
+                    stats?.new_leads_change_pct !== null && stats?.new_leads_change_pct !== undefined
                         ? {
-                            currentValue: stats.this_month,
-                            previousValue: stats.last_month,
-                            percentChange: stats.month_change_pct,
-                            period: "last month",
+                            currentValue: stats.new_leads_24h,
+                            previousValue: stats.new_leads_prev_24h,
+                            percentChange: stats.new_leads_change_pct,
+                            period: "last 24h",
                         }
                         : undefined
                 }

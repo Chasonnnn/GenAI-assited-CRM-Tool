@@ -35,9 +35,9 @@ export interface SurrogateStats {
     this_week: number;
     last_week: number;
     week_change_pct: number | null;
-    this_month: number;
-    last_month: number;
-    month_change_pct: number | null;
+    new_leads_24h: number;
+    new_leads_prev_24h: number;
+    new_leads_change_pct: number | null;
     pending_tasks: number;
 }
 

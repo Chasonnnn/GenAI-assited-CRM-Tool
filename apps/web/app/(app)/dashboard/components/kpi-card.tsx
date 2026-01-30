@@ -43,16 +43,12 @@ interface KPICardProps {
 // Helpers
 // =============================================================================
 
-function formatChange(change: ChangeIndicator): { text: string; color: string; icon: React.ReactNode } {
+function formatChange(change: ChangeIndicator): { text: string; color: string; icon: React.ReactNode } | null {
     const { currentValue, previousValue, percentChange, period } = change
 
     // Handle no prior data
     if (previousValue === 0) {
-        return {
-            text: "— (no prior data)",
-            color: "text-muted-foreground",
-            icon: null,
-        }
+        return null
     }
 
     if (currentValue === previousValue) {

@@ -229,7 +229,7 @@ def get_attention_items(
 
     # -------------------------------------------------------------------------
     # 1. Unreached Leads
-    # Surrogates in early intake stages (order <= 2) with no contact in X days
+    # Surrogates in early intake stages (order <= 2) with no contact or updates in X days
     # -------------------------------------------------------------------------
     unreached_cutoff = now - timedelta(days=days_unreached)
 
@@ -241,6 +241,8 @@ def get_attention_items(
             Surrogate.is_archived.is_(False),
             PipelineStage.stage_type == "intake",
             PipelineStage.order <= 2,  # Only first 2 intake stages
+            Surrogate.created_at < unreached_cutoff,
+            Surrogate.updated_at < unreached_cutoff,
             or_(
                 Surrogate.last_contacted_at.is_(None),
                 Surrogate.last_contacted_at < unreached_cutoff,
@@ -281,6 +283,8 @@ def get_attention_items(
             Surrogate.is_archived.is_(False),
             PipelineStage.stage_type == "intake",
             PipelineStage.order <= 2,
+            Surrogate.created_at < unreached_cutoff,
+            Surrogate.updated_at < unreached_cutoff,
             or_(
                 Surrogate.last_contacted_at.is_(None),
                 Surrogate.last_contacted_at < unreached_cutoff,

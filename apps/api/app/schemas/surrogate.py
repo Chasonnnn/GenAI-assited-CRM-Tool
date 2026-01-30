@@ -540,9 +540,9 @@ class SurrogateStats(BaseModel):
     this_week: int
     last_week: int = 0
     week_change_pct: float | None = None
-    this_month: int
-    last_month: int = 0
-    month_change_pct: float | None = None
+    new_leads_24h: int
+    new_leads_prev_24h: int = 0
+    new_leads_change_pct: float | None = None
     pending_tasks: int = 0
 
 

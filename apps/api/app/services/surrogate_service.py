@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import (
+    ContactStatus,
     SurrogateActivityType,
     SurrogateSource,
     OwnerType,
@@ -1102,16 +1103,16 @@ def get_surrogate_stats(
     Get aggregated surrogatestatistics for dashboard.
 
     Returns:
-        dict with total, by_status, this_week, this_month,
-        last_week, last_month, and percentage changes
+        dict with total, by_status, this_week, new_leads_24h,
+        last_week, new_leads_prev_24h, and percentage changes
     """
     from datetime import timedelta
 
     now = datetime.now(timezone.utc)
     week_ago = now - timedelta(days=7)
     two_weeks_ago = now - timedelta(days=14)
-    month_ago = now - timedelta(days=30)
-    two_months_ago = now - timedelta(days=60)
+    last_24h = now - timedelta(hours=24)
+    prev_24h = now - timedelta(hours=48)
 
     from app.db.models import Task, PipelineStage
     from app.db.enums import TaskType
@@ -1158,10 +1159,15 @@ def get_surrogate_stats(
         Surrogate.created_at >= two_weeks_ago, Surrogate.created_at < week_ago
     ).count()
 
-    # This month vs last month
-    this_month = base.filter(Surrogate.created_at >= month_ago).count()
-    last_month = base.filter(
-        Surrogate.created_at >= two_months_ago, Surrogate.created_at < month_ago
+    # New leads (unreached) in last 24h vs previous 24h
+    new_leads_24h = base.filter(
+        Surrogate.contact_status == ContactStatus.UNREACHED.value,
+        Surrogate.created_at >= last_24h,
+    ).count()
+    new_leads_prev_24h = base.filter(
+        Surrogate.contact_status == ContactStatus.UNREACHED.value,
+        Surrogate.created_at >= prev_24h,
+        Surrogate.created_at < last_24h,
     ).count()
 
     # Calculate percentage changes (handle division by zero)
@@ -1171,7 +1177,7 @@ def get_surrogate_stats(
         return round(((current - previous) / previous) * 100, 1)
 
     week_change_pct = calc_change_pct(this_week, last_week)
-    month_change_pct = calc_change_pct(this_month, last_month)
+    new_leads_change_pct = calc_change_pct(new_leads_24h, new_leads_prev_24h)
 
     # Pending tasks count (for dashboard)
     task_query = db.query(func.count(Task.id)).filter(
@@ -1202,9 +1208,9 @@ def get_surrogate_stats(
         "this_week": this_week,
         "last_week": last_week,
         "week_change_pct": week_change_pct,
-        "this_month": this_month,
-        "last_month": last_month,
-        "month_change_pct": month_change_pct,
+        "new_leads_24h": new_leads_24h,
+        "new_leads_prev_24h": new_leads_prev_24h,
+        "new_leads_change_pct": new_leads_change_pct,
         "pending_tasks": pending_tasks,
     }
 
