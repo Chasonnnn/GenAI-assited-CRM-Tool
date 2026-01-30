@@ -21,6 +21,9 @@ class AppointmentTypeCreate(BaseModel):
     buffer_before_minutes: int = Field(0, ge=0, le=60)
     buffer_after_minutes: int = Field(5, ge=0, le=60)
     meeting_mode: Literal["zoom", "google_meet", "phone", "in_person"] = "zoom"
+    meeting_location: str | None = Field(None, max_length=500)
+    dial_in_number: str | None = Field(None, max_length=100)
+    auto_approve: bool = False
     reminder_hours_before: int = Field(24, ge=0, le=168)
 
 
@@ -33,6 +36,9 @@ class AppointmentTypeUpdate(BaseModel):
     buffer_before_minutes: int | None = Field(None, ge=0, le=60)
     buffer_after_minutes: int | None = Field(None, ge=0, le=60)
     meeting_mode: Literal["zoom", "google_meet", "phone", "in_person"] | None = None
+    meeting_location: str | None = Field(None, max_length=500)
+    dial_in_number: str | None = Field(None, max_length=100)
+    auto_approve: bool | None = None
     reminder_hours_before: int | None = Field(None, ge=0, le=168)
     is_active: bool | None = None
 
@@ -49,6 +55,9 @@ class AppointmentTypeRead(BaseModel):
     buffer_before_minutes: int
     buffer_after_minutes: int
     meeting_mode: str
+    meeting_location: str | None
+    dial_in_number: str | None
+    auto_approve: bool
     reminder_hours_before: int
     is_active: bool
     created_at: datetime
@@ -175,6 +184,8 @@ class AppointmentRead(BaseModel):
     scheduled_end: datetime
     duration_minutes: int
     meeting_mode: str
+    meeting_location: str | None = None
+    dial_in_number: str | None = None
     status: str
     pending_expires_at: datetime | None
     approved_at: datetime | None
@@ -210,6 +221,8 @@ class AppointmentListItem(BaseModel):
     scheduled_end: datetime
     duration_minutes: int
     meeting_mode: str
+    meeting_location: str | None = None
+    dial_in_number: str | None = None
     status: str
     zoom_join_url: str | None = None
     google_meet_url: str | None = None

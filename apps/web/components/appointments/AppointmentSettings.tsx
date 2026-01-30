@@ -435,6 +435,9 @@ function AppointmentTypesCard() {
         duration_minutes: 30,
         buffer_after_minutes: 5,
         meeting_mode: "zoom" as "zoom" | "google_meet" | "phone" | "in_person",
+        meeting_location: "",
+        dial_in_number: "",
+        auto_approve: false,
         reminder_hours_before: 24,
     })
 
@@ -446,6 +449,9 @@ function AppointmentTypesCard() {
             duration_minutes: 30,
             buffer_after_minutes: 5,
             meeting_mode: "zoom",
+            meeting_location: "",
+            dial_in_number: "",
+            auto_approve: false,
             reminder_hours_before: 24,
         })
         setDialogOpen(true)
@@ -459,6 +465,9 @@ function AppointmentTypesCard() {
             duration_minutes: type.duration_minutes,
             buffer_after_minutes: type.buffer_after_minutes,
             meeting_mode: type.meeting_mode,
+            meeting_location: type.meeting_location || "",
+            dial_in_number: type.dial_in_number || "",
+            auto_approve: type.auto_approve ?? false,
             reminder_hours_before: type.reminder_hours_before,
         })
         setDialogOpen(true)
@@ -474,13 +483,27 @@ function AppointmentTypesCard() {
             toast.error("Appointment type name is required")
             return
         }
+        if (formData.meeting_mode === "in_person" && !formData.meeting_location.trim()) {
+            toast.error("Location is required for in-person appointments")
+            return
+        }
+        if (formData.meeting_mode === "phone" && !formData.dial_in_number.trim()) {
+            toast.error("Dial-in number is required for phone appointments")
+            return
+        }
+
+        const payload = {
+            ...formData,
+            meeting_location: formData.meeting_location.trim() || null,
+            dial_in_number: formData.dial_in_number.trim() || null,
+        }
 
         try {
             if (editingType) {
-                await updateMutation.mutateAsync({ typeId: editingType.id, data: formData })
+                await updateMutation.mutateAsync({ typeId: editingType.id, data: payload })
                 toast.success("Appointment type updated")
             } else {
-                await createMutation.mutateAsync(formData)
+                await createMutation.mutateAsync(payload)
                 toast.success("Appointment type created")
             }
             setDialogOpen(false)
@@ -643,6 +666,40 @@ function AppointmentTypesCard() {
                                     </SelectContent>
                                 </Select>
                             </div>
+                            {formData.meeting_mode === "in_person" && (
+                                <div className="space-y-2">
+                                    <Label>Location</Label>
+                                    <Input
+                                        value={formData.meeting_location}
+                                        onChange={(e) => setFormData({ ...formData, meeting_location: e.target.value })}
+                                        placeholder="e.g., 123 Main St, Suite 4B"
+                                    />
+                                </div>
+                            )}
+                            {formData.meeting_mode === "phone" && (
+                                <div className="space-y-2">
+                                    <Label>Dial-in Number</Label>
+                                    <Input
+                                        value={formData.dial_in_number}
+                                        onChange={(e) => setFormData({ ...formData, dial_in_number: e.target.value })}
+                                        placeholder="e.g., +1 (555) 123-4567"
+                                    />
+                                </div>
+                            )}
+                            <div className="flex items-start gap-3 rounded-lg border border-border p-3">
+                                <Switch
+                                    checked={formData.auto_approve}
+                                    onCheckedChange={(checked) =>
+                                        setFormData({ ...formData, auto_approve: checked })
+                                    }
+                                />
+                                <div>
+                                    <Label className="text-sm">Auto-approve bookings</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Clients will be instantly confirmed without manual approval.
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                         <div className="flex justify-end gap-2">
                             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
@@ -685,12 +742,25 @@ function AppointmentTypesCard() {
                                                 {type.duration_minutes} min
                                                 {type.description && ` • ${type.description}`}
                                             </p>
+                                            {type.meeting_mode === "in_person" && type.meeting_location && (
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                    Location: {type.meeting_location}
+                                                </p>
+                                            )}
+                                            {type.meeting_mode === "phone" && type.dial_in_number && (
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                    Dial-in: {type.dial_in_number}
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <Badge variant={type.is_active ? "default" : "secondary"}>
                                             {type.is_active ? "Active" : "Inactive"}
                                         </Badge>
+                                        {type.auto_approve && (
+                                            <Badge variant="outline">Auto-approve</Badge>
+                                        )}
                                         <Button variant="ghost" size="sm" onClick={() => openEdit(type)}>
                                             Edit
                                         </Button>

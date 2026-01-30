@@ -53,6 +53,9 @@ export interface AppointmentType {
     buffer_before_minutes: number;
     buffer_after_minutes: number;
     meeting_mode: MeetingMode;
+    meeting_location: string | null;
+    dial_in_number: string | null;
+    auto_approve: boolean;
     reminder_hours_before: number;
     is_active: boolean;
     created_at: string;
@@ -66,6 +69,9 @@ export interface AppointmentTypeCreate {
     buffer_before_minutes?: number;
     buffer_after_minutes?: number;
     meeting_mode?: MeetingMode;
+    meeting_location?: string | null;
+    dial_in_number?: string | null;
+    auto_approve?: boolean;
     reminder_hours_before?: number;
 }
 
@@ -125,6 +131,8 @@ export interface Appointment {
     scheduled_end: string;
     duration_minutes: number;
     meeting_mode: string;
+    meeting_location: string | null;
+    dial_in_number: string | null;
     status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show' | 'expired';
     pending_expires_at: string | null;
     approved_at: string | null;
@@ -158,6 +166,8 @@ export interface AppointmentListItem {
     scheduled_end: string;
     duration_minutes: number;
     meeting_mode: string;
+    meeting_location: string | null;
+    dial_in_number: string | null;
     status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show' | 'expired';
     zoom_join_url: string | null;
     google_meet_url: string | null;
@@ -220,6 +230,8 @@ export interface PublicAppointmentView {
     scheduled_end: string;
     duration_minutes: number;
     meeting_mode: string;
+    meeting_location: string | null;
+    dial_in_number: string | null;
     status: string;
     client_timezone: string;
     zoom_join_url: string | null;

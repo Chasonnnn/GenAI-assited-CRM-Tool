@@ -304,6 +304,18 @@ function AppointmentDetailDialog({
                             </a>
                         )}
                     </div>
+                    {appointment.meeting_location && (
+                        <div className="flex items-center gap-3">
+                            <MapPinIcon className="size-5 text-muted-foreground" />
+                            <p className="font-medium">{appointment.meeting_location}</p>
+                        </div>
+                    )}
+                    {appointment.dial_in_number && (
+                        <div className="flex items-center gap-3">
+                            <PhoneIcon className="size-5 text-muted-foreground" />
+                            <p className="font-medium">{appointment.dial_in_number}</p>
+                        </div>
+                    )}
 
                     {/* Client Info */}
                     <div className="border-t border-border pt-4">

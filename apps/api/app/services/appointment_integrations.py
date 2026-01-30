@@ -63,6 +63,7 @@ def sync_to_google_calendar(
             description += f"\nPhone: {appointment.client_phone}"
         if appointment.client_notes:
             description += f"\n\nNotes: {appointment.client_notes}"
+        location = appointment.meeting_location or appointment.dial_in_number
 
         event = _run_async(
             calendar_service.create_appointment_event(
@@ -73,6 +74,7 @@ def sync_to_google_calendar(
                 end_time=appointment.scheduled_end,
                 client_email=appointment.client_email,
                 description=description,
+                location=location,
                 timezone_name=client_tz,
             )
         )

@@ -124,19 +124,29 @@ class TestAvailabilitySlots:
     def test_get_available_slots_empty_rules(
         self, db, test_org, test_user, appointment_type, booking_link
     ):
-        """No availability rules should return empty slots."""
-        from app.services.appointment_service import get_available_slots, SlotQuery
+        """Default availability should be created when no rules exist."""
+        from app.services.appointment_service import (
+            get_available_slots,
+            get_availability_rules,
+            SlotQuery,
+        )
 
+        target_date = _next_weekday(0)
         query = SlotQuery(
             user_id=test_user.id,
             org_id=test_org.id,
             appointment_type_id=appointment_type.id,
-            date_start=datetime.now(timezone.utc).date(),
-            date_end=datetime.now(timezone.utc).date(),
+            date_start=target_date,
+            date_end=target_date,
             client_timezone="America/New_York",
         )
         slots = get_available_slots(db, query)
-        assert slots == []
+        rules = get_availability_rules(db, test_user.id, test_org.id)
+
+        assert len(rules) == 5
+        assert all(rule.start_time == time(9, 0) for rule in rules)
+        assert all(rule.end_time == time(17, 0) for rule in rules)
+        assert slots
 
     def test_get_available_slots_with_rules(
         self,
@@ -169,6 +179,58 @@ class TestAvailabilitySlots:
 
         # Should have multiple slots (9am-5pm = 8 hours = 16 half-hour slots minus buffer)
         assert len(slots) > 0
+
+
+class TestAvailabilityValidation:
+    """Validation tests for availability inputs."""
+
+    def test_set_availability_rules_rejects_invalid_time_range(
+        self, db, test_org, test_user
+    ):
+        """End time must be after start time."""
+        from app.services.appointment_service import set_availability_rules
+
+        with pytest.raises(ValueError, match="end_time must be after start_time"):
+            set_availability_rules(
+                db=db,
+                user_id=test_user.id,
+                org_id=test_org.id,
+                rules=[{"day_of_week": 0, "start_time": "17:00", "end_time": "09:00"}],
+                timezone_name="America/New_York",
+            )
+
+    def test_set_availability_override_requires_times_when_available(
+        self, db, test_org, test_user
+    ):
+        """Overrides marked available must include a valid time range."""
+        from app.services.appointment_service import set_availability_override
+
+        with pytest.raises(ValueError, match="start_time and end_time are required"):
+            set_availability_override(
+                db=db,
+                user_id=test_user.id,
+                org_id=test_org.id,
+                override_date=date.today(),
+                is_unavailable=False,
+                start_time=None,
+                end_time=None,
+                reason="Open block",
+            )
+
+    def test_set_availability_rules_rejects_invalid_timezone(
+        self, db, test_org, test_user
+    ):
+        """Invalid timezone values should be rejected."""
+        from app.services.appointment_service import set_availability_rules
+
+        with pytest.raises(ValueError, match="Invalid timezone"):
+            set_availability_rules(
+                db=db,
+                user_id=test_user.id,
+                org_id=test_org.id,
+                rules=[{"day_of_week": 0, "start_time": "09:00", "end_time": "17:00"}],
+                timezone_name="Invalid/Zone",
+            )
 
 
 # =============================================================================
@@ -363,6 +425,61 @@ class TestTokens:
         assert appt is None
 
 
+@pytest.mark.asyncio
+async def test_reschedule_slots_use_appointment_duration(
+    client,
+    db,
+    test_org,
+    test_user,
+    appointment_type,
+    availability_rules,
+):
+    """Reschedule slots should respect the appointment's stored duration."""
+    from app.db.enums import AppointmentStatus
+
+    target_date = _next_weekday(0)
+    local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
+    scheduled_start = local_start.astimezone(timezone.utc)
+
+    appt = Appointment(
+        id=uuid4(),
+        organization_id=test_org.id,
+        user_id=test_user.id,
+        appointment_type_id=appointment_type.id,
+        client_name="Reschedule Client",
+        client_email="reschedule@example.com",
+        client_phone="555-123-0000",
+        client_timezone="America/New_York",
+        scheduled_start=scheduled_start,
+        scheduled_end=scheduled_start + timedelta(minutes=60),
+        duration_minutes=60,
+        buffer_before_minutes=0,
+        buffer_after_minutes=0,
+        meeting_mode=appointment_type.meeting_mode,
+        status=AppointmentStatus.CONFIRMED.value,
+        reschedule_token=f"reschedule-{uuid4().hex}",
+        cancel_token=f"cancel-{uuid4().hex}",
+        reschedule_token_expires_at=scheduled_start + timedelta(days=30),
+        cancel_token_expires_at=scheduled_start + timedelta(days=30),
+    )
+    db.add(appt)
+    db.flush()
+
+    response = await client.get(
+        f"/book/self-service/{test_org.id}/reschedule/{appt.reschedule_token}/slots",
+        params={"date_start": target_date.isoformat(), "client_timezone": "America/New_York"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["slots"], "Expected at least one slot in reschedule response"
+
+    first_slot = data["slots"][0]
+    start = datetime.fromisoformat(first_slot["start"])
+    end = datetime.fromisoformat(first_slot["end"])
+    duration = int((end - start).total_seconds() // 60)
+    assert duration == 60
+
+
 # =============================================================================
 # Booking Status Tests
 # =============================================================================
@@ -422,6 +539,57 @@ class TestBookingStatus:
         )
 
         assert appt.status == AppointmentStatus.PENDING.value
+
+    def test_auto_approve_booking_is_confirmed(
+        self,
+        db,
+        test_org,
+        test_user,
+        appointment_type,
+        booking_link,
+        availability_rules,
+    ):
+        """Auto-approved appointment types should confirm immediately."""
+        from app.services.appointment_service import (
+            create_booking,
+            get_available_slots,
+            SlotQuery,
+        )
+
+        appointment_type.meeting_mode = "phone"
+        appointment_type.auto_approve = True
+        db.commit()
+
+        target_date = _next_weekday(0)
+        query = SlotQuery(
+            user_id=test_user.id,
+            org_id=test_org.id,
+            appointment_type_id=appointment_type.id,
+            date_start=target_date,
+            date_end=target_date,
+            client_timezone="America/New_York",
+        )
+        slots = get_available_slots(db, query)
+
+        if not slots:
+            pytest.skip("No available slots for testing")
+
+        appt = create_booking(
+            db=db,
+            org_id=test_org.id,
+            user_id=test_user.id,
+            appointment_type_id=appointment_type.id,
+            client_name="Auto Approve Client",
+            client_email="auto@example.com",
+            client_phone="555-222-9999",
+            client_timezone="America/New_York",
+            scheduled_start=slots[0].start,
+        )
+
+        assert appt.status == AppointmentStatus.CONFIRMED.value
+        assert appt.approved_by_user_id == test_user.id
+        assert appt.approved_at is not None
+        assert appt.pending_expires_at is None
 
     def test_approve_booking(
         self,
@@ -532,6 +700,49 @@ class TestTimezoneHandling:
             east_utc = slots_east[0].start
             assert isinstance(east_utc, datetime)
 
+    def test_create_booking_rejects_invalid_timezone(
+        self,
+        db,
+        test_org,
+        test_user,
+        appointment_type,
+        booking_link,
+        availability_rules,
+    ):
+        """Client timezone must be a valid IANA timezone."""
+        from app.services.appointment_service import (
+            create_booking,
+            get_available_slots,
+            SlotQuery,
+        )
+
+        target_date = _next_weekday(0)
+        query = SlotQuery(
+            user_id=test_user.id,
+            org_id=test_org.id,
+            appointment_type_id=appointment_type.id,
+            date_start=target_date,
+            date_end=target_date,
+            client_timezone="America/New_York",
+        )
+        slots = get_available_slots(db, query)
+
+        if not slots:
+            pytest.skip("No available slots for testing")
+
+        with pytest.raises(ValueError, match="Invalid client timezone"):
+            create_booking(
+                db=db,
+                org_id=test_org.id,
+                user_id=test_user.id,
+                appointment_type_id=appointment_type.id,
+                client_name="Invalid TZ Client",
+                client_email="bad-tz@example.com",
+                client_phone="555-000-1111",
+                client_timezone="Invalid/Zone",
+                scheduled_start=slots[0].start,
+            )
+
 
 # =============================================================================
 # Email Template Tests
@@ -568,6 +779,8 @@ class TestEmailTemplates:
             "scheduled_time",
             "duration",
             "meeting_mode",
+            "meeting_location",
+            "dial_in_number",
             "staff_name",
             "staff_email",
             "org_name",
@@ -970,6 +1183,134 @@ def test_reschedule_booking_regenerates_zoom_link(
 
     assert updated.zoom_meeting_id == "999"
     assert updated.zoom_join_url == "https://zoom.us/j/999"
+
+
+def test_reschedule_booking_creates_zoom_link_when_missing(
+    db, test_org, test_user, appointment_type, availability_rules, monkeypatch
+):
+    """Reschedule should create a Zoom link if one is missing."""
+    from app.services import appointment_service, zoom_service, appointment_integrations
+
+    appointment_type.meeting_mode = MeetingMode.ZOOM.value
+    db.flush()
+
+    target_date = _next_weekday(0)
+    local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
+    scheduled_start = local_start.astimezone(timezone.utc)
+
+    appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
+    appt.status = AppointmentStatus.CONFIRMED.value
+    appt.zoom_meeting_id = None
+    appt.zoom_join_url = None
+    db.flush()
+
+    monkeypatch.setattr(appointment_integrations, "sync_to_google_calendar", lambda *a, **k: None)
+    monkeypatch.setattr(zoom_service, "check_user_has_zoom", lambda *a, **k: True)
+
+    async def fake_get_user_zoom_token(*args, **kwargs):
+        return "test-token"
+
+    async def fake_create_zoom_meeting(*args, **kwargs):
+        return zoom_service.ZoomMeeting(
+            id=555,
+            uuid="",
+            topic="Rescheduled Meeting",
+            start_time=(scheduled_start + timedelta(days=1)).isoformat(),
+            duration=30,
+            timezone="America/New_York",
+            join_url="https://zoom.us/j/555",
+            start_url="https://zoom.us/s/555",
+            password=None,
+        )
+
+    monkeypatch.setattr(zoom_service, "get_user_zoom_token", fake_get_user_zoom_token)
+    monkeypatch.setattr(zoom_service, "create_zoom_meeting", fake_create_zoom_meeting)
+
+    new_start = scheduled_start + timedelta(days=1)
+    updated = appointment_service.reschedule_booking(
+        db=db,
+        appointment=appt,
+        new_start=new_start,
+        by_client=False,
+    )
+
+    assert updated.zoom_meeting_id == "555"
+    assert updated.zoom_join_url == "https://zoom.us/j/555"
+
+
+def test_reschedule_booking_creates_google_meet_link_when_missing(
+    db, test_org, test_user, appointment_type, availability_rules, monkeypatch
+):
+    """Reschedule should create a Google Meet link if one is missing."""
+    from app.services import appointment_service, appointment_integrations
+
+    appointment_type.meeting_mode = MeetingMode.GOOGLE_MEET.value
+    db.flush()
+
+    target_date = _next_weekday(0)
+    local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
+    scheduled_start = local_start.astimezone(timezone.utc)
+
+    appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
+    appt.status = AppointmentStatus.CONFIRMED.value
+    appt.google_event_id = None
+    appt.google_meet_url = None
+    db.flush()
+
+    def fake_create_google_meet_link(db, appointment, appt_type_name):
+        appointment.google_event_id = "event_456"
+        appointment.google_meet_url = "https://meet.google.com/xyz-9876"
+
+    monkeypatch.setattr(
+        appointment_integrations, "create_google_meet_link", fake_create_google_meet_link
+    )
+
+    new_start = scheduled_start + timedelta(days=1)
+    updated = appointment_service.reschedule_booking(
+        db=db,
+        appointment=appt,
+        new_start=new_start,
+        by_client=False,
+    )
+
+    assert updated.google_event_id == "event_456"
+    assert updated.google_meet_url == "https://meet.google.com/xyz-9876"
+
+
+def test_reschedule_booking_google_meet_link_failure_raises(
+    db, test_org, test_user, appointment_type, availability_rules, monkeypatch
+):
+    """Reschedule should fail hard if Google Meet link creation fails."""
+    from app.services import appointment_service, appointment_integrations
+
+    appointment_type.meeting_mode = MeetingMode.GOOGLE_MEET.value
+    db.flush()
+
+    target_date = _next_weekday(0)
+    local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
+    scheduled_start = local_start.astimezone(timezone.utc)
+
+    appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
+    appt.status = AppointmentStatus.CONFIRMED.value
+    appt.google_event_id = None
+    appt.google_meet_url = None
+    db.flush()
+
+    def fake_create_google_meet_link(db, appointment, appt_type_name):
+        return None
+
+    monkeypatch.setattr(
+        appointment_integrations, "create_google_meet_link", fake_create_google_meet_link
+    )
+
+    new_start = scheduled_start + timedelta(days=1)
+    with pytest.raises(ValueError, match="Google Meet"):
+        appointment_service.reschedule_booking(
+            db=db,
+            appointment=appt,
+            new_start=new_start,
+            by_client=False,
+        )
 
 
 def test_approve_booking_fails_when_google_calendar_not_connected(

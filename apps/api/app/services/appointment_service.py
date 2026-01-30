@@ -9,7 +9,6 @@ Handles:
 """
 
 import hashlib
-import logging
 import secrets
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -31,12 +30,11 @@ from app.db.models import (
     UserIntegration,
     Surrogate,
     IntendedParent,
+    Organization,
 )
 from app.schemas.appointment import AppointmentRead, AppointmentListItem
 from app.db.enums import AppointmentStatus, MeetingMode
 from app.services import appointment_integrations
-
-logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -97,6 +95,20 @@ def _get_timezone(name: str | None) -> ZoneInfo:
         return ZoneInfo("America/Los_Angeles")
 
 
+def _validate_timezone_name(name: str, label: str = "timezone") -> None:
+    """Validate an IANA timezone name."""
+    if not name:
+        raise ValueError(f"Invalid {label}: missing value")
+    try:
+        ZoneInfo(name)
+    except Exception as exc:
+        raise ValueError(f"Invalid {label}: {name}") from exc
+
+
+def validate_timezone_name(name: str, label: str = "timezone") -> None:
+    """Public helper to validate timezones for API inputs."""
+    _validate_timezone_name(name, label)
+
 def _normalize_idempotency_key(org_id: UUID, user_id: UUID, key: str) -> str:
     """Normalize idempotency key to avoid cross-tenant collisions."""
     raw = f"{org_id}:{user_id}:{key}".encode()
@@ -114,6 +126,12 @@ def _normalize_scheduled_start(
     return scheduled_start.astimezone(timezone.utc)
 
 
+def _validate_time_range(start: time, end: time, label: str) -> None:
+    """Ensure end time is after start time."""
+    if end <= start:
+        raise ValueError(f"{label} end_time must be after start_time")
+
+
 # =============================================================================
 # Appointment Types
 # =============================================================================
@@ -129,6 +147,9 @@ def create_appointment_type(
     buffer_before_minutes: int = 0,
     buffer_after_minutes: int = 5,
     meeting_mode: str = MeetingMode.ZOOM.value,
+    meeting_location: str | None = None,
+    dial_in_number: str | None = None,
+    auto_approve: bool = False,
     reminder_hours_before: int = 24,
 ) -> AppointmentType:
     """Create a new appointment type for a user."""
@@ -154,6 +175,9 @@ def create_appointment_type(
         buffer_before_minutes=buffer_before_minutes,
         buffer_after_minutes=buffer_after_minutes,
         meeting_mode=meeting_mode,
+        meeting_location=meeting_location,
+        dial_in_number=dial_in_number,
+        auto_approve=auto_approve,
         reminder_hours_before=reminder_hours_before,
         is_active=True,
     )
@@ -172,6 +196,9 @@ def update_appointment_type(
     buffer_before_minutes: int | None = None,
     buffer_after_minutes: int | None = None,
     meeting_mode: str | None = None,
+    meeting_location: str | None = None,
+    dial_in_number: str | None = None,
+    auto_approve: bool | None = None,
     reminder_hours_before: int | None = None,
     is_active: bool | None = None,
 ) -> AppointmentType:
@@ -203,6 +230,12 @@ def update_appointment_type(
         appt_type.buffer_after_minutes = buffer_after_minutes
     if meeting_mode is not None:
         appt_type.meeting_mode = meeting_mode
+    if meeting_location is not None:
+        appt_type.meeting_location = meeting_location
+    if dial_in_number is not None:
+        appt_type.dial_in_number = dial_in_number
+    if auto_approve is not None:
+        appt_type.auto_approve = auto_approve
     if reminder_hours_before is not None:
         appt_type.reminder_hours_before = reminder_hours_before
     if is_active is not None:
@@ -280,6 +313,8 @@ def to_appointment_read(
         scheduled_end=appt.scheduled_end,
         duration_minutes=appt.duration_minutes,
         meeting_mode=appt.meeting_mode,
+        meeting_location=appt.meeting_location,
+        dial_in_number=appt.dial_in_number,
         status=appt.status,
         pending_expires_at=appt.pending_expires_at,
         approved_at=appt.approved_at,
@@ -318,6 +353,8 @@ def to_appointment_list_item(
         scheduled_end=appt.scheduled_end,
         duration_minutes=appt.duration_minutes,
         meeting_mode=appt.meeting_mode,
+        meeting_location=appt.meeting_location,
+        dial_in_number=appt.dial_in_number,
         status=appt.status,
         zoom_join_url=appt.zoom_join_url,
         google_meet_url=appt.google_meet_url,
@@ -378,6 +415,8 @@ def set_availability_rules(
 
     rules format: [{"day_of_week": 0, "start_time": "09:00", "end_time": "17:00"}, ...]
     """
+    _validate_timezone_name(timezone_name, "timezone")
+
     # Delete existing rules
     db.query(AvailabilityRule).filter(
         AvailabilityRule.user_id == user_id,
@@ -387,12 +426,15 @@ def set_availability_rules(
     # Create new rules
     new_rules = []
     for rule_data in rules:
+        start = time.fromisoformat(rule_data["start_time"])
+        end = time.fromisoformat(rule_data["end_time"])
+        _validate_time_range(start, end, "Availability rule")
         rule = AvailabilityRule(
             organization_id=org_id,
             user_id=user_id,
             day_of_week=rule_data["day_of_week"],
-            start_time=time.fromisoformat(rule_data["start_time"]),
-            end_time=time.fromisoformat(rule_data["end_time"]),
+            start_time=start,
+            end_time=end,
             timezone=timezone_name,
         )
         db.add(rule)
@@ -410,7 +452,7 @@ def get_availability_rules(
     org_id: UUID,
 ) -> list[AvailabilityRule]:
     """Get all availability rules for a user."""
-    return (
+    rules = (
         db.query(AvailabilityRule)
         .filter(
             AvailabilityRule.user_id == user_id,
@@ -419,6 +461,33 @@ def get_availability_rules(
         .order_by(AvailabilityRule.day_of_week, AvailabilityRule.start_time)
         .all()
     )
+    if rules:
+        return rules
+
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    timezone_name = org.timezone if org and org.timezone else "America/Los_Angeles"
+    try:
+        ZoneInfo(timezone_name)
+    except Exception:
+        timezone_name = "America/Los_Angeles"
+
+    default_rules = []
+    for day in range(5):  # Monday-Friday
+        rule = AvailabilityRule(
+            organization_id=org_id,
+            user_id=user_id,
+            day_of_week=day,
+            start_time=time(9, 0),
+            end_time=time(17, 0),
+            timezone=timezone_name,
+        )
+        db.add(rule)
+        default_rules.append(rule)
+
+    db.commit()
+    for rule in default_rules:
+        db.refresh(rule)
+    return default_rules
 
 
 # =============================================================================
@@ -437,6 +506,13 @@ def set_availability_override(
     reason: str | None = None,
 ) -> AvailabilityOverride:
     """Create or update an availability override for a specific date."""
+    if is_unavailable:
+        start_time = None
+        end_time = None
+    else:
+        if not start_time or not end_time:
+            raise ValueError("start_time and end_time are required when is_unavailable is false")
+        _validate_time_range(start_time, end_time, "Availability override")
     existing = (
         db.query(AvailabilityOverride)
         .filter(
@@ -957,6 +1033,7 @@ def create_booking(
     if not appt_type:
         raise ValueError("Appointment type not found")
 
+    _validate_timezone_name(client_timezone, "client timezone")
     scheduled_start = _normalize_scheduled_start(scheduled_start, client_timezone)
     scheduled_end = scheduled_start + timedelta(minutes=appt_type.duration_minutes)
     pending_expires = datetime.now(timezone.utc) + timedelta(minutes=60)
@@ -989,6 +1066,8 @@ def create_booking(
         buffer_before_minutes=appt_type.buffer_before_minutes,
         buffer_after_minutes=appt_type.buffer_after_minutes,
         meeting_mode=appt_type.meeting_mode,
+        meeting_location=appt_type.meeting_location,
+        dial_in_number=appt_type.dial_in_number,
         status=AppointmentStatus.PENDING.value,
         pending_expires_at=pending_expires,
         reschedule_token=generate_token(),
@@ -1000,6 +1079,15 @@ def create_booking(
     db.add(appointment)
     db.commit()
     db.refresh(appointment)
+
+    if appt_type.auto_approve:
+        try:
+            appointment = approve_booking(db, appointment, approved_by_user_id=user_id)
+        except Exception:
+            db.delete(appointment)
+            db.commit()
+            raise
+        return appointment
 
     # Notify staff about new appointment request
     from app.services import notification_facade
@@ -1223,7 +1311,6 @@ def reschedule_booking(
     meeting_mode = appointment.meeting_mode
     if (
         meeting_mode == MeetingMode.ZOOM.value
-        and appointment.zoom_meeting_id
         and appointment.status == AppointmentStatus.CONFIRMED.value
     ):
         appt_type = (
@@ -1238,6 +1325,20 @@ def reschedule_booking(
             appt_type_name,
             new_start,
         )
+    elif (
+        meeting_mode == MeetingMode.GOOGLE_MEET.value
+        and appointment.status == AppointmentStatus.CONFIRMED.value
+        and not appointment.google_event_id
+    ):
+        appt_type = (
+            db.query(AppointmentType)
+            .filter(AppointmentType.id == appointment.appointment_type_id)
+            .first()
+        )
+        appt_type_name = appt_type.name if appt_type else "Appointment"
+        appointment_integrations.create_google_meet_link(db, appointment, appt_type_name)
+        if not appointment.google_event_id:
+            raise ValueError("Google Meet link creation failed. Please reconnect Google Calendar.")
 
     # Rotate tokens after reschedule
     appointment.reschedule_token = generate_token()

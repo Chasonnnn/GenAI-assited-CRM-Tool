@@ -70,6 +70,9 @@ def _type_to_read(appt_type) -> AppointmentTypeRead:
         buffer_before_minutes=appt_type.buffer_before_minutes,
         buffer_after_minutes=appt_type.buffer_after_minutes,
         meeting_mode=appt_type.meeting_mode,
+        meeting_location=appt_type.meeting_location,
+        dial_in_number=appt_type.dial_in_number,
+        auto_approve=appt_type.auto_approve,
         reminder_hours_before=appt_type.reminder_hours_before,
         is_active=appt_type.is_active,
         created_at=appt_type.created_at,
@@ -158,6 +161,9 @@ def create_appointment_type(
             buffer_before_minutes=data.buffer_before_minutes,
             buffer_after_minutes=data.buffer_after_minutes,
             meeting_mode=data.meeting_mode,
+            meeting_location=data.meeting_location,
+            dial_in_number=data.dial_in_number,
+            auto_approve=data.auto_approve,
             reminder_hours_before=data.reminder_hours_before,
         )
         return _type_to_read(appt_type)
@@ -245,14 +251,17 @@ def set_availability_rules(
     db: Session = Depends(get_db),
 ):
     """Replace all availability rules for the current user."""
-    rules = appointment_service.set_availability_rules(
-        db=db,
-        user_id=session.user_id,
-        org_id=session.org_id,
-        rules=[r.model_dump() for r in data.rules],
-        timezone_name=data.timezone,
-    )
-    return [_rule_to_read(r) for r in rules]
+    try:
+        rules = appointment_service.set_availability_rules(
+            db=db,
+            user_id=session.user_id,
+            org_id=session.org_id,
+            rules=[r.model_dump() for r in data.rules],
+            timezone_name=data.timezone,
+        )
+        return [_rule_to_read(r) for r in rules]
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # =============================================================================
@@ -295,17 +304,20 @@ def create_availability_override(
     start_time = dt_time.fromisoformat(data.start_time) if data.start_time else None
     end_time = dt_time.fromisoformat(data.end_time) if data.end_time else None
 
-    override = appointment_service.set_availability_override(
-        db=db,
-        user_id=session.user_id,
-        org_id=session.org_id,
-        override_date=data.override_date,
-        is_unavailable=data.is_unavailable,
-        start_time=start_time,
-        end_time=end_time,
-        reason=data.reason,
-    )
-    return _override_to_read(override)
+    try:
+        override = appointment_service.set_availability_override(
+            db=db,
+            user_id=session.user_id,
+            org_id=session.org_id,
+            override_date=data.override_date,
+            is_unavailable=data.is_unavailable,
+            start_time=start_time,
+            end_time=end_time,
+            reason=data.reason,
+        )
+        return _override_to_read(override)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete(
@@ -436,6 +448,11 @@ def get_booking_preview_slots(
     if not client_timezone:
         org = org_service.get_org_by_id(db, session.org_id)
         client_timezone = org.timezone if org else "America/Los_Angeles"
+
+    try:
+        appointment_service.validate_timezone_name(client_timezone, "client timezone")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     query = appointment_service.SlotQuery(
         user_id=session.user_id,

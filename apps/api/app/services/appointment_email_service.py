@@ -62,6 +62,8 @@ DEFAULT_TEMPLATES: dict[AppointmentEmailType, dict[str, str]] = {
                 <tr><td style="padding: 8px 0; color: #6b7280;">Time:</td><td style="padding: 8px 0;"><strong>{{scheduled_time}}</strong></td></tr>
                 <tr><td style="padding: 8px 0; color: #6b7280;">Duration:</td><td style="padding: 8px 0;"><strong>{{duration}} minutes</strong></td></tr>
                 <tr><td style="padding: 8px 0; color: #6b7280;">Meeting Mode:</td><td style="padding: 8px 0;"><strong>{{meeting_mode}}</strong></td></tr>
+                <tr><td style="padding: 8px 0; color: #6b7280;">Location:</td><td style="padding: 8px 0;"><strong>{{meeting_location}}</strong></td></tr>
+                <tr><td style="padding: 8px 0; color: #6b7280;">Dial-in:</td><td style="padding: 8px 0;"><strong>{{dial_in_number}}</strong></td></tr>
             </table>
         </div>
         
@@ -100,6 +102,9 @@ DEFAULT_TEMPLATES: dict[AppointmentEmailType, dict[str, str]] = {
                 <tr><td style="padding: 8px 0; color: #6b7280;">Date:</td><td style="padding: 8px 0;"><strong>{{scheduled_date}}</strong></td></tr>
                 <tr><td style="padding: 8px 0; color: #6b7280;">Time:</td><td style="padding: 8px 0;"><strong>{{scheduled_time}}</strong></td></tr>
                 <tr><td style="padding: 8px 0; color: #6b7280;">Duration:</td><td style="padding: 8px 0;"><strong>{{duration}} minutes</strong></td></tr>
+                <tr><td style="padding: 8px 0; color: #6b7280;">Meeting Mode:</td><td style="padding: 8px 0;"><strong>{{meeting_mode}}</strong></td></tr>
+                <tr><td style="padding: 8px 0; color: #6b7280;">Location:</td><td style="padding: 8px 0;"><strong>{{meeting_location}}</strong></td></tr>
+                <tr><td style="padding: 8px 0; color: #6b7280;">Dial-in:</td><td style="padding: 8px 0;"><strong>{{dial_in_number}}</strong></td></tr>
                 <tr><td style="padding: 8px 0; color: #6b7280;">With:</td><td style="padding: 8px 0;"><strong>{{staff_name}}</strong></td></tr>
                 <tr><td style="padding: 8px 0; color: #6b7280;">Join Zoom:</td><td style="padding: 8px 0;"><a href="{{zoom_join_url}}" style="color: #2563eb; text-decoration: none;">{{zoom_join_url}}</a></td></tr>
                 <tr><td style="padding: 8px 0; color: #6b7280;">Join Google Meet:</td><td style="padding: 8px 0;"><a href="{{google_meet_url}}" style="color: #2563eb; text-decoration: none;">{{google_meet_url}}</a></td></tr>
@@ -155,6 +160,9 @@ DEFAULT_TEMPLATES: dict[AppointmentEmailType, dict[str, str]] = {
                 <tr><td style="padding: 8px 0; color: #6b7280;">New Date:</td><td style="padding: 8px 0;"><strong>{{scheduled_date}}</strong></td></tr>
                 <tr><td style="padding: 8px 0; color: #6b7280;">New Time:</td><td style="padding: 8px 0;"><strong>{{scheduled_time}}</strong></td></tr>
                 <tr><td style="padding: 8px 0; color: #6b7280;">Duration:</td><td style="padding: 8px 0;"><strong>{{duration}} minutes</strong></td></tr>
+                <tr><td style="padding: 8px 0; color: #6b7280;">Meeting Mode:</td><td style="padding: 8px 0;"><strong>{{meeting_mode}}</strong></td></tr>
+                <tr><td style="padding: 8px 0; color: #6b7280;">Location:</td><td style="padding: 8px 0;"><strong>{{meeting_location}}</strong></td></tr>
+                <tr><td style="padding: 8px 0; color: #6b7280;">Dial-in:</td><td style="padding: 8px 0;"><strong>{{dial_in_number}}</strong></td></tr>
             </table>
         </div>
         
@@ -308,6 +316,8 @@ def build_appointment_variables(
         "meeting_mode": MEETING_MODE_DISPLAY.get(
             appointment.meeting_mode or "", appointment.meeting_mode or ""
         ),
+        "meeting_location": appointment.meeting_location or "",
+        "dial_in_number": appointment.dial_in_number or "",
         # Staff info
         "staff_name": staff.display_name if staff else "",
         "staff_email": staff.email if staff else "",

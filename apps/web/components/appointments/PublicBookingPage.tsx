@@ -47,19 +47,49 @@ import {
     useBookingPreviewPage,
     useBookingPreviewSlots,
 } from "@/lib/hooks/use-appointments"
-import type { AppointmentType, TimeSlot, BookingCreate } from "@/lib/api/appointments"
+import type { AppointmentType, TimeSlot, BookingCreate, PublicAppointmentView } from "@/lib/api/appointments"
 import { format, addDays, startOfDay, parseISO, isSameDay } from "date-fns"
 import { toast } from "sonner"
 
 // Timezone options
 const TIMEZONE_OPTIONS = [
-    { value: "America/Los_Angeles", label: "Pacific Time (PT)" },
-    { value: "America/New_York", label: "Eastern Time (ET)" },
-    { value: "America/Chicago", label: "Central Time (CT)" },
-    { value: "America/Denver", label: "Mountain Time (MT)" },
-    { value: "America/Phoenix", label: "Arizona (AZ)" },
-    { value: "Pacific/Honolulu", label: "Hawaii (HI)" },
-    { value: "America/Anchorage", label: "Alaska (AK)" },
+    { value: "America/Los_Angeles", label: "Pacific Time (US)" },
+    { value: "America/Phoenix", label: "Arizona (US)" },
+    { value: "America/Denver", label: "Mountain Time (US)" },
+    { value: "America/Chicago", label: "Central Time (US)" },
+    { value: "America/New_York", label: "Eastern Time (US)" },
+    { value: "America/Anchorage", label: "Alaska (US)" },
+    { value: "Pacific/Honolulu", label: "Hawaii (US)" },
+    { value: "America/Vancouver", label: "Vancouver" },
+    { value: "America/Toronto", label: "Toronto" },
+    { value: "America/Mexico_City", label: "Mexico City" },
+    { value: "America/Sao_Paulo", label: "Sao Paulo" },
+    { value: "America/Argentina/Buenos_Aires", label: "Buenos Aires" },
+    { value: "Europe/London", label: "London" },
+    { value: "Europe/Dublin", label: "Dublin" },
+    { value: "Europe/Paris", label: "Paris" },
+    { value: "Europe/Berlin", label: "Berlin" },
+    { value: "Europe/Rome", label: "Rome" },
+    { value: "Europe/Madrid", label: "Madrid" },
+    { value: "Europe/Amsterdam", label: "Amsterdam" },
+    { value: "Africa/Johannesburg", label: "Johannesburg" },
+    { value: "Africa/Lagos", label: "Lagos" },
+    { value: "Africa/Cairo", label: "Cairo" },
+    { value: "Asia/Dubai", label: "Dubai" },
+    { value: "Asia/Riyadh", label: "Riyadh" },
+    { value: "Asia/Karachi", label: "Karachi" },
+    { value: "Asia/Kolkata", label: "India (Kolkata)" },
+    { value: "Asia/Bangkok", label: "Bangkok" },
+    { value: "Asia/Singapore", label: "Singapore" },
+    { value: "Asia/Hong_Kong", label: "Hong Kong" },
+    { value: "Asia/Shanghai", label: "Shanghai" },
+    { value: "Asia/Tokyo", label: "Tokyo" },
+    { value: "Asia/Seoul", label: "Seoul" },
+    { value: "Australia/Perth", label: "Perth" },
+    { value: "Australia/Sydney", label: "Sydney" },
+    { value: "Australia/Melbourne", label: "Melbourne" },
+    { value: "Pacific/Auckland", label: "Auckland" },
+    { value: "UTC", label: "UTC" },
 ]
 
 // Appointment format display
@@ -175,6 +205,19 @@ function AppointmentTypeSelector({
                                 </p>
                                 {type.description && (
                                     <p className="text-sm text-muted-foreground mt-1">{type.description}</p>
+                                )}
+                                {type.meeting_mode === "in_person" && type.meeting_location && (
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                        Location: {type.meeting_location}
+                                    </p>
+                                )}
+                                {type.meeting_mode === "phone" && type.dial_in_number && (
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                        Dial-in: {type.dial_in_number}
+                                    </p>
+                                )}
+                                {type.auto_approve && (
+                                    <Badge variant="secondary" className="mt-2">Instant confirmation</Badge>
                                 )}
                             </div>
                         </Button>
@@ -498,11 +541,13 @@ function BookingForm({
 
             <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
                 {isSubmitting && <Loader2Icon className="size-4 mr-2 animate-spin" />}
-                Request Appointment
+                {appointmentType.auto_approve ? "Confirm Appointment" : "Request Appointment"}
             </Button>
 
             <p className="text-xs text-center text-muted-foreground">
-                Your appointment request will be sent for review. You'll receive a confirmation email once approved.
+                {appointmentType.auto_approve
+                    ? "This appointment will be confirmed immediately and emailed to you."
+                    : "Your appointment request will be sent for review. You'll receive a confirmation email once approved."}
             </p>
         </form>
     )
@@ -514,6 +559,12 @@ function generateICSFile(
     startTime: string,
     timezone: string,
     staffName: string,
+    options?: {
+        status?: string
+        meetingLocation?: string | null
+        dialInNumber?: string | null
+        joinUrl?: string | null
+    }
 ): string {
     const start = new Date(startTime)
     const end = new Date(start.getTime() + appointmentType.duration_minutes * 60 * 1000)
@@ -523,7 +574,21 @@ function generateICSFile(
         return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
     }
 
-    const meetingModeLabel = MEETING_MODES[appointmentType.meeting_mode as keyof typeof MEETING_MODES]?.label || appointmentType.meeting_mode
+    const meetingModeLabel =
+        MEETING_MODES[appointmentType.meeting_mode as keyof typeof MEETING_MODES]?.label ||
+        appointmentType.meeting_mode
+    const location = options?.meetingLocation || options?.dialInNumber || ""
+    const status = options?.status === "confirmed" ? "confirmed" : "pending"
+    const descriptionLines = [
+        `Appointment format: ${meetingModeLabel}`,
+        `Duration: ${appointmentType.duration_minutes} minutes`,
+        status === "confirmed"
+            ? "Status: Confirmed"
+            : "Status: Pending approval. You will receive a confirmation email once approved.",
+    ]
+    if (options?.meetingLocation) descriptionLines.push(`Location: ${options.meetingLocation}`)
+    if (options?.dialInNumber) descriptionLines.push(`Dial-in: ${options.dialInNumber}`)
+    if (options?.joinUrl) descriptionLines.push(`Join: ${options.joinUrl}`)
 
     const ics = [
         'BEGIN:VCALENDAR',
@@ -535,12 +600,15 @@ function generateICSFile(
         `DTSTART:${formatICSDate(start)}`,
         `DTEND:${formatICSDate(end)}`,
         `SUMMARY:${appointmentType.name} with ${staffName}`,
-        `DESCRIPTION:Appointment format: ${meetingModeLabel}\\nDuration: ${appointmentType.duration_minutes} minutes\\n\\nThis appointment is pending approval. You will receive a confirmation email once approved.`,
-        'STATUS:TENTATIVE',
+        `DESCRIPTION:${descriptionLines.join("\\n")}`,
+        location ? `LOCATION:${location}` : null,
+        status === "confirmed" ? "STATUS:CONFIRMED" : "STATUS:TENTATIVE",
         `UID:${Date.now()}@crm-platform`,
         'END:VEVENT',
         'END:VCALENDAR',
-    ].join('\r\n')
+    ]
+        .filter((line): line is string => Boolean(line))
+        .join('\r\n')
 
     return ics
 }
@@ -550,17 +618,28 @@ function ConfirmationView({
     selectedSlot,
     timezone,
     staffName,
+    confirmation,
 }: {
     appointmentType: AppointmentType
     selectedSlot: TimeSlot
     timezone: string
     staffName: string
+    confirmation: PublicAppointmentView | null
 }) {
     const meetingMode = MEETING_MODES[appointmentType.meeting_mode as keyof typeof MEETING_MODES]
     const ModeIcon = meetingMode?.icon || VideoIcon
+    const isConfirmed = confirmation?.status === "confirmed"
+    const meetingLocation = confirmation?.meeting_location ?? appointmentType.meeting_location
+    const dialInNumber = confirmation?.dial_in_number ?? appointmentType.dial_in_number
+    const joinUrl = confirmation?.zoom_join_url || confirmation?.google_meet_url || null
 
     const handleDownloadICS = () => {
-        const ics = generateICSFile(appointmentType, selectedSlot.start, timezone, staffName)
+        const ics = generateICSFile(appointmentType, selectedSlot.start, timezone, staffName, {
+            status: confirmation?.status,
+            meetingLocation,
+            dialInNumber,
+            joinUrl,
+        })
         const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' })
         const url = URL.createObjectURL(blob)
         const link = document.createElement('a')
@@ -581,9 +660,13 @@ function ConfirmationView({
                 </div>
             </div>
 
-            <h2 className="text-2xl font-semibold mb-2">Request Submitted!</h2>
+            <h2 className="text-2xl font-semibold mb-2">
+                {isConfirmed ? "Appointment Confirmed!" : "Request Submitted!"}
+            </h2>
             <p className="text-muted-foreground mb-6">
-                Your appointment request has been submitted successfully.
+                {isConfirmed
+                    ? "Your appointment is confirmed. We look forward to meeting with you."
+                    : "Your appointment request has been submitted successfully."}
             </p>
 
             {/* Appointment Summary Card */}
@@ -612,6 +695,31 @@ function ConfirmationView({
                         <ModeIcon className="size-5 text-muted-foreground flex-shrink-0" />
                         <p className="font-medium">{meetingMode?.label || appointmentType.meeting_mode}</p>
                     </div>
+                    {meetingLocation && (
+                        <div className="flex items-center gap-3">
+                            <MapPinIcon className="size-5 text-muted-foreground flex-shrink-0" />
+                            <p className="font-medium">{meetingLocation}</p>
+                        </div>
+                    )}
+                    {dialInNumber && (
+                        <div className="flex items-center gap-3">
+                            <PhoneIcon className="size-5 text-muted-foreground flex-shrink-0" />
+                            <p className="font-medium">{dialInNumber}</p>
+                        </div>
+                    )}
+                    {isConfirmed && joinUrl && (
+                        <div className="flex items-center gap-3">
+                            <VideoIcon className="size-5 text-muted-foreground flex-shrink-0" />
+                            <a
+                                href={joinUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-medium text-primary underline"
+                            >
+                                Join Meeting
+                            </a>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -628,20 +736,37 @@ function ConfirmationView({
             {/* What's Next Section */}
             <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4 text-left">
                 <h3 className="font-medium text-blue-700 dark:text-blue-400 mb-2">What&apos;s Next?</h3>
-                <ol className="text-sm text-muted-foreground space-y-2">
-                    <li className="flex gap-2">
-                        <span className="font-medium text-blue-600 dark:text-blue-400">1.</span>
-                        <span>Our team will review your request</span>
-                    </li>
-                    <li className="flex gap-2">
-                        <span className="font-medium text-blue-600 dark:text-blue-400">2.</span>
-                        <span>You&apos;ll receive an email confirmation once approved</span>
-                    </li>
-                    <li className="flex gap-2">
-                        <span className="font-medium text-blue-600 dark:text-blue-400">3.</span>
-                        <span>Appointment details will be included in the confirmation</span>
-                    </li>
-                </ol>
+                {isConfirmed ? (
+                    <ol className="text-sm text-muted-foreground space-y-2">
+                        <li className="flex gap-2">
+                            <span className="font-medium text-blue-600 dark:text-blue-400">1.</span>
+                            <span>Check your email for the confirmation details</span>
+                        </li>
+                        <li className="flex gap-2">
+                            <span className="font-medium text-blue-600 dark:text-blue-400">2.</span>
+                            <span>Add the appointment to your calendar</span>
+                        </li>
+                        <li className="flex gap-2">
+                            <span className="font-medium text-blue-600 dark:text-blue-400">3.</span>
+                            <span>Need changes? You can reschedule or cancel anytime</span>
+                        </li>
+                    </ol>
+                ) : (
+                    <ol className="text-sm text-muted-foreground space-y-2">
+                        <li className="flex gap-2">
+                            <span className="font-medium text-blue-600 dark:text-blue-400">1.</span>
+                            <span>Our team will review your request</span>
+                        </li>
+                        <li className="flex gap-2">
+                            <span className="font-medium text-blue-600 dark:text-blue-400">2.</span>
+                            <span>You&apos;ll receive an email confirmation once approved</span>
+                        </li>
+                        <li className="flex gap-2">
+                            <span className="font-medium text-blue-600 dark:text-blue-400">3.</span>
+                            <span>Appointment details will be included in the confirmation</span>
+                        </li>
+                    </ol>
+                )}
             </div>
 
             <p className="text-xs text-muted-foreground mt-6">
@@ -669,16 +794,14 @@ export function PublicBookingPage({
     const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
     const [showForm, setShowForm] = useState(false)
     const [isConfirmed, setIsConfirmed] = useState(false)
+    const [confirmation, setConfirmation] = useState<PublicAppointmentView | null>(null)
     const [timezone, setTimezone] = useState("America/Los_Angeles")
 
     // Auto-detect timezone
     useEffect(() => {
         try {
             const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
-            const found = TIMEZONE_OPTIONS.find((opt) => opt.value === tz)
-            if (found) {
-                setTimezone(tz)
-            }
+            if (tz) setTimezone(tz)
         } catch {
             // Use default
         }
@@ -696,6 +819,13 @@ export function PublicBookingPage({
             setTimezone(pageData.org_timezone)
         }
     }, [pageData?.org_timezone, timezone])
+
+    const timezoneOptions = useMemo(() => {
+        if (TIMEZONE_OPTIONS.some((opt) => opt.value === timezone)) {
+            return TIMEZONE_OPTIONS
+        }
+        return [...TIMEZONE_OPTIONS, { value: timezone, label: timezone }]
+    }, [timezone])
 
     const dateRange = useMemo(() => {
         const start = format(new Date(), "yyyy-MM-dd")
@@ -765,7 +895,12 @@ export function PublicBookingPage({
 
         createBookingMutation.mutate(
             { publicSlug, data },
-            { onSuccess: () => setIsConfirmed(true) }
+            {
+                onSuccess: (response) => {
+                    setConfirmation(response)
+                    setIsConfirmed(true)
+                },
+            }
         )
     }
 
@@ -808,6 +943,7 @@ export function PublicBookingPage({
                                 selectedSlot={selectedSlot}
                                 timezone={timezone}
                                 staffName={pageData?.staff?.display_name || "Staff Member"}
+                                confirmation={confirmation}
                             />
                         </CardContent>
                     </Card>
@@ -837,7 +973,7 @@ export function PublicBookingPage({
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {TIMEZONE_OPTIONS.map((opt) => (
+                                    {timezoneOptions.map((opt) => (
                                         <SelectItem key={opt.value} value={opt.value}>
                                             {opt.label}
                                         </SelectItem>

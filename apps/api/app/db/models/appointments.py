@@ -75,6 +75,11 @@ class AppointmentType(Base):
     meeting_mode: Mapped[str] = mapped_column(
         String(20), server_default=text(f"'{MeetingMode.ZOOM.value}'"), nullable=False
     )
+    meeting_location: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    dial_in_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    auto_approve: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("FALSE"), nullable=False
+    )
 
     # Notifications
     reminder_hours_before: Mapped[int] = mapped_column(Integer, default=24, nullable=False)
@@ -303,6 +308,8 @@ class Appointment(Base):
 
     # Meeting mode (snapshot from appointment type)
     meeting_mode: Mapped[str] = mapped_column(String(20), nullable=False)
+    meeting_location: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    dial_in_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # Status
     status: Mapped[str] = mapped_column(

@@ -34,10 +34,43 @@ import {
 
 // Timezone options
 const TIMEZONE_OPTIONS = [
-    { value: "America/Los_Angeles", label: "Pacific Time (PT)" },
-    { value: "America/New_York", label: "Eastern Time (ET)" },
-    { value: "America/Chicago", label: "Central Time (CT)" },
-    { value: "America/Denver", label: "Mountain Time (MT)" },
+    { value: "America/Los_Angeles", label: "Pacific Time (US)" },
+    { value: "America/Phoenix", label: "Arizona (US)" },
+    { value: "America/Denver", label: "Mountain Time (US)" },
+    { value: "America/Chicago", label: "Central Time (US)" },
+    { value: "America/New_York", label: "Eastern Time (US)" },
+    { value: "America/Anchorage", label: "Alaska (US)" },
+    { value: "Pacific/Honolulu", label: "Hawaii (US)" },
+    { value: "America/Vancouver", label: "Vancouver" },
+    { value: "America/Toronto", label: "Toronto" },
+    { value: "America/Mexico_City", label: "Mexico City" },
+    { value: "America/Sao_Paulo", label: "Sao Paulo" },
+    { value: "America/Argentina/Buenos_Aires", label: "Buenos Aires" },
+    { value: "Europe/London", label: "London" },
+    { value: "Europe/Dublin", label: "Dublin" },
+    { value: "Europe/Paris", label: "Paris" },
+    { value: "Europe/Berlin", label: "Berlin" },
+    { value: "Europe/Rome", label: "Rome" },
+    { value: "Europe/Madrid", label: "Madrid" },
+    { value: "Europe/Amsterdam", label: "Amsterdam" },
+    { value: "Africa/Johannesburg", label: "Johannesburg" },
+    { value: "Africa/Lagos", label: "Lagos" },
+    { value: "Africa/Cairo", label: "Cairo" },
+    { value: "Asia/Dubai", label: "Dubai" },
+    { value: "Asia/Riyadh", label: "Riyadh" },
+    { value: "Asia/Karachi", label: "Karachi" },
+    { value: "Asia/Kolkata", label: "India (Kolkata)" },
+    { value: "Asia/Bangkok", label: "Bangkok" },
+    { value: "Asia/Singapore", label: "Singapore" },
+    { value: "Asia/Hong_Kong", label: "Hong Kong" },
+    { value: "Asia/Shanghai", label: "Shanghai" },
+    { value: "Asia/Tokyo", label: "Tokyo" },
+    { value: "Asia/Seoul", label: "Seoul" },
+    { value: "Australia/Perth", label: "Perth" },
+    { value: "Australia/Sydney", label: "Sydney" },
+    { value: "Australia/Melbourne", label: "Melbourne" },
+    { value: "Pacific/Auckland", label: "Auckland" },
+    { value: "UTC", label: "UTC" },
 ]
 
 interface PageProps {
@@ -67,12 +100,18 @@ export default function ReschedulePage({ params }: PageProps) {
     useEffect(() => {
         try {
             const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
-            const found = TIMEZONE_OPTIONS.find((opt) => opt.value === tz)
-            if (found) setTimezone(tz)
+            if (tz) setTimezone(tz)
         } catch {
             // Use default
         }
     }, [])
+
+    const timezoneOptions = useMemo(() => {
+        if (TIMEZONE_OPTIONS.some((opt) => opt.value === timezone)) {
+            return TIMEZONE_OPTIONS
+        }
+        return [...TIMEZONE_OPTIONS, { value: timezone, label: timezone }]
+    }, [timezone])
 
     // Fetch appointment
     useEffect(() => {
@@ -240,6 +279,16 @@ export default function ReschedulePage({ params }: PageProps) {
                                 <p className="text-sm text-muted-foreground">
                                     {format(parseISO(appointment.scheduled_start), "EEEE, MMMM d 'at' h:mm a")}
                                 </p>
+                                {appointment.meeting_location && (
+                                    <p className="text-sm text-muted-foreground">
+                                        Location: {appointment.meeting_location}
+                                    </p>
+                                )}
+                                {appointment.dial_in_number && (
+                                    <p className="text-sm text-muted-foreground">
+                                        Dial-in: {appointment.dial_in_number}
+                                    </p>
+                                )}
                             </div>
                         )}
 
@@ -251,13 +300,13 @@ export default function ReschedulePage({ params }: PageProps) {
                                 <SelectTrigger className="w-auto h-8 text-sm">
                                     <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent>
-                                    {TIMEZONE_OPTIONS.map((opt) => (
+                                    <SelectContent>
+                                    {timezoneOptions.map((opt) => (
                                         <SelectItem key={opt.value} value={opt.value}>
                                             {opt.label}
                                         </SelectItem>
                                     ))}
-                                </SelectContent>
+                                    </SelectContent>
                             </Select>
                         </div>
 

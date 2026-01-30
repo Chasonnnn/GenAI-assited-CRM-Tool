@@ -54,6 +54,9 @@ def _type_to_read(appt_type) -> AppointmentTypeRead:
         buffer_before_minutes=appt_type.buffer_before_minutes,
         buffer_after_minutes=appt_type.buffer_after_minutes,
         meeting_mode=appt_type.meeting_mode,
+        meeting_location=appt_type.meeting_location,
+        dial_in_number=appt_type.dial_in_number,
+        auto_approve=appt_type.auto_approve,
         reminder_hours_before=appt_type.reminder_hours_before,
         is_active=appt_type.is_active,
         created_at=appt_type.created_at,
@@ -79,9 +82,12 @@ def _appointment_to_public_read(appt, db: Session) -> dict:
         "scheduled_end": appt.scheduled_end.isoformat(),
         "duration_minutes": appt.duration_minutes,
         "meeting_mode": appt.meeting_mode,
+        "meeting_location": appt.meeting_location,
+        "dial_in_number": appt.dial_in_number,
         "status": appt.status,
         "client_timezone": appt.client_timezone,
         "zoom_join_url": appt.zoom_join_url if appt.status == "confirmed" else None,
+        "google_meet_url": appt.google_meet_url if appt.status == "confirmed" else None,
     }
 
 
@@ -179,6 +185,11 @@ def get_available_slots(
         org = org_service.get_org_by_id(db, link.organization_id)
         client_timezone = org.timezone if org else "America/Los_Angeles"
 
+    try:
+        appointment_service.validate_timezone_name(client_timezone, "client timezone")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     # Get slots
     query = appointment_service.SlotQuery(
         user_id=link.user_id,
@@ -244,7 +255,10 @@ def create_booking(
         # Send confirmation email to client
         org = org_service.get_org_by_id(db, link.organization_id)
         base_url = org_service.get_org_portal_base_url(org)
-        appointment_email_service.send_request_received(db, appt, base_url)
+        if appt.status == "confirmed":
+            appointment_email_service.send_confirmed(db, appt, base_url)
+        else:
+            appointment_email_service.send_request_received(db, appt, base_url)
 
         return _appointment_to_public_read(appt, db)
     except ValueError as e:
@@ -306,6 +320,11 @@ def get_reschedule_slots(
     # Use client timezone from request or fallback to appointment's timezone
     tz = client_timezone or appt.client_timezone or "America/Los_Angeles"
 
+    try:
+        appointment_service.validate_timezone_name(tz, "client timezone")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     # Get slots using appointment's user and type
     query = appointment_service.SlotQuery(
         user_id=appt.user_id,
@@ -320,6 +339,9 @@ def get_reschedule_slots(
         db,
         query,
         exclude_appointment_id=appt.id,  # Exclude this appointment from conflict check
+        duration_minutes=appt.duration_minutes,
+        buffer_before_minutes=appt.buffer_before_minutes,
+        buffer_after_minutes=appt.buffer_after_minutes,
     )
 
     # Get appointment type for response
