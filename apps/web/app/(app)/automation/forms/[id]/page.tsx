@@ -671,20 +671,6 @@ export default function FormBuilderPage() {
     }, [formData, mappingData, isMappingsLoading, hasHydrated, isNewForm])
 
     useEffect(() => {
-        if (!hasHydrated) return
-        const identity = isNewForm ? "new" : formId || "unknown"
-        if (hydratedFormRef.current === identity) return
-        hydratedFormRef.current = identity
-        lastSavedFingerprintRef.current = draftFingerprint
-        if (!isNewForm && formData?.updated_at) {
-            setAutoSaveStatus("saved")
-            setLastSavedAt(new Date(formData.updated_at))
-        } else {
-            setAutoSaveStatus("idle")
-        }
-    }, [hasHydrated, isNewForm, formId, draftFingerprint, formData?.updated_at])
-
-    useEffect(() => {
         if (!hasHydrated || orgLogoInitRef.current) return
         if (!orgLogoPath) return
         const isOrgLogo = logoUrl === orgLogoPath
@@ -718,25 +704,19 @@ export default function FormBuilderPage() {
     )
     const isDirty = draftFingerprint !== lastSavedFingerprintRef.current
 
-    if (!isNewForm && (isFormLoading || isMappingsLoading)) {
-        return (
-            <div className="flex h-screen items-center justify-center bg-stone-100 dark:bg-stone-950">
-                <div className="flex items-center gap-2 text-stone-600 dark:text-stone-400">
-                    <Loader2Icon className="size-5 animate-spin" />
-                    <span>Loading form...</span>
-                </div>
-            </div>
-        )
-    }
-
-    if (!isNewForm && !formData) {
-        return (
-            <NotFoundState
-                title="Form not found"
-                backUrl="/automation?tab=forms"
-            />
-        )
-    }
+    useEffect(() => {
+        if (!hasHydrated) return
+        const identity = isNewForm ? "new" : formId || "unknown"
+        if (hydratedFormRef.current === identity) return
+        hydratedFormRef.current = identity
+        lastSavedFingerprintRef.current = draftFingerprint
+        if (!isNewForm && formData?.updated_at) {
+            setAutoSaveStatus("saved")
+            setLastSavedAt(new Date(formData.updated_at))
+        } else {
+            setAutoSaveStatus("idle")
+        }
+    }, [hasHydrated, isNewForm, formId, draftFingerprint, formData?.updated_at])
 
     // Drag and drop handlers
     const handleDragStart = (type: FieldType, label: string) => {
@@ -895,6 +875,7 @@ export default function FormBuilderPage() {
                 const index = page.fields.findIndex((field) => field.id === fieldId)
                 if (index === -1) return page
                 const source = page.fields[index]
+                if (!source) return page
                 const duplicated: FormField = {
                     ...source,
                     id: nextId,
@@ -922,7 +903,7 @@ export default function FormBuilderPage() {
         )
     }
 
-    const handleMappingChange = (fieldId: string, value: string) => {
+    const handleMappingChange = (fieldId: string, value: string | null) => {
         const nextValue = value && value !== "none" ? value : ""
         if (nextValue) {
             const hasConflict = pages.some((page) =>
@@ -1279,6 +1260,26 @@ export default function FormBuilderPage() {
         }
         return "Autosave on"
     }, [autoSaveStatus, hasHydrated, isDirty, isSaving, lastSavedAt])
+
+    if (!isNewForm && (isFormLoading || isMappingsLoading)) {
+        return (
+            <div className="flex h-screen items-center justify-center bg-stone-100 dark:bg-stone-950">
+                <div className="flex items-center gap-2 text-stone-600 dark:text-stone-400">
+                    <Loader2Icon className="size-5 animate-spin" />
+                    <span>Loading form...</span>
+                </div>
+            </div>
+        )
+    }
+
+    if (!isNewForm && !formData) {
+        return (
+            <NotFoundState
+                title="Form not found"
+                backUrl="/automation?tab=forms"
+            />
+        )
+    }
 
     return (
         <div className="flex h-screen flex-col bg-stone-100 dark:bg-stone-950">

@@ -6,11 +6,16 @@ import { SurrogateApplicationTab } from "@/components/surrogates/SurrogateApplic
 import { useForms } from "@/lib/hooks/use-forms"
 
 export default function SurrogateApplicationPage() {
-    const params = useParams<{ id: string }>()
-    const id = params.id
+    const params = useParams<{ id?: string }>()
+    const id = params?.id
     const { data: forms } = useForms()
     const publishedForms = (forms || []).filter((form) => form.status === "published")
-    const defaultFormId = publishedForms.length === 1 ? publishedForms[0].id : null
+    const defaultFormId =
+        publishedForms.length === 1 ? publishedForms[0]?.id ?? null : null
+
+    if (!id) {
+        return null
+    }
 
     return (
         <TabsContent value="application" className="space-y-4">

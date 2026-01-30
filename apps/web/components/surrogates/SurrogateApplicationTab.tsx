@@ -322,7 +322,7 @@ export function SurrogateApplicationTab({
                 file,
                 formId: submission.form_id,
                 surrogateId: submission.surrogate_id,
-                fieldKey: uploadFieldKey || undefined,
+                fieldKey: uploadFieldKey ?? null,
             })
             toast.success(`Uploaded: ${file.name}`)
         } catch {
