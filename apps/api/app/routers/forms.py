@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, File, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, File, Form, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -109,6 +109,7 @@ def _submission_read(submission, files: list) -> FormSubmissionRead:
                 file_size=f.file_size,
                 quarantined=f.quarantined,
                 scan_status=f.scan_status,
+                field_key=f.field_key,
             )
             for f in files
         ],
@@ -617,6 +618,7 @@ def download_submission_file(
 async def upload_submission_file(
     submission_id: UUID,
     file: UploadFile = File(...),
+    field_key: str | None = Form(default=None),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
@@ -635,6 +637,7 @@ async def upload_submission_file(
             org_id=session.org_id,
             submission=submission,
             file=file,
+            field_key=field_key,
             user_id=session.user_id,
         )
         db.commit()
@@ -644,6 +647,8 @@ async def upload_submission_file(
             content_type=file_record.content_type,
             file_size=file_record.file_size,
             quarantined=file_record.quarantined,
+            scan_status=file_record.scan_status,
+            field_key=file_record.field_key,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

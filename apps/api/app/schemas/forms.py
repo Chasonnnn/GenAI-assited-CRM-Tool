@@ -144,6 +144,7 @@ class FormSubmissionFileRead(BaseModel):
     file_size: int
     quarantined: bool
     scan_status: str
+    field_key: str | None = None
 
 
 class FormSubmissionFileDownloadResponse(BaseModel):

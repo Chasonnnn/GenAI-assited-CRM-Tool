@@ -13,7 +13,7 @@ from app.core.deps import get_db
 from app.core.rate_limit import limiter
 from app.db.enums import FormStatus
 from app.schemas.forms import FormPublicRead, FormSubmissionPublicResponse, FormSchema
-from app.services import form_service, form_submission_service
+from app.services import form_service, form_submission_service, media_service, org_service
 
 router = APIRouter(prefix="/forms/public", tags=["forms-public"])
 
@@ -47,6 +47,22 @@ def get_form_logo(request: Request, org_id: UUID, logo_id: UUID, db: Session = D
         media_type=logo.content_type,
         filename=logo.filename,
     )
+
+
+@router.get("/{org_id}/signature-logo")
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
+def get_org_signature_logo(
+    request: Request, org_id: UUID, db: Session = Depends(get_db)
+):
+    org = org_service.get_org_by_id(db, org_id)
+    if not org or not org.signature_logo_url:
+        raise HTTPException(status_code=404, detail="Logo not found")
+
+    signed_url = media_service.get_signed_media_url(org.signature_logo_url)
+    if not signed_url:
+        raise HTTPException(status_code=404, detail="Logo not found")
+
+    return RedirectResponse(signed_url, status_code=307)
 
 
 @router.get("/{token}", response_model=FormPublicRead)
@@ -84,6 +100,7 @@ async def submit_public_form(
     request: Request,
     answers: str = Form(...),
     files: list[UploadFile] | None = File(default=None),
+    file_field_keys: str | None = Form(default=None),
     db: Session = Depends(get_db),
 ):
     token_record = form_submission_service.get_valid_token(db, token)
@@ -100,12 +117,23 @@ async def submit_public_form(
         raise HTTPException(status_code=400, detail="Invalid answers JSON") from exc
 
     try:
+        parsed_keys: list[str] | None = None
+        if file_field_keys:
+            try:
+                parsed = json.loads(file_field_keys)
+                if not isinstance(parsed, list) or not all(isinstance(k, str) for k in parsed):
+                    raise ValueError("Invalid file_field_keys payload")
+                parsed_keys = parsed
+            except json.JSONDecodeError as exc:
+                raise ValueError("Invalid file_field_keys payload") from exc
+
         submission = form_submission_service.create_submission(
             db=db,
             token=token_record,
             form=form,
             answers=answers_data,
             files=files or [],
+            file_field_keys=parsed_keys,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

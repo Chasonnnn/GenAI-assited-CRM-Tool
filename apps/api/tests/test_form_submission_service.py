@@ -1,4 +1,8 @@
 import uuid
+from io import BytesIO
+
+import pytest
+from starlette.datastructures import UploadFile
 
 from app.core.encryption import hash_email
 from app.db.models import Surrogate
@@ -70,6 +74,49 @@ def _create_published_form(db, org_id, user_id):
             {"field_key": "date_of_birth", "surrogate_field": "date_of_birth"},
         ],
     )
+    return form
+
+
+def _create_published_form_with_files(db, org_id, user_id, multiple: bool = False):
+    file_fields = [
+        {
+            "key": "supporting_docs",
+            "label": "Supporting Documents",
+            "type": "file",
+            "required": True,
+        }
+    ]
+    if multiple:
+        file_fields.append(
+            {
+                "key": "insurance_docs",
+                "label": "Insurance Documents",
+                "type": "file",
+                "required": False,
+            }
+        )
+
+    schema = {
+        "pages": [
+            {
+                "title": "Docs",
+                "fields": file_fields,
+            }
+        ]
+    }
+
+    form = form_service.create_form(
+        db=db,
+        org_id=org_id,
+        user_id=user_id,
+        name="Documents Form",
+        description="Test form with files",
+        schema=schema,
+        max_file_size_bytes=None,
+        max_file_count=None,
+        allowed_mime_types=None,
+    )
+    form_service.publish_form(db, form, user_id)
     return form
 
 
@@ -172,3 +219,196 @@ def test_submission_service_update_answers_syncs_surrogate(db, test_org, test_us
     db.refresh(surrogate)
     assert surrogate.full_name == "Jane Smith"
     assert str(surrogate.date_of_birth) == "1991-02-03"
+
+
+def test_submission_requires_required_file_fields(db, test_org, test_user, default_stage):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+    form = _create_published_form_with_files(db, test_org.id, test_user.id)
+
+    token_record = form_submission_service.create_submission_token(
+        db=db,
+        org_id=test_org.id,
+        form=form,
+        surrogate=surrogate,
+        user_id=test_user.id,
+        expires_in_days=7,
+    )
+
+    with pytest.raises(ValueError):
+        form_submission_service.create_submission(
+            db=db,
+            token=token_record,
+            form=form,
+            answers={},
+            files=[],
+        )
+
+
+def test_submission_requires_file_field_keys_when_multiple_file_fields(
+    db, test_org, test_user, default_stage
+):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+    form = _create_published_form_with_files(db, test_org.id, test_user.id, multiple=True)
+
+    token_record = form_submission_service.create_submission_token(
+        db=db,
+        org_id=test_org.id,
+        form=form,
+        surrogate=surrogate,
+        user_id=test_user.id,
+        expires_in_days=7,
+    )
+
+    upload = UploadFile(filename="doc.txt", file=BytesIO(b"test"), content_type="text/plain")
+
+    with pytest.raises(ValueError):
+        form_submission_service.create_submission(
+            db=db,
+            token=token_record,
+            form=form,
+            answers={},
+            files=[upload],
+        )
+
+
+def test_submission_stores_file_field_keys(db, test_org, test_user, default_stage):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+    form = _create_published_form_with_files(db, test_org.id, test_user.id, multiple=True)
+
+    token_record = form_submission_service.create_submission_token(
+        db=db,
+        org_id=test_org.id,
+        form=form,
+        surrogate=surrogate,
+        user_id=test_user.id,
+        expires_in_days=7,
+    )
+
+    upload_a = UploadFile(filename="doc-a.txt", file=BytesIO(b"a"), content_type="text/plain")
+    upload_b = UploadFile(filename="doc-b.txt", file=BytesIO(b"b"), content_type="text/plain")
+
+    submission = form_submission_service.create_submission(
+        db=db,
+        token=token_record,
+        form=form,
+        answers={},
+        files=[upload_a, upload_b],
+        file_field_keys=["supporting_docs", "insurance_docs"],
+    )
+
+    files = form_submission_service.list_submission_files(db, test_org.id, submission.id)
+    assert {f.field_key for f in files} == {"supporting_docs", "insurance_docs"}
+
+
+def test_submission_enforces_per_file_field_limit(db, test_org, test_user, default_stage):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+    form = _create_published_form_with_files(db, test_org.id, test_user.id)
+
+    token_record = form_submission_service.create_submission_token(
+        db=db,
+        org_id=test_org.id,
+        form=form,
+        surrogate=surrogate,
+        user_id=test_user.id,
+        expires_in_days=7,
+    )
+
+    uploads = [
+        UploadFile(filename=f"doc-{idx}.txt", file=BytesIO(b"test"), content_type="text/plain")
+        for idx in range(6)
+    ]
+
+    with pytest.raises(ValueError) as exc:
+        form_submission_service.create_submission(
+            db=db,
+            token=token_record,
+            form=form,
+            answers={},
+            files=uploads,
+        )
+
+    assert "Maximum 5 files allowed" in str(exc.value)
+
+
+def test_add_submission_file_enforces_per_file_field_limit(db, test_org, test_user, default_stage):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+    form = _create_published_form_with_files(db, test_org.id, test_user.id)
+
+    token_record = form_submission_service.create_submission_token(
+        db=db,
+        org_id=test_org.id,
+        form=form,
+        surrogate=surrogate,
+        user_id=test_user.id,
+        expires_in_days=7,
+    )
+
+    uploads = [
+        UploadFile(filename=f"doc-{idx}.txt", file=BytesIO(b"test"), content_type="text/plain")
+        for idx in range(5)
+    ]
+
+    submission = form_submission_service.create_submission(
+        db=db,
+        token=token_record,
+        form=form,
+        answers={},
+        files=uploads,
+    )
+
+    extra = UploadFile(filename="extra.txt", file=BytesIO(b"extra"), content_type="text/plain")
+
+    with pytest.raises(ValueError) as exc:
+        form_submission_service.add_submission_file(
+            db=db,
+            org_id=test_org.id,
+            submission=submission,
+            file=extra,
+            field_key="supporting_docs",
+            user_id=test_user.id,
+        )
+
+    assert "Maximum 5 files allowed" in str(exc.value)
+
+
+def test_submission_approval_uses_mapping_snapshot(db, test_org, test_user, default_stage):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+    form = _create_published_form(db, test_org.id, test_user.id)
+
+    token_record = form_submission_service.create_submission_token(
+        db=db,
+        org_id=test_org.id,
+        form=form,
+        surrogate=surrogate,
+        user_id=test_user.id,
+        expires_in_days=7,
+    )
+
+    submission = form_submission_service.create_submission(
+        db=db,
+        token=token_record,
+        form=form,
+        answers={"full_name": "Jane Doe", "date_of_birth": "1990-01-01"},
+        files=[],
+    )
+
+    # Change mappings after submission (would be incorrect if applied)
+    form_service.set_field_mappings(
+        db,
+        form,
+        [
+            {"field_key": "full_name", "surrogate_field": "phone"},
+            {"field_key": "date_of_birth", "surrogate_field": "date_of_birth"},
+        ],
+    )
+
+    form_submission_service.approve_submission(
+        db=db,
+        submission=submission,
+        reviewer_id=test_user.id,
+        review_notes=None,
+    )
+
+    db.refresh(surrogate)
+    assert surrogate.full_name == "Jane Doe"
+    assert surrogate.phone is None

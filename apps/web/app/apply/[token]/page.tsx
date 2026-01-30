@@ -39,6 +39,9 @@ type Step = {
 type AnswerValue = string | number | boolean | string[] | null
 type Answers = Record<string, AnswerValue>
 type UnknownRecord = Record<string, unknown>
+type FileUploads = Record<string, File[]>
+
+const PER_FILE_FIELD_MAX = 5
 
 const isFormPublicRead = (value: unknown): value is FormPublicRead => {
     if (!value || typeof value !== "object") return false
@@ -270,7 +273,7 @@ function FileUploadZone({
                     </p>
                 </div>
                 <p className="text-xs text-stone-400">
-                    Up to {maxFiles} files, {(maxSizeBytes / (1024 * 1024)).toFixed(0)}MB each
+                    Up to {maxFiles} files for this field, {(maxSizeBytes / (1024 * 1024)).toFixed(0)}MB each
                 </p>
                 <input
                     ref={inputRef}
@@ -357,7 +360,7 @@ export default function PublicApplicationForm() {
     const [currentStep, setCurrentStep] = React.useState(1)
     const [formConfig, setFormConfig] = React.useState<FormPublicRead | null>(null)
     const [answers, setAnswers] = React.useState<Answers>({})
-    const [files, setFiles] = React.useState<File[]>([])
+    const [fileUploads, setFileUploads] = React.useState<FileUploads>({})
     const [isSubmitting, setIsSubmitting] = React.useState(false)
     const [isSubmitted, setIsSubmitted] = React.useState(false)
     const [isLoading, setIsLoading] = React.useState(true)
@@ -414,8 +417,13 @@ export default function PublicApplicationForm() {
         formConfig?.name ||
         "Surrogate Application"
     const logoUrl = formConfig?.form_schema.logo_url?.trim() || ""
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || ""
+    const resolvedLogoUrl =
+        logoUrl && logoUrl.startsWith("/") && apiBaseUrl
+            ? `${apiBaseUrl}${logoUrl}`
+            : logoUrl
     const privacyNotice = formConfig?.form_schema.privacy_notice
-    const showLogo = Boolean(logoUrl) && !logoError
+    const showLogo = Boolean(resolvedLogoUrl) && !logoError
     const steps: Step[] = [
         ...pages.map((page, index) => ({
             id: index + 1,
@@ -424,6 +432,39 @@ export default function PublicApplicationForm() {
         })),
         { id: pages.length + 1, label: "Review & Submit", shortLabel: "Review" },
     ]
+
+    const fileFields = pages.flatMap((page) =>
+        page.fields.filter((field) => field.type === "file"),
+    )
+    const totalFiles = Object.values(fileUploads).reduce((sum, group) => sum + group.length, 0)
+    const maxTotalFiles = formConfig?.max_file_count ?? 10
+
+    const updateFileUploads = (fieldKey: string, nextFiles: File[]) => {
+        setFileUploads((prev) => {
+            const otherCount = Object.entries(prev).reduce(
+                (sum, [key, files]) => (key === fieldKey ? sum : sum + files.length),
+                0,
+            )
+            const allowedByTotal = Math.max(0, maxTotalFiles - otherCount)
+            const allowed = Math.min(PER_FILE_FIELD_MAX, allowedByTotal)
+            const trimmed = nextFiles.slice(0, allowed)
+            if (trimmed.length < nextFiles.length) {
+                if (allowedByTotal < PER_FILE_FIELD_MAX) {
+                    toast.error(`Maximum ${maxTotalFiles} files allowed.`)
+                } else {
+                    toast.error(`Maximum ${PER_FILE_FIELD_MAX} files allowed per upload field.`)
+                }
+            }
+            return { ...prev, [fieldKey]: trimmed }
+        })
+    }
+
+    const getMaxFilesForField = (fieldKey: string) => {
+        const currentFiles = fileUploads[fieldKey] || []
+        const otherCount = totalFiles - currentFiles.length
+        const allowedByTotal = Math.max(0, maxTotalFiles - otherCount)
+        return Math.min(PER_FILE_FIELD_MAX, allowedByTotal)
+    }
 
     const updateField = (field: string, value: AnswerValue) => {
         setAnswers((prev) => ({ ...prev, [field]: value }))
@@ -482,9 +523,25 @@ export default function PublicApplicationForm() {
             toast.error("Please confirm the agreement before submitting.")
             return
         }
+
+        const missingFileField = fileFields.find(
+            (field) => field.required && (fileUploads[field.key]?.length ?? 0) === 0,
+        )
+        if (missingFileField) {
+            toast.error(`Please upload: ${missingFileField.label}`)
+            return
+        }
+
         setIsSubmitting(true)
         try {
-            await submitPublicForm(token, answers, files)
+            const fileEntries = Object.entries(fileUploads).flatMap(([fieldKey, items]) =>
+                items.map((file) => ({ fieldKey, file })),
+            )
+            const files = fileEntries.map((entry) => entry.file)
+            const fileFieldKeys = fileEntries.length
+                ? fileEntries.map((entry) => entry.fieldKey)
+                : undefined
+            await submitPublicForm(token, answers, files, fileFieldKeys)
             setIsSubmitted(true)
         } catch {
             toast.error("Failed to submit application. Please try again.")
@@ -732,7 +789,7 @@ export default function PublicApplicationForm() {
                     {showLogo ? (
                         <div className="mx-auto mb-6 flex size-20 items-center justify-center">
                             <img
-                                src={logoUrl}
+                                src={resolvedLogoUrl}
                                 alt={`${publicTitle} logo`}
                                 className="size-20 rounded-2xl object-contain shadow-sm"
                                 onError={() => setLogoError(true)}
@@ -810,14 +867,19 @@ export default function PublicApplicationForm() {
                                                     {renderReviewValue(field, answers[field.key] ?? null)}
                                                 </div>
                                             ))}
-                                            {page.fields.some((field) => field.type === "file") && (
-                                                <div className="flex justify-between">
-                                                    <span className="text-stone-500">Uploaded Files</span>
-                                                    <span className="font-medium">
-                                                        {files.length ? `${files.length} file(s)` : "—"}
-                                                    </span>
-                                                </div>
-                                            )}
+                                            {page.fields
+                                                .filter((field) => field.type === "file")
+                                                .map((field) => {
+                                                    const count = fileUploads[field.key]?.length ?? 0
+                                                    return (
+                                                        <div key={field.key} className="flex justify-between">
+                                                            <span className="text-stone-500">{field.label}</span>
+                                                            <span className="font-medium">
+                                                                {count ? `${count} file(s)` : "—"}
+                                                            </span>
+                                                        </div>
+                                                    )
+                                                })}
                                         </div>
                                     </div>
                                 ))
@@ -861,18 +923,25 @@ export default function PublicApplicationForm() {
                                     .map((field) => renderFieldInput(field))
                             )}
 
-                            {currentPage.fields.some((field) => field.type === "file") && (
-                                <div className="space-y-2">
-                                    <Label className="text-sm font-medium">Upload Documents</Label>
-                                    <FileUploadZone
-                                        files={files}
-                                        onFilesChange={setFiles}
-                                        maxFiles={formConfig.max_file_count}
-                                        maxFileSizeBytes={formConfig.max_file_size_bytes}
-                                        allowedMimeTypes={formConfig.allowed_mime_types ?? null}
-                                    />
-                                </div>
-                            )}
+                            {currentPage.fields
+                                .filter((field) => field.type === "file")
+                                .map((field) => (
+                                    <div key={field.key} className="space-y-2">
+                                        <Label className="text-sm font-medium">
+                                            {field.label} {field.required && <span className="text-red-500">*</span>}
+                                        </Label>
+                                        <FileUploadZone
+                                            files={fileUploads[field.key] || []}
+                                            onFilesChange={(nextFiles) => updateFileUploads(field.key, nextFiles)}
+                                            maxFiles={getMaxFilesForField(field.key)}
+                                            maxFileSizeBytes={formConfig.max_file_size_bytes}
+                                            allowedMimeTypes={formConfig.allowed_mime_types ?? null}
+                                        />
+                                        {field.help_text && (
+                                            <p className="text-xs text-stone-500">{field.help_text}</p>
+                                        )}
+                                    </div>
+                                ))}
 
                             <PrivacyNotice text={privacyNotice ?? null} />
                         </CardContent>

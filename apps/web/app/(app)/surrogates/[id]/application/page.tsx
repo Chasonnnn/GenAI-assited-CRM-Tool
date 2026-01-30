@@ -9,11 +9,16 @@ export default function SurrogateApplicationPage() {
     const params = useParams<{ id: string }>()
     const id = params.id
     const { data: forms } = useForms()
-    const defaultFormId = forms?.find((form) => form.status === "published")?.id || ""
+    const publishedForms = (forms || []).filter((form) => form.status === "published")
+    const defaultFormId = publishedForms.length === 1 ? publishedForms[0].id : null
 
     return (
         <TabsContent value="application" className="space-y-4">
-            <SurrogateApplicationTab surrogateId={id} formId={defaultFormId} />
+            <SurrogateApplicationTab
+                surrogateId={id}
+                formId={defaultFormId}
+                publishedForms={publishedForms}
+            />
         </TabsContent>
     )
 }

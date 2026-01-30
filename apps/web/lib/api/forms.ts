@@ -116,6 +116,7 @@ export interface FormSubmissionFileRead {
     file_size: number
     quarantined: boolean
     scan_status: string
+    field_key?: string | null
 }
 
 export interface FormSubmissionRead {
@@ -219,11 +220,15 @@ export function getPublicForm(token: string): Promise<FormPublicRead> {
 export function submitPublicForm(
     token: string,
     answers: JsonObject,
-    files: File[] = []
+    files: File[] = [],
+    fileFieldKeys?: string[]
 ): Promise<FormSubmissionPublicResponse> {
     const formData = new FormData()
     formData.append('answers', JSON.stringify(answers))
     files.forEach((file) => formData.append('files', file))
+    if (fileFieldKeys) {
+        formData.append('file_field_keys', JSON.stringify(fileFieldKeys))
+    }
     return api.upload<FormSubmissionPublicResponse>(`/forms/public/${token}/submit`, formData)
 }
 
@@ -233,9 +238,16 @@ export function getSubmissionFileDownloadUrl(submissionId: string, fileId: strin
     )
 }
 
-export function uploadSubmissionFile(submissionId: string, file: File): Promise<FormSubmissionFileRead> {
+export function uploadSubmissionFile(
+    submissionId: string,
+    file: File,
+    fieldKey?: string | null
+): Promise<FormSubmissionFileRead> {
     const formData = new FormData()
     formData.append('file', file)
+    if (fieldKey) {
+        formData.append('field_key', fieldKey)
+    }
     return api.upload<FormSubmissionFileRead>(
         `/forms/submissions/${submissionId}/files`,
         formData

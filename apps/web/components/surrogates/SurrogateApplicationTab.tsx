@@ -48,13 +48,19 @@ import {
     useUploadSubmissionFile,
     useDeleteSubmissionFile,
 } from "@/lib/hooks/use-forms"
-import { exportSubmissionPdf, getSubmissionFileDownloadUrl, type FormSchema } from "@/lib/api/forms"
+import {
+    exportSubmissionPdf,
+    getSubmissionFileDownloadUrl,
+    type FormSchema,
+    type FormSummary,
+} from "@/lib/api/forms"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { cn } from "@/lib/utils"
 
 interface SurrogateApplicationTabProps {
     surrogateId: string
-    formId: string
+    formId: string | null
+    publishedForms?: FormSummary[]
 }
 
 // Format file size for display
@@ -79,6 +85,7 @@ function formatDateTime(dateString: string): string {
 export function SurrogateApplicationTab({
     surrogateId,
     formId,
+    publishedForms = [],
 }: SurrogateApplicationTabProps) {
     const { user } = useAuth()
     const [baseUrl, setBaseUrl] = React.useState("")
@@ -93,11 +100,19 @@ export function SurrogateApplicationTab({
         }
     }, [user?.org_portal_base_url])
 
+    const [selectedFormId, setSelectedFormId] = React.useState<string>(formId || "")
+
+    React.useEffect(() => {
+        setSelectedFormId(formId || "")
+    }, [formId])
+
+    const effectiveFormId = selectedFormId || formId || ""
+
     const {
         data: submission,
         isLoading,
         error: submissionError,
-    } = useSurrogateFormSubmission(formId, surrogateId)
+    } = useSurrogateFormSubmission(effectiveFormId || null, surrogateId)
     const createTokenMutation = useCreateFormToken()
     const approveMutation = useApproveFormSubmission()
     const rejectMutation = useRejectFormSubmission()
@@ -108,6 +123,7 @@ export function SurrogateApplicationTab({
     const [deletingFileId, setDeletingFileId] = React.useState<string | null>(null)
     const [isEditMode, setIsEditMode] = React.useState(false)
     const [isExporting, setIsExporting] = React.useState(false)
+    const [uploadFieldKey, setUploadFieldKey] = React.useState("")
 
     // Section collapse state
     const [sectionOpen, setSectionOpen] = React.useState<Record<number, boolean>>({})
@@ -140,6 +156,19 @@ export function SurrogateApplicationTab({
             initialState[index] = true
         })
         setSectionOpen(initialState)
+    }, [submission?.schema_snapshot])
+
+    React.useEffect(() => {
+        const pages = submission?.schema_snapshot?.pages || []
+        const fileFields = pages.flatMap((page) =>
+            page.fields.filter((field) => field.type === "file"),
+        )
+        if (fileFields.length === 1) {
+            setUploadFieldKey(fileFields[0]?.key || "")
+        }
+        if (fileFields.length === 0) {
+            setUploadFieldKey("")
+        }
     }, [submission?.schema_snapshot])
 
     const copyFormLink = async () => {
@@ -190,10 +219,14 @@ export function SurrogateApplicationTab({
     }
 
     const handleGenerateFormLink = async () => {
+        if (!effectiveFormId) {
+            toast.error("Select a published form first")
+            return
+        }
         setIsGeneratingLink(true)
         try {
             const token = await createTokenMutation.mutateAsync({
-                formId,
+                formId: effectiveFormId,
                 surrogateId,
                 expiresInDays: 14,
             })
@@ -272,12 +305,24 @@ export function SurrogateApplicationTab({
         const file = e.target.files?.[0]
         if (!file || !submission) return
 
+        const fileFields = (submission.schema_snapshot?.pages || []).flatMap((page) =>
+            page.fields.filter((field) => field.type === "file"),
+        )
+        if (fileFields.length > 1 && !uploadFieldKey) {
+            toast.error("Select a file field first")
+            if (fileInputRef.current) {
+                fileInputRef.current.value = ""
+            }
+            return
+        }
+
         try {
             await uploadFileMutation.mutateAsync({
                 submissionId: submission.id,
                 file,
                 formId: submission.form_id,
                 surrogateId: submission.surrogate_id,
+                fieldKey: uploadFieldKey || undefined,
             })
             toast.success(`Uploaded: ${file.name}`)
         } catch {
@@ -431,6 +476,7 @@ export function SurrogateApplicationTab({
 
     // Empty state - no submission
     if (!submission) {
+        const availableForms = publishedForms
         return (
             <Card>
                 <CardContent className="flex flex-col items-center justify-center py-16 text-center">
@@ -439,10 +485,34 @@ export function SurrogateApplicationTab({
                     <p className="text-sm text-muted-foreground mb-6 max-w-md">
                         This candidate has not yet submitted their application form. Send them a secure form link to get started.
                     </p>
+                    {availableForms.length > 1 && (
+                        <div className="mb-4 w-full max-w-xs">
+                            <Label className="mb-2 block text-xs font-medium text-muted-foreground">
+                                Select form
+                            </Label>
+                            <NativeSelect
+                                value={selectedFormId}
+                                onChange={(e) => setSelectedFormId(e.target.value)}
+                                className="w-full"
+                            >
+                                <NativeSelectOption value="">Choose a form</NativeSelectOption>
+                                {availableForms.map((form) => (
+                                    <NativeSelectOption key={form.id} value={form.id}>
+                                        {form.name}
+                                    </NativeSelectOption>
+                                ))}
+                            </NativeSelect>
+                        </div>
+                    )}
+                    {availableForms.length === 0 && (
+                        <div className="mb-4 text-xs text-muted-foreground">
+                            No published forms available. Publish a form to generate a link.
+                        </div>
+                    )}
                     <Button
                         className="bg-teal-500 hover:bg-teal-600"
                         onClick={handleGenerateFormLink}
-                        disabled={isGeneratingLink}
+                        disabled={isGeneratingLink || !effectiveFormId}
                     >
                         {isGeneratingLink ? (
                             <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
@@ -470,8 +540,8 @@ export function SurrogateApplicationTab({
                                 <div className="flex items-start gap-2 text-sm text-muted-foreground">
                                     <AlertTriangleIcon className="h-4 w-4 mt-0.5 shrink-0" />
                                     <p>
-                                        This link is unique to this surrogate and expires in 14 days. The candidate can save their progress
-                                        and return later.
+                                        This link is unique to this surrogate and expires in 14 days. The candidate can reopen the link
+                                        while it is active.
                                     </p>
                                 </div>
                             </div>
@@ -505,6 +575,12 @@ export function SurrogateApplicationTab({
     const isPending = status === "pending_review"
     const schema = submission.schema_snapshot as FormSchema | null
     const pages = schema?.pages || []
+    const fileFields = pages.flatMap((page) =>
+        page.fields.filter((field) => field.type === "file"),
+    )
+    const fileFieldLabels = new Map(
+        fileFields.map((field) => [field.key, field.label]),
+    )
     const previewFields = pages
         .flatMap((page) => page.fields)
         .filter((field) => field.type !== "file")
@@ -726,8 +802,23 @@ export function SurrogateApplicationTab({
                                     )}
                                 </CollapsibleTrigger>
 
-                                {isEditMode && (
-                                    <>
+                                {isEditMode && fileFields.length > 0 && (
+                                    <div className="flex items-center gap-2">
+                                        {fileFields.length > 1 && (
+                                            <NativeSelect
+                                                value={uploadFieldKey}
+                                                onChange={(e) => setUploadFieldKey(e.target.value)}
+                                                size="sm"
+                                                className="h-8 text-xs"
+                                            >
+                                                <NativeSelectOption value="">Select field</NativeSelectOption>
+                                                {fileFields.map((field) => (
+                                                    <NativeSelectOption key={field.key} value={field.key}>
+                                                        {field.label}
+                                                    </NativeSelectOption>
+                                                ))}
+                                            </NativeSelect>
+                                        )}
                                         <input
                                             ref={fileInputRef}
                                             type="file"
@@ -740,7 +831,7 @@ export function SurrogateApplicationTab({
                                             size="sm"
                                             className="h-8 gap-1.5 text-xs border-dashed border-primary/50 text-primary hover:bg-primary/5 hover:border-primary"
                                             onClick={() => fileInputRef.current?.click()}
-                                            disabled={uploadFileMutation.isPending}
+                                            disabled={uploadFileMutation.isPending || (fileFields.length > 1 && !uploadFieldKey)}
                                         >
                                             {uploadFileMutation.isPending ? (
                                                 <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
@@ -749,7 +840,12 @@ export function SurrogateApplicationTab({
                                             )}
                                             Upload File
                                         </Button>
-                                    </>
+                                    </div>
+                                )}
+                                {isEditMode && fileFields.length === 0 && (
+                                    <span className="text-xs text-muted-foreground">
+                                        No file fields configured
+                                    </span>
                                 )}
                             </div>
                         </CardHeader>
@@ -774,6 +870,9 @@ export function SurrogateApplicationTab({
                                 ) : (
                                     submission.files.map((file) => {
                                         const isDeleting = deletingFileId === file.id
+                                        const fieldLabel = file.field_key
+                                            ? fileFieldLabels.get(file.field_key)
+                                            : null
                                         return (
                                             <div
                                                 key={file.id}
@@ -793,6 +892,11 @@ export function SurrogateApplicationTab({
                                                     )}
                                                     <div className="min-w-0">
                                                         <p className="text-sm font-medium truncate">{file.filename}</p>
+                                                        {fieldLabel && (
+                                                            <p className="text-xs text-muted-foreground">
+                                                                Field: {fieldLabel}
+                                                            </p>
+                                                        )}
                                                         <p
                                                             className={cn(
                                                                 "text-xs",

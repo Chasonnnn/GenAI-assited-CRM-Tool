@@ -195,14 +195,16 @@ export function useUploadSubmissionFile() {
             file,
             formId,
             surrogateId,
+            fieldKey,
         }: {
             submissionId: string
             file: File
             formId: string
             surrogateId: string
+            fieldKey?: string | null
         }) => {
             const { uploadSubmissionFile } = await import('@/lib/api/forms')
-            return { result: await uploadSubmissionFile(submissionId, file), formId, surrogateId }
+            return { result: await uploadSubmissionFile(submissionId, file, fieldKey), formId, surrogateId }
         },
         onSuccess: ({ formId, surrogateId }) => {
             queryClient.invalidateQueries({

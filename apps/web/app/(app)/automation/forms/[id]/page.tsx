@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { ChangeEvent } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
@@ -38,6 +38,8 @@ import {
     XIcon,
     Loader2Icon,
     Trash2Icon,
+    CopyIcon,
+    SmartphoneIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -49,8 +51,11 @@ import {
     useUpdateForm,
     useUploadFormLogo,
 } from "@/lib/hooks/use-forms"
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
 import { NotFoundState } from "@/components/not-found-state"
-import type { FieldType, FormSchema, FormFieldOption, FormRead } from "@/lib/api/forms"
+import type { FieldType, FormSchema, FormFieldOption, FormRead, FormCreatePayload } from "@/lib/api/forms"
+import { useAuth } from "@/lib/auth-context"
+import { useOrgSignature } from "@/lib/hooks/use-signature"
 
 // Field type definitions
 type FieldTypeOption = {
@@ -564,11 +569,13 @@ export default function FormBuilderPage() {
     const idParam = params?.id
     const id = Array.isArray(idParam) ? idParam[0] : idParam ?? "new"
     const router = useRouter()
+    const { user } = useAuth()
     const isNewForm = id === "new"
     const formId = isNewForm ? null : id
 
     const { data: formData, isLoading: isFormLoading } = useForm(formId)
     const { data: mappingData, isLoading: isMappingsLoading } = useFormMappings(formId)
+    const { data: orgSignature } = useOrgSignature()
     const createFormMutation = useCreateForm()
     const updateFormMutation = useUpdateForm()
     const publishFormMutation = usePublishForm()
@@ -576,6 +583,9 @@ export default function FormBuilderPage() {
     const uploadLogoMutation = useUploadFormLogo()
 
     const logoInputRef = useRef<HTMLInputElement>(null)
+    const lastSavedFingerprintRef = useRef<string>("")
+    const hydratedFormRef = useRef<string | null>(null)
+    const orgLogoInitRef = useRef(false)
 
     const [hasHydrated, setHasHydrated] = useState(false)
 
@@ -588,9 +598,21 @@ export default function FormBuilderPage() {
     const [isPublished, setIsPublished] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [isPublishing, setIsPublishing] = useState(false)
+    const [useOrgLogo, setUseOrgLogo] = useState(false)
+    const [customLogoUrl, setCustomLogoUrl] = useState("")
+    const [isMobilePreview, setIsMobilePreview] = useState(false)
+    const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
+    const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
     const [draftPrompt, setDraftPrompt] = useState("")
     const [formDraft, setFormDraft] = useState<FormDraft | null>(null)
     const [isDrafting, setIsDrafting] = useState(false)
+
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || ""
+    const orgId = user?.org_id || ""
+    const orgLogoPath = orgId ? `/forms/public/${orgId}/signature-logo` : ""
+    const orgLogoAvailable = Boolean(orgSignature?.signature_logo_url)
+    const resolvedLogoUrl =
+        logoUrl && logoUrl.startsWith("/") && apiBaseUrl ? `${apiBaseUrl}${logoUrl}` : logoUrl
 
     // Page/field state
     const [pages, setPages] = useState<FormPage[]>([{ id: 1, name: "Page 1", fields: [] }])
@@ -612,7 +634,20 @@ export default function FormBuilderPage() {
         setHasHydrated(false)
         setFormDraft(null)
         setDraftPrompt("")
+        setAutoSaveStatus("idle")
+        setLastSavedAt(null)
+        hydratedFormRef.current = null
+        orgLogoInitRef.current = false
+        setUseOrgLogo(false)
+        setCustomLogoUrl("")
+        setIsMobilePreview(false)
     }, [formId])
+
+    useEffect(() => {
+        if (isNewForm) {
+            setHasHydrated(true)
+        }
+    }, [isNewForm])
 
     useEffect(() => {
         if (isNewForm || !formData || isMappingsLoading || hasHydrated) return
@@ -635,8 +670,53 @@ export default function FormBuilderPage() {
         setHasHydrated(true)
     }, [formData, mappingData, isMappingsLoading, hasHydrated, isNewForm])
 
+    useEffect(() => {
+        if (!hasHydrated) return
+        const identity = isNewForm ? "new" : formId || "unknown"
+        if (hydratedFormRef.current === identity) return
+        hydratedFormRef.current = identity
+        lastSavedFingerprintRef.current = draftFingerprint
+        if (!isNewForm && formData?.updated_at) {
+            setAutoSaveStatus("saved")
+            setLastSavedAt(new Date(formData.updated_at))
+        } else {
+            setAutoSaveStatus("idle")
+        }
+    }, [hasHydrated, isNewForm, formId, draftFingerprint, formData?.updated_at])
+
+    useEffect(() => {
+        if (!hasHydrated || orgLogoInitRef.current) return
+        if (!orgLogoPath) return
+        const isOrgLogo = logoUrl === orgLogoPath
+        setUseOrgLogo(isOrgLogo)
+        if (!isOrgLogo) {
+            setCustomLogoUrl(logoUrl)
+        }
+        orgLogoInitRef.current = true
+    }, [hasHydrated, logoUrl, orgLogoPath])
+
     const fallbackPage: FormPage = { id: 1, name: "Page 1", fields: [] }
     const currentPage = pages.find((p) => p.id === activePage) ?? pages[0] ?? fallbackPage
+
+    const draftPayload = useMemo<FormCreatePayload>(
+        () => ({
+            name: formName.trim(),
+            description: formDescription.trim() || null,
+            form_schema: buildFormSchema(pages, {
+                publicTitle,
+                logoUrl,
+                privacyNotice,
+            }),
+        }),
+        [formName, formDescription, pages, publicTitle, logoUrl, privacyNotice],
+    )
+    const draftFingerprint = useMemo(() => JSON.stringify(draftPayload), [draftPayload])
+    const debouncedPayload = useDebouncedValue(draftPayload, 1200)
+    const debouncedFingerprint = useMemo(
+        () => JSON.stringify(debouncedPayload),
+        [debouncedPayload],
+    )
+    const isDirty = draftFingerprint !== lastSavedFingerprintRef.current
 
     if (!isNewForm && (isFormLoading || isMappingsLoading)) {
         return (
@@ -688,13 +768,17 @@ export default function FormBuilderPage() {
         setDropIndicatorId(fieldId)
     }
 
+    const generateFieldId = () => {
+        if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+            return crypto.randomUUID()
+        }
+        return `field-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    }
+
     const buildNewField = (): FormField | null => {
         if (!draggedField) return null
 
-        const fieldId =
-            typeof crypto !== "undefined" && "randomUUID" in crypto
-                ? crypto.randomUUID()
-                : `field-${Date.now()}`
+        const fieldId = generateFieldId()
 
         const baseField: FormField = {
             id: fieldId,
@@ -803,6 +887,28 @@ export default function FormBuilderPage() {
         }
     }
 
+    const handleDuplicateField = (fieldId: string) => {
+        const nextId = generateFieldId()
+        setPages((prev) =>
+            prev.map((page) => {
+                if (page.id !== activePage) return page
+                const index = page.fields.findIndex((field) => field.id === fieldId)
+                if (index === -1) return page
+                const source = page.fields[index]
+                const duplicated: FormField = {
+                    ...source,
+                    id: nextId,
+                    label: `${source.label} (Copy)`,
+                    surrogateFieldMapping: "",
+                }
+                const nextFields = [...page.fields]
+                nextFields.splice(index + 1, 0, duplicated)
+                return { ...page, fields: nextFields }
+            }),
+        )
+        setSelectedField(nextId)
+    }
+
     const handleUpdateField = (fieldId: string, updates: Partial<FormField>) => {
         setPages((prev) =>
             prev.map((page) =>
@@ -816,15 +922,55 @@ export default function FormBuilderPage() {
         )
     }
 
+    const handleMappingChange = (fieldId: string, value: string) => {
+        const nextValue = value && value !== "none" ? value : ""
+        if (nextValue) {
+            const hasConflict = pages.some((page) =>
+                page.fields.some(
+                    (field) =>
+                        field.id !== fieldId && field.surrogateFieldMapping === nextValue,
+                ),
+            )
+            if (hasConflict) {
+                toast.error("This surrogate field is already mapped to another form field.")
+                return
+            }
+        }
+        handleUpdateField(fieldId, { surrogateFieldMapping: nextValue })
+    }
+
     // Page handlers
     const handleAddPage = () => {
+        const nextPageId = Math.max(0, ...pages.map((page) => page.id)) + 1
         const newPage: FormPage = {
-            id: pages.length + 1,
-            name: `Page ${pages.length + 1}`,
+            id: nextPageId,
+            name: `Page ${nextPageId}`,
             fields: [],
         }
         setPages([...pages, newPage])
         setActivePage(newPage.id)
+    }
+
+    const handleDuplicatePage = (pageId: number) => {
+        const nextPageId = Math.max(0, ...pages.map((page) => page.id)) + 1
+        const sourcePage = pages.find((page) => page.id === pageId)
+        if (!sourcePage) return
+
+        const duplicatedFields = sourcePage.fields.map((field) => ({
+            ...field,
+            id: generateFieldId(),
+            surrogateFieldMapping: "",
+        }))
+
+        const nextPage: FormPage = {
+            id: nextPageId,
+            name: `${sourcePage.name} (Copy)`,
+            fields: duplicatedFields,
+        }
+
+        setPages((prev) => [...prev, nextPage])
+        setActivePage(nextPageId)
+        setSelectedField(duplicatedFields[0]?.id ?? null)
     }
 
     const requestDeletePage = (pageId: number) => {
@@ -857,37 +1003,51 @@ export default function FormBuilderPage() {
         setPageToDelete(null)
     }
 
-    const persistForm = async (): Promise<FormRead> => {
-        const payload = {
-            name: formName.trim(),
-            description: formDescription.trim() || null,
-            form_schema: buildFormSchema(pages, {
-                publicTitle,
-                logoUrl,
-                privacyNotice,
-            }),
-        }
-
-        let savedForm: FormRead
-        if (isNewForm) {
-            savedForm = await createFormMutation.mutateAsync(payload)
-            router.replace(`/automation/forms/${savedForm.id}`)
+    const markSaved = useCallback((fingerprint: string, savedForm?: FormRead) => {
+        lastSavedFingerprintRef.current = fingerprint
+        setAutoSaveStatus("saved")
+        if (savedForm?.updated_at) {
+            setLastSavedAt(new Date(savedForm.updated_at))
         } else {
-            savedForm = await updateFormMutation.mutateAsync({
-                formId: id,
-                payload,
-            })
+            setLastSavedAt(new Date())
         }
+    }, [])
 
-        const mappings = buildMappings(pages)
-        await setMappingsMutation.mutateAsync({
-            formId: savedForm.id,
-            mappings,
-        })
+    const persistForm = useCallback(
+        async (payloadOverride?: FormCreatePayload): Promise<FormRead> => {
+            const payload = payloadOverride ?? draftPayload
 
-        setIsPublished(savedForm.status === "published")
-        return savedForm
-    }
+            let savedForm: FormRead
+            if (isNewForm) {
+                savedForm = await createFormMutation.mutateAsync(payload)
+                router.replace(`/automation/forms/${savedForm.id}`)
+            } else {
+                savedForm = await updateFormMutation.mutateAsync({
+                    formId: id,
+                    payload,
+                })
+            }
+
+            const mappings = buildMappings(pages)
+            await setMappingsMutation.mutateAsync({
+                formId: savedForm.id,
+                mappings,
+            })
+
+            setIsPublished(savedForm.status === "published")
+            return savedForm
+        },
+        [
+            createFormMutation,
+            draftPayload,
+            id,
+            isNewForm,
+            pages,
+            router,
+            setMappingsMutation,
+            updateFormMutation,
+        ],
+    )
 
     const handleSave = async () => {
         if (!formName.trim()) {
@@ -896,14 +1056,84 @@ export default function FormBuilderPage() {
         }
         setIsSaving(true)
         try {
-            await persistForm()
+            const savedForm = await persistForm(draftPayload)
+            markSaved(draftFingerprint, savedForm)
             toast.success("Form saved")
         } catch {
+            setAutoSaveStatus("error")
             toast.error("Failed to save form")
         } finally {
             setIsSaving(false)
         }
     }
+
+    const handleLogoUrlChange = (value: string) => {
+        setLogoUrl(value)
+        if (!useOrgLogo) {
+            setCustomLogoUrl(value)
+        }
+    }
+
+    const handleUseOrgLogoChange = (checked: boolean) => {
+        if (checked) {
+            if (!orgLogoAvailable || !orgLogoPath) {
+                toast.error("Add an organization logo in Settings to use this option.")
+                return
+            }
+            if (logoUrl && logoUrl !== orgLogoPath) {
+                setCustomLogoUrl(logoUrl)
+            }
+            setUseOrgLogo(true)
+            setLogoUrl(orgLogoPath)
+            return
+        }
+
+        setUseOrgLogo(false)
+        setLogoUrl(customLogoUrl)
+    }
+
+    useEffect(() => {
+        if (!hasHydrated) return
+        if (!formName.trim()) return
+        if (debouncedFingerprint === lastSavedFingerprintRef.current) return
+        if (isSaving || isPublishing) return
+        if (
+            createFormMutation.isPending ||
+            updateFormMutation.isPending ||
+            setMappingsMutation.isPending
+        ) {
+            return
+        }
+
+        let cancelled = false
+        setAutoSaveStatus("saving")
+
+        persistForm(debouncedPayload)
+            .then((savedForm) => {
+                if (cancelled) return
+                markSaved(debouncedFingerprint, savedForm)
+            })
+            .catch(() => {
+                if (cancelled) return
+                setAutoSaveStatus("error")
+            })
+
+        return () => {
+            cancelled = true
+        }
+    }, [
+        hasHydrated,
+        formName,
+        debouncedFingerprint,
+        debouncedPayload,
+        isSaving,
+        isPublishing,
+        createFormMutation.isPending,
+        updateFormMutation.isPending,
+        setMappingsMutation.isPending,
+        persistForm,
+        markSaved,
+    ])
 
     const handleLogoUploadClick = () => {
         logoInputRef.current?.click()
@@ -917,6 +1147,8 @@ export default function FormBuilderPage() {
         try {
             const uploaded = await uploadLogoMutation.mutateAsync(file)
             setLogoUrl(uploaded.logo_url)
+            setCustomLogoUrl(uploaded.logo_url)
+            setUseOrgLogo(false)
             toast.success("Logo uploaded")
         } catch {
             toast.error("Failed to upload logo")
@@ -1003,12 +1235,14 @@ export default function FormBuilderPage() {
     const confirmPublish = async () => {
         setIsPublishing(true)
         try {
-            const savedForm = await persistForm()
+            const savedForm = await persistForm(draftPayload)
+            markSaved(draftFingerprint, savedForm)
             await publishFormMutation.mutateAsync(savedForm.id)
             setIsPublished(true)
             setShowPublishDialog(false)
             toast.success("Form published")
         } catch {
+            setAutoSaveStatus("error")
             toast.error("Failed to publish form")
         } finally {
             setIsPublishing(false)
@@ -1024,6 +1258,27 @@ export default function FormBuilderPage() {
     }
 
     const isDragging = Boolean(draggedField || draggedFieldId)
+    const canvasWidthClass = isMobilePreview ? "max-w-sm" : "max-w-3xl"
+    const canvasFrameClass = isMobilePreview
+        ? "rounded-[32px] border border-stone-200 bg-white shadow-sm p-6"
+        : ""
+    const canvasScaleClass = isMobilePreview ? "origin-top scale-[0.96]" : ""
+    const autoSaveLabel = useMemo(() => {
+        if (!hasHydrated) return null
+        if (isSaving || autoSaveStatus === "saving") return "Saving..."
+        if (autoSaveStatus === "error") return "Autosave failed"
+        if (isDirty) return "Unsaved changes"
+        if (autoSaveStatus === "saved") {
+            if (lastSavedAt) {
+                return `Saved ${lastSavedAt.toLocaleTimeString("en-US", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                })}`
+            }
+            return "Saved"
+        }
+        return "Autosave on"
+    }, [autoSaveStatus, hasHydrated, isDirty, isSaving, lastSavedAt])
 
     return (
         <div className="flex h-screen flex-col bg-stone-100 dark:bg-stone-950">
@@ -1049,6 +1304,23 @@ export default function FormBuilderPage() {
                         <EyeIcon className="mr-2 size-4" />
                         Preview
                     </Button>
+                    <Button
+                        variant={isMobilePreview ? "secondary" : "outline"}
+                        size="sm"
+                        onClick={() => setIsMobilePreview((prev) => !prev)}
+                    >
+                        <SmartphoneIcon className="mr-2 size-4" />
+                        Mobile
+                    </Button>
+                    {autoSaveLabel && (
+                        <span
+                            className={`text-xs ${
+                                autoSaveStatus === "error" ? "text-red-600" : "text-stone-500"
+                            }`}
+                        >
+                            {autoSaveLabel}
+                        </span>
+                    )}
                     <Button variant="secondary" size="sm" onClick={handleSave} disabled={isSaving}>
                         {isSaving && <Loader2Icon className="mr-2 size-4 animate-spin" />}
                         Save
@@ -1082,6 +1354,10 @@ export default function FormBuilderPage() {
                 <Button variant="ghost" size="sm" onClick={handleAddPage}>
                     <PlusIcon className="mr-1 size-4" />
                     Add Page
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => handleDuplicatePage(activePage)}>
+                    <CopyIcon className="mr-1 size-4" />
+                    Duplicate Page
                 </Button>
                 <Button
                     variant="ghost"
@@ -1162,8 +1438,8 @@ export default function FormBuilderPage() {
                     <div
                         onDragOver={handleCanvasDragOver}
                         onDrop={handleDrop}
-                        className={`mx-auto min-h-[500px] max-w-3xl space-y-4 ${currentPage.fields.length === 0 ? "flex items-center justify-center" : ""
-                            }`}
+                        className={`mx-auto min-h-[500px] ${canvasWidthClass} space-y-4 ${currentPage.fields.length === 0 ? "flex items-center justify-center" : ""
+                            } ${canvasFrameClass} ${canvasScaleClass}`}
                     >
                         {currentPage.fields.length === 0 ? (
                             <div
@@ -1218,17 +1494,30 @@ export default function FormBuilderPage() {
                                                             {field.required && <span className="ml-2 text-red-500">*</span>}
                                                         </div>
                                                     </div>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="shrink-0"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation()
-                                                            handleDeleteField(field.id)
-                                                        }}
-                                                    >
-                                                        <XIcon className="size-4" />
-                                                    </Button>
+                                                    <div className="flex items-center gap-1">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="shrink-0"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleDuplicateField(field.id)
+                                                            }}
+                                                        >
+                                                            <CopyIcon className="size-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="shrink-0"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleDeleteField(field.id)
+                                                            }}
+                                                        >
+                                                            <XIcon className="size-4" />
+                                                        </Button>
+                                                    </div>
                                                 </CardContent>
                                             </Card>
                                         </div>
@@ -1334,9 +1623,7 @@ export default function FormBuilderPage() {
                                 <Select
                                     value={selectedFieldData.surrogateFieldMapping || "none"}
                                     onValueChange={(value) =>
-                                        handleUpdateField(selectedFieldData.id, {
-                                            surrogateFieldMapping: value && value !== "none" ? value : "",
-                                        })
+                                        handleMappingChange(selectedFieldData.id, value)
                                     }
                                 >
                                     <SelectTrigger>
@@ -1493,13 +1780,29 @@ export default function FormBuilderPage() {
 
                                 {/* Logo URL */}
                                 <div className="mt-4 space-y-2">
-                                    <Label htmlFor="logo-url">Logo URL</Label>
+                                    <div className="flex items-center justify-between">
+                                        <Label htmlFor="logo-url">Logo URL</Label>
+                                        <div className="flex items-center gap-2 text-xs text-stone-500">
+                                            <Switch
+                                                checked={useOrgLogo}
+                                                onCheckedChange={handleUseOrgLogoChange}
+                                                disabled={!orgLogoAvailable}
+                                            />
+                                            <span>Use org logo</span>
+                                        </div>
+                                    </div>
                                     <Input
                                         id="logo-url"
                                         value={logoUrl}
-                                        onChange={(e) => setLogoUrl(e.target.value)}
+                                        onChange={(e) => handleLogoUrlChange(e.target.value)}
                                         placeholder="https://example.com/logo.png"
+                                        disabled={useOrgLogo}
                                     />
+                                    {!orgLogoAvailable && (
+                                        <p className="text-xs text-stone-500">
+                                            Add an organization logo in Settings to enable this option.
+                                        </p>
+                                    )}
                                     <div className="flex items-center gap-2">
                                         <input
                                             ref={logoInputRef}
@@ -1513,20 +1816,20 @@ export default function FormBuilderPage() {
                                             variant="outline"
                                             size="sm"
                                             onClick={handleLogoUploadClick}
-                                            disabled={uploadLogoMutation.isPending}
+                                            disabled={uploadLogoMutation.isPending || useOrgLogo}
                                         >
                                             {uploadLogoMutation.isPending && (
                                                 <Loader2Icon className="mr-2 size-4 animate-spin" />
                                             )}
                                             Upload Logo
                                         </Button>
-                                        {logoUrl && (
+                                        {logoUrl && !useOrgLogo && (
                                             <Button
                                                 type="button"
                                                 variant="ghost"
                                                 size="sm"
-                                                onClick={() => setLogoUrl("")}
-                                            >
+                                                onClick={() => handleLogoUrlChange("")}
+                                                >
                                                 Remove
                                             </Button>
                                         )}
@@ -1534,7 +1837,7 @@ export default function FormBuilderPage() {
                                     {logoUrl && (
                                         <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
                                             <img
-                                                src={logoUrl}
+                                                src={resolvedLogoUrl}
                                                 alt="Form logo preview"
                                                 className="h-14 w-auto rounded-md object-contain"
                                             />

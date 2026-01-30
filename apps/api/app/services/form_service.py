@@ -213,6 +213,18 @@ def set_field_mappings(
         if surrogate_field not in SURROGATE_FIELD_TYPES:
             raise ValueError(f"Unsupported surrogate field: {surrogate_field}")
 
+    field_key_set: set[str] = set()
+    surrogate_field_set: set[str] = set()
+    for mapping in mappings:
+        field_key = mapping["field_key"]
+        surrogate_field = mapping["surrogate_field"]
+        if field_key in field_key_set:
+            raise ValueError(f"Duplicate field key: {field_key}")
+        if surrogate_field in surrogate_field_set:
+            raise ValueError(f"Duplicate surrogate field: {surrogate_field}")
+        field_key_set.add(field_key)
+        surrogate_field_set.add(surrogate_field)
+
     db.query(FormFieldMapping).filter(FormFieldMapping.form_id == form.id).delete()
     created: list[FormFieldMapping] = []
     for mapping in mappings:

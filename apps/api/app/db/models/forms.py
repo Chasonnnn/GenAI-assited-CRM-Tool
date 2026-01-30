@@ -232,6 +232,7 @@ class FormSubmission(Base):
     )
     answers_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
     schema_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    mapping_snapshot: Mapped[list[dict] | None] = mapped_column(JSONB, nullable=True)
 
     submitted_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(), server_default=text("now()"), nullable=False
@@ -274,6 +275,7 @@ class FormSubmissionFile(Base):
         nullable=False,
     )
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    field_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
     storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
     content_type: Mapped[str] = mapped_column(String(100), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -283,6 +285,9 @@ class FormSubmissionFile(Base):
     )
     quarantined: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
+    deleted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(), server_default=text("now()"), nullable=False
     )

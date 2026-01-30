@@ -264,3 +264,107 @@ async def test_update_submission_answers_syncs_surrogate_fields(
     db.refresh(surrogate)
     assert surrogate.full_name == "Jane Smith"
     assert str(surrogate.date_of_birth) == "1991-02-03"
+
+
+@pytest.mark.asyncio
+async def test_form_mappings_reject_duplicate_surrogate_fields(
+    authed_client,
+):
+    schema = {
+        "pages": [
+            {
+                "title": "Basics",
+                "fields": [
+                    {
+                        "key": "full_name",
+                        "label": "Full Name",
+                        "type": "text",
+                        "required": True,
+                    },
+                    {
+                        "key": "email",
+                        "label": "Email",
+                        "type": "email",
+                        "required": True,
+                    },
+                ],
+            }
+        ]
+    }
+
+    create_res = await authed_client.post(
+        "/forms",
+        json={
+            "name": "Mapping Form",
+            "description": "Test form",
+            "form_schema": schema,
+        },
+    )
+    assert create_res.status_code == 200
+    form_id = create_res.json()["id"]
+
+    publish_res = await authed_client.post(f"/forms/{form_id}/publish")
+    assert publish_res.status_code == 200
+
+    mapping_res = await authed_client.put(
+        f"/forms/{form_id}/mappings",
+        json={
+            "mappings": [
+                {"field_key": "full_name", "surrogate_field": "email"},
+                {"field_key": "email", "surrogate_field": "email"},
+            ]
+        },
+    )
+    assert mapping_res.status_code == 400
+    assert "Duplicate surrogate field" in mapping_res.text
+
+
+@pytest.mark.asyncio
+async def test_public_form_requires_file_fields(
+    client, authed_client, db, test_org, test_user, default_stage
+):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+
+    schema = {
+        "pages": [
+            {
+                "title": "Docs",
+                "fields": [
+                    {
+                        "key": "supporting_docs",
+                        "label": "Supporting Documents",
+                        "type": "file",
+                        "required": True,
+                    }
+                ],
+            }
+        ]
+    }
+
+    # Use authed client to create form and token
+    create_res = await authed_client.post(
+        "/forms",
+        json={
+            "name": "Docs Form",
+            "description": "Test form",
+            "form_schema": schema,
+        },
+    )
+    assert create_res.status_code == 200
+    form_id = create_res.json()["id"]
+
+    publish_res = await authed_client.post(f"/forms/{form_id}/publish")
+    assert publish_res.status_code == 200
+
+    token_res = await authed_client.post(
+        f"/forms/{form_id}/tokens",
+        json={"surrogate_id": str(surrogate.id), "expires_in_days": 7},
+    )
+    assert token_res.status_code == 200
+    token = token_res.json()["token"]
+
+    submission_res = await client.post(
+        f"/forms/public/{token}/submit",
+        data={"answers": json.dumps({})},
+    )
+    assert submission_res.status_code == 400

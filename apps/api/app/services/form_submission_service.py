@@ -32,6 +32,7 @@ from app.services.attachment_service import (
 
 DEFAULT_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 DEFAULT_MAX_FILE_COUNT = 10
+PER_FILE_FIELD_MAX_COUNT = 5
 
 SURROGATE_FIELD_TYPES: dict[str, str] = {
     "full_name": "str",
@@ -136,6 +137,7 @@ def create_submission(
     form: Form,
     answers: dict[str, Any],
     files: list[UploadFile] | None = None,
+    file_field_keys: list[str] | None = None,
 ) -> FormSubmission:
     if form.status != FormStatus.PUBLISHED.value:
         raise ValueError("Form is not published")
@@ -144,6 +146,15 @@ def create_submission(
 
     schema = parse_schema(form.published_schema_json)
     _validate_answers(schema, answers)
+
+    file_fields = _get_file_fields(schema)
+    resolved_file_field_keys = _resolve_file_field_keys(
+        file_fields=file_fields,
+        files=files or [],
+        file_field_keys=file_field_keys,
+    )
+    _validate_required_file_fields(file_fields, resolved_file_field_keys)
+    _validate_file_field_limits(file_fields, resolved_file_field_keys)
 
     existing = (
         db.query(FormSubmission)
@@ -158,6 +169,8 @@ def create_submission(
     upload_files = files or []
     _validate_files(form, upload_files)
 
+    mapping_snapshot = _snapshot_mappings(db, form.id)
+
     submission = FormSubmission(
         organization_id=form.organization_id,
         form_id=form.id,
@@ -166,13 +179,15 @@ def create_submission(
         status=FormSubmissionStatus.PENDING_REVIEW.value,
         answers_json=answers,
         schema_snapshot=form.published_schema_json,
+        mapping_snapshot=mapping_snapshot,
         submitted_at=datetime.now(timezone.utc),
     )
     db.add(submission)
     db.flush()
 
-    for file in upload_files:
-        _store_submission_file(db, submission, file, form)
+    for idx, file in enumerate(upload_files):
+        field_key = resolved_file_field_keys[idx] if resolved_file_field_keys else None
+        _store_submission_file(db, submission, file, form, field_key=field_key)
 
     token.used_submissions += 1
     if token.used_submissions >= token.max_submissions:
@@ -282,6 +297,7 @@ def add_submission_file(
     org_id: uuid.UUID,
     submission: FormSubmission,
     file: UploadFile,
+    field_key: str | None,
     user_id: uuid.UUID,
 ) -> FormSubmissionFile:
     """Add a file to an existing submission (staff edit mode)."""
@@ -290,6 +306,36 @@ def add_submission_file(
         raise ValueError("Form not found")
 
     _validate_file(form, file)
+
+    schema_json = submission.schema_snapshot or form.published_schema_json
+    if not schema_json:
+        raise ValueError("Submission schema missing")
+
+    schema = parse_schema(schema_json)
+    file_fields = _get_file_fields(schema)
+    resolved_keys = _resolve_file_field_keys(
+        file_fields=file_fields,
+        files=[file],
+        file_field_keys=[field_key] if field_key else None,
+    )
+    resolved_field_key = resolved_keys[0] if resolved_keys else None
+
+    if resolved_field_key:
+        existing_field_count = (
+            db.query(FormSubmissionFile)
+            .filter(
+                FormSubmissionFile.submission_id == submission.id,
+                FormSubmissionFile.field_key == resolved_field_key,
+                FormSubmissionFile.deleted_at.is_(None),
+            )
+            .count()
+        )
+        if existing_field_count >= PER_FILE_FIELD_MAX_COUNT:
+            label = file_fields.get(resolved_field_key).label if resolved_field_key in file_fields else None
+            label_text = label or resolved_field_key
+            raise ValueError(
+                f"Maximum {PER_FILE_FIELD_MAX_COUNT} files allowed for {label_text}"
+            )
 
     existing_count = (
         db.query(FormSubmissionFile)
@@ -323,6 +369,7 @@ def add_submission_file(
         organization_id=submission.organization_id,
         submission_id=submission.id,
         filename=file.filename or "upload",
+        field_key=resolved_field_key,
         storage_key=storage_key,
         content_type=file.content_type or "application/octet-stream",
         file_size=file_size,
@@ -433,7 +480,7 @@ def approve_submission(
     if not surrogate:
         raise ValueError("Surrogate not found")
 
-    mappings = list_field_mappings(db, submission.form_id)
+    mappings = _get_submission_mappings(db, submission)
     updates = _build_surrogate_updates(submission, mappings)
 
     if updates:
@@ -527,8 +574,8 @@ def update_submission_answers(
 
     schema = parse_schema(submission.schema_snapshot)
     fields = flatten_fields(schema)
-    mappings = list_field_mappings(db, submission.form_id)
-    mapping_by_key = {m.field_key: m.surrogate_field for m in mappings}
+    mappings = _get_submission_mappings(db, submission)
+    mapping_by_key = {m["field_key"]: m["surrogate_field"] for m in mappings}
 
     old_values: dict[str, Any] = {}
     new_values: dict[str, Any] = {}
@@ -730,7 +777,11 @@ def _mime_allowed(content_type: str, allowed: list[str]) -> bool:
 
 
 def _store_submission_file(
-    db: Session, submission: FormSubmission, file: UploadFile, form: Form
+    db: Session,
+    submission: FormSubmission,
+    file: UploadFile,
+    form: Form,
+    field_key: str | None,
 ) -> None:
     scan_enabled = getattr(settings, "ATTACHMENT_SCAN_ENABLED", False)
     file.file.seek(0, 2)
@@ -752,6 +803,7 @@ def _store_submission_file(
         organization_id=submission.organization_id,
         submission_id=submission.id,
         filename=file.filename or "upload",
+        field_key=field_key,
         storage_key=storage_key,
         content_type=file.content_type or "application/octet-stream",
         file_size=file_size,
@@ -763,12 +815,14 @@ def _store_submission_file(
 
 
 def _build_surrogate_updates(
-    submission: FormSubmission, mappings: list[FormFieldMapping]
+    submission: FormSubmission, mappings: list[dict[str, str]]
 ) -> dict[str, Any]:
     updates: dict[str, Any] = {}
     for mapping in mappings:
-        field_key = mapping.field_key
-        surrogate_field = mapping.surrogate_field
+        field_key = mapping.get("field_key")
+        surrogate_field = mapping.get("surrogate_field")
+        if not field_key or not surrogate_field:
+            continue
         if surrogate_field not in SURROGATE_FIELD_TYPES:
             continue
         value = submission.answers_json.get(field_key)
@@ -776,6 +830,98 @@ def _build_surrogate_updates(
             continue
         updates[surrogate_field] = _coerce_surrogate_value(surrogate_field, value)
     return updates
+
+
+def _snapshot_mappings(db: Session, form_id: uuid.UUID) -> list[dict[str, str]]:
+    return [
+        {"field_key": mapping.field_key, "surrogate_field": mapping.surrogate_field}
+        for mapping in list_field_mappings(db, form_id)
+    ]
+
+
+def _get_submission_mappings(
+    db: Session, submission: FormSubmission
+) -> list[dict[str, str]]:
+    if submission.mapping_snapshot is not None:
+        return submission.mapping_snapshot
+    return _snapshot_mappings(db, submission.form_id)
+
+
+def _get_file_fields(schema: FormSchema) -> dict[str, FormField]:
+    fields: dict[str, FormField] = {}
+    for page in schema.pages:
+        for field in page.fields:
+            if field.type == "file":
+                fields[field.key] = field
+    return fields
+
+
+def _resolve_file_field_keys(
+    file_fields: dict[str, FormField],
+    files: list[UploadFile],
+    file_field_keys: list[str] | None,
+) -> list[str]:
+    if not files:
+        if file_field_keys:
+            raise ValueError("file_field_keys provided without files")
+        return []
+
+    if not file_fields:
+        raise ValueError("Form does not accept file uploads")
+
+    provided_keys = file_field_keys or []
+    field_keys = list(file_fields.keys())
+
+    if len(file_fields) == 1:
+        only_key = field_keys[0]
+        if provided_keys:
+            if len(provided_keys) != len(files):
+                raise ValueError("file_field_keys length must match files")
+            for key in provided_keys:
+                if key != only_key:
+                    raise ValueError(f"Unknown file field: {key}")
+            return provided_keys
+        return [only_key for _ in files]
+
+    if not provided_keys:
+        raise ValueError("file_field_keys required when multiple file fields are configured")
+    if len(provided_keys) != len(files):
+        raise ValueError("file_field_keys length must match files")
+    for key in provided_keys:
+        if key not in file_fields:
+            raise ValueError(f"Unknown file field: {key}")
+    return provided_keys
+
+
+def _validate_required_file_fields(
+    file_fields: dict[str, FormField], file_field_keys: list[str]
+) -> None:
+    required_keys = {key for key, field in file_fields.items() if field.required}
+    if not required_keys:
+        return
+    provided = set(file_field_keys)
+    missing = required_keys - provided
+    if missing:
+        missing_key = next(iter(missing))
+        label = file_fields[missing_key].label or missing_key
+        raise ValueError(f"Missing required file: {label}")
+
+
+def _validate_file_field_limits(
+    file_fields: dict[str, FormField], file_field_keys: list[str]
+) -> None:
+    if not file_field_keys:
+        return
+
+    counts: dict[str, int] = {}
+    for key in file_field_keys:
+        counts[key] = counts.get(key, 0) + 1
+        if counts[key] > PER_FILE_FIELD_MAX_COUNT:
+            label = file_fields.get(key).label if key in file_fields else None
+            label_text = label or key
+            raise ValueError(
+                f"Maximum {PER_FILE_FIELD_MAX_COUNT} files allowed for {label_text}"
+            )
 
 
 def _coerce_surrogate_value(surrogate_field: str, value: Any) -> Any:
