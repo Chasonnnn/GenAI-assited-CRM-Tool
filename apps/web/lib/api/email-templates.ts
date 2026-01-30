@@ -5,6 +5,8 @@
 import api from './index'
 
 // Types
+export type EmailTemplateScope = 'org' | 'personal'
+
 export interface EmailTemplate {
     id: string
     organization_id: string
@@ -14,6 +16,11 @@ export interface EmailTemplate {
     from_email: string | null
     body: string
     is_active: boolean
+    scope: EmailTemplateScope
+    owner_user_id: string | null
+    owner_name: string | null
+    source_template_id: string | null
+    is_system_template: boolean
     current_version: number
     created_at: string
     updated_at: string
@@ -25,6 +32,10 @@ export interface EmailTemplateListItem {
     subject: string
     from_email: string | null
     is_active: boolean
+    scope: EmailTemplateScope
+    owner_user_id: string | null
+    owner_name: string | null
+    is_system_template: boolean
     created_at: string
     updated_at: string
 }
@@ -34,6 +45,15 @@ export interface EmailTemplateCreate {
     subject: string
     from_email?: string | null
     body: string
+    scope?: EmailTemplateScope
+}
+
+export interface EmailTemplateCopyRequest {
+    name: string
+}
+
+export interface EmailTemplateShareRequest {
+    name: string
 }
 
 export interface EmailTemplateUpdate {
@@ -83,9 +103,24 @@ export interface EmailTemplateVersion {
     created_at: string
 }
 
+export interface ListTemplatesParams {
+    activeOnly?: boolean
+    scope?: EmailTemplateScope | null
+    showAllPersonal?: boolean
+}
+
 // API functions
-export async function listTemplates(activeOnly: boolean = true): Promise<EmailTemplateListItem[]> {
-    return api.get<EmailTemplateListItem[]>(`/email-templates?active_only=${activeOnly}`)
+export async function listTemplates(params: ListTemplatesParams = {}): Promise<EmailTemplateListItem[]> {
+    const { activeOnly = true, scope, showAllPersonal = false } = params
+    const searchParams = new URLSearchParams()
+    searchParams.set('active_only', String(activeOnly))
+    if (scope) {
+        searchParams.set('scope', scope)
+    }
+    if (showAllPersonal) {
+        searchParams.set('show_all_personal', 'true')
+    }
+    return api.get<EmailTemplateListItem[]>(`/email-templates?${searchParams.toString()}`)
 }
 
 export async function getTemplate(id: string): Promise<EmailTemplate> {
@@ -119,4 +154,31 @@ export async function getTemplateVersions(id: string): Promise<EmailTemplateVers
 
 export async function rollbackTemplate(id: string, version: number): Promise<EmailTemplate> {
     return api.post<EmailTemplate>(`/email-templates/${id}/rollback`, { target_version: version })
+}
+
+// ============================================================================
+// Copy & Share API
+// ============================================================================
+
+/**
+ * Copy an org/system template to your personal templates.
+ * Any authenticated user can copy - no manage permission required.
+ */
+export async function copyTemplateToPersonal(
+    id: string,
+    data: EmailTemplateCopyRequest
+): Promise<EmailTemplate> {
+    return api.post<EmailTemplate>(`/email-templates/${id}/copy`, data)
+}
+
+/**
+ * Share a personal template with the organization.
+ * Creates an org copy while keeping the personal template.
+ * Any user can share their own personal templates.
+ */
+export async function shareTemplateWithOrg(
+    id: string,
+    data: EmailTemplateShareRequest
+): Promise<EmailTemplate> {
+    return api.post<EmailTemplate>(`/email-templates/${id}/share`, data)
 }

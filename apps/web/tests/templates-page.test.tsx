@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import TemplatesPage from '../app/(app)/automation/templates/page'
+import WorkflowTemplatesPanel from '../components/automation/workflow-templates-panel'
+
+const mockUseAuth = vi.fn()
+vi.mock('@/lib/auth-context', () => ({
+    useAuth: () => mockUseAuth(),
+}))
 
 // Mock Next.js navigation
 vi.mock('next/navigation', () => ({
@@ -69,9 +74,10 @@ const mockCategories = [
     { value: 'general', label: 'General' },
 ]
 
-describe('TemplatesPage', () => {
+describe('WorkflowTemplatesPanel', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        mockUseAuth.mockReturnValue({ user: { role: 'admin' } })
 
             // Mock useQuery to return different data based on queryKey
             ; (useQuery as ReturnType<typeof vi.fn>).mockImplementation(({ queryKey }) => {
@@ -108,18 +114,18 @@ describe('TemplatesPage', () => {
     })
 
     it('renders the workflow templates panel', () => {
-        render(<TemplatesPage />)
+        render(<WorkflowTemplatesPanel />)
         expect(screen.getByText('Workflow Templates')).toBeInTheDocument()
     })
 
     it('renders template list from mocked data', () => {
-        render(<TemplatesPage />)
+        render(<WorkflowTemplatesPanel />)
         expect(screen.getByText('Welcome New Lead')).toBeInTheDocument()
         expect(screen.getByText('Task Reminder')).toBeInTheDocument()
     })
 
     it('shows email template selection when template with missing email is selected', async () => {
-        render(<TemplatesPage />)
+        render(<WorkflowTemplatesPanel />)
 
         // Find and click the template card (Card component, not button)
         const templateName = screen.getByText('Welcome New Lead')
@@ -134,7 +140,7 @@ describe('TemplatesPage', () => {
     })
 
     it('does not show email template selection for templates without send_email actions', async () => {
-        render(<TemplatesPage />)
+        render(<WorkflowTemplatesPanel />)
 
         // Find and click the Task Reminder template card
         const templateName = screen.getByText('Task Reminder')
@@ -145,7 +151,7 @@ describe('TemplatesPage', () => {
         // Should NOT show email template selection
         await waitFor(() => {
             // Dialog should be open but without email selection
-            expect(screen.getByText(/Use Template/i)).toBeInTheDocument()
+            expect(screen.getByRole("heading", { name: /Use Template/i })).toBeInTheDocument()
         })
 
         expect(screen.queryByText(/Select email templates for this workflow/i)).not.toBeInTheDocument()

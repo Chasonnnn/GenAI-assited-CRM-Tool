@@ -10,25 +10,31 @@ import {
     updateTemplate,
     deleteTemplate,
     sendEmail,
+    copyTemplateToPersonal,
+    shareTemplateWithOrg,
     EmailTemplateCreate,
     EmailTemplateUpdate,
     EmailSendRequest,
+    EmailTemplateCopyRequest,
+    EmailTemplateShareRequest,
+    EmailTemplateScope,
+    ListTemplatesParams,
 } from '@/lib/api/email-templates'
 
 // Query keys
 export const emailTemplateKeys = {
     all: ['email-templates'] as const,
     lists: () => [...emailTemplateKeys.all, 'list'] as const,
-    list: (activeOnly: boolean) => [...emailTemplateKeys.lists(), { activeOnly }] as const,
+    list: (params: ListTemplatesParams) => [...emailTemplateKeys.lists(), params] as const,
     details: () => [...emailTemplateKeys.all, 'detail'] as const,
     detail: (id: string) => [...emailTemplateKeys.details(), id] as const,
 }
 
 // Hooks
-export function useEmailTemplates(activeOnly: boolean = true) {
+export function useEmailTemplates(params: ListTemplatesParams = {}) {
     return useQuery({
-        queryKey: emailTemplateKeys.list(activeOnly),
-        queryFn: () => listTemplates(activeOnly),
+        queryKey: emailTemplateKeys.list(params),
+        queryFn: () => listTemplates(params),
     })
 }
 
@@ -104,6 +110,34 @@ export function useRollbackTemplate() {
         onSuccess: (_, { id }) => {
             queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
             queryClient.invalidateQueries({ queryKey: emailTemplateKeys.detail(id) })
+        },
+    })
+}
+
+// ============================================================================
+// Copy & Share Hooks
+// ============================================================================
+
+export function useCopyTemplateToPersonal() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: EmailTemplateCopyRequest }) =>
+            copyTemplateToPersonal(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
+        },
+    })
+}
+
+export function useShareTemplateWithOrg() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: EmailTemplateShareRequest }) =>
+            shareTemplateWithOrg(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
         },
     })
 }

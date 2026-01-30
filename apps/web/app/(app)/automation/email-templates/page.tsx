@@ -9,7 +9,13 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+    DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu"
 import {
     Dialog,
     DialogContent,
@@ -18,6 +24,13 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import {
     PlusIcon,
     MoreVerticalIcon,
@@ -32,6 +45,11 @@ import {
     LinkedinIcon,
     InstagramIcon,
     ImageIcon,
+    CopyIcon,
+    ShareIcon,
+    UserIcon,
+    BuildingIcon,
+    LockIcon,
 } from "lucide-react"
 import DOMPurify from "dompurify"
 import {
@@ -40,6 +58,8 @@ import {
     useCreateEmailTemplate,
     useUpdateEmailTemplate,
     useDeleteEmailTemplate,
+    useCopyTemplateToPersonal,
+    useShareTemplateWithOrg,
 } from "@/lib/hooks/use-email-templates"
 import {
     useUserSignature,
@@ -47,11 +67,13 @@ import {
     useSignaturePreview,
     useUploadSignaturePhoto,
     useDeleteSignaturePhoto,
+    useOrgSignaturePreview,
 } from "@/lib/hooks/use-signature"
 import { getSignaturePreview } from "@/lib/api/signature"
 import { RichTextEditor } from "@/components/rich-text-editor"
-import type { EmailTemplateListItem } from "@/lib/api/email-templates"
+import type { EmailTemplateListItem, EmailTemplateScope } from "@/lib/api/email-templates"
 import { toast } from "sonner"
+import { useAuth } from "@/lib/auth-context"
 
 // =============================================================================
 // Signature Override Field Component
@@ -287,6 +309,40 @@ function SignaturePreviewComponent() {
 }
 
 // =============================================================================
+// Org Signature Preview Component
+// =============================================================================
+
+function OrgSignaturePreviewComponent() {
+    const { data: preview, isLoading } = useOrgSignaturePreview(true)
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-8">
+                <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
+            </div>
+        )
+    }
+
+    if (!preview?.html) {
+        return (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+                <ImageIcon className="size-10 text-muted-foreground/40 mb-2" />
+                <p className="text-sm text-muted-foreground">
+                    No organization signature configured yet
+                </p>
+            </div>
+        )
+    }
+
+    return (
+        <div
+            className="prose prose-sm max-w-none"
+            dangerouslySetInnerHTML={{ __html: preview.html }}
+        />
+    )
+}
+
+// =============================================================================
 // Available template variables
 // =============================================================================
 
@@ -307,18 +363,145 @@ const TEMPLATE_VARIABLES = [
 ]
 
 // =============================================================================
+// Template Card Component
+// =============================================================================
+
+interface TemplateCardProps {
+    template: EmailTemplateListItem
+    isReadOnly?: boolean
+    canCopy?: boolean
+    canShare?: boolean
+    onEdit: () => void
+    onDelete: () => void
+    onCopy: () => void
+    onShare: () => void
+}
+
+function TemplateCard({
+    template,
+    isReadOnly = false,
+    canCopy = false,
+    canShare = false,
+    onEdit,
+    onDelete,
+    onCopy,
+    onShare,
+}: TemplateCardProps) {
+    return (
+        <Card className="group relative">
+            <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                            <CardTitle className="text-base truncate">
+                                {template.name}
+                            </CardTitle>
+                            {template.is_system_template && (
+                                <Badge variant="secondary" className="text-xs shrink-0">
+                                    System
+                                </Badge>
+                            )}
+                        </div>
+                        <CardDescription className="truncate mt-1">
+                            {template.subject}
+                        </CardDescription>
+                        {template.owner_name && (
+                            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                                <UserIcon className="size-3" />
+                                {template.owner_name}
+                            </p>
+                        )}
+                    </div>
+                    {!isReadOnly && (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger>
+                                <span className="inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground size-8 shrink-0 cursor-pointer">
+                                    <MoreVerticalIcon className="size-4" />
+                                </span>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                {!template.is_system_template && (
+                                    <>
+                                        <DropdownMenuItem onClick={onEdit}>
+                                            <EditIcon className="mr-2 size-4" />
+                                            Edit
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                    </>
+                                )}
+                                {canCopy && (
+                                    <DropdownMenuItem onClick={onCopy}>
+                                        <CopyIcon className="mr-2 size-4" />
+                                        Copy to My Templates
+                                    </DropdownMenuItem>
+                                )}
+                                {canShare && (
+                                    <DropdownMenuItem onClick={onShare}>
+                                        <ShareIcon className="mr-2 size-4" />
+                                        Share with Org
+                                    </DropdownMenuItem>
+                                )}
+                                {!template.is_system_template && (canCopy || canShare) && (
+                                    <DropdownMenuSeparator />
+                                )}
+                                {!template.is_system_template && (
+                                    <DropdownMenuItem
+                                        onClick={onDelete}
+                                        className="text-destructive"
+                                    >
+                                        <TrashIcon className="mr-2 size-4" />
+                                        Delete
+                                    </DropdownMenuItem>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )}
+                    {isReadOnly && (
+                        <Badge variant="outline" className="text-xs shrink-0">
+                            <LockIcon className="size-3 mr-1" />
+                            View Only
+                        </Badge>
+                    )}
+                </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+                <div className="flex items-center gap-2">
+                    <Badge variant={template.is_active ? "default" : "secondary"}>
+                        {template.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                        Updated {new Date(template.updated_at).toLocaleDateString()}
+                    </span>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+// =============================================================================
 // Main Page Component
 // =============================================================================
 
 export default function EmailTemplatesPage() {
-    const [activeTab, setActiveTab] = useState("templates")
+    const { user } = useAuth()
+    const isAdmin = user?.role === "admin" || user?.role === "developer"
+
+    const [activeTab, setActiveTab] = useState("personal")
+    const [showAllPersonal, setShowAllPersonal] = useState(false)
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingTemplate, setEditingTemplate] = useState<EmailTemplateListItem | null>(null)
     const [templateName, setTemplateName] = useState("")
     const [templateSubject, setTemplateSubject] = useState("")
     const [templateBody, setTemplateBody] = useState("")
+    const [templateScope, setTemplateScope] = useState<EmailTemplateScope>("personal")
     const [showPreview, setShowPreview] = useState(false)
     const [previewHtml, setPreviewHtml] = useState("")
+
+    // Copy/Share dialog state
+    const [copyDialogOpen, setCopyDialogOpen] = useState(false)
+    const [shareDialogOpen, setShareDialogOpen] = useState(false)
+    const [copyShareTarget, setCopyShareTarget] = useState<EmailTemplateListItem | null>(null)
+    const [copyShareName, setCopyShareName] = useState("")
 
     // Signature override state
     const [signatureName, setSignatureName] = useState("")
@@ -333,11 +516,22 @@ export default function EmailTemplatesPage() {
     // Track if form has unsaved changes
     const [hasChanges, setHasChanges] = useState(false)
 
-    // API hooks
-    const { data: templates, isLoading } = useEmailTemplates(false)
+    // API hooks for templates
+    const { data: personalTemplates, isLoading: loadingPersonal } = useEmailTemplates({
+        activeOnly: false,
+        scope: "personal",
+        showAllPersonal: isAdmin && showAllPersonal,
+    })
+    const { data: orgTemplates, isLoading: loadingOrg } = useEmailTemplates({
+        activeOnly: false,
+        scope: "org",
+    })
+
     const createTemplate = useCreateEmailTemplate()
     const updateTemplate = useUpdateEmailTemplate()
     const deleteTemplate = useDeleteEmailTemplate()
+    const copyToPersonal = useCopyTemplateToPersonal()
+    const shareWithOrg = useShareTemplateWithOrg()
 
     // Signature hooks
     const { data: signatureData, refetch: refetchSignature } = useUserSignature()
@@ -429,17 +623,19 @@ export default function EmailTemplatesPage() {
         setHasChanges(changed)
     }, [signatureName, signatureTitle, signaturePhone, signatureLinkedin, signatureTwitter, signatureInstagram, signatureData])
 
-    const handleOpenModal = (template?: EmailTemplateListItem) => {
+    const handleOpenModal = (template?: EmailTemplateListItem, scope: EmailTemplateScope = "personal") => {
         if (template) {
             setEditingTemplate(template)
             setTemplateName(template.name)
             setTemplateSubject(template.subject)
             setTemplateBody("")
+            setTemplateScope(template.scope)
         } else {
             setEditingTemplate(null)
             setTemplateName("")
             setTemplateSubject("")
             setTemplateBody("")
+            setTemplateScope(scope)
         }
         setIsModalOpen(true)
     }
@@ -460,7 +656,7 @@ export default function EmailTemplatesPage() {
             )
         } else {
             createTemplate.mutate(
-                { name: templateName, subject: templateSubject, body: templateBody },
+                { name: templateName, subject: templateSubject, body: templateBody, scope: templateScope },
                 { onSuccess: () => setIsModalOpen(false) }
             )
         }
@@ -470,6 +666,54 @@ export default function EmailTemplatesPage() {
         if (confirm("Are you sure you want to delete this template?")) {
             deleteTemplate.mutate(id)
         }
+    }
+
+    const handleOpenCopyDialog = (template: EmailTemplateListItem) => {
+        setCopyShareTarget(template)
+        setCopyShareName(`${template.name} (Copy)`)
+        setCopyDialogOpen(true)
+    }
+
+    const handleOpenShareDialog = (template: EmailTemplateListItem) => {
+        setCopyShareTarget(template)
+        setCopyShareName(template.name)
+        setShareDialogOpen(true)
+    }
+
+    const handleCopy = () => {
+        if (!copyShareTarget || !copyShareName.trim()) return
+        copyToPersonal.mutate(
+            { id: copyShareTarget.id, data: { name: copyShareName.trim() } },
+            {
+                onSuccess: () => {
+                    toast.success("Template copied to your personal templates")
+                    setCopyDialogOpen(false)
+                    setCopyShareTarget(null)
+                    setCopyShareName("")
+                },
+                onError: (error: Error) => {
+                    toast.error(error.message || "Failed to copy template")
+                },
+            }
+        )
+    }
+
+    const handleShare = () => {
+        if (!copyShareTarget || !copyShareName.trim()) return
+        shareWithOrg.mutate(
+            { id: copyShareTarget.id, data: { name: copyShareName.trim() } },
+            {
+                onSuccess: () => {
+                    toast.success("Template shared with the organization")
+                    setShareDialogOpen(false)
+                    setCopyShareTarget(null)
+                    setCopyShareName("")
+                },
+                onError: (error: Error) => {
+                    toast.error(error.message || "Failed to share template")
+                },
+            }
+        )
     }
 
     const handlePreview = () => {
@@ -570,10 +814,16 @@ export default function EmailTemplatesPage() {
             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <div className="flex h-16 items-center justify-between px-6">
                     <h1 className="text-2xl font-semibold">Email Templates</h1>
-                    {activeTab === "templates" && (
-                        <Button onClick={() => handleOpenModal()}>
+                    {activeTab === "personal" && (
+                        <Button onClick={() => handleOpenModal(undefined, "personal")}>
                             <PlusIcon className="mr-2 size-4" />
                             Create Template
+                        </Button>
+                    )}
+                    {activeTab === "org" && isAdmin && (
+                        <Button onClick={() => handleOpenModal(undefined, "org")}>
+                            <PlusIcon className="mr-2 size-4" />
+                            Create Org Template
                         </Button>
                     )}
                 </div>
@@ -582,75 +832,114 @@ export default function EmailTemplatesPage() {
             {/* Content */}
             <div className="flex-1 p-6">
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <TabsList className="mb-6">
-                        <TabsTrigger value="templates">Templates</TabsTrigger>
-                        <TabsTrigger value="signature">My Signature</TabsTrigger>
-                    </TabsList>
+                    <div className="flex items-center justify-between mb-6">
+                        <TabsList>
+                            <TabsTrigger value="personal" className="gap-2">
+                                <UserIcon className="size-4" />
+                                My Email Templates
+                            </TabsTrigger>
+                            <TabsTrigger value="org" className="gap-2">
+                                <BuildingIcon className="size-4" />
+                                Email Templates
+                            </TabsTrigger>
+                            <TabsTrigger value="signature">My Signature</TabsTrigger>
+                        </TabsList>
 
-                    {/* Templates Tab */}
-                    <TabsContent value="templates" className="space-y-4">
-                        {isLoading ? (
+                        {/* Admin filter for personal templates */}
+                        {activeTab === "personal" && isAdmin && (
+                            <Select
+                                value={showAllPersonal ? "all" : "mine"}
+                                onValueChange={(v) => setShowAllPersonal(v === "all")}
+                            >
+                                <SelectTrigger className="w-[180px]">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="mine">My Templates</SelectItem>
+                                    <SelectItem value="all">All Personal Templates</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        )}
+                    </div>
+
+                    {/* Personal Templates Tab */}
+                    <TabsContent value="personal" className="space-y-4">
+                        {loadingPersonal ? (
                             <div className="flex items-center justify-center py-12">
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                             </div>
-                        ) : !templates?.length ? (
+                        ) : !personalTemplates?.length ? (
                             <Card>
                                 <CardContent className="flex flex-col items-center justify-center py-12">
-                                    <MailIcon className="size-12 text-muted-foreground mb-4" />
-                                    <p className="text-muted-foreground mb-4">No email templates yet</p>
-                                    <Button onClick={() => handleOpenModal()}>
-                                        <PlusIcon className="mr-2 size-4" />
-                                        Create Your First Template
-                                    </Button>
+                                    <UserIcon className="size-12 text-muted-foreground mb-4" />
+                                    <p className="text-muted-foreground mb-4">
+                                        {showAllPersonal
+                                            ? "No personal templates found"
+                                            : "You don't have any personal templates yet"}
+                                    </p>
+                                    {!showAllPersonal && (
+                                        <Button onClick={() => handleOpenModal(undefined, "personal")}>
+                                            <PlusIcon className="mr-2 size-4" />
+                                            Create Your First Template
+                                        </Button>
+                                    )}
                                 </CardContent>
                             </Card>
                         ) : (
                             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                {templates.map((template) => (
-                                    <Card key={template.id} className="group relative">
-                                        <CardHeader className="pb-3">
-                                            <div className="flex items-start justify-between">
-                                                <div className="flex-1 min-w-0">
-                                                    <CardTitle className="text-base truncate">
-                                                        {template.name}
-                                                    </CardTitle>
-                                                    <CardDescription className="truncate mt-1">
-                                                        {template.subject}
-                                                    </CardDescription>
-                                                </div>
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger>
-                                                        <span className="inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground size-8 shrink-0 cursor-pointer">
-                                                            <MoreVerticalIcon className="size-4" />
-                                                        </span>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end">
-                                                        <DropdownMenuItem onClick={() => handleOpenModal(template)}>
-                                                            <EditIcon className="mr-2 size-4" />
-                                                            Edit
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem
-                                                            onClick={() => handleDelete(template.id)}
-                                                            className="text-destructive"
-                                                        >
-                                                            <TrashIcon className="mr-2 size-4" />
-                                                            Delete
-                                                        </DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </div>
-                                        </CardHeader>
-                                        <CardContent className="pt-0">
-                                            <div className="flex items-center gap-2">
-                                                <Badge variant={template.is_active ? "default" : "secondary"}>
-                                                    {template.is_active ? "Active" : "Inactive"}
-                                                </Badge>
-                                                <span className="text-xs text-muted-foreground">
-                                                    Updated {new Date(template.updated_at).toLocaleDateString()}
-                                                </span>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
+                                {personalTemplates.map((template) => {
+                                    const isOwner = template.owner_user_id === user?.user_id
+                                    return (
+                                        <TemplateCard
+                                            key={template.id}
+                                            template={template}
+                                            isReadOnly={!isOwner}
+                                            canCopy={false}
+                                            canShare={isOwner}
+                                            onEdit={() => handleOpenModal(template)}
+                                            onDelete={() => handleDelete(template.id)}
+                                            onCopy={() => {}}
+                                            onShare={() => handleOpenShareDialog(template)}
+                                        />
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </TabsContent>
+
+                    {/* Org Templates Tab */}
+                    <TabsContent value="org" className="space-y-4">
+                        {loadingOrg ? (
+                            <div className="flex items-center justify-center py-12">
+                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : !orgTemplates?.length ? (
+                            <Card>
+                                <CardContent className="flex flex-col items-center justify-center py-12">
+                                    <BuildingIcon className="size-12 text-muted-foreground mb-4" />
+                                    <p className="text-muted-foreground mb-4">No organization templates yet</p>
+                                    {isAdmin && (
+                                        <Button onClick={() => handleOpenModal(undefined, "org")}>
+                                            <PlusIcon className="mr-2 size-4" />
+                                            Create Org Template
+                                        </Button>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        ) : (
+                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                {orgTemplates.map((template) => (
+                                    <TemplateCard
+                                        key={template.id}
+                                        template={template}
+                                        isReadOnly={!isAdmin && !template.is_system_template}
+                                        canCopy={true}
+                                        canShare={false}
+                                        onEdit={() => handleOpenModal(template)}
+                                        onDelete={() => handleDelete(template.id)}
+                                        onCopy={() => handleOpenCopyDialog(template)}
+                                        onShare={() => {}}
+                                    />
                                 ))}
                             </div>
                         )}
@@ -872,22 +1161,43 @@ export default function EmailTemplatesPage() {
                             </div>
 
                             {/* Preview Column */}
-                            <Card className="lg:sticky lg:top-6 h-fit">
-                                <CardHeader>
-                                    <CardTitle>Preview</CardTitle>
-                                    <CardDescription>
-                                        How your signature will appear in emails
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="border rounded-lg p-4 bg-white min-h-[200px]">
-                                        <p className="text-muted-foreground text-sm mb-4 border-b pb-4">
-                                            [Your email content here...]
-                                        </p>
-                                        <SignaturePreviewComponent />
-                                    </div>
-                                </CardContent>
-                            </Card>
+                            <div className="space-y-6 lg:sticky lg:top-6 h-fit">
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Preview</CardTitle>
+                                        <CardDescription>
+                                            How your signature will appear in emails
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="border rounded-lg p-4 bg-white min-h-[200px]">
+                                            <p className="text-muted-foreground text-sm mb-4 border-b pb-4">
+                                                [Your email content here...]
+                                            </p>
+                                            <SignaturePreviewComponent />
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                <Card className="border-dashed">
+                                    <CardHeader>
+                                        <div className="flex items-center justify-between">
+                                            <CardTitle>Organization Signature</CardTitle>
+                                            <Badge variant="secondary" className="text-xs">
+                                                Read-only
+                                            </Badge>
+                                        </div>
+                                        <CardDescription>
+                                            Applied to organization workflows by default
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="border rounded-lg p-4 bg-white min-h-[160px]">
+                                            <OrgSignaturePreviewComponent />
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </div>
                         </div>
                     </TabsContent>
                 </Tabs>
@@ -902,6 +1212,15 @@ export default function EmailTemplatesPage() {
                         </DialogTitle>
                         <DialogDescription>
                             Create reusable email templates with dynamic variables.
+                            {!editingTemplate && (
+                                <span className="block mt-1">
+                                    Creating a{" "}
+                                    <Badge variant="outline" className="text-xs">
+                                        {templateScope === "personal" ? "Personal" : "Organization"}
+                                    </Badge>{" "}
+                                    template
+                                </span>
+                            )}
                         </DialogDescription>
                     </DialogHeader>
 
@@ -977,6 +1296,82 @@ export default function EmailTemplatesPage() {
                                 <Loader2Icon className="mr-2 size-4 animate-spin" />
                             )}
                             {editingTemplate ? "Save Changes" : "Create Template"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Copy Template Dialog */}
+            <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Copy to My Templates</DialogTitle>
+                        <DialogDescription>
+                            Create a personal copy of this template that you can customize.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="copy-name">Template Name</Label>
+                            <Input
+                                id="copy-name"
+                                placeholder="My Template Name"
+                                value={copyShareName}
+                                onChange={(e) => setCopyShareName(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setCopyDialogOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleCopy}
+                            disabled={copyToPersonal.isPending || !copyShareName.trim()}
+                        >
+                            {copyToPersonal.isPending && (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            )}
+                            <CopyIcon className="mr-2 size-4" />
+                            Copy Template
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Share Template Dialog */}
+            <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Share with Organization</DialogTitle>
+                        <DialogDescription>
+                            Share this template with your organization. Your personal copy will remain unchanged.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="share-name">Template Name</Label>
+                            <Input
+                                id="share-name"
+                                placeholder="Shared Template Name"
+                                value={copyShareName}
+                                onChange={(e) => setCopyShareName(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShareDialogOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleShare}
+                            disabled={shareWithOrg.isPending || !copyShareName.trim()}
+                        >
+                            {shareWithOrg.isPending && (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            )}
+                            <ShareIcon className="mr-2 size-4" />
+                            Share Template
                         </Button>
                     </DialogFooter>
                 </DialogContent>

@@ -3,6 +3,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import AutomationPage from '../app/(app)/automation/page'
 
+const mockUseAuth = vi.fn()
+vi.mock('@/lib/auth-context', () => ({
+    useAuth: () => mockUseAuth(),
+}))
+
 // Mock Next.js navigation
 vi.mock('next/navigation', () => ({
     useSearchParams: () => ({
@@ -114,6 +119,7 @@ vi.mock('@/lib/hooks/use-workflows', () => ({
 
 describe('AutomationPage', () => {
     beforeEach(() => {
+        mockUseAuth.mockReturnValue({ user: { role: 'admin' } })
         mockUseWorkflows.mockReturnValue({ data: [], isLoading: false })
         mockUseWorkflow.mockReturnValue({ data: null, isLoading: false })
         mockUseWorkflowStats.mockReturnValue({ data: { total_workflows: 0, enabled_workflows: 0, success_rate_24h: 0, total_executions_24h: 0 }, isLoading: false })
@@ -147,6 +153,13 @@ describe('AutomationPage', () => {
     it('renders', () => {
         render(<AutomationPage />)
         expect(screen.getAllByText('Workflows').length).toBeGreaterThan(0)
+    })
+
+    it('renders workflow tabs', () => {
+        render(<AutomationPage />)
+        expect(screen.getByText('My Workflows')).toBeInTheDocument()
+        expect(screen.getByText('Org Workflows')).toBeInTheDocument()
+        expect(screen.getByText('Workflow Templates')).toBeInTheDocument()
     })
 
     it('shows server validation errors in the wizard', () => {

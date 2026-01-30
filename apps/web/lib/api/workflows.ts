@@ -31,6 +31,8 @@ export interface Workflow {
     can_edit?: boolean
 }
 
+export type WorkflowScope = 'org' | 'personal'
+
 export interface WorkflowListItem {
     id: string
     name: string
@@ -41,6 +43,9 @@ export interface WorkflowListItem {
     run_count: number
     last_run_at: string | null
     last_error: string | null
+    scope: WorkflowScope
+    owner_user_id: string | null
+    owner_name: string | null
     created_at: string
     can_edit?: boolean
 }
@@ -66,6 +71,7 @@ export interface WorkflowCreate {
     condition_logic?: "AND" | "OR"
     actions: ActionConfig[]
     is_enabled?: boolean
+    scope?: WorkflowScope
 }
 
 export interface WorkflowUpdate {
@@ -160,13 +166,17 @@ export interface UserWorkflowPreference {
 // API Functions
 // =============================================================================
 
-export async function listWorkflows(params?: {
+export interface ListWorkflowsParams {
     enabled_only?: boolean
     trigger_type?: string
-}): Promise<WorkflowListItem[]> {
+    scope?: WorkflowScope | null
+}
+
+export async function listWorkflows(params?: ListWorkflowsParams): Promise<WorkflowListItem[]> {
     const searchParams = new URLSearchParams()
     if (params?.enabled_only) searchParams.set("enabled_only", "true")
     if (params?.trigger_type) searchParams.set("trigger_type", params.trigger_type)
+    if (params?.scope) searchParams.set("scope", params.scope)
 
     const query = searchParams.toString()
     return api.get<WorkflowListItem[]>(`/workflows${query ? `?${query}` : ""}`)
@@ -211,8 +221,11 @@ export async function getWorkflowStats(): Promise<WorkflowStats> {
     return api.get<WorkflowStats>("/workflows/stats")
 }
 
-export async function getWorkflowOptions(): Promise<WorkflowOptions> {
-    return api.get<WorkflowOptions>("/workflows/options")
+export async function getWorkflowOptions(workflowScope?: WorkflowScope): Promise<WorkflowOptions> {
+    const searchParams = new URLSearchParams()
+    if (workflowScope) searchParams.set("workflow_scope", workflowScope)
+    const query = searchParams.toString()
+    return api.get<WorkflowOptions>(`/workflows/options${query ? `?${query}` : ""}`)
 }
 
 export async function listExecutions(

@@ -19,6 +19,7 @@ import {
     updateUserPreference,
     type WorkflowCreate,
     type WorkflowUpdate,
+    type ListWorkflowsParams,
 } from "@/lib/api/workflows"
 
 // =============================================================================
@@ -28,12 +29,12 @@ import {
 export const workflowKeys = {
     all: ["workflows"] as const,
     lists: () => [...workflowKeys.all, "list"] as const,
-    list: (filters: { enabled_only?: boolean; trigger_type?: string }) =>
+    list: (filters: ListWorkflowsParams) =>
         [...workflowKeys.lists(), filters] as const,
     details: () => [...workflowKeys.all, "detail"] as const,
     detail: (id: string) => [...workflowKeys.details(), id] as const,
     stats: () => [...workflowKeys.all, "stats"] as const,
-    options: () => [...workflowKeys.all, "options"] as const,
+    options: (workflowScope?: string) => [...workflowKeys.all, "options", workflowScope] as const,
     executions: (workflowId: string) =>
         [...workflowKeys.all, "executions", workflowId] as const,
     preferences: () => [...workflowKeys.all, "preferences"] as const,
@@ -43,10 +44,7 @@ export const workflowKeys = {
 // List Hooks
 // =============================================================================
 
-export function useWorkflows(params?: {
-    enabled_only?: boolean
-    trigger_type?: string
-}) {
+export function useWorkflows(params?: ListWorkflowsParams) {
     return useQuery({
         queryKey: workflowKeys.list(params || {}),
         queryFn: () => listWorkflows(params),
@@ -68,10 +66,10 @@ export function useWorkflowStats() {
     })
 }
 
-export function useWorkflowOptions() {
+export function useWorkflowOptions(workflowScope?: string) {
     return useQuery({
-        queryKey: workflowKeys.options(),
-        queryFn: getWorkflowOptions,
+        queryKey: workflowKeys.options(workflowScope),
+        queryFn: () => getWorkflowOptions(workflowScope as 'org' | 'personal' | undefined),
         staleTime: 5 * 60 * 1000, // 5 minutes - options don't change often
     })
 }

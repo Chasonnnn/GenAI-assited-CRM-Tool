@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
     Dialog,
@@ -35,12 +36,14 @@ import {
     GripVerticalIcon,
     ChevronRightIcon,
     WorkflowIcon,
+    LayoutTemplateIcon,
     ClockIcon,
     ZapIcon,
     FileTextIcon,
     Loader2Icon,
     AlertCircleIcon,
     ChevronDownIcon,
+    BuildingIcon,
 } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import {
@@ -63,11 +66,14 @@ import type {
     WorkflowCreate,
     WorkflowTestResponse,
     WorkflowOptions,
+    WorkflowScope,
 } from "@/lib/api/workflows"
+import { useAuth } from "@/lib/auth-context"
 import { useCreateEmailTemplate, useUpdateEmailTemplate, useDeleteEmailTemplate } from "@/lib/hooks/use-email-templates"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
 import { ApiError } from "@/lib/api"
 import { globalSearch } from "@/lib/api/search"
+import WorkflowTemplatesPanel from "@/components/automation/workflow-templates-panel"
 import { getAppointments } from "@/lib/api/appointments"
 import { listMatches, type ListMatchesParams } from "@/lib/api/matches"
 import { getTasks, type TaskListParams } from "@/lib/api/tasks"
@@ -502,11 +508,18 @@ function normalizeTriggerConfigForUi(
 export default function AutomationPage() {
     const router = useRouter()
     const searchParams = useSearchParams()
+    const { user } = useAuth()
     const validTabs = ["workflows", "email-templates", "campaigns"]
     const tabParam = searchParams.get("tab")
     const createParam = searchParams.get("create")
     const initialTab = tabParam && validTabs.includes(tabParam) ? tabParam : "workflows"
     const [activeTab] = useState(initialTab)
+
+    // Workflow scope tab state
+    const [workflowScopeTab, setWorkflowScopeTab] = useState<"personal" | "org" | "templates">("personal")
+    const [workflowScope, setWorkflowScope] = useState<WorkflowScope>("personal")
+    const isTemplatesTab = workflowScopeTab === "templates"
+    const activeWorkflowScope: WorkflowScope = workflowScopeTab === "templates" ? "personal" : workflowScopeTab
 
     // Workflow state - initialize create modal from query param
     const [showCreateModal, setShowCreateModal] = useState(createParam === "true")
@@ -542,9 +555,9 @@ export default function AutomationPage() {
     const [templateBody, setTemplateBody] = useState("")
 
     // API hooks
-    const { data: workflows, isLoading: workflowsLoading } = useWorkflows()
+    const { data: workflows, isLoading: workflowsLoading } = useWorkflows({ scope: activeWorkflowScope })
     const { data: stats, isLoading: statsLoading } = useWorkflowStats()
-    const { data: options } = useWorkflowOptions()
+    const { data: options } = useWorkflowOptions(workflowScope)
     const statusOptions = options?.statuses ?? EMPTY_STATUS_OPTIONS
     const activeStatusOptions = statusOptions.filter((status) => status.is_active !== false)
     const actionTypeOptions = options?.action_types ?? []
@@ -904,9 +917,10 @@ export default function AutomationPage() {
         setEditingWorkflowId(null)
     }
 
-    const handleCreate = () => {
+    const handleCreate = (scope: WorkflowScope = activeWorkflowScope) => {
         resetWorkflowForm()
         setEditingWorkflowId(null)
+        setWorkflowScope(scope)
         setShowCreateModal(true)
     }
 
@@ -940,6 +954,7 @@ export default function AutomationPage() {
                 : "AND"
         setConditionLogic(logic)
         setActions(normalizeActionsForUi(editingWorkflow.actions || []))
+        setWorkflowScope(editingWorkflow.scope as WorkflowScope)
         setHydratedWorkflowId(editingWorkflowId)
     }, [editingWorkflow, editingWorkflowId, hydratedWorkflowId, showCreateModal, statusOptions])
 
@@ -1041,6 +1056,7 @@ export default function AutomationPage() {
             condition_logic: conditionLogic,
             actions,
             is_enabled: true,
+            scope: workflowScope,
             ...(workflowDescription ? { description: workflowDescription } : {}),
         }
 
@@ -1245,25 +1261,65 @@ export default function AutomationPage() {
                         </Card>
                     </div>
 
-                    {/* Workflow List */}
-                    <div className="space-y-4">
-                        <h2 className="text-lg font-semibold">Workflows</h2>
+                    {/* Workflow Tabs */}
+                    <Tabs
+                        value={workflowScopeTab}
+                        onValueChange={(v) => setWorkflowScopeTab(v as "personal" | "org" | "templates")}
+                        className="space-y-4"
+                    >
+                        <div className="flex items-center justify-between">
+                            <TabsList>
+                                <TabsTrigger value="personal" className="gap-2">
+                                    <UserIcon className="size-4" />
+                                    My Workflows
+                                </TabsTrigger>
+                                <TabsTrigger value="org" className="gap-2">
+                                    <BuildingIcon className="size-4" />
+                                    Org Workflows
+                                </TabsTrigger>
+                                <TabsTrigger value="templates" className="gap-2">
+                                    <LayoutTemplateIcon className="size-4" />
+                                    Workflow Templates
+                                </TabsTrigger>
+                            </TabsList>
+                            {!isTemplatesTab && (
+                                <Button onClick={() => handleCreate(activeWorkflowScope)}>
+                                    <PlusIcon className="mr-2 size-4" />
+                                    {activeWorkflowScope === "personal" ? "Create Workflow" : "Create Org Workflow"}
+                                </Button>
+                            )}
+                        </div>
 
-                        {workflowsLoading ? (
+                        {isTemplatesTab ? (
+                            <WorkflowTemplatesPanel embedded />
+                        ) : workflowsLoading ? (
                             <div className="flex items-center justify-center py-12">
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                             </div>
                         ) : !workflows?.length ? (
                             <Card>
                                 <CardContent className="flex flex-col items-center justify-center py-12">
-                                    <WorkflowIcon className="size-12 text-muted-foreground/50" />
-                                    <h3 className="mt-4 text-lg font-medium">No workflows yet</h3>
+                                    {activeWorkflowScope === "personal" ? (
+                                        <UserIcon className="size-12 text-muted-foreground/50" />
+                                    ) : (
+                                        <BuildingIcon className="size-12 text-muted-foreground/50" />
+                                    )}
+                                    <h3 className="mt-4 text-lg font-medium">
+                                        {activeWorkflowScope === "personal"
+                                            ? "No personal workflows yet"
+                                            : "No org workflows yet"}
+                                    </h3>
                                     <p className="mt-1 text-sm text-muted-foreground">
-                                        Create your first workflow to automate repetitive tasks
+                                        {activeWorkflowScope === "personal"
+                                            ? "Create personal workflows to automate your tasks"
+                                            : "Create organization workflows visible to all team members"
+                                        }
                                     </p>
-                                    <Button className="mt-4" onClick={handleCreate}>
+                                    <Button className="mt-4" onClick={() => handleCreate(activeWorkflowScope)}>
                                         <PlusIcon className="mr-2 size-4" />
-                                        Create Workflow
+                                        {activeWorkflowScope === "personal"
+                                            ? "Create Workflow"
+                                            : "Create Org Workflow"}
                                     </Button>
                                 </CardContent>
                             </Card>
@@ -1285,7 +1341,15 @@ export default function AutomationPage() {
                                                 </div>
 
                                                 <div className="flex-1">
-                                                    <h3 className="font-semibold">{workflow.name}</h3>
+                                                    <div className="flex items-center gap-2">
+                                                        <h3 className="font-semibold">{workflow.name}</h3>
+                                                        {workflow.owner_name && (
+                                                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                                                <UserIcon className="size-3" />
+                                                                {workflow.owner_name}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     <p className="text-sm text-muted-foreground">{workflow.description || "No description"}</p>
                                                     <div className="mt-2 flex items-center gap-3">
                                                         <Badge variant="secondary" className="text-xs">
@@ -1343,7 +1407,7 @@ export default function AutomationPage() {
                                 )
                             })
                         )}
-                    </div>
+                    </Tabs>
                 </div>
             </div>
             <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
