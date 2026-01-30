@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import Link from "@/components/app-link";
 import {
@@ -25,7 +24,6 @@ import {
     revokeInvite,
     deleteOrganization,
     restoreOrganization,
-    type PlatformEmailStatus,
     type SystemEmailTemplate,
     type OrganizationDetail,
     type OrganizationSubscription,
@@ -34,49 +32,28 @@ import {
     type AdminActionLog,
     type PlatformAlert,
 } from '@/lib/api/platform';
+import type { PlatformEmailStatus } from '@/lib/api/platform';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
+import { AgencyOverviewTab } from '@/components/ops/agencies/AgencyOverviewTab';
+import { AgencyUsersTab } from '@/components/ops/agencies/AgencyUsersTab';
+import { AgencyInvitesTab } from '@/components/ops/agencies/AgencyInvitesTab';
+import { AgencySubscriptionTab } from '@/components/ops/agencies/AgencySubscriptionTab';
+import { AgencyAlertsTab } from '@/components/ops/agencies/AgencyAlertsTab';
+import { AgencyTemplatesTab } from '@/components/ops/agencies/AgencyTemplatesTab';
+import { AgencyAuditTab } from '@/components/ops/agencies/AgencyAuditTab';
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogDescription,
-    DialogFooter,
-    DialogTrigger,
-} from '@/components/ui/dialog';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
+    ALERT_SEVERITY_BADGES,
+    ALERT_STATUS_BADGES,
+    INVITE_ROLE_LABELS,
+    INVITE_ROLE_OPTIONS,
+    INVITE_STATUS_VARIANTS,
+    PLAN_BADGE_VARIANTS,
+    STATUS_BADGE_VARIANTS,
+    type InviteRole,
+} from '@/components/ops/agencies/agency-constants';
 import {
     ChevronRight,
     Globe,
@@ -84,56 +61,10 @@ import {
     Loader2,
     AlertTriangle,
     CalendarPlus,
-    UserMinus,
-    Mail,
-    Ban,
-    ShieldOff,
-    Code,
     Plus,
 } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
-import DOMPurify from 'dompurify';
+import { format } from 'date-fns';
 import { toast } from 'sonner';
-const RichTextEditor = dynamic(
-    () => import('@/components/rich-text-editor').then((mod) => mod.RichTextEditor),
-    {
-        ssr: false,
-        loading: () => (
-            <div className="rounded-md border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-                Loading editor...
-            </div>
-        ),
-    }
-);
-
-const STATUS_BADGE_VARIANTS: Record<string, string> = {
-    active: 'bg-green-500/10 text-green-600 border-green-500/20',
-    trial: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
-    past_due: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
-    canceled: 'bg-red-500/10 text-red-600 border-red-500/20',
-};
-
-const PLAN_BADGE_VARIANTS: Record<string, string> = {
-    starter: 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300',
-    professional: 'bg-teal-500/10 text-teal-600 dark:text-teal-400',
-    enterprise: 'bg-purple-500/10 text-purple-600 dark:text-purple-400',
-};
-
-const INVITE_STATUS_VARIANTS: Record<string, string> = {
-    pending: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
-    accepted: 'bg-green-500/10 text-green-600 border-green-500/20',
-    expired: 'bg-stone-500/10 text-stone-600 border-stone-500/20',
-    revoked: 'bg-red-500/10 text-red-600 border-red-500/20',
-};
-
-const INVITE_ROLE_OPTIONS = ['intake_specialist', 'case_manager', 'admin', 'developer'] as const;
-type InviteRole = (typeof INVITE_ROLE_OPTIONS)[number];
-const INVITE_ROLE_LABELS: Record<InviteRole, string> = {
-    intake_specialist: 'Intake Specialist',
-    case_manager: 'Case Manager',
-    admin: 'Admin',
-    developer: 'Developer',
-};
 
 const resolveErrorMessage = (error: unknown, fallback: string) => {
     if (error instanceof Error && error.message) {
@@ -142,50 +73,6 @@ const resolveErrorMessage = (error: unknown, fallback: string) => {
     return fallback;
 };
 
-const ALERT_STATUS_BADGES: Record<string, string> = {
-    open: 'bg-red-500/10 text-red-600 border-red-500/20',
-    acknowledged: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
-    resolved: 'bg-green-500/10 text-green-600 border-green-500/20',
-};
-
-const ALERT_SEVERITY_BADGES: Record<string, string> = {
-    critical: 'bg-red-500/10 text-red-600 border-red-500/20',
-    error: 'bg-orange-500/10 text-orange-600 border-orange-500/20',
-    warn: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
-    info: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
-};
-
-function DetailRow({
-    label,
-    value,
-    mono = false,
-}: {
-    label: string;
-    value: string | null | undefined;
-    mono?: boolean;
-}) {
-    return (
-        <div className="flex justify-between py-2 border-b border-stone-100 dark:border-stone-800 last:border-0">
-            <span className="text-stone-500 dark:text-stone-400">{label}</span>
-            <span
-                className={`text-stone-900 dark:text-stone-100 ${mono ? 'font-mono text-sm' : ''}`}
-            >
-                {value || '-'}
-            </span>
-        </div>
-    );
-}
-
-function StatBlock({ label, value }: { label: string; value: number }) {
-    return (
-        <div className="text-center p-4 bg-stone-50 dark:bg-stone-800/50 rounded-lg">
-            <div className="text-2xl font-bold text-stone-900 dark:text-stone-100">
-                {value.toLocaleString()}
-            </div>
-            <div className="text-xs text-stone-500 dark:text-stone-400 mt-1">{label}</div>
-        </div>
-    );
-}
 
 function CopyButton({ value, label }: { value: string; label: string }) {
     const handleCopy = async () => {
@@ -244,7 +131,6 @@ export default function AgencyDetailPage() {
     const [templateVersion, setTemplateVersion] = useState<number | null>(null);
     const [testEmail, setTestEmail] = useState('');
     const [testSending, setTestSending] = useState(false);
-    const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleteSubmitting, setDeleteSubmitting] = useState(false);
     const [restoreSubmitting, setRestoreSubmitting] = useState(false);
 
@@ -417,64 +303,10 @@ export default function AgencyDetailPage() {
         }
     };
 
-    const previewSubject = templateSubject.replace(/\{\{org_name\}\}/g, org?.name ?? 'Organization');
-    const previewBody = DOMPurify.sanitize(
-        templateBody
-            .replace(/\{\{org_name\}\}/g, org?.name ?? 'Organization')
-            .replace(/\{\{inviter_text\}\}/g, ' by Platform Admin')
-            .replace(/\{\{role_title\}\}/g, 'Admin')
-            .replace(
-                /\{\{invite_url\}\}/g,
-                `${org?.portal_base_url || 'https://app.example.com'}/invite/EXAMPLE`
-            )
-            .replace(/\{\{expires_block\}\}/g, '<p>This invitation expires in 7 days.</p>'),
-        {
-            USE_PROFILES: { html: true },
-            ADD_TAGS: [
-                'table',
-                'thead',
-                'tbody',
-                'tfoot',
-                'tr',
-                'td',
-                'th',
-                'colgroup',
-                'col',
-                'img',
-                'hr',
-                'div',
-                'span',
-                'center',
-                'h1',
-                'h2',
-                'h3',
-                'h4',
-                'h5',
-                'h6',
-            ],
-            ADD_ATTR: [
-                'style',
-                'class',
-                'align',
-                'valign',
-                'width',
-                'height',
-                'cellpadding',
-                'cellspacing',
-                'border',
-                'bgcolor',
-                'colspan',
-                'rowspan',
-                'role',
-                'target',
-                'rel',
-                'href',
-                'src',
-                'alt',
-                'title',
-            ],
-        }
-    );
+    const handleGoToTemplates = () => {
+        setInviteOpen(false);
+        setActiveTab('templates');
+    };
 
     const handleExtendSubscription = async () => {
         try {

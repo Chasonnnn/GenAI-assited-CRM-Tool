@@ -16,9 +16,9 @@ vi.mock("@/components/rich-text-editor", () => ({
     RichTextEditor: () => null,
 }))
 
-import "../app/ops/agencies/[orgId]/page"
+import "../components/ops/agencies/AgencyTemplatesTab"
 
-describe("OpsAgencyPage", () => {
+describe("AgencyTemplatesTab", () => {
     it("lazy loads the rich text editor", () => {
         expect(dynamicState.calls.length).toBeGreaterThan(0)
         expect(dynamicState.calls.some((call) => call.options?.ssr === false)).toBe(true)
