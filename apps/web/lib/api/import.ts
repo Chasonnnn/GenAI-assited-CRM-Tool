@@ -7,6 +7,7 @@ import type { SurrogateSource } from '@/lib/types/surrogate'
 
 export type ColumnAction = 'map' | 'metadata' | 'custom' | 'ignore'
 export type ConfidenceLevel = 'high' | 'medium' | 'low' | 'none'
+export type ValidationMode = 'skip_invalid_rows' | 'drop_invalid_fields'
 
 export interface ColumnSuggestion {
     csv_column: string
@@ -152,6 +153,7 @@ export async function submitImport(
         save_as_template_name?: string | null
         backdate_created_at?: boolean
         default_source?: SurrogateSource | null
+        validation_mode?: ValidationMode
     }
 ): Promise<ImportSubmitResponse> {
     return api.post<ImportSubmitResponse>(`/surrogates/import/${importId}/submit`, payload)

@@ -90,6 +90,7 @@ export function useSubmitImport() {
                 save_as_template_name?: string | null
                 backdate_created_at?: boolean
                 default_source?: SurrogateSource | null
+                validation_mode?: 'skip_invalid_rows' | 'drop_invalid_fields'
             }
         }) =>
             submitImport(params.importId, params.payload),

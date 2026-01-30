@@ -22,6 +22,7 @@ async def process_csv_import(db, job) -> None:
     payload = job.payload or {}
     import_id = payload.get("import_id")
     dedupe_action = payload.get("dedupe_action", "skip")
+    validation_mode = payload.get("validation_mode")
 
     if not import_id:
         raise Exception("Missing import_id in payload")
@@ -49,6 +50,7 @@ async def process_csv_import(db, job) -> None:
             use_mappings=bool(payload.get("use_mappings")),
             dedupe_action=dedupe_action,
             unknown_column_behavior=payload.get("unknown_column_behavior"),
+            validation_mode=validation_mode,
         )
         logger.info("CSV import completed: %s", import_id)
     except Exception as e:

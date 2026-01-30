@@ -10,12 +10,13 @@ Features:
 - state_normalize: Normalizes to 2-letter state codes
 - phone_normalize: Normalizes to E.164 format
 - boolean_flexible: Parses yes/no/true/false/1/0
+- int_flexible: Parses integers from strings with units or extra characters
 """
 
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Callable, TypeAlias
 
 from app.utils.normalization import normalize_phone, normalize_state
@@ -235,8 +236,20 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
 
     warnings: list[str] = []
 
+    # Normalize quote characters and common separators
+    value = (
+        value.replace("\u2018", "'")
+        .replace("\u2019", "'")
+        .replace("\u2032", "'")
+        .replace("\u201c", '"')
+        .replace("\u201d", '"')
+        .replace("\u2033", '"')
+    )
+    if re.match(r"^\d+,\d+$", value):
+        value = value.replace(",", ".")
+
     # Pattern: 5'4" or 5'4 or 5' 4" or 5' 4
-    match = re.match(r"^(\d+)\s*['\u2019]?\s*(\d+)\s*\"?\s*$", value)
+    match = re.match(r"^(\d+)\s*['\"]?\s*(\d+)\s*\"?\s*$", value)
     if match:
         feet = int(match.group(1))
         inches = int(match.group(2))
@@ -339,13 +352,23 @@ def transform_state_normalize(raw_value: str) -> TransformOutput:
     try:
         normalized = normalize_state(value)
         return TransformOutput(value=normalized, success=True, warnings=[])
-    except ValueError as e:
-        return TransformOutput(
-            value=None,
-            success=False,
-            warnings=[],
-            error=str(e),
-        )
+    except ValueError:
+        tokens = re.split(r"[,\s]+", value)
+        tokens = [t for t in tokens if t]
+        if len(tokens) >= 2:
+            candidates = [tokens[-1], " ".join(tokens[-2:])]
+            for candidate in candidates:
+                try:
+                    normalized = normalize_state(candidate)
+                    return TransformOutput(value=normalized, success=True, warnings=[])
+                except ValueError:
+                    continue
+    return TransformOutput(
+        value=None,
+        success=False,
+        warnings=[],
+        error=f"Invalid state '{raw_value}'. Use 2-letter code (e.g., CA) or full name (e.g., California).",
+    )
 
 
 # =============================================================================
@@ -364,7 +387,8 @@ def transform_phone_normalize(raw_value: str) -> TransformOutput:
         return TransformOutput(value=None, success=True, warnings=[])
 
     try:
-        normalized = normalize_phone(value)
+        cleaned = re.sub(r"^(p|phone|tel)\s*[:#-]?\s*", "", value, flags=re.IGNORECASE)
+        normalized = normalize_phone(cleaned)
         return TransformOutput(value=normalized, success=True, warnings=[])
     except ValueError as e:
         return TransformOutput(
@@ -373,6 +397,59 @@ def transform_phone_normalize(raw_value: str) -> TransformOutput:
             warnings=[],
             error=str(e),
         )
+
+
+# =============================================================================
+# Integer Transformer
+# =============================================================================
+
+
+def transform_int_flexible(raw_value: str) -> TransformOutput:
+    """
+    Parse integer from values like "160", "160 lbs", "2 kids".
+    """
+    value = raw_value.strip()
+    if not value:
+        return TransformOutput(value=None, success=True, warnings=[])
+
+    lowered = value.lower()
+    if lowered in {"na", "n/a", "none", "null"}:
+        return TransformOutput(value=None, success=True, warnings=[])
+
+    cleaned = value.replace(",", "")
+    match = re.search(r"-?\d+(?:\.\d+)?", cleaned)
+    if not match:
+        return TransformOutput(
+            value=None,
+            success=False,
+            warnings=[],
+            error=f"Unrecognized integer format: {raw_value}",
+        )
+
+    try:
+        number = Decimal(match.group(0))
+    except InvalidOperation:
+        return TransformOutput(
+            value=None,
+            success=False,
+            warnings=[],
+            error=f"Unrecognized integer format: {raw_value}",
+        )
+
+    if number < 0:
+        return TransformOutput(
+            value=None,
+            success=False,
+            warnings=[],
+            error=f"Negative values are not allowed: {raw_value}",
+        )
+
+    rounded = int(number.to_integral_value(rounding=ROUND_HALF_UP))
+    warnings: list[str] = []
+    if rounded != number:
+        warnings.append("Rounded decimal value to nearest integer.")
+
+    return TransformOutput(value=rounded, success=True, warnings=warnings)
 
 
 # =============================================================================
@@ -470,6 +547,7 @@ TRANSFORMERS: dict[str, Callable[[str], TransformOutput]] = {
     "phone_normalize": transform_phone_normalize,
     "boolean_flexible": transform_boolean_flexible,
     "boolean_inverted": transform_boolean_inverted,
+    "int_flexible": transform_int_flexible,
 }
 
 
@@ -510,11 +588,14 @@ FIELD_TRANSFORMERS: dict[str, str] = {
     "height_ft": "height_flexible",
     "state": "state_normalize",
     "phone": "phone_normalize",
+    "weight_lb": "int_flexible",
     "is_age_eligible": "boolean_flexible",
     "is_citizen_or_pr": "boolean_flexible",
     "has_child": "boolean_flexible",
     "is_non_smoker": "boolean_flexible",  # May need inversion based on question
     "has_surrogate_experience": "boolean_flexible",
+    "num_deliveries": "int_flexible",
+    "num_csections": "int_flexible",
     # Insurance info
     "insurance_phone": "phone_normalize",
     "insurance_subscriber_dob": "date_flexible",

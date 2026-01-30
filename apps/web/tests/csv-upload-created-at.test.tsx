@@ -112,6 +112,9 @@ describe('CSVUpload created_at backdating', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Submit Import' }))
 
+        await screen.findByText(/Handle validation issues/i)
+        fireEvent.click(screen.getByRole('button', { name: 'Submit import' }))
+
         await waitFor(() => {
             expect(mockSubmitImport).toHaveBeenCalledWith(
                 expect.objectContaining({

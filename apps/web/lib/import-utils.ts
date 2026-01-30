@@ -1,4 +1,10 @@
-import type { ColumnAction, ColumnMappingItem, ColumnSuggestion, ConfidenceLevel } from '@/lib/api/import'
+import type {
+    ColumnAction,
+    ColumnMappingItem,
+    ColumnSuggestion,
+    ConfidenceLevel,
+    ValidationMode,
+} from '@/lib/api/import'
 import type { SurrogateSource } from '@/lib/types/surrogate'
 
 export interface ColumnMappingDraft extends ColumnMappingItem {
@@ -88,12 +94,14 @@ export function buildImportSubmitPayload(
     behavior: UnknownColumnBehavior,
     touchedColumns: Set<string>,
     backdateCreatedAt = false,
-    defaultSource: SurrogateSource = 'manual'
+    defaultSource: SurrogateSource = 'manual',
+    validationMode: ValidationMode = 'skip_invalid_rows'
 ): {
     column_mappings: ColumnMappingItem[]
     unknown_column_behavior: UnknownColumnBehavior
     backdate_created_at: boolean
     default_source: SurrogateSource
+    validation_mode: ValidationMode
 } {
     const column_mappings = mappings
         .filter((mapping) => {
@@ -115,5 +123,6 @@ export function buildImportSubmitPayload(
         unknown_column_behavior: behavior,
         backdate_created_at: backdateCreatedAt,
         default_source: defaultSource,
+        validation_mode: validationMode,
     }
 }

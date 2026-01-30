@@ -28,6 +28,7 @@ from app.core.deps import (
     require_permission,
     require_roles,
 )
+from app.core.permissions import PermissionKey as P
 from app.core.policies import POLICIES
 from app.db.enums import Role, SurrogateSource
 from app.schemas.auth import UserSession
@@ -414,7 +415,7 @@ class AIMapResponse(BaseModel):
 @router.post(
     "/ai-map",
     response_model=AIMapResponse,
-    dependencies=[Depends(require_csrf_header)],
+    dependencies=[Depends(require_csrf_header), Depends(require_permission(P.AI_USE))],
 )
 async def get_ai_mapping_suggestions(
     data: AIMapRequest,
@@ -490,6 +491,7 @@ class ImportSubmitRequest(BaseModel):
     save_as_template_name: str | None = None
     backdate_created_at: bool = False
     default_source: SurrogateSource | None = None
+    validation_mode: Literal["skip_invalid_rows", "drop_invalid_fields"] = "skip_invalid_rows"
 
 
 @router.post(
@@ -553,6 +555,7 @@ def submit_import_for_approval(
             unknown_column_behavior=data.unknown_column_behavior,
             backdate_created_at=data.backdate_created_at,
             default_source=data.default_source,
+            validation_mode=data.validation_mode,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

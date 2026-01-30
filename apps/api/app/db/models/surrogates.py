@@ -639,6 +639,12 @@ class SurrogateImport(Base):
     backdate_created_at: Mapped[bool] = mapped_column(
         Boolean, server_default=text("false"), nullable=False
     )
+    validation_mode: Mapped[str] = mapped_column(
+        String(30),
+        default="skip_invalid_rows",
+        server_default=text("'skip_invalid_rows'"),
+        nullable=False,
+    )
 
     # Learning: store original suggestions for correction learning
     original_suggestions_snapshot: Mapped[list | None] = mapped_column(JSONB, nullable=True)

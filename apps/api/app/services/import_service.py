@@ -51,6 +51,11 @@ ACTIVE_IMPORT_STATUSES = {
     "running",
 }
 
+VALIDATION_MODE_SKIP = "skip_invalid_rows"
+VALIDATION_MODE_DROP_FIELDS = "drop_invalid_fields"
+VALIDATION_MODES = {VALIDATION_MODE_SKIP, VALIDATION_MODE_DROP_FIELDS}
+REQUIRED_IMPORT_FIELDS = {"full_name", "email"}
+
 
 # =============================================================================
 # Column Mapping (Legacy - kept for backward compatibility)
@@ -317,6 +322,48 @@ def _validate_row(
     return SurrogateCreate(**row_data)
 
 
+def _normalize_validation_mode(value: str | None) -> str:
+    if value in VALIDATION_MODES:
+        return value
+    return VALIDATION_MODE_SKIP
+
+
+def _validate_row_with_mode(
+    row_data: dict[str, Any],
+    default_source: SurrogateSource | str | None,
+    validation_mode: str,
+    dropped_field_counts: dict[str, int],
+) -> SurrogateCreate:
+    normalized_mode = _normalize_validation_mode(validation_mode)
+    if normalized_mode != VALIDATION_MODE_DROP_FIELDS:
+        return _validate_row(row_data, default_source)
+
+    try:
+        return _validate_row(row_data, default_source)
+    except ValidationError as e:
+        invalid_fields: set[str] = set()
+        has_required_error = False
+        for err in e.errors():
+            loc = err.get("loc") or []
+            field = loc[0] if loc else None
+            if isinstance(field, str):
+                if field in REQUIRED_IMPORT_FIELDS:
+                    has_required_error = True
+                else:
+                    invalid_fields.add(field)
+
+        if invalid_fields:
+            for field in invalid_fields:
+                if field in row_data:
+                    row_data.pop(field, None)
+                    dropped_field_counts[field] = dropped_field_counts.get(field, 0) + 1
+
+        if has_required_error or not invalid_fields:
+            raise
+
+        return _validate_row(row_data, default_source)
+
+
 # =============================================================================
 # Import Execution
 # =============================================================================
@@ -342,6 +389,7 @@ def execute_import(
     file_content: bytes | str,
     dedupe_action: str = "skip",  # "skip" or "update" (future)
     default_source: SurrogateSource | str | None = None,
+    validation_mode: str | None = None,
 ) -> ImportResult:
     """
     Execute CSV import.
@@ -352,6 +400,7 @@ def execute_import(
     Relies on case creation retry to avoid surrogate_number collisions under concurrency.
     """
     result = ImportResult()
+    normalized_validation_mode = _normalize_validation_mode(validation_mode)
 
     headers, rows = parse_csv_file(file_content)
     if not headers:
@@ -390,6 +439,8 @@ def execute_import(
     # Track emails seen in this import (for intra-CSV dedupe)
     seen_emails = set()
 
+    dropped_field_counts: dict[str, int] = {}
+
     for row_num, row in enumerate(rows, start=2):  # 1-indexed, skip header
         row_data = _row_to_dict(row, column_map)
 
@@ -412,7 +463,12 @@ def execute_import(
 
         # Validate
         try:
-            surrogate_data = _validate_row(row_data, default_source)
+            surrogate_data = _validate_row_with_mode(
+                row_data,
+                default_source,
+                normalized_validation_mode,
+                dropped_field_counts,
+            )
         except ValidationError as e:
             result.errors.append(
                 {
@@ -444,6 +500,17 @@ def execute_import(
             )
 
     # Update import record
+    if dropped_field_counts:
+        for field, count in sorted(dropped_field_counts.items()):
+            result.warnings.append(
+                {
+                    "level": "warning",
+                    "code": "invalid_field_dropped",
+                    "field": field,
+                    "count": count,
+                    "message": f"Dropped invalid values for {field} in {count} row(s).",
+                }
+            )
     import_record = (
         db.query(SurrogateImport)
         .filter(
@@ -933,6 +1000,7 @@ def execute_import_with_mappings(
     unknown_column_behavior: str = "ignore",
     backdate_created_at: bool = False,
     default_source: SurrogateSource | str | None = None,
+    validation_mode: str | None = None,
 ) -> ImportResult:
     """
     Execute import with user-specified column mappings.
@@ -946,6 +1014,7 @@ def execute_import_with_mappings(
     from app.services import custom_field_service
 
     result = ImportResult()
+    normalized_validation_mode = _normalize_validation_mode(validation_mode)
     from app.db.models import Organization
 
     org_timezone: str | None = None
@@ -994,6 +1063,7 @@ def execute_import_with_mappings(
     data_rows = all_rows[1:] if detection.has_header else all_rows
 
     warning_counts: dict[str, int] = {}
+    dropped_field_counts: dict[str, int] = {}
 
     for row_num, row in enumerate(data_rows, start=2):
         row_data: dict[str, Any] = {}
@@ -1065,8 +1135,13 @@ def execute_import_with_mappings(
                     if transform_result.success:
                         row_data[mapping.surrogate_field] = transform_result.value
                     else:
-                        # Keep original value on transform failure
-                        row_data[mapping.surrogate_field] = raw_value
+                        if normalized_validation_mode == VALIDATION_MODE_DROP_FIELDS:
+                            dropped_field_counts[mapping.surrogate_field] = (
+                                dropped_field_counts.get(mapping.surrogate_field, 0) + 1
+                            )
+                        else:
+                            # Keep original value on transform failure
+                            row_data[mapping.surrogate_field] = raw_value
                 else:
                     row_data[mapping.surrogate_field] = raw_value
 
@@ -1093,7 +1168,12 @@ def execute_import_with_mappings(
 
         # Validate and create surrogate
         try:
-            surrogate_data = _validate_row(row_data, default_source)
+            surrogate_data = _validate_row_with_mode(
+                row_data,
+                default_source,
+                normalized_validation_mode,
+                dropped_field_counts,
+            )
             surrogate = surrogate_service.create_surrogate(
                 db=db,
                 org_id=org_id,
@@ -1139,6 +1219,17 @@ def execute_import_with_mappings(
                     "column": column,
                     "count": count,
                     "message": "Unmapped column ignored",
+                }
+            )
+    if dropped_field_counts:
+        for field, count in sorted(dropped_field_counts.items()):
+            result.warnings.append(
+                {
+                    "level": "warning",
+                    "code": "invalid_field_dropped",
+                    "field": field,
+                    "count": count,
+                    "message": f"Dropped invalid values for {field} in {count} row(s).",
                 }
             )
     if created_at_disabled:
@@ -1341,6 +1432,7 @@ def submit_for_approval(
     unknown_column_behavior: str = "ignore",
     backdate_created_at: bool = False,
     default_source: SurrogateSource | str | None = None,
+    validation_mode: str | None = None,
 ) -> SurrogateImport:
     """
     Submit an import for admin approval.
@@ -1368,6 +1460,7 @@ def submit_for_approval(
     import_record.deduplication_stats = dedup_stats
     import_record.unknown_column_behavior = unknown_column_behavior
     import_record.backdate_created_at = backdate_created_at
+    import_record.validation_mode = _normalize_validation_mode(validation_mode)
     if default_source is None:
         import_record.default_source = SurrogateSource.MANUAL.value
     elif isinstance(default_source, SurrogateSource):
@@ -1491,6 +1584,7 @@ def queue_import_job(
             "unknown_column_behavior": unknown_column_behavior
             or import_record.unknown_column_behavior
             or "ignore",
+            "validation_mode": _normalize_validation_mode(import_record.validation_mode),
         },
     )
     return job, False
@@ -1504,6 +1598,7 @@ def run_import_execution(
     use_mappings: bool | None = None,
     dedupe_action: str = "skip",
     unknown_column_behavior: str | None = None,
+    validation_mode: str | None = None,
 ) -> None:
     """Execute an import immediately using stored content and mappings."""
     if not import_record.file_content:
@@ -1519,6 +1614,9 @@ def run_import_execution(
             unknown_column_behavior or import_record.unknown_column_behavior or "ignore"
         )
         resolved_default_source = getattr(import_record, "default_source", None)
+        resolved_validation_mode = _normalize_validation_mode(
+            validation_mode or getattr(import_record, "validation_mode", None)
+        )
 
         if resolved_use_mappings and isinstance(mapping_snapshot, list) and mapping_snapshot:
             mappings = build_column_mappings_from_snapshot(mapping_snapshot)
@@ -1533,6 +1631,7 @@ def run_import_execution(
                 unknown_column_behavior=resolved_unknown_behavior,
                 backdate_created_at=bool(getattr(import_record, "backdate_created_at", False)),
                 default_source=resolved_default_source,
+                validation_mode=resolved_validation_mode,
             )
         else:
             execute_import(
@@ -1543,6 +1642,7 @@ def run_import_execution(
                 file_content=import_record.file_content,
                 dedupe_action=dedupe_action,
                 default_source=resolved_default_source,
+                validation_mode=resolved_validation_mode,
             )
 
         import_record.file_content = None

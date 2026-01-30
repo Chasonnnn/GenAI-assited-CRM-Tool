@@ -7,6 +7,15 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import {
     Select,
     SelectContent,
     SelectItem,
@@ -36,6 +45,7 @@ import {
     useAiMapImport,
     type EnhancedImportPreview,
 } from "@/lib/hooks/use-import"
+import type { ValidationMode } from "@/lib/api/import"
 import type { SurrogateSource } from "@/lib/types/surrogate"
 import {
     applyUnknownColumnBehavior,
@@ -50,6 +60,7 @@ const TRANSFORM_OPTIONS = [
     { value: "date_flexible", label: "Date (flexible)" },
     { value: "datetime_flexible", label: "Date/Time (flexible)" },
     { value: "height_flexible", label: "Height (flexible)" },
+    { value: "int_flexible", label: "Integer (flexible)" },
     { value: "state_normalize", label: "State normalize" },
     { value: "phone_normalize", label: "Phone normalize" },
     { value: "boolean_flexible", label: "Boolean (flexible)" },
@@ -129,6 +140,8 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
     const [submitMessage, setSubmitMessage] = useState<string | null>(null)
     const [approveMessage, setApproveMessage] = useState<string | null>(null)
     const [templateCleared, setTemplateCleared] = useState(false)
+    const [validationMode, setValidationMode] = useState<ValidationMode>("drop_invalid_fields")
+    const [showValidationDialog, setShowValidationDialog] = useState(false)
 
     const previewMutation = usePreviewImport()
     const submitMutation = useSubmitImport()
@@ -192,6 +205,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         setBackdateTouched(false)
         setDefaultSource("manual")
         setTemplateCleared(false)
+        setValidationMode("drop_invalid_fields")
         setFile(selectedFile)
 
         try {
@@ -239,6 +253,8 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         setError("")
         setSubmitMessage(null)
         setApproveMessage(null)
+        setValidationMode("drop_invalid_fields")
+        setShowValidationDialog(false)
     }
 
     const handleBackdateToggle = (checked: boolean) => {
@@ -336,20 +352,19 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         return true
     }
 
-    const handleSubmit = async () => {
+    const submitImportWithMode = async (mode: ValidationMode) => {
         if (!preview) return
         setError("")
         setSubmitMessage(null)
         setApproveMessage(null)
-
-        if (!ensureRequiredMappings()) return
 
         const payload = buildImportSubmitPayload(
             mappings,
             unknownColumnBehavior,
             touchedColumns,
             backdateCreatedAt,
-            defaultSource
+            defaultSource,
+            mode
         )
 
         try {
@@ -360,9 +375,11 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                     unknown_column_behavior: payload.unknown_column_behavior,
                     backdate_created_at: payload.backdate_created_at,
                     default_source: payload.default_source,
+                    validation_mode: payload.validation_mode,
                 },
             })
 
+            setValidationMode(mode)
             setSubmitMessage(
                 response.status === "awaiting_approval"
                     ? "Import submitted for approval."
@@ -372,6 +389,17 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         } catch (err: unknown) {
             setError(resolveErrorDetail(err, "Failed to submit import"))
         }
+    }
+
+    const handleSubmit = async () => {
+        if (!preview) return
+        setError("")
+        setSubmitMessage(null)
+        setApproveMessage(null)
+
+        if (!ensureRequiredMappings()) return
+
+        setShowValidationDialog(true)
     }
 
     const handleApprove = async () => {
@@ -819,7 +847,9 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                         <CardHeader>
                             <CardTitle>Preview ({preview.sample_rows.length} of {preview.total_rows} rows)</CardTitle>
                             <CardDescription>
-                                Rows with validation errors will be skipped and logged.
+                                {validationMode === "drop_invalid_fields"
+                                    ? "Rows with invalid values will still be imported; invalid fields are dropped and logged."
+                                    : "Rows with validation errors will be skipped and logged."}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -918,6 +948,76 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                             </CardContent>
                         </Card>
                     )}
+
+                    <Dialog open={showValidationDialog} onOpenChange={setShowValidationDialog}>
+                        <DialogContent className="sm:max-w-lg">
+                            <DialogHeader>
+                                <DialogTitle>Handle validation issues</DialogTitle>
+                                <DialogDescription>
+                                    Choose how to handle invalid values (for example phone, state, or numeric fields)
+                                    before submitting this import.
+                                </DialogDescription>
+                            </DialogHeader>
+
+                            <div className="space-y-3 py-2">
+                                <RadioGroup
+                                    value={validationMode}
+                                    onValueChange={(value) => setValidationMode(value as ValidationMode)}
+                                    className="space-y-3"
+                                >
+                                    <div className="flex items-start space-x-3 rounded-md border border-border p-3">
+                                        <RadioGroupItem value="drop_invalid_fields" id="validation-drop-fields" />
+                                        <div className="space-y-1">
+                                            <Label htmlFor="validation-drop-fields" className="font-medium">
+                                                Import anyway (drop invalid fields)
+                                            </Label>
+                                            <p className="text-xs text-muted-foreground">
+                                                Import rows even if optional fields are invalid. Invalid values are
+                                                cleared and recorded as warnings.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start space-x-3 rounded-md border border-border p-3">
+                                        <RadioGroupItem value="skip_invalid_rows" id="validation-skip-rows" />
+                                        <div className="space-y-1">
+                                            <Label htmlFor="validation-skip-rows" className="font-medium">
+                                                Skip invalid rows
+                                            </Label>
+                                            <p className="text-xs text-muted-foreground">
+                                                Rows with any validation errors are skipped and logged.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </RadioGroup>
+                            </div>
+
+                            <DialogFooter>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setShowValidationDialog(false)}
+                                    disabled={submitMutation.isPending}
+                                >
+                                    Review mappings
+                                </Button>
+                                <Button
+                                    onClick={async () => {
+                                        setShowValidationDialog(false)
+                                        await submitImportWithMode(validationMode)
+                                    }}
+                                    disabled={submitMutation.isPending}
+                                >
+                                    {submitMutation.isPending ? (
+                                        <>
+                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                            Submitting...
+                                        </>
+                                    ) : (
+                                        "Submit import"
+                                    )}
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                 </>
             )}
         </div>
