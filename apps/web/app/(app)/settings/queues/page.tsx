@@ -161,11 +161,11 @@ export default function QueuesSettingsPage() {
     ) || []
 
     if (!isManager) {
-        return (
-            <div className="flex min-h-screen items-center justify-center">
-                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-            </div>
-        )
+            return (
+                <div className="flex min-h-screen items-center justify-center">
+                <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+                </div>
+            )
     }
 
     return (
@@ -173,7 +173,7 @@ export default function QueuesSettingsPage() {
             <div className="flex items-center justify-between mb-6">
                 <div>
                     <h1 className="text-2xl font-semibold flex items-center gap-2">
-                        <UsersIcon className="h-6 w-6" />
+                        <UsersIcon className="h-6 w-6" aria-hidden="true" />
                         Queue Management
                     </h1>
                     <p className="text-muted-foreground">
@@ -181,7 +181,7 @@ export default function QueuesSettingsPage() {
                     </p>
                 </div>
                 <Button onClick={() => setCreateDialogOpen(true)}>
-                    <PlusIcon className="h-4 w-4 mr-2" />
+                    <PlusIcon className="h-4 w-4 mr-2" aria-hidden="true" />
                     Create Queue
                 </Button>
             </div>
@@ -196,20 +196,20 @@ export default function QueuesSettingsPage() {
             {/* Loading State */}
             {isLoading && (
                 <Card className="p-12 flex items-center justify-center">
-                    <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                    <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                 </Card>
             )}
 
             {/* Empty State */}
             {!isLoading && !error && queues?.length === 0 && (
-                <Card className="p-12 text-center">
-                    <UsersIcon className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <Card className="p-12 text-center">
+                    <UsersIcon className="h-12 w-12 mx-auto text-muted-foreground mb-4" aria-hidden="true" />
                     <h3 className="text-lg font-medium mb-2">No queues yet</h3>
                     <p className="text-muted-foreground mb-4">
                         Create your first queue to organize cases
                     </p>
                     <Button onClick={() => setCreateDialogOpen(true)}>
-                        <PlusIcon className="h-4 w-4 mr-2" />
+                        <PlusIcon className="h-4 w-4 mr-2" aria-hidden="true" />
                         Create Queue
                     </Button>
                 </Card>
@@ -243,10 +243,17 @@ export default function QueuesSettingsPage() {
                                             {queue.description || "—"}
                                         </TableCell>
                                         <TableCell>
-                                            <Badge variant="outline" className="cursor-pointer" onClick={() => openMembersDialog(queue)}>
-                                                <UsersIcon className="size-3 mr-1" />
-                                                {queue.member_ids?.length || 0}
-                                            </Badge>
+                                            <button
+                                                type="button"
+                                                onClick={() => openMembersDialog(queue)}
+                                                className="inline-flex"
+                                                aria-label={`Manage members for ${queue.name}`}
+                                            >
+                                                <Badge variant="outline" className="cursor-pointer">
+                                                    <UsersIcon className="size-3 mr-1" aria-hidden="true" />
+                                                    {queue.member_ids?.length || 0}
+                                                </Badge>
+                                            </button>
                                         </TableCell>
                                         <TableCell>
                                             <Badge variant={queue.is_active ? "default" : "secondary"}>
@@ -255,9 +262,12 @@ export default function QueuesSettingsPage() {
                                         </TableCell>
                                         <TableCell>
                                             <DropdownMenu>
-                                                <DropdownMenuTrigger className="inline-flex items-center justify-center size-8 p-0 rounded-md hover:bg-accent">
+                                                <DropdownMenuTrigger
+                                                    className="inline-flex items-center justify-center size-8 p-0 rounded-md hover:bg-accent"
+                                                    aria-label={`Queue actions for ${queue.name}`}
+                                                >
                                                     <span className="inline-flex items-center justify-center">
-                                                        <MoreVerticalIcon className="size-4" />
+                                                        <MoreVerticalIcon className="size-4" aria-hidden="true" />
                                                     </span>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
@@ -293,6 +303,8 @@ export default function QueuesSettingsPage() {
                                 <Label htmlFor="queue-name">Name</Label>
                                 <Input
                                     id="queue-name"
+                                    name="queueName"
+                                    autoComplete="off"
                                     value={formData.name}
                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                     placeholder="e.g., New Leads Queue"
@@ -303,6 +315,8 @@ export default function QueuesSettingsPage() {
                                 <Label htmlFor="queue-description">Description (optional)</Label>
                                 <Textarea
                                     id="queue-description"
+                                    name="queueDescription"
+                                    autoComplete="off"
                                     value={formData.description || ""}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                     placeholder="Brief description of the queue purpose"
@@ -316,7 +330,7 @@ export default function QueuesSettingsPage() {
                                 Cancel
                             </Button>
                             <Button type="submit" disabled={createQueueMutation.isPending || !formData.name.trim()}>
-                                {createQueueMutation.isPending ? "Creating..." : "Create Queue"}
+                                {createQueueMutation.isPending ? "Creating…" : "Create Queue"}
                             </Button>
                         </DialogFooter>
                     </form>
@@ -335,6 +349,8 @@ export default function QueuesSettingsPage() {
                                 <Label htmlFor="edit-queue-name">Name</Label>
                                 <Input
                                     id="edit-queue-name"
+                                    name="editQueueName"
+                                    autoComplete="off"
                                     value={formData.name}
                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                     className="mt-2"
@@ -344,6 +360,8 @@ export default function QueuesSettingsPage() {
                                 <Label htmlFor="edit-queue-description">Description (optional)</Label>
                                 <Textarea
                                     id="edit-queue-description"
+                                    name="editQueueDescription"
+                                    autoComplete="off"
                                     value={formData.description || ""}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                     className="mt-2"
@@ -356,7 +374,7 @@ export default function QueuesSettingsPage() {
                                 Cancel
                             </Button>
                             <Button type="submit" disabled={updateQueueMutation.isPending || !formData.name.trim()}>
-                                {updateQueueMutation.isPending ? "Saving..." : "Save Changes"}
+                                {updateQueueMutation.isPending ? "Saving…" : "Save Changes"}
                             </Button>
                         </DialogFooter>
                     </form>
@@ -368,7 +386,7 @@ export default function QueuesSettingsPage() {
                 <DialogContent className="max-w-md">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
-                            <UsersIcon className="size-5" />
+                            <UsersIcon className="size-5" aria-hidden="true" />
                             {managingQueue?.name} - Members
                         </DialogTitle>
                     </DialogHeader>
@@ -376,9 +394,9 @@ export default function QueuesSettingsPage() {
                         {/* Add Member */}
                         <div className="flex gap-2">
                             <Select value={selectedUserId} onValueChange={(v) => setSelectedUserId(v || "")}>
-                                <SelectTrigger className="flex-1">
-                                    <SelectValue placeholder="Select a user to add..." />
-                                </SelectTrigger>
+                            <SelectTrigger className="flex-1">
+                                <SelectValue placeholder="Select a user to add…" />
+                            </SelectTrigger>
                                 <SelectContent>
                                     {availableMembers.length === 0 ? (
                                         <div className="py-2 px-3 text-sm text-muted-foreground">
@@ -397,8 +415,9 @@ export default function QueuesSettingsPage() {
                                 onClick={handleAddMember}
                                 disabled={!selectedUserId || addMemberMutation.isPending}
                                 size="icon"
+                                aria-label="Add member to queue"
                             >
-                                <UserPlusIcon className="size-4" />
+                                <UserPlusIcon className="size-4" aria-hidden="true" />
                             </Button>
                         </div>
 
@@ -409,7 +428,7 @@ export default function QueuesSettingsPage() {
                             </Label>
                             {loadingMembers ? (
                                 <div className="flex items-center justify-center py-4">
-                                    <Loader2Icon className="size-4 animate-spin" />
+                                    <Loader2Icon className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                 </div>
                             ) : queueMembers?.length === 0 ? (
                                 <div className="text-center py-4 text-sm text-muted-foreground">
@@ -432,8 +451,9 @@ export default function QueuesSettingsPage() {
                                                 className="size-7 text-muted-foreground hover:text-destructive"
                                                 onClick={() => handleRemoveMember(member.user_id)}
                                                 disabled={removeMemberMutation.isPending}
+                                                aria-label={`Remove ${member.user_name || member.user_email || "member"} from queue`}
                                             >
-                                                <XIcon className="size-4" />
+                                                <XIcon className="size-4" aria-hidden="true" />
                                             </Button>
                                         </div>
                                     ))}

@@ -55,21 +55,21 @@ function BrowserNotificationsCard() {
             case "granted":
                 return (
                     <div className="flex items-center gap-2 text-green-600">
-                        <CheckCircle2 className="size-4" />
+                        <CheckCircle2 className="size-4" aria-hidden="true" />
                         <span className="text-sm font-medium">Enabled</span>
                     </div>
                 )
             case "denied":
                 return (
                     <div className="flex items-center gap-2 text-red-600">
-                        <BellOff className="size-4" />
+                        <BellOff className="size-4" aria-hidden="true" />
                         <span className="text-sm font-medium">Blocked</span>
                     </div>
                 )
             case "unsupported":
                 return (
                     <div className="flex items-center gap-2 text-muted-foreground">
-                        <AlertTriangle className="size-4" />
+                        <AlertTriangle className="size-4" aria-hidden="true" />
                         <span className="text-sm font-medium">Not Supported</span>
                     </div>
                 )
@@ -77,9 +77,9 @@ function BrowserNotificationsCard() {
                 return (
                     <Button size="sm" onClick={handleRequestPermission} disabled={isRequesting}>
                         {isRequesting ? (
-                            <Loader2 className="size-4 mr-2 animate-spin" />
+                            <Loader2 className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                         ) : (
-                            <Bell className="size-4 mr-2" />
+                            <Bell className="size-4 mr-2" aria-hidden="true" />
                         )}
                         Enable Notifications
                     </Button>
@@ -91,7 +91,7 @@ function BrowserNotificationsCard() {
         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                    <Bell className="size-5" />
+                    <Bell className="size-5" aria-hidden="true" />
                     Browser Notifications
                 </CardTitle>
                 <CardDescription>
@@ -135,7 +135,7 @@ function NotificationsSettingsCard() {
         return (
             <Card>
                 <CardContent className="flex items-center justify-center py-8">
-                    <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                    <Loader2 className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                 </CardContent>
             </Card>
         )
@@ -207,7 +207,7 @@ function NotificationsSettingsCard() {
                         className="flex items-center justify-between p-4 rounded-lg border"
                     >
                         <div className="flex items-center gap-3">
-                            <type.icon className="size-5 text-muted-foreground" />
+                            <type.icon className="size-5 text-muted-foreground" aria-hidden="true" />
                             <div>
                                 <p className="font-medium">{type.title}</p>
                                 <p className="text-sm text-muted-foreground">{type.description}</p>
@@ -217,6 +217,7 @@ function NotificationsSettingsCard() {
                             checked={settings?.[type.key] ?? true}
                             onCheckedChange={(checked) => handleToggle(type.key, checked)}
                             disabled={updateSettings.isPending}
+                            aria-label={`${type.title} notifications`}
                         />
                     </div>
                 ))}

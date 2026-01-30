@@ -1,11 +1,12 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { format, formatDistanceToNow } from "date-fns"
+import { formatDateTime, formatRelativeTime } from "@/lib/formatters"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import {
     Select,
@@ -192,16 +193,17 @@ export default function AuditLogPage() {
                     <CardContent className="space-y-4">
                         <div className="flex flex-wrap gap-4">
                             <div className="flex flex-col gap-2">
-                                <span className="text-sm text-muted-foreground">Date Range</span>
+                                <Label className="text-sm text-muted-foreground">Date Range</Label>
                                 <DateRangePicker
                                     preset={exportRange}
                                     onPresetChange={setExportRange}
                                     customRange={customRange}
                                     onCustomRangeChange={setCustomRange}
+                                    ariaLabel="Date range"
                                 />
                             </div>
                             <div className="flex flex-col gap-2">
-                                <span className="text-sm text-muted-foreground">Format</span>
+                                <Label htmlFor="export-format" className="text-sm text-muted-foreground">Format</Label>
                                 <Select
                                     value={exportFormat}
                                     onValueChange={(value) => {
@@ -210,7 +212,7 @@ export default function AuditLogPage() {
                                         }
                                     }}
                                 >
-                                    <SelectTrigger className="w-[160px]">
+                                    <SelectTrigger id="export-format" className="w-[160px]">
                                         <SelectValue>
                                             {(value: string | null) => value?.toUpperCase() ?? "CSV"}
                                         </SelectValue>
@@ -222,7 +224,7 @@ export default function AuditLogPage() {
                                 </Select>
                             </div>
                             <div className="flex flex-col gap-2">
-                                <span className="text-sm text-muted-foreground">Redaction</span>
+                                <Label htmlFor="export-redaction" className="text-sm text-muted-foreground">Redaction</Label>
                                 <Select
                                     value={redactMode}
                                     onValueChange={(value) => {
@@ -232,7 +234,7 @@ export default function AuditLogPage() {
                                     }}
                                     disabled={!isDeveloper}
                                 >
-                                    <SelectTrigger className="w-[180px]">
+                                    <SelectTrigger id="export-redaction" className="w-[180px]">
                                         <SelectValue>
                                             {(value: string | null) => {
                                                 return value === "full" ? "Full (Developer)" : "Redacted (default)"
@@ -246,15 +248,15 @@ export default function AuditLogPage() {
                                 </Select>
                             </div>
                             <div className="flex flex-col gap-2">
-                                <span className="text-sm text-muted-foreground">Request Export</span>
+                                <Label className="text-sm text-muted-foreground">Request Export</Label>
                                 <Button
                                     onClick={handleExport}
                                     disabled={createExport.isPending || (redactMode === "full" && !acknowledgment.trim())}
                                 >
                                     {createExport.isPending ? (
-                                        <Loader2Icon className="size-4 animate-spin mr-2" />
+                                        <Loader2Icon className="size-4 animate-spin motion-reduce:animate-none mr-2" aria-hidden="true" />
                                     ) : (
-                                        <Upload className="size-4 mr-2" />
+                                        <Upload className="size-4 mr-2" aria-hidden="true" />
                                     )}
                                     Create Export
                                 </Button>
@@ -267,6 +269,10 @@ export default function AuditLogPage() {
                                     Full exports contain PHI. Type confirmation to proceed.
                                 </p>
                                 <Input
+                                    id="export-confirmation"
+                                    name="exportConfirmation"
+                                    autoComplete="off"
+                                    aria-label="Confirmation phrase"
                                     placeholder="Type confirmation (e.g. I UNDERSTAND)"
                                     value={acknowledgment}
                                     onChange={(e) => setAcknowledgment(e.target.value)}
@@ -289,7 +295,7 @@ export default function AuditLogPage() {
                                 <div className="flex items-center justify-between px-4 py-2 border-b">
                                     <span className="text-sm font-medium">Recent Exports</span>
                                     {hasPendingExports && (
-                                        <span className="text-xs text-muted-foreground">Refreshing...</span>
+                                        <span className="text-xs text-muted-foreground">Refreshing…</span>
                                     )}
                                 </div>
                                 <div className="divide-y">
@@ -306,7 +312,7 @@ export default function AuditLogPage() {
                                                     </Badge>
                                                 </div>
                                                 <p className="text-xs text-muted-foreground">
-                                                    Created {formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}
+                                                    Created {formatRelativeTime(job.created_at, "Unknown")}
                                                 </p>
                                                 {job.error_message && (
                                                     <p className="text-xs text-red-500">{job.error_message}</p>
@@ -414,8 +420,8 @@ export default function AuditLogPage() {
                                 <div className="mt-2 space-y-2">
                                     {aiActivityLoading ? (
                                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                            <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
-                                            Loading AI activity...
+                                            <Loader2Icon className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                            Loading AI activity…
                                         </div>
                                     ) : aiActivity?.recent?.length ? (
                                         aiActivity.recent.map((entry) => {
@@ -434,7 +440,7 @@ export default function AuditLogPage() {
                                                     <div className="flex-1">
                                                         <div className="font-medium text-foreground">{meta.label}</div>
                                                         <div className="text-[11px] text-muted-foreground">
-                                                            {formatDistanceToNow(new Date(entry.created_at), { addSuffix: true })}
+                                                            {formatRelativeTime(entry.created_at, "Unknown")}
                                                         </div>
                                                     </div>
                                                 </button>
@@ -451,7 +457,7 @@ export default function AuditLogPage() {
 
                         {isLoading ? (
                             <div className="py-12 flex items-center justify-center">
-                                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                                <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                             </div>
                         ) : auditData?.items.length === 0 ? (
                             <div className="text-center py-12 text-muted-foreground">
@@ -500,12 +506,12 @@ export default function AuditLogPage() {
                                                     {entry.details && Object.keys(entry.details).length > 0 && (
                                                         <span className="ml-2">
                                                             {JSON.stringify(entry.details).slice(0, 100)}
-                                                            {JSON.stringify(entry.details).length > 100 ? "..." : ""}
+                                                            {JSON.stringify(entry.details).length > 100 ? "…" : ""}
                                                         </span>
                                                     )}
                                                 </p>
                                                 <p className="text-xs text-muted-foreground mt-1">
-                                                    {format(new Date(entry.created_at), "MMM d, yyyy 'at' h:mm a")}
+                                                    {formatDateTime(entry.created_at, "Unknown")}
                                                     {entry.ip_address && (
                                                         <span className="ml-2">from {entry.ip_address}</span>
                                                     )}

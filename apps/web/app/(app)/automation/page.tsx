@@ -126,6 +126,19 @@ const conditionFieldLabels: Record<string, string> = {
     full_name: "Full Name",
     email: "Email",
     phone: "Phone",
+    owner_type: "Owner Type",
+    created_at: "Created At",
+    date_of_birth: "Date of Birth",
+    age: "Age",
+    bmi: "BMI",
+    height_ft: "Height (ft)",
+    weight_lb: "Weight (lb)",
+    num_deliveries: "Deliveries",
+    num_csections: "C-Sections",
+    race: "Race",
+    meta_lead_id: "Meta Lead ID",
+    meta_ad_external_id: "Meta Ad External ID",
+    meta_form_id: "Meta Form ID",
 }
 
 type SelectOption = { value: string; label: string }
@@ -150,7 +163,14 @@ const NUMBER_FIELDS = new Set([
 
 const DATE_FIELDS = new Set(["created_at", "date_of_birth"])
 
-const MULTISELECT_FIELDS = new Set(["stage_id", "status_label", "owner_id", "state", "source"])
+const MULTISELECT_FIELDS = new Set([
+    "stage_id",
+    "status_label",
+    "owner_id",
+    "owner_type",
+    "state",
+    "source",
+])
 
 const SOURCE_OPTIONS: SelectOption[] = [
     { value: "manual", label: "Manual" },
@@ -173,6 +193,15 @@ const ENTITY_LABELS: Record<string, string> = {
     appointment: "Appointment ID",
     note: "Note ID",
     document: "Document ID",
+}
+
+const ENTITY_PLURALS: Record<string, string> = {
+    surrogate: "surrogates",
+    task: "tasks",
+    match: "matches",
+    appointment: "appointments",
+    note: "notes",
+    document: "documents",
 }
 
 function formatRelativeTime(dateString: string | null): string {
@@ -340,6 +369,83 @@ function MultiSelect({
     )
 }
 
+type TestEntitySuggestion = { id: string; label: string; meta?: string }
+
+async function fetchTestEntities(
+    entityType: string,
+    query: string
+): Promise<TestEntitySuggestion[]> {
+    if (entityType === "surrogate") {
+        const response = await getSurrogates({
+            q: query || undefined,
+            per_page: 5,
+            sort_by: "created_at",
+            sort_order: "desc",
+        })
+        return response.items.map((item) => ({
+            id: item.id,
+            label: `${item.surrogate_number} • ${item.full_name}`,
+            meta: item.status_label,
+        }))
+    }
+    if (entityType === "task") {
+        const response = await getTasks({
+            q: query || undefined,
+            per_page: 5,
+            exclude_approvals: true,
+        })
+        return response.items.map((item) => ({
+            id: item.id,
+            label: item.title,
+            meta: item.surrogate_number ?? undefined,
+        }))
+    }
+    if (entityType === "match") {
+        const response = await listMatches({
+            q: query || undefined,
+            per_page: 5,
+        })
+        return response.items.map((item) => ({
+            id: item.id,
+            label: item.match_number,
+            meta: item.surrogate_name ?? item.ip_name ?? undefined,
+        }))
+    }
+    if (entityType === "appointment") {
+        const now = new Date()
+        const end = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 30)
+        const response = await getAppointments({
+            per_page: 5,
+            date_start: now.toISOString(),
+            date_end: end.toISOString(),
+        })
+        return response.items.map((item) => ({
+            id: item.id,
+            label: item.appointment_type_name ?? "Appointment",
+            meta: item.surrogate_number ?? item.intended_parent_name ?? undefined,
+        }))
+    }
+    if (entityType === "note") {
+        if (!query.trim()) return []
+        const response = await globalSearch({ q: query, types: "note", limit: 5 })
+        return response.results.map((result) => ({
+            id: result.entity_id,
+            label: result.title,
+            meta: result.surrogate_name ?? undefined,
+        }))
+    }
+    if (entityType === "document") {
+        if (!query.trim()) return []
+        const response = await globalSearch({ q: query, types: "attachment", limit: 5 })
+        return response.results.map((result) => ({
+            id: result.entity_id,
+            label: result.title,
+            meta: result.surrogate_name ?? undefined,
+        }))
+    }
+    return []
+}
+
 function normalizeTriggerConfigForUi(
     triggerType: string,
     triggerConfig: JsonObject,
@@ -466,6 +572,17 @@ export default function AutomationPage() {
     const testTriggerType = selectedTestWorkflow?.trigger_type
     const testEntityType = testTriggerType ? triggerEntityTypes[testTriggerType] ?? "surrogate" : "surrogate"
 
+    const {
+        data: testEntitySuggestionsData,
+        isLoading: testEntitySuggestionsLoading,
+    } = useQuery({
+        queryKey: ["workflow-test-entities", testEntityType, testEntityQuery],
+        queryFn: () => fetchTestEntities(testEntityType, testEntityQuery),
+        enabled: showTestModal && !!testEntityType,
+        staleTime: 30 * 1000,
+    })
+    const testEntitySuggestions = testEntitySuggestionsData ?? []
+
     const createWorkflow = useCreateWorkflow()
     const updateWorkflow = useUpdateWorkflow()
     const toggleWorkflow = useToggleWorkflow()
@@ -490,7 +607,7 @@ export default function AutomationPage() {
     }
 
     useEffect(() => {
-        setServerErrors([])
+        setServerErrors((current) => (current.length > 0 ? [] : current))
     }, [workflowName, workflowDescription, triggerType, triggerConfig, conditions, actions])
 
     // Email template hooks
@@ -498,7 +615,9 @@ export default function AutomationPage() {
     const updateTemplate = useUpdateEmailTemplate()
     const deleteTemplate = useDeleteEmailTemplate()
 
-    const selectedTriggerFields = Array.isArray(triggerConfig.fields) ? triggerConfig.fields : []
+    const selectedTriggerFields = Array.isArray(triggerConfig.fields)
+        ? triggerConfig.fields.filter((field): field is string => typeof field === "string")
+        : []
     const availableConditionFields = options?.condition_fields ?? []
 
     const getActionValidationError = (action: ActionConfig): string | null => {
@@ -540,6 +659,126 @@ export default function AutomationPage() {
             if (error) return error
         }
         return null
+    }
+
+    const getConditionOptions = (field: string): SelectOption[] | null => {
+        if (field === "stage_id") return stageIdOptions
+        if (field === "status_label") return stageLabelOptions
+        if (field === "owner_type") return OWNER_TYPE_OPTIONS
+        if (field === "owner_id") return ownerOptions
+        if (field === "state") return stateOptions
+        if (field === "source") return SOURCE_OPTIONS
+        return null
+    }
+
+    const renderConditionValueInput = (condition: Condition, index: number) => {
+        const operator = condition.operator
+        const field = condition.field
+        const isListOperator = LIST_OPERATORS.has(operator)
+        const isValueless = VALUELESS_OPERATORS.has(operator)
+        const options = getConditionOptions(field)
+
+        if (isValueless) {
+            return (
+                <Input
+                    className="flex-1"
+                    value=""
+                    disabled
+                    placeholder="No value needed"
+                />
+            )
+        }
+
+        if (!isListOperator && BOOLEAN_FIELDS.has(field)) {
+            const checked = Boolean(condition.value)
+            return (
+                <div className="flex flex-1 items-center gap-2 rounded-md border px-3 py-2">
+                    <Switch
+                        checked={checked}
+                        onCheckedChange={(next) => updateCondition(index, { value: next })}
+                    />
+                    <span className="text-sm">{checked ? "Yes" : "No"}</span>
+                </div>
+            )
+        }
+
+        if (!isListOperator && NUMBER_FIELDS.has(field)) {
+            return (
+                <Input
+                    type="number"
+                    className="flex-1"
+                    value={typeof condition.value === "number" ? condition.value : ""}
+                    onChange={(e) => updateCondition(index, { value: Number(e.target.value) })}
+                />
+            )
+        }
+
+        if (!isListOperator && DATE_FIELDS.has(field)) {
+            return (
+                <Input
+                    type="date"
+                    className="flex-1"
+                    value={typeof condition.value === "string" ? condition.value : ""}
+                    onChange={(e) => updateCondition(index, { value: e.target.value })}
+                />
+            )
+        }
+
+        if (isListOperator && options && MULTISELECT_FIELDS.has(field)) {
+            const selectedValues = Array.isArray(condition.value)
+                ? condition.value.map((item) => String(item))
+                : toListArray(condition.value as JsonValue)
+            return (
+                <MultiSelect
+                    options={options}
+                    value={selectedValues}
+                    onChange={(next) => updateCondition(index, { value: next })}
+                    placeholder="Select values"
+                />
+            )
+        }
+
+        if (options && !isListOperator) {
+            return (
+                <Select
+                    value={typeof condition.value === "string" ? condition.value : ""}
+                    onValueChange={(value) => updateCondition(index, { value })}
+                >
+                    <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Select value">
+                            {(value: string | null) => {
+                                if (!value) return "Select value"
+                                const option = options.find((opt) => opt.value === value)
+                                return option?.label ?? value
+                            }}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        {options.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            )
+        }
+
+        const inputValue =
+            typeof condition.value === "string"
+                ? condition.value
+                : Array.isArray(condition.value)
+                    ? condition.value.join(", ")
+                    : ""
+
+        return (
+            <Input
+                placeholder={isListOperator ? "Comma-separated values" : "Value"}
+                className="flex-1"
+                value={inputValue}
+                onChange={(e) => updateCondition(index, { value: e.target.value })}
+            />
+        )
     }
 
     const getTriggerConfigValidationError = (): string | null => {
@@ -615,9 +854,9 @@ export default function AutomationPage() {
     }
 
     const handleRunTest = () => {
-        if (!testWorkflowId || !testSurrogateId) return
+        if (!testWorkflowId || !testEntityId) return
         testWorkflowMutation.mutate(
-            { id: testWorkflowId, entityId: testSurrogateId },
+            { id: testWorkflowId, entityId: testEntityId, entityType: testEntityType },
             { onSuccess: (result) => setTestResult(result) }
         )
     }
@@ -783,12 +1022,17 @@ export default function AutomationPage() {
         }
 
         if (editingWorkflowId) {
-            updateWorkflow.mutate({ id: editingWorkflowId, data }, {
-                onSuccess: () => resetWizard(),
-            })
+            updateWorkflow.mutate(
+                { id: editingWorkflowId, data },
+                {
+                    onSuccess: () => resetWizard(),
+                    onError: (error) => setServerErrors(parseServerErrors(error)),
+                }
+            )
         } else {
             createWorkflow.mutate(data, {
                 onSuccess: () => resetWizard(),
+                onError: (error) => setServerErrors(parseServerErrors(error)),
             })
         }
     }
@@ -806,16 +1050,32 @@ export default function AutomationPage() {
             conditions.map((condition, i) => {
                 if (i !== index) return condition
                 const next = { ...condition, ...updates }
-                if (updates.operator && LIST_OPERATORS.has(updates.operator)) {
-                    if (Array.isArray(next.value)) {
-                        next.value = next.value.join(", ")
-                    }
-                    if (typeof next.value !== "string") {
-                        next.value = ""
-                    }
-                }
-                if (updates.operator && VALUELESS_OPERATORS.has(updates.operator)) {
+                const fieldChanged = typeof updates.field === "string" && updates.field !== condition.field
+                if (fieldChanged) {
                     next.value = ""
+                }
+                if (VALUELESS_OPERATORS.has(next.operator)) {
+                    next.value = ""
+                    return next
+                }
+                if (LIST_OPERATORS.has(next.operator)) {
+                    if (MULTISELECT_FIELDS.has(next.field)) {
+                        next.value = toListArray(next.value as JsonValue)
+                    } else {
+                        if (Array.isArray(next.value)) {
+                            next.value = next.value.join(", ")
+                        }
+                        if (typeof next.value !== "string") {
+                            next.value = ""
+                        }
+                    }
+                    return next
+                }
+                if (Array.isArray(next.value)) {
+                    next.value = next.value[0] ?? ""
+                }
+                if (BOOLEAN_FIELDS.has(next.field) && typeof next.value !== "boolean") {
+                    next.value = false
                 }
                 return next
             })
@@ -879,6 +1139,7 @@ export default function AutomationPage() {
     }
 
     const workflowValidationError = getWorkflowValidationError()
+    const hasServerErrors = serverErrors.length > 0
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -1359,13 +1620,7 @@ export default function AutomationPage() {
                                                                 ))}
                                                             </SelectContent>
                                                         </Select>
-                                                        <Input
-                                                            placeholder={LIST_OPERATORS.has(condition.operator) ? "Comma-separated values" : "Value"}
-                                                            className="flex-1"
-                                                            value={typeof condition.value === "string" ? condition.value : ""}
-                                                            disabled={VALUELESS_OPERATORS.has(condition.operator)}
-                                                            onChange={(e) => updateCondition(index, { value: e.target.value })}
-                                                        />
+                                                        {renderConditionValueInput(condition, index)}
                                                         <Button
                                                             size="icon"
                                                             variant="ghost"
@@ -1733,7 +1988,7 @@ export default function AutomationPage() {
                                         </div>
                                     </div>
                                 </div>
-                                {!workflowValidationError ? (
+                                {!workflowValidationError && !hasServerErrors ? (
                                     <div className="flex items-center gap-2 rounded-lg border border-teal-500/20 bg-teal-500/5 p-3 text-sm">
                                         <CheckCircle2Icon className="size-4 text-teal-500" />
                                         <span>Ready to activate workflow</span>
@@ -1748,6 +2003,19 @@ export default function AutomationPage() {
                         )}
                     </div>
 
+                    {hasServerErrors && (
+                        <div className="mt-4 flex items-start gap-3 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm">
+                            <AlertCircleIcon className="mt-0.5 size-4 text-destructive" />
+                            <div className="space-y-2">
+                                <p className="font-medium text-destructive">Fix these errors</p>
+                                <ul className="space-y-1 text-xs text-destructive">
+                                    {serverErrors.map((message, index) => (
+                                        <li key={`${message}-${index}`}>• {message}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </div>
+                    )}
                     {validationError && (
                         <div className="mt-4 flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm">
                             <AlertCircleIcon className="size-4 text-destructive" />
@@ -1774,7 +2042,7 @@ export default function AutomationPage() {
                         ) : (
                             <Button
                                 onClick={handleSaveWorkflow}
-                                disabled={!!workflowValidationError || createWorkflow.isPending || updateWorkflow.isPending}
+                                disabled={!!workflowValidationError || hasServerErrors || createWorkflow.isPending || updateWorkflow.isPending}
                             >
                                 {(createWorkflow.isPending || updateWorkflow.isPending) ? (
                                     <Loader2Icon className="mr-2 size-4 animate-spin" />
@@ -1914,19 +2182,63 @@ export default function AutomationPage() {
                     <DialogHeader>
                         <DialogTitle>Test Workflow</DialogTitle>
                         <DialogDescription>
-                            Enter a case ID to test this workflow against (dry run - no changes will be made)
+                            Test this workflow against a specific {testEntityType} (dry run - no changes will be made)
                         </DialogDescription>
                     </DialogHeader>
 
                     <div className="space-y-4 py-4">
                         <div className="space-y-2">
-                            <Label>Surrogate ID</Label>
+                            <Label>{ENTITY_LABELS[testEntityType] ?? "Entity ID"}</Label>
                             <Input
-                                placeholder="Enter case UUID..."
-                                value={testSurrogateId}
-                                onChange={(e) => setTestSurrogateId(e.target.value)}
+                                placeholder={`Enter ${testEntityType} UUID...`}
+                                list="workflow-test-entity-options"
+                                value={testEntityQuery}
+                                onChange={(e) => {
+                                    setTestEntityQuery(e.target.value)
+                                    setTestEntityId(e.target.value)
+                                }}
                             />
+                            <datalist id="workflow-test-entity-options">
+                                {testEntitySuggestions.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                        {item.label}
+                                    </option>
+                                ))}
+                            </datalist>
+                            <p className="text-xs text-muted-foreground">
+                                {testEntityType === "note" || testEntityType === "document"
+                                    ? "Type a keyword to search notes or documents."
+                                    : "Start typing to see recent suggestions."}
+                            </p>
                         </div>
+
+                        {testEntitySuggestionsLoading ? (
+                            <div className="text-xs text-muted-foreground">Loading suggestions...</div>
+                        ) : testEntitySuggestions.length > 0 ? (
+                            <div className="space-y-2 rounded-lg border p-3">
+                                <p className="text-xs font-medium text-muted-foreground">
+                                    Suggested {ENTITY_PLURALS[testEntityType] ?? `${testEntityType}s`}
+                                </p>
+                                <div className="space-y-2">
+                                    {testEntitySuggestions.map((item) => (
+                                        <button
+                                            key={item.id}
+                                            type="button"
+                                            className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-muted"
+                                            onClick={() => {
+                                                setTestEntityId(item.id)
+                                                setTestEntityQuery(item.id)
+                                            }}
+                                        >
+                                            <span className="font-medium">{item.label}</span>
+                                            {item.meta && (
+                                                <span className="text-xs text-muted-foreground">{item.meta}</span>
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : null}
 
                         {testResult && (
                             <div className="space-y-3 rounded-lg border p-4">
@@ -1980,7 +2292,7 @@ export default function AutomationPage() {
                         </Button>
                         <Button
                             onClick={handleRunTest}
-                            disabled={!testSurrogateId || testWorkflowMutation.isPending}
+                            disabled={!testEntityId || testWorkflowMutation.isPending}
                         >
                             {testWorkflowMutation.isPending ? (
                                 <Loader2Icon className="mr-2 size-4 animate-spin" />

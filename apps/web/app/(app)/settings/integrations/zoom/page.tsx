@@ -7,7 +7,7 @@ import { Table, TableHead, TableHeader, TableBody, TableRow, TableCell } from "@
 import { ArrowLeftIcon, VideoIcon, CheckCircleIcon, UnlinkIcon, Loader2Icon, ExternalLinkIcon, CalendarIcon } from "lucide-react"
 import { useZoomStatus, useZoomMeetings, useConnectZoom, useDisconnectIntegration, type ZoomMeetingRead } from "@/lib/hooks/use-user-integrations"
 import Link from "@/components/app-link"
-import { formatDistanceToNow } from "date-fns"
+import { formatRelativeTime } from "@/lib/formatters"
 
 export default function ZoomSettingsPage() {
     const { data: status, isLoading: statusLoading } = useZoomStatus()
@@ -72,7 +72,7 @@ export default function ZoomSettingsPage() {
                                     <p>
                                         <span className="text-muted-foreground">Connected:</span>{" "}
                                         <span className="font-medium">
-                                            {formatDistanceToNow(new Date(status.connected_at), { addSuffix: true })}
+                                            {formatRelativeTime(status.connected_at, "Unknown")}
                                         </span>
                                     </p>
                                 )}
@@ -80,7 +80,7 @@ export default function ZoomSettingsPage() {
                                     <p>
                                         <span className="text-muted-foreground">Token expires:</span>{" "}
                                         <span className="font-medium">
-                                            {formatDistanceToNow(new Date(status.token_expires_at), { addSuffix: true })}
+                                            {formatRelativeTime(status.token_expires_at, "Unknown")}
                                         </span>
                                     </p>
                                 )}

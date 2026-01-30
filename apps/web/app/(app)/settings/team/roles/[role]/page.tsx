@@ -80,7 +80,7 @@ export default function RoleDetailPage() {
     if (isLoading) {
         return (
             <div className="flex flex-1 items-center justify-center p-6">
-                <Loader2 className="size-8 animate-spin text-muted-foreground" />
+                <Loader2 className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
             </div>
         )
     }
@@ -108,17 +108,17 @@ export default function RoleDetailPage() {
         <div className="flex flex-1 flex-col gap-6 p-6 max-w-4xl mx-auto">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="sm" render={<Link href="/settings/team/roles" />}>
-                        <ChevronLeft className="size-4 mr-1" />
-                        Back
-                    </Button>
+                <Button variant="ghost" size="sm" render={<Link href="/settings/team/roles" />}>
+                    <ChevronLeft className="size-4 mr-1" aria-hidden="true" />
+                    Back
+                </Button>
                 </div>
                 {isDeveloper && hasChanges && (
                     <Button onClick={handleSave} disabled={updatePermissions.isPending}>
                         {updatePermissions.isPending ? (
-                            <Loader2 className="size-4 mr-2 animate-spin" />
+                            <Loader2 className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                         ) : (
-                            <Save className="size-4 mr-2" />
+                            <Save className="size-4 mr-2" aria-hidden="true" />
                         )}
                         Save Changes
                     </Button>
@@ -127,7 +127,7 @@ export default function RoleDetailPage() {
 
             <div>
                 <h1 className="text-2xl font-semibold flex items-center gap-2">
-                    <Shield className="size-6" />
+                    <Shield className="size-6" aria-hidden="true" />
                     {roleDetail.label} Permissions
                 </h1>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -139,7 +139,7 @@ export default function RoleDetailPage() {
 
             {hasChanges && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-center gap-3">
-                    <AlertTriangle className="size-5 text-yellow-600" />
+                    <AlertTriangle className="size-5 text-yellow-600" aria-hidden="true" />
                     <p className="text-sm text-yellow-800">
                         You have unsaved changes. Click Save Changes to apply.
                     </p>
@@ -171,7 +171,7 @@ export default function RoleDetailPage() {
                                                         {perm.label}
                                                         {perm.developer_only && (
                                                             <Badge variant="outline" className="text-xs">
-                                                                <Lock className="size-3 mr-1" />
+                                                                <Lock className="size-3 mr-1" aria-hidden="true" />
                                                                 Dev Only
                                                             </Badge>
                                                         )}
@@ -184,6 +184,7 @@ export default function RoleDetailPage() {
                                                     checked={currentValue}
                                                     onCheckedChange={(checked) => handleToggle(perm.key, checked)}
                                                     disabled={!isDeveloper || perm.developer_only}
+                                                    aria-label={`${perm.label} permission`}
                                                 />
                                             </div>
                                         )

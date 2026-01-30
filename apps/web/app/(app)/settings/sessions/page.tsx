@@ -12,7 +12,6 @@
  */
 
 import { useState } from "react"
-import { formatDistanceToNow } from "date-fns"
 import { toast } from "sonner"
 import {
     Card,
@@ -46,22 +45,23 @@ import {
     useRevokeAllSessions,
     type Session,
 } from "@/lib/hooks/use-sessions"
+import { formatRelativeTime } from "@/lib/formatters"
 
 // =============================================================================
 // Device Icon Helper
 // =============================================================================
 
 function getDeviceIcon(deviceInfo: string | null) {
-    if (!deviceInfo) return <GlobeIcon className="size-5" />
+    if (!deviceInfo) return <GlobeIcon className="size-5" aria-hidden="true" />
 
     const info = deviceInfo.toLowerCase()
     if (info.includes("mobile") || info.includes("iphone") || info.includes("android")) {
-        return <SmartphoneIcon className="size-5" />
+        return <SmartphoneIcon className="size-5" aria-hidden="true" />
     }
     if (info.includes("tablet") || info.includes("ipad")) {
-        return <TabletIcon className="size-5" />
+        return <TabletIcon className="size-5" aria-hidden="true" />
     }
-    return <MonitorIcon className="size-5" />
+    return <MonitorIcon className="size-5" aria-hidden="true" />
 }
 
 function parseDeviceInfo(deviceInfo: string | null): { browser: string; os: string } {
@@ -103,7 +103,7 @@ function SessionCard({
 }) {
     const { browser, os } = parseDeviceInfo(session.device_info)
     const lastActive = session.last_active_at
-        ? formatDistanceToNow(new Date(session.last_active_at), { addSuffix: true })
+        ? formatRelativeTime(session.last_active_at, "Unknown")
         : "Unknown"
 
     return (
@@ -134,12 +134,16 @@ function SessionCard({
                     onClick={onRevoke}
                     disabled={isRevoking}
                     className="shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    aria-label="Revoke session"
                 >
                     {isRevoking ? (
-                        <Loader2Icon className="size-4 animate-spin" />
+                        <>
+                            <Loader2Icon className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                            <span className="sr-only">Revoking</span>
+                        </>
                     ) : (
                         <>
-                            <LogOutIcon className="size-4 mr-1" />
+                            <LogOutIcon className="size-4 mr-1" aria-hidden="true" />
                             Revoke
                         </>
                     )}
@@ -186,7 +190,7 @@ export default function SessionsPage() {
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-64">
-                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
             </div>
         )
     }
@@ -219,7 +223,7 @@ export default function SessionsPage() {
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-lg">
-                        <ShieldCheckIcon className="size-5 text-green-500" />
+                        <ShieldCheckIcon className="size-5 text-green-500" aria-hidden="true" />
                         Current Session
                     </CardTitle>
                     <CardDescription>
@@ -259,7 +263,7 @@ export default function SessionsPage() {
                             onClick={() => setShowRevokeAllDialog(true)}
                             className="shrink-0"
                         >
-                            <LogOutIcon className="size-4 mr-2" />
+                            <LogOutIcon className="size-4 mr-2" aria-hidden="true" />
                             Revoke All
                         </Button>
                     )}
@@ -267,7 +271,7 @@ export default function SessionsPage() {
                 <CardContent>
                     {otherSessions.length === 0 ? (
                         <div className="py-8 text-center text-muted-foreground">
-                            <MonitorIcon className="size-8 mx-auto mb-2 opacity-50" />
+                            <MonitorIcon className="size-8 mx-auto mb-2 opacity-50" aria-hidden="true" />
                             <p>You're only logged in on this device.</p>
                         </div>
                     ) : (
@@ -308,8 +312,8 @@ export default function SessionsPage() {
                         >
                             {revokeAllSessions.isPending ? (
                                 <>
-                                    <Loader2Icon className="size-4 mr-2 animate-spin" />
-                                    Revoking...
+                                    <Loader2Icon className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                    Revoking…
                                 </>
                             ) : (
                                 "Revoke All Sessions"

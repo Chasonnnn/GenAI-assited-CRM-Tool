@@ -148,11 +148,12 @@ function ProfileSection() {
             onClick={() => fileInputRef.current?.click()}
             disabled={uploadAvatarMutation.isPending}
             className="absolute bottom-0 right-0 flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            aria-label="Upload profile photo"
           >
             {uploadAvatarMutation.isPending ? (
-              <Loader2Icon className="size-3.5 animate-spin" />
+              <Loader2Icon className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
             ) : (
-              <CameraIcon className="size-3.5" />
+              <CameraIcon className="size-3.5" aria-hidden="true" />
             )}
           </button>
           {user?.avatar_url && (
@@ -161,8 +162,9 @@ function ProfileSection() {
               onClick={handleDeleteAvatar}
               disabled={deleteAvatarMutation.isPending}
               className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+              aria-label="Remove profile photo"
             >
-              <TrashIcon className="size-3" />
+              <TrashIcon className="size-3" aria-hidden="true" />
             </button>
           )}
         </div>
@@ -175,12 +177,25 @@ function ProfileSection() {
       <div className="grid gap-6 md:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="fullName">Full Name</Label>
-          <Input id="fullName" value={profileName} onChange={(e) => setProfileName(e.target.value)} />
+          <Input
+            id="fullName"
+            name="fullName"
+            autoComplete="name"
+            value={profileName}
+            onChange={(e) => setProfileName(e.target.value)}
+          />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
-          <Input id="email" type="email" defaultValue={user?.email || ""} disabled />
+          <Input
+            id="email"
+            name="email"
+            autoComplete="email"
+            type="email"
+            defaultValue={user?.email || ""}
+            disabled
+          />
           <p className="text-xs text-muted-foreground">Email is managed by SSO</p>
         </div>
 
@@ -188,6 +203,8 @@ function ProfileSection() {
           <Label htmlFor="title">Title</Label>
           <Input
             id="title"
+            name="title"
+            autoComplete="organization-title"
             value={profileTitle}
             onChange={(e) => setProfileTitle(e.target.value)}
             placeholder="Case Manager"
@@ -199,6 +216,8 @@ function ProfileSection() {
           <Label htmlFor="phone">Phone</Label>
           <Input
             id="phone"
+            name="phone"
+            autoComplete="tel"
             type="tel"
             value={profilePhone}
             onChange={(e) => setProfilePhone(e.target.value)}
@@ -218,11 +237,11 @@ function ProfileSection() {
       <Button onClick={handleSaveProfile} disabled={profileSaving}>
         {profileSaving ? (
           <>
-            <Loader2Icon className="mr-2 size-4 animate-spin" /> Saving...
+            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Saving…
           </>
         ) : profileSaved ? (
           <>
-            <CheckIcon className="mr-2 size-4" /> Saved!
+            <CheckIcon className="mr-2 size-4" aria-hidden="true" /> Saved!
           </>
         ) : (
           "Save Changes"
@@ -266,9 +285,9 @@ function ActiveSessionsSection() {
   const getDeviceIcon = (deviceInfo: string | null) => {
     const info = deviceInfo?.toLowerCase() || ""
     if (info.includes("mobile") || info.includes("android") || info.includes("iphone")) {
-      return <SmartphoneIcon className="mt-0.5 size-5 text-muted-foreground" />
+      return <SmartphoneIcon className="mt-0.5 size-5 text-muted-foreground" aria-hidden="true" />
     }
-    return <MonitorIcon className="mt-0.5 size-5 text-muted-foreground" />
+    return <MonitorIcon className="mt-0.5 size-5 text-muted-foreground" aria-hidden="true" />
   }
 
   if (isLoading) {
@@ -276,7 +295,7 @@ function ActiveSessionsSection() {
       <div className="space-y-3">
         <h4 className="font-medium">Active Sessions</h4>
         <div className="flex items-center justify-center py-8">
-          <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+          <Loader2Icon className="size-6 animate-spin text-muted-foreground motion-reduce:animate-none" aria-hidden="true" />
         </div>
       </div>
     )
@@ -297,7 +316,7 @@ function ActiveSessionsSection() {
             className="text-destructive hover:text-destructive"
           >
             {revokeAllSessions.isPending ? (
-              <Loader2Icon className="mr-2 size-4 animate-spin" />
+              <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
             ) : null}
             Log out all others
           </Button>
@@ -334,7 +353,7 @@ function ActiveSessionsSection() {
               disabled={revokeSession.isPending}
             >
               {revokeSession.isPending ? (
-                <Loader2Icon className="size-4 animate-spin" />
+                <Loader2Icon className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
               ) : (
                 "Revoke"
               )}
@@ -441,7 +460,7 @@ function OrganizationSection() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div className="animate-pulse flex gap-4">
+        <div className="animate-pulse motion-reduce:animate-none flex gap-4">
           <div className="h-24 w-full bg-muted rounded" />
         </div>
       </div>
@@ -471,13 +490,21 @@ function OrganizationSection() {
       <fieldset disabled={!!loadError} className="grid gap-6 md:grid-cols-2">
         <div className="space-y-2 md:col-span-2">
           <Label htmlFor="orgName">Organization Name</Label>
-          <Input id="orgName" value={orgName} onChange={(e) => setOrgName(e.target.value)} />
+          <Input
+            id="orgName"
+            name="orgName"
+            autoComplete="organization"
+            value={orgName}
+            onChange={(e) => setOrgName(e.target.value)}
+          />
         </div>
 
         <div className="space-y-2 md:col-span-2">
           <Label htmlFor="address">Address</Label>
           <Textarea
             id="address"
+            name="address"
+            autoComplete="street-address"
             rows={3}
             placeholder="123 Main St, City, State 12345"
             value={orgAddress}
@@ -489,6 +516,8 @@ function OrganizationSection() {
           <Label htmlFor="orgPhone">Phone</Label>
           <Input
             id="orgPhone"
+            name="orgPhone"
+            autoComplete="tel"
             type="tel"
             placeholder="(555) 123-4567"
             value={orgPhone}
@@ -500,6 +529,8 @@ function OrganizationSection() {
           <Label htmlFor="orgEmail">Email</Label>
           <Input
             id="orgEmail"
+            name="orgEmail"
+            autoComplete="email"
             type="email"
             placeholder="contact@company.com"
             value={orgEmail}
@@ -509,9 +540,10 @@ function OrganizationSection() {
 
         {portalBaseUrl && (
           <div className="space-y-2 md:col-span-2">
-            <Label>Portal URL</Label>
+            <Label htmlFor="portalUrl">Portal URL</Label>
             <div className="flex items-center gap-2">
               <Input
+                id="portalUrl"
                 value={portalBaseUrl}
                 disabled
                 className="font-mono text-sm"
@@ -527,11 +559,11 @@ function OrganizationSection() {
       <Button onClick={handleSaveOrg} disabled={orgSaving || isLoading || !!loadError}>
         {orgSaving ? (
           <>
-            <Loader2Icon className="mr-2 size-4 animate-spin" /> Saving...
+            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Saving…
           </>
         ) : orgSaved ? (
           <>
-            <CheckIcon className="mr-2 size-4" /> Saved!
+            <CheckIcon className="mr-2 size-4" aria-hidden="true" /> Saved!
           </>
         ) : (
           "Save Changes"
@@ -600,7 +632,7 @@ function SocialLinksSection() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div className="animate-pulse flex gap-4">
+        <div className="animate-pulse motion-reduce:animate-none flex gap-4">
           <div className="h-24 w-full bg-muted rounded" />
         </div>
       </div>
@@ -611,7 +643,7 @@ function SocialLinksSection() {
     <div className="space-y-6">
       <div>
         <h3 className="font-medium flex items-center gap-2">
-          <LinkIcon className="size-4" />
+          <LinkIcon className="size-4" aria-hidden="true" />
           Social Links
         </h3>
         <p className="text-sm text-muted-foreground">
@@ -627,12 +659,18 @@ function SocialLinksSection() {
               onChange={(e) => updateLink(i, "platform", e.target.value)}
               placeholder="Platform (e.g., LinkedIn)"
               className="w-40"
+              name={`social-platform-${i}`}
+              autoComplete="off"
+              aria-label={`Social platform ${i + 1}`}
             />
             <Input
               value={link.url}
               onChange={(e) => updateLink(i, "url", e.target.value)}
-              placeholder="https://..."
+              placeholder="https://…"
               className="flex-1"
+              name={`social-url-${i}`}
+              autoComplete="url"
+              aria-label={`Social URL ${i + 1}`}
             />
             <Button
               type="button"
@@ -640,15 +678,16 @@ function SocialLinksSection() {
               size="icon"
               onClick={() => removeLink(i)}
               className="text-destructive hover:text-destructive"
+              aria-label={`Remove social link ${i + 1}`}
             >
-              <TrashIcon className="size-4" />
+              <TrashIcon className="size-4" aria-hidden="true" />
             </Button>
           </div>
         ))}
 
         {links.length < 6 && (
           <Button type="button" variant="outline" size="sm" onClick={addLink}>
-            <PlusIcon className="mr-2 size-4" />
+            <PlusIcon className="mr-2 size-4" aria-hidden="true" />
             Add Social Link
           </Button>
         )}
@@ -657,11 +696,11 @@ function SocialLinksSection() {
       <Button onClick={handleSave} disabled={updateOrgSig.isPending}>
         {updateOrgSig.isPending ? (
           <>
-            <Loader2Icon className="mr-2 size-4 animate-spin" /> Saving...
+            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Saving…
           </>
         ) : saved ? (
           <>
-            <CheckIcon className="mr-2 size-4" /> Saved!
+            <CheckIcon className="mr-2 size-4" aria-hidden="true" /> Saved!
           </>
         ) : (
           "Save Social Links"
@@ -744,7 +783,7 @@ function SignatureBrandingSection() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div className="animate-pulse flex gap-4">
+        <div className="animate-pulse motion-reduce:animate-none flex gap-4">
           <div className="h-24 w-full bg-muted rounded" />
         </div>
       </div>
@@ -763,7 +802,7 @@ function SignatureBrandingSection() {
     <div className="space-y-6">
       <div>
         <h3 className="font-medium flex items-center gap-2">
-          <PaletteIcon className="size-4" />
+          <PaletteIcon className="size-4" aria-hidden="true" />
           Signature Branding
         </h3>
         <p className="text-sm text-muted-foreground">Template and visual style for email signatures</p>
@@ -772,12 +811,14 @@ function SignatureBrandingSection() {
       {/* Template Selection */}
       <div className="space-y-3">
         <Label>Signature Template</Label>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3" role="radiogroup" aria-label="Signature template">
           {templates.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => setTemplate(t.id)}
+              aria-pressed={template === t.id}
+              aria-label={`Template ${t.name}`}
               className={`p-3 rounded-lg border text-left transition-colors ${template === t.id
                 ? "border-primary bg-primary/5"
                 : "border-border hover:border-muted-foreground"
@@ -799,6 +840,8 @@ function SignatureBrandingSection() {
               <img
                 src={orgSig.signature_logo_url}
                 alt="Organization Logo"
+                width={200}
+                height={80}
                 className="h-16 w-auto border rounded"
               />
               <button
@@ -806,8 +849,9 @@ function SignatureBrandingSection() {
                 onClick={handleDeleteLogo}
                 disabled={deleteLogo.isPending}
                 className="absolute -top-2 -right-2 p-1 bg-destructive text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                aria-label="Remove organization logo"
               >
-                <TrashIcon className="size-3" />
+                <TrashIcon className="size-3" aria-hidden="true" />
               </button>
             </div>
           ) : (
@@ -830,9 +874,9 @@ function SignatureBrandingSection() {
               disabled={uploadLogo.isPending}
             >
               {uploadLogo.isPending ? (
-                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
               ) : (
-                <UploadIcon className="mr-2 size-4" />
+                <UploadIcon className="mr-2 size-4" aria-hidden="true" />
               )}
               Upload Logo
             </Button>
@@ -843,11 +887,12 @@ function SignatureBrandingSection() {
 
       {/* Primary Color */}
       <div className="space-y-2">
-        <Label>Primary Color</Label>
+        <Label htmlFor="primaryColor">Primary Color</Label>
         <div className="flex items-center gap-3">
           <div className="relative">
             <input
               type="color"
+              id="primaryColor"
               value={primaryColor}
               onChange={(e) => setPrimaryColor(e.target.value)}
               className="w-10 h-10 rounded cursor-pointer border"
@@ -858,6 +903,9 @@ function SignatureBrandingSection() {
             onChange={(e) => setPrimaryColor(e.target.value)}
             className="w-28 font-mono text-sm"
             placeholder="#14b8a6"
+            name="primaryColorHex"
+            autoComplete="off"
+            aria-label="Primary color hex"
           />
         </div>
       </div>
@@ -868,6 +916,8 @@ function SignatureBrandingSection() {
           <Label htmlFor="sigCompanyName">Company Name (in signature)</Label>
           <Input
             id="sigCompanyName"
+            name="sigCompanyName"
+            autoComplete="organization"
             value={companyName}
             onChange={(e) => setCompanyName(e.target.value)}
             placeholder="Your Company"
@@ -877,6 +927,8 @@ function SignatureBrandingSection() {
           <Label htmlFor="sigWebsite">Website</Label>
           <Input
             id="sigWebsite"
+            name="sigWebsite"
+            autoComplete="url"
             value={website}
             onChange={(e) => setWebsite(e.target.value)}
             placeholder="https://www.example.com"
@@ -886,6 +938,8 @@ function SignatureBrandingSection() {
           <Label htmlFor="sigPhone">Phone (in signature)</Label>
           <Input
             id="sigPhone"
+            name="sigPhone"
+            autoComplete="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="(555) 123-4567"
@@ -895,6 +949,8 @@ function SignatureBrandingSection() {
           <Label htmlFor="sigAddress">Address (in signature)</Label>
           <Textarea
             id="sigAddress"
+            name="sigAddress"
+            autoComplete="street-address"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
             placeholder="123 Main St, City, State 12345"
@@ -905,6 +961,7 @@ function SignatureBrandingSection() {
           <Label htmlFor="sigDisclaimer">Disclaimer / Legal Footer</Label>
           <Textarea
             id="sigDisclaimer"
+            name="sigDisclaimer"
             value={disclaimer}
             onChange={(e) => setDisclaimer(e.target.value)}
             placeholder="Confidentiality notice, legal disclaimer, etc."
@@ -936,22 +993,22 @@ function SignatureBrandingSection() {
           >
             {previewLoading ? (
               <>
-                <Loader2Icon className="mr-2 size-4 animate-spin" /> Loading...
+                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Loading…
               </>
             ) : (
               <>
-                <EyeIcon className="mr-2 size-4" /> Preview Template
+                <EyeIcon className="mr-2 size-4" aria-hidden="true" /> Preview Template
               </>
             )}
           </Button>
           <Button onClick={handleSave} disabled={updateOrgSig.isPending}>
             {updateOrgSig.isPending ? (
               <>
-                <Loader2Icon className="mr-2 size-4 animate-spin" /> Saving...
+                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Saving…
               </>
             ) : saved ? (
               <>
-                <CheckIcon className="mr-2 size-4" /> Saved!
+                <CheckIcon className="mr-2 size-4" aria-hidden="true" /> Saved!
               </>
             ) : (
               "Save Signature Branding"
@@ -1025,7 +1082,7 @@ export default function SettingsPage() {
             <TabsTrigger value="general">General</TabsTrigger>
             {isAdmin && (
               <TabsTrigger value="email-signature" className="flex items-center gap-2">
-                <MailIcon className="size-4" />
+                <MailIcon className="size-4" aria-hidden="true" />
                 Email Signature
               </TabsTrigger>
             )}
@@ -1082,7 +1139,7 @@ export default function SettingsPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                      <MailIcon className="size-5" />
+                      <MailIcon className="size-5" aria-hidden="true" />
                       Email Signature Settings
                     </CardTitle>
                     <CardDescription>

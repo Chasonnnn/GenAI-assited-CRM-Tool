@@ -24,8 +24,8 @@ import {
     useUpdateStage,
 } from "@/lib/hooks/use-pipelines"
 import type { PipelineStage } from "@/lib/api/pipelines"
-import { formatDistanceToNow } from "date-fns"
 import { useAuth } from "@/lib/auth-context"
+import { formatRelativeTime } from "@/lib/formatters"
 
 function StageEditor({
     stages,
@@ -84,7 +84,7 @@ function StageEditor({
                         className={`flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/30 transition-colors ${dragIndex === index ? "opacity-50" : ""
                             }`}
                     >
-                        <GripVerticalIcon className="size-4 text-muted-foreground cursor-grab" />
+                        <GripVerticalIcon className="size-4 text-muted-foreground cursor-grab" aria-hidden="true" />
 
                         <div className="flex items-center gap-2">
                             <input
@@ -92,6 +92,7 @@ function StageEditor({
                                 value={stage.color}
                                 onChange={(e) => updateStage(index, "color", e.target.value)}
                                 className="w-8 h-8 rounded border cursor-pointer"
+                                aria-label={`Stage ${index + 1} color`}
                             />
                         </div>
 
@@ -101,6 +102,8 @@ function StageEditor({
                                 onChange={(e) => updateStage(index, "label", e.target.value)}
                                 placeholder="Label"
                                 className="h-9"
+                                name={`stage-label-${stage.id}`}
+                                autoComplete="off"
                             />
                             <Input
                                 value={stage.slug}
@@ -108,6 +111,7 @@ function StageEditor({
                                 disabled
                                 className="h-9 font-mono text-sm bg-muted"
                                 title="Stage slug is read-only"
+                                aria-label="Stage slug"
                             />
                         </div>
 
@@ -119,7 +123,7 @@ function StageEditor({
             </div>
 
             <Alert>
-                <InfoIcon className="size-4" />
+                <InfoIcon className="size-4" aria-hidden="true" />
                 <AlertDescription>
                     Drag stages to reorder. Edit labels and colors. Stage slugs are read-only.
                 </AlertDescription>
@@ -142,7 +146,7 @@ function VersionHistory({
     if (isLoading) {
         return (
             <div className="flex items-center justify-center py-8">
-                <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
+                <Loader2Icon className="size-5 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
             </div>
         )
     }
@@ -178,7 +182,7 @@ function VersionHistory({
                             </Badge>
                             {index === 0 && (
                                 <span className="text-xs text-green-600 flex items-center gap-1">
-                                    <CheckIcon className="size-3" />
+                                    <CheckIcon className="size-3" aria-hidden="true" />
                                     Current
                                 </span>
                             )}
@@ -190,13 +194,13 @@ function VersionHistory({
                                 onClick={() => onRollback(version.version)}
                                 className="h-7 text-xs"
                             >
-                                <RotateCcwIcon className="size-3 mr-1" />
+                                <RotateCcwIcon className="size-3 mr-1" aria-hidden="true" />
                                 Restore
                             </Button>
                         )}
                     </div>
                     <p className="text-xs text-muted-foreground">
-                        {formatDistanceToNow(new Date(version.created_at), { addSuffix: true })}
+                        {formatRelativeTime(version.created_at, "Unknown")}
                     </p>
                     {version.comment && (
                         <p className="text-xs mt-1 italic">{version.comment}</p>
@@ -284,7 +288,7 @@ export default function PipelinesSettingsPage() {
     if (isLoading) {
         return (
             <div className="flex flex-1 items-center justify-center p-6">
-                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
             </div>
         )
     }
@@ -340,9 +344,9 @@ export default function PipelinesSettingsPage() {
                                         className="flex-1"
                                     >
                                         {updateStage.isPending || reorderStages.isPending ? (
-                                            <Loader2Icon className="size-4 mr-2 animate-spin" />
+                                            <Loader2Icon className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                         ) : (
-                                            <SaveIcon className="size-4 mr-2" />
+                                            <SaveIcon className="size-4 mr-2" aria-hidden="true" />
                                         )}
                                         Save Changes
                                     </Button>
@@ -360,7 +364,7 @@ export default function PipelinesSettingsPage() {
                     <Card>
                         <CardHeader className="pb-3">
                             <CardTitle className="text-base flex items-center gap-2">
-                                <HistoryIcon className="size-4" />
+                                <HistoryIcon className="size-4" aria-hidden="true" />
                                 Version History
                             </CardTitle>
                         </CardHeader>

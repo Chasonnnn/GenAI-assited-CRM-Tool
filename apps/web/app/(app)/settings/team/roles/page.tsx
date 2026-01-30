@@ -30,7 +30,7 @@ export default function RolePermissionsPage() {
     if (isLoading) {
         return (
             <div className="flex flex-1 items-center justify-center p-6">
-                <Loader2 className="size-8 animate-spin text-muted-foreground" />
+                <Loader2 className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
             </div>
         )
     }
@@ -38,15 +38,15 @@ export default function RolePermissionsPage() {
     return (
         <div className="flex flex-1 flex-col gap-6 p-6 max-w-4xl mx-auto">
             <div className="flex items-center gap-4">
-                <Button variant="ghost" size="sm" render={<Link href="/settings/team" />}>
-                    <ChevronLeft className="size-4 mr-1" />
-                    Back to Team
-                </Button>
+            <Button variant="ghost" size="sm" render={<Link href="/settings/team" />}>
+                <ChevronLeft className="size-4 mr-1" aria-hidden="true" />
+                Back to Team
+            </Button>
             </div>
 
             <div>
                 <h1 className="text-2xl font-semibold flex items-center gap-2">
-                    <Shield className="size-6" />
+                <Shield className="size-6" aria-hidden="true" />
                     Role Permissions
                 </h1>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -67,7 +67,7 @@ export default function RolePermissionsPage() {
                                             {role.label}
                                             {role.is_developer && (
                                                 <Badge variant="outline" className="text-orange-600 border-orange-300">
-                                                    <Lock className="size-3 mr-1" />
+                                <Lock className="size-3 mr-1" aria-hidden="true" />
                                                     Immutable
                                                 </Badge>
                                             )}
@@ -88,7 +88,7 @@ export default function RolePermissionsPage() {
                                             size="sm"
                                         >
                                             {isDeveloper ? "Edit" : "View"}
-                                            <ChevronRight className="size-4 ml-1" />
+                                            <ChevronRight className="size-4 ml-1" aria-hidden="true" />
                                         </Button>
                                     )}
                                     {role.is_developer && (

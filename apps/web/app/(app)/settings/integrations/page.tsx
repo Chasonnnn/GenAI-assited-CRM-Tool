@@ -33,7 +33,7 @@ import { useUserIntegrations, useConnectZoom, useConnectGmail, useConnectGoogleC
 import { useAISettings, useUpdateAISettings, useTestAPIKey, useAIConsent, useAcceptConsent } from "@/lib/hooks/use-ai"
 import { useResendSettings, useUpdateResendSettings, useTestResendKey, useRotateWebhook, useEligibleSenders } from "@/lib/hooks/use-resend"
 import { useZapierSettings, useRotateZapierSecret, useZapierTestLead, useUpdateZapierOutboundSettings, useZapierOutboundTest } from "@/lib/hooks/use-zapier"
-import { formatDistanceToNow } from "date-fns"
+import { formatRelativeTime } from "@/lib/formatters"
 import { CopyIcon, SendIcon, RotateCwIcon, ActivityIcon } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { toast } from "sonner"
@@ -1737,7 +1737,7 @@ export default function IntegrationsPage() {
                                                 <div className="flex items-center justify-between text-muted-foreground">
                                                     <span>Last success</span>
                                                     <span className="text-green-600">
-                                                        {formatDistanceToNow(new Date(integration.last_success_at), { addSuffix: true })}
+                                                        {formatRelativeTime(integration.last_success_at, "Never")}
                                                     </span>
                                                 </div>
                                             )}
@@ -1745,7 +1745,7 @@ export default function IntegrationsPage() {
                                                 <div className="flex items-center justify-between text-muted-foreground">
                                                     <span>Last error</span>
                                                     <span className="text-red-600">
-                                                        {formatDistanceToNow(new Date(integration.last_error_at), { addSuffix: true })}
+                                                        {formatRelativeTime(integration.last_error_at, "Never")}
                                                     </span>
                                                 </div>
                                             )}

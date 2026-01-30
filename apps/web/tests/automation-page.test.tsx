@@ -106,10 +106,10 @@ vi.mock('@/lib/hooks/use-workflows', () => ({
     useWorkflowExecutions: () => mockUseWorkflowExecutions(),
     useCreateWorkflow: () => mockCreateWorkflow,
     useUpdateWorkflow: () => mockUpdateWorkflow,
-    useDuplicateWorkflow: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useTestWorkflow: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useDeleteWorkflow: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useToggleWorkflow: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useDuplicateWorkflow: () => ({ mutate: vi.fn(), isPending: false }),
+    useTestWorkflow: () => ({ mutate: vi.fn(), isPending: false }),
+    useDeleteWorkflow: () => ({ mutate: vi.fn(), isPending: false }),
+    useToggleWorkflow: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
 describe('AutomationPage', () => {
@@ -156,7 +156,8 @@ describe('AutomationPage', () => {
 
         render(<AutomationPage />)
 
-        fireEvent.click(screen.getByRole('button', { name: /create workflow/i }))
+        const createButtons = screen.getAllByRole('button', { name: /create workflow/i })
+        fireEvent.click(createButtons[createButtons.length - 1])
 
         fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Surrogates'), { target: { value: 'Test Workflow' } })
         fireEvent.change(screen.getAllByTestId('select')[0], { target: { value: 'surrogate_created' } })
@@ -169,7 +170,8 @@ describe('AutomationPage', () => {
         fireEvent.change(screen.getByPlaceholderText('Note content'), { target: { value: 'Test note' } })
 
         fireEvent.click(screen.getByRole('button', { name: /next/i }))
-        fireEvent.click(screen.getByRole('button', { name: /create workflow/i }))
+        const saveButtons = screen.getAllByRole('button', { name: /create workflow/i })
+        fireEvent.click(saveButtons[saveButtons.length - 1])
 
         expect(screen.getByText(/fix these errors/i)).toBeInTheDocument()
         expect(screen.getByText(/Action 1: title is required/i)).toBeInTheDocument()

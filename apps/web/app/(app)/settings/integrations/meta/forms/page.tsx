@@ -14,7 +14,7 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { useMetaForms, useSyncMetaForms } from "@/lib/hooks/use-meta-forms"
-import { formatDistanceToNow } from "date-fns"
+import { formatRelativeTime } from "@/lib/formatters"
 import { AlertTriangleIcon, CheckCircleIcon, Loader2Icon, RefreshCwIcon } from "lucide-react"
 
 const statusBadge = (status: string) => {
@@ -137,7 +137,7 @@ export default function MetaFormsPage() {
                                             </TableCell>
                                             <TableCell className="text-sm text-muted-foreground">
                                                 {form.last_lead_at
-                                                    ? formatDistanceToNow(new Date(form.last_lead_at), { addSuffix: true })
+                                                    ? formatRelativeTime(form.last_lead_at, "—")
                                                     : "—"}
                                             </TableCell>
                                             <TableCell className="text-right">

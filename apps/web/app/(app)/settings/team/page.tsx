@@ -39,9 +39,9 @@ import {
 import { useInvites, useCreateInvite, useResendInvite, useRevokeInvite } from "@/lib/hooks/use-invites"
 import { useMembers, useRemoveMember, useBulkUpdateRoles } from "@/lib/hooks/use-permissions"
 import { toast } from "sonner"
-import { formatDistanceToNow } from "date-fns"
 import { useAuth } from "@/lib/auth-context"
 import { Checkbox } from "@/components/ui/checkbox"
+import { formatRelativeTime } from "@/lib/formatters"
 
 const ROLE_LABELS: Record<string, string> = {
     intake_specialist: "Intake Specialist",
@@ -94,18 +94,21 @@ function InviteTeamModal({ onClose }: { onClose: () => void }) {
                         <Label htmlFor="email">Email address</Label>
                         <Input
                             id="email"
+                            name="inviteEmail"
                             type="email"
                             placeholder="colleague@example.com"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             required
+                            autoComplete="email"
+                            spellCheck={false}
                         />
                     </div>
 
                     <div className="space-y-2">
                         <Label htmlFor="role">Role</Label>
                         <Select value={role} onValueChange={(v) => v && setRole(v as InviteRole)}>
-                            <SelectTrigger>
+                            <SelectTrigger id="role">
                                 <SelectValue placeholder="Select role">
                                     {(value: string | null) => {
                                         return value ? ROLE_LABELS[value] || value : "Select role"
@@ -131,7 +134,9 @@ function InviteTeamModal({ onClose }: { onClose: () => void }) {
                         Cancel
                     </Button>
                     <Button type="submit" disabled={createInvite.isPending}>
-                        {createInvite.isPending && <Loader2 className="size-4 mr-2 animate-spin" />}
+                        {createInvite.isPending && (
+                            <Loader2 className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                        )}
                         Send Invitation
                     </Button>
                 </DialogFooter>
@@ -210,7 +215,7 @@ function MembersTab() {
     if (isLoading) {
         return (
             <div className="flex justify-center py-8">
-                <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                <Loader2 className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
             </div>
         )
     }
@@ -245,7 +250,7 @@ function MembersTab() {
                         <Dialog open={showBulkDialog} onOpenChange={setShowBulkDialog}>
                             <DialogTrigger render={
                                 <Button size="sm">
-                                    <UserCog className="size-4 mr-2" />
+                                    <UserCog className="size-4 mr-2" aria-hidden="true" />
                                     Assign Role
                                 </Button>
                             } />
@@ -260,7 +265,7 @@ function MembersTab() {
                                     <div className="space-y-2">
                                         <Label htmlFor="bulk-role">New Role</Label>
                                         <Select value={bulkRole} onValueChange={(v) => v && setBulkRole(v)}>
-                                            <SelectTrigger>
+                                            <SelectTrigger id="bulk-role">
                                                 <SelectValue>
                                                     {(value: string | null) => {
                                                         const labels: Record<string, string> = {
@@ -285,7 +290,9 @@ function MembersTab() {
                                         Cancel
                                     </Button>
                                     <Button onClick={handleBulkAssign} disabled={bulkUpdate.isPending}>
-                                        {bulkUpdate.isPending && <Loader2 className="size-4 mr-2 animate-spin" />}
+                                        {bulkUpdate.isPending && (
+                                            <Loader2 className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                        )}
                                         Apply to {selectedIds.size} Member{selectedIds.size !== 1 ? "s" : ""}
                                     </Button>
                                 </DialogFooter>
@@ -341,7 +348,7 @@ function MembersTab() {
                                 </TableCell>
                                 <TableCell className="text-muted-foreground text-center">
                                     {member.last_login_at
-                                        ? formatDistanceToNow(new Date(member.last_login_at), { addSuffix: true })
+                                        ? formatRelativeTime(member.last_login_at, "Never")
                                         : "Never"}
                                 </TableCell>
                                 <TableCell className="text-center">
@@ -351,7 +358,7 @@ function MembersTab() {
                                             variant="ghost"
                                             size="sm"
                                         >
-                                            <Settings2 className="size-4 mr-1" />
+                                            <Settings2 className="size-4 mr-1" aria-hidden="true" />
                                             Manage
                                         </Button>
                                         {member.user_id !== user?.user_id ? (
@@ -361,8 +368,9 @@ function MembersTab() {
                                                 onClick={() => handleRemove(member.id, member.email)}
                                                 disabled={removeMember.isPending}
                                                 className="text-destructive hover:text-destructive"
+                                                aria-label={`Remove ${member.email}`}
                                             >
-                                                <X className="size-4" />
+                                                <X className="size-4" aria-hidden="true" />
                                             </Button>
                                         ) : (
                                             <div className="w-8" />
@@ -412,7 +420,7 @@ function InvitationsTab() {
     if (isLoading) {
         return (
             <div className="flex justify-center py-8">
-                <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                <Loader2 className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
             </div>
         )
     }
@@ -447,7 +455,7 @@ function InvitationsTab() {
                         </TableCell>
                         <TableCell className="text-muted-foreground text-center">
                             {invite.expires_at
-                                ? formatDistanceToNow(new Date(invite.expires_at), { addSuffix: true })
+                                ? formatRelativeTime(invite.expires_at, "Never")
                                 : "Never"}
                         </TableCell>
                         <TableCell className="text-center">{invite.resend_count}/3</TableCell>
@@ -458,8 +466,9 @@ function InvitationsTab() {
                                     size="sm"
                                     onClick={() => handleResend(invite.id)}
                                     disabled={!invite.can_resend || resendInvite.isPending}
+                                    aria-label={`Resend invitation to ${invite.email}`}
                                 >
-                                    <RotateCcw className="size-4" />
+                                    <RotateCcw className="size-4" aria-hidden="true" />
                                 </Button>
                                 <Button
                                     variant="ghost"
@@ -467,8 +476,9 @@ function InvitationsTab() {
                                     onClick={() => handleRevoke(invite.id)}
                                     disabled={revokeInvite.isPending}
                                     className="text-destructive hover:text-destructive"
+                                    aria-label={`Revoke invitation for ${invite.email}`}
                                 >
-                                    <X className="size-4" />
+                                    <X className="size-4" aria-hidden="true" />
                                 </Button>
                             </div>
                         </TableCell>
@@ -499,13 +509,13 @@ export default function TeamSettingsPage() {
 
                 <div className="flex gap-2">
                     <Button render={<Link href="/settings/team/roles" />} variant="outline">
-                        <Shield className="size-4 mr-2" />
+                        <Shield className="size-4 mr-2" aria-hidden="true" />
                         Role Permissions
                     </Button>
                     <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
                         <DialogTrigger render={
                             <Button>
-                                <UserPlus className="size-4 mr-2" />
+                                <UserPlus className="size-4 mr-2" aria-hidden="true" />
                                 Invite Member
                             </Button>
                         } />
@@ -525,11 +535,11 @@ export default function TeamSettingsPage() {
                     <Tabs defaultValue="members">
                         <TabsList className="mb-4">
                             <TabsTrigger value="members">
-                                <Users className="size-4 mr-1" />
+                                <Users className="size-4 mr-1" aria-hidden="true" />
                                 Members ({memberCount})
                             </TabsTrigger>
                             <TabsTrigger value="invitations">
-                                <Mail className="size-4 mr-1" />
+                                <Mail className="size-4 mr-1" aria-hidden="true" />
                                 Invitations ({pendingCount})
                             </TabsTrigger>
                         </TabsList>

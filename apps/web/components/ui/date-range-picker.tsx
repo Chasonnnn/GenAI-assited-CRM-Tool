@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { CalendarIcon, ChevronDownIcon } from "lucide-react"
-import { format, isSameDay } from "date-fns"
+import { isSameDay } from "date-fns"
 import type { DateRange as DayPickerDateRange } from "react-day-picker"
 
 import { Button } from "@/components/ui/button"
@@ -27,6 +27,7 @@ interface DateRangePickerProps {
     customRange?: DateRange
     onCustomRangeChange?: (range: DateRange) => void
     className?: string
+    ariaLabel?: string
 }
 
 const presetLabels: Record<DateRangePreset, string> = {
@@ -43,6 +44,7 @@ export function DateRangePicker({
     customRange,
     onCustomRangeChange,
     className,
+    ariaLabel,
 }: DateRangePickerProps) {
     const [open, setOpen] = React.useState(false)
     const [showCalendar, setShowCalendar] = React.useState(false)
@@ -112,7 +114,7 @@ export function DateRangePicker({
 
     const getDisplayLabel = () => {
         if (preset === 'custom' && customRange?.from && customRange?.to) {
-            return `${format(customRange.from, 'MMM d')} - ${format(customRange.to, 'MMM d')}`
+            return `${shortDateFormatter.format(customRange.from)} - ${shortDateFormatter.format(customRange.to)}`
         }
         return presetLabels[preset]
     }
@@ -143,10 +145,11 @@ export function DateRangePicker({
                     "inline-flex items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-normal hover:bg-accent hover:text-accent-foreground w-44",
                     className
                 )}
+                aria-label={ariaLabel}
             >
-                <CalendarIcon className="size-4" />
+                <CalendarIcon className="size-4" aria-hidden="true" />
                 {getDisplayLabel()}
-                <ChevronDownIcon className="size-4 opacity-50" />
+                <ChevronDownIcon className="size-4 opacity-50" aria-hidden="true" />
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
                 {!showCalendar ? (
@@ -167,8 +170,8 @@ export function DateRangePicker({
                             className="justify-start"
                             onClick={() => handlePresetSelect('custom')}
                         >
-                            <CalendarIcon className="size-4 mr-2" />
-                            Custom Range...
+                            <CalendarIcon className="size-4 mr-2" aria-hidden="true" />
+                            Custom Range…
                         </Button>
                     </div>
                 ) : (
@@ -178,8 +181,8 @@ export function DateRangePicker({
                                 <span className="text-sm font-medium">Select date range</span>
                                 {localRange.from && (
                                     <span className="text-xs text-muted-foreground">
-                                        {localRange.from && format(localRange.from, 'MMM d, yyyy')}
-                                        {localRange.to && ` → ${format(localRange.to, 'MMM d, yyyy')}`}
+                                        {localRange.from && longDateFormatter.format(localRange.from)}
+                                        {localRange.to && ` → ${longDateFormatter.format(localRange.to)}`}
                                         {!localRange.to && ' → Select end date'}
                                     </span>
                                 )}
@@ -220,3 +223,5 @@ export function DateRangePicker({
         </Popover>
     )
 }
+    const shortDateFormatter = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" })
+    const longDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" })

@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
     AlertTriangleIcon,
@@ -16,7 +17,7 @@ import {
     RefreshCwIcon,
 } from "lucide-react"
 import { useAlerts, useAlertsSummary, useResolveAlert, useAcknowledgeAlert, useSnoozeAlert } from "@/lib/hooks/use-ops"
-import { formatDistanceToNow } from "date-fns"
+import { formatRelativeTime } from "@/lib/formatters"
 
 const severityConfig = {
     critical: { icon: XCircleIcon, color: "text-red-600 bg-red-100 dark:bg-red-900/30", badge: "destructive" },
@@ -67,7 +68,7 @@ export default function AlertsPage() {
                         )}
                     </div>
                     <Button variant="outline" size="sm" onClick={handleRefresh}>
-                        <RefreshCwIcon className="mr-2 size-4" />
+                        <RefreshCwIcon className="mr-2 size-4" aria-hidden="true" />
                         Refresh
                     </Button>
                 </div>
@@ -80,11 +81,11 @@ export default function AlertsPage() {
                     <Card className={summary?.critical && summary.critical > 0 ? "border-red-500" : ""}>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Critical</CardTitle>
-                            <XCircleIcon className="size-4 text-red-600" />
+                            <XCircleIcon className="size-4 text-red-600" aria-hidden="true" />
                         </CardHeader>
                         <CardContent>
                             {summaryLoading ? (
-                                <Loader2Icon className="size-6 animate-spin" />
+                                <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                             ) : (
                                 <div className="text-2xl font-bold text-red-600">{summary?.critical ?? 0}</div>
                             )}
@@ -94,11 +95,11 @@ export default function AlertsPage() {
                     <Card className={summary?.error && summary.error > 0 ? "border-orange-500" : ""}>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Errors</CardTitle>
-                            <AlertCircleIcon className="size-4 text-orange-600" />
+                            <AlertCircleIcon className="size-4 text-orange-600" aria-hidden="true" />
                         </CardHeader>
                         <CardContent>
                             {summaryLoading ? (
-                                <Loader2Icon className="size-6 animate-spin" />
+                                <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                             ) : (
                                 <div className="text-2xl font-bold text-orange-600">{summary?.error ?? 0}</div>
                             )}
@@ -108,11 +109,11 @@ export default function AlertsPage() {
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Warnings</CardTitle>
-                            <AlertTriangleIcon className="size-4 text-yellow-600" />
+                            <AlertTriangleIcon className="size-4 text-yellow-600" aria-hidden="true" />
                         </CardHeader>
                         <CardContent>
                             {summaryLoading ? (
-                                <Loader2Icon className="size-6 animate-spin" />
+                                <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                             ) : (
                                 <div className="text-2xl font-bold text-yellow-600">{summary?.warn ?? 0}</div>
                             )}
@@ -125,8 +126,10 @@ export default function AlertsPage() {
                     <CardHeader>
                         <div className="flex items-center justify-between">
                             <CardTitle>Alerts</CardTitle>
-                            <Select value={statusFilter} onValueChange={(v) => v && setStatusFilter(v)}>
-                                <SelectTrigger className="w-40">
+                            <div className="flex items-center gap-2">
+                                <Label htmlFor="alerts-status" className="sr-only">Status filter</Label>
+                                <Select value={statusFilter} onValueChange={(v) => v && setStatusFilter(v)}>
+                                    <SelectTrigger className="w-40" id="alerts-status">
                                     <SelectValue>
                                         {(value: string | null) => {
                                             const labels: Record<string, string> = {
@@ -139,25 +142,26 @@ export default function AlertsPage() {
                                             return labels[value ?? "open"] ?? "Select status"
                                         }}
                                     </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="open">Open</SelectItem>
-                                    <SelectItem value="acknowledged">Acknowledged</SelectItem>
-                                    <SelectItem value="resolved">Resolved</SelectItem>
-                                    <SelectItem value="snoozed">Snoozed</SelectItem>
-                                    <SelectItem value="all">All</SelectItem>
-                                </SelectContent>
-                            </Select>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="open">Open</SelectItem>
+                                        <SelectItem value="acknowledged">Acknowledged</SelectItem>
+                                        <SelectItem value="resolved">Resolved</SelectItem>
+                                        <SelectItem value="snoozed">Snoozed</SelectItem>
+                                        <SelectItem value="all">All</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
                     </CardHeader>
                     <CardContent>
                         {alertsLoading ? (
                             <div className="flex items-center justify-center py-12">
-                                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                                <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                             </div>
                         ) : (alertsData?.items?.length ?? 0) === 0 ? (
                             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                                <CheckCircleIcon className="mb-2 size-12 text-green-500" />
+                                <CheckCircleIcon className="mb-2 size-12 text-green-500" aria-hidden="true" />
                                 <p className="text-lg font-medium">No {statusFilter === "all" ? "" : statusFilter} alerts</p>
                                 <p className="text-sm">All systems operating normally</p>
                             </div>
@@ -174,7 +178,7 @@ export default function AlertsPage() {
                                             key={alert.id}
                                             className={`flex items-start gap-4 rounded-lg border p-4 ${config.color}`}
                                         >
-                                            <Icon className="mt-0.5 size-5 flex-shrink-0" />
+                                            <Icon className="mt-0.5 size-5 flex-shrink-0" aria-hidden="true" />
                                             <div className="flex-1 space-y-1">
                                                 <div className="flex items-start justify-between gap-2">
                                                     <div>
@@ -192,7 +196,7 @@ export default function AlertsPage() {
                                                 )}
                                                 <div className="flex items-center gap-4 text-xs opacity-60">
                                                     <span>
-                                                        First seen: {formatDistanceToNow(new Date(alert.first_seen_at), { addSuffix: true })}
+                                                        First seen: {formatRelativeTime(alert.first_seen_at, "Unknown")}
                                                     </span>
                                                     {alert.occurrence_count > 1 && (
                                                         <span>Occurred {alert.occurrence_count} times</span>
@@ -208,7 +212,7 @@ export default function AlertsPage() {
                                                             onClick={() => acknowledgeAlert.mutate(alert.id)}
                                                             disabled={acknowledgeAlert.isPending}
                                                         >
-                                                            <BellOffIcon className="mr-1 size-3" />
+                                                            <BellOffIcon className="mr-1 size-3" aria-hidden="true" />
                                                             Acknowledge
                                                         </Button>
                                                         <Button
@@ -217,7 +221,7 @@ export default function AlertsPage() {
                                                             onClick={() => snoozeAlert.mutate({ alertId: alert.id, hours: 24 })}
                                                             disabled={snoozeAlert.isPending}
                                                         >
-                                                            <ClockIcon className="mr-1 size-3" />
+                                                            <ClockIcon className="mr-1 size-3" aria-hidden="true" />
                                                             Snooze 24h
                                                         </Button>
                                                         <Button
@@ -226,7 +230,7 @@ export default function AlertsPage() {
                                                             onClick={() => resolveAlert.mutate(alert.id)}
                                                             disabled={resolveAlert.isPending}
                                                         >
-                                                            <CheckCircleIcon className="mr-1 size-3" />
+                                                            <CheckCircleIcon className="mr-1 size-3" aria-hidden="true" />
                                                             Resolve
                                                         </Button>
                                                     </div>

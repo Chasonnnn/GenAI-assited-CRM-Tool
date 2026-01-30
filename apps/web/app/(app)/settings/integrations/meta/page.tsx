@@ -65,7 +65,7 @@ import {
 } from "@/lib/api/meta-oauth"
 import { useAdminMetaAdAccounts, useDeleteMetaAdAccount, useUpdateMetaAdAccount } from "@/lib/hooks/use-admin-meta"
 import type { MetaAdAccount, MetaAdAccountUpdate } from "@/lib/api/admin-meta"
-import { formatDistanceToNow } from "date-fns"
+import { formatRelativeTime } from "@/lib/formatters"
 
 // Connection health badge component
 function ConnectionHealthBadge({ connection }: { connection: MetaOAuthConnection }) {
@@ -536,9 +536,7 @@ export default function MetaIntegrationPage() {
                                             </TableCell>
                                             <TableCell className="text-sm text-muted-foreground">
                                                 {connection.last_validated_at
-                                                    ? formatDistanceToNow(new Date(connection.last_validated_at), {
-                                                          addSuffix: true,
-                                                      })
+                                                    ? formatRelativeTime(connection.last_validated_at, "—")
                                                     : "—"}
                                             </TableCell>
                                             <TableCell className="text-right">
@@ -654,19 +652,13 @@ export default function MetaIntegrationPage() {
                                                     <div>
                                                         Hierarchy:{" "}
                                                         {account.hierarchy_synced_at
-                                                            ? formatDistanceToNow(
-                                                                  new Date(account.hierarchy_synced_at),
-                                                                  { addSuffix: true }
-                                                              )
+                                                            ? formatRelativeTime(account.hierarchy_synced_at, "—")
                                                             : "—"}
                                                     </div>
                                                     <div>
                                                         Spend:{" "}
                                                         {account.spend_synced_at
-                                                            ? formatDistanceToNow(
-                                                                  new Date(account.spend_synced_at),
-                                                                  { addSuffix: true }
-                                                              )
+                                                            ? formatRelativeTime(account.spend_synced_at, "—")
                                                             : "—"}
                                                     </div>
                                                 </div>
