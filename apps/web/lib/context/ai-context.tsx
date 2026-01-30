@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { createContext, useContext, useState, useCallback, useEffect } from "react"
+import { createContext, use, useState, useCallback, useEffect } from "react"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
@@ -129,7 +129,7 @@ export function AIContextProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useAIContext() {
-    const context = useContext(AIContext)
+    const context = use(AIContext)
     if (context === undefined) {
         throw new Error("useAIContext must be used within an AIContextProvider")
     }

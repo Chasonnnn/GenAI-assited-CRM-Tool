@@ -68,6 +68,7 @@ export default function TasksPage() {
     const router = useRouter()
     const { user: currentUser } = useAuth()
     const canApproveImports = ["admin", "developer"].includes(currentUser?.role || "")
+    const currentUserId = currentUser?.user_id ?? null
 
     // Read initial values from URL params
     const urlFilter = searchParams.get("filter")
@@ -396,7 +397,7 @@ export default function TasksPage() {
                         loadingImportApprovals={loadingImportApprovals}
                         onResolvedStatusRequests={refetchStatusRequests}
                         onResolvedImportApprovals={refetchImportApprovals}
-                        currentUserId={currentUser?.user_id ?? null}
+                        currentUserId={currentUserId}
                     />
                 )}
 

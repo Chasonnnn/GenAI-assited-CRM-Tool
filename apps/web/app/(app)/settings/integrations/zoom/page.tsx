@@ -165,7 +165,7 @@ export default function ZoomSettingsPage() {
                                             <TableCell className="font-medium">{meeting.topic}</TableCell>
                                             <TableCell>
                                                 {meeting.start_time
-                                                    ? formatDate(meeting.start_time, "—")
+                                                    ? formatDate(meeting.start_time, undefined, "—")
                                                     : "Instant"}
                                             </TableCell>
                                             <TableCell>{meeting.duration} min</TableCell>

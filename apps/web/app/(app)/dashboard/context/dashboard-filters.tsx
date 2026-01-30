@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useCallback, useState, useEffect, type ReactNode } from "react"
+import { createContext, use, useCallback, useState, useEffect, type ReactNode } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import type { DateRangePreset } from "@/components/ui/date-range-picker"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
@@ -62,7 +62,7 @@ const datesEqual = (left?: Date, right?: Date) => {
 const DashboardFiltersContext = createContext<DashboardFiltersContextValue | null>(null)
 
 export function useDashboardFilters() {
-    const context = useContext(DashboardFiltersContext)
+    const context = use(DashboardFiltersContext)
     if (!context) {
         throw new Error("useDashboardFilters must be used within a DashboardFiltersProvider")
     }
