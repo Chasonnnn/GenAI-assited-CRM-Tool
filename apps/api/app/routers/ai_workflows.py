@@ -3,11 +3,11 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_ai_enabled, require_all_permissions, require_csrf_header
+from app.core.deps import get_db, require_ai_enabled, require_permission, require_csrf_header
 from app.core.permissions import PermissionKey as P
 from app.core.rate_limit import limiter
 from app.schemas.auth import UserSession
@@ -20,6 +20,7 @@ class GenerateWorkflowRequest(BaseModel):
     """Request to generate a workflow from natural language."""
 
     description: str = Field(..., min_length=10, max_length=2000)
+    scope: str = Field(default="personal", pattern="^(personal|org)$")
 
 
 class GenerateWorkflowResponse(BaseModel):
@@ -36,6 +37,7 @@ class ValidateWorkflowRequest(BaseModel):
     """Request to validate a workflow configuration."""
 
     workflow: dict[str, Any]
+    scope: str = Field(default="personal", pattern="^(personal|org)$")
 
 
 class ValidateWorkflowResponse(BaseModel):
@@ -50,6 +52,7 @@ class SaveWorkflowRequest(BaseModel):
     """Request to save an approved workflow."""
 
     workflow: dict[str, Any]
+    scope: str = Field(default="personal", pattern="^(personal|org)$")
 
 
 class SaveWorkflowResponse(BaseModel):
@@ -70,7 +73,7 @@ def generate_workflow(
     request: Request,
     body: GenerateWorkflowRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_all_permissions([P.AI_USE, P.AUTOMATION_MANAGE])),
+    session: UserSession = Depends(require_permission(P.AI_USE)),
 ) -> GenerateWorkflowResponse:
     """
     Generate a workflow configuration from natural language description.
@@ -80,11 +83,20 @@ def generate_workflow(
     """
     from app.services import ai_workflow_service
 
+    if body.scope == "org":
+        from app.services import permission_service
+
+        if not permission_service.check_permission(
+            db, session.org_id, session.user_id, session.role.value, P.AUTOMATION_MANAGE.value
+        ):
+            raise HTTPException(status_code=403, detail="Missing permission: manage_automation")
+
     result = ai_workflow_service.generate_workflow(
         db=db,
         org_id=session.org_id,
         user_id=session.user_id,
         description=body.description,
+        scope=body.scope,
     )
 
     return GenerateWorkflowResponse(
@@ -104,7 +116,7 @@ def generate_workflow(
 def validate_workflow(
     body: ValidateWorkflowRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_all_permissions([P.AI_USE, P.AUTOMATION_MANAGE])),
+    session: UserSession = Depends(require_permission(P.AI_USE)),
 ) -> ValidateWorkflowResponse:
     """
     Validate a workflow configuration.
@@ -123,7 +135,21 @@ def validate_workflow(
             errors=[f"Invalid workflow format: {str(e)}"],
         )
 
-    result = ai_workflow_service.validate_workflow(db, session.org_id, workflow)
+    if body.scope == "org":
+        from app.services import permission_service
+
+        if not permission_service.check_permission(
+            db, session.org_id, session.user_id, session.role.value, P.AUTOMATION_MANAGE.value
+        ):
+            raise HTTPException(status_code=403, detail="Missing permission: manage_automation")
+
+    result = ai_workflow_service.validate_workflow(
+        db,
+        session.org_id,
+        workflow,
+        scope=body.scope,
+        owner_user_id=session.user_id if body.scope == "personal" else None,
+    )
 
     return ValidateWorkflowResponse(
         valid=result.valid,
@@ -140,7 +166,7 @@ def validate_workflow(
 def save_ai_workflow(
     body: SaveWorkflowRequest,
     db: Session = Depends(get_db),
-    session: UserSession = Depends(require_all_permissions([P.AI_USE, P.AUTOMATION_MANAGE])),
+    session: UserSession = Depends(require_permission(P.AI_USE)),
 ) -> SaveWorkflowResponse:
     """
     Save an approved AI-generated workflow.
@@ -159,12 +185,21 @@ def save_ai_workflow(
             error=f"Invalid workflow format: {str(e)}",
         )
 
+    if body.scope == "org":
+        from app.services import permission_service
+
+        if not permission_service.check_permission(
+            db, session.org_id, session.user_id, session.role.value, P.AUTOMATION_MANAGE.value
+        ):
+            raise HTTPException(status_code=403, detail="Missing permission: manage_automation")
+
     try:
         saved = ai_workflow_service.save_workflow(
             db=db,
             org_id=session.org_id,
             user_id=session.user_id,
             workflow=workflow_data,
+            scope=body.scope,
         )
 
         # Audit log for AI-generated workflow

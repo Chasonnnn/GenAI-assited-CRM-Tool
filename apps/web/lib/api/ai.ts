@@ -298,6 +298,7 @@ export interface GeneratedWorkflow {
 
 export interface GenerateWorkflowRequest {
     description: string;
+    scope?: 'personal' | 'org';
 }
 
 export interface GenerateWorkflowResponse {
@@ -310,6 +311,7 @@ export interface GenerateWorkflowResponse {
 
 export interface ValidateWorkflowRequest {
     workflow: GeneratedWorkflow;
+    scope?: 'personal' | 'org';
 }
 
 export interface ValidateWorkflowResponse {
@@ -320,6 +322,7 @@ export interface ValidateWorkflowResponse {
 
 export interface SaveWorkflowRequest {
     workflow: GeneratedWorkflow;
+    scope?: 'personal' | 'org';
 }
 
 export interface SaveWorkflowResponse {
@@ -328,14 +331,46 @@ export interface SaveWorkflowResponse {
     error: string | null;
 }
 
-export async function generateWorkflow(description: string): Promise<GenerateWorkflowResponse> {
-    return api.post<GenerateWorkflowResponse>('/ai/workflows/generate', { description });
+export async function generateWorkflow(
+    description: string,
+    scope: 'personal' | 'org' = 'personal'
+): Promise<GenerateWorkflowResponse> {
+    return api.post<GenerateWorkflowResponse>('/ai/workflows/generate', { description, scope });
 }
 
-export async function validateWorkflow(workflow: GeneratedWorkflow): Promise<ValidateWorkflowResponse> {
-    return api.post<ValidateWorkflowResponse>('/ai/workflows/validate', { workflow });
+export async function validateWorkflow(
+    workflow: GeneratedWorkflow,
+    scope: 'personal' | 'org' = 'personal'
+): Promise<ValidateWorkflowResponse> {
+    return api.post<ValidateWorkflowResponse>('/ai/workflows/validate', { workflow, scope });
 }
 
-export async function saveAIWorkflow(workflow: GeneratedWorkflow): Promise<SaveWorkflowResponse> {
-    return api.post<SaveWorkflowResponse>('/ai/workflows/save', { workflow });
+export async function saveAIWorkflow(
+    workflow: GeneratedWorkflow,
+    scope: 'personal' | 'org' = 'personal'
+): Promise<SaveWorkflowResponse> {
+    return api.post<SaveWorkflowResponse>('/ai/workflows/save', { workflow, scope });
+}
+
+// ============================================================================
+// AI Email Template Generation API
+// ============================================================================
+
+export interface GeneratedEmailTemplate {
+    name: string;
+    subject: string;
+    body_html: string;
+    variables_used: string[];
+}
+
+export interface GenerateEmailTemplateResponse {
+    success: boolean;
+    template: GeneratedEmailTemplate | null;
+    explanation: string | null;
+    validation_errors: string[];
+    warnings: string[];
+}
+
+export async function generateEmailTemplate(description: string): Promise<GenerateEmailTemplateResponse> {
+    return api.post<GenerateEmailTemplateResponse>('/ai/email-templates/generate', { description });
 }

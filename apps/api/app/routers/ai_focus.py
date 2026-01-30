@@ -29,6 +29,10 @@ from app.services.ai_prompt_schemas import (
     AISurrogateSummaryOutput,
 )
 from app.services.ai_response_validation import parse_json_object, validate_model
+from app.services.ai_email_template_service import (
+    EmailTemplateGenerationRequest,
+    EmailTemplateGenerationResponse,
+)
 
 router = APIRouter()
 
@@ -88,6 +92,29 @@ class AnalyzeDashboardResponse(BaseModel):
     bottlenecks: list[dict[str, Any]]
     recommendations: list[str]
     stats: dict[str, Any]
+
+
+@router.post(
+    "/email-templates/generate",
+    response_model=EmailTemplateGenerationResponse,
+    dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
+)
+@limiter.limit("10/minute")
+def generate_email_template(
+    request: Request,
+    body: EmailTemplateGenerationRequest,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_permission(P.AI_USE)),
+) -> EmailTemplateGenerationResponse:
+    """Generate a reusable email template using AI."""
+    from app.services import ai_email_template_service
+
+    return ai_email_template_service.generate_email_template(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        description=body.description,
+    )
 
 
 EMAIL_PROMPTS = {

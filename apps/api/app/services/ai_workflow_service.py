@@ -10,6 +10,7 @@ import logging
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.db.models import (
@@ -177,7 +178,12 @@ CONDITION_OPERATORS = [
 
 
 def _get_context_for_prompt(
-    db: Session, org_id: UUID, *, anonymize_pii: bool = False
+    db: Session,
+    org_id: UUID,
+    *,
+    anonymize_pii: bool = False,
+    scope: str = "personal",
+    owner_user_id: UUID | None = None,
 ) -> dict[str, str]:
     """Build context strings for the generation prompt."""
     # Get triggers
@@ -192,15 +198,23 @@ def _get_context_for_prompt(
     )
 
     # Get email templates
-    templates = (
-        db.query(EmailTemplate)
-        .filter(
-            EmailTemplate.organization_id == org_id,
-            EmailTemplate.is_active.is_(True),
-        )
-        .limit(20)
-        .all()
+    template_query = db.query(EmailTemplate).filter(
+        EmailTemplate.organization_id == org_id,
+        EmailTemplate.is_active.is_(True),
     )
+    if scope == "org":
+        template_query = template_query.filter(EmailTemplate.scope == "org")
+    else:
+        template_query = template_query.filter(
+            or_(
+                EmailTemplate.scope == "org",
+                and_(
+                    EmailTemplate.scope == "personal",
+                    EmailTemplate.owner_user_id == owner_user_id,
+                ),
+            )
+        )
+    templates = template_query.limit(20).all()
     templates_text = (
         "\n".join([f"- {t.id}: {t.name}" for t in templates]) or "No templates available"
     )
@@ -256,6 +270,7 @@ def generate_workflow(
     org_id: UUID,
     user_id: UUID,
     description: str,
+    scope: str = "personal",
 ) -> WorkflowGenerationResponse:
     """
     Generate a workflow configuration from natural language.
@@ -291,7 +306,13 @@ def generate_workflow(
         )
 
     # Build prompt context
-    context = _get_context_for_prompt(db, org_id, anonymize_pii=settings.anonymize_pii)
+    context = _get_context_for_prompt(
+        db,
+        org_id,
+        anonymize_pii=settings.anonymize_pii,
+        scope=scope,
+        owner_user_id=user_id,
+    )
     prompt_template = get_prompt("workflow_generation")
     prompt = prompt_template.render_user(
         triggers=context["triggers"],
@@ -324,7 +345,13 @@ def generate_workflow(
             raise json.JSONDecodeError("Invalid workflow JSON", response.content, 0)
 
         # Validate the generated workflow
-        validation_result = validate_workflow(db, org_id, workflow_model)
+        validation_result = validate_workflow(
+            db,
+            org_id,
+            workflow_model,
+            scope=scope,
+            owner_user_id=user_id if scope == "personal" else None,
+        )
 
         if not validation_result.valid:
             return WorkflowGenerationResponse(
@@ -362,6 +389,9 @@ def validate_workflow(
     db: Session,
     org_id: UUID,
     workflow: GeneratedWorkflow,
+    *,
+    scope: str | None = None,
+    owner_user_id: UUID | None = None,
 ) -> WorkflowValidationResponse:
     """
     Validate a workflow configuration.
@@ -427,17 +457,6 @@ def validate_workflow(
             errors.append(f"Action {i + 1} missing 'action_type'")
             continue
 
-        if action_type == "update_status":
-            stage_id = action.get("stage_id")
-            if not stage_id:
-                errors.append(f"Action {i + 1}: stage_id is required for update_status")
-                continue
-            action["action_type"] = "update_field"
-            action["field"] = "stage_id"
-            action["value"] = stage_id
-            action.pop("stage_id", None)
-            action_type = "update_field"
-
         if action_type not in AVAILABLE_ACTIONS:
             errors.append(f"Invalid action type: {action_type}")
             continue
@@ -449,125 +468,19 @@ def validate_workflow(
             if field not in action:
                 errors.append(f"Action {i + 1} ({action_type}) missing required field: {field}")
 
-        # Validate template_id exists
-        if action_type == "send_email" and "template_id" in action:
-            template = (
-                db.query(EmailTemplate)
-                .filter(
-                    EmailTemplate.id == action["template_id"],
-                    EmailTemplate.organization_id == org_id,
-                )
-                .first()
+        # Validate against workflow service to enforce org/user scoping
+        from app.services import workflow_service
+
+        try:
+            workflow_service._validate_action_config(
+                db,
+                org_id,
+                action,
+                scope,
+                owner_user_id if scope == "personal" else None,
             )
-            if not template:
-                errors.append(
-                    f"Action {i + 1}: Template ID does not exist: {action['template_id']}"
-                )
-
-        # Validate stage_id exists for stage updates
-        if action_type == "update_field" and action.get("field") == "stage_id":
-            from app.db.models import PipelineStage, Pipeline
-
-            stage = (
-                db.query(PipelineStage)
-                .join(Pipeline, PipelineStage.pipeline_id == Pipeline.id)
-                .filter(
-                    PipelineStage.id == action.get("value"),
-                    Pipeline.organization_id == org_id,
-                )
-                .first()
-            )
-            if not stage:
-                errors.append(f"Action {i + 1}: Stage ID does not exist: {action.get('value')}")
-
-        # Validate assign_surrogate owner
-        if action_type == "assign_surrogate":
-            owner_type = action.get("owner_type")
-            owner_id = action.get("owner_id")
-            if owner_type not in ("user", "queue"):
-                errors.append(f"Action {i + 1}: owner_type must be 'user' or 'queue'")
-            elif not owner_id:
-                errors.append(f"Action {i + 1}: owner_id is required")
-            elif owner_type == "user":
-                from app.db.models import Membership
-
-                try:
-                    owner_id = UUID(str(owner_id))
-                except (TypeError, ValueError):
-                    errors.append(f"Action {i + 1}: Invalid user_id format: {owner_id}")
-                    owner_id = None
-                member = (
-                    db.query(Membership)
-                    .filter(
-                        Membership.user_id == owner_id,
-                        Membership.organization_id == org_id,
-                        Membership.is_active.is_(True),
-                    )
-                    .first()
-                )
-                if not member:
-                    errors.append(f"Action {i + 1}: User ID does not exist: {owner_id}")
-            elif owner_type == "queue":
-                from app.db.models import Queue
-
-                try:
-                    owner_id = UUID(str(owner_id))
-                except (TypeError, ValueError):
-                    errors.append(f"Action {i + 1}: Invalid queue_id format: {owner_id}")
-                    owner_id = None
-                queue = (
-                    db.query(Queue)
-                    .filter(Queue.id == owner_id, Queue.organization_id == org_id)
-                    .first()
-                )
-                if not queue:
-                    errors.append(f"Action {i + 1}: Queue ID does not exist: {owner_id}")
-
-        # Validate create_task assignee
-        if action_type == "create_task" and "assignee" in action:
-            assignee = action.get("assignee")
-            if isinstance(assignee, str) and assignee not in (
-                "owner",
-                "creator",
-                "admin",
-            ):
-                try:
-                    UUID(str(assignee))
-                except (TypeError, ValueError):
-                    errors.append(
-                        f"Action {i + 1}: assignee must be owner, creator, admin, or a user_id"
-                    )
-
-        # Validate send_notification recipients
-        if action_type == "send_notification":
-            if "recipients" not in action and "user_id" not in action:
-                errors.append(f"Action {i + 1}: recipients or user_id is required")
-            if "recipients" not in action and "user_id" in action:
-                action["recipients"] = [action["user_id"]]
-            recipients = action.get("recipients")
-            if isinstance(recipients, str):
-                if recipients not in ("owner", "creator", "all_admins"):
-                    errors.append(f"Action {i + 1}: invalid recipients value: {recipients}")
-            elif isinstance(recipients, list):
-                from app.db.models import Membership
-
-                for user_id in recipients:
-                    try:
-                        user_uuid = UUID(str(user_id))
-                    except (TypeError, ValueError):
-                        errors.append(f"Action {i + 1}: Invalid user_id format: {user_id}")
-                        continue
-                    member = (
-                        db.query(Membership)
-                        .filter(
-                            Membership.user_id == user_uuid,
-                            Membership.organization_id == org_id,
-                            Membership.is_active.is_(True),
-                        )
-                        .first()
-                    )
-                    if not member:
-                        errors.append(f"Action {i + 1}: User ID does not exist: {user_uuid}")
+        except Exception as exc:  # noqa: BLE001 - return validation error details to caller
+            errors.append(f"Action {i + 1}: {exc}")
 
     return WorkflowValidationResponse(
         valid=len(errors) == 0,
@@ -581,6 +494,7 @@ def save_workflow(
     org_id: UUID,
     user_id: UUID,
     workflow: GeneratedWorkflow,
+    scope: str = "personal",
 ) -> AutomationWorkflow:
     """
     Save an approved workflow to the database.
@@ -588,7 +502,13 @@ def save_workflow(
     The workflow should have been validated and approved by the user.
     """
     # Final validation before save
-    validation = validate_workflow(db, org_id, workflow)
+    validation = validate_workflow(
+        db,
+        org_id,
+        workflow,
+        scope=scope,
+        owner_user_id=user_id if scope == "personal" else None,
+    )
     if not validation.valid:
         raise ValueError(f"Workflow validation failed: {', '.join(validation.errors)}")
 
@@ -599,6 +519,7 @@ def save_workflow(
         name=workflow.name,
         description=workflow.description,
         icon=workflow.icon,
+        scope=scope,
         trigger_type=workflow.trigger_type,
         trigger_config=workflow.trigger_config,
         conditions=workflow.conditions,

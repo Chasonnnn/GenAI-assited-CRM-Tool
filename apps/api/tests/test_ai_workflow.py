@@ -84,6 +84,134 @@ def test_ai_workflow_prompt_anonymizes_users(db, test_org, test_user, monkeypatc
     assert result.success is True
 
 
+def test_ai_workflow_prompt_filters_templates_by_scope(db, test_org, test_user, monkeypatch):
+    settings = AISettings(
+        organization_id=test_org.id,
+        is_enabled=True,
+        provider="gemini",
+        model="gemini-3-flash-preview",
+        current_version=1,
+        anonymize_pii=False,
+        consent_accepted_at=datetime.now(timezone.utc),
+        consent_accepted_by=test_user.id,
+        api_key_encrypted=ai_settings_service.encrypt_api_key("sk-test"),
+    )
+    db.add(settings)
+    db.flush()
+
+    # Templates: org + personal (owner) + personal (other)
+    org_template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name="Org Template",
+        subject="Test",
+        body="Test body",
+        scope="org",
+        created_by_user_id=test_user.id,
+    )
+    owner_template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name="Owner Template",
+        subject="Test",
+        body="Test body",
+        scope="personal",
+        owner_user_id=test_user.id,
+        created_by_user_id=test_user.id,
+    )
+
+    from app.db.models import User, Membership
+    from app.db.enums import Role
+
+    other_user = User(
+        id=uuid.uuid4(),
+        email=f"other-{uuid.uuid4().hex[:6]}@test.com",
+        display_name="Other User",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(other_user)
+    db.flush()
+    db.add(
+        Membership(
+            id=uuid.uuid4(),
+            user_id=other_user.id,
+            organization_id=test_org.id,
+            role=Role.INTAKE_SPECIALIST,
+        )
+    )
+    db.flush()
+
+    other_template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name="Other Template",
+        subject="Test",
+        body="Test body",
+        scope="personal",
+        owner_user_id=other_user.id,
+        created_by_user_id=other_user.id,
+    )
+
+    db.add_all([org_template, owner_template, other_template])
+    db.flush()
+
+    captured = []
+    workflow_payload = {
+        "name": "Test Workflow",
+        "description": "Test",
+        "icon": "zap",
+        "trigger_type": "surrogate_created",
+        "trigger_config": {},
+        "conditions": [],
+        "condition_logic": "AND",
+        "actions": [{"action_type": "add_note", "content": "Hello"}],
+    }
+
+    class StubProvider:
+        async def chat(self, messages, **kwargs):  # noqa: ARG002
+            captured.extend(messages)
+            return ChatResponse(
+                content=json.dumps(workflow_payload),
+                prompt_tokens=10,
+                completion_tokens=5,
+                total_tokens=15,
+                model="gemini-3-flash-preview",
+            )
+
+    monkeypatch.setattr(
+        "app.services.ai_provider.get_provider",
+        lambda *_args, **_kwargs: StubProvider(),
+    )
+
+    from app.services import ai_workflow_service
+
+    ai_workflow_service.generate_workflow(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        description="Create a workflow",
+        scope="personal",
+    )
+    combined = "\n".join(msg.content for msg in captured)
+    assert str(org_template.id) in combined
+    assert str(owner_template.id) in combined
+    assert str(other_template.id) not in combined
+
+    captured.clear()
+    ai_workflow_service.generate_workflow(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        description="Create a workflow",
+        scope="org",
+    )
+    combined = "\n".join(msg.content for msg in captured)
+    assert str(org_template.id) in combined
+    assert str(owner_template.id) not in combined
+    assert str(other_template.id) not in combined
+
+
 class TestWorkflowValidation:
     """Tests for workflow validation logic."""
 
@@ -221,7 +349,7 @@ class TestWorkflowValidation:
         )
         result = validate_workflow(db, test_org.id, workflow)
         assert not result.valid
-        assert any("Template ID does not exist" in e for e in result.errors)
+        assert any("Email template" in e and "not found" in e for e in result.errors)
 
     def test_validate_existing_template_id(self, db, test_org, test_user):
         """Should pass with existing template ID."""
@@ -245,6 +373,150 @@ class TestWorkflowValidation:
         assert result.valid
         assert not any("Template ID does not exist" in e for e in result.errors)
 
+    def test_validate_org_scope_rejects_personal_template(self, db, test_org, test_user):
+        """Org workflows should not use personal templates."""
+        personal_template = EmailTemplate(
+            id=uuid.uuid4(),
+            organization_id=test_org.id,
+            name="Personal Template",
+            subject="Test",
+            body="Test body",
+            scope="personal",
+            owner_user_id=test_user.id,
+            created_by_user_id=test_user.id,
+        )
+        db.add(personal_template)
+        db.flush()
+
+        workflow = GeneratedWorkflow(
+            name="Org Workflow",
+            trigger_type="surrogate_created",
+            actions=[{"action_type": "send_email", "template_id": str(personal_template.id)}],
+        )
+        result = validate_workflow(db, test_org.id, workflow, scope="org")
+        assert not result.valid
+        assert any("Org workflows cannot use personal email templates" in e for e in result.errors)
+
+    def test_validate_personal_scope_rejects_other_owner_template(self, db, test_org, test_user):
+        """Personal workflows should only use templates owned by the workflow owner."""
+        from app.db.models import User, Membership
+        from app.db.enums import Role
+
+        other_user = User(
+            id=uuid.uuid4(),
+            email=f"other-{uuid.uuid4().hex[:6]}@test.com",
+            display_name="Other User",
+            token_version=1,
+            is_active=True,
+        )
+        db.add(other_user)
+        db.flush()
+        db.add(
+            Membership(
+                id=uuid.uuid4(),
+                user_id=other_user.id,
+                organization_id=test_org.id,
+            role=Role.INTAKE_SPECIALIST,
+            )
+        )
+        db.flush()
+
+        personal_template = EmailTemplate(
+            id=uuid.uuid4(),
+            organization_id=test_org.id,
+            name="Other Personal Template",
+            subject="Test",
+            body="Test body",
+            scope="personal",
+            owner_user_id=other_user.id,
+            created_by_user_id=other_user.id,
+        )
+        db.add(personal_template)
+        db.flush()
+
+        workflow = GeneratedWorkflow(
+            name="Personal Workflow",
+            trigger_type="surrogate_created",
+            actions=[{"action_type": "send_email", "template_id": str(personal_template.id)}],
+        )
+        result = validate_workflow(
+            db, test_org.id, workflow, scope="personal", owner_user_id=test_user.id
+        )
+        assert not result.valid
+        assert any("Personal email templates must be owned" in e for e in result.errors)
+
+    def test_validate_personal_scope_accepts_owner_template(self, db, test_org, test_user):
+        """Personal workflows can use templates owned by the workflow owner."""
+        personal_template = EmailTemplate(
+            id=uuid.uuid4(),
+            organization_id=test_org.id,
+            name="Owned Personal Template",
+            subject="Test",
+            body="Test body",
+            scope="personal",
+            owner_user_id=test_user.id,
+            created_by_user_id=test_user.id,
+        )
+        db.add(personal_template)
+        db.flush()
+
+        workflow = GeneratedWorkflow(
+            name="Personal Workflow",
+            trigger_type="surrogate_created",
+            actions=[{"action_type": "send_email", "template_id": str(personal_template.id)}],
+        )
+        result = validate_workflow(
+            db, test_org.id, workflow, scope="personal", owner_user_id=test_user.id
+        )
+        assert result.valid
+
+    def test_validate_org_scope_accepts_org_template(self, db, test_org, test_user):
+        """Org workflows can use org templates."""
+        org_template = EmailTemplate(
+            id=uuid.uuid4(),
+            organization_id=test_org.id,
+            name="Org Template",
+            subject="Test",
+            body="Test body",
+            scope="org",
+            created_by_user_id=test_user.id,
+        )
+        db.add(org_template)
+        db.flush()
+
+        workflow = GeneratedWorkflow(
+            name="Org Workflow",
+            trigger_type="surrogate_created",
+            actions=[{"action_type": "send_email", "template_id": str(org_template.id)}],
+        )
+        result = validate_workflow(db, test_org.id, workflow, scope="org")
+        assert result.valid
+
+
+# =============================================================================
+# AI Workflow Save Tests
+# =============================================================================
+
+
+def test_save_workflow_respects_personal_scope(db, test_org, test_user):
+    """AI save should create personal workflows when scope=personal."""
+    from app.services import ai_workflow_service
+
+    workflow = GeneratedWorkflow(
+        name="AI Personal Workflow",
+        trigger_type="surrogate_created",
+        actions=[{"action_type": "add_note", "content": "Hello"}],
+    )
+    saved = ai_workflow_service.save_workflow(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        workflow=workflow,
+        scope="personal",
+    )
+
+    assert saved.scope == "personal"
+    assert saved.owner_user_id == test_user.id
     def test_validate_update_status_action_normalizes(self, db, test_org, default_stage):
         """update_status should normalize to update_field stage_id."""
         workflow = GeneratedWorkflow(

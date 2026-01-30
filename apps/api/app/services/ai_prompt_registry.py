@@ -179,6 +179,37 @@ Respond with ONLY a valid JSON object (no markdown, no explanation) in this exac
 9. Use descriptive but concise names
 """,
     ),
+    "email_template_generation": PromptTemplate(
+        key="email_template_generation",
+        version="v1",
+        system="You are an email template generator. Always respond with ONLY valid JSON, no markdown or explanation.",
+        user="""You are generating a reusable EMAIL TEMPLATE (HTML) for a surrogacy agency using Surrogacy Force.
+
+The template will be saved and reused. Do NOT include an organization signature block in the body.
+Always include the {{unsubscribe_url}} variable in the body HTML.
+
+## Allowed Variables
+{allowed_variables}
+
+## User Request
+{user_input}
+
+## Output Format
+Respond with ONLY a valid JSON object (no markdown, no explanation) in this exact format:
+{{
+  "name": "Template name (concise, descriptive)",
+  "subject": "Email subject line with variables if needed",
+  "body_html": "<p>HTML body...</p>",
+  "variables_used": ["variable1", "variable2"]
+}}
+
+## Rules
+1. Use HTML only (no markdown)
+2. Use ONLY the allowed variables
+3. Always include {{unsubscribe_url}} in the body HTML
+4. Do NOT include org signature content
+""",
+    ),
     "schedule_parse": PromptTemplate(
         key="schedule_parse",
         version="v1",
