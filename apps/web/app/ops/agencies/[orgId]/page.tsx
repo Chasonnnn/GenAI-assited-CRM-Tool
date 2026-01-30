@@ -31,11 +31,10 @@ import {
     type OrgInvite,
     type AdminActionLog,
     type PlatformAlert,
+    type PlatformEmailStatus,
 } from '@/lib/api/platform';
-import type { PlatformEmailStatus } from '@/lib/api/platform';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AgencyOverviewTab } from '@/components/ops/agencies/AgencyOverviewTab';
 import { AgencyUsersTab } from '@/components/ops/agencies/AgencyUsersTab';
@@ -45,25 +44,12 @@ import { AgencyAlertsTab } from '@/components/ops/agencies/AgencyAlertsTab';
 import { AgencyTemplatesTab } from '@/components/ops/agencies/AgencyTemplatesTab';
 import { AgencyAuditTab } from '@/components/ops/agencies/AgencyAuditTab';
 import {
-    ALERT_SEVERITY_BADGES,
-    ALERT_STATUS_BADGES,
-    INVITE_ROLE_LABELS,
     INVITE_ROLE_OPTIONS,
-    INVITE_STATUS_VARIANTS,
     PLAN_BADGE_VARIANTS,
     STATUS_BADGE_VARIANTS,
     type InviteRole,
 } from '@/components/ops/agencies/agency-constants';
-import {
-    ChevronRight,
-    Globe,
-    Copy,
-    Loader2,
-    AlertTriangle,
-    CalendarPlus,
-    Plus,
-} from 'lucide-react';
-import { format } from 'date-fns';
+import { ChevronRight, Globe, Copy, Loader2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 const resolveErrorMessage = (error: unknown, fallback: string) => {
@@ -553,1024 +539,108 @@ export default function AgencyDetailPage() {
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                     {/* Overview Tab */}
                     <TabsContent value="overview" className="mt-0">
-                        <div className="grid gap-6 md:grid-cols-2">
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="text-lg">Organization Details</CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-1">
-                                    <DetailRow label="Name" value={org.name} />
-                                    <DetailRow label="Slug" value={org.slug} mono />
-                                    <DetailRow label="Timezone" value={org.timezone} />
-                                    <DetailRow
-                                        label="Created"
-                                        value={format(new Date(org.created_at), 'MMMM d, yyyy')}
-                                    />
-                                </CardContent>
-                            </Card>
-
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="text-lg">Statistics</CardTitle>
-                                </CardHeader>
-                                <CardContent className="grid grid-cols-2 gap-4">
-                                    <StatBlock label="Members" value={org.member_count} />
-                                    <StatBlock label="Surrogates" value={org.surrogate_count} />
-                                    <StatBlock label="Active Matches" value={org.active_match_count} />
-                                    <StatBlock label="Tasks Pending" value={org.pending_task_count} />
-                                </CardContent>
-                            </Card>
-                        </div>
-
-                        <Card className="mt-6 border-destructive/30">
-                            <CardHeader>
-                                <CardTitle className="text-lg text-destructive">
-                                    Danger Zone
-                                </CardTitle>
-                                <CardDescription>
-                                    Soft delete this organization for 30 days, then permanently remove all data.
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                                {isDeleted ? (
-                                    <div className="space-y-3">
-                                        <div className="rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-900 dark:border-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-100">
-                                            Deletion scheduled{purgeDate ? ` for ${format(purgeDate, 'MMM d, yyyy h:mm a')}` : ''}.
-                                        </div>
-                                        <Button
-                                            variant="outline"
-                                            onClick={handleRestoreOrganization}
-                                            disabled={restoreSubmitting}
-                                        >
-                                            {restoreSubmitting ? (
-                                                <Loader2 className="mr-2 size-4 animate-spin" />
-                                            ) : null}
-                                            Restore Organization
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-                                        <AlertDialogTrigger
-                                            className={buttonVariants({
-                                                variant: 'destructive',
-                                            })}
-                                        >
-                                            Delete Organization
-                                        </AlertDialogTrigger>
-                                        <AlertDialogContent>
-                                            <AlertDialogHeader>
-                                                <AlertDialogTitle>
-                                                    Delete {org.name}?
-                                                </AlertDialogTitle>
-                                                <AlertDialogDescription>
-                                                    This will disable access immediately. Data will be permanently deleted after 30 days.
-                                                </AlertDialogDescription>
-                                            </AlertDialogHeader>
-                                            <AlertDialogFooter>
-                                                <AlertDialogCancel>
-                                                    Cancel
-                                                </AlertDialogCancel>
-                                                <AlertDialogAction
-                                                    onClick={handleDeleteOrganization}
-                                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                                    disabled={deleteSubmitting}
-                                                >
-                                                    {deleteSubmitting ? (
-                                                        <span className="inline-flex items-center gap-2">
-                                                            <Loader2 className="size-4 animate-spin" />
-                                                            Deleting
-                                                        </span>
-                                                    ) : (
-                                                        'Confirm Delete'
-                                                    )}
-                                                </AlertDialogAction>
-                                            </AlertDialogFooter>
-                                        </AlertDialogContent>
-                                    </AlertDialog>
-                                )}
-                            </CardContent>
-                        </Card>
+                        <AgencyOverviewTab
+                            org={org}
+                            isDeleted={isDeleted}
+                            purgeDate={purgeDate}
+                            restoreSubmitting={restoreSubmitting}
+                            deleteSubmitting={deleteSubmitting}
+                            onRestoreOrganization={handleRestoreOrganization}
+                            onDeleteOrganization={handleDeleteOrganization}
+                        />
                     </TabsContent>
 
                     {/* Users Tab */}
                     <TabsContent value="users" className="mt-0">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-lg">Members</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                {members.length === 0 ? (
-                                    <p className="text-center py-8 text-muted-foreground">
-                                        No members yet
-                                    </p>
-                                ) : (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>User</TableHead>
-                                                <TableHead>Role</TableHead>
-                                            <TableHead>Status</TableHead>
-                                            <TableHead>Last Login</TableHead>
-                                            <TableHead className="w-24 text-right">Actions</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {members.map((member) => (
-                                                <TableRow key={member.id}>
-                                                    <TableCell>
-                                                        <div>
-                                                            <div className="font-medium">
-                                                                {member.display_name}
-                                                            </div>
-                                                            <div className="text-sm text-muted-foreground">
-                                                                {member.email}
-                                                            </div>
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge variant="outline">{member.role}</Badge>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge
-                                                            variant={member.is_active ? 'default' : 'secondary'}
-                                                        >
-                                                            {member.is_active ? 'Active' : 'Inactive'}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-sm text-muted-foreground">
-                                                        {member.last_login_at
-                                                            ? formatDistanceToNow(
-                                                                  new Date(member.last_login_at),
-                                                                  { addSuffix: true }
-                                                              )
-                                                            : 'Never'}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <div className="flex items-center justify-end gap-2">
-                                                            <AlertDialog>
-                                                                <AlertDialogTrigger
-                                                                    className={buttonVariants({
-                                                                        variant: 'ghost',
-                                                                        size: 'sm',
-                                                                    })}
-                                                                >
-                                                                    <ShieldOff className="size-4" />
-                                                                </AlertDialogTrigger>
-                                                                <AlertDialogContent>
-                                                                    <AlertDialogHeader>
-                                                                        <AlertDialogTitle>
-                                                                            Reset MFA?
-                                                                        </AlertDialogTitle>
-                                                                        <AlertDialogDescription>
-                                                                            This will clear MFA enrollment for{' '}
-                                                                            <strong>
-                                                                                {member.display_name}
-                                                                            </strong>{' '}
-                                                                            ({member.email}). They will be
-                                                                            required to set up MFA again on
-                                                                            next login.
-                                                                        </AlertDialogDescription>
-                                                                    </AlertDialogHeader>
-                                                                    <AlertDialogFooter>
-                                                                        <AlertDialogCancel>
-                                                                            Cancel
-                                                                        </AlertDialogCancel>
-                                                                        <AlertDialogAction
-                                                                            onClick={() =>
-                                                                                handleResetMfa(member)
-                                                                            }
-                                                                            disabled={
-                                                                                mfaResetting === member.id
-                                                                            }
-                                                                        >
-                                                                            {mfaResetting === member.id ? (
-                                                                                <span className="inline-flex items-center gap-2">
-                                                                                    <Loader2 className="size-4 animate-spin" />
-                                                                                    Resetting
-                                                                                </span>
-                                                                            ) : (
-                                                                                'Reset MFA'
-                                                                            )}
-                                                                        </AlertDialogAction>
-                                                                    </AlertDialogFooter>
-                                                                </AlertDialogContent>
-                                                            </AlertDialog>
-                                                            {member.is_active && (
-                                                                <AlertDialog>
-                                                                    <AlertDialogTrigger
-                                                                        className={buttonVariants({
-                                                                            variant: 'ghost',
-                                                                            size: 'sm',
-                                                                            className: 'text-destructive',
-                                                                        })}
-                                                                    >
-                                                                        <UserMinus className="size-4" />
-                                                                    </AlertDialogTrigger>
-                                                                    <AlertDialogContent>
-                                                                        <AlertDialogHeader>
-                                                                            <AlertDialogTitle>
-                                                                                Deactivate User?
-                                                                            </AlertDialogTitle>
-                                                                            <AlertDialogDescription>
-                                                                                <strong>
-                                                                                    {member.display_name}
-                                                                                </strong>{' '}
-                                                                                ({member.email}) will no longer
-                                                                                be able to access {org.name}.
-                                                                                This action can be reversed.
-                                                                            </AlertDialogDescription>
-                                                                        </AlertDialogHeader>
-                                                                        <AlertDialogFooter>
-                                                                            <AlertDialogCancel>
-                                                                                Cancel
-                                                                            </AlertDialogCancel>
-                                                                            <AlertDialogAction
-                                                                                onClick={() =>
-                                                                                    handleDeactivateMember(
-                                                                                        member.id
-                                                                                    )
-                                                                                }
-                                                                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                                                            >
-                                                                                Deactivate
-                                                                            </AlertDialogAction>
-                                                                        </AlertDialogFooter>
-                                                                    </AlertDialogContent>
-                                                                </AlertDialog>
-                                                            )}
-                                                        </div>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                )}
-                            </CardContent>
-                        </Card>
+                        <AgencyUsersTab
+                            members={members}
+                            orgName={org.name}
+                            mfaResetting={mfaResetting}
+                            onResetMfa={handleResetMfa}
+                            onDeactivateMember={handleDeactivateMember}
+                        />
                     </TabsContent>
 
                     {/* Invites Tab */}
                     <TabsContent value="invites" className="mt-0">
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between">
-                                <CardTitle className="text-lg">Invitations</CardTitle>
-                                <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-                                    <DialogTrigger
-                                        className={buttonVariants({ size: 'sm' })}
-                                    >
-                                        <Plus className="mr-2 size-4" />
-                                        Invite User
-                                    </DialogTrigger>
-                                    <DialogContent>
-                                <DialogHeader>
-                                    <DialogTitle>Invite user</DialogTitle>
-                                    <DialogDescription>
-                                        Send an invitation to join {org.name}.
-                                        <button
-                                            type="button"
-                                            className="ml-2 text-xs text-teal-600 hover:underline"
-                                            onClick={() => {
-                                                setInviteOpen(false);
-                                                setActiveTab('templates');
-                                            }}
-                                        >
-                                            Edit invite template
-                                        </button>
-                                    </DialogDescription>
-                                </DialogHeader>
-                                        <div className="space-y-4">
-                                            <div className="space-y-2">
-                                                <Label htmlFor="invite-email">Email</Label>
-                                                <Input
-                                                    id="invite-email"
-                                                    type="email"
-                                                    value={inviteForm.email}
-                                                    onChange={(e) =>
-                                                        setInviteForm((prev) => ({
-                                                            ...prev,
-                                                            email: e.target.value,
-                                                        }))
-                                                    }
-                                                    placeholder="user@agency.com"
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label htmlFor="invite-role">Role</Label>
-                                                <Select
-                                                    value={inviteForm.role}
-                                                    onValueChange={(value) => {
-                                                        if (value) {
-                                                            setInviteForm((prev) => ({
-                                                                ...prev,
-                                                                role: value as InviteRole,
-                                                            }));
-                                                        }
-                                                    }}
-                                                >
-                                                    <SelectTrigger id="invite-role">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {INVITE_ROLE_OPTIONS.map((roleOption) => (
-                                                            <SelectItem key={roleOption} value={roleOption}>
-                                                                {INVITE_ROLE_LABELS[roleOption]}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            {inviteError && (
-                                                <p className="text-sm text-destructive">
-                                                    {inviteError}
-                                                </p>
-                                            )}
-                                        </div>
-                                        <DialogFooter>
-                                            <Button
-                                                variant="outline"
-                                                onClick={() => setInviteOpen(false)}
-                                                disabled={inviteSubmitting}
-                                            >
-                                                Cancel
-                                            </Button>
-                                            <Button
-                                                onClick={handleCreateInvite}
-                                                disabled={inviteSubmitting}
-                                            >
-                                                {inviteSubmitting ? 'Sending...' : 'Send invite'}
-                                            </Button>
-                                        </DialogFooter>
-                                    </DialogContent>
-                                </Dialog>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-600 dark:border-stone-800 dark:bg-stone-900 dark:text-stone-300">
-                                    <div className="flex flex-col gap-1">
-                                        <span>
-                                            Invites use the <span className="font-mono">org_invite</span> template.
-                                        </span>
-                                        {platformEmailLoading ? (
-                                            <span className="text-xs text-muted-foreground">
-                                                Loading sender status...
-                                            </span>
-                                        ) : platformEmailStatus?.configured ? (
-                                            <span className="text-xs text-muted-foreground">
-                                                Platform sender configured (Resend)
-                                            </span>
-                                        ) : (
-                                            <span className="text-xs text-yellow-700 dark:text-yellow-400">
-                                                Platform sender not configured — invite emails may fail.
-                                            </span>
-                                        )}
-                                    </div>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setActiveTab('templates')}
-                                    >
-                                        Manage template
-                                    </Button>
-                                </div>
-                                {invites.length === 0 ? (
-                                    <p className="text-center py-8 text-muted-foreground">
-                                        No invites yet
-                                    </p>
-                                ) : (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Email</TableHead>
-                                                <TableHead>Role</TableHead>
-                                                <TableHead>Status</TableHead>
-                                                <TableHead>Opened</TableHead>
-                                                <TableHead>Clicked</TableHead>
-                                                <TableHead>Created</TableHead>
-                                                <TableHead className="w-10"></TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {invites.map((invite) => (
-                                                <TableRow key={invite.id}>
-                                                    <TableCell>
-                                                        <div className="flex items-center gap-2">
-                                                            <Mail className="size-4 text-muted-foreground" />
-                                                            {invite.email}
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge variant="outline">{invite.role}</Badge>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge
-                                                            variant="outline"
-                                                            className={
-                                                                INVITE_STATUS_VARIANTS[invite.status]
-                                                            }
-                                                        >
-                                                            {invite.status}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-sm text-muted-foreground">
-                                                        {invite.open_count && invite.open_count > 0 ? (
-                                                            <div className="flex flex-col">
-                                                                <span>{invite.open_count} open{invite.open_count === 1 ? '' : 's'}</span>
-                                                                {invite.opened_at ? (
-                                                                    <span className="text-xs">
-                                                                        {formatDistanceToNow(
-                                                                            new Date(invite.opened_at),
-                                                                            { addSuffix: true }
-                                                                        )}
-                                                                    </span>
-                                                                ) : null}
-                                                            </div>
-                                                        ) : (
-                                                            '-'
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell className="text-sm text-muted-foreground">
-                                                        {invite.click_count && invite.click_count > 0 ? (
-                                                            <div className="flex flex-col">
-                                                                <span>{invite.click_count} click{invite.click_count === 1 ? '' : 's'}</span>
-                                                                {invite.clicked_at ? (
-                                                                    <span className="text-xs">
-                                                                        {formatDistanceToNow(
-                                                                            new Date(invite.clicked_at),
-                                                                            { addSuffix: true }
-                                                                        )}
-                                                                    </span>
-                                                                ) : null}
-                                                            </div>
-                                                        ) : (
-                                                            '-'
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell className="text-sm text-muted-foreground">
-                                                        {formatDistanceToNow(
-                                                            new Date(invite.created_at),
-                                                            { addSuffix: true }
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {invite.status === 'pending' && (
-                                                            <AlertDialog>
-                                                                <AlertDialogTrigger
-                                                                    className={buttonVariants({
-                                                                        variant: 'ghost',
-                                                                        size: 'sm',
-                                                                        className: 'text-destructive',
-                                                                    })}
-                                                                >
-                                                                    <Ban className="size-4" />
-                                                                </AlertDialogTrigger>
-                                                                <AlertDialogContent>
-                                                                    <AlertDialogHeader>
-                                                                        <AlertDialogTitle>
-                                                                            Revoke Invite?
-                                                                        </AlertDialogTitle>
-                                                                        <AlertDialogDescription>
-                                                                            The invite to{' '}
-                                                                            <strong>{invite.email}</strong>{' '}
-                                                                            will be invalidated.
-                                                                        </AlertDialogDescription>
-                                                                    </AlertDialogHeader>
-                                                                    <AlertDialogFooter>
-                                                                        <AlertDialogCancel>
-                                                                            Cancel
-                                                                        </AlertDialogCancel>
-                                                                        <AlertDialogAction
-                                                                            onClick={() =>
-                                                                                handleRevokeInvite(invite.id)
-                                                                            }
-                                                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                                                        >
-                                                                            Revoke
-                                                                        </AlertDialogAction>
-                                                                    </AlertDialogFooter>
-                                                                </AlertDialogContent>
-                                                            </AlertDialog>
-                                                        )}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                )}
-                            </CardContent>
-                        </Card>
+                        <AgencyInvitesTab
+                            orgName={org.name}
+                            invites={invites}
+                            inviteOpen={inviteOpen}
+                            inviteSubmitting={inviteSubmitting}
+                            inviteForm={inviteForm}
+                            inviteError={inviteError}
+                            platformEmailStatus={platformEmailStatus}
+                            platformEmailLoading={platformEmailLoading}
+                            onInviteOpenChange={setInviteOpen}
+                            onInviteEmailChange={(email) =>
+                                setInviteForm((prev) => ({ ...prev, email }))
+                            }
+                            onInviteRoleChange={(role) =>
+                                setInviteForm((prev) => ({ ...prev, role }))
+                            }
+                            onCreateInvite={handleCreateInvite}
+                            onRevokeInvite={handleRevokeInvite}
+                            onGoToTemplates={handleGoToTemplates}
+                        />
                     </TabsContent>
 
                     {/* Subscription Tab */}
                     <TabsContent value="subscription" className="mt-0 space-y-6">
-                        {/* Warning Banner */}
-                        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/30 p-4">
-                            <div className="flex items-start gap-3">
-                                <AlertTriangle className="size-5 text-amber-600 mt-0.5" />
-                                <div>
-                                    <p className="font-medium text-amber-800 dark:text-amber-200">
-                                        Billing Not Enforced
-                                    </p>
-                                    <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                                        Billing is managed offline. No automated charges are processed.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {subscription && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="text-lg">Subscription Details</CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-6">
-                                    <div className="grid gap-4 md:grid-cols-3">
-                                        <div>
-                                            <Label className="text-muted-foreground">Plan</Label>
-                                            <div className="mt-1">
-                                                <Badge
-                                                    className={
-                                                        PLAN_BADGE_VARIANTS[subscription.plan_key]
-                                                    }
-                                                >
-                                                    {subscription.plan_key}
-                                                </Badge>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <Label className="text-muted-foreground">Status</Label>
-                                            <div className="mt-1">
-                                                <Badge
-                                                    className={
-                                                        STATUS_BADGE_VARIANTS[subscription.status]
-                                                    }
-                                                >
-                                                    {subscription.status}
-                                                </Badge>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <Label className="text-muted-foreground">Auto-Renew</Label>
-                                            <div className="mt-1">
-                                                <Switch
-                                                    checked={subscription.auto_renew}
-                                                    onCheckedChange={handleToggleAutoRenew}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="grid gap-4 md:grid-cols-2">
-                                        <div>
-                                            <Label className="text-muted-foreground">
-                                                Current Period End
-                                            </Label>
-                                            <p className="mt-1 font-medium">
-                                                {format(
-                                                    new Date(subscription.current_period_end),
-                                                    'MMMM d, yyyy'
-                                                )}
-                                            </p>
-                                        </div>
-                                        {subscription.trial_end && (
-                                            <div>
-                                                <Label className="text-muted-foreground">
-                                                    Trial End
-                                                </Label>
-                                                <p className="mt-1 font-medium">
-                                                    {format(
-                                                        new Date(subscription.trial_end),
-                                                        'MMMM d, yyyy'
-                                                    )}
-                                                </p>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Notes */}
-                                    <div>
-                                        <Label className="text-muted-foreground">Notes</Label>
-                                        <Textarea
-                                            className="mt-1"
-                                            value={notesDraft}
-                                            onChange={(event) => setNotesDraft(event.target.value)}
-                                            placeholder="Internal notes about this subscription..."
-                                        />
-                                    </div>
-
-                                    {/* Actions */}
-                                    <div className="flex gap-3 pt-4 border-t">
-                                        <Button variant="outline" onClick={handleExtendSubscription}>
-                                            <CalendarPlus className="mr-2 size-4" />
-                                            Extend 30 Days
-                                        </Button>
-                                        <Button
-                                            onClick={handleSaveNotes}
-                                            disabled={!notesDirty || notesSaving}
-                                        >
-                                            {notesSaving ? 'Saving...' : 'Save Notes'}
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        )}
+                        <AgencySubscriptionTab
+                            subscription={subscription}
+                            notesDraft={notesDraft}
+                            notesDirty={notesDirty}
+                            notesSaving={notesSaving}
+                            onNotesChange={setNotesDraft}
+                            onSaveNotes={handleSaveNotes}
+                            onExtendSubscription={handleExtendSubscription}
+                            onToggleAutoRenew={handleToggleAutoRenew}
+                        />
                     </TabsContent>
 
                     {/* Alerts Tab */}
                     <TabsContent value="alerts" className="mt-0">
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between">
-                                <CardTitle className="text-lg">Organization Alerts</CardTitle>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={fetchOrgAlerts}
-                                    disabled={alertsLoading}
-                                >
-                                    {alertsLoading ? 'Refreshing...' : 'Refresh'}
-                                </Button>
-                            </CardHeader>
-                            <CardContent>
-                                {alertsLoading ? (
-                                    <div className="flex items-center justify-center py-10">
-                                        <Loader2 className="size-6 animate-spin text-muted-foreground" />
-                                    </div>
-                                ) : orgAlerts.length === 0 ? (
-                                    <div className="text-center py-10">
-                                        <AlertTriangle className="size-10 mx-auto mb-3 text-muted-foreground/50" />
-                                        <p className="text-muted-foreground">
-                                            No alerts for this organization
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Alert</TableHead>
-                                                <TableHead>Severity</TableHead>
-                                                <TableHead>Status</TableHead>
-                                                <TableHead>Last Seen</TableHead>
-                                                <TableHead className="w-32"></TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {orgAlerts.map((alert) => (
-                                                <TableRow key={alert.id}>
-                                                    <TableCell>
-                                                        <div>
-                                                            <div className="font-medium">
-                                                                {alert.title}
-                                                            </div>
-                                                            <div className="text-sm text-muted-foreground">
-                                                                {alert.alert_type}
-                                                            </div>
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge
-                                                            variant="outline"
-                                                            className={
-                                                                ALERT_SEVERITY_BADGES[alert.severity]
-                                                            }
-                                                        >
-                                                            {alert.severity}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge
-                                                            variant="outline"
-                                                            className={
-                                                                ALERT_STATUS_BADGES[alert.status]
-                                                            }
-                                                        >
-                                                            {alert.status}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-sm text-muted-foreground">
-                                                        {formatDistanceToNow(
-                                                            new Date(alert.last_seen_at),
-                                                            { addSuffix: true }
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {alert.status !== 'resolved' && (
-                                                            <div className="flex items-center gap-2">
-                                                                {alert.status === 'open' && (
-                                                                    <Button
-                                                                        variant="outline"
-                                                                        size="sm"
-                                                                        onClick={() =>
-                                                                            handleAcknowledgeAlert(
-                                                                                alert.id
-                                                                            )
-                                                                        }
-                                                                        disabled={
-                                                                            alertsUpdating === alert.id
-                                                                        }
-                                                                    >
-                                                                        Acknowledge
-                                                                    </Button>
-                                                                )}
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    onClick={() =>
-                                                                        handleResolveAlert(alert.id)
-                                                                    }
-                                                                    disabled={
-                                                                        alertsUpdating === alert.id
-                                                                    }
-                                                                >
-                                                                    Resolve
-                                                                </Button>
-                                                            </div>
-                                                        )}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                )}
-                            </CardContent>
-                        </Card>
+                        <AgencyAlertsTab
+                            orgAlerts={orgAlerts}
+                            alertsLoading={alertsLoading}
+                            alertsUpdating={alertsUpdating}
+                            onRefresh={fetchOrgAlerts}
+                            onAcknowledge={handleAcknowledgeAlert}
+                            onResolve={handleResolveAlert}
+                        />
                     </TabsContent>
 
                     {/* Templates Tab */}
                     <TabsContent value="templates" className="mt-0">
-                        <div className="grid gap-6 lg:grid-cols-2">
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="text-lg flex items-center justify-between">
-                                        Invite Email Template
-                                        <Badge variant="outline" className="font-mono text-xs">
-                                            org_invite
-                                        </Badge>
-                                    </CardTitle>
-                                    <CardDescription>
-                                        Used for user invites to this agency. Sent via the platform sender (Resend).
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-5">
-                                    {platformEmailLoading ? (
-                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                            <Loader2 className="size-4 animate-spin" />
-                                            Loading email sender status...
-                                        </div>
-                                    ) : platformEmailStatus?.configured ? (
-                                        <div className="rounded-md border bg-stone-50 dark:bg-stone-900 p-3 text-sm">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-muted-foreground">
-                                                    Sender configured
-                                                </span>
-                                                <Badge variant="secondary">Resend</Badge>
-                                            </div>
-                                            <div className="mt-1 text-xs text-muted-foreground">
-                                                From: managed per-template
-                                                {platformEmailStatus.from_email ? (
-                                                    <span className="ml-1 font-mono">
-                                                        (fallback: {platformEmailStatus.from_email})
-                                                    </span>
-                                                ) : null}
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900">
-                                            Platform sender is not configured. Set PLATFORM_RESEND_API_KEY to
-                                            enable platform/system emails via Resend.
-                                        </div>
-                                    )}
-
-                                    {inviteTemplateLoading ? (
-                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                            <Loader2 className="size-4 animate-spin" />
-                                            Loading template...
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <div className="space-y-2">
-                                                <Label>From (required for Resend)</Label>
-                                                <Input
-                                                    value={templateFromEmail}
-                                                    onChange={(e) => setTemplateFromEmail(e.target.value)}
-                                                    placeholder="Invites <invites@surrogacyforce.com>"
-                                                />
-                                                <p className="text-xs text-muted-foreground">
-                                                    Choose the sender for this template. You can use different
-                                                    senders per template without Terraform changes (must be on a
-                                                    verified domain in Resend).
-                                                </p>
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <Label>Subject</Label>
-                                                <Input
-                                                    value={templateSubject}
-                                                    onChange={(e) => setTemplateSubject(e.target.value)}
-                                                    placeholder="You're invited to join {{org_name}}"
-                                                />
-                                                <p className="text-xs text-muted-foreground">
-                                                    Variables:{' '}
-                                                    <span className="font-mono">{'{{org_name}}'}</span>
-                                                </p>
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <div className="flex items-center justify-between">
-                                                    <Label>Email Body (HTML)</Label>
-                                                    <Badge variant="outline" className="text-xs">
-                                                        <Code className="size-3 mr-1" />
-                                                        Variables
-                                                    </Badge>
-                                                </div>
-                                                <RichTextEditor
-                                                    content={templateBody}
-                                                    onChange={(html) => setTemplateBody(html)}
-                                                    placeholder="Write your invite email content..."
-                                                    minHeight="220px"
-                                                    maxHeight="420px"
-                                                />
-                                                <p className="text-xs text-muted-foreground">
-                                                    Available variables:{' '}
-                                                    <span className="font-mono">{'{{invite_url}}'}</span>,{' '}
-                                                    <span className="font-mono">{'{{role_title}}'}</span>,{' '}
-                                                    <span className="font-mono">{'{{inviter_text}}'}</span>,{' '}
-                                                    <span className="font-mono">{'{{expires_block}}'}</span>
-                                                </p>
-                                            </div>
-
-                                            <div className="flex items-center justify-between rounded-md border p-3">
-                                                <div>
-                                                    <div className="font-medium">Template active</div>
-                                                    <div className="text-xs text-muted-foreground">
-                                                        If disabled, invites use the default built-in template.
-                                                    </div>
-                                                </div>
-                                                <Switch
-                                                    checked={templateActive}
-                                                    onCheckedChange={setTemplateActive}
-                                                />
-                                            </div>
-
-                                            <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                                <span>
-                                                    Version:{' '}
-                                                    <span className="font-mono">
-                                                        {templateVersion ?? inviteTemplate?.current_version ?? '-'}
-                                                    </span>
-                                                </span>
-                                                <span>
-                                                    Updated:{' '}
-                                                    {inviteTemplate?.updated_at
-                                                        ? format(new Date(inviteTemplate.updated_at), 'MMM d, yyyy h:mm a')
-                                                        : '-'}
-                                                </span>
-                                            </div>
-
-                                            <div className="flex gap-2">
-                                                <Button
-                                                    onClick={handleSaveInviteTemplate}
-                                                    disabled={inviteTemplateSaving}
-                                                >
-                                                    {inviteTemplateSaving && (
-                                                        <Loader2 className="mr-2 size-4 animate-spin" />
-                                                    )}
-                                                    Save Template
-                                                </Button>
-                                            </div>
-
-                                            <div className="rounded-md border p-4 space-y-3">
-                                                <div className="font-medium">Send Test Email</div>
-                                                <div className="grid gap-2">
-                                                    <Label className="text-xs">To</Label>
-                                                    <Input
-                                                        value={testEmail}
-                                                        onChange={(e) => setTestEmail(e.target.value)}
-                                                        placeholder="name@example.com"
-                                                    />
-                                                </div>
-                                                <Button
-                                                    variant="secondary"
-                                                    onClick={handleSendTestInviteEmail}
-                                                    disabled={
-                                                        !platformEmailStatus?.configured ||
-                                                        testSending ||
-                                                        !(
-                                                            templateFromEmail.trim() ||
-                                                            platformEmailStatus?.from_email
-                                                        )
-                                                    }
-                                                >
-                                                    {testSending && (
-                                                        <Loader2 className="mr-2 size-4 animate-spin" />
-                                                    )}
-                                                    Send Test
-                                                </Button>
-                                                {!platformEmailStatus?.configured && (
-                                                    <p className="text-xs text-muted-foreground">
-                                                        Configure platform email sender to enable test sends.
-                                                    </p>
-                                                )}
-                                                {platformEmailStatus?.configured &&
-                                                    !templateFromEmail.trim() &&
-                                                    !platformEmailStatus?.from_email && (
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Set a From address above to enable test sends.
-                                                        </p>
-                                                    )}
-                                            </div>
-                                        </>
-                                    )}
-                                </CardContent>
-                            </Card>
-
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="text-lg">Preview</CardTitle>
-                                    <CardDescription>
-                                        Sample rendering with mock values.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="rounded-lg border bg-white overflow-hidden">
-                                        <div className="border-b bg-muted/30 px-4 py-3 text-sm space-y-2">
-                                            <div className="flex items-center gap-2">
-                                                <span className="w-16 text-muted-foreground font-medium">From:</span>
-                                                <span className="font-mono text-xs">
-                                                    {templateFromEmail.trim() ||
-                                                        platformEmailStatus?.from_email ||
-                                                        "you@company.com"}
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="w-16 text-muted-foreground font-medium">To:</span>
-                                                <span className="font-mono text-xs">person@example.com</span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="w-16 text-muted-foreground font-medium">Subject:</span>
-                                                <span className="font-medium">{previewSubject}</span>
-                                            </div>
-                                        </div>
-                                        <div className="p-4">
-                                            <div
-                                                className="prose prose-sm max-w-none [&_p]:whitespace-pre-wrap"
-                                                dangerouslySetInnerHTML={{ __html: previewBody }}
-                                            />
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </div>
+                        <AgencyTemplatesTab
+                            orgName={org.name}
+                            portalBaseUrl={org.portal_base_url}
+                            platformEmailStatus={platformEmailStatus}
+                            platformEmailLoading={platformEmailLoading}
+                            inviteTemplate={inviteTemplate}
+                            inviteTemplateLoading={inviteTemplateLoading}
+                            templateFromEmail={templateFromEmail}
+                            templateSubject={templateSubject}
+                            templateBody={templateBody}
+                            templateActive={templateActive}
+                            templateVersion={templateVersion}
+                            onTemplateFromEmailChange={setTemplateFromEmail}
+                            onTemplateSubjectChange={setTemplateSubject}
+                            onTemplateBodyChange={setTemplateBody}
+                            onTemplateActiveChange={setTemplateActive}
+                            onSaveTemplate={handleSaveInviteTemplate}
+                            inviteTemplateSaving={inviteTemplateSaving}
+                            testEmail={testEmail}
+                            onTestEmailChange={setTestEmail}
+                            onSendTestEmail={handleSendTestInviteEmail}
+                            testSending={testSending}
+                        />
                     </TabsContent>
 
                     {/* Audit Log Tab */}
                     <TabsContent value="audit" className="mt-0">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-lg">Admin Action Log</CardTitle>
-                                <CardDescription>
-                                    Platform admin actions related to this organization
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                {actionLogs.length === 0 ? (
-                                    <p className="text-center py-8 text-muted-foreground">
-                                        No admin actions recorded
-                                    </p>
-                                ) : (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Action</TableHead>
-                                                <TableHead>Actor</TableHead>
-                                                <TableHead>Details</TableHead>
-                                                <TableHead>Time</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {actionLogs.map((log) => (
-                                                <TableRow key={log.id}>
-                                                    <TableCell className="font-mono text-sm">
-                                                        {log.action}
-                                                    </TableCell>
-                                                    <TableCell className="text-sm">
-                                                        {log.actor_email || 'System'}
-                                                    </TableCell>
-                                                    <TableCell className="text-sm text-muted-foreground max-w-xs truncate">
-                                                        {log.metadata
-                                                            ? JSON.stringify(log.metadata)
-                                                            : '-'}
-                                                    </TableCell>
-                                                    <TableCell className="text-sm text-muted-foreground">
-                                                        {formatDistanceToNow(
-                                                            new Date(log.created_at),
-                                                            { addSuffix: true }
-                                                        )}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                )}
-                            </CardContent>
-                        </Card>
+                        <AgencyAuditTab actionLogs={actionLogs} />
                     </TabsContent>
                 </Tabs>
             </div>
