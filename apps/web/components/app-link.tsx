@@ -46,90 +46,85 @@ function resolveHref(href: LinkProps["href"]) {
 export type AppLinkProps = LinkProps &
   React.AnchorHTMLAttributes<HTMLAnchorElement> & {
     fallbackMode?: "router" | "reload" | "none"
+    ref?: React.Ref<HTMLAnchorElement>
   }
 
-const AppLink = React.forwardRef<HTMLAnchorElement, AppLinkProps>(
-  (
-    {
-      href,
-      onClick,
-      replace,
-      scroll,
-      prefetch = false,
-      fallbackMode = "none",
-      target,
-      download,
-      ...props
-    },
-    ref
-  ) => {
-    const router = useRouter()
-    const handleClick = React.useCallback(
-      (event: React.MouseEvent<HTMLAnchorElement>) => {
-        onClick?.(event)
+function AppLink({
+  href,
+  onClick,
+  replace,
+  scroll,
+  prefetch = false,
+  fallbackMode = "none",
+  target,
+  download,
+  ref,
+  ...props
+}: AppLinkProps) {
+  const router = useRouter()
+  const handleClick = React.useCallback(
+    (event: React.MouseEvent<HTMLAnchorElement>) => {
+      onClick?.(event)
 
-        const ariaDisabled = event.currentTarget.getAttribute("aria-disabled")
-        if (ariaDisabled === "true" || event.currentTarget.hasAttribute("disabled")) {
-          return
-        }
+      const ariaDisabled = event.currentTarget.getAttribute("aria-disabled")
+      if (ariaDisabled === "true" || event.currentTarget.hasAttribute("disabled")) {
+        return
+      }
 
-        if (event.button !== 0) return
-        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-        if (target && target !== "_self") return
-        if (download) return
+      if (event.button !== 0) return
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+      if (target && target !== "_self") return
+      if (download) return
 
-        const hrefString = resolveHref(href)
-        if (!hrefString) return
+      const hrefString = resolveHref(href)
+      if (!hrefString) return
 
-        const currentUrl = window.location.href
-        const targetUrl = new URL(hrefString, currentUrl)
+      const currentUrl = window.location.href
+      const targetUrl = new URL(hrefString, currentUrl)
 
-        if (currentUrl === targetUrl.toString()) return
+      if (currentUrl === targetUrl.toString()) return
 
-        if (fallbackMode === "none") return
+      if (fallbackMode === "none") return
 
-        const targetHref =
-          targetUrl.origin === window.location.origin
-            ? `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`
-            : targetUrl.toString()
+      const targetHref =
+        targetUrl.origin === window.location.origin
+          ? `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`
+          : targetUrl.toString()
 
-        if (fallbackMode === "reload") {
-          event.preventDefault()
-          window.location.assign(targetHref)
-          return
-        }
-
-        // Default: client-side navigation via router for same-origin routes.
+      if (fallbackMode === "reload") {
         event.preventDefault()
-        if (targetUrl.origin === window.location.origin) {
-          if (replace) {
-            router.replace(targetHref, scroll === undefined ? undefined : { scroll })
-          } else {
-            router.push(targetHref, scroll === undefined ? undefined : { scroll })
-          }
+        window.location.assign(targetHref)
+        return
+      }
+
+      // Default: client-side navigation via router for same-origin routes.
+      event.preventDefault()
+      if (targetUrl.origin === window.location.origin) {
+        if (replace) {
+          router.replace(targetHref, scroll === undefined ? undefined : { scroll })
         } else {
-          window.location.assign(targetHref)
+          router.push(targetHref, scroll === undefined ? undefined : { scroll })
         }
-      },
-      [onClick, href, target, download, fallbackMode, replace, router, scroll]
-    )
+      } else {
+        window.location.assign(targetHref)
+      }
+    },
+    [onClick, href, target, download, fallbackMode, replace, router, scroll]
+  )
 
-    const linkProps = {
-      href,
-      onClick: handleClick,
-      target,
-      download,
-      ref,
-      ...props,
-      ...(replace ? { replace: true } : {}),
-      ...(scroll !== undefined ? { scroll } : {}),
-      ...(prefetch !== undefined ? { prefetch } : {}),
-    }
-
-    return <Link {...linkProps} />
+  const linkProps = {
+    href,
+    onClick: handleClick,
+    target,
+    download,
+    ref,
+    ...props,
+    ...(replace ? { replace: true } : {}),
+    ...(scroll !== undefined ? { scroll } : {}),
+    ...(prefetch !== undefined ? { prefetch } : {}),
   }
-)
 
-AppLink.displayName = "AppLink"
+  return <Link {...linkProps} />
+}
 
 export default AppLink
