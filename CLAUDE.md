@@ -1,6 +1,6 @@
 # Surrogacy Force Platform
 
-> **Version:** 0.24.0 | Multi-tenant Surrogacy Force platform for surrogacy agencies
+> **Version:** 0.42.0 | Multi-tenant Surrogacy Force platform for surrogacy agencies
 
 ## Project Guidelines
 
@@ -10,7 +10,7 @@ See @docs/layouts.md for UI design system.
 ## Quick Reference
 
 ### Tech Stack
-- **Backend:** FastAPI, Pydantic v2, SQLAlchemy 2.0, PostgreSQL 16, Alembic
+- **Backend:** FastAPI, Pydantic v2, SQLAlchemy 2.0, PostgreSQL 18, Alembic
 - **Frontend:** Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, shadcn/ui
 - **State:** TanStack Query (server), Zustand (UI only)
 - **Forms:** React Hook Form + Zod
