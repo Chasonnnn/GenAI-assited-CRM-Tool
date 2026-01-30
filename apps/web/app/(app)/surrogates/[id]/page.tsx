@@ -355,17 +355,31 @@ export default function SurrogateDetailPage() {
         stage_id: string
         reason?: string
         effective_at?: string
+        delivery_baby_gender?: string | null
+        delivery_baby_weight?: string | null
     }): Promise<{ status: "applied" | "pending_approval"; request_id?: string }> => {
         if (!surrogateData || !canChangeStage) {
             return { status: "applied" }
         }
         const previousStageId = surrogateData.stage_id
         const targetStageLabel = stageById.get(data.stage_id)?.label || "Stage"
-        const payload: { stage_id: string; reason?: string; effective_at?: string } = {
+        const payload: {
+            stage_id: string
+            reason?: string
+            effective_at?: string
+            delivery_baby_gender?: string | null
+            delivery_baby_weight?: string | null
+        } = {
             stage_id: data.stage_id,
         }
         if (data.reason) payload.reason = data.reason
         if (data.effective_at) payload.effective_at = data.effective_at
+        if (data.delivery_baby_gender !== undefined) {
+            payload.delivery_baby_gender = data.delivery_baby_gender
+        }
+        if (data.delivery_baby_weight !== undefined) {
+            payload.delivery_baby_weight = data.delivery_baby_weight
+        }
 
         const result = await changeStatusMutation.mutateAsync({
             surrogateId: id,
@@ -1393,6 +1407,9 @@ export default function SurrogateDetailPage() {
                 currentStageLabel={statusLabel}
                 onSubmit={handleStatusChange}
                 isPending={changeStatusMutation.isPending}
+                deliveryFieldsEnabled
+                initialDeliveryBabyGender={surrogateData.delivery_baby_gender}
+                initialDeliveryBabyWeight={surrogateData.delivery_baby_weight}
             />
         </div>
     )

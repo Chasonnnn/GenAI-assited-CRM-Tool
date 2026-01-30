@@ -108,6 +108,8 @@ class SurrogateCreate(BaseModel):
     pregnancy_start_date: date | None = None
     pregnancy_due_date: date | None = None
     actual_delivery_date: date | None = None
+    delivery_baby_gender: str | None = Field(None, max_length=50)
+    delivery_baby_weight: str | None = Field(None, max_length=50)
 
     @field_validator("phone")
     @classmethod
@@ -244,6 +246,8 @@ class SurrogateUpdate(BaseModel):
     pregnancy_start_date: date | None = None
     pregnancy_due_date: date | None = None
     actual_delivery_date: date | None = None
+    delivery_baby_gender: str | None = Field(None, max_length=50)
+    delivery_baby_weight: str | None = Field(None, max_length=50)
 
     @field_validator("phone")
     @classmethod
@@ -407,6 +411,8 @@ class SurrogateRead(BaseModel):
     pregnancy_start_date: date | None = None
     pregnancy_due_date: date | None = None
     actual_delivery_date: date | None = None
+    delivery_baby_gender: str | None = None
+    delivery_baby_weight: str | None = None
 
     # Soft delete
     is_archived: bool
@@ -475,6 +481,8 @@ class SurrogateStatusChange(BaseModel):
     effective_at: datetime | None = Field(
         None, description="When the change actually occurred (optional, defaults to now)"
     )
+    delivery_baby_gender: str | None = Field(None, max_length=50)
+    delivery_baby_weight: str | None = Field(None, max_length=50)
 
 
 class SurrogateStatusChangeResponse(BaseModel):

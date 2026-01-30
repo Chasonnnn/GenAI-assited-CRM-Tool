@@ -146,6 +146,8 @@ const baseSurrogateData = {
     pregnancy_start_date: null,
     pregnancy_due_date: null,
     actual_delivery_date: null,
+    delivery_baby_gender: null,
+    delivery_baby_weight: null,
 }
 
 vi.mock('@/lib/hooks/use-surrogates', () => ({
@@ -399,6 +401,8 @@ describe('SurrogateDetailPage', () => {
                 pregnancy_start_date: '2025-01-10',
                 pregnancy_due_date: '2025-10-17',
                 actual_delivery_date: '2025-10-20',
+                delivery_baby_gender: 'Female',
+                delivery_baby_weight: '7 lb 2 oz',
             },
             isLoading: false,
             error: null,
@@ -408,5 +412,7 @@ describe('SurrogateDetailPage', () => {
 
         expect(screen.getByText('Pregnancy Tracker')).toBeInTheDocument()
         expect(screen.getByText('Actual Delivery Date:')).toBeInTheDocument()
+        expect(screen.getByText('Gender:')).toBeInTheDocument()
+        expect(screen.getByText('Weight:')).toBeInTheDocument()
     })
 })

@@ -93,6 +93,8 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
         pregnancy_start_date=surrogate.pregnancy_start_date,
         pregnancy_due_date=surrogate.pregnancy_due_date,
         actual_delivery_date=surrogate.actual_delivery_date,
+        delivery_baby_gender=surrogate.delivery_baby_gender,
+        delivery_baby_weight=surrogate.delivery_baby_weight,
         is_archived=surrogate.is_archived,
         archived_at=surrogate.archived_at,
         created_at=surrogate.created_at,

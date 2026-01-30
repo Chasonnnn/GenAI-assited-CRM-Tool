@@ -203,6 +203,8 @@ def create_surrogate(
             pregnancy_start_date=data.pregnancy_start_date,
             pregnancy_due_date=data.pregnancy_due_date,
             actual_delivery_date=data.actual_delivery_date,
+            delivery_baby_gender=data.delivery_baby_gender,
+            delivery_baby_weight=data.delivery_baby_weight,
             is_priority=data.is_priority if hasattr(data, "is_priority") else False,
         )
         if created_at_override is not None:
@@ -330,6 +332,8 @@ def update_surrogate(
         "pregnancy_start_date",
         "pregnancy_due_date",
         "actual_delivery_date",
+        "delivery_baby_gender",
+        "delivery_baby_weight",
     }
 
     # Track changes for activity log (new values only)
@@ -457,6 +461,8 @@ def update_surrogate(
                 "pregnancy_start_date",
                 "pregnancy_due_date",
                 "actual_delivery_date",
+                "delivery_baby_gender",
+                "delivery_baby_weight",
             }
             if changed_fields & pregnancy_fields:
                 activity_service.log_pregnancy_dates_updated(

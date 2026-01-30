@@ -41,8 +41,13 @@ interface ChangeStageModalProps {
         stage_id: string
         reason?: string
         effective_at?: string // ISO datetime
+        delivery_baby_gender?: string | null
+        delivery_baby_weight?: string | null
     }) => Promise<{ status: "applied" | "pending_approval"; request_id?: string }>
     isPending?: boolean
+    deliveryFieldsEnabled?: boolean
+    initialDeliveryBabyGender?: string | null
+    initialDeliveryBabyWeight?: string | null
 }
 
 export function ChangeStageModal({
@@ -54,6 +59,9 @@ export function ChangeStageModal({
     entityLabel,
     onSubmit,
     isPending = false,
+    deliveryFieldsEnabled = false,
+    initialDeliveryBabyGender = null,
+    initialDeliveryBabyWeight = null,
 }: ChangeStageModalProps) {
     // State
     const [selectedStageId, setSelectedStageId] = useState<string | null>(null)
@@ -62,6 +70,8 @@ export function ChangeStageModal({
     const [selectedTime, setSelectedTime] = useState("")
     const [reason, setReason] = useState("")
     const [datePickerOpen, setDatePickerOpen] = useState(false)
+    const [deliveryBabyGender, setDeliveryBabyGender] = useState("")
+    const [deliveryBabyWeight, setDeliveryBabyWeight] = useState("")
 
     // Reset state when modal opens
     useEffect(() => {
@@ -71,8 +81,10 @@ export function ChangeStageModal({
             setSelectedDate(undefined)
             setSelectedTime("")
             setReason("")
+            setDeliveryBabyGender(initialDeliveryBabyGender ?? "")
+            setDeliveryBabyWeight(initialDeliveryBabyWeight ?? "")
         }
-    }, [open])
+    }, [open, initialDeliveryBabyGender, initialDeliveryBabyWeight])
 
     // Get the current stage order
     const currentStage = useMemo(
@@ -85,6 +97,8 @@ export function ChangeStageModal({
         () => stages.find(s => s.id === selectedStageId),
         [stages, selectedStageId]
     )
+    const isDeliveredStage = selectedStage?.slug === "delivered"
+    const showDeliveryFields = deliveryFieldsEnabled && isDeliveredStage
 
     // Calculate if this is a regression (moving to earlier stage)
     const isRegression = useMemo(() => {
@@ -144,12 +158,24 @@ export function ChangeStageModal({
 
         const effective_at = buildEffectiveAt()
 
-        const payload: { stage_id: string; reason?: string; effective_at?: string } = {
+        const payload: {
+            stage_id: string
+            reason?: string
+            effective_at?: string
+            delivery_baby_gender?: string | null
+            delivery_baby_weight?: string | null
+        } = {
             stage_id: selectedStageId,
         }
         const trimmedReason = reason.trim()
         if (trimmedReason) payload.reason = trimmedReason
         if (effective_at) payload.effective_at = effective_at
+        if (showDeliveryFields) {
+            const trimmedGender = deliveryBabyGender.trim()
+            const trimmedWeight = deliveryBabyWeight.trim()
+            if (trimmedGender) payload.delivery_baby_gender = trimmedGender
+            if (trimmedWeight) payload.delivery_baby_weight = trimmedWeight
+        }
 
         await onSubmit(payload)
     }
@@ -286,6 +312,36 @@ export function ChangeStageModal({
                                     Leave blank to use now (today) or noon (past dates)
                                 </p>
                             </div>
+                        </div>
+                    )}
+
+                    {/* Delivery details (only when moving to Delivered) */}
+                    {showDeliveryFields && (
+                        <div className="space-y-3 rounded-lg border border-muted/60 bg-muted/20 p-3">
+                            <div className="text-sm font-medium text-foreground">Delivery details</div>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="space-y-2">
+                                    <Label htmlFor="delivery-baby-gender">Baby gender</Label>
+                                    <Input
+                                        id="delivery-baby-gender"
+                                        value={deliveryBabyGender}
+                                        onChange={(e) => setDeliveryBabyGender(e.target.value)}
+                                        placeholder="Optional"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="delivery-baby-weight">Baby weight</Label>
+                                    <Input
+                                        id="delivery-baby-weight"
+                                        value={deliveryBabyWeight}
+                                        onChange={(e) => setDeliveryBabyWeight(e.target.value)}
+                                        placeholder="Optional"
+                                    />
+                                </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                These fields sync to the pregnancy tracker after delivery.
+                            </p>
                         </div>
                     )}
 

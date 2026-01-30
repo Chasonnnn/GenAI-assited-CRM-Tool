@@ -288,6 +288,8 @@ class Surrogate(Base):
     pregnancy_start_date: Mapped[date | None] = mapped_column(EncryptedDate, nullable=True)
     pregnancy_due_date: Mapped[date | None] = mapped_column(EncryptedDate, nullable=True)
     actual_delivery_date: Mapped[date | None] = mapped_column(EncryptedDate, nullable=True)
+    delivery_baby_gender: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    delivery_baby_weight: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
     # Soft delete
     is_archived: Mapped[bool] = mapped_column(Boolean, server_default=text("FALSE"), nullable=False)

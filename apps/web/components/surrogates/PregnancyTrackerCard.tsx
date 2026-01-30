@@ -6,6 +6,7 @@ import { parseISO, differenceInDays, addDays, format, isValid } from "date-fns"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { InlineDateField } from "@/components/inline-date-field"
+import { InlineEditField } from "@/components/inline-edit-field"
 import { SurrogateRead } from "@/lib/types/surrogate"
 import { SurrogateUpdatePayload } from "@/lib/api/surrogates"
 
@@ -31,7 +32,7 @@ function usePregnancyTracker(
 
         const today = new Date()
 
-        // Start date = LMP-equivalent = gestational day 0
+        // Transferred date = LMP-equivalent = gestational day 0
         // Allow negative values so UI can show "future date" warning
         const gestationalDays = differenceInDays(today, start)
 
@@ -136,22 +137,22 @@ export function PregnancyTrackerCard({
                 {/* Future date warning */}
                 {pregnancy && pregnancy.gestationalDays < 0 && (
                     <div className="text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/20 p-2 rounded">
-                        Start date is in the future ({Math.abs(pregnancy.gestationalDays)} days from now)
+                        Transferred date is in the future ({Math.abs(pregnancy.gestationalDays)} days from now)
                     </div>
                 )}
 
                 {/* Date inputs */}
                 <div className="space-y-3 pt-2 border-t">
-                    {/* Start Date (LMP-equivalent = day 0) */}
+                    {/* Transferred Date (LMP-equivalent = day 0) */}
                     <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground w-24 shrink-0">Start Date:</span>
+                        <span className="text-sm text-muted-foreground w-24 shrink-0">Transferred Date:</span>
                         <InlineDateField
                             value={surrogateData.pregnancy_start_date}
                             onSave={async (v) => {
                                 await onUpdate({ pregnancy_start_date: v })
                             }}
-                            label="Pregnancy start date (LMP-equivalent)"
-                            placeholder="Set start date"
+                            label="Transferred date (LMP-equivalent)"
+                            placeholder="Set transferred date"
                         />
                     </div>
 
@@ -208,6 +209,33 @@ export function PregnancyTrackerCard({
                                 </Badge>
                             )}
                         </div>
+                    )}
+
+                    {surrogateData.actual_delivery_date && (
+                        <>
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm text-muted-foreground w-24 shrink-0">Gender:</span>
+                                <InlineEditField
+                                    value={surrogateData.delivery_baby_gender ?? undefined}
+                                    onSave={async (v) => {
+                                        await onUpdate({ delivery_baby_gender: v || null })
+                                    }}
+                                    placeholder="Set gender"
+                                    label="Delivery gender"
+                                />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm text-muted-foreground w-24 shrink-0">Weight:</span>
+                                <InlineEditField
+                                    value={surrogateData.delivery_baby_weight ?? undefined}
+                                    onSave={async (v) => {
+                                        await onUpdate({ delivery_baby_weight: v || null })
+                                    }}
+                                    placeholder="Set weight"
+                                    label="Delivery weight"
+                                />
+                            </div>
+                        </>
                     )}
                 </div>
 

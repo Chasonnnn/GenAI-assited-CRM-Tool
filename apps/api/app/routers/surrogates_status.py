@@ -60,21 +60,34 @@ def change_status(
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
 
-    if (
-        result["status"] == "applied"
-        and is_changing_to_delivered
-        and result["surrogate"]
-        and result["surrogate"].actual_delivery_date is None
-    ):
-        if data.effective_at:
-            delivery_date = (
-                data.effective_at.date() if hasattr(data.effective_at, "date") else date.today()
-            )
-        else:
-            delivery_date = date.today()
-        result["surrogate"].actual_delivery_date = delivery_date
-        db.commit()
-        db.refresh(result["surrogate"])
+    if result["status"] == "applied" and is_changing_to_delivered and result["surrogate"]:
+        updated_fields = False
+
+        if result["surrogate"].actual_delivery_date is None:
+            if data.effective_at:
+                delivery_date = (
+                    data.effective_at.date()
+                    if hasattr(data.effective_at, "date")
+                    else date.today()
+                )
+            else:
+                delivery_date = date.today()
+            result["surrogate"].actual_delivery_date = delivery_date
+            updated_fields = True
+
+        if data.delivery_baby_gender is not None:
+            gender = data.delivery_baby_gender.strip()
+            result["surrogate"].delivery_baby_gender = gender or None
+            updated_fields = True
+
+        if data.delivery_baby_weight is not None:
+            weight = data.delivery_baby_weight.strip()
+            result["surrogate"].delivery_baby_weight = weight or None
+            updated_fields = True
+
+        if updated_fields:
+            db.commit()
+            db.refresh(result["surrogate"])
 
     surrogate_read = _surrogate_to_read(result["surrogate"], db) if result["surrogate"] else None
     return SurrogateStatusChangeResponse(

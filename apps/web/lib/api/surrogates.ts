@@ -159,6 +159,8 @@ export interface SurrogateUpdatePayload {
     pregnancy_start_date?: string | null;
     pregnancy_due_date?: string | null;
     actual_delivery_date?: string | null;
+    delivery_baby_gender?: string | null;
+    delivery_baby_weight?: string | null;
 }
 
 // Status change payload
@@ -166,6 +168,8 @@ export interface SurrogateStatusChangePayload {
     stage_id: string;
     reason?: string;
     effective_at?: string; // ISO datetime, optional (defaults to now)
+    delivery_baby_gender?: string | null;
+    delivery_baby_weight?: string | null;
 }
 
 // Status change response

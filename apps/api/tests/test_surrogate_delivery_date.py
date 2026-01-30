@@ -67,3 +67,53 @@ async def test_delivered_stage_sets_actual_delivery_date_when_missing(authed_cli
     surrogate_row = db.query(Surrogate).filter(Surrogate.id == UUID(surrogate["id"])).first()
     assert surrogate_row is not None
     assert surrogate_row.actual_delivery_date == date.fromisoformat(today)
+
+
+@pytest.mark.asyncio
+async def test_delivered_stage_syncs_delivery_outcome_fields(authed_client, db, test_auth):
+    surrogate = await _create_surrogate(authed_client)
+    delivered_stage = _get_stage(db, test_auth.org.id, "delivered")
+    today = _org_today(test_auth.org.timezone)
+
+    response = await authed_client.patch(
+        f"/surrogates/{surrogate['id']}/status",
+        json={
+            "stage_id": str(delivered_stage.id),
+            "effective_at": today,
+            "delivery_baby_gender": "Male",
+            "delivery_baby_weight": "6 lb 8 oz",
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["surrogate"]["delivery_baby_gender"] == "Male"
+    assert payload["surrogate"]["delivery_baby_weight"] == "6 lb 8 oz"
+
+    surrogate_row = db.query(Surrogate).filter(Surrogate.id == UUID(surrogate["id"])).first()
+    assert surrogate_row is not None
+    assert surrogate_row.delivery_baby_gender == "Male"
+    assert surrogate_row.delivery_baby_weight == "6 lb 8 oz"
+
+
+@pytest.mark.asyncio
+async def test_delivery_outcome_fields_saved(authed_client, db, test_auth):
+    surrogate = await _create_surrogate(authed_client)
+    today = _org_today(test_auth.org.timezone)
+
+    response = await authed_client.patch(
+        f"/surrogates/{surrogate['id']}",
+        json={
+            "actual_delivery_date": today,
+            "delivery_baby_gender": "Female",
+            "delivery_baby_weight": "7 lb 2 oz",
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload.get("delivery_baby_gender") == "Female"
+    assert payload.get("delivery_baby_weight") == "7 lb 2 oz"
+
+    surrogate_row = db.query(Surrogate).filter(Surrogate.id == UUID(surrogate["id"])).first()
+    assert surrogate_row is not None
+    assert surrogate_row.delivery_baby_gender == "Female"
+    assert surrogate_row.delivery_baby_weight == "7 lb 2 oz"
