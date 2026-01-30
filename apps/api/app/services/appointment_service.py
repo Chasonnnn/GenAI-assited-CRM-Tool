@@ -109,6 +109,7 @@ def validate_timezone_name(name: str, label: str = "timezone") -> None:
     """Public helper to validate timezones for API inputs."""
     _validate_timezone_name(name, label)
 
+
 def _normalize_idempotency_key(org_id: UUID, user_id: UUID, key: str) -> str:
     """Normalize idempotency key to avoid cross-tenant collisions."""
     raw = f"{org_id}:{user_id}:{key}".encode()

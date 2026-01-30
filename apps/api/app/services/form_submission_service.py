@@ -331,11 +331,13 @@ def add_submission_file(
             .count()
         )
         if existing_field_count >= PER_FILE_FIELD_MAX_COUNT:
-            label = file_fields.get(resolved_field_key).label if resolved_field_key in file_fields else None
-            label_text = label or resolved_field_key
-            raise ValueError(
-                f"Maximum {PER_FILE_FIELD_MAX_COUNT} files allowed for {label_text}"
+            label = (
+                file_fields.get(resolved_field_key).label
+                if resolved_field_key in file_fields
+                else None
             )
+            label_text = label or resolved_field_key
+            raise ValueError(f"Maximum {PER_FILE_FIELD_MAX_COUNT} files allowed for {label_text}")
 
     existing_count = (
         db.query(FormSubmissionFile)
@@ -839,9 +841,7 @@ def _snapshot_mappings(db: Session, form_id: uuid.UUID) -> list[dict[str, str]]:
     ]
 
 
-def _get_submission_mappings(
-    db: Session, submission: FormSubmission
-) -> list[dict[str, str]]:
+def _get_submission_mappings(db: Session, submission: FormSubmission) -> list[dict[str, str]]:
     if submission.mapping_snapshot is not None:
         return submission.mapping_snapshot
     return _snapshot_mappings(db, submission.form_id)
@@ -919,9 +919,7 @@ def _validate_file_field_limits(
         if counts[key] > PER_FILE_FIELD_MAX_COUNT:
             label = file_fields.get(key).label if key in file_fields else None
             label_text = label or key
-            raise ValueError(
-                f"Maximum {PER_FILE_FIELD_MAX_COUNT} files allowed for {label_text}"
-            )
+            raise ValueError(f"Maximum {PER_FILE_FIELD_MAX_COUNT} files allowed for {label_text}")
 
 
 def _coerce_surrogate_value(surrogate_field: str, value: Any) -> Any:

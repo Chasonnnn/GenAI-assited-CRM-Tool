@@ -51,9 +51,7 @@ def get_form_logo(request: Request, org_id: UUID, logo_id: UUID, db: Session = D
 
 @router.get("/{org_id}/signature-logo")
 @limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
-def get_org_signature_logo(
-    request: Request, org_id: UUID, db: Session = Depends(get_db)
-):
+def get_org_signature_logo(request: Request, org_id: UUID, db: Session = Depends(get_db)):
     org = org_service.get_org_by_id(db, org_id)
     if not org or not org.signature_logo_url:
         raise HTTPException(status_code=404, detail="Logo not found")
