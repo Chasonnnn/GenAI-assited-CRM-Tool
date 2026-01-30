@@ -248,8 +248,6 @@ def get_ai_provider_for_settings(
 ) -> AIProvider | None:
     if not ai_settings or not ai_settings.is_enabled:
         return None
-    if ai_settings.provider == "openai":
-        return None
 
     if ai_settings.provider == "vertex_wif":
         if not (

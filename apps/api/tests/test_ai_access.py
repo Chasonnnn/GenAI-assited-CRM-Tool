@@ -159,3 +159,124 @@ async def test_ai_org_ai_enabled_blocks_usage(authed_client: AsyncClient, db, te
 
     response = await authed_client.post("/ai/analyze-dashboard")
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_ai_map_requires_ai_permission(db, test_org, monkeypatch):
+    """AI import mapping should require use_ai_assistant permission."""
+    intake_user = User(
+        id=uuid.uuid4(),
+        email=f"intake-{uuid.uuid4().hex[:8]}@test.com",
+        display_name="Intake User",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(intake_user)
+    db.flush()
+
+    membership = Membership(
+        id=uuid.uuid4(),
+        user_id=intake_user.id,
+        organization_id=test_org.id,
+        role=Role.INTAKE_SPECIALIST,
+    )
+    db.add(membership)
+    db.flush()
+
+    # Avoid external AI calls; the permission check should block first.
+    from app.services import import_ai_mapper_service
+
+    async def fake_ai_suggest_mappings(db, org_id, unmatched_columns):  # noqa: ANN001
+        return unmatched_columns
+
+    monkeypatch.setattr(import_ai_mapper_service, "is_ai_available", lambda *_: True)
+    monkeypatch.setattr(import_ai_mapper_service, "ai_suggest_mappings", fake_ai_suggest_mappings)
+
+    async with _authed_client_for_user(
+        db, test_org.id, intake_user, Role.INTAKE_SPECIALIST
+    ) as client:
+        response = await client.post(
+            "/surrogates/import/ai-map",
+            json={
+                "unmatched_columns": ["Custom Column"],
+                "sample_values": {"Custom Column": ["value"]},
+            },
+        )
+        assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_ai_focus_supports_vertex_wif_without_api_key(
+    authed_client: AsyncClient,
+    db,
+    test_org,
+    test_user,
+    default_stage,
+    monkeypatch,
+):
+    """Vertex WIF should work for AI focus endpoints without api_key_encrypted."""
+    from app.db.models import AISettings
+    from app.services import ai_settings_service
+    from app.services.ai_provider import ChatResponse
+
+    settings = AISettings(
+        organization_id=test_org.id,
+        is_enabled=True,
+        provider="vertex_wif",
+        model="gemini-3-flash-preview",
+        vertex_project_id="demo-project",
+        vertex_location="us-central1",
+        vertex_audience="projects/123/locations/global/workloadIdentityPools/pool/providers/provider",
+        vertex_service_account_email="vertex-sa@demo-project.iam.gserviceaccount.com",
+        consent_accepted_at=datetime.now(timezone.utc),
+        consent_accepted_by=test_user.id,
+    )
+    db.add(settings)
+    db.flush()
+
+    surrogate = Surrogate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        surrogate_number=f"S{uuid.uuid4().int % 90000 + 10000:05d}",
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
+        owner_type="user",
+        owner_id=test_user.id,
+        created_by_user_id=test_user.id,
+        full_name="WIF Test",
+        email=normalize_email("wif@test.com"),
+        email_hash=hash_email(normalize_email("wif@test.com")),
+    )
+    db.add(surrogate)
+    db.flush()
+
+    class FakeProvider:
+        async def chat(self, *_, **__):
+            return ChatResponse(
+                content="ok",
+                prompt_tokens=1,
+                completion_tokens=1,
+                total_tokens=2,
+                model="gemini-3-flash-preview",
+            )
+
+    monkeypatch.setattr(
+        ai_settings_service,
+        "get_ai_provider_for_settings",
+        lambda *_args, **_kwargs: FakeProvider(),
+    )
+
+    response = await authed_client.post(
+        "/ai/summarize-surrogate",
+        json={"surrogate_id": str(surrogate.id)},
+    )
+    assert response.status_code == 200
+
+    response = await authed_client.post(
+        "/ai/draft-email",
+        json={"surrogate_id": str(surrogate.id), "email_type": "follow_up"},
+    )
+    assert response.status_code == 200
+
+    response = await authed_client.post("/ai/analyze-dashboard")
+    assert response.status_code == 200

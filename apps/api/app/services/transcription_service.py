@@ -1,13 +1,12 @@
 """AI Transcription service using Gemini/Vertex AI."""
 
-import base64
 import logging
 import os
 import tempfile
 from uuid import UUID
 
-import httpx
 from botocore.client import BaseClient
+from google.genai import types
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -91,64 +90,41 @@ def _build_transcription_instruction(language: str, prompt: str | None) -> str:
     return instruction
 
 
-def _build_gemini_audio_request(
+def _build_transcription_parts(
     file_bytes: bytes,
     content_type: str,
     language: str,
     prompt: str | None,
-) -> dict:
+) -> list[types.Part]:
     instruction = _build_transcription_instruction(language, prompt)
-    audio_b64 = base64.b64encode(file_bytes).decode()
-    return {
-        "contents": [
-            {
-                "role": "user",
-                "parts": [
-                    {"text": instruction},
-                    {"inlineData": {"mimeType": content_type, "data": audio_b64}},
-                ],
-            }
-        ],
-        "generationConfig": {"temperature": 0, "maxOutputTokens": 4096},
-    }
+    return [
+        types.Part.from_text(instruction),
+        types.Part.from_bytes(data=file_bytes, mime_type=content_type),
+    ]
 
 
-def _extract_gemini_text(payload: dict) -> str:
+async def _transcribe_with_provider(
+    provider_instance: "GoogleGenAIProvider",
+    file_bytes: bytes,
+    content_type: str,
+    language: str,
+    prompt: str | None,
+    model: str,
+) -> str:
+    parts = _build_transcription_parts(file_bytes, content_type, language, prompt)
     try:
-        parts = payload["candidates"][0]["content"]["parts"]
-    except (KeyError, IndexError, TypeError) as exc:
-        raise TranscriptionError("Transcription failed: invalid provider response") from exc
-
-    text_parts = [p.get("text", "") for p in parts if isinstance(p, dict)]
-    text = "".join(text_parts).strip()
-    if not text:
-        raise TranscriptionError("Transcription failed: empty response")
-    return text
-
-
-async def _post_json(
-    url: str,
-    *,
-    headers: dict[str, str],
-    body: dict,
-    params: dict | None = None,
-) -> dict:
-    async with httpx.AsyncClient(timeout=300.0) as client:  # 5 min timeout
-        try:
-            response = await client.post(url, headers=headers, params=params, json=body)
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPStatusError as exc:
-            status_code = exc.response.status_code
-            logger.error("Transcription provider error: status=%s", status_code)
-            raise TranscriptionError(
-                f"Transcription failed: provider error ({status_code})"
-            ) from exc
-        except httpx.TimeoutException as exc:
+        return await provider_instance.generate_text_with_parts(
+            parts=parts,
+            model=model,
+            temperature=0,
+            max_tokens=4096,
+        )
+    except Exception as exc:
+        logger.exception("Transcription provider error")
+        message = str(exc).lower()
+        if "timeout" in message:
             raise TranscriptionError("Transcription timed out. The file may be too long.") from exc
-        except Exception as exc:
-            logger.exception("Unexpected error during transcription")
-            raise TranscriptionError(f"Transcription failed: {str(exc)}") from exc
+        raise TranscriptionError("Transcription failed: provider error") from exc
 
 
 async def transcribe_audio(
@@ -191,41 +167,40 @@ async def transcribe_audio(
             f"File too large for transcription. Max size is {MAX_TRANSCRIPTION_SIZE_BYTES / (1024 * 1024):.0f}MB"
         )
 
-    body = _build_gemini_audio_request(file_bytes, content_type, language, prompt)
-
     if provider == "gemini":
         if not api_key:
             raise TranscriptionError("AI API key not configured")
-        payload = await _post_json(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-            headers={
-                "Content-Type": "application/json",
-                "x-goog-api-key": api_key,
-            },
-            body=body,
+        from app.services.ai_provider import GeminiProvider
+
+        provider_instance = GeminiProvider(api_key, default_model=model)
+        return await _transcribe_with_provider(
+            provider_instance,
+            file_bytes,
+            content_type,
+            language,
+            prompt,
+            model,
         )
-        return _extract_gemini_text(payload)
 
     if provider == "vertex_api_key":
         if not api_key:
             raise TranscriptionError("AI API key not configured")
-        if vertex_project_id and vertex_location:
-            base_url = (
-                f"https://{vertex_location}-aiplatform.googleapis.com/v1/projects/"
-                f"{vertex_project_id}/locations/{vertex_location}"
-            )
-        else:
-            base_url = "https://aiplatform.googleapis.com/v1"
-        headers = {"Content-Type": "application/json"}
-        if vertex_project_id:
-            headers["x-goog-user-project"] = vertex_project_id
-        payload = await _post_json(
-            f"{base_url}/publishers/google/models/{model}:generateContent",
-            headers=headers,
-            params={"key": api_key},
-            body=body,
+        from app.services.ai_provider import VertexAPIKeyConfig, VertexAPIKeyProvider
+
+        config = VertexAPIKeyConfig(
+            api_key=api_key,
+            project_id=vertex_project_id,
+            location=vertex_location,
         )
-        return _extract_gemini_text(payload)
+        provider_instance = VertexAPIKeyProvider(config, default_model=model)
+        return await _transcribe_with_provider(
+            provider_instance,
+            file_bytes,
+            content_type,
+            language,
+            prompt,
+            model,
+        )
 
     if provider == "vertex_wif":
         if not (
@@ -250,17 +225,14 @@ async def transcribe_audio(
             user_id=user_id,
         )
         provider_instance = VertexWIFProvider(config, default_model=model)
-        access_token = await provider_instance.get_access_token()
-        payload = await _post_json(
-            f"https://{vertex_location}-aiplatform.googleapis.com/v1/projects/{vertex_project_id}/locations/{vertex_location}/publishers/google/models/{model}:generateContent",
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-                "x-goog-user-project": vertex_project_id,
-            },
-            body=body,
+        return await _transcribe_with_provider(
+            provider_instance,
+            file_bytes,
+            content_type,
+            language,
+            prompt,
+            model,
         )
-        return _extract_gemini_text(payload)
 
     raise TranscriptionError("Transcription provider not supported")
 

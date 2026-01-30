@@ -1,8 +1,9 @@
 """AI Provider abstraction layer.
 
-Supports OpenAI, Google Gemini, and Vertex AI with a unified interface.
+Supports Google Gemini and Vertex AI with a unified interface.
 """
 
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -10,7 +11,11 @@ from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 import uuid
 
-import httpx
+import requests
+from google import genai
+from google.auth.credentials import Credentials
+from google.auth.transport.requests import Request
+from google.genai import types
 
 logger = logging.getLogger(__name__)
 
@@ -36,14 +41,10 @@ class ChatResponse:
     @property
     def estimated_cost_usd(self) -> Decimal:
         """Estimate cost based on model pricing (approximate)."""
-        # Pricing per 1M tokens (approximate)
+        # Pricing per 1M tokens (approximate, as of Jan 2026)
         pricing = {
-            # OpenAI
-            "gpt-4o-mini": {"input": Decimal("0.15"), "output": Decimal("0.60")},
-            "gpt-4o": {"input": Decimal("2.50"), "output": Decimal("10.00")},
-            # Gemini
-            "gemini-3-flash-preview": {"input": Decimal("0.00"), "output": Decimal("0.00")},
-            "gemini-3-pro-preview": {"input": Decimal("0.00"), "output": Decimal("0.00")},
+            "gemini-3-flash-preview": {"input": Decimal("0.075"), "output": Decimal("0.30")},
+            "gemini-3-pro-preview": {"input": Decimal("1.25"), "output": Decimal("5.00")},
         }
 
         model_pricing = pricing.get(self.model, {"input": Decimal("0"), "output": Decimal("0")})
@@ -74,71 +75,96 @@ class AIProvider(ABC):
         pass
 
 
-class OpenAIProvider(AIProvider):
-    """OpenAI API provider."""
-
-    def __init__(self, api_key: str, default_model: str = "gpt-4o-mini") -> None:
-        self.api_key = api_key
-        self.default_model = default_model
-        self.base_url = "https://api.openai.com/v1"
-
-    async def chat(
-        self,
-        messages: list[ChatMessage],
-        model: str | None = None,
-        temperature: float = 0.7,
-        max_tokens: int = 2000,
-    ) -> ChatResponse:
-        model = model or self.default_model
-
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                f"{self.base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "messages": [{"role": m.role, "content": m.content} for m in messages],
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                },
+def _build_google_contents(
+    messages: list[ChatMessage],
+) -> tuple[list[types.Content], str | None]:
+    system_instruction = None
+    contents: list[types.Content] = []
+    for msg in messages:
+        if msg.role == "system":
+            system_instruction = msg.content
+        else:
+            role = "model" if msg.role == "assistant" else "user"
+            contents.append(
+                types.Content(
+                    role=role,
+                    parts=[types.Part.from_text(msg.content)],
+                )
             )
-            response.raise_for_status()
-            data = response.json()
+    return contents, system_instruction
 
-        usage = data.get("usage", {})
-        return ChatResponse(
-            content=data["choices"][0]["message"]["content"],
-            prompt_tokens=usage.get("prompt_tokens", 0),
-            completion_tokens=usage.get("completion_tokens", 0),
-            total_tokens=usage.get("total_tokens", 0),
+
+def _build_google_config(
+    temperature: float,
+    max_tokens: int,
+    system_instruction: str | None,
+) -> types.GenerateContentConfig:
+    return types.GenerateContentConfig(
+        temperature=temperature,
+        max_output_tokens=max_tokens,
+        system_instruction=system_instruction,
+    )
+
+
+def _extract_genai_text(response: object) -> str:
+    text = getattr(response, "text", None)
+    if isinstance(text, str) and text.strip():
+        return text
+    try:
+        parts = response.candidates[0].content.parts  # type: ignore[attr-defined]
+    except Exception as exc:  # pragma: no cover - defensive
+        raise ValueError("Provider response missing text") from exc
+    text_parts = []
+    for part in parts:
+        part_text = getattr(part, "text", None)
+        if part_text:
+            text_parts.append(part_text)
+    combined = "".join(text_parts).strip()
+    if not combined:
+        raise ValueError("Provider response missing text")
+    return combined
+
+
+def _extract_usage_counts(response: object) -> tuple[int, int, int]:
+    usage = getattr(response, "usage_metadata", None)
+    if not usage:
+        return 0, 0, 0
+    prompt_tokens = int(getattr(usage, "prompt_token_count", 0) or 0)
+    completion_tokens = int(
+        getattr(usage, "candidates_token_count", 0)
+        or getattr(usage, "response_token_count", 0)
+        or 0
+    )
+    total_tokens = int(
+        getattr(usage, "total_token_count", prompt_tokens + completion_tokens)
+        or (prompt_tokens + completion_tokens)
+    )
+    return prompt_tokens, completion_tokens, total_tokens
+
+
+class GoogleGenAIProvider(AIProvider):
+    """Base provider for Google Gen AI SDK backends."""
+
+    def __init__(self, client: genai.Client, default_model: str) -> None:
+        self._client = client
+        self.default_model = default_model
+
+    async def _generate_content(
+        self,
+        *,
+        model: str,
+        contents: list[types.Content],
+        temperature: float,
+        max_tokens: int,
+        system_instruction: str | None,
+    ) -> object:
+        config = _build_google_config(temperature, max_tokens, system_instruction)
+        return await self._client.aio.models.generate_content(
             model=model,
+            contents=contents,
+            config=config,
         )
 
-    async def validate_key(self) -> bool:
-        """Test the API key with a minimal request."""
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(
-                    f"{self.base_url}/models",
-                    headers={"Authorization": f"Bearer {self.api_key}"},
-                )
-                return response.status_code == 200
-        except Exception as e:
-            logger.warning(f"OpenAI key validation failed: {e}")
-            return False
-
-
-class GeminiProvider(AIProvider):
-    """Google Gemini API provider."""
-
-    def __init__(self, api_key: str, default_model: str = "gemini-3-flash-preview") -> None:
-        self.api_key = api_key
-        self.default_model = default_model
-        self.base_url = "https://generativelanguage.googleapis.com/v1beta"
-
     async def chat(
         self,
         messages: list[ChatMessage],
@@ -147,67 +173,62 @@ class GeminiProvider(AIProvider):
         max_tokens: int = 2000,
     ) -> ChatResponse:
         model = model or self.default_model
-
-        # Convert messages to Gemini format
-        # Gemini uses 'user' and 'model' roles, system goes in systemInstruction
-        system_instruction = None
-        contents = []
-
-        for msg in messages:
-            if msg.role == "system":
-                system_instruction = msg.content
-            else:
-                role = "model" if msg.role == "assistant" else "user"
-                contents.append({"role": role, "parts": [{"text": msg.content}]})
-
-        request_body: dict[str, object] = {
-            "contents": contents,
-            "generationConfig": {
-                "temperature": temperature,
-                "maxOutputTokens": max_tokens,
-            },
-        }
-
-        if system_instruction:
-            request_body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
-
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                f"{self.base_url}/models/{model}:generateContent",
-                headers={
-                    "Content-Type": "application/json",
-                    "x-goog-api-key": self.api_key,
-                },
-                json=request_body,
-            )
-            response.raise_for_status()
-            data = response.json()
-
-        # Extract response content
-        content = data["candidates"][0]["content"]["parts"][0]["text"]
-
-        # Gemini returns usage metadata
-        usage = data.get("usageMetadata", {})
-        prompt_tokens = usage.get("promptTokenCount", 0)
-        completion_tokens = usage.get("candidatesTokenCount", 0)
-
+        contents, system_instruction = _build_google_contents(messages)
+        response = await self._generate_content(
+            model=model,
+            contents=contents,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            system_instruction=system_instruction,
+        )
+        content = _extract_genai_text(response)
+        prompt_tokens, completion_tokens, total_tokens = _extract_usage_counts(response)
         return ChatResponse(
             content=content,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
-            total_tokens=prompt_tokens + completion_tokens,
+            total_tokens=total_tokens,
             model=model,
         )
+
+    async def generate_text_with_parts(
+        self,
+        *,
+        parts: list[types.Part],
+        model: str | None = None,
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+        system_instruction: str | None = None,
+    ) -> str:
+        model = model or self.default_model
+        contents = [types.Content(role="user", parts=parts)]
+        response = await self._generate_content(
+            model=model,
+            contents=contents,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            system_instruction=system_instruction,
+        )
+        return _extract_genai_text(response)
+
+
+class GeminiProvider(GoogleGenAIProvider):
+    """Google Gemini API provider."""
+
+    def __init__(self, api_key: str, default_model: str = "gemini-3-flash-preview") -> None:
+        self.api_key = api_key
+        client = genai.Client(api_key=api_key)
+        super().__init__(client, default_model)
 
     async def validate_key(self) -> bool:
         """Test the API key with a minimal request."""
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(
-                    f"{self.base_url}/models",
-                    headers={"x-goog-api-key": self.api_key},
-                )
-                return response.status_code == 200
+            await self._client.aio.models.generate_content(
+                model=self.default_model,
+                contents=[types.Content(role="user", parts=[types.Part.from_text("ping")])],
+                config=types.GenerateContentConfig(temperature=0, max_output_tokens=1),
+            )
+            return True
         except Exception as e:
             logger.warning(f"Gemini key validation failed: {e}")
             return False
@@ -223,43 +244,41 @@ class VertexWIFConfig:
     user_id: uuid.UUID | None = None
 
 
-class VertexWIFProvider(AIProvider):
-    """Vertex AI provider using Workload Identity Federation (OIDC)."""
+class VertexWIFCredentials(Credentials):
+    """Google Auth credentials using Workload Identity Federation tokens."""
 
     STS_TOKEN_URL = "https://sts.googleapis.com/v1/token"
-    IAM_CREDENTIALS_URL = "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{service_account}:generateAccessToken"
+    IAM_CREDENTIALS_URL = (
+        "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/"
+        "{service_account}:generateAccessToken"
+    )
 
-    def __init__(
-        self, config: VertexWIFConfig, default_model: str = "gemini-3-flash-preview"
-    ) -> None:
-        self.config = config
-        self.default_model = default_model
-        self.base_url = f"https://{config.location}-aiplatform.googleapis.com/v1"
-        self._cached_token: str | None = None
-        self._cached_token_expiry: datetime | None = None
+    def __init__(self, config: VertexWIFConfig) -> None:
+        super().__init__()
+        self._config = config
+        self.token = None
+        self.expiry: datetime | None = None
 
-    def _normalize_audience(self, audience: str) -> str:
+    @staticmethod
+    def _normalize_audience(audience: str) -> str:
         if audience.startswith("//"):
             return audience
         return f"//iam.googleapis.com/{audience}"
 
-    async def get_access_token(self) -> str:
-        return await self._get_access_token()
-
-    async def _get_access_token(self) -> str:
-        if self._cached_token and self._cached_token_expiry:
-            if self._cached_token_expiry > datetime.now(timezone.utc) + timedelta(minutes=2):
-                return self._cached_token
+    def refresh(self, request: Request) -> None:  # noqa: ARG002
+        now = datetime.now(timezone.utc)
+        if self.token and self.expiry and self.expiry > now + timedelta(minutes=2):
+            return
 
         from app.services import wif_oidc_service
 
-        audience = self._normalize_audience(self.config.audience)
-        subject = f"org:{self.config.organization_id}"
+        audience = self._normalize_audience(self._config.audience)
+        subject = f"org:{self._config.organization_id}"
         claims = {
-            "org_id": str(self.config.organization_id),
+            "org_id": str(self._config.organization_id),
         }
-        if self.config.user_id:
-            claims["user_id"] = str(self.config.user_id)
+        if self._config.user_id:
+            claims["user_id"] = str(self._config.user_id)
 
         subject_token = wif_oidc_service.create_subject_token(
             audience=audience,
@@ -267,104 +286,83 @@ class VertexWIFProvider(AIProvider):
             claims=claims,
         )
 
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            sts_response = await client.post(
-                self.STS_TOKEN_URL,
-                data={
-                    "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
-                    "audience": audience,
-                    "requested_token_type": "urn:ietf:params:oauth:token-type:access_token",
-                    "scope": "https://www.googleapis.com/auth/cloud-platform",
-                    "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
-                    "subject_token": subject_token,
-                },
-            )
-            sts_response.raise_for_status()
-            sts_payload = sts_response.json()
-
+        sts_response = requests.post(
+            self.STS_TOKEN_URL,
+            data={
+                "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+                "audience": audience,
+                "requested_token_type": "urn:ietf:params:oauth:token-type:access_token",
+                "scope": "https://www.googleapis.com/auth/cloud-platform",
+                "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
+                "subject_token": subject_token,
+            },
+            timeout=20,
+        )
+        sts_response.raise_for_status()
+        sts_payload = sts_response.json()
         sts_token = sts_payload["access_token"]
 
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            iam_response = await client.post(
-                self.IAM_CREDENTIALS_URL.format(service_account=self.config.service_account_email),
-                headers={"Authorization": f"Bearer {sts_token}"},
-                json={
-                    "scope": ["https://www.googleapis.com/auth/cloud-platform"],
-                    "lifetime": "3600s",
-                },
-            )
-            iam_response.raise_for_status()
-            iam_payload = iam_response.json()
+        iam_response = requests.post(
+            self.IAM_CREDENTIALS_URL.format(service_account=self._config.service_account_email),
+            headers={"Authorization": f"Bearer {sts_token}"},
+            json={
+                "scope": ["https://www.googleapis.com/auth/cloud-platform"],
+                "lifetime": "3600s",
+            },
+            timeout=20,
+        )
+        iam_response.raise_for_status()
+        iam_payload = iam_response.json()
 
         access_token = iam_payload["accessToken"]
         expires_at = iam_payload.get("expireTime")
         if expires_at:
-            self._cached_token_expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+            self.expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
         else:
-            self._cached_token_expiry = datetime.now(timezone.utc) + timedelta(hours=1)
-        self._cached_token = access_token
-        return access_token
+            self.expiry = now + timedelta(hours=1)
+        self.token = access_token
 
-    async def chat(
+
+class VertexWIFProvider(GoogleGenAIProvider):
+    """Vertex AI provider using Workload Identity Federation (OIDC)."""
+
+    def __init__(
+        self, config: VertexWIFConfig, default_model: str = "gemini-3-flash-preview"
+    ) -> None:
+        self.config = config
+        self._credentials = VertexWIFCredentials(config)
+        client = genai.Client(
+            vertexai=True,
+            project=config.project_id,
+            location=config.location,
+            credentials=self._credentials,
+            http_options=types.HttpOptions(api_version="v1"),
+        )
+        super().__init__(client, default_model)
+
+    async def _generate_content(
         self,
-        messages: list[ChatMessage],
-        model: str | None = None,
-        temperature: float = 0.7,
-        max_tokens: int = 2000,
-    ) -> ChatResponse:
-        model = model or self.default_model
-
-        system_instruction = None
-        contents = []
-        for msg in messages:
-            if msg.role == "system":
-                system_instruction = msg.content
-            else:
-                role = "model" if msg.role == "assistant" else "user"
-                contents.append({"role": role, "parts": [{"text": msg.content}]})
-
-        body: dict[str, object] = {
-            "contents": contents,
-            "generationConfig": {
-                "temperature": temperature,
-                "maxOutputTokens": max_tokens,
-            },
-        }
-        if system_instruction:
-            body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
-
-        access_token = await self._get_access_token()
-
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                f"{self.base_url}/projects/{self.config.project_id}/locations/{self.config.location}/publishers/google/models/{model}:generateContent",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json",
-                    "x-goog-user-project": self.config.project_id,
-                },
-                json=body,
-            )
-            response.raise_for_status()
-            data = response.json()
-
-        content = data["candidates"][0]["content"]["parts"][0]["text"]
-        usage = data.get("usageMetadata", {})
-        prompt_tokens = usage.get("promptTokenCount", 0)
-        completion_tokens = usage.get("candidatesTokenCount", 0)
-
-        return ChatResponse(
-            content=content,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=prompt_tokens + completion_tokens,
+        *,
+        model: str,
+        contents: list[types.Content],
+        temperature: float,
+        max_tokens: int,
+        system_instruction: str | None,
+    ) -> object:
+        if not self._credentials.token or not self._credentials.expiry or self._credentials.expired:
+            await asyncio.to_thread(self._credentials.refresh, Request())
+        return await super()._generate_content(
             model=model,
+            contents=contents,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            system_instruction=system_instruction,
         )
 
     async def validate_key(self) -> bool:
         """Validate WIF configuration by attempting a token exchange."""
         try:
-            await self._get_access_token()
+            self._credentials.refresh(Request())
             return True
         except Exception as e:
             logger.warning(f"Vertex WIF validation failed: {e}")
@@ -378,7 +376,7 @@ class VertexAPIKeyConfig:
     location: str | None = None
 
 
-class VertexAPIKeyProvider(AIProvider):
+class VertexAPIKeyProvider(GoogleGenAIProvider):
     """Vertex AI provider using API keys (supports express mode)."""
 
     def __init__(
@@ -387,88 +385,28 @@ class VertexAPIKeyProvider(AIProvider):
         default_model: str = "gemini-3-flash-preview",
     ) -> None:
         self.config = config
-        self.default_model = default_model
         self._is_express = not (config.project_id and config.location)
-
-    def _base_url(self) -> str:
-        if self._is_express:
-            return "https://aiplatform.googleapis.com/v1"
-        return f"https://{self.config.location}-aiplatform.googleapis.com/v1/projects/{self.config.project_id}/locations/{self.config.location}"
-
-    def _endpoint(self, model: str) -> str:
-        return f"{self._base_url()}/publishers/google/models/{model}:generateContent"
-
-    def _headers(self) -> dict[str, str]:
-        headers = {"Content-Type": "application/json"}
-        if self.config.project_id:
-            headers["x-goog-user-project"] = self.config.project_id
-        return headers
-
-    async def chat(
-        self,
-        messages: list[ChatMessage],
-        model: str | None = None,
-        temperature: float = 0.7,
-        max_tokens: int = 2000,
-    ) -> ChatResponse:
-        model = model or self.default_model
-
-        system_instruction = None
-        contents = []
-        for msg in messages:
-            if msg.role == "system":
-                system_instruction = msg.content
-            else:
-                role = "model" if msg.role == "assistant" else "user"
-                contents.append({"role": role, "parts": [{"text": msg.content}]})
-
-        body: dict[str, object] = {
-            "contents": contents,
-            "generationConfig": {
-                "temperature": temperature,
-                "maxOutputTokens": max_tokens,
-            },
+        client_kwargs: dict[str, object] = {
+            "vertexai": True,
+            "api_key": config.api_key,
+            "http_options": types.HttpOptions(api_version="v1"),
         }
-        if system_instruction:
-            body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
-
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                self._endpoint(model),
-                params={"key": self.config.api_key},
-                headers=self._headers(),
-                json=body,
-            )
-            response.raise_for_status()
-            data = response.json()
-
-        content = data["candidates"][0]["content"]["parts"][0]["text"]
-        usage = data.get("usageMetadata", {})
-        prompt_tokens = usage.get("promptTokenCount", 0)
-        completion_tokens = usage.get("candidatesTokenCount", 0)
-
-        return ChatResponse(
-            content=content,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=prompt_tokens + completion_tokens,
-            model=model,
-        )
+        if config.project_id:
+            client_kwargs["project"] = config.project_id
+        if config.location:
+            client_kwargs["location"] = config.location
+        client = genai.Client(**client_kwargs)
+        super().__init__(client, default_model)
 
     async def validate_key(self) -> bool:
         """Validate API key with a lightweight request."""
         try:
-            async with httpx.AsyncClient(timeout=20.0) as client:
-                response = await client.post(
-                    self._endpoint(self.default_model),
-                    params={"key": self.config.api_key},
-                    headers=self._headers(),
-                    json={
-                        "contents": [{"role": "user", "parts": [{"text": "ping"}]}],
-                        "generationConfig": {"maxOutputTokens": 1, "temperature": 0},
-                    },
-                )
-                return response.status_code == 200
+            await self._client.aio.models.generate_content(
+                model=self.default_model,
+                contents=[types.Content(role="user", parts=[types.Part.from_text("ping")])],
+                config=types.GenerateContentConfig(temperature=0, max_output_tokens=1),
+            )
+            return True
         except Exception as e:
             logger.warning(f"Vertex API key validation failed: {e}")
             return False
@@ -478,9 +416,7 @@ def get_provider(
     provider_name: str, api_key: str, model: str | None = None, **kwargs
 ) -> AIProvider:
     """Factory function to get the appropriate AI provider."""
-    if provider_name == "openai":
-        return OpenAIProvider(api_key, default_model=model or "gpt-4o-mini")
-    elif provider_name == "gemini":
+    if provider_name == "gemini":
         return GeminiProvider(api_key, default_model=model or "gemini-3-flash-preview")
     elif provider_name == "vertex_api_key":
         config = VertexAPIKeyConfig(

@@ -148,7 +148,7 @@ async def summarize_surrogate(
     Requires: use_ai_assistant permission
     """
     from app.services import ai_settings_service, note_service, surrogate_service, task_service
-    from app.services.ai_provider import ChatMessage, get_provider
+    from app.services.ai_provider import ChatMessage
     from app.services.ai_usage_service import log_usage
     from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_data
 
@@ -225,13 +225,16 @@ Pending Tasks:
     prompt = get_prompt("surrogate_summary").render_user(context=context)
 
     # Call AI
-    api_key = ai_settings_service.get_decrypted_key(settings)
-    if not api_key:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="AI API key not configured"
+    provider = ai_settings_service.get_ai_provider_for_settings(
+        settings, session.org_id, user_id=session.user_id
+    )
+    if not provider:
+        missing_message = (
+            "Vertex AI configuration is incomplete"
+            if settings.provider == "vertex_wif"
+            else "AI API key not configured"
         )
-
-    provider = get_provider(settings.provider, api_key, settings.model)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=missing_message)
 
     response = await provider.chat(
         [
@@ -309,7 +312,7 @@ async def draft_email(
     Requires: use_ai_assistant permission
     """
     from app.services import ai_settings_service, surrogate_service, user_service
-    from app.services.ai_provider import ChatMessage, get_provider
+    from app.services.ai_provider import ChatMessage
     from app.services.ai_usage_service import log_usage
     from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_data
 
@@ -369,13 +372,16 @@ async def draft_email(
     )
 
     # Call AI
-    api_key = ai_settings_service.get_decrypted_key(settings)
-    if not api_key:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="AI API key not configured"
+    provider = ai_settings_service.get_ai_provider_for_settings(
+        settings, session.org_id, user_id=session.user_id
+    )
+    if not provider:
+        missing_message = (
+            "Vertex AI configuration is incomplete"
+            if settings.provider == "vertex_wif"
+            else "AI API key not configured"
         )
-
-    provider = get_provider(settings.provider, api_key, settings.model)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=missing_message)
 
     response = await provider.chat(
         [
@@ -429,7 +435,7 @@ async def analyze_dashboard(
 ) -> AnalyzeDashboardResponse:
     """Analyze dashboard data and provide AI-powered insights."""
     from app.services import ai_settings_service, surrogate_service, task_service
-    from app.services.ai_provider import ChatMessage, get_provider
+    from app.services.ai_provider import ChatMessage
     from app.services.ai_usage_service import log_usage
 
     # Check AI is enabled
@@ -484,14 +490,16 @@ async def analyze_dashboard(
             )
 
     # Call AI for insights
-    api_key = ai_settings_service.get_decrypted_key(settings)
-    if not api_key:
+    provider = ai_settings_service.get_ai_provider_for_settings(
+        settings, session.org_id, user_id=session.user_id
+    )
+    if not provider:
         # Return basic analysis without AI
         return AnalyzeDashboardResponse(
             insights=[f"You have {total_surrogates} active surrogates"],
             surrogate_volume_trend=trend,
             bottlenecks=bottlenecks,
-            recommendations=["Configure AI API key for detailed insights"],
+            recommendations=["Configure AI settings for detailed insights"],
             stats=stats,
         )
 
@@ -502,8 +510,6 @@ async def analyze_dashboard(
         overdue_tasks=overdue_tasks,
         status_summary=status_summary,
     )
-
-    provider = get_provider(settings.provider, api_key, settings.model)
 
     response = await provider.chat(
         [
