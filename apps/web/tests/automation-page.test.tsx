@@ -8,6 +8,10 @@ vi.mock('@/lib/auth-context', () => ({
     useAuth: () => mockUseAuth(),
 }))
 
+vi.mock('@/lib/hooks/use-permissions', () => ({
+    useEffectivePermissions: () => ({ data: { permissions: [] } }),
+}))
+
 // Mock Next.js navigation
 vi.mock('next/navigation', () => ({
     useSearchParams: () => ({

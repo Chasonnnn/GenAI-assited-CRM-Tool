@@ -2,7 +2,7 @@ import uuid
 from io import BytesIO
 
 import pytest
-from starlette.datastructures import UploadFile
+from starlette.datastructures import UploadFile, Headers
 
 from app.core.encryption import hash_email
 from app.db.models import Surrogate
@@ -259,7 +259,11 @@ def test_submission_requires_file_field_keys_when_multiple_file_fields(
         expires_in_days=7,
     )
 
-    upload = UploadFile(filename="doc.txt", file=BytesIO(b"test"), content_type="text/plain")
+    upload = UploadFile(
+        filename="doc.txt",
+        file=BytesIO(b"test"),
+        headers=Headers({"content-type": "text/plain"}),
+    )
 
     with pytest.raises(ValueError):
         form_submission_service.create_submission(
@@ -284,8 +288,16 @@ def test_submission_stores_file_field_keys(db, test_org, test_user, default_stag
         expires_in_days=7,
     )
 
-    upload_a = UploadFile(filename="doc-a.txt", file=BytesIO(b"a"), content_type="text/plain")
-    upload_b = UploadFile(filename="doc-b.txt", file=BytesIO(b"b"), content_type="text/plain")
+    upload_a = UploadFile(
+        filename="doc-a.txt",
+        file=BytesIO(b"a"),
+        headers=Headers({"content-type": "text/plain"}),
+    )
+    upload_b = UploadFile(
+        filename="doc-b.txt",
+        file=BytesIO(b"b"),
+        headers=Headers({"content-type": "text/plain"}),
+    )
 
     submission = form_submission_service.create_submission(
         db=db,
@@ -314,7 +326,11 @@ def test_submission_enforces_per_file_field_limit(db, test_org, test_user, defau
     )
 
     uploads = [
-        UploadFile(filename=f"doc-{idx}.txt", file=BytesIO(b"test"), content_type="text/plain")
+        UploadFile(
+            filename=f"doc-{idx}.txt",
+            file=BytesIO(b"test"),
+            headers=Headers({"content-type": "text/plain"}),
+        )
         for idx in range(6)
     ]
 
@@ -344,7 +360,11 @@ def test_add_submission_file_enforces_per_file_field_limit(db, test_org, test_us
     )
 
     uploads = [
-        UploadFile(filename=f"doc-{idx}.txt", file=BytesIO(b"test"), content_type="text/plain")
+        UploadFile(
+            filename=f"doc-{idx}.txt",
+            file=BytesIO(b"test"),
+            headers=Headers({"content-type": "text/plain"}),
+        )
         for idx in range(5)
     ]
 
@@ -356,7 +376,11 @@ def test_add_submission_file_enforces_per_file_field_limit(db, test_org, test_us
         files=uploads,
     )
 
-    extra = UploadFile(filename="extra.txt", file=BytesIO(b"extra"), content_type="text/plain")
+    extra = UploadFile(
+        filename="extra.txt",
+        file=BytesIO(b"extra"),
+        headers=Headers({"content-type": "text/plain"}),
+    )
 
     with pytest.raises(ValueError) as exc:
         form_submission_service.add_submission_file(

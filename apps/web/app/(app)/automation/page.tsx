@@ -44,6 +44,7 @@ import {
     AlertCircleIcon,
     ChevronDownIcon,
     BuildingIcon,
+    SparklesIcon,
 } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import {
@@ -69,11 +70,13 @@ import type {
     WorkflowScope,
 } from "@/lib/api/workflows"
 import { useAuth } from "@/lib/auth-context"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { useCreateEmailTemplate, useUpdateEmailTemplate, useDeleteEmailTemplate } from "@/lib/hooks/use-email-templates"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
 import { ApiError } from "@/lib/api"
 import { globalSearch } from "@/lib/api/search"
 import WorkflowTemplatesPanel from "@/components/automation/workflow-templates-panel"
+import Link from "@/components/app-link"
 import { getAppointments } from "@/lib/api/appointments"
 import { listMatches, type ListMatchesParams } from "@/lib/api/matches"
 import { getTasks, type TaskListParams } from "@/lib/api/tasks"
@@ -509,14 +512,23 @@ export default function AutomationPage() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const { user } = useAuth()
+    const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
+    const permissions = effectivePermissions?.permissions || []
+    const canUseAI = Boolean(user?.ai_enabled) && permissions.includes("use_ai_assistant")
+    const canManageAutomation = permissions.includes("manage_automation")
     const validTabs = ["workflows", "email-templates", "campaigns"]
     const tabParam = searchParams.get("tab")
+    const scopeParam = searchParams.get("scope")
     const createParam = searchParams.get("create")
     const initialTab = tabParam && validTabs.includes(tabParam) ? tabParam : "workflows"
     const [activeTab] = useState(initialTab)
 
     // Workflow scope tab state
-    const [workflowScopeTab, setWorkflowScopeTab] = useState<"personal" | "org" | "templates">("personal")
+    const initialWorkflowScopeTab =
+        scopeParam === "org" ? "org" : scopeParam === "templates" ? "templates" : "personal"
+    const [workflowScopeTab, setWorkflowScopeTab] = useState<"personal" | "org" | "templates">(
+        initialWorkflowScopeTab
+    )
     const [workflowScope, setWorkflowScope] = useState<WorkflowScope>("personal")
     const isTemplatesTab = workflowScopeTab === "templates"
     const activeWorkflowScope: WorkflowScope = workflowScopeTab === "templates" ? "personal" : workflowScopeTab
@@ -1283,10 +1295,41 @@ export default function AutomationPage() {
                                 </TabsTrigger>
                             </TabsList>
                             {!isTemplatesTab && (
-                                <Button onClick={() => handleCreate(activeWorkflowScope)}>
-                                    <PlusIcon className="mr-2 size-4" />
-                                    {activeWorkflowScope === "personal" ? "Create Workflow" : "Create Org Workflow"}
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        variant="outline"
+                                        disabled={
+                                            !canUseAI ||
+                                            (activeWorkflowScope === "org" && !canManageAutomation)
+                                        }
+                                        title={
+                                            !canUseAI
+                                                ? "AI is disabled or permission is missing"
+                                                : activeWorkflowScope === "org" && !canManageAutomation
+                                                    ? "Requires manage automation permission"
+                                                    : "Generate workflow with AI"
+                                        }
+                                        render={
+                                            canUseAI &&
+                                            !(activeWorkflowScope === "org" && !canManageAutomation)
+                                                ? (
+                                                    <Link
+                                                        href={`/automation/ai-builder?mode=workflow&scope=${activeWorkflowScope}`}
+                                                    />
+                                                )
+                                                : undefined
+                                        }
+                                    >
+                                        <SparklesIcon className="mr-2 size-4" />
+                                        Generate with AI
+                                    </Button>
+                                    <Button onClick={() => handleCreate(activeWorkflowScope)}>
+                                        <PlusIcon className="mr-2 size-4" />
+                                        {activeWorkflowScope === "personal"
+                                            ? "Create Workflow"
+                                            : "Create Org Workflow"}
+                                    </Button>
+                                </div>
                             )}
                         </div>
 

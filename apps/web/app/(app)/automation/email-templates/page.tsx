@@ -50,6 +50,7 @@ import {
     UserIcon,
     BuildingIcon,
     LockIcon,
+    SparklesIcon,
 } from "lucide-react"
 import DOMPurify from "dompurify"
 import {
@@ -74,6 +75,8 @@ import { RichTextEditor } from "@/components/rich-text-editor"
 import type { EmailTemplateListItem, EmailTemplateScope } from "@/lib/api/email-templates"
 import { toast } from "sonner"
 import { useAuth } from "@/lib/auth-context"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
+import Link from "@/components/app-link"
 
 // =============================================================================
 // Signature Override Field Component
@@ -485,6 +488,9 @@ function TemplateCard({
 export default function EmailTemplatesPage() {
     const { user } = useAuth()
     const isAdmin = user?.role === "admin" || user?.role === "developer"
+    const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
+    const permissions = effectivePermissions?.permissions || []
+    const canUseAI = Boolean(user?.ai_enabled) && permissions.includes("use_ai_assistant")
 
     const [activeTab, setActiveTab] = useState("personal")
     const [showAllPersonal, setShowAllPersonal] = useState(false)
@@ -815,18 +821,41 @@ export default function EmailTemplatesPage() {
             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <div className="flex h-16 items-center justify-between px-6">
                     <h1 className="text-2xl font-semibold">Email Templates</h1>
-                    {activeTab === "personal" && (
-                        <Button onClick={() => handleOpenModal(undefined, "personal")}>
-                            <PlusIcon className="mr-2 size-4" />
-                            Create Template
-                        </Button>
-                    )}
-                    {activeTab === "org" && isAdmin && (
-                        <Button onClick={() => handleOpenModal(undefined, "org")}>
-                            <PlusIcon className="mr-2 size-4" />
-                            Create Org Template
-                        </Button>
-                    )}
+                    <div className="flex items-center gap-2">
+                        {activeTab === "personal" && (
+                            <>
+                                <Button
+                                    variant="outline"
+                                    disabled={!canUseAI}
+                                    title={
+                                        !canUseAI
+                                            ? "AI is disabled or permission is missing"
+                                            : "Generate email template with AI"
+                                    }
+                                    render={
+                                        canUseAI
+                                            ? (
+                                                <Link href="/automation/ai-builder?mode=email_template" />
+                                            )
+                                            : undefined
+                                    }
+                                >
+                                    <SparklesIcon className="mr-2 size-4" />
+                                    Generate with AI
+                                </Button>
+                                <Button onClick={() => handleOpenModal(undefined, "personal")}>
+                                    <PlusIcon className="mr-2 size-4" />
+                                    Create Template
+                                </Button>
+                            </>
+                        )}
+                        {activeTab === "org" && isAdmin && (
+                            <Button onClick={() => handleOpenModal(undefined, "org")}>
+                                <PlusIcon className="mr-2 size-4" />
+                                Create Org Template
+                            </Button>
+                        )}
+                    </div>
                 </div>
             </div>
 

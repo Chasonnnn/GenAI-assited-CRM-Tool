@@ -8,6 +8,22 @@ vi.mock("@/lib/auth-context", () => ({
     useAuth: () => mockUseAuth(),
 }))
 
+vi.mock("@/lib/hooks/use-permissions", () => ({
+    useEffectivePermissions: () => ({ data: { permissions: [] } }),
+}))
+
+vi.mock("next/navigation", () => ({
+    useRouter: () => ({
+        push: vi.fn(),
+        replace: vi.fn(),
+        back: vi.fn(),
+        prefetch: vi.fn(),
+    }),
+    useSearchParams: () => ({
+        get: vi.fn(() => null),
+    }),
+}))
+
 vi.mock("@/lib/hooks/use-email-templates", () => ({
     useEmailTemplates: () => ({ data: [], isLoading: false }),
     useEmailTemplate: () => ({ data: null, isLoading: false }),
