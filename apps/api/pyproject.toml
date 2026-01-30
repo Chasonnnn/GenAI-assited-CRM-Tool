@@ -4,7 +4,7 @@ name = "surrogacy-force-api"
 version = "0.0.0"
 requires-python = ">=3.11"
 dependencies = [
-    "alembic==1.18.1",
+    "alembic==1.18.3",
     "annotated-doc==0.0.4",
     "annotated-types==0.7.0",
     "anyio==4.12.1",
@@ -20,7 +20,7 @@ dependencies = [
     "pydantic-settings==2.12.0",
     "python-dotenv==1.2.1",
     "pyyaml==6.0.3",
-    "sqlalchemy==2.0.45",
+    "sqlalchemy==2.0.46",
     "starlette==0.50.0",
     "typing-extensions==4.15.0",
     "typing-inspection==0.4.2",
@@ -31,9 +31,9 @@ dependencies = [
 
     # Auth dependencies
     "httpx==0.28.1",
-    "pyjwt==2.10.1",
-    "google-auth==2.47.0",
-    "google-genai==1.58.0",
+    "pyjwt==2.11.0",
+    "google-auth==2.48.0",
+    "google-genai==1.61.0",
     "requests==2.32.5",
     "email-validator==2.3.0",
 
@@ -41,16 +41,16 @@ dependencies = [
     "nh3==0.3.2",
 
     # Email
-    "resend==2.19.0",
+    "resend==2.21.0",
 
     # Encryption (for Meta page tokens)
-    "cryptography==46.0.3",
+    "cryptography==46.0.4",
 
     # Rate limiting
     "slowapi==0.1.9",
 
     # Error tracking (optional)
-    "sentry-sdk[fastapi]==2.49.0",
+    "sentry-sdk[fastapi]==2.51.0",
     "google-cloud-logging==3.13.0",
     "google-cloud-error-reporting==1.14.0",
 
@@ -65,7 +65,7 @@ dependencies = [
     "opentelemetry-instrumentation-sqlalchemy==0.60b1",
 
     # Protobuf (avoid deprecated PyType_Spec usage warnings in Python 3.14+)
-    "protobuf==6.33.4",
+    "protobuf==6.33.5",
 
     # Timezone support (for containers without system tzdata)
     "tzdata==2025.3",
@@ -75,7 +75,7 @@ dependencies = [
     "redis==7.1.0",
 
     # Export storage (S3)
-    "boto3==1.42.29",
+    "boto3==1.42.39",
 
     # Image processing (EXIF stripping)
     "pillow>=10.2.0",
@@ -84,7 +84,7 @@ dependencies = [
     # MFA/TOTP support
     "pyotp==2.9.0",
     "duo_universal==2.2.0",
-    "playwright==1.57.0",
+    "playwright==1.58.0",
 
     # Session tracking (user agent parsing)
     "user-agents==2.2.0",
