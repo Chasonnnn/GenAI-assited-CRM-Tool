@@ -17,7 +17,6 @@ import {
     EmailSendRequest,
     EmailTemplateCopyRequest,
     EmailTemplateShareRequest,
-    EmailTemplateScope,
     ListTemplatesParams,
 } from '@/lib/api/email-templates'
 

@@ -43,6 +43,21 @@ class EmailTemplate(Base):
         # Partial unique indexes are created in migration
         # Org templates: unique (org_id, name) WHERE scope = 'org'
         # Personal templates: unique (org_id, owner_user_id, name) WHERE scope = 'personal'
+        Index(
+            "uq_email_template_org_name",
+            "organization_id",
+            "name",
+            unique=True,
+            postgresql_where=text("scope = 'org'"),
+        ),
+        Index(
+            "uq_email_template_personal_name",
+            "organization_id",
+            "owner_user_id",
+            "name",
+            unique=True,
+            postgresql_where=text("scope = 'personal'"),
+        ),
         Index("idx_email_templates_org", "organization_id", "is_active"),
         Index("idx_email_templates_scope", "organization_id", "scope", "owner_user_id"),
     )
@@ -67,14 +82,25 @@ class EmailTemplate(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
 
     # Scope: 'org' (shared) or 'personal' (user-owned)
-    scope: Mapped[str] = mapped_column(String(20), server_default=text("'org'"), nullable=False)
+    scope: Mapped[str] = mapped_column(
+        String(20),
+        server_default=text("'org'"),
+        nullable=False,
+        comment="Template scope: 'org' or 'personal'",
+    )
     # Owner for personal templates (NULL for org templates)
     owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        comment="Owner for personal templates (NULL for org templates)",
     )
     # Source template when copied or shared
     source_template_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("email_templates.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("email_templates.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Source template when copied/shared",
     )
 
     # System template fields (idempotent seeding/upgrades)

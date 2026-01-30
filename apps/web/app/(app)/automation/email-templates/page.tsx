@@ -34,7 +34,6 @@ import {
 import {
     PlusIcon,
     MoreVerticalIcon,
-    MailIcon,
     EditIcon,
     TrashIcon,
     EyeIcon,
@@ -824,25 +823,25 @@ export default function EmailTemplatesPage() {
                     <div className="flex items-center gap-2">
                         {activeTab === "personal" && (
                             <>
-                                <Button
-                                    variant="outline"
-                                    disabled={!canUseAI}
-                                    title={
-                                        !canUseAI
-                                            ? "AI is disabled or permission is missing"
-                                            : "Generate email template with AI"
-                                    }
-                                    render={
-                                        canUseAI
-                                            ? (
-                                                <Link href="/automation/ai-builder?mode=email_template" />
-                                            )
-                                            : undefined
-                                    }
-                                >
-                                    <SparklesIcon className="mr-2 size-4" />
-                                    Generate with AI
-                                </Button>
+                                {canUseAI ? (
+                                    <Button
+                                        variant="outline"
+                                        title="Generate email template with AI"
+                                        render={<Link href="/automation/ai-builder?mode=email_template" />}
+                                    >
+                                        <SparklesIcon className="mr-2 size-4" />
+                                        Generate with AI
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        variant="outline"
+                                        disabled
+                                        title="AI is disabled or permission is missing"
+                                    >
+                                        <SparklesIcon className="mr-2 size-4" />
+                                        Generate with AI
+                                    </Button>
+                                )}
                                 <Button onClick={() => handleOpenModal(undefined, "personal")}>
                                     <PlusIcon className="mr-2 size-4" />
                                     Create Template
