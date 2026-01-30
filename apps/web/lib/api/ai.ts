@@ -107,18 +107,6 @@ export interface ChatResponse {
     assistant_message_id?: string;
 }
 
-export interface ChatJobResponse {
-    job_id: string;
-    status: string;
-}
-
-export interface ChatJobStatusResponse {
-    job_id: string;
-    status: string;
-    error?: string | null;
-    result?: ChatResponse | null;
-}
-
 export interface ActionApprovalResult {
     success: boolean;
     action_type: string;
@@ -164,23 +152,7 @@ export async function acceptConsent(): Promise<ConsentAcceptResponse> {
 // ============================================================================
 
 export async function sendChatMessage(request: ChatRequest): Promise<ChatResponse> {
-    const job = await api.post<ChatJobResponse>('/ai/chat/async', request);
-    const jobId = job.job_id;
-
-    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-    for (let attempt = 0; attempt < 60; attempt += 1) {
-        const status = await api.get<ChatJobStatusResponse>(`/ai/chat/jobs/${jobId}`);
-        if (status.status === 'completed' && status.result) {
-            return status.result;
-        }
-        if (status.status === 'failed') {
-            throw new Error(status.error || 'AI chat failed');
-        }
-        await sleep(1000);
-    }
-
-    throw new Error('AI chat timed out');
+    return api.post<ChatResponse>('/ai/chat', request);
 }
 
 export async function getConversation(entityType: string, entityId: string): Promise<AIConversation> {

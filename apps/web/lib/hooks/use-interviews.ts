@@ -356,6 +356,7 @@ export function useRequestTranscription() {
                 queryKey: interviewKeys.transcription(interviewId, attachmentId)
             });
             queryClient.invalidateQueries({ queryKey: interviewKeys.attachments(interviewId) });
+            queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interviewId) });
         },
     });
 }

@@ -44,7 +44,6 @@ from app.schemas.interview import (
     TranscriptionRequest,
     TranscriptionStatusRead,
 )
-from app.db.enums import JobType
 from app.services import (
     attachment_service,
     ai_interview_service,
@@ -52,7 +51,6 @@ from app.services import (
     interview_attachment_service,
     interview_note_service,
     interview_service,
-    job_service,
     org_service,
     pdf_export_service,
 )
@@ -597,16 +595,18 @@ def unlink_attachment(
 @router.post(
     "/interviews/{interview_id}/attachments/{attachment_id}/transcribe",
     response_model=TranscriptionStatusRead,
-    dependencies=[Depends(require_csrf_header)],
+    dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
-def request_transcription(
+async def request_transcription(
     interview_id: UUID,
     attachment_id: UUID,
     data: TranscriptionRequest | None = None,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Request AI transcription for an audio/video attachment."""
+    """Request AI transcription for an audio/video attachment (sync)."""
+    from app.services import transcription_service
+
     interview, case = _check_interview_access(db, session.org_id, interview_id, session)
     _check_can_modify_interview(case, session)
 
@@ -624,28 +624,29 @@ def request_transcription(
     if link.transcription_status in ["pending", "processing"]:
         raise HTTPException(status_code=400, detail="Transcription already in progress")
 
-    # Update status to pending
-    interview_attachment_service.update_transcription_status(db, link, status="pending")
-    job_service.schedule_job(
-        db=db,
-        org_id=session.org_id,
-        job_type=JobType.INTERVIEW_TRANSCRIPTION,
-        payload={
-            "interview_attachment_id": str(link.id),
-            "interview_id": str(interview_id),
-            "attachment_id": str(attachment_id),
-            "language": data.language if data else "en",
-            "prompt": data.prompt if data else None,
-            "requested_by_user_id": str(session.user_id),
-        },
-    )
-
-    return TranscriptionStatusRead(
-        status="pending",
-        progress=None,
-        result=None,
-        error=None,
-    )
+    try:
+        result = await transcription_service.request_transcription(
+            db=db,
+            interview_attachment=link,
+            language=data.language if data else "en",
+            prompt=data.prompt if data else None,
+            requested_by_user_id=session.user_id,
+        )
+        db.commit()
+        return TranscriptionStatusRead(
+            status="completed",
+            progress=100,
+            result=result.get("result"),
+            error=None,
+        )
+    except transcription_service.TranscriptionError as e:
+        db.commit()  # Commit the failed status
+        return TranscriptionStatusRead(
+            status="failed",
+            progress=None,
+            result=None,
+            error=str(e),
+        )
 
 
 @router.get(
