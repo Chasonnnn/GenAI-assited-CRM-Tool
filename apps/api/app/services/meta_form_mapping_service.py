@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -55,6 +57,110 @@ def list_forms(db: Session, org_id: UUID) -> list[MetaForm]:
             .order_by(MetaForm.updated_at.desc())
         ).all()
     )
+
+
+def upsert_form_from_payload(
+    db: Session,
+    org_id: UUID,
+    *,
+    form_external_id: str | None,
+    form_name: str | None,
+    field_keys: list[str] | None = None,
+    page_id: str | None = None,
+) -> MetaForm | None:
+    """Create or update a Meta form definition from inbound payload fields."""
+    if not form_external_id:
+        return None
+
+    form = get_form_by_external_id(db, org_id, form_external_id)
+    if not form:
+        form = MetaForm(
+            organization_id=org_id,
+            page_id=page_id or "zapier",
+            form_external_id=form_external_id,
+            form_name=form_name or f"Form {form_external_id}",
+        )
+        db.add(form)
+        db.flush()
+    else:
+        if form_name and form.form_name != form_name:
+            form.form_name = form_name
+        if page_id and form.page_id in {"zapier", "unknown"} and form.page_id != page_id:
+            form.page_id = page_id
+
+    unique_keys: list[str] = []
+    seen_keys: set[str] = set()
+    for key in field_keys or []:
+        if not key:
+            continue
+        key_str = str(key)
+        if key_str in seen_keys:
+            continue
+        seen_keys.add(key_str)
+        unique_keys.append(key_str)
+
+    questions: list[dict[str, str]] = []
+    for key in unique_keys:
+        label = key.replace("_", " ").strip().title()
+        questions.append({"key": key, "label": label, "type": "text"})
+
+    schema_json = json.dumps(questions, sort_keys=True)
+    schema_hash = hashlib.sha256(schema_json.encode()).hexdigest()
+
+    existing_version = db.scalar(
+        select(MetaFormVersion).where(
+            MetaFormVersion.form_id == form.id,
+            MetaFormVersion.schema_hash == schema_hash,
+        )
+    )
+    if not existing_version:
+        key_set = {item.get("key") or item.get("name") for item in questions}
+        versions = list(
+            db.scalars(select(MetaFormVersion).where(MetaFormVersion.form_id == form.id)).all()
+        )
+        current = (
+            db.get(MetaFormVersion, form.current_version_id) if form.current_version_id else None
+        )
+        if current:
+            current_keys = {
+                item.get("key") or item.get("name") for item in (current.field_schema or [])
+            }
+            if key_set.issubset(current_keys):
+                existing_version = current
+        if not existing_version:
+            for version in versions:
+                version_keys = {
+                    item.get("key") or item.get("name") for item in (version.field_schema or [])
+                }
+                if key_set.issubset(version_keys):
+                    existing_version = version
+                    break
+
+    if not existing_version:
+        max_version = (
+            db.scalar(
+                select(func.max(MetaFormVersion.version_number)).where(
+                    MetaFormVersion.form_id == form.id
+                )
+            )
+            or 0
+        )
+        new_version = MetaFormVersion(
+            form_id=form.id,
+            version_number=max_version + 1,
+            field_schema=questions,
+            schema_hash=schema_hash,
+        )
+        db.add(new_version)
+        db.flush()
+        form.current_version_id = new_version.id
+        if form.mapping_version_id and form.mapping_version_id != new_version.id:
+            form.mapping_status = "outdated"
+    else:
+        form.current_version_id = existing_version.id
+
+    form.updated_at = datetime.now(timezone.utc)
+    return form
 
 
 def get_form_version(db: Session, form: MetaForm) -> MetaFormVersion | None:

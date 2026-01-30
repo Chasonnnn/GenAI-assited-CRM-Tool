@@ -252,3 +252,75 @@ async def test_zapier_test_endpoint_creates_test_lead(authed_client, db, test_or
     surrogate = db.get(Surrogate, body["surrogate_id"])
     assert surrogate is not None
     assert surrogate.import_metadata.get("zapier_test") is True
+
+
+@pytest.mark.asyncio
+async def test_zapier_webhook_stores_raw_payload_and_creates_form(client, db, test_org):
+    from app.db.models import MetaForm, MetaFormVersion, MetaLead, Task
+    from app.services import zapier_settings_service
+
+    settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    secret = zapier_settings_service.decrypt_webhook_secret(settings.webhook_secret_encrypted)
+
+    payload = [
+        {
+            "lead_id": "lead_zapier_1",
+            "form_id": "zap_form_1",
+            "form_name": "Zapier Intake",
+            "field_data": [
+                {"name": "full_name", "values": ["Zapier User"]},
+                {"name": "email", "values": ["zapier@example.com"]},
+                {"name": "state", "values": ["CA"]},
+                {"name": "created_time", "values": ["2026-01-20T12:00:00Z"]},
+            ],
+        }
+    ]
+
+    res = await client.post(
+        f"/webhooks/zapier/{settings.webhook_id}",
+        json=payload,
+        headers={"X-Webhook-Token": secret},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["status"] == "awaiting_mapping"
+    assert body["surrogate_id"] is None
+
+    lead = (
+        db.query(MetaLead)
+        .filter(
+            MetaLead.organization_id == test_org.id,
+            MetaLead.meta_lead_id == "lead_zapier_1",
+        )
+        .first()
+    )
+    assert lead is not None
+    assert lead.raw_payload == payload[0]
+    assert lead.meta_form_id == "zap_form_1"
+
+    form = (
+        db.query(MetaForm)
+        .filter(
+            MetaForm.organization_id == test_org.id,
+            MetaForm.form_external_id == "zap_form_1",
+        )
+        .first()
+    )
+    assert form is not None
+    assert form.form_name == "Zapier Intake"
+    assert form.current_version_id is not None
+
+    version = db.get(MetaFormVersion, form.current_version_id)
+    assert version is not None
+    schema_keys = {item.get("key") for item in version.field_schema}
+    assert {"full_name", "email", "state", "created_time"}.issubset(schema_keys)
+
+    task = (
+        db.query(Task)
+        .filter(
+            Task.organization_id == test_org.id,
+            Task.title == f"Review Meta form mapping: {form.form_name}",
+        )
+        .first()
+    )
+    assert task is not None

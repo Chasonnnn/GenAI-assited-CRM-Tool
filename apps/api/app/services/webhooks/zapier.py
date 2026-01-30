@@ -12,7 +12,7 @@ from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.db.models import MetaLead, Organization
-from app.services import meta_api, meta_lead_service
+from app.services import meta_api, meta_lead_service, meta_form_mapping_service
 from app.services import zapier_settings_service
 from app.utils.datetime_parsing import parse_datetime_with_timezone
 
@@ -45,6 +45,22 @@ def _coerce_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
     return {}
+
+
+def _unwrap_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        if isinstance(value.get("data"), dict):
+            return value["data"]
+        if isinstance(value.get("lead"), dict):
+            return value["lead"]
+    return value
+
+
+def _normalize_payload(value: Any) -> dict[str, Any]:
+    unwrapped = _unwrap_payload(value)
+    if isinstance(unwrapped, dict):
+        return unwrapped
+    return {"payload": unwrapped}
 
 
 def _get_any(payload: dict[str, Any], raw_fields: dict[str, Any], keys: tuple[str, ...]) -> Any:
@@ -146,9 +162,19 @@ def process_zapier_payload(
     org_id: Any,
     payload: dict[str, Any],
     *,
+    raw_payload: dict | list | None = None,
     test_mode: bool = False,
 ) -> dict[str, Any]:
     field_data_list = _build_field_data_list(payload)
+    field_keys = [
+        str(item.get("name"))
+        for item in field_data_list
+        if isinstance(item, dict) and item.get("name")
+    ]
+    if (
+        payload.get("created_time") or payload.get("submitted_at") or payload.get("submission_time")
+    ) and "created_time" not in field_keys:
+        field_keys.append("created_time")
     field_data = meta_api.normalize_field_data(field_data_list)
     field_data_raw = meta_api.extract_field_data_raw(field_data_list)
 
@@ -209,19 +235,32 @@ def process_zapier_payload(
         )
         meta_created_time = parsed.value
 
+    meta_form_id = (
+        str(tracking.get("form_id")) if tracking.get("form_id") else payload.get("form_id")
+    )
+    meta_page_id = (
+        str(tracking.get("page_id")) if tracking.get("page_id") else payload.get("page_id")
+    )
+    meta_form_name = tracking.get("form_name") or payload.get("form_name")
+    if meta_form_id:
+        meta_form_mapping_service.upsert_form_from_payload(
+            db,
+            org_id,
+            form_external_id=str(meta_form_id),
+            form_name=str(meta_form_name) if meta_form_name else None,
+            field_keys=field_keys,
+            page_id=str(meta_page_id) if meta_page_id else None,
+        )
+
     meta_lead, error = meta_lead_service.store_meta_lead(
         db=db,
         org_id=org_id,
         meta_lead_id=str(lead_id or f"zapier-{uuid.uuid4()}"),
         field_data=field_data,
         field_data_raw=field_data_raw,
-        raw_payload=None,
-        meta_form_id=str(tracking.get("form_id"))
-        if tracking.get("form_id")
-        else payload.get("form_id"),
-        meta_page_id=str(tracking.get("page_id"))
-        if tracking.get("page_id")
-        else payload.get("page_id"),
+        raw_payload=raw_payload if raw_payload is not None else payload,
+        meta_form_id=str(meta_form_id) if meta_form_id else None,
+        meta_page_id=str(meta_page_id) if meta_page_id else None,
         meta_created_time=meta_created_time,
     )
     if error:
@@ -260,15 +299,37 @@ class ZapierWebhookHandler:
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
-        if not isinstance(payload, dict):
-            raise HTTPException(status_code=400, detail="Payload must be an object")
-
-        if isinstance(payload.get("data"), dict):
+        if isinstance(payload, dict) and isinstance(payload.get("data"), list):
             payload = payload["data"]
-        elif isinstance(payload.get("lead"), dict):
+        elif isinstance(payload, dict) and isinstance(payload.get("lead"), list):
             payload = payload["lead"]
 
-        result = process_zapier_payload(db, settings.organization_id, payload)
+        if isinstance(payload, list):
+            if not payload:
+                return {"status": "ignored", "processed": 0}
+            results = []
+            for item in payload:
+                normalized = _normalize_payload(item)
+                results.append(
+                    process_zapier_payload(
+                        db,
+                        settings.organization_id,
+                        normalized,
+                        raw_payload=item if isinstance(item, (dict, list)) else payload,
+                    )
+                )
+            if len(results) == 1:
+                result = results[0]
+            else:
+                result = {"status": "ok", "processed": len(results), "results": results}
+        else:
+            normalized = _normalize_payload(payload)
+            result = process_zapier_payload(
+                db,
+                settings.organization_id,
+                normalized,
+                raw_payload=payload if isinstance(payload, (dict, list)) else None,
+            )
 
         logger.info("Zapier lead ingested for org=%s", settings.organization_id)
 
