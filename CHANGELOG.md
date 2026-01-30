@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.46.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.45.0...surrogacy-crm-platform-v0.46.0) (2026-01-30)
+
+
+### Features
+
+* **api:** refactor AI provider and transcription architecture ([bee397f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bee397f34491c60c132f327ab11b9c64dc4f1808))
+* enhance import system with validation modes and flexible transformers ([8da37f7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8da37f70bda9da78345204673967bd975ab44495))
+
+
+### Maintenance
+
+* **api:** update dependencies in pyproject.toml and uv.lock ([d4ad435](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d4ad4357f2be04b5aefe9f7081150a5d73e7a71c))
+* update .gitignore to include .pnpm-store ([eda0cf6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/eda0cf6468257e030441d772dc66e300bf7c7fba))
+* update api dependencies and cleanup documentation ([fb2d72b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fb2d72b7cabdf8acef2c93917c806c6c174d3264))
+* **web:** update dependencies and pnpm peer dependency rules ([475d1d5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/475d1d52b64b97d0bf53827f3a111911bb664f88))
+
 ## [0.45.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.44.0...surrogacy-crm-platform-v0.45.0) (2026-01-30)
 
 
