@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useCallback } from "react"
 import type { CommentInteraction } from "../context"
 
 const COMMENT_HOVER_CLASSES = "bg-amber-200 dark:bg-amber-800/50"
@@ -18,7 +18,7 @@ export function useInteractionClasses(
     const prevHoveredRef = useRef<string | null>(null)
     const prevFocusedRef = useRef<string | null>(null)
 
-    const toggleSpanClasses = (
+    const toggleSpanClasses = useCallback((
         commentId: string,
         classNames: string,
         enabled: boolean
@@ -35,7 +35,7 @@ export function useInteractionClasses(
                 span.classList.remove(className)
             }
         }
-    }
+    }, [transcriptRef])
 
     // Handle hover classes
     useEffect(() => {
@@ -49,7 +49,7 @@ export function useInteractionClasses(
             toggleSpanClasses(currentHovered, COMMENT_HOVER_CLASSES, true)
         }
         prevHoveredRef.current = currentHovered
-    }, [interaction])
+    }, [interaction, toggleSpanClasses])
 
     // Handle focus classes
     useEffect(() => {
@@ -63,5 +63,5 @@ export function useInteractionClasses(
             toggleSpanClasses(currentFocused, COMMENT_FOCUS_CLASSES, true)
         }
         prevFocusedRef.current = currentFocused
-    }, [interaction])
+    }, [interaction, toggleSpanClasses])
 }

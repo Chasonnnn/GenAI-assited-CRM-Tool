@@ -11,7 +11,6 @@ import { SurrogateDetailProvider } from "@/components/surrogates/detail/Surrogat
 import {
     SurrogateDetailLayoutProvider,
     useSurrogateDetailLayout,
-    type TabValue,
 } from "./context"
 import { HeaderActions } from "./HeaderActions"
 import { Dialogs } from "./dialogs"
@@ -30,7 +29,6 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
         noteCount,
         taskCount,
         currentTab,
-        allowedTabs,
         setTab,
         canViewJourney,
         canViewProfile,
