@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.44.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.43.0...surrogacy-crm-platform-v0.44.0) (2026-01-30)
+
+
+### Features
+
+* add baby gender and weight tracking for surrogate delivery outcome ([fdc5366](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fdc5366add93ed56fa90f1c7d967a76d50c3339c))
+* add client-safe redacted journey export ([a013558](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a0135580bc7a95e21a00a37bc748dd6a804bce55))
+* add delivery tracking and future-only scheduling for campaigns ([2bb5c2c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2bb5c2ca3dbb0cf8a7c1647b78b94ad40f39ea08))
+* enhance Duo MFA security with state cookies and UA hashing ([d46683a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d46683a337c37f374a0bce0eb1509347f4f19947))
+* enhance surrogate import workflow and error reporting ([ecade9d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ecade9d64f85c497078db901be7d500151dda46f))
+* enhance workflow engine with multi-entity testing support ([a41a25d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a41a25d16651e5aebb72321a3f69ec94ffe8096c))
+* enhance Zapier lead ingestion with batch support and auto-mapping ([44c4e87](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/44c4e87f7c618354617859dae6a4f2b9cf02d296))
+* expand workflow engine to support multi-entity testing ([bbf83ef](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bbf83ef19dba1ed8eb49a8c0a0213d95d7d493f5))
+* improve workflow engine reliability and automation UI ([2225fb4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2225fb4f8abce7921b13b9b2403d8fa2c5ddf9c5))
+* modernize Meta integration and OAuth handlers ([a42225f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a42225f82c07cbdc5d366f592103c830fe4d232b))
+* overhaul tasks page with modular components ([7365c12](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7365c1233bf523dc372063dfc78eb97ed6f76f18))
+* sync organization AI status and improve integration settings UI ([bb316f9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bb316f910a980bac977e06586b4eb83eb2de076c))
+
+
+### Bug Fixes
+
+* improve accessibility and consistency across settings and automation ([c744acc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c744acc09a512aa1647b988c46e3a6978970f55e))
+* preserve handler signature in FailOpenLimiter decorator ([cd344b1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cd344b1c3d150c3c529d0fc10c18255b4b042282))
+* refine automation page error handling and UI helpers ([c1933b0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c1933b0f825fc256a8187bc0cd0ea5e10ba9c32b))
+* **web:** add status icons and improve accessibility on integrations page ([56f0f6a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/56f0f6a087e7691a07444962d0ecb84c49c7ea55))
+* **web:** broad accessibility and consistency audit across settings pages ([00f4585](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/00f4585be381a4eea6737ba737f0321cde9c378f))
+* **web:** finalize automation page testing and state logic ([1cec3fa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1cec3faa5419db1bf11dc3433e23338a3762c058))
+* **web:** minor type and state fixups for tasks and ops pages ([fc439b2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fc439b29b44815faf5ea1b30f0f4902ac2ed9bc9))
+
+
+### Maintenance
+
+* update project metadata and core infrastructure ([18f6a17](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/18f6a172fe0c7f1a31e2666b4e5107216d93ac9f))
+
 ## [0.43.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.42.0...surrogacy-crm-platform-v0.43.0) (2026-01-29)
 
 
