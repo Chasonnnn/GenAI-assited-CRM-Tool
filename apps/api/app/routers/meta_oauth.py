@@ -10,7 +10,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -30,7 +29,6 @@ from app.core.security import (
     verify_oauth_state,
 )
 from app.db.enums import AuditEventType
-from app.db.models import MetaAdAccount, MetaOAuthConnection, MetaPageMapping
 from app.schemas.auth import UserSession
 from app.services import (
     audit_service,
@@ -410,35 +408,10 @@ def disconnect_connection(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Connection not found")
 
     # Unlink ad accounts - they become tokenless
-    unlinked_accounts = (
-        db.execute(
-            update(MetaAdAccount)
-            .where(MetaAdAccount.oauth_connection_id == connection_id)
-            .values(oauth_connection_id=None)
-            .returning(MetaAdAccount.id)
-        )
-        .scalars()
-        .all()
-    )
+    unlinked_accounts = meta_admin_service.unlink_accounts_by_connection(db, connection_id)
 
     # Unlink pages and disable lead ingestion
-    unlinked_pages = (
-        db.execute(
-            update(MetaPageMapping)
-            .where(MetaPageMapping.oauth_connection_id == connection_id)
-            .values(
-                oauth_connection_id=None,
-                access_token_encrypted=None,
-                token_expires_at=None,
-                is_active=False,
-                last_error=None,
-                last_error_at=None,
-            )
-            .returning(MetaPageMapping.id)
-        )
-        .scalars()
-        .all()
-    )
+    unlinked_pages = meta_page_service.unlink_pages_by_connection(db, connection_id)
 
     # Deactivate connection (preserve for history)
     meta_oauth_service.deactivate_oauth_connection(db, connection)
@@ -516,7 +489,7 @@ async def list_available_assets(
     def get_owner_name(asset) -> str | None:
         if not asset or not asset.oauth_connection_id:
             return None
-        conn = db.get(MetaOAuthConnection, asset.oauth_connection_id)
+        conn = meta_oauth_service.get_oauth_connection_by_id(db, asset.oauth_connection_id)
         return conn.meta_user_name if conn else None
 
     # Build ad account options
@@ -610,14 +583,18 @@ async def connect_assets(
 
         if existing and existing.oauth_connection_id != connection.id:
             if not data.overwrite_existing:
-                old_conn = db.get(MetaOAuthConnection, existing.oauth_connection_id)
+                old_conn = meta_oauth_service.get_oauth_connection_by_id(
+                    db, existing.oauth_connection_id
+                )
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"Asset {account_id} is connected by {old_conn.meta_user_name if old_conn else 'another user'}",
                 )
 
             # Log overwrite
-            old_conn = db.get(MetaOAuthConnection, existing.oauth_connection_id)
+            old_conn = meta_oauth_service.get_oauth_connection_by_id(
+                db, existing.oauth_connection_id
+            )
             results["overwrites"].append(
                 {
                     "asset_id": account_id,
@@ -691,13 +668,17 @@ async def connect_assets(
         if existing:
             if existing.oauth_connection_id != connection.id:
                 if not data.overwrite_existing:
-                    old_conn = db.get(MetaOAuthConnection, existing.oauth_connection_id)
+                    old_conn = meta_oauth_service.get_oauth_connection_by_id(
+                        db, existing.oauth_connection_id
+                    )
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
                         detail=f"Page {page_id} is connected by {old_conn.meta_user_name if old_conn else 'another user'}",
                     )
 
-                old_conn = db.get(MetaOAuthConnection, existing.oauth_connection_id)
+                old_conn = meta_oauth_service.get_oauth_connection_by_id(
+                    db, existing.oauth_connection_id
+                )
                 results["overwrites"].append(
                     {
                         "asset_id": page_id,
@@ -716,15 +697,15 @@ async def connect_assets(
             existing.last_error_at = None
         else:
             # Create new page mapping
-            new_page = MetaPageMapping(
-                organization_id=session.org_id,
+            meta_page_service.create_mapping(
+                db=db,
+                org_id=session.org_id,
                 page_id=page_id,
                 page_name=page_name,
-                oauth_connection_id=connection.id,
                 access_token_encrypted=encrypted_page_token,
-                is_active=True,
+                oauth_connection_id=connection.id,
+                commit=False,
             )
-            db.add(new_page)
 
         results["pages"].append(page_id)
 

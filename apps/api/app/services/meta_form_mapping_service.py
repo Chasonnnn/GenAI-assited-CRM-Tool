@@ -59,6 +59,20 @@ def list_forms(db: Session, org_id: UUID) -> list[MetaForm]:
     )
 
 
+def list_active_forms(db: Session, org_id: UUID) -> list[MetaForm]:
+    """List active Meta forms for an organization."""
+    return list(
+        db.scalars(
+            select(MetaForm)
+            .where(
+                MetaForm.organization_id == org_id,
+                MetaForm.is_active.is_(True),
+            )
+            .order_by(MetaForm.created_at.desc())
+        ).all()
+    )
+
+
 def upsert_form_from_payload(
     db: Session,
     org_id: UUID,

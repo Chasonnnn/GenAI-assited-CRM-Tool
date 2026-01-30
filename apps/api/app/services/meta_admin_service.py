@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.db.models import MetaAdAccount
@@ -121,3 +121,17 @@ def deactivate_ad_account(db: Session, account: MetaAdAccount) -> None:
     """Soft-delete an ad account (set inactive)."""
     account.is_active = False
     db.commit()
+
+
+def unlink_accounts_by_connection(db: Session, connection_id: UUID) -> list[UUID]:
+    """Unlink all ad accounts from an OAuth connection."""
+    return list(
+        db.execute(
+            update(MetaAdAccount)
+            .where(MetaAdAccount.oauth_connection_id == connection_id)
+            .values(oauth_connection_id=None)
+            .returning(MetaAdAccount.id)
+        )
+        .scalars()
+        .all()
+    )

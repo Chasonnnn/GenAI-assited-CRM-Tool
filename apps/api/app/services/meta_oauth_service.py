@@ -380,6 +380,16 @@ def get_active_oauth_connections(db: Session, org_id: UUID) -> list[MetaOAuthCon
     )
 
 
+def list_active_oauth_connections_any_org(db: Session) -> list[MetaOAuthConnection]:
+    """List active OAuth connections across all organizations."""
+    return (
+        db.query(MetaOAuthConnection)
+        .filter(MetaOAuthConnection.is_active.is_(True))
+        .order_by(MetaOAuthConnection.created_at.desc())
+        .all()
+    )
+
+
 def get_oauth_connection(
     db: Session, connection_id: UUID, org_id: UUID
 ) -> MetaOAuthConnection | None:
@@ -392,6 +402,13 @@ def get_oauth_connection(
         )
         .first()
     )
+
+
+def get_oauth_connection_by_id(
+    db: Session, connection_id: UUID
+) -> MetaOAuthConnection | None:
+    """Get OAuth connection by ID (no org scoping)."""
+    return db.get(MetaOAuthConnection, connection_id)
 
 
 def get_oauth_connection_by_meta_user(

@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
 from app.core.policies import POLICIES
 from app.db.enums import JobType
-from app.db.models import MetaPageMapping, User
 from app.schemas.auth import UserSession
 from app.schemas.meta_forms import (
     MetaFormMappingPreviewResponse,
@@ -20,7 +19,13 @@ from app.schemas.meta_forms import (
     MetaFormSyncRequest,
 )
 from app.schemas.import_template import ColumnSuggestionResponse, ColumnMappingItem
-from app.services import job_service, meta_form_mapping_service, meta_sync_service
+from app.services import (
+    job_service,
+    meta_form_mapping_service,
+    meta_page_service,
+    meta_sync_service,
+    user_service,
+)
 
 
 router = APIRouter(
@@ -40,9 +45,7 @@ def list_meta_forms(
         return []
 
     # Page name lookup
-    pages = (
-        db.query(MetaPageMapping).filter(MetaPageMapping.organization_id == session.org_id).all()
-    )
+    pages = meta_page_service.list_meta_pages(db, session.org_id)
     page_names = {p.page_id: p.page_name for p in pages}
 
     # Lead stats by form_external_id
@@ -50,10 +53,7 @@ def list_meta_forms(
 
     # User lookup for mapping updated by
     user_ids = {f.mapping_updated_by_user_id for f in forms if f.mapping_updated_by_user_id}
-    user_names = {}
-    if user_ids:
-        users = db.query(User).filter(User.id.in_(user_ids)).all()
-        user_names = {u.id: u.display_name for u in users}
+    user_names = user_service.get_display_names_by_ids(db, user_ids)
 
     summaries: list[MetaFormSummary] = []
     for form in forms:
@@ -111,19 +111,13 @@ def preview_meta_form_mapping(
     # Build form summary for response
     lead_stats = meta_form_mapping_service.get_lead_stats(db, session.org_id)
     stats = lead_stats.get(form.form_external_id, {})
-    page = (
-        db.query(MetaPageMapping)
-        .filter(
-            MetaPageMapping.organization_id == session.org_id,
-            MetaPageMapping.page_id == form.page_id,
-        )
-        .first()
-    )
+    page = meta_page_service.get_mapping_by_page_id(db, session.org_id, form.page_id)
 
     updated_by_name = None
     if form.mapping_updated_by_user_id:
-        user = db.query(User).filter(User.id == form.mapping_updated_by_user_id).first()
-        updated_by_name = user.display_name if user else None
+        updated_by_name = user_service.get_display_names_by_ids(
+            db, [form.mapping_updated_by_user_id]
+        ).get(form.mapping_updated_by_user_id)
 
     form_summary = MetaFormSummary(
         id=form.id,

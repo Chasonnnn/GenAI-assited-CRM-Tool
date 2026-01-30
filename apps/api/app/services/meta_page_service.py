@@ -3,6 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.db.models import MetaPageMapping
@@ -101,8 +102,11 @@ def create_mapping(
     org_id: UUID,
     page_id: str,
     page_name: str | None,
-    access_token_encrypted: str,
-    token_expires_at: datetime,
+    access_token_encrypted: str | None,
+    token_expires_at: datetime | None = None,
+    oauth_connection_id: UUID | None = None,
+    *,
+    commit: bool = True,
 ) -> MetaPageMapping:
     """Create a new meta page mapping."""
     mapping = MetaPageMapping(
@@ -111,11 +115,13 @@ def create_mapping(
         page_name=page_name,
         access_token_encrypted=access_token_encrypted,
         token_expires_at=token_expires_at,
+        oauth_connection_id=oauth_connection_id,
         is_active=True,
     )
     db.add(mapping)
-    db.commit()
-    db.refresh(mapping)
+    if commit:
+        db.commit()
+        db.refresh(mapping)
     return mapping
 
 
@@ -148,3 +154,24 @@ def delete_mapping(db: Session, mapping: MetaPageMapping) -> None:
     """Delete a meta page mapping."""
     db.delete(mapping)
     db.commit()
+
+
+def unlink_pages_by_connection(db: Session, connection_id: UUID) -> list[UUID]:
+    """Unlink all pages from an OAuth connection and disable lead ingestion."""
+    return list(
+        db.execute(
+            update(MetaPageMapping)
+            .where(MetaPageMapping.oauth_connection_id == connection_id)
+            .values(
+                oauth_connection_id=None,
+                access_token_encrypted=None,
+                token_expires_at=None,
+                is_active=False,
+                last_error=None,
+                last_error_at=None,
+            )
+            .returning(MetaPageMapping.id)
+        )
+        .scalars()
+        .all()
+    )
