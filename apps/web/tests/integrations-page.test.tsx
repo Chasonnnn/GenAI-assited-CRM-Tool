@@ -1,5 +1,6 @@
+import type { ReactNode } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import IntegrationsPage from '../app/(app)/settings/integrations/page'
 
 const mockRefetch = vi.fn()
@@ -13,6 +14,12 @@ const mockZapierRotate = vi.fn()
 const mockZapierTestLead = vi.fn()
 const mockZapierOutboundUpdate = vi.fn()
 const mockZapierOutboundTest = vi.fn()
+const mockUpdateAISettings = vi.fn()
+const mockTestAIKey = vi.fn()
+const mockAcceptConsent = vi.fn()
+const mockUpdateResendSettings = vi.fn()
+const mockTestResendKey = vi.fn()
+const mockRotateWebhook = vi.fn()
 
 const zapierSettingsData = {
     webhook_url: 'https://api.test/webhooks/zapier/abc',
@@ -27,6 +34,31 @@ const zapierSettingsData = {
         { stage_slug: 'qualified', event_name: 'QualifiedLead', enabled: true },
         { stage_slug: 'matched', event_name: 'ConvertedLead', enabled: true },
     ],
+} as const
+
+const aiSettingsData = {
+    is_enabled: true,
+    provider: 'openai',
+    model: 'gpt-4o-mini',
+    api_key_masked: 'sk-****',
+    vertex_wif: null,
+    vertex_api_key: null,
+    consent_accepted_at: '2026-01-01T00:00:00Z',
+} as const
+
+const resendSettingsData = {
+    email_provider: 'resend',
+    api_key_masked: 're_****',
+    from_email: 'no-reply@surrogacyforce.com',
+    from_name: null,
+    reply_to_email: null,
+    verified_domain: 'surrogacyforce.com',
+    last_key_validated_at: null,
+    default_sender_user_id: null,
+    default_sender_name: null,
+    default_sender_email: null,
+    webhook_url: 'https://api.test/webhooks/resend/abc',
+    current_version: 1,
 } as const
 
 vi.mock('@/lib/hooks/use-ops', () => ({
@@ -45,6 +77,15 @@ vi.mock('next/navigation', () => ({
     }),
 }))
 
+vi.mock('@/components/ui/dialog', () => ({
+    Dialog: ({ open, children }: { open?: boolean; children?: ReactNode }) =>
+        open ? <div data-testid="dialog-root">{children}</div> : null,
+    DialogContent: ({ children }: { children?: ReactNode }) => <div role="dialog">{children}</div>,
+    DialogHeader: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    DialogTitle: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    DialogDescription: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+}))
+
 vi.mock('@/lib/hooks/use-user-integrations', () => ({
     useUserIntegrations: () => ({ data: [], isLoading: false }),
     useConnectZoom: () => ({ mutate: mockConnectZoom, isPending: false }),
@@ -52,6 +93,22 @@ vi.mock('@/lib/hooks/use-user-integrations', () => ({
     useConnectGoogleCalendar: () => ({ mutate: mockConnectGoogleCalendar, isPending: false }),
     useConnectGcp: () => ({ mutate: mockConnectGcp, isPending: false }),
     useDisconnectIntegration: () => ({ mutate: mockDisconnectIntegration, isPending: false }),
+}))
+
+vi.mock('@/lib/hooks/use-ai', () => ({
+    useAISettings: () => ({ data: aiSettingsData, isLoading: false }),
+    useAIConsent: () => ({ data: { consent_text: 'Consent', consent_accepted_at: aiSettingsData.consent_accepted_at, consent_accepted_by: 'Admin' }, isLoading: false }),
+    useAcceptConsent: () => ({ mutateAsync: mockAcceptConsent, isPending: false }),
+    useUpdateAISettings: () => ({ mutateAsync: mockUpdateAISettings, isPending: false }),
+    useTestAPIKey: () => ({ mutateAsync: mockTestAIKey, isPending: false }),
+}))
+
+vi.mock('@/lib/hooks/use-resend', () => ({
+    useResendSettings: () => ({ data: resendSettingsData, isLoading: false }),
+    useUpdateResendSettings: () => ({ mutateAsync: mockUpdateResendSettings, isPending: false }),
+    useTestResendKey: () => ({ mutateAsync: mockTestResendKey, isPending: false }),
+    useRotateWebhook: () => ({ mutateAsync: mockRotateWebhook, isPending: false }),
+    useEligibleSenders: () => ({ data: [], isLoading: false }),
 }))
 
 vi.mock('@/lib/hooks/use-zapier', () => ({
@@ -99,10 +156,38 @@ describe('IntegrationsPage', () => {
 
         expect(screen.getByText('Integrations')).toBeInTheDocument()
         expect(screen.getByText('Meta Lead Ads')).toBeInTheDocument()
-        expect(screen.getByText('Zapier Webhook')).toBeInTheDocument()
-        expect(screen.getByRole('button', { name: /send test lead/i })).toBeInTheDocument()
+        expect(screen.getByText('AI Assistant')).toBeInTheDocument()
+        expect(screen.getByText('Email Delivery')).toBeInTheDocument()
+        expect(screen.getByText('Zapier')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /configure zapier/i })).toBeInTheDocument()
 
         fireEvent.click(screen.getByRole('button', { name: /refresh/i }))
         expect(mockRefetch).toHaveBeenCalled()
+    })
+
+    it('shows status badge in AI dialog header', () => {
+        render(<IntegrationsPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: /configure ai/i }))
+
+        const dialog = screen.getByRole('dialog')
+        expect(within(dialog).getByText('AI Configuration')).toBeInTheDocument()
+        expect(within(dialog).getByText('Enabled', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
+    })
+
+    it('shows status badges on organization integration cards', () => {
+        render(<IntegrationsPage />)
+
+        const aiCard = screen.getByText('AI Assistant').closest('[data-slot="card"]')
+        const emailCard = screen.getByText('Email Delivery').closest('[data-slot="card"]')
+        const zapierCard = screen.getByText('Zapier').closest('[data-slot="card"]')
+
+        expect(aiCard).not.toBeNull()
+        expect(emailCard).not.toBeNull()
+        expect(zapierCard).not.toBeNull()
+
+        expect(within(aiCard as HTMLElement).getByText('Enabled', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
+        expect(within(emailCard as HTMLElement).getByText('Configured', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
+        expect(within(zapierCard as HTMLElement).getByText('Active', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
     })
 })

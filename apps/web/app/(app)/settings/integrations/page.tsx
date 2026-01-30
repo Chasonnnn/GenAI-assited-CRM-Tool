@@ -1787,7 +1787,8 @@ export default function IntegrationsPage() {
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
-                                        <Badge variant={aiStatusVariant} className="w-fit">
+                                        <Badge variant={aiStatusVariant} className="w-fit flex items-center gap-1">
+                                            <AiStatusIcon className="size-3" aria-hidden="true" />
                                             {aiStatusLabel}
                                         </Badge>
                                         <p className="text-xs text-muted-foreground">
@@ -1825,7 +1826,8 @@ export default function IntegrationsPage() {
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
-                                        <Badge variant={emailStatusVariant} className="w-fit">
+                                        <Badge variant={emailStatusVariant} className="w-fit flex items-center gap-1">
+                                            <EmailStatusIcon className="size-3" aria-hidden="true" />
                                             {emailStatusLabel}
                                         </Badge>
                                         <p className="text-xs text-muted-foreground">
@@ -1863,7 +1865,8 @@ export default function IntegrationsPage() {
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
-                                        <Badge variant={zapierStatusVariant} className="w-fit">
+                                        <Badge variant={zapierStatusVariant} className="w-fit flex items-center gap-1">
+                                            <ZapierStatusIcon className="size-3" aria-hidden="true" />
                                             {zapierStatusLabel}
                                         </Badge>
                                         <p className="text-xs text-muted-foreground">
