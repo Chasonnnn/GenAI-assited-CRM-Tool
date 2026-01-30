@@ -27,5 +27,5 @@ export function SurrogateDetailProvider({
 }
 
 export function useSurrogateDetailContext() {
-    return React.useContext(SurrogateDetailContext)
+    return React.use(SurrogateDetailContext)
 }
