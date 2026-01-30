@@ -126,10 +126,11 @@ export function useDeleteOrgLogo() {
     })
 }
 
-export function useOrgSignaturePreview(enabled = false) {
+export function useOrgSignaturePreview(options: { enabled?: boolean; mode?: "org_only"; template?: string } = {}) {
+    const { enabled = false, mode, template } = options
     return useQuery({
-        queryKey: signatureKeys.orgPreview(),
-        queryFn: () => getOrgSignaturePreview(),
+        queryKey: [...signatureKeys.orgPreview(), mode ?? "default", template ?? "default"],
+        queryFn: () => getOrgSignaturePreview(template, mode),
         enabled,
     })
 }

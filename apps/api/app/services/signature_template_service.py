@@ -648,6 +648,7 @@ def render_signature_preview(
 def render_org_signature_html(
     db: Session,
     org_id: uuid.UUID,
+    template_override: str | None = None,
 ) -> str:
     """Render org-only signature HTML (no user-specific fields)."""
     org = org_service.get_org_by_id(db, org_id)
@@ -655,7 +656,7 @@ def render_org_signature_html(
     if not org:
         return ""
 
-    template = org.signature_template or DEFAULT_TEMPLATE
+    template = template_override or org.signature_template or DEFAULT_TEMPLATE
     data = _get_org_only_data(org)
     return _render_from_data(data, template)
 

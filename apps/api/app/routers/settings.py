@@ -409,6 +409,7 @@ def update_org_signature(
 @router.get("/organization/signature/preview", response_model=SignaturePreviewResponse)
 def get_org_signature_preview(
     template: str | None = None,
+    mode: str | None = None,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
@@ -420,6 +421,7 @@ def get_org_signature_preview(
 
     Optionally pass ?template=modern|minimal|professional|creative to
     preview a template before saving.
+    Use ?mode=org_only for org-only preview (no user fields).
 
     """
     # Validate template parameter if provided
@@ -427,11 +429,18 @@ def get_org_signature_preview(
     if template and template not in valid_templates:
         template = None  # Fall back to saved template
 
-    html = signature_template_service.render_signature_preview(
-        db=db,
-        org_id=session.org_id,
-        template_override=template,
-    )
+    if mode == "org_only":
+        html = signature_template_service.render_org_signature_html(
+            db=db,
+            org_id=session.org_id,
+            template_override=template,
+        )
+    else:
+        html = signature_template_service.render_signature_preview(
+            db=db,
+            org_id=session.org_id,
+            template_override=template,
+        )
 
     return SignaturePreviewResponse(html=html)
 

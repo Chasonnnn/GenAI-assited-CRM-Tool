@@ -37,6 +37,23 @@ async def test_signature_preview_returns_html(authed_client: AsyncClient, db, te
 
 
 @pytest.mark.asyncio
+async def test_org_signature_preview_org_only_excludes_user(
+    authed_client: AsyncClient, db, test_org, test_user
+):
+    """Org-only preview excludes user fields."""
+    test_org.signature_company_name = "Org Brand"
+    test_org.signature_template = "classic"
+    db.commit()
+
+    response = await authed_client.get("/settings/organization/signature/preview?mode=org_only")
+    assert response.status_code == 200
+    html = response.json()["html"]
+    assert "Org Brand" in html
+    assert test_user.display_name not in html
+    assert test_user.email not in html
+
+
+@pytest.mark.asyncio
 async def test_signature_update_rejects_invalid_url(authed_client: AsyncClient):
     """Invalid social URL is rejected."""
     response = await authed_client.patch(

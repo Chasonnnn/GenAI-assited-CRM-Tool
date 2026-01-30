@@ -141,7 +141,13 @@ export async function deleteOrgLogo(): Promise<{ status: string }> {
     return api.delete<{ status: string }>('/settings/organization/signature/logo')
 }
 
-export async function getOrgSignaturePreview(template?: string): Promise<SignaturePreview> {
-    const params = template ? `?template=${template}` : ''
-    return api.get<SignaturePreview>(`/settings/organization/signature/preview${params}`)
+export async function getOrgSignaturePreview(
+    template?: string,
+    mode?: "org_only"
+): Promise<SignaturePreview> {
+    const searchParams = new URLSearchParams()
+    if (template) searchParams.set("template", template)
+    if (mode) searchParams.set("mode", mode)
+    const params = searchParams.toString()
+    return api.get<SignaturePreview>(`/settings/organization/signature/preview${params ? `?${params}` : ""}`)
 }

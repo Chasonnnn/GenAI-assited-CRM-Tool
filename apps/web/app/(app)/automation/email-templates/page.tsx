@@ -313,7 +313,7 @@ function SignaturePreviewComponent() {
 // =============================================================================
 
 function OrgSignaturePreviewComponent() {
-    const { data: preview, isLoading } = useOrgSignaturePreview(true)
+    const { data: preview, isLoading } = useOrgSignaturePreview({ enabled: true, mode: "org_only" })
 
     if (isLoading) {
         return (
@@ -496,6 +496,7 @@ export default function EmailTemplatesPage() {
     const [templateScope, setTemplateScope] = useState<EmailTemplateScope>("personal")
     const [showPreview, setShowPreview] = useState(false)
     const [previewHtml, setPreviewHtml] = useState("")
+    const [signaturePreviewMode, setSignaturePreviewMode] = useState<"personal" | "org">("personal")
 
     // Copy/Share dialog state
     const [copyDialogOpen, setCopyDialogOpen] = useState(false)
@@ -1164,36 +1165,43 @@ export default function EmailTemplatesPage() {
                             <div className="space-y-6 lg:sticky lg:top-6 h-fit">
                                 <Card>
                                     <CardHeader>
-                                        <CardTitle>Preview</CardTitle>
-                                        <CardDescription>
-                                            How your signature will appear in emails
-                                        </CardDescription>
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                            <div>
+                                                <CardTitle>Signature Preview</CardTitle>
+                                                <CardDescription>
+                                                    {signaturePreviewMode === "personal"
+                                                        ? "Personal email signature (your info + org branding)"
+                                                        : "Org workflow signature (org branding only)"}
+                                                </CardDescription>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant={signaturePreviewMode === "personal" ? "default" : "outline"}
+                                                    onClick={() => setSignaturePreviewMode("personal")}
+                                                >
+                                                    Personal Email
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant={signaturePreviewMode === "org" ? "default" : "outline"}
+                                                    onClick={() => setSignaturePreviewMode("org")}
+                                                >
+                                                    Org Workflow
+                                                </Button>
+                                            </div>
+                                        </div>
                                     </CardHeader>
                                     <CardContent>
                                         <div className="border rounded-lg p-4 bg-white min-h-[200px]">
                                             <p className="text-muted-foreground text-sm mb-4 border-b pb-4">
                                                 [Your email content here...]
                                             </p>
-                                            <SignaturePreviewComponent />
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                <Card className="border-dashed">
-                                    <CardHeader>
-                                        <div className="flex items-center justify-between">
-                                            <CardTitle>Organization Signature</CardTitle>
-                                            <Badge variant="secondary" className="text-xs">
-                                                Read-only
-                                            </Badge>
-                                        </div>
-                                        <CardDescription>
-                                            Applied to organization workflows by default
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="border rounded-lg p-4 bg-white min-h-[160px]">
-                                            <OrgSignaturePreviewComponent />
+                                            {signaturePreviewMode === "personal" ? (
+                                                <SignaturePreviewComponent />
+                                            ) : (
+                                                <OrgSignaturePreviewComponent />
+                                            )}
                                         </div>
                                     </CardContent>
                                 </Card>
