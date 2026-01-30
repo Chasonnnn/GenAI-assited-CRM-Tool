@@ -1,11 +1,12 @@
 from http.cookies import SimpleCookie
+import json
 
 import pyotp
 import pytest
 
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME
-from app.core.security import create_session_token
+from app.core.security import create_session_token, hash_user_agent
 from app.db.enums import Role
 from app.services import session_service
 
@@ -62,6 +63,7 @@ async def test_duo_callback_creates_session_for_upgraded_token(
     client, db, test_user, test_org, monkeypatch
 ):
     from app.services import duo_service
+    from app.routers.mfa import DUO_STATE_COOKIE
 
     monkeypatch.setattr(duo_service, "is_available", lambda: True)
 
@@ -69,8 +71,63 @@ async def test_duo_callback_creates_session_for_upgraded_token(
         assert code == "duo-code"
         assert state == expected_state
         assert username == test_user.email
-        assert redirect_uri  # should be derived from FRONTEND/OPS url
+        assert redirect_uri == "https://ops.surrogacyforce.com/auth/duo/callback"
         return True, {"sub": "duo-subject"}
+
+    monkeypatch.setattr(duo_service, "verify_callback", fake_verify_callback)
+
+    old_token = create_session_token(
+        user_id=test_user.id,
+        org_id=test_org.id,
+        role=Role.DEVELOPER.value,
+        token_version=test_user.token_version,
+        mfa_verified=False,
+        mfa_required=True,
+    )
+    session_service.create_session(db=db, user_id=test_user.id, org_id=test_org.id, token=old_token)
+
+    csrf = generate_csrf_token()
+    client.cookies.set(COOKIE_NAME, old_token)
+    client.cookies.set(CSRF_COOKIE_NAME, csrf)
+    user_agent = "pytest-duo"
+    client.headers.update({"user-agent": user_agent})
+    client.cookies.set(
+        DUO_STATE_COOKIE,
+        json.dumps(
+            {
+                "state": "state123",
+                "ua_hash": hash_user_agent(user_agent),
+                "redirect_uri": "https://ops.surrogacyforce.com/auth/duo/callback",
+            }
+        ),
+    )
+
+    res = await client.post(
+        "/mfa/duo/callback?return_to=ops",
+        json={"code": "duo-code", "state": "state123"},
+        headers={CSRF_HEADER: csrf},
+    )
+    assert res.status_code == 200, res.text
+    data = res.json()
+    assert data["success"] is True
+
+    new_token = _get_cookie_value(res, COOKIE_NAME)
+    assert new_token != old_token
+
+    new_hash = session_service.hash_token(new_token)
+    assert session_service.get_session_by_token_hash(db, new_hash) is not None
+
+
+@pytest.mark.asyncio
+async def test_duo_callback_rejects_missing_state_cookie(
+    client, db, test_user, test_org, monkeypatch
+):
+    from app.services import duo_service
+
+    monkeypatch.setattr(duo_service, "is_available", lambda: True)
+
+    def fake_verify_callback(*_args, **_kwargs):
+        raise AssertionError("verify_callback should not be called without state cookie")
 
     monkeypatch.setattr(duo_service, "verify_callback", fake_verify_callback)
 
@@ -89,16 +146,8 @@ async def test_duo_callback_creates_session_for_upgraded_token(
     client.cookies.set(CSRF_COOKIE_NAME, csrf)
 
     res = await client.post(
-        "/mfa/duo/callback?expected_state=state123&return_to=ops",
+        "/mfa/duo/callback",
         json={"code": "duo-code", "state": "state123"},
         headers={CSRF_HEADER: csrf},
     )
-    assert res.status_code == 200, res.text
-    data = res.json()
-    assert data["success"] is True
-
-    new_token = _get_cookie_value(res, COOKIE_NAME)
-    assert new_token != old_token
-
-    new_hash = session_service.hash_token(new_token)
-    assert session_service.get_session_by_token_hash(db, new_hash) is not None
+    assert res.status_code == 400, res.text

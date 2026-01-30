@@ -150,10 +150,9 @@ export function initiateDuoAuth(returnTo?: 'app' | 'ops'): Promise<DuoInitiateRe
 export function verifyDuoCallback(
     code: string,
     state: string,
-    expectedState: string,
     returnTo?: 'app' | 'ops'
 ): Promise<DuoCallbackResponse> {
-    const query = `?expected_state=${expectedState}${returnTo ? `&return_to=${returnTo}` : ''}`
+    const query = returnTo ? `?return_to=${returnTo}` : ''
     return api.post<DuoCallbackResponse>(`/mfa/duo/callback${query}`, {
         code,
         state,

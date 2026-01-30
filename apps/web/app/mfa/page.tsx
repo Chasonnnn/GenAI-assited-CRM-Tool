@@ -240,7 +240,6 @@ function MFAPageContent() {
                 sessionStorage.setItem("auth_return_to", "ops")
             }
             const result = await initiateDuo.mutateAsync(returnTo)
-            sessionStorage.setItem("duo_state", result.state)
             window.location.assign(result.auth_url)
         } catch (error) {
             console.error("Failed to initiate Duo:", error)

@@ -127,35 +127,15 @@ function DuoCallbackContent() {
         // Duo Web SDK can return the authorization parameter as `duo_code` (default) or `code`.
         const code = searchParams.get("duo_code") ?? searchParams.get("code")
         const state = searchParams.get("state")
-        const storedState = sessionStorage.getItem("duo_state")
-
         if (!code || !state) {
             setStatus("error")
             setErrorMessage("Missing Duo response parameters. Please try again.")
             return
         }
 
-        let expectedState: string | null = null
-        if (storedState) {
-            if (storedState !== state) {
-                sessionStorage.removeItem("duo_state")
-                setStatus("error")
-                setErrorMessage("Invalid Duo state. Please try again.")
-                return
-            }
-            expectedState = storedState
-            sessionStorage.removeItem("duo_state")
-        }
-
-        if (!expectedState) {
-            setStatus("error")
-            setErrorMessage("Missing Duo state. Please try again.")
-            return
-        }
-
         const verify = async () => {
             try {
-                const result = await verifyDuoCallback(code, state, expectedState, returnTo)
+                const result = await verifyDuoCallback(code, state, returnTo)
                 if (result.recovery_codes && result.recovery_codes.length > 0) {
                     setRecoveryCodes(result.recovery_codes)
                 }

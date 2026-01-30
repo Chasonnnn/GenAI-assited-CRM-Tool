@@ -8,7 +8,7 @@ Provides:
 - MFA verification during login
 """
 
-import secrets
+import json
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -18,12 +18,16 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.deps import COOKIE_NAME, get_current_session, get_db, require_csrf_header
 from app.core.csrf import CSRF_COOKIE_NAME, set_csrf_cookie
-from app.core.security import create_session_token
+from app.core.security import create_session_token, generate_oauth_state, hash_user_agent
 from app.schemas.auth import UserSession
 from app.services import duo_service, membership_service, mfa_service, org_service, user_service
 
 
 router = APIRouter()
+
+DUO_STATE_COOKIE = "duo_state"
+DUO_STATE_MAX_AGE = 5 * 60
+DUO_STATE_ERROR = "Duo session mismatch. Please restart verification."
 
 
 def _resolve_portal_base_url(
@@ -57,6 +61,23 @@ def _resolve_portal_base_url(
         return settings.FRONTEND_URL.rstrip("/")
 
     return f"{scheme}://{host}".rstrip("/")
+
+
+def _build_duo_state_payload(
+    state: str,
+    user_agent: str,
+    redirect_uri: str,
+) -> str:
+    payload = {
+        "state": state,
+        "ua_hash": hash_user_agent(user_agent),
+        "redirect_uri": redirect_uri,
+    }
+    return json.dumps(payload)
+
+
+def _parse_duo_state_payload(cookie_value: str) -> dict:
+    return json.loads(cookie_value)
 
 
 # =============================================================================
@@ -518,6 +539,7 @@ def duo_health_check():
 )
 def initiate_duo_auth(
     request: Request,
+    response: Response,
     return_to: str | None = Query(None),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
@@ -536,7 +558,7 @@ def initiate_duo_auth(
         raise HTTPException(status_code=404, detail="User not found")
 
     # Generate secure state token for CSRF protection
-    state = secrets.token_urlsafe(32)
+    state = generate_oauth_state()
 
     base_url = _resolve_portal_base_url(request, db, session.org_id, return_to=return_to)
 
@@ -553,6 +575,22 @@ def initiate_duo_auth(
         redirect_uri=redirect_uri,
     )
 
+    state_payload = _build_duo_state_payload(
+        state=state,
+        user_agent=request.headers.get("user-agent", ""),
+        redirect_uri=redirect_uri,
+    )
+    response.set_cookie(
+        key=DUO_STATE_COOKIE,
+        value=state_payload,
+        max_age=DUO_STATE_MAX_AGE,
+        httponly=True,
+        samesite=settings.cookie_samesite,
+        secure=settings.cookie_secure,
+        domain=settings.COOKIE_DOMAIN or None,
+        path="/mfa/duo",
+    )
+
     return DuoInitiateResponse(auth_url=auth_url, state=state)
 
 
@@ -564,7 +602,6 @@ def verify_duo_callback(
     request: Request,
     body: DuoCallbackRequest,
     response: Response,
-    expected_state: str,  # Should come from session in production
     return_to: str | None = Query(None),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
@@ -581,11 +618,27 @@ def verify_duo_callback(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # IMPORTANT: Duo token exchange must use the SAME redirect_uri used during initiation.
-    base_url = _resolve_portal_base_url(request, db, session.org_id, return_to=return_to)
+    state_cookie = request.cookies.get(DUO_STATE_COOKIE)
+    if not state_cookie:
+        raise HTTPException(status_code=400, detail=DUO_STATE_ERROR)
 
-    # Must match the redirect URI used during initiation.
-    redirect_uri = f"{base_url}/auth/duo/callback" if base_url else None
+    try:
+        stored_payload = _parse_duo_state_payload(state_cookie)
+    except Exception:
+        raise HTTPException(status_code=400, detail=DUO_STATE_ERROR)
+
+    expected_state = stored_payload.get("state")
+    stored_ua_hash = stored_payload.get("ua_hash")
+    redirect_uri = stored_payload.get("redirect_uri")
+    if not expected_state or not stored_ua_hash or not redirect_uri:
+        raise HTTPException(status_code=400, detail=DUO_STATE_ERROR)
+
+    current_ua_hash = hash_user_agent(request.headers.get("user-agent", ""))
+    if stored_ua_hash != current_ua_hash:
+        raise HTTPException(status_code=400, detail=DUO_STATE_ERROR)
+
+    if body.state != expected_state:
+        raise HTTPException(status_code=400, detail=DUO_STATE_ERROR)
 
     # Verify the callback
     is_valid, auth_result = duo_service.verify_callback(
@@ -598,6 +651,12 @@ def verify_duo_callback(
 
     if not is_valid:
         raise HTTPException(status_code=400, detail="Duo verification failed")
+
+    response.delete_cookie(
+        DUO_STATE_COOKIE,
+        domain=settings.COOKIE_DOMAIN or None,
+        path="/mfa/duo",
+    )
 
     # Mark user as Duo enrolled and enable MFA
     from datetime import datetime, timezone
