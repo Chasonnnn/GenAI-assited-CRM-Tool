@@ -110,6 +110,17 @@ def db(db_engine) -> Generator:
     connection.close()
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _use_temp_local_storage(tmp_path_factory):
+    """Route test attachment storage to a temp directory."""
+    from app.core.config import settings
+
+    temp_dir = tmp_path_factory.mktemp("attachments")
+    settings.STORAGE_BACKEND = "local"
+    settings.LOCAL_STORAGE_PATH = str(temp_dir)
+    yield
+
+
 # =============================================================================
 # Entity Fixtures
 # =============================================================================

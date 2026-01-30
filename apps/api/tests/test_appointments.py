@@ -184,9 +184,7 @@ class TestAvailabilitySlots:
 class TestAvailabilityValidation:
     """Validation tests for availability inputs."""
 
-    def test_set_availability_rules_rejects_invalid_time_range(
-        self, db, test_org, test_user
-    ):
+    def test_set_availability_rules_rejects_invalid_time_range(self, db, test_org, test_user):
         """End time must be after start time."""
         from app.services.appointment_service import set_availability_rules
 
@@ -199,9 +197,7 @@ class TestAvailabilityValidation:
                 timezone_name="America/New_York",
             )
 
-    def test_set_availability_override_requires_times_when_available(
-        self, db, test_org, test_user
-    ):
+    def test_set_availability_override_requires_times_when_available(self, db, test_org, test_user):
         """Overrides marked available must include a valid time range."""
         from app.services.appointment_service import set_availability_override
 
@@ -217,9 +213,7 @@ class TestAvailabilityValidation:
                 reason="Open block",
             )
 
-    def test_set_availability_rules_rejects_invalid_timezone(
-        self, db, test_org, test_user
-    ):
+    def test_set_availability_rules_rejects_invalid_timezone(self, db, test_org, test_user):
         """Invalid timezone values should be rejected."""
         from app.services.appointment_service import set_availability_rules
 

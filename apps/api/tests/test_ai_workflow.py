@@ -416,7 +416,7 @@ class TestWorkflowValidation:
                 id=uuid.uuid4(),
                 user_id=other_user.id,
                 organization_id=test_org.id,
-            role=Role.INTAKE_SPECIALIST,
+                role=Role.INTAKE_SPECIALIST,
             )
         )
         db.flush()
@@ -517,6 +517,7 @@ def test_save_workflow_respects_personal_scope(db, test_org, test_user):
 
     assert saved.scope == "personal"
     assert saved.owner_user_id == test_user.id
+
     def test_validate_update_status_action_normalizes(self, db, test_org, default_stage):
         """update_status should normalize to update_field stage_id."""
         workflow = GeneratedWorkflow(

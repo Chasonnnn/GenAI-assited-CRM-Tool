@@ -106,7 +106,7 @@ def test_form_submission_file_cleanup_on_rollback(
         is form_submission_service.register_storage_cleanup_on_rollback
     )
 
-    _store_submission_file(db, submission, upload, form)
+    _store_submission_file(db, submission, upload, form, field_key="supporting_docs")
     db.flush()
 
     assert register_called["value"] is True
