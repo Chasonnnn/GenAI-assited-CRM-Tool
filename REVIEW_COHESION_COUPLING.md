@@ -3,9 +3,9 @@
 ## Executive Summary
 - Core domain logic is concentrated in a small set of “god” services/routers (surrogate, analytics, workflow, AI, worker), creating high blast radius for routine changes.
 - Cross‑domain service calls are pervasive (notifications, workflows, queues, meta, email), and `app.services` re‑exports hide true coupling in static analysis.
-- Multiple routers read/write DB models directly (journey, forms, matches, webhooks, profile), bypassing the service layer and weakening boundaries.
+- Router‑level model imports have been removed and guarded by tests, but a few routers still orchestrate heavy cross‑domain flows (integrations/platform).
 - Several frontend pages are monoliths that orchestrate many domains (surrogate detail, ops org page, tasks), increasing regression risk and merge conflicts.
-- There is no explicit interface for notifications/email/integration webhooks, so domain services reach into each other instead of publishing events or using facades.
+- Notification/email/webhook interfaces now exist (facade/adapter/registry), reducing direct coupling, but large service files still hide cross‑domain effects.
 
 ## Current Intended Boundaries
 
@@ -147,19 +147,17 @@ Coupling notes:
 
 ## Boundary Violations & Leaks
 
-- `apps/api/app/routers/journey.py` → imports `Attachment/JourneyFeaturedImage/Surrogate` models directly. Correct direction: router → `journey_service`/`attachment_service`. Minimal fix: move queries into `journey_service` and expose read DTOs.
-- `apps/api/app/routers/forms.py` → imports `Form/FormSubmission` models directly. Correct direction: router → `form_service`. Minimal fix: add service methods for list/detail and call those from router.
-- `apps/api/app/routers/profile.py` → imports `FormSubmission` directly. Correct direction: router → `form_service`. Minimal fix: add `form_service.get_submission_for_profile()`.
-- `apps/api/app/routers/matches.py` → uses `Match/IntendedParent` models directly. Correct direction: router → `match_service` + `ip_service`. Minimal fix: move DB queries into services.
-- `apps/api/app/routers/webhooks.py` → uses `Appointment/ZoomWebhookEvent/CampaignRecipient/EmailLog` models directly. Correct direction: router → integration handler service. Minimal fix: create `webhook_handlers/*` and call from router.
-- `apps/api/app/routers/admin_meta.py` and `routers/internal.py` → import `MetaAdAccount` directly. Correct direction: router → `meta_admin_service`. Minimal fix: introduce `meta_admin_service.get_ad_account()`.
-- `apps/api/app/routers/platform.py` → imports `Organization` model directly. Correct direction: router → `platform_service`/`org_service`. Minimal fix: move org lookups into services.
-- `apps/api/app/routers/websocket.py` → imports `Membership/Organization` models directly. Correct direction: router → `membership_service`/`org_service`. Minimal fix: add service methods for ws auth context.
-- `apps/api/app/services/status_change_request_service.py` → called private status helpers (`surrogate_service._apply_status_change`, `ip_service._apply_status_change`). Correct direction: dedicated status-change services with public APIs. Status: completed (2026-01-28).
-- `apps/api/app/services/task_service.py` → queries `User/Surrogate` to format notifications. Correct direction: notification formatting in notification/event layer. Minimal fix: move to `notification_events.task_assigned`.
-- `apps/api/app/services/surrogate_service.py` → triggers queue assignment + workflows + notifications + Meta CAPI. Correct direction: publish domain event; consumers handle side effects. Minimal fix: introduce event dispatch module and move side effects there.
-- `apps/web/app/(app)/surrogates/[id]/page.tsx` → mixes AI, tasks, notes, meetings, queues logic. Correct direction: page composes domain sub‑containers. Minimal fix: split tab containers into separate files.
-- `apps/web/components/appointments/UnifiedCalendar.tsx` → fetches tasks/appointments/people inside UI component. Correct direction: hook supplies data, component renders only. Minimal fix: add `useUnifiedCalendarData()` hook.
+Remaining (as of 2026-01-30):
+- `apps/web/app/(app)/surrogates/[id]/page.tsx` → mixes AI, tasks, notes, meetings, queues logic. Correct direction: page composes domain sub‑containers. Status: partially split (2026-01-28), still large.
+- `apps/web/app/(app)/tasks/page.tsx` → list + calendar + approvals in one file. Correct direction: extract list and calendar containers.
+- `apps/web/app/ops/agencies/[orgId]/page.tsx` → ops console mixes org/invites/templates. Correct direction: split tab‑level containers.
+
+Resolved:
+- Router model imports moved into services (journey/forms/profile/matches/webhooks/platform/websocket/admin_meta/internal + settings/attachments/zapier/meta_oauth/surrogates_read/ai_tasks/meta_forms). Guarded by `tests/test_router_model_imports.py`. Status: completed (2026-01-30).
+- `apps/api/app/services/status_change_request_service.py` → private status helpers → public status services. Status: completed (2026-01-28).
+- `apps/api/app/services/task_service.py` → notification formatting moved to `task_events`. Status: completed (2026-01-28).
+- `apps/api/app/services/surrogate_service.py` → side-effects moved to `surrogate_events`. Status: completed (2026-01-29).
+- `apps/web/components/appointments/UnifiedCalendar.tsx` → data fetching moved to `useUnifiedCalendarData()`. Status: completed (2026-01-28).
 
 ## Refactor Candidates (grouped)
 
@@ -192,6 +190,8 @@ Coupling notes:
   Create/Delete: create `apps/api/app/services/task_events.py`.
   Expected blast radius: low‑medium (task assignment notifications).
   Test plan: unit tests for notification payloads; integration test for task assignment flow.
+  Status: completed (2026-01-28).
+  Notes: added `task_events` and switched task_service callers.
 
 ### Introduce boundary / interface
 - **R5 — Notification dispatch facade**
@@ -256,10 +256,10 @@ Coupling notes:
 - [x] R9 — Dashboard stats push via service/event.
 
 ### Weeks 2–3 (structural)
-- R1 — Surrogate status module.
-- R2 — Form submission pipeline split.
-- R5 — Notification dispatch facade.
-- R6 — Email sender interface.
+- [x] R1 — Surrogate status module.
+- [x] R2 — Form submission pipeline split.
+- [x] R5 — Notification dispatch facade.
+- [x] R6 — Email sender interface.
 
 ### Later (optional)
 - [x] R3 — Appointment integrations module.
@@ -274,3 +274,4 @@ Coupling notes:
 - 2026-01-29: Split workflow engine into core (`workflow_engine_core`) and domain adapter (`workflow_engine_adapters`) modules.
 - 2026-01-29: Split worker jobs into per-domain handlers with a central registry.
 - 2026-01-29: Added surrogate status side-effects event bus (`surrogate_events`) and moved notifications/queues/workflows/Meta CAPI hooks into it.
+- 2026-01-30: Removed remaining router model imports (settings/attachments/zapier/meta_oauth/surrogates_read/ai_tasks/meta_forms/internal) and added `tests/test_router_model_imports.py` guard.

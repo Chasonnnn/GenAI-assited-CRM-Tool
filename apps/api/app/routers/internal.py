@@ -23,6 +23,7 @@ from app.services import (
     alert_service,
     job_service,
     meta_admin_service,
+    meta_oauth_service,
     meta_page_service,
     ops_service,
     org_service,
@@ -147,11 +148,7 @@ def check_meta_tokens(x_internal_secret: str = Header(...)):
                 alerts_created += 1
 
         # Check OAuth connection tokens for expiry
-        from app.db.models import MetaOAuthConnection
-
-        connections = (
-            db.query(MetaOAuthConnection).filter(MetaOAuthConnection.is_active.is_(True)).all()
-        )
+        connections = meta_oauth_service.list_active_oauth_connections_any_org(db)
 
         for connection in connections:
             oauth_connections_checked += 1
