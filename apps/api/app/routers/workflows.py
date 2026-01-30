@@ -13,7 +13,16 @@ from app.core.deps import (
 )
 from app.schemas.auth import UserSession
 from app.db.enums import WorkflowTriggerType
-from app.services import surrogate_service, workflow_service, workflow_access
+from app.services import (
+    appointment_service,
+    attachment_service,
+    match_service,
+    note_service,
+    surrogate_service,
+    task_service,
+    workflow_access,
+    workflow_service,
+)
 from app.services.workflow_engine import engine
 from app.schemas.workflow import (
     WorkflowCreate,
@@ -325,28 +334,22 @@ def test_workflow(
     if entity_type == "surrogate":
         entity = surrogate_service.get_surrogate(db, session.org_id, request.entity_id)
     else:
-        from app.db.models import Task, Match, Appointment, EntityNote, Attachment
-
-        model = None
         if entity_type == "task":
-            model = Task
+            entity = task_service.get_task(db, request.entity_id, session.org_id)
         elif entity_type == "match":
-            model = Match
+            entity = match_service.get_match(db, request.entity_id, session.org_id)
         elif entity_type == "appointment":
-            model = Appointment
+            entity = appointment_service.get_appointment(
+                db, request.entity_id, session.org_id
+            )
         elif entity_type == "note":
-            model = EntityNote
+            entity = note_service.get_note(db, request.entity_id, session.org_id)
         elif entity_type == "document":
-            model = Attachment
-
-        if model is None:
+            entity = attachment_service.get_attachment(
+                db, session.org_id, request.entity_id
+            )
+        else:
             raise HTTPException(status_code=422, detail="Unsupported entity type for test")
-
-        entity = (
-            db.query(model)
-            .filter(model.id == request.entity_id, model.organization_id == session.org_id)
-            .first()
-        )
 
     if not entity:
         raise HTTPException(status_code=404, detail=f"{entity_type.capitalize()} not found")

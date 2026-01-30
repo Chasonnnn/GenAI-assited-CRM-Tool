@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Input } from "@/components/ui/input"
@@ -69,9 +69,9 @@ import type { EmailTemplateListItem } from "@/lib/api/email-templates"
 import { ApiError } from "@/lib/api"
 import { globalSearch } from "@/lib/api/search"
 import { getAppointments } from "@/lib/api/appointments"
-import { listMatches } from "@/lib/api/matches"
-import { getTasks } from "@/lib/api/tasks"
-import { getSurrogates } from "@/lib/api/surrogates"
+import { listMatches, type ListMatchesParams } from "@/lib/api/matches"
+import { getTasks, type TaskListParams } from "@/lib/api/tasks"
+import { getSurrogates, type SurrogateListParams } from "@/lib/api/surrogates"
 import { US_STATES } from "@/lib/constants/us-states"
 import { parseDateInput } from "@/lib/utils/date"
 import type { JsonObject, JsonValue } from "@/lib/types/json"
@@ -273,14 +273,15 @@ function normalizeConditionsForSave(conditions: Condition[]): Condition[] {
 
 function normalizeActionsForUi(actions: ActionConfig[]): ActionConfig[] {
     return actions.map((action) => {
-        if (action.action_type === "update_status" && action.stage_id) {
-            const normalized = {
+        const stageId = action["stage_id"]
+        if (action.action_type === "update_status" && typeof stageId === "string" && stageId) {
+            const normalized: ActionConfig = {
                 ...action,
                 action_type: "update_field",
                 field: "stage_id",
-                value: action.stage_id,
+                value: stageId,
             }
-            delete normalized.stage_id
+            delete normalized["stage_id"]
             return normalized
         }
         return action
@@ -326,11 +327,12 @@ function MultiSelect({
 
     return (
         <Popover>
-            <PopoverTrigger asChild>
-                <Button variant="outline" className="flex-1 justify-between">
-                    <span className="truncate">{label}</span>
-                    <ChevronDownIcon className="size-4 text-muted-foreground" />
-                </Button>
+            <PopoverTrigger
+                type="button"
+                className={buttonVariants({ variant: "outline", className: "flex-1 justify-between" })}
+            >
+                <span className="truncate">{label}</span>
+                <ChevronDownIcon className="size-4 text-muted-foreground" />
             </PopoverTrigger>
             <PopoverContent className="w-72">
                 <ScrollArea className="h-48">
@@ -371,45 +373,60 @@ function MultiSelect({
 
 type TestEntitySuggestion = { id: string; label: string; meta?: string }
 
+const buildTestEntitySuggestion = (
+    id: string,
+    label: string,
+    meta?: string | null
+): TestEntitySuggestion => (meta == null ? { id, label } : { id, label, meta })
+
 async function fetchTestEntities(
     entityType: string,
     query: string
 ): Promise<TestEntitySuggestion[]> {
     if (entityType === "surrogate") {
-        const response = await getSurrogates({
-            q: query || undefined,
+        const params: SurrogateListParams = {
             per_page: 5,
             sort_by: "created_at",
             sort_order: "desc",
-        })
-        return response.items.map((item) => ({
-            id: item.id,
-            label: `${item.surrogate_number} • ${item.full_name}`,
-            meta: item.status_label,
-        }))
+        }
+        if (query.trim()) params.q = query.trim()
+        const response = await getSurrogates(params)
+        return response.items.map((item) =>
+            buildTestEntitySuggestion(
+                item.id,
+                `${item.surrogate_number} • ${item.full_name}`,
+                item.status_label ?? null
+            )
+        )
     }
     if (entityType === "task") {
-        const response = await getTasks({
-            q: query || undefined,
+        const params: TaskListParams = {
             per_page: 5,
             exclude_approvals: true,
-        })
-        return response.items.map((item) => ({
-            id: item.id,
-            label: item.title,
-            meta: item.surrogate_number ?? undefined,
-        }))
+        }
+        if (query.trim()) params.q = query.trim()
+        const response = await getTasks(params)
+        return response.items.map((item) =>
+            buildTestEntitySuggestion(
+                item.id,
+                item.title,
+                item.surrogate_number ?? null
+            )
+        )
     }
     if (entityType === "match") {
-        const response = await listMatches({
-            q: query || undefined,
+        const params: ListMatchesParams = {
             per_page: 5,
-        })
-        return response.items.map((item) => ({
-            id: item.id,
-            label: item.match_number,
-            meta: item.surrogate_name ?? item.ip_name ?? undefined,
-        }))
+        }
+        if (query.trim()) params.q = query.trim()
+        const response = await listMatches(params)
+        return response.items.map((item) =>
+            buildTestEntitySuggestion(
+                item.id,
+                item.match_number,
+                item.surrogate_name ?? item.ip_name ?? null
+            )
+        )
     }
     if (entityType === "appointment") {
         const now = new Date()
@@ -419,29 +436,35 @@ async function fetchTestEntities(
             date_start: now.toISOString(),
             date_end: end.toISOString(),
         })
-        return response.items.map((item) => ({
-            id: item.id,
-            label: item.appointment_type_name ?? "Appointment",
-            meta: item.surrogate_number ?? item.intended_parent_name ?? undefined,
-        }))
+        return response.items.map((item) =>
+            buildTestEntitySuggestion(
+                item.id,
+                item.appointment_type_name ?? "Appointment",
+                item.surrogate_number ?? item.intended_parent_name ?? null
+            )
+        )
     }
     if (entityType === "note") {
         if (!query.trim()) return []
         const response = await globalSearch({ q: query, types: "note", limit: 5 })
-        return response.results.map((result) => ({
-            id: result.entity_id,
-            label: result.title,
-            meta: result.surrogate_name ?? undefined,
-        }))
+        return response.results.map((result) =>
+            buildTestEntitySuggestion(
+                result.entity_id,
+                result.title,
+                result.surrogate_name ?? null
+            )
+        )
     }
     if (entityType === "document") {
         if (!query.trim()) return []
         const response = await globalSearch({ q: query, types: "attachment", limit: 5 })
-        return response.results.map((result) => ({
-            id: result.entity_id,
-            label: result.title,
-            meta: result.surrogate_name ?? undefined,
-        }))
+        return response.results.map((result) =>
+            buildTestEntitySuggestion(
+                result.entity_id,
+                result.title,
+                result.surrogate_name ?? null
+            )
+        )
     }
     return []
 }
@@ -531,8 +554,8 @@ export default function AutomationPage() {
     const filteredActionTypes = actionTypeValuesForTrigger
         ? actionTypeOptions.filter((action) => actionTypeValuesForTrigger.has(action.value))
         : actionTypeOptions
-    const userOptions = options?.users ?? []
-    const queueOptions = options?.queues ?? []
+    const userOptions = useMemo(() => options?.users ?? [], [options?.users])
+    const queueOptions = useMemo(() => options?.queues ?? [], [options?.queues])
     const updateFields = options?.update_fields ?? []
     const conditionOperators = options?.condition_operators ?? []
     const { data: executions } = useWorkflowExecutions(selectedWorkflowId || "", { limit: 20 })
@@ -1533,7 +1556,7 @@ export default function AutomationPage() {
                                         <Label>Assigned To (Optional)</Label>
                                         <Select
                                             value={typeof triggerConfig.to_user_id === "string" ? triggerConfig.to_user_id : ""}
-                                            onValueChange={(value) => setTriggerConfig({ ...triggerConfig, to_user_id: value || undefined })}
+                                            onValueChange={(value) => setTriggerConfig({ ...triggerConfig, to_user_id: value || null })}
                                         >
                                             <SelectTrigger className="mt-1.5">
                                                 <SelectValue placeholder="Any user">
