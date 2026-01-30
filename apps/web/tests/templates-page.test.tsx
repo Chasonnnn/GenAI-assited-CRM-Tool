@@ -107,7 +107,7 @@ describe('TemplatesPage', () => {
             })
     })
 
-    it('renders the templates page', () => {
+    it('renders the workflow templates panel', () => {
         render(<TemplatesPage />)
         expect(screen.getByText('Workflow Templates')).toBeInTheDocument()
     })

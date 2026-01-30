@@ -33,8 +33,8 @@ async def test_global_chat_performance_requires_view_reports(db, test_org, test_
     settings = AISettings(
         organization_id=test_org.id,
         is_enabled=True,
-        provider="openai",
-        model="gpt-4o-mini",
+        provider="gemini",
+        model="gemini-3-flash-preview",
         current_version=1,
         consent_accepted_at=datetime.now(timezone.utc),
         consent_accepted_by=test_user.id,
@@ -64,7 +64,7 @@ async def test_global_chat_performance_requires_view_reports(db, test_org, test_
                 prompt_tokens=1,
                 completion_tokens=1,
                 total_tokens=2,
-                model="gpt-4o-mini",
+                model="gemini-3-flash-preview",
             )
 
     monkeypatch.setattr(

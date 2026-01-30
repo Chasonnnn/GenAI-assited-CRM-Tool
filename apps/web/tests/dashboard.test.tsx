@@ -104,12 +104,12 @@ describe('DashboardPage', () => {
                 total: 10,
                 this_week: 2,
                 pending_tasks: 1,
-                this_month: 3,
+                new_leads_24h: 3,
                 by_status: { new_unread: 4 },
                 last_week: 1,
                 week_change_pct: 10,
-                last_month: 2,
-                month_change_pct: 50,
+                new_leads_prev_24h: 2,
+                new_leads_change_pct: 50,
             },
             isLoading: false,
         })
@@ -200,12 +200,12 @@ describe('DashboardPage', () => {
                 total: 10,
                 this_week: 0,
                 pending_tasks: 1,
-                this_month: 0,
+                new_leads_24h: 0,
                 by_status: { new_unread: 4 },
                 last_week: 1,
                 week_change_pct: -100,
-                last_month: 7,
-                month_change_pct: -100,
+                new_leads_prev_24h: 7,
+                new_leads_change_pct: -100,
             },
             isLoading: false,
             isError: false,
@@ -214,7 +214,7 @@ describe('DashboardPage', () => {
         render(<DashboardPage />)
 
         expect(screen.queryByText('-100%')).not.toBeInTheDocument()
-        expect(screen.getByText('0 vs 7 last month')).toBeInTheDocument()
+        expect(screen.getByText('0 vs 7 last 24h')).toBeInTheDocument()
     })
 
     it('limits upcoming list and collapses overdue items', () => {

@@ -15,8 +15,8 @@ def _create_ai_settings(db, org_id, user_id) -> AISettings:
     settings = AISettings(
         organization_id=org_id,
         is_enabled=True,
-        provider="openai",
-        model="gpt-4o-mini",
+        provider="gemini",
+        model="gemini-3-flash-preview",
         current_version=1,
         consent_accepted_at=datetime.now(timezone.utc),
         consent_accepted_by=user_id,
@@ -62,7 +62,7 @@ async def test_summarize_surrogate_logs_usage(
                 prompt_tokens=10,
                 completion_tokens=5,
                 total_tokens=15,
-                model="gpt-4o-mini",
+                model="gemini-3-flash-preview",
             )
 
     monkeypatch.setattr(
@@ -85,7 +85,7 @@ async def test_summarize_surrogate_logs_usage(
         .all()
     )
     assert len(usage) == 1
-    assert usage[0].model == "gpt-4o-mini"
+    assert usage[0].model == "gemini-3-flash-preview"
 
 
 @pytest.mark.asyncio
@@ -102,7 +102,7 @@ async def test_draft_email_logs_usage(
                 prompt_tokens=8,
                 completion_tokens=4,
                 total_tokens=12,
-                model="gpt-4o-mini",
+                model="gemini-3-flash-preview",
             )
 
     monkeypatch.setattr(
@@ -125,7 +125,7 @@ async def test_draft_email_logs_usage(
         .all()
     )
     assert len(usage) == 1
-    assert usage[0].model == "gpt-4o-mini"
+    assert usage[0].model == "gemini-3-flash-preview"
 
 
 @pytest.mark.asyncio
@@ -141,7 +141,7 @@ async def test_analyze_dashboard_logs_usage(
                 prompt_tokens=6,
                 completion_tokens=3,
                 total_tokens=9,
-                model="gpt-4o-mini",
+                model="gemini-3-flash-preview",
             )
 
     monkeypatch.setattr(
@@ -161,4 +161,4 @@ async def test_analyze_dashboard_logs_usage(
         .all()
     )
     assert len(usage) == 1
-    assert usage[0].model == "gpt-4o-mini"
+    assert usage[0].model == "gemini-3-flash-preview"

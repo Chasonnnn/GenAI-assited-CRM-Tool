@@ -27,7 +27,7 @@ async def test_ai_settings_test_contract(authed_client: AsyncClient, monkeypatch
 
     response = await authed_client.post(
         "/ai/settings/test",
-        json={"provider": "openai", "api_key": "sk-test"},
+        json={"provider": "gemini", "api_key": "sk-test"},
     )
     assert response.status_code == 200
     assert response.json() == {"valid": True}
@@ -110,7 +110,7 @@ async def test_ai_settings_supports_vertex_api_key_config(authed_client: AsyncCl
 
 
 @pytest.mark.asyncio
-async def test_ai_settings_rejects_non_flash_gemini_models(authed_client: AsyncClient):
+async def test_ai_settings_rejects_unsupported_gemini_models(authed_client: AsyncClient):
     settings_response = await authed_client.get("/ai/settings")
     assert settings_response.status_code == 200
     current_version = settings_response.json()["current_version"]
@@ -119,14 +119,15 @@ async def test_ai_settings_rejects_non_flash_gemini_models(authed_client: AsyncC
         "/ai/settings",
         json={
             "provider": "gemini",
-            "model": "gemini-3-pro-preview",
+            "model": "gemini-2.0-flash-001",
             "is_enabled": False,
             "expected_version": current_version,
         },
     )
     assert response.status_code == 400
     assert (
-        response.json()["detail"] == "Only gemini-3-flash-preview is supported for this provider."
+        response.json()["detail"]
+        == "Only gemini-3-flash-preview or gemini-3-pro-preview is supported for this provider."
     )
 
 
@@ -170,8 +171,8 @@ async def test_ai_chat_returns_approval_id_per_action(
     ai_settings = AISettings(
         organization_id=test_auth.org.id,
         is_enabled=False,  # Avoid consent gating in router
-        provider="openai",
-        model="gpt-4o-mini",
+        provider="gemini",
+        model="gemini-3-flash-preview",
         current_version=1,
     )
     db.add(ai_settings)
@@ -184,7 +185,7 @@ async def test_ai_chat_returns_approval_id_per_action(
                 prompt_tokens=10,
                 completion_tokens=5,
                 total_tokens=15,
-                model="gpt-4o-mini",
+                model="gemini-3-flash-preview",
             )
 
     monkeypatch.setattr(
@@ -243,8 +244,8 @@ async def test_ai_chat_anonymizes_case_messages(
     ai_settings = AISettings(
         organization_id=test_auth.org.id,
         is_enabled=False,
-        provider="openai",
-        model="gpt-4o-mini",
+        provider="gemini",
+        model="gemini-3-flash-preview",
         current_version=1,
         anonymize_pii=True,
     )
@@ -261,7 +262,7 @@ async def test_ai_chat_anonymizes_case_messages(
                 prompt_tokens=1,
                 completion_tokens=1,
                 total_tokens=2,
-                model="gpt-4o-mini",
+                model="gemini-3-flash-preview",
             )
 
     monkeypatch.setattr(
@@ -307,8 +308,8 @@ async def test_ai_chat_creates_entity_summary(
     ai_settings = AISettings(
         organization_id=test_auth.org.id,
         is_enabled=False,
-        provider="openai",
-        model="gpt-4o-mini",
+        provider="gemini",
+        model="gemini-3-flash-preview",
         current_version=1,
     )
     db.add(ai_settings)
@@ -321,7 +322,7 @@ async def test_ai_chat_creates_entity_summary(
                 prompt_tokens=1,
                 completion_tokens=1,
                 total_tokens=2,
-                model="gpt-4o-mini",
+                model="gemini-3-flash-preview",
             )
 
     monkeypatch.setattr(

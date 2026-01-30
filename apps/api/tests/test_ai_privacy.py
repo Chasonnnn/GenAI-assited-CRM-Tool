@@ -17,8 +17,8 @@ def _create_ai_settings(db, org_id, user_id, *, anonymize_pii=True) -> AISetting
     settings = AISettings(
         organization_id=org_id,
         is_enabled=True,
-        provider="openai",
-        model="gpt-4o-mini",
+        provider="gemini",
+        model="gemini-3-flash-preview",
         current_version=1,
         anonymize_pii=anonymize_pii,
         consent_accepted_at=datetime.now(timezone.utc),
@@ -74,7 +74,7 @@ async def test_summarize_surrogate_anonymizes_prompt(
                 prompt_tokens=10,
                 completion_tokens=5,
                 total_tokens=15,
-                model="gpt-4o-mini",
+                model="gemini-3-flash-preview",
             )
 
     monkeypatch.setattr(
@@ -120,7 +120,7 @@ async def test_draft_email_anonymizes_prompt_and_rehydrates(
                 prompt_tokens=10,
                 completion_tokens=5,
                 total_tokens=15,
-                model="gpt-4o-mini",
+                model="gemini-3-flash-preview",
             )
 
     monkeypatch.setattr(
@@ -174,7 +174,7 @@ async def test_parse_schedule_anonymizes_prompt_and_rehydrates(
                 prompt_tokens=10,
                 completion_tokens=5,
                 total_tokens=15,
-                model="gpt-4o-mini",
+                model="gemini-3-flash-preview",
             )
 
     monkeypatch.setattr(
@@ -242,7 +242,7 @@ async def test_task_chat_anonymizes_context_and_message(
                 prompt_tokens=10,
                 completion_tokens=5,
                 total_tokens=15,
-                model="gpt-4o-mini",
+                model="gemini-3-flash-preview",
             )
 
     monkeypatch.setattr(

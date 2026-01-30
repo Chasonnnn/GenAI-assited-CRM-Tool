@@ -36,8 +36,8 @@ describe('AI API client contract', () => {
 
     it('uses /ai/settings/test for API key test', async () => {
         apiMock.post.mockResolvedValue({ valid: true })
-        await testAPIKey('openai', 'k')
-        expect(api.post).toHaveBeenCalledWith('/ai/settings/test', { provider: 'openai', api_key: 'k' })
+        await testAPIKey('gemini', 'k')
+        expect(api.post).toHaveBeenCalledWith('/ai/settings/test', { provider: 'gemini', api_key: 'k' })
     })
 
     it('uses /ai/consent/accept for consent acceptance', async () => {

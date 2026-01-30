@@ -210,8 +210,8 @@ async def test_interview_summary_anonymizes_transcript(
     settings = AISettings(
         organization_id=test_org.id,
         is_enabled=True,
-        provider="openai",
-        model="gpt-4o-mini",
+        provider="gemini",
+        model="gemini-3-flash-preview",
         current_version=1,
         anonymize_pii=True,
         consent_accepted_at=datetime.now(timezone.utc),
@@ -233,7 +233,7 @@ async def test_interview_summary_anonymizes_transcript(
                 prompt_tokens=10,
                 completion_tokens=5,
                 total_tokens=15,
-                model="gpt-4o-mini",
+                model="gemini-3-flash-preview",
             )
 
     monkeypatch.setattr(

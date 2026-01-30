@@ -38,8 +38,8 @@ const zapierSettingsData = {
 
 const aiSettingsData = {
     is_enabled: true,
-    provider: 'openai',
-    model: 'gpt-4o-mini',
+    provider: 'gemini',
+    model: 'gemini-3-flash-preview',
     api_key_masked: 'sk-****',
     vertex_wif: null,
     vertex_api_key: null,

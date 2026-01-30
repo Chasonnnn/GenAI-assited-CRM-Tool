@@ -2,8 +2,8 @@
 Tests for case statistics endpoint with period comparisons.
 
 Tests the /surrogates/stats endpoint including:
-- Basic stats (total, by_status, this_week, this_month)
-- Period comparisons (last_week, last_month, percentage changes)
+- Basic stats (total, by_status, this_week, new_leads_24h)
+- Period comparisons (last_week, new_leads_prev_24h, percentage changes)
 """
 
 import uuid
@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.core.encryption import hash_email
+from app.db.enums import ContactStatus
 from app.db.models import Surrogate, PipelineStage, Pipeline
 from app.services import surrogate_service
 from app.utils.normalization import normalize_email
@@ -76,7 +77,73 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
     cases = []
     now = datetime.now(timezone.utc)
 
-    # Cases created this week (3 cases) - within last 7 days
+    # New leads in last 24h (2 unreached, 1 reached)
+    for i in range(2):
+        email = f"newlead{i}@test.com"
+        normalized_email = normalize_email(email)
+        case = Surrogate(
+            id=uuid.uuid4(),
+            organization_id=test_org.id,
+            stage_id=stage.id,
+            full_name=f"New Lead {i}",
+            status_label=stage.label,
+            email=normalized_email,
+            email_hash=hash_email(normalized_email),
+            source="website",
+            surrogate_number=f"S{10001 + i:05d}",
+            created_by_user_id=test_user.id,
+            owner_type="user",
+            owner_id=test_user.id,
+            created_at=now - timedelta(hours=2 + i),
+        )
+        db.add(case)
+        cases.append(case)
+
+    reached_email = "reached-lead@test.com"
+    reached_normalized = normalize_email(reached_email)
+    reached_case = Surrogate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        stage_id=stage.id,
+        full_name="Reached Lead",
+        status_label=stage.label,
+        email=reached_normalized,
+        email_hash=hash_email(reached_normalized),
+        source="website",
+        surrogate_number="S10003",
+        created_by_user_id=test_user.id,
+        owner_type="user",
+        owner_id=test_user.id,
+        created_at=now - timedelta(hours=3),
+        contact_status=ContactStatus.REACHED.value,
+        last_contacted_at=now - timedelta(hours=1),
+    )
+    db.add(reached_case)
+    cases.append(reached_case)
+
+    # New leads in previous 24h window (3 unreached, 24-48h ago)
+    for i in range(3):
+        email = f"prevlead{i}@test.com"
+        normalized_email = normalize_email(email)
+        case = Surrogate(
+            id=uuid.uuid4(),
+            organization_id=test_org.id,
+            stage_id=stage.id,
+            full_name=f"Prev Lead {i}",
+            status_label=stage.label,
+            email=normalized_email,
+            email_hash=hash_email(normalized_email),
+            source="website",
+            surrogate_number=f"S{10010 + i:05d}",
+            created_by_user_id=test_user.id,
+            owner_type="user",
+            owner_id=test_user.id,
+            created_at=now - timedelta(hours=30 + (i * 3)),
+        )
+        db.add(case)
+        cases.append(case)
+
+    # Other cases created this week (3 cases) - 4-6 days ago
     for i in range(3):
         email = f"thisweek{i}@test.com"
         normalized_email = normalize_email(email)
@@ -89,11 +156,11 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
             email=normalized_email,
             email_hash=hash_email(normalized_email),
             source="website",
-            surrogate_number=f"S{10001 + i:05d}",
+            surrogate_number=f"S{10020 + i:05d}",
             created_by_user_id=test_user.id,
             owner_type="user",
             owner_id=test_user.id,
-            created_at=now - timedelta(days=1 + i),  # 1-3 days ago
+            created_at=now - timedelta(days=4 + i),  # 4-6 days ago
         )
         db.add(case)
         cases.append(case)
@@ -111,7 +178,7 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
             email=normalized_email,
             email_hash=hash_email(normalized_email),
             source="website",
-            surrogate_number=f"S{10010 + i:05d}",
+            surrogate_number=f"S{10100 + i:05d}",
             created_by_user_id=test_user.id,
             owner_type="user",
             owner_id=test_user.id,
@@ -120,46 +187,24 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
         db.add(case)
         cases.append(case)
 
-    # Cases created this month but not this/last week (4 cases) - 15-20 days ago
-    for i in range(4):
-        email = f"thismonth{i}@test.com"
-        normalized_email = normalize_email(email)
-        case = Surrogate(
-            id=uuid.uuid4(),
-            organization_id=test_org.id,
-            stage_id=stage.id,
-            full_name=f"This Month Case {i}",
-            status_label=stage.label,
-            email=normalized_email,
-            email_hash=hash_email(normalized_email),
-            source="website",
-            surrogate_number=f"S{10020 + i:05d}",
-            created_by_user_id=test_user.id,
-            owner_type="user",
-            owner_id=test_user.id,
-            created_at=now - timedelta(days=15 + i),  # 15-18 days ago (within 30 days)
-        )
-        db.add(case)
-        cases.append(case)
-
-    # Cases created last month (2 cases) - 35-40 days ago (in 30-60 day window)
+    # Older cases outside the last week (2 cases) - 35-40 days ago
     for i in range(2):
-        email = f"lastmonth{i}@test.com"
+        email = f"older{i}@test.com"
         normalized_email = normalize_email(email)
         case = Surrogate(
             id=uuid.uuid4(),
             organization_id=test_org.id,
             stage_id=stage.id,
-            full_name=f"Last Month Case {i}",
+            full_name=f"Older Case {i}",
             status_label=stage.label,
             email=normalized_email,
             email_hash=hash_email(normalized_email),
             source="website",
-            surrogate_number=f"S{10030 + i:05d}",
+            surrogate_number=f"S{10110 + i:05d}",
             created_by_user_id=test_user.id,
             owner_type="user",
             owner_id=test_user.id,
-            created_at=now - timedelta(days=35 + i),  # 35-36 days ago
+            created_at=now - timedelta(days=35 + i),
         )
         db.add(case)
         cases.append(case)
@@ -184,21 +229,21 @@ class TestCaseStats:
         assert "total" in stats
         assert "by_status" in stats
         assert "this_week" in stats
-        assert "this_month" in stats
+        assert "new_leads_24h" in stats
 
         # Period comparison fields
         assert "last_week" in stats
-        assert "last_month" in stats
+        assert "new_leads_prev_24h" in stats
         assert "week_change_pct" in stats
-        assert "month_change_pct" in stats
+        assert "new_leads_change_pct" in stats
         assert "pending_tasks" in stats
 
     def test_this_week_count(self, db, test_org, cases_for_stats):
         """This week count is accurate."""
         stats = surrogate_service.get_surrogate_stats(db, test_org.id)
 
-        # We created 3 cases this week
-        assert stats["this_week"] == 3
+        # We created 9 cases this week
+        assert stats["this_week"] == 9
 
     def test_last_week_count(self, db, test_org, cases_for_stats):
         """Last week count is accurate."""
@@ -211,32 +256,31 @@ class TestCaseStats:
         """Week-over-week percentage is calculated correctly."""
         stats = surrogate_service.get_surrogate_stats(db, test_org.id)
 
-        # this_week=3, last_week=5
-        # Change = ((3 - 5) / 5) * 100 = -40%
-        assert stats["week_change_pct"] == -40.0
+        # this_week=9, last_week=5
+        # Change = ((9 - 5) / 5) * 100 = 80%
+        assert stats["week_change_pct"] == 80.0
 
-    def test_this_month_count(self, db, test_org, cases_for_stats):
-        """This month count includes all cases in last 30 days."""
+    def test_new_leads_24h_count(self, db, test_org, cases_for_stats):
+        """New leads count includes only unreached leads from last 24h."""
         stats = surrogate_service.get_surrogate_stats(db, test_org.id)
 
-        # 3 (this week) + 5 (last week) + 4 (this month earlier) = 12
-        # (Cases at 20-23 days ago are within 30 days)
-        assert stats["this_month"] == 12
+        # 2 unreached leads in last 24h (reached lead excluded)
+        assert stats["new_leads_24h"] == 2
 
-    def test_last_month_count(self, db, test_org, cases_for_stats):
-        """Last month count is accurate."""
+    def test_new_leads_prev_24h_count(self, db, test_org, cases_for_stats):
+        """Previous 24h window count is accurate."""
         stats = surrogate_service.get_surrogate_stats(db, test_org.id)
 
-        # We created 2 cases 35-36 days ago (in the 30-60 day window)
-        assert stats["last_month"] == 2
+        # We created 3 unreached leads in the previous 24h window
+        assert stats["new_leads_prev_24h"] == 3
 
-    def test_month_change_percentage(self, db, test_org, cases_for_stats):
-        """Month-over-month percentage is calculated correctly."""
+    def test_new_leads_change_percentage(self, db, test_org, cases_for_stats):
+        """24h-over-24h percentage is calculated correctly."""
         stats = surrogate_service.get_surrogate_stats(db, test_org.id)
 
-        # this_month=12, last_month=2
-        # Change = ((12 - 2) / 2) * 100 = 500%
-        assert stats["month_change_pct"] == 500.0
+        # new_leads_24h=2, new_leads_prev_24h=3
+        # Change = ((2 - 3) / 3) * 100 = -33.3%
+        assert stats["new_leads_change_pct"] == -33.3
 
     def test_empty_org_returns_zeros(self, db):
         """Empty org returns zero values with 0.0 for percentages."""
@@ -247,9 +291,9 @@ class TestCaseStats:
         assert stats["this_week"] == 0
         assert stats["last_week"] == 0
         assert stats["week_change_pct"] == 0.0  # 0 current, 0 previous = 0%
-        assert stats["this_month"] == 0
-        assert stats["last_month"] == 0
-        assert stats["month_change_pct"] == 0.0
+        assert stats["new_leads_24h"] == 0
+        assert stats["new_leads_prev_24h"] == 0
+        assert stats["new_leads_change_pct"] == 0.0
 
 
 class TestCaseStatsEndpoint:
@@ -267,9 +311,9 @@ class TestCaseStatsEndpoint:
         assert "this_week" in data
         assert "last_week" in data
         assert "week_change_pct" in data
-        assert "this_month" in data
-        assert "last_month" in data
-        assert "month_change_pct" in data
+        assert "new_leads_24h" in data
+        assert "new_leads_prev_24h" in data
+        assert "new_leads_change_pct" in data
         assert "pending_tasks" in data
 
     @pytest.mark.asyncio

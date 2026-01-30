@@ -97,6 +97,8 @@ async def test_attention_scoped_to_owner_when_owned(db, test_org, default_stage)
             full_name="Owned Surrogate",
             email="owned@example.com",
             email_hash=hash_email("owned@example.com"),
+            created_at=now - timedelta(days=10),
+            updated_at=now - timedelta(days=10),
             last_contacted_at=now - timedelta(days=10),
         )
         other = Surrogate(
@@ -111,6 +113,8 @@ async def test_attention_scoped_to_owner_when_owned(db, test_org, default_stage)
             full_name="Other Surrogate",
             email="other@example.com",
             email_hash=hash_email("other@example.com"),
+            created_at=now - timedelta(days=10),
+            updated_at=now - timedelta(days=10),
             last_contacted_at=now - timedelta(days=10),
         )
         db.add_all([owned, other])
@@ -149,6 +153,8 @@ async def test_attention_case_manager_orgwide_when_no_owned(db, test_org, defaul
             full_name="Other Org Surrogate",
             email="orgwide@example.com",
             email_hash=hash_email("orgwide@example.com"),
+            created_at=now - timedelta(days=10),
+            updated_at=now - timedelta(days=10),
             last_contacted_at=now - timedelta(days=10),
         )
         db.add(other)
@@ -187,6 +193,8 @@ async def test_attention_admin_sees_orgwide(db, test_org, default_stage):
             full_name="Admin Visible Surrogate",
             email="admin-visible@example.com",
             email_hash=hash_email("admin-visible@example.com"),
+            created_at=now - timedelta(days=10),
+            updated_at=now - timedelta(days=10),
             last_contacted_at=now - timedelta(days=10),
         )
         db.add(other)
@@ -197,6 +205,68 @@ async def test_attention_admin_sees_orgwide(db, test_org, default_stage):
         data = response.json()
         assert data["unreached_count"] == 1
         assert data["unreached_leads"][0]["id"] == str(other.id)
+
+
+@pytest.mark.asyncio
+async def test_attention_unreached_excludes_recent_updates(db, test_org, default_stage):
+    async with role_client(db, test_org, Role.CASE_MANAGER) as (client, user):
+        now = datetime.now(timezone.utc)
+        stale = Surrogate(
+            id=uuid.uuid4(),
+            surrogate_number="S20007",
+            organization_id=test_org.id,
+            stage_id=default_stage.id,
+            status_label=default_stage.label,
+            source=SurrogateSource.MANUAL.value,
+            owner_type=OwnerType.USER.value,
+            owner_id=user.id,
+            full_name="Stale Lead",
+            email="stale@example.com",
+            email_hash=hash_email("stale@example.com"),
+            created_at=now - timedelta(days=10),
+            updated_at=now - timedelta(days=10),
+            last_contacted_at=None,
+        )
+        recent_created = Surrogate(
+            id=uuid.uuid4(),
+            surrogate_number="S20008",
+            organization_id=test_org.id,
+            stage_id=default_stage.id,
+            status_label=default_stage.label,
+            source=SurrogateSource.MANUAL.value,
+            owner_type=OwnerType.USER.value,
+            owner_id=user.id,
+            full_name="Recent Lead",
+            email="recent@example.com",
+            email_hash=hash_email("recent@example.com"),
+            created_at=now - timedelta(days=2),
+            updated_at=now - timedelta(days=2),
+            last_contacted_at=None,
+        )
+        recent_updated = Surrogate(
+            id=uuid.uuid4(),
+            surrogate_number="S20009",
+            organization_id=test_org.id,
+            stage_id=default_stage.id,
+            status_label=default_stage.label,
+            source=SurrogateSource.MANUAL.value,
+            owner_type=OwnerType.USER.value,
+            owner_id=user.id,
+            full_name="Recently Updated Lead",
+            email="updated@example.com",
+            email_hash=hash_email("updated@example.com"),
+            created_at=now - timedelta(days=12),
+            updated_at=now - timedelta(days=2),
+            last_contacted_at=None,
+        )
+        db.add_all([stale, recent_created, recent_updated])
+        db.flush()
+
+        response = await client.get("/dashboard/attention")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["unreached_count"] == 1
+        assert {item["id"] for item in data["unreached_leads"]} == {str(stale.id)}
 
 
 @pytest.mark.asyncio
@@ -250,6 +320,8 @@ async def test_attention_assignee_filter_admin(db, test_org, default_stage):
             full_name="Other Surrogate",
             email="other-admin@example.com",
             email_hash=hash_email("other-admin@example.com"),
+            created_at=now - timedelta(days=10),
+            updated_at=now - timedelta(days=10),
             last_contacted_at=now - timedelta(days=10),
         )
         db.add(other)

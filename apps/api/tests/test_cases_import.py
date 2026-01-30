@@ -72,8 +72,8 @@ async def test_preview_import_ai_available_requires_consent(
     settings = AISettings(
         organization_id=test_org.id,
         is_enabled=True,
-        provider="openai",
-        model="gpt-4o-mini",
+        provider="gemini",
+        model="gemini-3-flash-preview",
         current_version=1,
         consent_accepted_at=None,
         consent_accepted_by=None,
