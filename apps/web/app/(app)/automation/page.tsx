@@ -608,7 +608,8 @@ export default function AutomationPage() {
 
     const handleTest = (id: string) => {
         setTestWorkflowId(id)
-        setTestSurrogateId("")
+        setTestEntityId("")
+        setTestEntityQuery("")
         setTestResult(null)
         setShowTestModal(true)
     }
