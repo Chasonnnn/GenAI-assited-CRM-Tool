@@ -5,6 +5,7 @@ import Link from "@/components/app-link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -98,7 +99,7 @@ type AiProvider = (typeof AI_PROVIDERS)[number]["value"]
 const isAiProvider = (value: string | null | undefined): value is AiProvider =>
     AI_PROVIDERS.some((providerOption) => providerOption.value === value)
 
-function AIConfigurationSection() {
+function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
     const { data: aiSettings, isLoading } = useAISettings()
     const { data: consentInfo } = useAIConsent()
     const acceptConsent = useAcceptConsent()
@@ -165,6 +166,8 @@ function AIConfigurationSection() {
             vertexServiceAccount.trim() &&
             vertexAudience.trim()
         )
+    const showHeading = variant === "page"
+    const containerClass = showHeading ? "border-t pt-6" : "space-y-4"
 
     const handleTestKey = async () => {
         if (provider === "vertex_wif") return
@@ -252,21 +255,27 @@ function AIConfigurationSection() {
 
     if (isLoading) {
         return (
-            <div className="border-t pt-6">
-                <h2 className="mb-4 text-lg font-semibold">AI Configuration</h2>
+            <div className={containerClass}>
+                {showHeading && (
+                    <h2 className="mb-4 text-lg font-semibold">AI Configuration</h2>
+                )}
                 <div className="flex items-center justify-center py-8">
-                    <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                    <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                 </div>
             </div>
         )
     }
 
     return (
-        <div className="border-t pt-6">
-            <h2 className="mb-4 text-lg font-semibold">AI Configuration</h2>
-            <p className="mb-4 text-sm text-muted-foreground">
-                Configure AI assistant settings for your organization. Use BYOK (OpenAI/Gemini), Vertex API key (express mode), or Vertex AI via Workload Identity Federation.
-            </p>
+        <div className={containerClass}>
+            {showHeading && (
+                <>
+                    <h2 className="mb-4 text-lg font-semibold">AI Configuration</h2>
+                    <p className="mb-4 text-sm text-muted-foreground">
+                        Configure AI assistant settings for your organization. Use BYOK (OpenAI/Gemini), Vertex API key (express mode), or Vertex AI via Workload Identity Federation.
+                    </p>
+                </>
+            )}
 
             {!consentAccepted && consentInfo && (
                 <Card className="mb-4 border-yellow-200 bg-yellow-50/60">
@@ -286,8 +295,8 @@ function AIConfigurationSection() {
                         >
                             {acceptConsent.isPending ? (
                                 <>
-                                    <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                    Accepting...
+                                    <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                    Accepting…
                                 </>
                             ) : (
                                 "Accept Consent"
@@ -302,7 +311,7 @@ function AIConfigurationSection() {
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <div className="flex size-10 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-900">
-                                <SparklesIcon className="size-5 text-purple-600 dark:text-purple-400" />
+                                <SparklesIcon className="size-5 text-purple-600 dark:text-purple-400" aria-hidden="true" />
                             </div>
                             <div>
                                 <CardTitle className="text-base">AI Assistant</CardTitle>
@@ -371,6 +380,8 @@ function AIConfigurationSection() {
                                     placeholder="Enter API key"
                                     disabled={!editingKey && !apiKey && !!aiSettings?.api_key_masked}
                                     className="flex-1"
+                                    name="ai-api-key"
+                                    autoComplete="off"
                                 />
                                 {aiSettings?.api_key_masked && !apiKey && !editingKey ? (
                                     <Button
@@ -392,11 +403,11 @@ function AIConfigurationSection() {
                                         disabled={!apiKey.trim() || testKey.isPending}
                                     >
                                         {testKey.isPending ? (
-                                            <Loader2Icon className="size-4 animate-spin" />
+                                            <Loader2Icon className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                         ) : keyTested === true ? (
-                                            <CheckIcon className="size-4 text-green-600" />
+                                            <CheckIcon className="size-4 text-green-600" aria-hidden="true" />
                                         ) : keyTested === false ? (
-                                            <XCircleIcon className="size-4 text-red-600" />
+                                            <XCircleIcon className="size-4 text-red-600" aria-hidden="true" />
                                         ) : (
                                             "Test"
                                         )}
@@ -451,6 +462,8 @@ function AIConfigurationSection() {
                                             value={vertexProjectId}
                                             onChange={(e) => setVertexProjectId(e.target.value)}
                                             placeholder="your-gcp-project-id"
+                                            name="vertex-project-key"
+                                            autoComplete="off"
                                         />
                                     </div>
                                     <div className="space-y-2">
@@ -460,6 +473,8 @@ function AIConfigurationSection() {
                                             value={vertexLocation}
                                             onChange={(e) => setVertexLocation(e.target.value)}
                                             placeholder="us-central1"
+                                            name="vertex-location-key"
+                                            autoComplete="off"
                                         />
                                     </div>
                                 </div>
@@ -505,7 +520,7 @@ function AIConfigurationSection() {
                                         disabled={connectGcp.isPending}
                                     >
                                         {connectGcp.isPending ? (
-                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                         ) : null}
                                         Connect GCP
                                     </Button>
@@ -519,6 +534,8 @@ function AIConfigurationSection() {
                                     value={vertexProjectId}
                                     onChange={(e) => setVertexProjectId(e.target.value)}
                                     placeholder="your-gcp-project-id"
+                                    name="vertex-project"
+                                    autoComplete="off"
                                 />
                             </div>
 
@@ -529,6 +546,8 @@ function AIConfigurationSection() {
                                     value={vertexLocation}
                                     onChange={(e) => setVertexLocation(e.target.value)}
                                     placeholder="us-central1"
+                                    name="vertex-location"
+                                    autoComplete="off"
                                 />
                             </div>
 
@@ -539,6 +558,8 @@ function AIConfigurationSection() {
                                     value={vertexServiceAccount}
                                     onChange={(e) => setVertexServiceAccount(e.target.value)}
                                     placeholder="vertex-sa@project.iam.gserviceaccount.com"
+                                    name="vertex-service-account"
+                                    autoComplete="off"
                                 />
                             </div>
 
@@ -549,6 +570,8 @@ function AIConfigurationSection() {
                                     value={vertexAudience}
                                     onChange={(e) => setVertexAudience(e.target.value)}
                                     placeholder="//iam.googleapis.com/projects/123/locations/global/workloadIdentityPools/pool/providers/provider"
+                                    name="vertex-audience"
+                                    autoComplete="off"
                                 />
                                 <p className="text-xs text-muted-foreground">
                                     Use the provider resource name or full audience from the Workload Identity Provider.
@@ -581,12 +604,12 @@ function AIConfigurationSection() {
                     <Button onClick={handleSave} disabled={updateSettings.isPending || !vertexReady} className="w-full">
                         {updateSettings.isPending ? (
                             <>
-                                <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                Saving...
+                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                Saving…
                             </>
                         ) : saved ? (
                             <>
-                                <CheckIcon className="mr-2 size-4" />
+                                <CheckIcon className="mr-2 size-4" aria-hidden="true" />
                                 Saved!
                             </>
                         ) : (
@@ -599,7 +622,7 @@ function AIConfigurationSection() {
     )
 }
 
-function EmailConfigurationSection() {
+function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
     const { data: settings, isLoading } = useResendSettings()
     const updateSettings = useUpdateResendSettings()
     const testKey = useTestResendKey()
@@ -737,30 +760,38 @@ function EmailConfigurationSection() {
     const gmailReady = provider !== "gmail" || hasGmailSender
     const canSave = Boolean(provider) && resendReady && gmailReady
     const showMaskedKey = Boolean(settings?.api_key_masked) && !isEditingKey && !apiKey
+    const showHeading = variant === "page"
+    const containerClass = showHeading ? "border-t pt-6" : "space-y-4"
 
     if (isLoading) {
         return (
-            <div className="border-t pt-6">
-                <h2 className="mb-4 text-lg font-semibold">Email Configuration</h2>
+            <div className={containerClass}>
+                {showHeading && (
+                    <h2 className="mb-4 text-lg font-semibold">Email Configuration</h2>
+                )}
                 <div className="flex items-center justify-center py-8">
-                    <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                    <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                 </div>
             </div>
         )
     }
 
     return (
-        <div className="border-t pt-6">
-            <h2 className="mb-4 text-lg font-semibold">Email Configuration</h2>
-            <p className="mb-4 text-sm text-muted-foreground">
-                Configure the email provider for campaigns. Choose between Resend (recommended for deliverability) or Gmail.
-            </p>
+        <div className={containerClass}>
+            {showHeading && (
+                <>
+                    <h2 className="mb-4 text-lg font-semibold">Email Configuration</h2>
+                    <p className="mb-4 text-sm text-muted-foreground">
+                        Configure the email provider for campaigns. Choose between Resend (recommended for deliverability) or Gmail.
+                    </p>
+                </>
+            )}
 
             <Card>
                 <CardHeader className="pb-3">
                     <div className="flex items-center gap-3">
                         <div className="flex size-10 items-center justify-center rounded-lg bg-teal-100 dark:bg-teal-900">
-                            <SendIcon className="size-5 text-teal-600 dark:text-teal-400" />
+                            <SendIcon className="size-5 text-teal-600 dark:text-teal-400" aria-hidden="true" />
                         </div>
                         <div>
                             <CardTitle className="text-base">Campaign Email Provider</CardTitle>
@@ -778,11 +809,13 @@ function EmailConfigurationSection() {
                 <CardContent className="space-y-6">
                     {/* Provider Selection */}
                     <div className="space-y-3">
-                        <Label>Email Provider</Label>
+                        <Label htmlFor="email-provider">Email Provider</Label>
                         <RadioGroup
                             value={provider}
                             onValueChange={(v) => handleProviderChange(v as "resend" | "gmail" | "")}
                             className="flex flex-col gap-3"
+                            id="email-provider"
+                            aria-label="Email provider"
                         >
                             <div className="flex items-center space-x-2">
                                 <RadioGroupItem value="resend" id="provider-resend" />
@@ -820,9 +853,11 @@ function EmailConfigurationSection() {
                                             setIsEditingKey(true)
                                             setHasUserEdited(true)
                                         }}
-                                        placeholder="re_..."
+                                        placeholder="re_…"
                                         disabled={showMaskedKey}
                                         className="flex-1"
+                                        name="resend-api-key"
+                                        autoComplete="off"
                                     />
                                     {showMaskedKey ? (
                                         <Button
@@ -847,11 +882,11 @@ function EmailConfigurationSection() {
                                                 disabled={!apiKey.trim() || testKey.isPending}
                                             >
                                                 {testKey.isPending ? (
-                                                    <Loader2Icon className="size-4 animate-spin" />
+                                                    <Loader2Icon className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                                 ) : keyTested?.valid ? (
-                                                    <CheckIcon className="size-4 text-green-600" />
+                                                    <CheckIcon className="size-4 text-green-600" aria-hidden="true" />
                                                 ) : keyTested !== null ? (
-                                                    <XCircleIcon className="size-4 text-red-600" />
+                                                    <XCircleIcon className="size-4 text-red-600" aria-hidden="true" />
                                                 ) : (
                                                     "Test"
                                                 )}
@@ -874,7 +909,7 @@ function EmailConfigurationSection() {
                                 </div>
                                 {keyTested?.valid && (
                                     <p className="text-xs text-green-600">
-                                        API key is valid! Verified domain{keyTested.verified_domains && keyTested.verified_domains.length > 1 ? "s" : ""}: {keyTested.verified_domains?.join(", ") || settings?.verified_domain}
+                                        API key is valid! Verified domain: {keyTested.verified_domains?.[0] || settings?.verified_domain}
                                     </p>
                                 )}
                                 {keyTested && !keyTested.valid && (
@@ -888,7 +923,7 @@ function EmailConfigurationSection() {
                             {/* Verified Domain */}
                             {settings?.verified_domain && (
                                 <div className="flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm dark:bg-green-900/20">
-                                    <CheckCircleIcon className="size-4 text-green-600" />
+                                    <CheckCircleIcon className="size-4 text-green-600" aria-hidden="true" />
                                     <span>Verified domain: <strong>{settings.verified_domain}</strong></span>
                                 </div>
                             )}
@@ -905,6 +940,8 @@ function EmailConfigurationSection() {
                                         setHasUserEdited(true)
                                     }}
                                     placeholder={settings?.verified_domain ? `no-reply@${settings.verified_domain}` : "no-reply@yourdomain.com"}
+                                    name="from-email"
+                                    autoComplete="email"
                                 />
                                 {settings?.verified_domain && (
                                     <p className="text-xs text-muted-foreground">
@@ -924,6 +961,8 @@ function EmailConfigurationSection() {
                                         setHasUserEdited(true)
                                     }}
                                     placeholder="Your Company Name"
+                                    name="from-name"
+                                    autoComplete="organization"
                                 />
                             </div>
 
@@ -939,6 +978,8 @@ function EmailConfigurationSection() {
                                         setHasUserEdited(true)
                                     }}
                                     placeholder="support@yourdomain.com"
+                                    name="reply-to"
+                                    autoComplete="email"
                                 />
                             </div>
 
@@ -956,19 +997,21 @@ function EmailConfigurationSection() {
                                             variant="outline"
                                             size="sm"
                                             onClick={() => copyToClipboard(settings.webhook_url)}
+                                            aria-label="Copy webhook URL"
                                         >
-                                            <CopyIcon className="size-4" />
+                                            <CopyIcon className="size-4" aria-hidden="true" />
                                         </Button>
                                         <Button
                                             variant="outline"
                                             size="sm"
                                             onClick={handleRotateWebhook}
                                             disabled={rotateWebhook.isPending}
+                                            aria-label="Rotate webhook secret"
                                         >
                                             {rotateWebhook.isPending ? (
-                                                <Loader2Icon className="size-4 animate-spin" />
+                                                <Loader2Icon className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                             ) : (
-                                                <RotateCwIcon className="size-4" />
+                                                <RotateCwIcon className="size-4" aria-hidden="true" />
                                             )}
                                         </Button>
                                     </div>
@@ -988,8 +1031,9 @@ function EmailConfigurationSection() {
                                                     variant="ghost"
                                                     size="sm"
                                                     onClick={() => copyToClipboard(webhookSecret)}
+                                                    aria-label="Copy webhook secret"
                                                 >
-                                                    <CopyIcon className="size-4" />
+                                                    <CopyIcon className="size-4" aria-hidden="true" />
                                                 </Button>
                                             </div>
                                         </div>
@@ -1014,7 +1058,7 @@ function EmailConfigurationSection() {
                                     }}
                                 >
                                     <SelectTrigger id="gmail-sender">
-                                        <SelectValue placeholder={eligibleSendersLoading ? "Loading senders..." : "Select admin with Gmail connected"} />
+                                        <SelectValue placeholder={eligibleSendersLoading ? "Loading senders…" : "Select admin with Gmail connected"} />
                                     </SelectTrigger>
                                     <SelectContent>
                                         {eligibleSenders?.map((sender) => (
@@ -1036,7 +1080,7 @@ function EmailConfigurationSection() {
 
                             {settings?.default_sender_name && (
                                 <div className="flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm dark:bg-green-900/20">
-                                    <CheckCircleIcon className="size-4 text-green-600" />
+                                    <CheckCircleIcon className="size-4 text-green-600" aria-hidden="true" />
                                     <span>
                                         Current sender: <strong>{settings.default_sender_name}</strong> ({settings.default_sender_email})
                                     </span>
@@ -1049,12 +1093,12 @@ function EmailConfigurationSection() {
                     <Button onClick={handleSave} disabled={updateSettings.isPending || !canSave} className="w-full">
                         {updateSettings.isPending ? (
                             <>
-                                <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                Saving...
+                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                Saving…
                             </>
                         ) : saved ? (
                             <>
-                                <CheckIcon className="mr-2 size-4" />
+                                <CheckIcon className="mr-2 size-4" aria-hidden="true" />
                                 Saved!
                             </>
                         ) : (
@@ -1067,7 +1111,7 @@ function EmailConfigurationSection() {
     )
 }
 
-function ZapierWebhookSection() {
+function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
     const { data: settings, isLoading } = useZapierSettings()
     const rotateSecret = useRotateZapierSecret()
     const updateOutbound = useUpdateZapierOutboundSettings()
@@ -1167,30 +1211,38 @@ function ZapierWebhookSection() {
             toast.error("Failed to send outbound test event")
         }
     }
+    const showHeading = variant === "page"
+    const containerClass = showHeading ? "border-t pt-6" : "space-y-4"
 
     if (isLoading) {
         return (
-            <div className="border-t pt-6">
-                <h2 className="mb-4 text-lg font-semibold">Zapier Webhook</h2>
+            <div className={containerClass}>
+                {showHeading && (
+                    <h2 className="mb-4 text-lg font-semibold">Zapier Webhook</h2>
+                )}
                 <div className="flex items-center justify-center py-8">
-                    <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                    <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                 </div>
             </div>
         )
     }
 
     return (
-        <div className="border-t pt-6">
-            <h2 className="mb-4 text-lg font-semibold">Zapier Webhook</h2>
-            <p className="mb-4 text-sm text-muted-foreground">
-                Use this webhook to push leads from Zapier into Surrogacy Force.
-            </p>
+        <div className={containerClass}>
+            {showHeading && (
+                <>
+                    <h2 className="mb-4 text-lg font-semibold">Zapier Webhook</h2>
+                    <p className="mb-4 text-sm text-muted-foreground">
+                        Use this webhook to push leads from Zapier into Surrogacy Force.
+                    </p>
+                </>
+            )}
 
             <Card>
                 <CardHeader className="pb-3">
                     <div className="flex items-center gap-3">
                         <div className="flex size-10 items-center justify-center rounded-lg bg-indigo-100 dark:bg-indigo-900">
-                            <LinkIcon className="size-5 text-indigo-600 dark:text-indigo-400" />
+                            <LinkIcon className="size-5 text-indigo-600 dark:text-indigo-400" aria-hidden="true" />
                         </div>
                         <div>
                             <CardTitle className="text-base">Lead Intake Webhook</CardTitle>
@@ -1210,8 +1262,9 @@ function ZapierWebhookSection() {
                                 variant="outline"
                                 size="icon"
                                 onClick={() => settings?.webhook_url && copyToClipboard(settings.webhook_url)}
+                                aria-label="Copy webhook URL"
                             >
-                                <CopyIcon className="size-4" />
+                                <CopyIcon className="size-4" aria-hidden="true" />
                             </Button>
                         </div>
                         <p className="text-xs text-muted-foreground">
@@ -1239,12 +1292,12 @@ function ZapierWebhookSection() {
                         >
                             {rotateSecret.isPending ? (
                                 <>
-                                    <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                    Rotating...
+                                    <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                    Rotating…
                                 </>
                             ) : (
                                 <>
-                                    <RotateCwIcon className="mr-2 size-4" />
+                                    <RotateCwIcon className="mr-2 size-4" aria-hidden="true" />
                                     Rotate Webhook Secret
                                 </>
                             )}
@@ -1259,8 +1312,9 @@ function ZapierWebhookSection() {
                                         variant="outline"
                                         size="icon"
                                         onClick={() => copyToClipboard(webhookSecret)}
+                                        aria-label="Copy webhook secret"
                                     >
-                                        <CopyIcon className="size-4" />
+                                        <CopyIcon className="size-4" aria-hidden="true" />
                                     </Button>
                                 </div>
                             </div>
@@ -1274,6 +1328,8 @@ function ZapierWebhookSection() {
                                 placeholder="Meta Form ID (optional if only one form)"
                                 value={testFormId}
                                 onChange={(event) => setTestFormId(event.target.value)}
+                                name="zapier-test-form-id"
+                                autoComplete="off"
                             />
                             <p className="text-xs text-muted-foreground">
                                 Sends a dummy lead through the same mapping pipeline as Meta leads.
@@ -1286,12 +1342,12 @@ function ZapierWebhookSection() {
                         >
                             {sendTestLead.isPending ? (
                                 <>
-                                    <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                    Sending...
+                                    <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                    Sending…
                                 </>
                             ) : (
                                 <>
-                                    <ActivityIcon className="mr-2 size-4" />
+                                    <ActivityIcon className="mr-2 size-4" aria-hidden="true" />
                                     Send Test Lead
                                 </>
                             )}
@@ -1306,7 +1362,11 @@ function ZapierWebhookSection() {
                                     Send surrogate stage changes to Zapier for Meta Conversions.
                                 </p>
                             </div>
-                            <Switch checked={outboundEnabled} onCheckedChange={setOutboundEnabled} />
+                            <Switch
+                                checked={outboundEnabled}
+                                onCheckedChange={setOutboundEnabled}
+                                aria-label="Enable outbound stage events"
+                            />
                         </div>
 
                         <div className="space-y-2">
@@ -1314,7 +1374,9 @@ function ZapierWebhookSection() {
                             <Input
                                 value={outboundUrl}
                                 onChange={(event) => setOutboundUrl(event.target.value)}
-                                placeholder="https://hooks.zapier.com/hooks/catch/..."
+                                placeholder="https://hooks.zapier.com/hooks/catch/…"
+                                name="zapier-outbound-url"
+                                autoComplete="off"
                             />
                         </div>
 
@@ -1325,6 +1387,8 @@ function ZapierWebhookSection() {
                                 value={outboundSecret}
                                 onChange={(event) => setOutboundSecret(event.target.value)}
                                 placeholder={settings?.outbound_secret_configured ? "•••••••• (set)" : "Enter secret"}
+                                name="zapier-outbound-secret"
+                                autoComplete="off"
                             />
                             <p className="text-xs text-muted-foreground">
                                 If provided, we send it as X-Webhook-Token header.
@@ -1338,7 +1402,11 @@ function ZapierWebhookSection() {
                                     Optional hashed email/phone for better match rates.
                                 </p>
                             </div>
-                            <Switch checked={sendHashedPii} onCheckedChange={setSendHashedPii} />
+                            <Switch
+                                checked={sendHashedPii}
+                                onCheckedChange={setSendHashedPii}
+                                aria-label="Include hashed PII"
+                            />
                         </div>
 
                         <div className="space-y-2">
@@ -1362,6 +1430,8 @@ function ZapierWebhookSection() {
                                                 setEventMapping(next)
                                             }}
                                             placeholder="Event name"
+                                            name={`zapier-event-${item.stage_slug}`}
+                                            autoComplete="off"
                                         />
                                         <div className="flex items-center gap-2">
                                             <Switch
@@ -1373,6 +1443,7 @@ function ZapierWebhookSection() {
                                                     next[index] = { ...existing, enabled: checked }
                                                     setEventMapping(next)
                                                 }}
+                                                aria-label={`Enable ${item.stage_slug} event`}
                                             />
                                             <span className="text-xs text-muted-foreground">Enabled</span>
                                         </div>
@@ -1385,8 +1456,8 @@ function ZapierWebhookSection() {
                             <Button onClick={handleSaveOutbound} disabled={updateOutbound.isPending}>
                                 {updateOutbound.isPending ? (
                                     <>
-                                        <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                        Saving...
+                                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                        Saving…
                                     </>
                                 ) : (
                                     "Save Outbound Settings"
@@ -1397,7 +1468,7 @@ function ZapierWebhookSection() {
                                     value={selectedOutboundStage}
                                     onValueChange={(value) => setSelectedOutboundStage(value ?? '')}
                                 >
-                                    <SelectTrigger className="w-full md:w-56">
+                                    <SelectTrigger className="w-full md:w-56" aria-label="Select stage">
                                         <SelectValue placeholder="Select stage" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1415,12 +1486,12 @@ function ZapierWebhookSection() {
                                 >
                                     {sendOutboundTest.isPending ? (
                                         <>
-                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                            Sending...
+                                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                            Sending…
                                         </>
                                     ) : (
                                         <>
-                                            <ActivityIcon className="mr-2 size-4" />
+                                            <ActivityIcon className="mr-2 size-4" aria-hidden="true" />
                                             Send Test Event
                                         </>
                                     )}
@@ -1437,14 +1508,56 @@ function ZapierWebhookSection() {
 export default function IntegrationsPage() {
     const { data: healthData, isLoading, refetch, isFetching } = useIntegrationHealth()
     const { data: userIntegrations } = useUserIntegrations()
+    const { data: aiSettings, isLoading: aiSettingsLoading } = useAISettings()
+    const { data: resendSettings, isLoading: resendSettingsLoading } = useResendSettings()
+    const { data: zapierSettings, isLoading: zapierSettingsLoading } = useZapierSettings()
     const connectZoom = useConnectZoom()
     const connectGmail = useConnectGmail()
     const connectGoogleCalendar = useConnectGoogleCalendar()
     const disconnectIntegration = useDisconnectIntegration()
+    const [aiDialogOpen, setAiDialogOpen] = useState(false)
+    const [emailDialogOpen, setEmailDialogOpen] = useState(false)
+    const [zapierDialogOpen, setZapierDialogOpen] = useState(false)
 
     const zoomIntegration = userIntegrations?.find(i => i.integration_type === 'zoom')
     const gmailIntegration = userIntegrations?.find(i => i.integration_type === 'gmail')
     const googleCalendarIntegration = userIntegrations?.find(i => i.integration_type === 'google_calendar')
+    const aiProviderLabel = aiSettings?.provider
+        ? AI_PROVIDERS.find((providerOption) => providerOption.value === aiSettings.provider)?.label
+            ?? aiSettings.provider
+        : "Not configured"
+    const aiStatusLabel = aiSettings?.is_enabled ? "Enabled" : "Disabled"
+    const aiStatusVariant = aiSettings?.is_enabled ? "default" : "secondary"
+    const aiStatusIcon = aiSettings?.is_enabled ? CheckCircleIcon : AlertTriangleIcon
+    const emailProviderLabel = resendSettings?.email_provider === "resend"
+        ? "Resend"
+        : resendSettings?.email_provider === "gmail"
+            ? "Gmail"
+            : "Not configured"
+    const emailConfigured = Boolean(resendSettings?.email_provider)
+    const emailStatusLabel = emailConfigured ? "Configured" : "Not configured"
+    const emailStatusVariant = emailConfigured ? "default" : "secondary"
+    const emailStatusIcon = emailConfigured ? CheckCircleIcon : AlertTriangleIcon
+    const emailDetail = emailConfigured
+        ? resendSettings?.email_provider === "resend"
+            ? resendSettings?.from_email ?? "Resend configured"
+            : resendSettings?.default_sender_email ?? "Gmail sender selected"
+        : "Choose a provider"
+    const zapierConfigured = Boolean(zapierSettings?.secret_configured)
+    const zapierActive = Boolean(zapierSettings?.is_active)
+    const zapierStatusLabel = zapierConfigured
+        ? (zapierActive ? "Active" : "Configured")
+        : "Not configured"
+    const zapierStatusVariant = zapierConfigured ? "default" : "secondary"
+    const zapierStatusIcon = zapierConfigured
+        ? (zapierActive ? CheckCircleIcon : AlertTriangleIcon)
+        : XCircleIcon
+    const zapierDetail = zapierConfigured
+        ? (zapierSettings?.outbound_enabled ? "Inbound + outbound enabled" : "Inbound webhook ready")
+        : "Configure webhook secret"
+    const AiStatusIcon = aiStatusIcon
+    const EmailStatusIcon = emailStatusIcon
+    const ZapierStatusIcon = zapierStatusIcon
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -1453,7 +1566,7 @@ export default function IntegrationsPage() {
                 <div className="flex h-16 items-center justify-between px-6">
                     <h1 className="text-2xl font-semibold">Integrations</h1>
                     <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-                        <RefreshCwIcon className={`mr-2 size-4 ${isFetching ? "animate-spin" : ""}`} />
+                        <RefreshCwIcon className={`mr-2 size-4 ${isFetching ? "animate-spin" : ""} motion-reduce:animate-none`} aria-hidden="true" />
                         Refresh
                     </Button>
                 </div>
@@ -1472,7 +1585,7 @@ export default function IntegrationsPage() {
                             <CardHeader className="pb-3">
                                 <div className="flex items-center gap-3">
                                     <div className="flex size-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900">
-                                        <VideoIcon className="size-5 text-blue-600 dark:text-blue-400" />
+                                        <VideoIcon className="size-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
                                     </div>
                                     <div>
                                         <CardTitle className="text-base">Zoom</CardTitle>
@@ -1485,7 +1598,7 @@ export default function IntegrationsPage() {
                                     <div className="space-y-3">
                                         <div className="flex items-center gap-2">
                                             <Badge variant="default" className="bg-green-600">
-                                                <CheckCircleIcon className="mr-1 size-3" />
+                                                <CheckCircleIcon className="mr-1 size-3" aria-hidden="true" />
                                                 Connected
                                             </Badge>
                                         </div>
@@ -1497,7 +1610,7 @@ export default function IntegrationsPage() {
                                             onClick={() => disconnectIntegration.mutate('zoom')}
                                             disabled={disconnectIntegration.isPending}
                                         >
-                                            <UnlinkIcon className="mr-2 size-3" />
+                                            <UnlinkIcon className="mr-2 size-3" aria-hidden="true" />
                                             Disconnect
                                         </Button>
                                     </div>
@@ -1508,9 +1621,9 @@ export default function IntegrationsPage() {
                                         disabled={connectZoom.isPending}
                                     >
                                         {connectZoom.isPending ? (
-                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                         ) : (
-                                            <LinkIcon className="mr-2 size-4" />
+                                            <LinkIcon className="mr-2 size-4" aria-hidden="true" />
                                         )}
                                         Connect Zoom
                                     </Button>
@@ -1523,7 +1636,7 @@ export default function IntegrationsPage() {
                             <CardHeader className="pb-3">
                                 <div className="flex items-center gap-3">
                                     <div className="flex size-10 items-center justify-center rounded-lg bg-red-100 dark:bg-red-900">
-                                        <MailIcon className="size-5 text-red-600 dark:text-red-400" />
+                                        <MailIcon className="size-5 text-red-600 dark:text-red-400" aria-hidden="true" />
                                     </div>
                                     <div>
                                         <CardTitle className="text-base">Gmail</CardTitle>
@@ -1536,7 +1649,7 @@ export default function IntegrationsPage() {
                                     <div className="space-y-3">
                                         <div className="flex items-center gap-2">
                                             <Badge variant="default" className="bg-green-600">
-                                                <CheckCircleIcon className="mr-1 size-3" />
+                                                <CheckCircleIcon className="mr-1 size-3" aria-hidden="true" />
                                                 Connected
                                             </Badge>
                                         </div>
@@ -1548,7 +1661,7 @@ export default function IntegrationsPage() {
                                             onClick={() => disconnectIntegration.mutate('gmail')}
                                             disabled={disconnectIntegration.isPending}
                                         >
-                                            <UnlinkIcon className="mr-2 size-3" />
+                                            <UnlinkIcon className="mr-2 size-3" aria-hidden="true" />
                                             Disconnect
                                         </Button>
                                     </div>
@@ -1559,9 +1672,9 @@ export default function IntegrationsPage() {
                                         disabled={connectGmail.isPending}
                                     >
                                         {connectGmail.isPending ? (
-                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                         ) : (
-                                            <LinkIcon className="mr-2 size-4" />
+                                            <LinkIcon className="mr-2 size-4" aria-hidden="true" />
                                         )}
                                         Connect Gmail
                                     </Button>
@@ -1574,7 +1687,7 @@ export default function IntegrationsPage() {
                             <CardHeader className="pb-3">
                                 <div className="flex items-center gap-3">
                                     <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900">
-                                        <CalendarIcon className="size-5 text-emerald-600 dark:text-emerald-400" />
+                                        <CalendarIcon className="size-5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
                                     </div>
                                     <div>
                                         <CardTitle className="text-base">Google Calendar + Meeting</CardTitle>
@@ -1587,7 +1700,7 @@ export default function IntegrationsPage() {
                                     <div className="space-y-3">
                                         <div className="flex items-center gap-2">
                                             <Badge variant="default" className="bg-green-600">
-                                                <CheckCircleIcon className="mr-1 size-3" />
+                                                <CheckCircleIcon className="mr-1 size-3" aria-hidden="true" />
                                                 Connected
                                             </Badge>
                                         </div>
@@ -1599,7 +1712,7 @@ export default function IntegrationsPage() {
                                             onClick={() => disconnectIntegration.mutate('google_calendar')}
                                             disabled={disconnectIntegration.isPending}
                                         >
-                                            <UnlinkIcon className="mr-2 size-3" />
+                                            <UnlinkIcon className="mr-2 size-3" aria-hidden="true" />
                                             Disconnect
                                         </Button>
                                     </div>
@@ -1610,9 +1723,9 @@ export default function IntegrationsPage() {
                                         disabled={connectGoogleCalendar.isPending}
                                     >
                                         {connectGoogleCalendar.isPending ? (
-                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                         ) : (
-                                            <LinkIcon className="mr-2 size-4" />
+                                            <LinkIcon className="mr-2 size-4" aria-hidden="true" />
                                         )}
                                         Connect Google Calendar
                                     </Button>
@@ -1625,7 +1738,7 @@ export default function IntegrationsPage() {
                             <CardHeader className="pb-3">
                                 <div className="flex items-center gap-3">
                                     <div className="flex size-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900">
-                                        <FacebookIcon className="size-5 text-blue-600 dark:text-blue-400" />
+                                        <FacebookIcon className="size-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
                                     </div>
                                     <div>
                                         <CardTitle className="text-base">Meta Leads Admin</CardTitle>
@@ -1639,7 +1752,7 @@ export default function IntegrationsPage() {
                                     variant="outline"
                                     className="w-full"
                                 >
-                                    <KeyIcon className="mr-2 size-4" />
+                                    <KeyIcon className="mr-2 size-4" aria-hidden="true" />
                                     Manage Page Tokens
                                 </Button>
                             </CardContent>
@@ -1647,14 +1760,188 @@ export default function IntegrationsPage() {
                     </div>
                 </div>
 
-                {/* AI Configuration Section */}
-                <AIConfigurationSection />
+                {/* Organization Integrations */}
+                <div>
+                    <h2 className="mb-4 text-lg font-semibold">Organization Integrations</h2>
+                    <p className="mb-4 text-sm text-muted-foreground">
+                        Configure shared services like AI, email delivery, and Zapier for the organization.
+                    </p>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {/* AI */}
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex size-10 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-900">
+                                        <SparklesIcon className="size-5 text-purple-600 dark:text-purple-400" aria-hidden="true" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-base">AI Assistant</CardTitle>
+                                        <CardDescription className="text-xs">Copilot, summaries, and AI workflows</CardDescription>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                {aiSettingsLoading ? (
+                                    <div className="flex items-center justify-center py-6">
+                                        <Loader2Icon className="size-5 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        <Badge variant={aiStatusVariant} className="w-fit">
+                                            {aiStatusLabel}
+                                        </Badge>
+                                        <p className="text-xs text-muted-foreground">
+                                            {aiSettings?.provider ? `Provider: ${aiProviderLabel}` : "No provider configured"}
+                                        </p>
+                                        <Button
+                                            variant="outline"
+                                            className="w-full"
+                                            onClick={() => setAiDialogOpen(true)}
+                                        >
+                                            Configure AI
+                                        </Button>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
 
-                {/* Email Configuration Section */}
-                <EmailConfigurationSection />
+                        {/* Email */}
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex size-10 items-center justify-center rounded-lg bg-teal-100 dark:bg-teal-900">
+                                        <SendIcon className="size-5 text-teal-600 dark:text-teal-400" aria-hidden="true" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-base">Email Delivery</CardTitle>
+                                        <CardDescription className="text-xs">Campaign + transactional sending</CardDescription>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                {resendSettingsLoading ? (
+                                    <div className="flex items-center justify-center py-6">
+                                        <Loader2Icon className="size-5 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        <Badge variant={emailStatusVariant} className="w-fit">
+                                            {emailStatusLabel}
+                                        </Badge>
+                                        <p className="text-xs text-muted-foreground">
+                                            {emailConfigured ? `${emailProviderLabel} · ${emailDetail}` : "Choose a provider to start sending"}
+                                        </p>
+                                        <Button
+                                            variant="outline"
+                                            className="w-full"
+                                            onClick={() => setEmailDialogOpen(true)}
+                                        >
+                                            Configure Email
+                                        </Button>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
 
-                {/* Zapier Webhook Section */}
-                <ZapierWebhookSection />
+                        {/* Zapier */}
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex size-10 items-center justify-center rounded-lg bg-indigo-100 dark:bg-indigo-900">
+                                        <LinkIcon className="size-5 text-indigo-600 dark:text-indigo-400" aria-hidden="true" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-base">Zapier</CardTitle>
+                                        <CardDescription className="text-xs">Inbound leads + stage event delivery</CardDescription>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                {zapierSettingsLoading ? (
+                                    <div className="flex items-center justify-center py-6">
+                                        <Loader2Icon className="size-5 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        <Badge variant={zapierStatusVariant} className="w-fit">
+                                            {zapierStatusLabel}
+                                        </Badge>
+                                        <p className="text-xs text-muted-foreground">
+                                            {zapierDetail}
+                                        </p>
+                                        <Button
+                                            variant="outline"
+                                            className="w-full"
+                                            onClick={() => setZapierDialogOpen(true)}
+                                        >
+                                            Configure Zapier
+                                        </Button>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
+
+                <Dialog open={aiDialogOpen} onOpenChange={setAiDialogOpen}>
+                    <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+                        <DialogHeader>
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="space-y-1">
+                                    <DialogTitle>AI Configuration</DialogTitle>
+                                    <DialogDescription>
+                                        Configure the AI provider, model, and safety controls for your organization.
+                                    </DialogDescription>
+                                </div>
+                                <Badge variant={aiStatusVariant} className="mt-1 flex items-center gap-1">
+                                    <AiStatusIcon className="size-3" aria-hidden="true" />
+                                    {aiStatusLabel}
+                                </Badge>
+                            </div>
+                        </DialogHeader>
+                        {aiDialogOpen ? <AIConfigurationSection variant="dialog" /> : null}
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+                    <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+                        <DialogHeader>
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="space-y-1">
+                                    <DialogTitle>Email Configuration</DialogTitle>
+                                    <DialogDescription>
+                                        Choose a provider and set sender defaults for campaigns and automation.
+                                    </DialogDescription>
+                                </div>
+                                <Badge variant={emailStatusVariant} className="mt-1 flex items-center gap-1">
+                                    <EmailStatusIcon className="size-3" aria-hidden="true" />
+                                    {emailStatusLabel}
+                                </Badge>
+                            </div>
+                        </DialogHeader>
+                        {emailDialogOpen ? <EmailConfigurationSection variant="dialog" /> : null}
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog open={zapierDialogOpen} onOpenChange={setZapierDialogOpen}>
+                    <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto">
+                        <DialogHeader>
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="space-y-1">
+                                    <DialogTitle>Zapier Configuration</DialogTitle>
+                                    <DialogDescription>
+                                        Manage inbound lead webhooks and outbound stage event delivery.
+                                    </DialogDescription>
+                                </div>
+                                <Badge variant={zapierStatusVariant} className="mt-1 flex items-center gap-1">
+                                    <ZapierStatusIcon className="size-3" aria-hidden="true" />
+                                    {zapierStatusLabel}
+                                </Badge>
+                            </div>
+                        </DialogHeader>
+                        {zapierDialogOpen ? <ZapierWebhookSection variant="dialog" /> : null}
+                    </DialogContent>
+                </Dialog>
 
                 {/* System Integrations Section */}
                 <div className="border-t pt-6">
@@ -1663,12 +1950,12 @@ export default function IntegrationsPage() {
                 </div>
                 {isLoading ? (
                     <div className="flex items-center justify-center py-12">
-                        <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                        <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                     </div>
                 ) : (healthData?.length ?? 0) === 0 ? (
                     <Card>
                         <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                            <ServerIcon className="mb-4 size-12" />
+                            <ServerIcon className="mb-4 size-12" aria-hidden="true" />
                             <p className="text-lg font-medium">No integrations configured</p>
                             <p className="text-sm">Add integrations to see their health status here</p>
                         </CardContent>
@@ -1700,7 +1987,7 @@ export default function IntegrationsPage() {
                                         <div className="flex items-start justify-between">
                                             <div className="flex items-center gap-3">
                                                 <div className="flex size-10 items-center justify-center rounded-lg bg-muted">
-                                                    <Icon className="size-5" />
+                                                    <Icon className="size-5" aria-hidden="true" />
                                                 </div>
                                                 <div>
                                                     <CardTitle className="text-base">{typeConfig.label}</CardTitle>
@@ -1712,7 +1999,7 @@ export default function IntegrationsPage() {
                                                 </div>
                                             </div>
                                             <Badge variant={status.badge} className="flex items-center gap-1">
-                                                <StatusIcon className="size-3" />
+                                                <StatusIcon className="size-3" aria-hidden="true" />
                                                 {status.label}
                                             </Badge>
                                         </div>
@@ -1726,7 +2013,7 @@ export default function IntegrationsPage() {
                                         <div className="flex items-center justify-between text-sm">
                                             <span className="text-muted-foreground">Configuration</span>
                                             <Badge variant={configStatus.variant} className="text-xs">
-                                                <KeyIcon className="mr-1 size-3" />
+                                                <KeyIcon className="mr-1 size-3" aria-hidden="true" />
                                                 {configStatus.label}
                                             </Badge>
                                         </div>
@@ -1779,7 +2066,7 @@ export default function IntegrationsPage() {
                                                     size="sm"
                                                     className="w-full"
                                                 >
-                                                    <KeyIcon className="mr-2 size-3" />
+                                                    <KeyIcon className="mr-2 size-3" aria-hidden="true" />
                                                     {integration.config_status === "expired_token"
                                                         ? "Refresh Token"
                                                         : "Configure"

@@ -88,7 +88,7 @@ function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: ()
             <DialogContent className="max-w-md">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <KeyIcon className="size-5" />
+                        <KeyIcon className="size-5" aria-hidden="true" />
                         Recovery Codes
                     </DialogTitle>
                     <DialogDescription>
@@ -97,7 +97,7 @@ function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: ()
                 </DialogHeader>
 
                 <Alert variant="destructive" className="my-4">
-                    <AlertTriangleIcon className="size-4" />
+                    <AlertTriangleIcon className="size-4" aria-hidden="true" />
                     <AlertTitle>Important</AlertTitle>
                     <AlertDescription>
                         These codes will not be shown again. Save them now!
@@ -116,12 +116,12 @@ function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: ()
                     <Button variant="outline" onClick={handleCopy}>
                         {copied ? (
                             <>
-                                <CheckIcon className="size-4 mr-2" />
+                                <CheckIcon className="size-4 mr-2" aria-hidden="true" />
                                 Copied!
                             </>
                         ) : (
                             <>
-                                <CopyIcon className="size-4 mr-2" />
+                                <CopyIcon className="size-4 mr-2" aria-hidden="true" />
                                 Copy All
                             </>
                         )}
@@ -199,7 +199,7 @@ export default function SecuritySettingsPage() {
     if (statusLoading) {
         return (
             <div className="flex items-center justify-center h-64">
-                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
             </div>
         )
     }
@@ -223,12 +223,12 @@ export default function SecuritySettingsPage() {
                     <CardTitle className="flex items-center gap-2">
                         {mfaEnabled ? (
                             <>
-                                <ShieldCheckIcon className="size-5 text-green-500" />
+                                <ShieldCheckIcon className="size-5 text-green-500" aria-hidden="true" />
                                 Two-Factor Authentication
                             </>
                         ) : (
                             <>
-                                <ShieldAlertIcon className="size-5 text-amber-500" />
+                                <ShieldAlertIcon className="size-5 text-amber-500" aria-hidden="true" />
                                 Two-Factor Authentication
                             </>
                         )}
@@ -243,7 +243,7 @@ export default function SecuritySettingsPage() {
                     {!mfaEnabled ? (
                         <>
                             <Alert>
-                                <AlertTriangleIcon className="size-4" />
+                                <AlertTriangleIcon className="size-4" aria-hidden="true" />
                                 <AlertTitle>MFA Required</AlertTitle>
                                 <AlertDescription>
                                     Two-factor authentication is required for all users.
@@ -253,12 +253,12 @@ export default function SecuritySettingsPage() {
                             <Button onClick={handleStartSetup} disabled={setupTOTP.isPending}>
                                 {setupTOTP.isPending ? (
                                     <>
-                                        <Loader2Icon className="size-4 mr-2 animate-spin" />
-                                        Setting up...
+                                        <Loader2Icon className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                        Setting up…
                                     </>
                                 ) : (
                                     <>
-                                        <SmartphoneIcon className="size-4 mr-2" />
+                                        <SmartphoneIcon className="size-4 mr-2" aria-hidden="true" />
                                         Set Up Authenticator App
                                     </>
                                 )}
@@ -268,7 +268,7 @@ export default function SecuritySettingsPage() {
                         <div className="space-y-4">
                             <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
                                 <div className="flex items-center gap-3">
-                                    <SmartphoneIcon className="size-5 text-muted-foreground" />
+                                    <SmartphoneIcon className="size-5 text-muted-foreground" aria-hidden="true" />
                                     <div>
                                         <p className="font-medium">Authenticator App</p>
                                         <p className="text-sm text-muted-foreground">
@@ -283,7 +283,7 @@ export default function SecuritySettingsPage() {
 
                             <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
                                 <div className="flex items-center gap-3">
-                                    <KeyIcon className="size-5 text-muted-foreground" />
+                                    <KeyIcon className="size-5 text-muted-foreground" aria-hidden="true" />
                                     <div>
                                         <p className="font-medium">Recovery Codes</p>
                                         <p className="text-sm text-muted-foreground">
@@ -296,12 +296,16 @@ export default function SecuritySettingsPage() {
                                     size="sm"
                                     onClick={handleRegenerateCodes}
                                     disabled={regenerateCodes.isPending}
+                                    aria-label="Regenerate recovery codes"
                                 >
                                     {regenerateCodes.isPending ? (
-                                        <Loader2Icon className="size-4 animate-spin" />
+                                        <>
+                                            <Loader2Icon className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                            <span className="sr-only">Regenerating</span>
+                                        </>
                                     ) : (
                                         <>
-                                            <RefreshCwIcon className="size-4 mr-2" />
+                                            <RefreshCwIcon className="size-4 mr-2" aria-hidden="true" />
                                             Regenerate
                                         </>
                                     )}
@@ -356,6 +360,8 @@ export default function SecuritySettingsPage() {
                                     value={verificationCode}
                                     onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))}
                                     className="text-center text-lg tracking-widest"
+                                    name="verification-code"
+                                    autoComplete="one-time-code"
                                 />
                             </div>
 
@@ -366,8 +372,8 @@ export default function SecuritySettingsPage() {
                             >
                                 {verifyTOTP.isPending ? (
                                     <>
-                                        <Loader2Icon className="size-4 mr-2 animate-spin" />
-                                        Verifying...
+                                        <Loader2Icon className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                        Verifying…
                                     </>
                                 ) : (
                                     "Verify and Enable"
@@ -382,7 +388,7 @@ export default function SecuritySettingsPage() {
                         </div>
                     ) : (
                         <div className="flex items-center justify-center h-40">
-                            <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                            <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                         </div>
                     )}
                 </DialogContent>
@@ -409,8 +415,8 @@ export default function SecuritySettingsPage() {
                         >
                             {disableMFA.isPending ? (
                                 <>
-                                    <Loader2Icon className="size-4 mr-2 animate-spin" />
-                                    Disabling...
+                                    <Loader2Icon className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                    Disabling…
                                 </>
                             ) : (
                                 "Disable MFA"

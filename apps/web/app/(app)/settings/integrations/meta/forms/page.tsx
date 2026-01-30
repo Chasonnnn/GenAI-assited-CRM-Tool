@@ -21,7 +21,7 @@ const statusBadge = (status: string) => {
     if (status === "mapped") {
         return (
             <Badge variant="default" className="gap-1 bg-green-500/10 text-green-600 border-green-500/20">
-                <CheckCircleIcon className="size-3" />
+                <CheckCircleIcon className="size-3" aria-hidden="true" />
                 Mapped
             </Badge>
         )
@@ -29,14 +29,14 @@ const statusBadge = (status: string) => {
     if (status === "outdated") {
         return (
             <Badge variant="destructive" className="gap-1">
-                <AlertTriangleIcon className="size-3" />
+                <AlertTriangleIcon className="size-3" aria-hidden="true" />
                 Outdated
             </Badge>
         )
     }
     return (
         <Badge variant="secondary" className="gap-1 bg-yellow-500/10 text-yellow-700 border-yellow-500/30">
-            <AlertTriangleIcon className="size-3" />
+            <AlertTriangleIcon className="size-3" aria-hidden="true" />
             Unmapped
         </Badge>
     )
@@ -65,9 +65,9 @@ export default function MetaFormsPage() {
                             disabled={syncMutation.isPending}
                         >
                             {syncMutation.isPending ? (
-                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                             ) : (
-                                <RefreshCwIcon className="mr-2 size-4" />
+                                <RefreshCwIcon className="mr-2 size-4" aria-hidden="true" />
                             )}
                             Sync forms
                         </Button>
@@ -96,7 +96,7 @@ export default function MetaFormsPage() {
                     <CardContent>
                         {isLoading ? (
                             <div className="flex items-center justify-center py-12">
-                                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                                <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                             </div>
                         ) : forms.length === 0 ? (
                             <div className="text-sm text-muted-foreground">

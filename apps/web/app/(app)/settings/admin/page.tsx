@@ -175,7 +175,7 @@ export default function AdminDataPage() {
         return (
             <div className="flex min-h-screen flex-col p-6">
                 <Alert variant="destructive">
-                    <ShieldAlertIcon className="size-4" />
+                    <ShieldAlertIcon className="size-4" aria-hidden="true" />
                     <AlertDescription>
                         This page is only accessible to developers.
                     </AlertDescription>
@@ -194,7 +194,7 @@ export default function AdminDataPage() {
 
             <div className="flex-1 space-y-6 p-6">
                 <Alert>
-                    <ShieldAlertIcon className="size-4" />
+                    <ShieldAlertIcon className="size-4" aria-hidden="true" />
                     <AlertDescription>
                         <strong>Developer Only.</strong> These tools export and import organization data for
                         backup, restore, and development purposes. Imports are only available in dev/test environments.
@@ -212,7 +212,7 @@ export default function AdminDataPage() {
                             <Card>
                                 <CardHeader>
                                     <CardTitle className="flex items-center gap-2">
-                                        <DatabaseIcon className="size-5" />
+                                        <DatabaseIcon className="size-5" aria-hidden="true" />
                                         Surrogates
                                     </CardTitle>
                                     <CardDescription>
@@ -226,9 +226,9 @@ export default function AdminDataPage() {
                                         disabled={isExporting !== null}
                                     >
                                         {isExporting === "surrogates" ? (
-                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                         ) : (
-                                            <DownloadIcon className="mr-2 size-4" />
+                                            <DownloadIcon className="mr-2 size-4" aria-hidden="true" />
                                         )}
                                         Export Surrogates CSV
                                     </Button>
@@ -238,7 +238,7 @@ export default function AdminDataPage() {
                             <Card>
                                 <CardHeader>
                                     <CardTitle className="flex items-center gap-2">
-                                        <FileIcon className="size-5" />
+                                        <FileIcon className="size-5" aria-hidden="true" />
                                         Configuration
                                     </CardTitle>
                                     <CardDescription>
@@ -252,9 +252,9 @@ export default function AdminDataPage() {
                                         disabled={isExporting !== null}
                                     >
                                         {isExporting === "config" ? (
-                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                         ) : (
-                                            <DownloadIcon className="mr-2 size-4" />
+                                            <DownloadIcon className="mr-2 size-4" aria-hidden="true" />
                                         )}
                                         Export Config ZIP
                                     </Button>
@@ -264,7 +264,7 @@ export default function AdminDataPage() {
                             <Card>
                                 <CardHeader>
                                     <CardTitle className="flex items-center gap-2">
-                                        <BarChart3Icon className="size-5" />
+                                        <BarChart3Icon className="size-5" aria-hidden="true" />
                                         Analytics
                                     </CardTitle>
                                     <CardDescription>
@@ -278,9 +278,9 @@ export default function AdminDataPage() {
                                         disabled={isExporting !== null}
                                     >
                                         {isExporting === "analytics" ? (
-                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                         ) : (
-                                            <DownloadIcon className="mr-2 size-4" />
+                                            <DownloadIcon className="mr-2 size-4" aria-hidden="true" />
                                         )}
                                         Export Analytics ZIP
                                     </Button>
@@ -291,7 +291,7 @@ export default function AdminDataPage() {
 
                     <TabsContent value="import" className="space-y-6 mt-6">
                         <Alert variant="destructive">
-                            <AlertCircleIcon className="size-4" />
+                            <AlertCircleIcon className="size-4" aria-hidden="true" />
                             <AlertDescription>
                                 <strong>Warning:</strong> Imports only work on empty organizations in dev/test mode.
                                 This is designed for restore and development scenarios.
@@ -370,9 +370,9 @@ function ImportForm({
                             disabled={isLoading || !configFile}
                         >
                             {isLoading ? (
-                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                             ) : (
-                                <UploadIcon className="mr-2 size-4" />
+                                <UploadIcon className="mr-2 size-4" aria-hidden="true" />
                             )}
                             Import Config Only
                         </Button>
@@ -388,9 +388,9 @@ function ImportForm({
                             disabled={isLoading || !surrogatesFile}
                         >
                             {isLoading ? (
-                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                             ) : (
-                                <UploadIcon className="mr-2 size-4" />
+                                <UploadIcon className="mr-2 size-4" aria-hidden="true" />
                             )}
                             Import Surrogates Only
                         </Button>
@@ -404,9 +404,9 @@ function ImportForm({
                             disabled={isLoading || !configFile || !surrogatesFile}
                         >
                             {isLoading ? (
-                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                             ) : (
-                                <UploadIcon className="mr-2 size-4" />
+                                <UploadIcon className="mr-2 size-4" aria-hidden="true" />
                             )}
                             Import All
                         </Button>
@@ -415,9 +415,9 @@ function ImportForm({
                     {result && (
                         <Alert variant={result.status === "success" ? "default" : "destructive"}>
                             {result.status === "success" ? (
-                                <CheckCircleIcon className="size-4" />
+                                <CheckCircleIcon className="size-4" aria-hidden="true" />
                             ) : (
-                                <AlertCircleIcon className="size-4" />
+                                <AlertCircleIcon className="size-4" aria-hidden="true" />
                             )}
                             <AlertDescription>
                                 {result.status === "success" ? (

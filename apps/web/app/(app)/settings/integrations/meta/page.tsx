@@ -74,7 +74,7 @@ function ConnectionHealthBadge({ connection }: { connection: MetaOAuthConnection
     if (status === "healthy") {
         return (
             <Badge variant="default" className="gap-1 bg-green-500/10 text-green-600 border-green-500/20">
-                <CheckCircleIcon className="size-3" />
+                <CheckCircleIcon className="size-3" aria-hidden="true" />
                 Healthy
             </Badge>
         )
@@ -85,7 +85,7 @@ function ConnectionHealthBadge({ connection }: { connection: MetaOAuthConnection
             <Tooltip>
                 <TooltipTrigger>
                     <Badge variant="destructive" className="gap-1">
-                        <AlertTriangleIcon className="size-3" />
+                        <AlertTriangleIcon className="size-3" aria-hidden="true" />
                         Needs Reauth
                     </Badge>
                 </TooltipTrigger>
@@ -101,7 +101,7 @@ function ConnectionHealthBadge({ connection }: { connection: MetaOAuthConnection
             <Tooltip>
                 <TooltipTrigger>
                     <Badge variant="secondary" className="gap-1 bg-yellow-500/10 text-yellow-600 border-yellow-500/20">
-                        <AlertTriangleIcon className="size-3" />
+                        <AlertTriangleIcon className="size-3" aria-hidden="true" />
                         Rate Limited
                     </Badge>
                 </TooltipTrigger>
@@ -117,7 +117,7 @@ function ConnectionHealthBadge({ connection }: { connection: MetaOAuthConnection
             <Tooltip>
                 <TooltipTrigger>
                     <Badge variant="destructive" className="gap-1">
-                        <AlertTriangleIcon className="size-3" />
+                        <AlertTriangleIcon className="size-3" aria-hidden="true" />
                         Permission Error
                     </Badge>
                 </TooltipTrigger>
@@ -132,7 +132,7 @@ function ConnectionHealthBadge({ connection }: { connection: MetaOAuthConnection
         <Tooltip>
             <TooltipTrigger>
                 <Badge variant="secondary" className="gap-1 bg-yellow-500/10 text-yellow-600 border-yellow-500/20">
-                    <AlertTriangleIcon className="size-3" />
+                    <AlertTriangleIcon className="size-3" aria-hidden="true" />
                     Error
                 </Badge>
             </TooltipTrigger>
@@ -240,12 +240,15 @@ function MetaAssetSelection({
                 </CardHeader>
                 <CardContent className="space-y-6">
                     <div className="relative">
-                        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" aria-hidden="true" />
                         <Input
                             placeholder="Search ad accounts or pages"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             className="pl-9"
+                            name="meta-asset-search"
+                            autoComplete="off"
+                            aria-label="Search ad accounts or pages"
                         />
                     </div>
 
@@ -254,8 +257,8 @@ function MetaAssetSelection({
                             <h3 className="font-medium text-sm">Ad Accounts</h3>
                             {isLoading ? (
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                    <Loader2Icon className="size-4 animate-spin" />
-                                    Loading...
+                                    <Loader2Icon className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                    Loading…
                                 </div>
                             ) : allAssets.ad_accounts.length === 0 ? (
                                 <p className="text-sm text-muted-foreground">No ad accounts available</p>
@@ -268,6 +271,7 @@ function MetaAssetSelection({
                                                 onCheckedChange={(checked) =>
                                                     toggleAdAccount(account.id, !!checked)
                                                 }
+                                                aria-label={`Select ad account ${account.id}`}
                                             />
                                             <div className="text-sm">
                                                 <span className="font-mono">{account.id}</span>
@@ -288,8 +292,8 @@ function MetaAssetSelection({
                             <h3 className="font-medium text-sm">Pages</h3>
                             {isLoading ? (
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                    <Loader2Icon className="size-4 animate-spin" />
-                                    Loading...
+                                    <Loader2Icon className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                    Loading…
                                 </div>
                             ) : allAssets.pages.length === 0 ? (
                                 <p className="text-sm text-muted-foreground">No pages available</p>
@@ -302,6 +306,7 @@ function MetaAssetSelection({
                                                 onCheckedChange={(checked) =>
                                                     togglePage(page.id, !!checked)
                                                 }
+                                                aria-label={`Select page ${page.id}`}
                                             />
                                             <div className="text-sm">
                                                 <span className="font-mono">{page.id}</span>
@@ -328,8 +333,8 @@ function MetaAssetSelection({
                         >
                             {isFetchingNextPage ? (
                                 <>
-                                    <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                    Loading...
+                                    <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                    Loading…
                                 </>
                             ) : (
                                 "Load more"
@@ -344,8 +349,8 @@ function MetaAssetSelection({
                     <Button onClick={() => handleConnect(false)} disabled={connectMutation.isPending}>
                         {connectMutation.isPending ? (
                             <>
-                                <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                Connecting...
+                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                Connecting…
                             </>
                         ) : (
                             "Connect Selected"
@@ -496,9 +501,9 @@ export default function MetaIntegrationPage() {
                         </div>
                         <Button onClick={handleConnectWithFacebook} disabled={connectUrlMutation.isPending}>
                             {connectUrlMutation.isPending ? (
-                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                             ) : (
-                                <FacebookIcon className="mr-2 size-4" />
+                                <FacebookIcon className="mr-2 size-4" aria-hidden="true" />
                             )}
                             Connect with Facebook
                         </Button>
@@ -506,7 +511,7 @@ export default function MetaIntegrationPage() {
                     <CardContent>
                         {connectionsLoading ? (
                             <div className="flex items-center justify-center py-12">
-                                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                                <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                             </div>
                         ) : connections.length === 0 ? (
                             <div className="text-sm text-muted-foreground">No connections yet.</div>
@@ -555,8 +560,9 @@ export default function MetaIntegrationPage() {
                                                     variant="ghost"
                                                     size="sm"
                                                     onClick={() => setDisconnectConnectionId(connection.id)}
+                                                    aria-label="Disconnect connection"
                                                 >
-                                                    <UnlinkIcon className="size-4" />
+                                                    <UnlinkIcon className="size-4" aria-hidden="true" />
                                                 </Button>
                                             </TableCell>
                                         </TableRow>
@@ -583,9 +589,9 @@ export default function MetaIntegrationPage() {
                                     disabled={connectUrlMutation.isPending}
                                 >
                                     {connectUrlMutation.isPending ? (
-                                        <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                     ) : (
-                                        <FacebookIcon className="mr-2 size-4" />
+                                        <FacebookIcon className="mr-2 size-4" aria-hidden="true" />
                                     )}
                                     Reconnect
                                 </Button>
@@ -619,7 +625,7 @@ export default function MetaIntegrationPage() {
                     <CardContent>
                         {adAccountsLoading ? (
                             <div className="flex items-center justify-center py-12">
-                                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                                <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                             </div>
                         ) : adAccounts.length === 0 ? (
                             <div className="text-sm text-muted-foreground">No ad accounts connected yet.</div>
@@ -666,9 +672,9 @@ export default function MetaIntegrationPage() {
                                             <TableCell>
                                                 <Badge variant={account.is_active ? "default" : "secondary"} className="gap-1">
                                                     {account.is_active ? (
-                                                        <CheckCircleIcon className="size-3" />
+                                                        <CheckCircleIcon className="size-3" aria-hidden="true" />
                                                     ) : (
-                                                        <AlertTriangleIcon className="size-3" />
+                                                        <AlertTriangleIcon className="size-3" aria-hidden="true" />
                                                     )}
                                                     {account.is_active ? "Active" : "Inactive"}
                                                 </Badge>
@@ -678,16 +684,18 @@ export default function MetaIntegrationPage() {
                                                     variant="ghost"
                                                     size="sm"
                                                     onClick={() => openEditAccount(account)}
+                                                    aria-label="Edit ad account"
                                                 >
-                                                    <PencilIcon className="size-4" />
+                                                    <PencilIcon className="size-4" aria-hidden="true" />
                                                 </Button>
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
                                                     onClick={() => handleDeleteAdAccount(account.id)}
                                                     disabled={deleteAccountMutation.isPending}
+                                                    aria-label="Delete ad account"
                                                 >
-                                                    <TrashIcon className="size-4" />
+                                                    <TrashIcon className="size-4" aria-hidden="true" />
                                                 </Button>
                                             </TableCell>
                                         </TableRow>
@@ -713,6 +721,8 @@ export default function MetaIntegrationPage() {
                                     id="adAccountName"
                                     value={adAccountName}
                                     onChange={(e) => setAdAccountName(e.target.value)}
+                                    name="ad-account-name"
+                                    autoComplete="off"
                                 />
                             </div>
                             <div className="space-y-2">
@@ -721,6 +731,8 @@ export default function MetaIntegrationPage() {
                                     id="pixelId"
                                     value={pixelId}
                                     onChange={(e) => setPixelId(e.target.value)}
+                                    name="pixel-id"
+                                    autoComplete="off"
                                 />
                             </div>
                             <div className="flex items-center justify-between">
@@ -760,8 +772,8 @@ export default function MetaIntegrationPage() {
                             <Button type="submit" disabled={updateAccountMutation.isPending}>
                                 {updateAccountMutation.isPending ? (
                                     <>
-                                        <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                        Saving...
+                                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                        Saving…
                                     </>
                                 ) : (
                                     "Save changes"

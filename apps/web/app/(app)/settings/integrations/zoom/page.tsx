@@ -7,7 +7,7 @@ import { Table, TableHead, TableHeader, TableBody, TableRow, TableCell } from "@
 import { ArrowLeftIcon, VideoIcon, CheckCircleIcon, UnlinkIcon, Loader2Icon, ExternalLinkIcon, CalendarIcon } from "lucide-react"
 import { useZoomStatus, useZoomMeetings, useConnectZoom, useDisconnectIntegration, type ZoomMeetingRead } from "@/lib/hooks/use-user-integrations"
 import Link from "@/components/app-link"
-import { formatRelativeTime } from "@/lib/formatters"
+import { formatDate, formatRelativeTime } from "@/lib/formatters"
 
 export default function ZoomSettingsPage() {
     const { data: status, isLoading: statusLoading } = useZoomStatus()
@@ -18,7 +18,7 @@ export default function ZoomSettingsPage() {
     if (statusLoading) {
         return (
             <div className="flex flex-1 items-center justify-center p-6">
-                <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
+                <Loader2Icon className="h-8 w-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
             </div>
         )
     }
@@ -35,12 +35,12 @@ export default function ZoomSettingsPage() {
         <div className="flex flex-1 flex-col gap-6 p-6">
             {/* Header */}
             <div className="flex items-center gap-4">
-                <Button variant="ghost" size="icon" render={<Link href="/settings/integrations" />}>
-                    <ArrowLeftIcon className="h-5 w-5" />
+                <Button variant="ghost" size="icon" render={<Link href="/settings/integrations" />} aria-label="Back to integrations">
+                    <ArrowLeftIcon className="h-5 w-5" aria-hidden="true" />
                 </Button>
                 <div className="flex items-center gap-3">
                     <div className="flex size-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900">
-                        <VideoIcon className="size-5 text-blue-600 dark:text-blue-400" />
+                        <VideoIcon className="size-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
                     </div>
                     <div>
                         <h1 className="text-2xl font-semibold">Zoom Integration</h1>
@@ -59,7 +59,7 @@ export default function ZoomSettingsPage() {
                         <div className="space-y-4">
                             <div className="flex items-center gap-3">
                                 <Badge variant="default" className="bg-green-600">
-                                    <CheckCircleIcon className="mr-1 size-3" />
+                                    <CheckCircleIcon className="mr-1 size-3" aria-hidden="true" />
                                     Connected
                                 </Badge>
                             </div>
@@ -91,7 +91,9 @@ export default function ZoomSettingsPage() {
                                     onClick={handleConnect}
                                     disabled={connectZoom.isPending}
                                 >
-                                    {connectZoom.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
+                                    {connectZoom.isPending && (
+                                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                    )}
                                     Reconnect
                                 </Button>
                                 <Button
@@ -100,9 +102,9 @@ export default function ZoomSettingsPage() {
                                     disabled={disconnectZoom.isPending}
                                 >
                                     {disconnectZoom.isPending ? (
-                                        <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                     ) : (
-                                        <UnlinkIcon className="mr-2 size-4" />
+                                        <UnlinkIcon className="mr-2 size-4" aria-hidden="true" />
                                     )}
                                     Disconnect
                                 </Button>
@@ -115,9 +117,9 @@ export default function ZoomSettingsPage() {
                             </p>
                             <Button onClick={handleConnect} disabled={connectZoom.isPending}>
                                 {connectZoom.isPending ? (
-                                    <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                    <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                 ) : (
-                                    <VideoIcon className="mr-2 size-4" />
+                                    <VideoIcon className="mr-2 size-4" aria-hidden="true" />
                                 )}
                                 Connect Zoom
                             </Button>
@@ -136,11 +138,11 @@ export default function ZoomSettingsPage() {
                     <CardContent>
                         {meetingsLoading ? (
                             <div className="flex items-center justify-center py-8">
-                                <Loader2Icon className="h-6 w-6 animate-spin text-muted-foreground" />
+                                <Loader2Icon className="h-6 w-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                             </div>
                         ) : meetings.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-12 text-center">
-                                <CalendarIcon className="h-12 w-12 text-muted-foreground/50 mb-3" />
+                                <CalendarIcon className="h-12 w-12 text-muted-foreground/50 mb-3" aria-hidden="true" />
                                 <p className="text-sm font-medium text-muted-foreground">No appointments yet</p>
                                 <p className="text-xs text-muted-foreground/60 mt-1">
                                     Appointments created from surrogates will appear here
@@ -163,7 +165,7 @@ export default function ZoomSettingsPage() {
                                             <TableCell className="font-medium">{meeting.topic}</TableCell>
                                             <TableCell>
                                                 {meeting.start_time
-                                                    ? new Date(meeting.start_time).toLocaleDateString()
+                                                    ? formatDate(meeting.start_time, "—")
                                                     : "Instant"}
                                             </TableCell>
                                             <TableCell>{meeting.duration} min</TableCell>
@@ -192,8 +194,9 @@ export default function ZoomSettingsPage() {
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent hover:text-accent-foreground"
+                                                    aria-label="Open Zoom meeting"
                                                 >
-                                                    <ExternalLinkIcon className="size-4" />
+                                                    <ExternalLinkIcon className="size-4" aria-hidden="true" />
                                                 </a>
                                             </TableCell>
                                         </TableRow>

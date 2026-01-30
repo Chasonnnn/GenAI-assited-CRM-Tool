@@ -484,7 +484,7 @@ export default function AuditLogPage() {
                                             className="flex items-start gap-4 rounded-lg border border-border p-4"
                                         >
                                             <div className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${config.color} text-white`}>
-                                                <Icon className="size-5" />
+                                                <Icon className="size-5" aria-hidden="true" />
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2 flex-wrap">

@@ -206,7 +206,7 @@ export default function MetaFormMappingPage() {
     if (isLoading || !data) {
         return (
             <div className="flex min-h-screen items-center justify-center">
-                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
             </div>
         )
     }
@@ -220,7 +220,7 @@ export default function MetaFormMappingPage() {
                         <p className="text-sm text-muted-foreground">{data.form.form_external_id}</p>
                     </div>
                     <Button variant="ghost" onClick={() => router.push("/settings/integrations/meta/forms")}>
-                        <ArrowLeftIcon className="mr-2 size-4" />
+                        <ArrowLeftIcon className="mr-2 size-4" aria-hidden="true" />
                         Back to forms
                     </Button>
                 </div>
@@ -254,7 +254,10 @@ export default function MetaFormMappingPage() {
                                             handleUnknownBehaviorChange(value as UnknownColumnBehavior)
                                         }
                                     >
-                                        <SelectTrigger className="h-8 w-[140px]">
+                                        <SelectTrigger
+                                            className="h-8 w-[140px]"
+                                            aria-label="Unknown columns behavior"
+                                        >
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -272,9 +275,9 @@ export default function MetaFormMappingPage() {
                                         disabled={aiMapMutation.isPending}
                                     >
                                         {aiMapMutation.isPending ? (
-                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                         ) : (
-                                            <SparklesIcon className="mr-2 size-4" />
+                                            <SparklesIcon className="mr-2 size-4" aria-hidden="true" />
                                         )}
                                         Get AI help
                                     </Button>
@@ -330,7 +333,10 @@ export default function MetaFormMappingPage() {
                                                         }
                                                     }}
                                                 >
-                                                    <SelectTrigger className="w-[130px]">
+                                                    <SelectTrigger
+                                                        className="w-[130px]"
+                                                        aria-label={`Action for ${mapping.csv_column}`}
+                                                    >
                                                         <SelectValue placeholder="Action" />
                                                     </SelectTrigger>
                                                     <SelectContent>
@@ -353,7 +359,10 @@ export default function MetaFormMappingPage() {
                                                             })
                                                         }
                                                     >
-                                                        <SelectTrigger className="w-[180px]">
+                                                        <SelectTrigger
+                                                            className="w-[180px]"
+                                                            aria-label={`Map ${mapping.csv_column} to field`}
+                                                        >
                                                             <SelectValue placeholder="Select field" />
                                                         </SelectTrigger>
                                                         <SelectContent>
@@ -374,6 +383,9 @@ export default function MetaFormMappingPage() {
                                                         }
                                                         placeholder="custom_field_key"
                                                         className="w-[180px]"
+                                                        name={`custom-field-${mapping.csv_column}`}
+                                                        autoComplete="off"
+                                                        aria-label={`Custom field key for ${mapping.csv_column}`}
                                                     />
                                                 ) : (
                                                     <span className="text-xs text-muted-foreground">—</span>
@@ -389,7 +401,10 @@ export default function MetaFormMappingPage() {
                                                     }
                                                     disabled={mapping.action !== "map"}
                                                 >
-                                                    <SelectTrigger className="w-[170px]">
+                                                    <SelectTrigger
+                                                        className="w-[170px]"
+                                                        aria-label={`Transform ${mapping.csv_column}`}
+                                                    >
                                                         <SelectValue placeholder="None" />
                                                     </SelectTrigger>
                                                     <SelectContent>
@@ -456,8 +471,8 @@ export default function MetaFormMappingPage() {
                     <Button onClick={handleSave} disabled={updateMutation.isPending}>
                         {updateMutation.isPending ? (
                             <>
-                                <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                Saving...
+                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                Saving…
                             </>
                         ) : (
                             "Save mapping"

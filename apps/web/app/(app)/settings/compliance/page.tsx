@@ -137,7 +137,7 @@ export default function ComplianceSettingsPage() {
                     <CardContent>
                         {policiesLoading ? (
                             <div className="flex items-center justify-center py-8">
-                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                                <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                             </div>
                         ) : (
                             <Table>
@@ -162,12 +162,16 @@ export default function ComplianceSettingsPage() {
                                                         value={edit.retention_days}
                                                         onChange={(e) => updatePolicyEdit(entity.value, "retention_days", Number(e.target.value))}
                                                         className="w-32"
+                                                        name={`retention-${entity.value}`}
+                                                        autoComplete="off"
+                                                        aria-label={`${entity.label} retention days`}
                                                     />
                                                 </TableCell>
                                                 <TableCell>
                                                     <Switch
                                                         checked={edit.is_active}
                                                         onCheckedChange={(checked) => updatePolicyEdit(entity.value, "is_active", checked)}
+                                                        aria-label={`${entity.label} retention active`}
                                                     />
                                                 </TableCell>
                                                 <TableCell className="text-right">
@@ -208,9 +212,9 @@ export default function ComplianceSettingsPage() {
                     <CardContent className="space-y-4">
                         <div className="grid gap-4 md:grid-cols-3">
                             <div className="space-y-2">
-                                <Label>Hold Scope</Label>
+                                <Label htmlFor="hold-scope">Hold Scope</Label>
                                 <Select value={holdType} onValueChange={(v) => setHoldType(v || "org")}>
-                                    <SelectTrigger>
+                                    <SelectTrigger id="hold-scope">
                                         <SelectValue>
                                             {(value: string | null) => {
                                                 const type = LEGAL_HOLD_TYPES.find(t => t.value === value)
@@ -228,31 +232,37 @@ export default function ComplianceSettingsPage() {
                                 </Select>
                             </div>
                             <div className="space-y-2">
-                                <Label>Entity ID</Label>
+                                <Label htmlFor="hold-entity-id">Entity ID</Label>
                                 <Input
+                                    id="hold-entity-id"
                                     placeholder="Optional entity UUID"
                                     value={holdEntityId}
                                     disabled={holdType === "org"}
                                     onChange={(e) => setHoldEntityId(e.target.value)}
+                                    name="hold-entity-id"
+                                    autoComplete="off"
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label>Reason</Label>
+                                <Label htmlFor="hold-reason">Reason</Label>
                                 <Input
+                                    id="hold-reason"
                                     placeholder="Reason for hold"
                                     value={holdReason}
                                     onChange={(e) => setHoldReason(e.target.value)}
+                                    name="hold-reason"
+                                    autoComplete="off"
                                 />
                             </div>
                         </div>
                         <Button onClick={handleCreateHold} disabled={!holdReason || createHold.isPending}>
-                            <ShieldCheck className="size-4 mr-2" />
+                            <ShieldCheck className="size-4 mr-2" aria-hidden="true" />
                             Create Hold
                         </Button>
 
                         {holdsLoading ? (
                             <div className="flex items-center justify-center py-8">
-                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                                <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                             </div>
                         ) : (
                             <Table>
@@ -320,7 +330,7 @@ export default function ComplianceSettingsPage() {
                                     Preview Purge
                                 </Button>
                                 <Button variant="destructive" onClick={handleExecutePurge}>
-                                    <Trash2 className="size-4 mr-2" />
+                                    <Trash2 className="size-4 mr-2" aria-hidden="true" />
                                     Execute Purge
                                 </Button>
                             </div>
