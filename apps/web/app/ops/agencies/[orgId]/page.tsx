@@ -265,7 +265,6 @@ export default function AgencyDetailPage() {
             const updated = await deleteOrganization(org.id);
             setOrg(updated);
             toast.success('Organization scheduled for deletion');
-            setDeleteOpen(false);
         } catch (error) {
             console.error('Failed to delete organization:', error);
             toast.error(resolveErrorMessage(error, 'Failed to delete organization'));

@@ -396,7 +396,7 @@ export default function TasksPage() {
                         loadingImportApprovals={loadingImportApprovals}
                         onResolvedStatusRequests={refetchStatusRequests}
                         onResolvedImportApprovals={refetchImportApprovals}
-                        currentUserId={currentUser?.user_id}
+                        currentUserId={currentUser?.user_id ?? null}
                     />
                 )}
 
