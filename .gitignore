@@ -5,6 +5,7 @@
 
 # Dependencies
 node_modules/
+.pnpm-store/
 __pycache__/
 *.py[cod]
 .venv/
