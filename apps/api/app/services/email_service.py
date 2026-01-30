@@ -456,6 +456,27 @@ def list_templates_for_user(
     return query.order_by(EmailTemplate.scope.desc(), EmailTemplate.name).all()
 
 
+def template_name_exists(
+    db: Session,
+    org_id: UUID,
+    name: str,
+    scope: str,
+    owner_user_id: UUID | None = None,
+    exclude_id: UUID | None = None,
+) -> bool:
+    """Check if a template name already exists for the given scope."""
+    query = db.query(EmailTemplate).filter(
+        EmailTemplate.organization_id == org_id,
+        EmailTemplate.scope == scope,
+        EmailTemplate.name == name,
+    )
+    if scope == "personal":
+        query = query.filter(EmailTemplate.owner_user_id == owner_user_id)
+    if exclude_id:
+        query = query.filter(EmailTemplate.id != exclude_id)
+    return query.first() is not None
+
+
 def copy_template_to_personal(
     db: Session,
     org_id: UUID,
