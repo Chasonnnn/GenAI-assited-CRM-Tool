@@ -635,7 +635,7 @@ function ConfirmationView({
 
     const handleDownloadICS = () => {
         const ics = generateICSFile(appointmentType, selectedSlot.start, timezone, staffName, {
-            status: confirmation?.status,
+            ...(confirmation?.status ? { status: confirmation.status } : {}),
             meetingLocation,
             dialInNumber,
             joinUrl,

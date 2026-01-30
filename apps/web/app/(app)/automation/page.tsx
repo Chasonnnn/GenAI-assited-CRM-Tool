@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
     Dialog,
@@ -1296,33 +1296,33 @@ export default function AutomationPage() {
                             </TabsList>
                             {!isTemplatesTab && (
                                 <div className="flex items-center gap-2">
-                                    <Button
-                                        variant="outline"
-                                        disabled={
-                                            !canUseAI ||
-                                            (activeWorkflowScope === "org" && !canManageAutomation)
-                                        }
-                                        title={
-                                            !canUseAI
-                                                ? "AI is disabled or permission is missing"
-                                                : activeWorkflowScope === "org" && !canManageAutomation
-                                                    ? "Requires manage automation permission"
-                                                    : "Generate workflow with AI"
-                                        }
-                                        render={
-                                            canUseAI &&
-                                            !(activeWorkflowScope === "org" && !canManageAutomation)
-                                                ? (
-                                                    <Link
-                                                        href={`/automation/ai-builder?mode=workflow&scope=${activeWorkflowScope}`}
-                                                    />
-                                                )
-                                                : undefined
-                                        }
-                                    >
-                                        <SparklesIcon className="mr-2 size-4" />
-                                        Generate with AI
-                                    </Button>
+                                    {canUseAI && !(activeWorkflowScope === "org" && !canManageAutomation) ? (
+                                        <Button
+                                            variant="outline"
+                                            title="Generate workflow with AI"
+                                            render={
+                                                <Link
+                                                    href={`/automation/ai-builder?mode=workflow&scope=${activeWorkflowScope}`}
+                                                />
+                                            }
+                                        >
+                                            <SparklesIcon className="mr-2 size-4" />
+                                            Generate with AI
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                            variant="outline"
+                                            disabled
+                                            title={
+                                                !canUseAI
+                                                    ? "AI is disabled or permission is missing"
+                                                    : "Requires manage automation permission"
+                                            }
+                                        >
+                                            <SparklesIcon className="mr-2 size-4" />
+                                            Generate with AI
+                                        </Button>
+                                    )}
                                     <Button onClick={() => handleCreate(activeWorkflowScope)}>
                                         <PlusIcon className="mr-2 size-4" />
                                         {activeWorkflowScope === "personal"
