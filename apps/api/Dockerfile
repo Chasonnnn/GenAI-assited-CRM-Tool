@@ -39,7 +39,12 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
+    clamav \
+    clamav-freshclam \
     && rm -rf /var/lib/apt/lists/*
+
+# Best-effort signature update; don't fail the image build if unavailable
+RUN freshclam --quiet || true
 
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
