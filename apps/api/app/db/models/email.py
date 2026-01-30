@@ -32,15 +32,19 @@ if TYPE_CHECKING:
 
 class EmailTemplate(Base):
     """
-    Org-scoped email templates with variable placeholders.
+    Email templates with variable placeholders.
 
+    Supports both org-wide (scope='org') and personal (scope='personal') templates.
     Body supports {{variable}} syntax for personalization.
     """
 
     __tablename__ = "email_templates"
     __table_args__ = (
-        UniqueConstraint("organization_id", "name", name="uq_email_template_name"),
+        # Partial unique indexes are created in migration
+        # Org templates: unique (org_id, name) WHERE scope = 'org'
+        # Personal templates: unique (org_id, owner_user_id, name) WHERE scope = 'personal'
         Index("idx_email_templates_org", "organization_id", "is_active"),
+        Index("idx_email_templates_scope", "organization_id", "scope", "owner_user_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -62,6 +66,19 @@ class EmailTemplate(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
 
+    # Scope: 'org' (shared) or 'personal' (user-owned)
+    scope: Mapped[str] = mapped_column(
+        String(20), server_default=text("'org'"), nullable=False
+    )
+    # Owner for personal templates (NULL for org templates)
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
+    )
+    # Source template when copied or shared
+    source_template_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("email_templates.id", ondelete="SET NULL"), nullable=True
+    )
+
     # System template fields (idempotent seeding/upgrades)
     is_system_template: Mapped[bool] = mapped_column(
         Boolean, server_default=text("FALSE"), nullable=False
@@ -82,7 +99,9 @@ class EmailTemplate(Base):
     )
 
     # Relationships
-    created_by: Mapped["User | None"] = relationship()
+    created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
+    owner: Mapped["User | None"] = relationship(foreign_keys=[owner_user_id])
+    source_template: Mapped["EmailTemplate | None"] = relationship(remote_side=[id])
 
 
 class EmailLog(Base):

@@ -204,9 +204,14 @@ def create_template(
     subject: str,
     body: str,
     from_email: str | None = None,
+    scope: str = "org",
 ) -> EmailTemplate:
     """Create a new email template with initial version snapshot."""
     clean_body = sanitize_template_html(body)
+
+    # Determine owner_user_id based on scope
+    owner_user_id = user_id if scope == "personal" else None
+
     template = EmailTemplate(
         organization_id=org_id,
         created_by_user_id=user_id,
@@ -215,6 +220,8 @@ def create_template(
         from_email=_normalize_from_email(from_email),
         body=clean_body,
         is_active=True,
+        scope=scope,
+        owner_user_id=owner_user_id,
         current_version=1,
     )
     db.add(template)
@@ -375,11 +382,223 @@ def list_templates(
     org_id: UUID,
     active_only: bool = True,
 ) -> list[EmailTemplate]:
-    """List email templates for an organization."""
-    query = db.query(EmailTemplate).filter(EmailTemplate.organization_id == org_id)
+    """List email templates for an organization (legacy - returns all org+system templates)."""
+    query = db.query(EmailTemplate).filter(
+        EmailTemplate.organization_id == org_id,
+        EmailTemplate.scope == "org",  # Only org templates for backward compatibility
+    )
     if active_only:
         query = query.filter(EmailTemplate.is_active.is_(True))
     return query.order_by(EmailTemplate.name).all()
+
+
+def list_templates_for_user(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    is_admin: bool = False,
+    scope_filter: str | None = None,
+    show_all_personal: bool = False,
+    active_only: bool = True,
+) -> list[EmailTemplate]:
+    """
+    List email templates visible to a user with scope-based filtering.
+
+    Args:
+        db: Database session
+        org_id: Organization ID
+        user_id: Current user ID
+        is_admin: Whether user has admin privileges
+        scope_filter: Optional 'org' or 'personal' filter
+        show_all_personal: Admin-only flag to view all personal templates (read-only)
+        active_only: Only return active templates
+
+    Returns:
+        List of templates the user can see
+    """
+    from sqlalchemy import or_, and_
+
+    query = db.query(EmailTemplate).filter(EmailTemplate.organization_id == org_id)
+
+    if active_only:
+        query = query.filter(EmailTemplate.is_active.is_(True))
+
+    if scope_filter == "org":
+        # Only org templates (including system templates)
+        query = query.filter(EmailTemplate.scope == "org")
+    elif scope_filter == "personal":
+        if show_all_personal and is_admin:
+            # Admin viewing all personal templates (read-only)
+            query = query.filter(EmailTemplate.scope == "personal")
+        else:
+            # User's own personal templates
+            query = query.filter(
+                EmailTemplate.scope == "personal",
+                EmailTemplate.owner_user_id == user_id,
+            )
+    else:
+        # No scope filter: return based on visibility rules
+        if show_all_personal and is_admin:
+            # Admin sees org + all personal
+            pass  # No additional filter needed
+        else:
+            # User sees org templates + their own personal templates
+            query = query.filter(
+                or_(
+                    EmailTemplate.scope == "org",
+                    and_(
+                        EmailTemplate.scope == "personal",
+                        EmailTemplate.owner_user_id == user_id,
+                    ),
+                )
+            )
+
+    return query.order_by(EmailTemplate.scope.desc(), EmailTemplate.name).all()
+
+
+def copy_template_to_personal(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    template_id: UUID,
+    new_name: str,
+) -> EmailTemplate:
+    """
+    Copy an org/system template to the user's personal templates.
+
+    Args:
+        db: Database session
+        org_id: Organization ID
+        user_id: User creating the copy
+        template_id: Source template ID
+        new_name: Name for the new personal template
+
+    Returns:
+        New personal template
+
+    Raises:
+        ValueError: If source template not found or name already exists
+    """
+    # Get source template
+    source = (
+        db.query(EmailTemplate)
+        .filter(
+            EmailTemplate.id == template_id,
+            EmailTemplate.organization_id == org_id,
+            EmailTemplate.scope == "org",  # Can only copy org/system templates
+        )
+        .first()
+    )
+    if not source:
+        raise LookupError("Template not found or cannot be copied")
+
+    # Check for duplicate name in user's personal templates
+    existing = (
+        db.query(EmailTemplate)
+        .filter(
+            EmailTemplate.organization_id == org_id,
+            EmailTemplate.owner_user_id == user_id,
+            EmailTemplate.scope == "personal",
+            EmailTemplate.name == new_name,
+        )
+        .first()
+    )
+    if existing:
+        raise ValueError(f"You already have a template named '{new_name}'")
+
+    # Create personal copy
+    new_template = EmailTemplate(
+        organization_id=org_id,
+        created_by_user_id=user_id,
+        name=new_name,
+        subject=source.subject,
+        from_email=source.from_email,
+        body=source.body,
+        is_active=True,
+        scope="personal",
+        owner_user_id=user_id,
+        source_template_id=source.id,
+        category=source.category,
+        current_version=1,
+    )
+    db.add(new_template)
+    db.commit()
+    db.refresh(new_template)
+    return new_template
+
+
+def share_template_with_org(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    template_id: UUID,
+    new_name: str,
+) -> EmailTemplate:
+    """
+    Share a personal template with the organization.
+
+    Creates an org copy while keeping the original personal template.
+
+    Args:
+        db: Database session
+        org_id: Organization ID
+        user_id: User sharing the template (must be owner)
+        template_id: Source personal template ID
+        new_name: Name for the new org template
+
+    Returns:
+        New org template
+
+    Raises:
+        ValueError: If source template not found, not owned by user, or name exists
+    """
+    # Get source template (must be owned by user)
+    source = (
+        db.query(EmailTemplate)
+        .filter(
+            EmailTemplate.id == template_id,
+            EmailTemplate.organization_id == org_id,
+            EmailTemplate.scope == "personal",
+        )
+        .first()
+    )
+    if not source:
+        raise LookupError("Template not found")
+    if source.owner_user_id != user_id:
+        raise PermissionError("You can only share your own personal templates")
+
+    # Check for duplicate name in org templates
+    existing = (
+        db.query(EmailTemplate)
+        .filter(
+            EmailTemplate.organization_id == org_id,
+            EmailTemplate.scope == "org",
+            EmailTemplate.name == new_name,
+        )
+        .first()
+    )
+    if existing:
+        raise ValueError(f"An organization template named '{new_name}' already exists")
+
+    # Create org copy
+    new_template = EmailTemplate(
+        organization_id=org_id,
+        created_by_user_id=user_id,
+        name=new_name,
+        subject=source.subject,
+        from_email=source.from_email,
+        body=source.body,
+        is_active=True,
+        scope="org",
+        owner_user_id=None,  # Org templates have no owner
+        source_template_id=source.id,
+        category=source.category,
+        current_version=1,
+    )
+    db.add(new_template)
+    db.commit()
+    db.refresh(new_template)
+    return new_template
 
 
 def delete_template(db: Session, template: EmailTemplate) -> None:

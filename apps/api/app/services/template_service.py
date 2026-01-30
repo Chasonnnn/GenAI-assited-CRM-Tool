@@ -153,6 +153,7 @@ def use_template(
     workflow_description: str | None = None,
     is_enabled: bool = True,
     action_overrides: dict | None = None,
+    scope: str = "org",
 ) -> AutomationWorkflow:
     """Create a workflow from a template.
 
@@ -193,7 +194,7 @@ def use_template(
         template.trigger_config or {},
     )
     for action in actions:
-        workflow_service._validate_action_config(db, org_id, action)
+        workflow_service._validate_action_config(db, org_id, action, scope, user_id if scope == "personal" else None)
 
     effective_enabled = is_enabled
 
@@ -209,6 +210,8 @@ def use_template(
         condition_logic=template.condition_logic,
         actions=actions,
         is_enabled=effective_enabled,
+        scope=scope,
+        owner_user_id=user_id if scope == "personal" else None,
         created_by_user_id=user_id,
         updated_by_user_id=user_id,
     )

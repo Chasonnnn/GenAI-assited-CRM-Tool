@@ -75,6 +75,10 @@ class UseTemplateRequest(BaseModel):
     description: str | None = None
     is_enabled: bool = True
     action_overrides: dict[str, dict] | None = None
+    scope: str = Field(
+        default="org",
+        description="Workflow scope: 'org' for shared workflows, 'personal' for user-owned",
+    )
 
 
 TEMPLATE_CATEGORIES = [

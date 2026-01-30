@@ -148,7 +148,20 @@ def use_template(
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
 ):
-    """Create a workflow from a template."""
+    """Create a workflow from a template.
+
+    - scope='org': Creates an organization workflow (requires manage_automation permission)
+    - scope='personal': Creates a personal workflow owned by the current user
+    """
+    from app.services import workflow_access
+
+    # Check permissions based on scope
+    if data.scope == "org" and not workflow_access.has_manage_permission(db, session):
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot create org workflows without manage_automation permission",
+        )
+
     try:
         workflow = template_service.use_template(
             db=db,
@@ -159,6 +172,7 @@ def use_template(
             workflow_description=data.description,
             is_enabled=data.is_enabled,
             action_overrides=getattr(data, "action_overrides", None),
+            scope=data.scope,
         )
 
         # Build response with creator name

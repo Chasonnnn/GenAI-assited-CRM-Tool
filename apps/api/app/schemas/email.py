@@ -1,6 +1,7 @@
 """Pydantic schemas for email templates and logs."""
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -9,6 +10,8 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 # =============================================================================
 # Email Templates
 # =============================================================================
+
+EmailTemplateScope = Literal["org", "personal"]
 
 
 class EmailTemplateCreate(BaseModel):
@@ -22,6 +25,10 @@ class EmailTemplateCreate(BaseModel):
         description="Optional per-template From header override (e.g., 'Surrogacy Force <invites@surrogacyforce.com>').",
     )
     body: str = Field(..., min_length=1, max_length=50000)
+    scope: EmailTemplateScope = Field(
+        default="org",
+        description="Template scope: 'org' for shared templates, 'personal' for user-owned",
+    )
 
 
 class EmailTemplateUpdate(BaseModel):
@@ -52,6 +59,11 @@ class EmailTemplateRead(BaseModel):
     from_email: str | None
     body: str
     is_active: bool
+    scope: str = "org"
+    owner_user_id: UUID | None = None
+    owner_name: str | None = None  # Populated by service
+    source_template_id: UUID | None = None
+    is_system_template: bool = False
     current_version: int  # For optimistic locking
     created_at: datetime
     updated_at: datetime
@@ -67,8 +79,24 @@ class EmailTemplateListItem(BaseModel):
     subject: str
     from_email: str | None
     is_active: bool
+    scope: str = "org"
+    owner_user_id: UUID | None = None
+    owner_name: str | None = None  # Populated by service
+    is_system_template: bool = False
     created_at: datetime
     updated_at: datetime
+
+
+class EmailTemplateCopyRequest(BaseModel):
+    """Request to copy an org/system template to personal."""
+
+    name: str = Field(..., min_length=1, max_length=100)
+
+
+class EmailTemplateShareRequest(BaseModel):
+    """Request to share a personal template with the organization."""
+
+    name: str = Field(..., min_length=1, max_length=100)
 
 
 # =============================================================================
