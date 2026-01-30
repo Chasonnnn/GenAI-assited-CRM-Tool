@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.45.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.44.0...surrogacy-crm-platform-v0.45.0) (2026-01-30)
+
+
+### Features
+
+* add personal vs organization scope for email templates ([ab221c5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ab221c5996758b61936ce9ce8ef4f04b5ddfb75e))
+* add template_name_exists utility for scoped validation ([0fb10f7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0fb10f701078ef425ccd59716191fd49b2940501))
+* AI assistant and workflow builder enhancements ([dd2d923](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dd2d92350ef7b678b437eec099aed8661f894225))
+* appointment system enhancements and auto-approval logic ([75677f4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/75677f4da4e6083d47993629b406c00d1467142b))
+* automated signature injection for workflow emails ([195c741](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/195c741c98486cbc47894518fbea153cf22737da))
+* enhance automation UI for scoped templates and workflows ([d3f7d8b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d3f7d8b276cf859ed0782176e6d20c058fa19d3b))
+* enhance email template models and UI logic ([8fb0af1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8fb0af1ae8ac13cb1d5a280006e1122a03230c03))
+* enhance signature preview with org-only mode support ([38227ad](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/38227ad8917de266192586450ea8ec9ca28dbbba))
+* form system enhancements with file uploads and mapping snapshots ([4f3d30e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4f3d30ef239f8e2f57c167e41247ebc73e698b31))
+* implement scope-aware validation for workflow email templates ([355351b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/355351b3c0c2052c1bd34bd7d775affcbdcced5d))
+* switch from OpenAI to Gemini/Vertex AI for all AI features ([f6d8fb7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f6d8fb78181ae4250d11dd5cf2937b9c4dd5b018))
+* update dashboard KPIs to track 24h lead conversion ([053ed89](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/053ed89bb251ceb2f38c7e6ecc1c85818316c760))
+
+
+### Bug Fixes
+
+* **web:** improve form builder stability and application tab safety ([5c3df61](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5c3df6183f87e861898f623c402f43f1a6088f36))
+* **web:** refine workflow types and automation UI state ([07f1ea2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/07f1ea29c242dec43bf8ef5000f5549adf5e2eae))
+
+
+### Maintenance
+
+* cleanup and final test refinements for automation and forms ([344e456](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/344e45615315e788d37d60eaad2ff9f5eaebf98e))
+* update CHANGELOG.md and minor UI/dependency cleanup ([44672a2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/44672a255fc70622ea335edf26fbe1dc2eb1be24))
+
 ## [0.44.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.43.0...surrogacy-crm-platform-v0.44.0) (2026-01-30)
 
 ### Features
