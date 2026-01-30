@@ -45,7 +45,7 @@ export function useTestAPIKey() {
             api_key,
             vertex_api_key,
         }: {
-            provider: 'openai' | 'gemini' | 'vertex_api_key';
+            provider: 'gemini' | 'vertex_api_key';
             api_key: string;
             vertex_api_key?: aiApi.VertexAPIKeyConfig;
         }) => aiApi.testAPIKey(provider, api_key, vertex_api_key),

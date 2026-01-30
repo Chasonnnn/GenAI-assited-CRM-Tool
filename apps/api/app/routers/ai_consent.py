@@ -14,13 +14,13 @@ CONSENT_TEXT = """
 By enabling the AI Assistant, you acknowledge that:
 
 1. Surrogate data (names, contact info, notes) will be sent to a third-party AI provider 
-   (OpenAI or Google Gemini) for processing.
+   (Google Gemini or Vertex AI) for processing.
 
 2. If "Anonymize PII" is enabled (default), personal identifiers will be stripped 
    before sending to the AI and restored in responses.
 
 3. Data sent to AI providers is subject to their data processing policies. 
-   OpenAI and Google do not train on API data.
+   Google does not train on API data.
 
 4. AI responses are suggestions only. Staff must verify accuracy before acting.
 

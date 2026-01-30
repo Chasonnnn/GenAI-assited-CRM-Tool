@@ -34,7 +34,7 @@ export interface VertexAPIKeyConfig {
 
 export interface AISettingsUpdate {
     is_enabled?: boolean;
-    provider?: 'openai' | 'gemini' | 'vertex_wif' | 'vertex_api_key';
+    provider?: 'gemini' | 'vertex_wif' | 'vertex_api_key';
     api_key?: string;
     model?: string;
     vertex_wif?: VertexWIFConfig;
@@ -140,7 +140,7 @@ export async function updateAISettings(update: AISettingsUpdate): Promise<AISett
 }
 
 export async function testAPIKey(
-    provider: 'openai' | 'gemini' | 'vertex_api_key',
+    provider: 'gemini' | 'vertex_api_key',
     api_key: string,
     vertex_api_key?: VertexAPIKeyConfig
 ): Promise<{ valid: boolean }> {

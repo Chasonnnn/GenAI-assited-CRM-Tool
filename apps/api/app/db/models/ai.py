@@ -49,11 +49,11 @@ class AISettings(Base):
     )
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     provider: Mapped[str] = mapped_column(
-        String(20), default="openai", server_default=text("'openai'")
+        String(20), default="gemini", server_default=text("'gemini'")
     )
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     model: Mapped[str | None] = mapped_column(
-        String(50), default="gpt-4o-mini", server_default=text("'gpt-4o-mini'")
+        String(50), default="gemini-3-flash-preview", server_default=text("'gemini-3-flash-preview'")
     )
     # Vertex AI (WIF) configuration
     vertex_project_id: Mapped[str | None] = mapped_column(String(128), nullable=True)

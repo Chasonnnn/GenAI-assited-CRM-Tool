@@ -46,7 +46,7 @@ class AISettingsUpdate(BaseModel):
     """Update AI settings."""
 
     is_enabled: bool | None = None
-    provider: str | None = Field(None, pattern="^(openai|gemini|vertex_wif|vertex_api_key)$")
+    provider: str | None = Field(None, pattern="^(gemini|vertex_wif|vertex_api_key)$")
     api_key: str | None = None
     model: str | None = None
     vertex_wif: VertexWIFConfig | None = None
@@ -60,7 +60,7 @@ class AISettingsUpdate(BaseModel):
 class TestKeyRequest(BaseModel):
     """Test an API key."""
 
-    provider: str = Field(..., pattern="^(openai|gemini|vertex_api_key)$")
+    provider: str = Field(..., pattern="^(gemini|vertex_api_key)$")
     api_key: str
     vertex_api_key: VertexAPIKeyConfig | None = None
 

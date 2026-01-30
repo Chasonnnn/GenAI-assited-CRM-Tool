@@ -42,10 +42,8 @@ class ChatResponse:
             "gpt-4o-mini": {"input": Decimal("0.15"), "output": Decimal("0.60")},
             "gpt-4o": {"input": Decimal("2.50"), "output": Decimal("10.00")},
             # Gemini
-            "gemini-3-flash-preview": {
-                "input": Decimal("0.10"),
-                "output": Decimal("0.40"),
-            },  # Gemini 3.0 Flash
+            "gemini-3-flash-preview": {"input": Decimal("0.00"), "output": Decimal("0.00")},
+            "gemini-3-pro-preview": {"input": Decimal("0.00"), "output": Decimal("0.00")},
         }
 
         model_pricing = pricing.get(self.model, {"input": Decimal("0"), "output": Decimal("0")})
@@ -176,8 +174,10 @@ class GeminiProvider(AIProvider):
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 f"{self.base_url}/models/{model}:generateContent",
-                params={"key": self.api_key},
-                headers={"Content-Type": "application/json"},
+                headers={
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": self.api_key,
+                },
                 json=request_body,
             )
             response.raise_for_status()
@@ -205,7 +205,7 @@ class GeminiProvider(AIProvider):
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(
                     f"{self.base_url}/models",
-                    params={"key": self.api_key},
+                    headers={"x-goog-api-key": self.api_key},
                 )
                 return response.status_code == 200
         except Exception as e:
@@ -242,6 +242,9 @@ class VertexWIFProvider(AIProvider):
         if audience.startswith("//"):
             return audience
         return f"//iam.googleapis.com/{audience}"
+
+    async def get_access_token(self) -> str:
+        return await self._get_access_token()
 
     async def _get_access_token(self) -> str:
         if self._cached_token and self._cached_token_expiry:

@@ -98,8 +98,8 @@ def get_or_create_ai_settings(
     ai_settings = AISettings(
         organization_id=organization_id,
         is_enabled=False,
-        provider="openai",
-        model="gpt-4o-mini",
+        provider="gemini",
+        model="gemini-3-flash-preview",
         current_version=1,
     )
     db.add(ai_settings)
@@ -142,7 +142,7 @@ def update_ai_settings(
 ) -> AISettings:
     """Update AI settings with version control."""
     ai_settings = get_or_create_ai_settings(db, organization_id, user_id)
-    gemini_only_models = {"gemini-3-flash-preview"}
+    gemini_only_models = {"gemini-3-flash-preview", "gemini-3-pro-preview"}
 
     # Optimistic locking
     if expected_version is not None:
@@ -160,7 +160,9 @@ def update_ai_settings(
         ai_settings.api_key_encrypted = encrypt_api_key(api_key)
     if ai_settings.provider in ("gemini", "vertex_wif", "vertex_api_key"):
         if model is not None and model not in gemini_only_models:
-            raise ValueError("Only gemini-3-flash-preview is supported for this provider.")
+            raise ValueError(
+                "Only gemini-3-flash-preview or gemini-3-pro-preview is supported for this provider."
+            )
         if model is None and ai_settings.model not in gemini_only_models:
             ai_settings.model = "gemini-3-flash-preview"
     else:
@@ -245,6 +247,8 @@ def get_ai_provider_for_settings(
     user_id: uuid.UUID | None = None,
 ) -> AIProvider | None:
     if not ai_settings or not ai_settings.is_enabled:
+        return None
+    if ai_settings.provider == "openai":
         return None
 
     if ai_settings.provider == "vertex_wif":

@@ -1,6 +1,6 @@
-"""AI Transcription service using OpenAI Whisper API."""
+"""AI Transcription service using Gemini/Vertex AI."""
 
-import io
+import base64
 import logging
 import os
 import tempfile
@@ -41,8 +41,8 @@ TRANSCRIBABLE_MIME_TYPES = {
     "video/quicktime",
 }
 
-# Max file size for transcription (25MB - Whisper limit)
-MAX_TRANSCRIPTION_SIZE_BYTES = 25 * 1024 * 1024
+# Max file size for inline audio (20MB Gemini/Vertex inline limit)
+MAX_TRANSCRIPTION_SIZE_BYTES = 20 * 1024 * 1024
 
 
 class TranscriptionError(Exception):
@@ -80,20 +80,106 @@ def _download_file(storage_key: str) -> bytes:
             return f.read()
 
 
+def _build_transcription_instruction(language: str, prompt: str | None) -> str:
+    instruction = (
+        "Transcribe the audio as plain text."
+        if not language
+        else f"Transcribe the audio in {language} as plain text."
+    )
+    if prompt:
+        instruction = f"{instruction} Use this context: {prompt}"
+    return instruction
+
+
+def _build_gemini_audio_request(
+    file_bytes: bytes,
+    content_type: str,
+    language: str,
+    prompt: str | None,
+) -> dict:
+    instruction = _build_transcription_instruction(language, prompt)
+    audio_b64 = base64.b64encode(file_bytes).decode()
+    return {
+        "contents": [
+            {
+                "role": "user",
+                "parts": [
+                    {"text": instruction},
+                    {"inlineData": {"mimeType": content_type, "data": audio_b64}},
+                ],
+            }
+        ],
+        "generationConfig": {"temperature": 0, "maxOutputTokens": 4096},
+    }
+
+
+def _extract_gemini_text(payload: dict) -> str:
+    try:
+        parts = payload["candidates"][0]["content"]["parts"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise TranscriptionError("Transcription failed: invalid provider response") from exc
+
+    text_parts = [p.get("text", "") for p in parts if isinstance(p, dict)]
+    text = "".join(text_parts).strip()
+    if not text:
+        raise TranscriptionError("Transcription failed: empty response")
+    return text
+
+
+async def _post_json(
+    url: str,
+    *,
+    headers: dict[str, str],
+    body: dict,
+    params: dict | None = None,
+) -> dict:
+    async with httpx.AsyncClient(timeout=300.0) as client:  # 5 min timeout
+        try:
+            response = await client.post(url, headers=headers, params=params, json=body)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as exc:
+            status_code = exc.response.status_code
+            logger.error("Transcription provider error: status=%s", status_code)
+            raise TranscriptionError(
+                f"Transcription failed: provider error ({status_code})"
+            ) from exc
+        except httpx.TimeoutException as exc:
+            raise TranscriptionError("Transcription timed out. The file may be too long.") from exc
+        except Exception as exc:
+            logger.exception("Unexpected error during transcription")
+            raise TranscriptionError(f"Transcription failed: {str(exc)}") from exc
+
+
 async def transcribe_audio(
     file_bytes: bytes,
-    filename: str,
-    api_key: str,
+    content_type: str,
+    *,
+    provider: str,
+    model: str,
+    api_key: str | None = None,
+    vertex_project_id: str | None = None,
+    vertex_location: str | None = None,
+    vertex_audience: str | None = None,
+    vertex_service_account_email: str | None = None,
+    organization_id: UUID | None = None,
+    user_id: UUID | None = None,
     language: str = "en",
     prompt: str | None = None,
 ) -> str:
     """
-    Transcribe audio/video using OpenAI Whisper API.
+    Transcribe audio/video using Gemini or Vertex AI.
 
     Args:
         file_bytes: The audio/video file content
-        filename: Original filename (for format detection)
-        api_key: OpenAI API key
+        content_type: MIME type
+        provider: gemini | vertex_api_key | vertex_wif
+        model: Gemini model name
+        api_key: Gemini/Vertex API key (if applicable)
+        vertex_project_id: Vertex project (if applicable)
+        vertex_location: Vertex location (if applicable)
+        vertex_audience: WIF audience (if applicable)
+        vertex_service_account_email: WIF service account email (if applicable)
         language: ISO 639-1 language code
         prompt: Optional context prompt for better accuracy
 
@@ -105,35 +191,73 @@ async def transcribe_audio(
             f"File too large for transcription. Max size is {MAX_TRANSCRIPTION_SIZE_BYTES / (1024 * 1024):.0f}MB"
         )
 
-    # Build form data for multipart upload
-    files = {"file": (filename, io.BytesIO(file_bytes))}
-    data = {
-        "model": "whisper-1",
-        "language": language,
-        "response_format": "text",
-    }
-    if prompt:
-        data["prompt"] = prompt
+    body = _build_gemini_audio_request(file_bytes, content_type, language, prompt)
 
-    async with httpx.AsyncClient(timeout=300.0) as client:  # 5 min timeout
-        try:
-            response = await client.post(
-                "https://api.openai.com/v1/audio/transcriptions",
-                headers={"Authorization": f"Bearer {api_key}"},
-                files=files,
-                data=data,
+    if provider == "gemini":
+        if not api_key:
+            raise TranscriptionError("AI API key not configured")
+        payload = await _post_json(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": api_key,
+            },
+            body=body,
+        )
+        return _extract_gemini_text(payload)
+
+    if provider == "vertex_api_key":
+        if not api_key:
+            raise TranscriptionError("AI API key not configured")
+        if vertex_project_id and vertex_location:
+            base_url = (
+                f"https://{vertex_location}-aiplatform.googleapis.com/v1/projects/"
+                f"{vertex_project_id}/locations/{vertex_location}"
             )
-            response.raise_for_status()
-            return response.text
-        except httpx.HTTPStatusError as e:
-            status_code = e.response.status_code
-            logger.error("Whisper API error: status=%s", status_code)
-            raise TranscriptionError(f"Transcription failed: provider error ({status_code})")
-        except httpx.TimeoutException:
-            raise TranscriptionError("Transcription timed out. The file may be too long.")
-        except Exception as e:
-            logger.exception("Unexpected error during transcription")
-            raise TranscriptionError(f"Transcription failed: {str(e)}")
+        else:
+            base_url = "https://aiplatform.googleapis.com/v1"
+        headers = {"Content-Type": "application/json"}
+        if vertex_project_id:
+            headers["x-goog-user-project"] = vertex_project_id
+        payload = await _post_json(
+            f"{base_url}/publishers/google/models/{model}:generateContent",
+            headers=headers,
+            params={"key": api_key},
+            body=body,
+        )
+        return _extract_gemini_text(payload)
+
+    if provider == "vertex_wif":
+        if not (vertex_project_id and vertex_location and vertex_audience and vertex_service_account_email):
+            raise TranscriptionError("Vertex AI configuration is incomplete")
+        if not settings.WIF_OIDC_PRIVATE_KEY:
+            raise TranscriptionError("Vertex WIF is not configured")
+        if not organization_id:
+            raise TranscriptionError("Organization is required for Vertex WIF")
+        from app.services.ai_provider import VertexWIFConfig, VertexWIFProvider
+
+        config = VertexWIFConfig(
+            project_id=vertex_project_id,
+            location=vertex_location,
+            audience=vertex_audience,
+            service_account_email=vertex_service_account_email,
+            organization_id=organization_id,
+            user_id=user_id,
+        )
+        provider_instance = VertexWIFProvider(config, default_model=model)
+        access_token = await provider_instance.get_access_token()
+        payload = await _post_json(
+            f"https://{vertex_location}-aiplatform.googleapis.com/v1/projects/{vertex_project_id}/locations/{vertex_location}/publishers/google/models/{model}:generateContent",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "x-goog-user-project": vertex_project_id,
+            },
+            body=body,
+        )
+        return _extract_gemini_text(payload)
+
+    raise TranscriptionError("Transcription provider not supported")
 
 
 def _format_transcript_doc(text: str, filename: str) -> dict:
@@ -229,13 +353,15 @@ async def request_transcription(
     if is_consent_required(ai_settings):
         raise TranscriptionError("AI consent has not been accepted for this organization")
 
-    # Only OpenAI supports Whisper
-    if ai_settings.provider != "openai":
-        raise TranscriptionError("Transcription requires OpenAI API key")
+    provider = ai_settings.provider
+    if provider not in {"gemini", "vertex_api_key", "vertex_wif"}:
+        raise TranscriptionError("Transcription provider not supported")
 
-    api_key = get_decrypted_key(ai_settings)
-    if not api_key:
-        raise TranscriptionError("AI API key not configured")
+    model = ai_settings.model or "gemini-3-flash-preview"
+    if model not in {"gemini-3-flash-preview", "gemini-3-pro-preview"}:
+        raise TranscriptionError("Unsupported transcription model configured")
+
+    api_key = get_decrypted_key(ai_settings) if provider in {"gemini", "vertex_api_key"} else None
 
     # Update status to processing
     interview_attachment.transcription_status = "processing"
@@ -248,8 +374,16 @@ async def request_transcription(
         # Transcribe
         transcription = await transcribe_audio(
             file_bytes=file_bytes,
-            filename=attachment.filename,
+            content_type=attachment.content_type,
+            provider=provider,
+            model=model,
             api_key=api_key,
+            vertex_project_id=ai_settings.vertex_project_id,
+            vertex_location=ai_settings.vertex_location,
+            vertex_audience=ai_settings.vertex_audience,
+            vertex_service_account_email=ai_settings.vertex_service_account_email,
+            organization_id=interview.organization_id,
+            user_id=requested_by_user_id,
             language=language,
             prompt=prompt,
         )

@@ -606,7 +606,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             id=UUID(ai_settings_payload["id"]),
             organization_id=org_id,
             is_enabled=ai_settings_payload.get("is_enabled", False),
-            provider=ai_settings_payload.get("provider", "openai"),
+            provider=ai_settings_payload.get("provider", "gemini"),
             model=ai_settings_payload.get("model"),
             vertex_project_id=ai_settings_payload.get("vertex_project_id"),
             vertex_location=ai_settings_payload.get("vertex_location"),
