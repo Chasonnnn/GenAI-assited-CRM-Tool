@@ -213,7 +213,7 @@ async def process_workflow_email(db, job) -> None:
         - workflow_owner_id: Owner user ID (for personal workflows)
     """
     from app.db.models import EmailTemplate, EmailLog
-    from app.services import gmail_service, resend_settings_service
+    from app.services import gmail_service, resend_settings_service, signature_template_service
     from app.services.workflow_email_provider import (
         resolve_workflow_email_provider,
         EmailProviderError,
@@ -237,6 +237,22 @@ async def process_workflow_email(db, job) -> None:
 
     # Resolve subject and body with variables (escaped)
     subject, body = email_service.render_template(template.subject, template.body, variables)
+
+    # Append signature based on workflow scope
+    signature_html = ""
+    if workflow_scope == "personal" and workflow_owner_id:
+        signature_html = signature_template_service.render_signature_html(
+            db=db,
+            org_id=job.organization_id,
+            user_id=UUID(workflow_owner_id),
+        )
+    else:
+        signature_html = signature_template_service.render_org_signature_html(
+            db=db,
+            org_id=job.organization_id,
+        )
+    if signature_html:
+        body = f"{body}{signature_html}"
 
     # Create email log
     email_log = EmailLog(

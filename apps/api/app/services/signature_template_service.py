@@ -180,6 +180,33 @@ def _get_sample_data(org: Organization) -> dict:
     }
 
 
+def _get_org_only_data(org: Organization) -> dict:
+    """Get org-only data without user-specific fields.
+
+    Uses raw org values so renderers can apply consistent escaping/validation.
+    """
+    return {
+        "logo_url": org.signature_logo_url,
+        "primary_color": org.signature_primary_color,
+        "company_name": org.signature_company_name or org.name,
+        "address": org.signature_address,
+        "org_phone": org.signature_phone,
+        "website": org.signature_website,
+        "org_social_links": org.signature_social_links,
+        "disclaimer": org.signature_disclaimer,
+        # User fields intentionally blank for org-only signature
+        "name": "",
+        "email": "",
+        "user_phone": "",
+        "user_title": "",
+        "phone": "",
+        "photo_url": None,
+        "linkedin": None,
+        "twitter": None,
+        "instagram": None,
+    }
+
+
 def _render_social_links(data: dict, style: str = "") -> str:
     """Render text-only social links (user + org)."""
     links = []
@@ -239,13 +266,14 @@ def _render_classic(org: Organization, user: User) -> str:
             f'<img src="{data["logo_url"]}" alt="{data["company_name"]}" style="max-height: 50px; max-width: 200px; margin-bottom: 12px; display: block;" />'
         )
 
-    # Name and Title
-    name_line = data["name"]
+    # Name and Title (optional)
+    name_line = data["name"] or ""
     if data.get("user_title"):
-        name_line += f" | {data['user_title']}"
-    html_parts.append(
-        f'<p style="margin: 0 0 4px 0; font-weight: 600; color: #1a1a1a;">{name_line}</p>'
-    )
+        name_line = f"{name_line} | {data['user_title']}" if name_line else data["user_title"]
+    if name_line:
+        html_parts.append(
+            f'<p style="margin: 0 0 4px 0; font-weight: 600; color: #1a1a1a;">{name_line}</p>'
+        )
 
     # Company
     if data["company_name"]:
@@ -325,9 +353,13 @@ def _render_modern(org: Organization, user: User) -> str:
             "</td>",
             # Right: contact info
             '<td style="padding-left: 16px; vertical-align: top;">',
-            f'<p style="margin: 0 0 4px 0; font-weight: 600; font-size: 16px; color: #1a1a1a;">{data["name"]}</p>',
         ]
     )
+
+    if data["name"]:
+        html_parts.append(
+            f'<p style="margin: 0 0 4px 0; font-weight: 600; font-size: 16px; color: #1a1a1a;">{data["name"]}</p>'
+        )
 
     if data["company_name"]:
         html_parts.append(
@@ -367,7 +399,9 @@ def _render_minimal(org: Organization, user: User) -> str:
     """
     data = _get_base_data(org, user)
 
-    parts = [data["name"]]
+    parts = []
+    if data["name"]:
+        parts.append(data["name"])
     if data["company_name"]:
         parts.append(data["company_name"])
     if data["phone"]:
@@ -429,9 +463,10 @@ def _render_professional(org: Organization, user: User) -> str:
 
     # Info column
     html_parts.append('<td style="vertical-align: top; padding-left: 20px;">')
-    html_parts.append(
-        f'<p style="margin: 0 0 2px 0; font-weight: 700; font-size: 16px; color: #1a1a1a;">{data["name"]}</p>'
-    )
+    if data["name"]:
+        html_parts.append(
+            f'<p style="margin: 0 0 2px 0; font-weight: 700; font-size: 16px; color: #1a1a1a;">{data["name"]}</p>'
+        )
 
     if data["company_name"]:
         html_parts.append(
@@ -493,9 +528,10 @@ def _render_creative(org: Organization, user: User) -> str:
         )
 
     # Name with accent
-    html_parts.append(
-        f'<p style="margin: 0 0 4px 0; font-weight: 700; font-size: 18px; color: {color};">{data["name"]}</p>'
-    )
+    if data["name"]:
+        html_parts.append(
+            f'<p style="margin: 0 0 4px 0; font-weight: 700; font-size: 18px; color: {color};">{data["name"]}</p>'
+        )
 
     if data["company_name"]:
         html_parts.append(
@@ -606,6 +642,21 @@ def render_signature_preview(
     data = _get_sample_data(org)
 
     # Use a variant that works with raw data dict
+    return _render_from_data(data, template)
+
+
+def render_org_signature_html(
+    db: Session,
+    org_id: uuid.UUID,
+) -> str:
+    """Render org-only signature HTML (no user-specific fields)."""
+    org = org_service.get_org_by_id(db, org_id)
+
+    if not org:
+        return ""
+
+    template = org.signature_template or DEFAULT_TEMPLATE
+    data = _get_org_only_data(org)
     return _render_from_data(data, template)
 
 

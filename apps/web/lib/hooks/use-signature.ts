@@ -126,10 +126,10 @@ export function useDeleteOrgLogo() {
     })
 }
 
-export function useOrgSignaturePreview() {
+export function useOrgSignaturePreview(enabled = false) {
     return useQuery({
         queryKey: signatureKeys.orgPreview(),
         queryFn: () => getOrgSignaturePreview(),
-        enabled: false, // Only fetch when manually triggered
+        enabled,
     })
 }

@@ -52,7 +52,7 @@ export function EmailComposeDialog({
     const idempotencyKeyRef = React.useRef<string | null>(null)
 
     // Fetch email templates list
-    const { data: templates = [], isLoading: templatesLoading } = useEmailTemplates(true)
+    const { data: templates = [], isLoading: templatesLoading } = useEmailTemplates({ activeOnly: true })
     // Fetch full template when one is selected
     const { data: fullTemplate } = useEmailTemplate(selectedTemplate || null)
     const sendEmailMutation = useSendSurrogateEmail()

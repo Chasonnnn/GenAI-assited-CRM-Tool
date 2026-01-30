@@ -267,13 +267,11 @@ class SignaturePreviewResponse(BaseModel):
 
 @router.get("/organization/signature", response_model=OrgSignatureRead)
 def get_org_signature(
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """
-    Get organization signature settings.
-
-    Requires Admin or Developer role.
+    Get organization signature settings (read-only for non-admin users).
     """
     org = org_service.get_org_by_id(db, session.org_id)
     if not org:
@@ -411,7 +409,7 @@ def update_org_signature(
 @router.get("/organization/signature/preview", response_model=SignaturePreviewResponse)
 def get_org_signature_preview(
     template: str | None = None,
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """
@@ -423,7 +421,6 @@ def get_org_signature_preview(
     Optionally pass ?template=modern|minimal|professional|creative to
     preview a template before saving.
 
-    Requires Admin or Developer role.
     """
     # Validate template parameter if provided
     valid_templates = ["classic", "modern", "minimal", "professional", "creative"]
