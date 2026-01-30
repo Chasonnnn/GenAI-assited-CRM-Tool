@@ -671,13 +671,13 @@ export function ActivityTimeline({
                 {/* Deep links to relevant tabs */}
                 <div className="flex gap-3 pt-2">
                     <Link
-                        href={`/surrogates/${surrogateId}?tab=history`}
+                        href={`/surrogates/${surrogateId}/history`}
                         className="text-xs text-primary hover:underline underline-offset-4"
                     >
                         View full history &rarr;
                     </Link>
                     <Link
-                        href={`/surrogates/${surrogateId}?tab=notes`}
+                        href={`/surrogates/${surrogateId}/notes`}
                         className="text-xs text-primary hover:underline underline-offset-4"
                     >
                         Notes &amp; Attachments &rarr;

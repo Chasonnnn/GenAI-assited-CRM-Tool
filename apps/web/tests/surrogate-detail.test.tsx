@@ -1,20 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import SurrogateDetailPage from '../app/(app)/surrogates/[id]/page'
+import { SurrogateDetailLayoutClient } from '@/components/surrogates/detail/SurrogateDetailLayoutClient'
+import { SurrogateOverviewTab } from '@/components/surrogates/detail/tabs/SurrogateOverviewTab'
 
 const mockPush = vi.fn()
 const mockReplace = vi.fn()
-const mockSearchParams = {
-    get: vi.fn(),
-    toString: vi.fn(),
+const mockParams = {
+    id: 'c1',
 }
+const mockSegment = { value: null as string | null }
 const mockCreateZoomMeeting = vi.fn()
 const mockSendZoomInvite = vi.fn()
 
 vi.mock('next/navigation', () => ({
-    useParams: () => ({ id: 'c1' }),
+    useParams: () => mockParams,
     useRouter: () => ({ push: mockPush, replace: mockReplace }),
-    useSearchParams: () => mockSearchParams,
+    useSelectedLayoutSegment: () => mockSegment.value,
 }))
 
 vi.mock('@/lib/auth-context', () => ({
@@ -243,8 +244,7 @@ describe('SurrogateDetailPage', () => {
 
         mockPush.mockReset()
         mockReplace.mockReset()
-        mockSearchParams.get.mockReturnValue(null)
-        mockSearchParams.toString.mockReturnValue('')
+        mockSegment.value = null
         mockClaimSurrogate.mockReset()
         mockReleaseSurrogate.mockReset()
         const clipboardWriteText = navigator.clipboard.writeText as unknown as { mockClear?: () => void }
@@ -252,7 +252,11 @@ describe('SurrogateDetailPage', () => {
     })
 
     it('renders surrogate header and allows copying email', () => {
-        render(<SurrogateDetailPage />)
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
 
         expect(screen.getByText('Surrogate #S12345')).toBeInTheDocument()
         expect(screen.getByText('Jane Applicant')).toBeInTheDocument()
@@ -277,31 +281,46 @@ describe('SurrogateDetailPage', () => {
             error: null,
         })
 
-        render(<SurrogateDetailPage />)
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
 
         fireEvent.click(screen.getByRole('button', { name: 'Claim Surrogate' }))
         expect(mockClaimSurrogate).toHaveBeenCalledWith('c1')
     })
 
     it('selects tab from url params', () => {
-        mockSearchParams.get.mockImplementation((key: string) => (key === 'tab' ? 'history' : null))
-        mockSearchParams.toString.mockReturnValue('tab=history')
+        mockSegment.value = 'history'
 
-        render(<SurrogateDetailPage />)
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
 
         const historyTab = screen.getByRole('tab', { name: /History/i })
         expect(historyTab).toHaveAttribute('aria-selected', 'true')
     })
 
     it('updates url when switching tabs', () => {
-        render(<SurrogateDetailPage />)
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
 
         fireEvent.click(screen.getByRole('tab', { name: /Notes/i }))
-        expect(mockReplace).toHaveBeenCalledWith('/surrogates/c1?tab=notes', { scroll: false })
+        expect(mockReplace).toHaveBeenCalledWith('/surrogates/c1/notes', { scroll: false })
     })
 
     it('disables Journey tab before matched', () => {
-        render(<SurrogateDetailPage />)
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
 
         const journeyTab = screen.getByRole('tab', { name: /Journey/i })
         expect(journeyTab).toHaveAttribute('aria-disabled', 'true')
@@ -309,16 +328,23 @@ describe('SurrogateDetailPage', () => {
     })
 
     it('redirects to overview when journey tab is requested before matched', () => {
-        mockSearchParams.get.mockImplementation((key: string) => (key === 'tab' ? 'journey' : null))
-        mockSearchParams.toString.mockReturnValue('tab=journey')
+        mockSegment.value = 'journey'
 
-        render(<SurrogateDetailPage />)
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
 
         expect(mockReplace).toHaveBeenCalledWith('/surrogates/c1', { scroll: false })
     })
 
     it('shows Insurance Info and Activity on overview', () => {
-        render(<SurrogateDetailPage />)
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
 
         expect(screen.getByText('Insurance Information')).toBeInTheDocument()
         expect(screen.getByText('Activity')).toBeInTheDocument()
@@ -335,7 +361,11 @@ describe('SurrogateDetailPage', () => {
             error: null,
         })
 
-        render(<SurrogateDetailPage />)
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
 
         const bmiValue = Math.round((120 / ((5.5 * 12) ** 2)) * 703 * 10) / 10
         expect(screen.getByText('BMI:')).toBeInTheDocument()
@@ -343,7 +373,11 @@ describe('SurrogateDetailPage', () => {
     })
 
     it('hides Medical Information and Pregnancy Tracker before ready_to_match', () => {
-        render(<SurrogateDetailPage />)
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
 
         expect(screen.queryByText('Medical Information')).not.toBeInTheDocument()
         expect(screen.queryByText('Pregnancy Tracker')).not.toBeInTheDocument()
@@ -362,7 +396,11 @@ describe('SurrogateDetailPage', () => {
             error: null,
         })
 
-        render(<SurrogateDetailPage />)
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
 
         expect(screen.getByText('Medical Information')).toBeInTheDocument()
         expect(screen.getByText('Pregnancy Tracker')).toBeInTheDocument()
@@ -384,7 +422,11 @@ describe('SurrogateDetailPage', () => {
             error: null,
         })
 
-        render(<SurrogateDetailPage />)
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
 
         expect(screen.getByText('Pregnancy Tracker')).toBeInTheDocument()
         expect(screen.getByText('Due Date:')).toBeInTheDocument()
@@ -408,7 +450,11 @@ describe('SurrogateDetailPage', () => {
             error: null,
         })
 
-        render(<SurrogateDetailPage />)
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
 
         expect(screen.getByText('Pregnancy Tracker')).toBeInTheDocument()
         expect(screen.getByText('Actual Delivery Date:')).toBeInTheDocument()
