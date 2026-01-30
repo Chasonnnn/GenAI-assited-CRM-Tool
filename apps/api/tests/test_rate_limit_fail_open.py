@@ -69,3 +69,19 @@ async def test_rate_limit_fail_closed_raises(monkeypatch):
     decorated = limiter.limit("1/minute")(handler)
     with pytest.raises(FakeRedisError):
         await decorated()
+
+
+def test_rate_limit_preserves_handler_signature(monkeypatch):
+    monkeypatch.setattr(rate_limit, "FAIL_OPEN", True)
+    monkeypatch.setattr(rate_limit, "REDIS_ERROR_TYPES", (FakeRedisError,))
+
+    redis_limiter = DummyLimiter()
+    memory_limiter = DummyLimiter()
+    limiter = rate_limit.FailOpenLimiter(redis_limiter, memory_limiter)
+
+    async def handler(request, user_id: str, *, include_archived: bool = False):
+        return request, user_id, include_archived
+
+    decorated = limiter.limit("1/minute")(handler)
+
+    assert inspect.signature(decorated) == inspect.signature(handler)

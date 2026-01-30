@@ -1,8 +1,9 @@
 """Rate limiting configuration for the Surrogacy Force API."""
 
+import functools
+import inspect
 import logging
 import os
-import inspect
 import time
 
 from slowapi import Limiter
@@ -61,6 +62,7 @@ class FailOpenLimiter:
 
             if inspect.iscoroutinefunction(func):
 
+                @functools.wraps(func)
                 async def async_wrapped(*f_args, **f_kwargs):
                     if self._fallback_active():
                         return await memory_wrapped(*f_args, **f_kwargs)
@@ -75,6 +77,7 @@ class FailOpenLimiter:
 
                 return async_wrapped
 
+            @functools.wraps(func)
             def sync_wrapped(*f_args, **f_kwargs):
                 if self._fallback_active():
                     return memory_wrapped(*f_args, **f_kwargs)
