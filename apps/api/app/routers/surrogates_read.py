@@ -9,7 +9,6 @@ from app.core.deps import get_current_session, get_db, require_permission
 from app.core.policies import POLICIES
 from app.core.surrogate_access import check_surrogate_access
 from app.db.enums import AuditEventType, Role, SurrogateSource
-from app.db.models import User
 from app.schemas.auth import UserSession
 from app.schemas.surrogate import (
     SurrogateActivityRead,
@@ -19,7 +18,7 @@ from app.schemas.surrogate import (
     SurrogateStats,
     SurrogateStatusHistoryRead,
 )
-from app.services import surrogate_service
+from app.services import surrogate_service, user_service
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
 from .surrogates_shared import _surrogate_to_list_item, _surrogate_to_read
@@ -92,8 +91,6 @@ def list_surrogates(
 ) -> SurrogateListResponse:
     """List surrogates with filters and pagination."""
     from app.services import audit_service, permission_service
-    from app.db.models import SurrogateActivityLog
-    from sqlalchemy import func
 
     exclude_stage_types = []
     if not permission_service.check_permission(
@@ -165,21 +162,9 @@ def list_surrogates(
     db.commit()
 
     surrogate_ids = [surrogate.id for surrogate in surrogates]
-    last_activity_map = {}
-    if surrogate_ids:
-        last_activity_rows = (
-            db.query(
-                SurrogateActivityLog.surrogate_id,
-                func.max(SurrogateActivityLog.created_at),
-            )
-            .filter(
-                SurrogateActivityLog.organization_id == session.org_id,
-                SurrogateActivityLog.surrogate_id.in_(surrogate_ids),
-            )
-            .group_by(SurrogateActivityLog.surrogate_id)
-            .all()
-        )
-        last_activity_map = {row[0]: row[1] for row in last_activity_rows}
+    last_activity_map = surrogate_service.get_last_activity_map(
+        db, session.org_id, surrogate_ids
+    )
 
     return SurrogateListResponse(
         items=[
@@ -275,12 +260,7 @@ def get_surrogate_history(
     history = surrogate_service.get_status_history(db, surrogate_id, session.org_id)
 
     user_ids = {h.changed_by_user_id for h in history if h.changed_by_user_id}
-    users_by_id: dict[UUID, str | None] = {}
-    if user_ids:
-        users_by_id = {
-            user.id: user.display_name
-            for user in db.query(User).filter(User.id.in_(user_ids)).all()
-        }
+    users_by_id = user_service.get_display_names_by_ids(db, user_ids)
 
     result = []
     for h in history:

@@ -9,8 +9,11 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_db, require_csrf_header, require_permission
 from app.core.permissions import PermissionKey as P
 from app.schemas.auth import UserSession
-from app.db.models import MetaForm, ZapierWebhookSettings
-from app.services import zapier_settings_service, zapier_outbound_service
+from app.services import (
+    meta_form_mapping_service,
+    zapier_settings_service,
+    zapier_outbound_service,
+)
 from app.services.webhooks import zapier as zapier_webhook_service
 
 router = APIRouter(prefix="/integrations/zapier", tags=["zapier"])
@@ -119,15 +122,7 @@ def send_test_lead(
 ):
     form_id = data.form_id
     if not form_id:
-        forms = (
-            db.query(MetaForm)
-            .filter(
-                MetaForm.organization_id == session.org_id,
-                MetaForm.is_active.is_(True),
-            )
-            .order_by(MetaForm.created_at.desc())
-            .all()
-        )
+        forms = meta_form_mapping_service.list_active_forms(db, session.org_id)
         if not forms:
             raise HTTPException(
                 status_code=400, detail="No Meta lead forms found for this organization."
@@ -188,7 +183,7 @@ def send_outbound_test(
     return ZapierOutboundTestResponse(status="queued", **result)
 
 
-def _serialize_settings(settings: ZapierWebhookSettings) -> ZapierSettingsResponse:
+def _serialize_settings(settings) -> ZapierSettingsResponse:
     mapping = zapier_settings_service.normalize_event_mapping(settings.outbound_event_mapping)
     return ZapierSettingsResponse(
         webhook_url=zapier_settings_service.get_webhook_url(settings.webhook_id),

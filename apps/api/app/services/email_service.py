@@ -845,7 +845,9 @@ def _sync_campaign_recipient(
     )
     status_counts = {status: count for status, count in status_rows}
 
-    run.sent_count = status_counts.get(CampaignRecipientStatus.SENT.value, 0)
+    delivered_count = status_counts.get(CampaignRecipientStatus.DELIVERED.value, 0)
+    run.sent_count = status_counts.get(CampaignRecipientStatus.SENT.value, 0) + delivered_count
+    run.delivered_count = delivered_count
     run.failed_count = status_counts.get(CampaignRecipientStatus.FAILED.value, 0)
     run.skipped_count = status_counts.get(CampaignRecipientStatus.SKIPPED.value, 0)
     pending_count = status_counts.get(CampaignRecipientStatus.PENDING.value, 0)
@@ -860,6 +862,7 @@ def _sync_campaign_recipient(
     campaign = db.query(Campaign).filter(Campaign.id == run.campaign_id).first()
     if campaign:
         campaign.sent_count = run.sent_count
+        campaign.delivered_count = run.delivered_count
         campaign.failed_count = run.failed_count
         campaign.skipped_count = run.skipped_count
         campaign.total_recipients = run.total_count

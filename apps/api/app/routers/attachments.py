@@ -1,6 +1,6 @@
 """Attachment endpoints for file uploads and downloads."""
 
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Request
@@ -16,7 +16,6 @@ from app.core.deps import (
 )
 from app.core.policies import POLICIES
 from app.db.enums import Role
-from app.db.models import Surrogate
 from app.schemas.auth import UserSession
 from app.services import activity_service, attachment_service, surrogate_service, ip_service
 
@@ -57,7 +56,7 @@ def _get_surrogate_with_access(
     surrogate_id: UUID,
     session: UserSession,
     require_write: bool = False,
-) -> Surrogate:
+) -> Any:
     """Get surrogate and verify user has access."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
 

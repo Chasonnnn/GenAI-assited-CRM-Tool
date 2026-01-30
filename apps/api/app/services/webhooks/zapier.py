@@ -19,6 +19,8 @@ from app.utils.datetime_parsing import parse_datetime_with_timezone
 logger = logging.getLogger(__name__)
 
 
+MAX_PAYLOAD_BYTES = 5 * 1024 * 1024
+
 _FIELD_DATA_KEYS = ("field_data", "fieldData")
 _FIELDS_KEYS = ("fields", "fieldDataRaw", "field_data_raw")
 
@@ -45,6 +47,33 @@ def _coerce_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
     return {}
+
+
+def _coerce_form_value(value: Any) -> Any:
+    if hasattr(value, "filename"):
+        return value.filename
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def _form_to_payload(form_data: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    if hasattr(form_data, "multi_items"):
+        for key, value in form_data.multi_items():
+            value = _coerce_form_value(value)
+            if key in payload:
+                existing = payload[key]
+                if isinstance(existing, list):
+                    existing.append(value)
+                else:
+                    payload[key] = [existing, value]
+            else:
+                payload[key] = value
+        return payload
+    for key in form_data:
+        payload[key] = _coerce_form_value(form_data[key])
+    return payload
 
 
 def _unwrap_payload(value: Any) -> Any:
@@ -294,10 +323,37 @@ class ZapierWebhookHandler:
         if not secret or not hmac.compare_digest(token, secret):
             raise HTTPException(status_code=401, detail="Invalid webhook token")
 
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                payload_size = int(content_length)
+            except ValueError:
+                payload_size = None
+            if payload_size and payload_size > MAX_PAYLOAD_BYTES:
+                raise HTTPException(status_code=413, detail="Payload too large (max 5MB).")
+
+        content_type = (request.headers.get("content-type") or "").lower()
         try:
-            payload = await request.json()
+            if (
+                "application/json" in content_type
+                or content_type.endswith("+json")
+                or "text/json" in content_type
+            ):
+                payload = await request.json()
+            elif (
+                "application/x-www-form-urlencoded" in content_type
+                or "multipart/form-data" in content_type
+            ):
+                form_data = await request.form()
+                payload = _form_to_payload(form_data)
+            else:
+                try:
+                    payload = await request.json()
+                except Exception:
+                    form_data = await request.form()
+                    payload = _form_to_payload(form_data)
         except Exception:
-            raise HTTPException(status_code=400, detail="Invalid JSON payload")
+            raise HTTPException(status_code=400, detail="Invalid payload")
 
         if isinstance(payload, dict) and isinstance(payload.get("data"), list):
             payload = payload["data"]

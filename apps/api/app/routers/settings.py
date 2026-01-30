@@ -20,7 +20,6 @@ from app.core.deps import (
     require_roles,
 )
 from app.core.policies import POLICIES
-from app.db.models import Organization
 from app.db.enums import Role
 from app.schemas.auth import UserSession
 from app.services import (
@@ -564,11 +563,7 @@ async def get_org_logo_local(
 
     expected_url = _build_local_logo_url(normalized)
     legacy_url = f"/static/{normalized}"
-    org = (
-        db.query(Organization)
-        .filter(Organization.signature_logo_url.in_([expected_url, legacy_url]))
-        .first()
-    )
+    org = org_service.get_org_by_signature_logo_urls(db, [expected_url, legacy_url])
     if not org:
         raise HTTPException(status_code=404, detail="Logo not found")
 

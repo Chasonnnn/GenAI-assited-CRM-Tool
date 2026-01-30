@@ -142,7 +142,7 @@ Your task is to generate a workflow configuration JSON based on the user's natur
 {stages}
 
 ## Condition Operators
-equals, not_equals, contains, not_contains, greater_than, less_than, is_empty, is_not_empty, in_list, not_in_list
+equals, not_equals, contains, not_contains, greater_than, less_than, is_empty, is_not_empty, in, not_in
 
 ## Condition Fields
 status_label, stage_id, source, is_priority, state, created_at, owner_type, owner_id, email, phone, full_name
@@ -173,10 +173,10 @@ Respond with ONLY a valid JSON object (no markdown, no explanation) in this exac
 3. For send_email action, use a real template_id from the list
 4. For assign_surrogate actions, use owner_type ("user" or "queue") and a real owner_id from the list
 5. For send_notification actions, use recipients ("owner", "creator", "all_admins") or a list of user_ids
-6. For update_status actions, use a real stage_id from the list
-6. Keep the workflow simple and focused on the user's request
-7. Add conditions only when the user specifies filtering criteria
-8. Use descriptive but concise names
+6. For update_field actions on stage changes, set field=stage_id and use a real stage_id from the list
+7. Keep the workflow simple and focused on the user's request
+8. Add conditions only when the user specifies filtering criteria
+9. Use descriptive but concise names
 """,
     ),
     "schedule_parse": PromptTemplate(

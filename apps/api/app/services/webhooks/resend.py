@@ -243,6 +243,9 @@ def _process_resend_event(
                     "bounced" if event_type == "email.bounced" else "complaint"
                 )
 
+            # Ensure status updates are persisted before aggregate counts (autoflush is disabled).
+            db.flush()
+
             run = db.query(CampaignRun).filter(CampaignRun.id == campaign_recipient.run_id).first()
             if run:
                 run.sent_count = (
@@ -255,6 +258,14 @@ def _process_resend_event(
                                 CampaignRecipientStatus.DELIVERED.value,
                             ]
                         ),
+                    )
+                    .count()
+                )
+                run.delivered_count = (
+                    db.query(CampaignRecipient)
+                    .filter(
+                        CampaignRecipient.run_id == run.id,
+                        CampaignRecipient.status == CampaignRecipientStatus.DELIVERED.value,
                     )
                     .count()
                 )

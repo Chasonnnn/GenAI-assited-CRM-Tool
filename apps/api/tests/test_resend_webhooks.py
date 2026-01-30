@@ -206,6 +206,96 @@ class TestResendWebhookHandler:
         assert email_log.delivered_at is not None
 
     @pytest.mark.asyncio
+    async def test_webhook_delivered_updates_campaign_run_counts(
+        self, db, test_org, test_user, client, setup_email_log
+    ):
+        """Delivered webhook should update campaign recipient + run delivered_count."""
+        import json
+        from uuid import uuid4
+
+        from app.db.models import Campaign, CampaignRun, CampaignRecipient, EmailTemplate
+
+        email_log, settings, webhook_secret = setup_email_log
+
+        template = EmailTemplate(
+            id=uuid4(),
+            organization_id=test_org.id,
+            name="Webhook Campaign Template",
+            subject="Hello",
+            body="<p>Test body</p>",
+            is_active=True,
+        )
+        db.add(template)
+        db.flush()
+
+        campaign = Campaign(
+            id=uuid4(),
+            organization_id=test_org.id,
+            name="Webhook Campaign",
+            email_template_id=template.id,
+            recipient_type="case",
+            filter_criteria={},
+            status="sending",
+            created_by_user_id=test_user.id,
+        )
+        db.add(campaign)
+        db.flush()
+
+        run = CampaignRun(
+            id=uuid4(),
+            organization_id=test_org.id,
+            campaign_id=campaign.id,
+            status="running",
+            total_count=1,
+            sent_count=1,
+            failed_count=0,
+            skipped_count=0,
+            opened_count=0,
+            clicked_count=0,
+        )
+        db.add(run)
+        db.flush()
+
+        recipient = CampaignRecipient(
+            id=uuid4(),
+            run_id=run.id,
+            entity_type="case",
+            entity_id=uuid4(),
+            recipient_email="test@recipient.com",
+            status="sent",
+            external_message_id=str(email_log.id),
+        )
+        db.add(recipient)
+        db.commit()
+
+        payload = {
+            "type": "email.delivered",
+            "data": {"email_id": email_log.external_id},
+        }
+        body = json.dumps(payload).encode("utf-8")
+        timestamp = str(int(time.time()))
+        msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+
+        response = await client.post(
+            f"/webhooks/resend/{settings.webhook_id}",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "svix-id": msg_id,
+                "svix-timestamp": timestamp,
+                "svix-signature": signature,
+            },
+        )
+
+        assert response.status_code == 200
+
+        db.refresh(recipient)
+        db.refresh(run)
+        assert recipient.status == "delivered"
+        assert run.delivered_count == 1
+        assert run.sent_count == 1
+
+    @pytest.mark.asyncio
     async def test_webhook_bounced_hard_adds_suppression(
         self, db, test_org, client, setup_email_log
     ):

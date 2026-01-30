@@ -72,6 +72,30 @@ def _get_org_user(db: Session, org_id: UUID, user_id: UUID | None) -> User | Non
     return membership.user if membership else None
 
 
+def get_last_activity_map(
+    db: Session, org_id: UUID, surrogate_ids: list[UUID]
+) -> dict[UUID, datetime]:
+    """Return last activity timestamps by surrogate id."""
+    if not surrogate_ids:
+        return {}
+
+    from app.db.models import SurrogateActivityLog
+
+    rows = (
+        db.query(
+            SurrogateActivityLog.surrogate_id,
+            func.max(SurrogateActivityLog.created_at),
+        )
+        .filter(
+            SurrogateActivityLog.organization_id == org_id,
+            SurrogateActivityLog.surrogate_id.in_(surrogate_ids),
+        )
+        .group_by(SurrogateActivityLog.surrogate_id)
+        .all()
+    )
+    return {row[0]: row[1] for row in rows}
+
+
 def create_surrogate(
     db: Session,
     org_id: UUID,

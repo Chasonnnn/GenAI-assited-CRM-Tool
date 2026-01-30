@@ -185,6 +185,66 @@ async def test_zapier_webhook_creates_surrogate(client, db, test_org):
 
 
 @pytest.mark.asyncio
+async def test_zapier_webhook_accepts_form_encoded_payload(client, db, test_org):
+    from app.db.models import Surrogate
+    from app.services import zapier_settings_service
+
+    _create_mapped_meta_form(db, test_org.id, user_id=None, form_external_id="form_form")
+
+    settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    secret = zapier_settings_service.decrypt_webhook_secret(settings.webhook_secret_encrypted)
+
+    payload = {
+        "lead_id": "lead_form",
+        "form_id": "form_form",
+        "full_name": "Form Lead",
+        "email": "form@example.com",
+        "phone_number": "(555) 123-4567",
+        "state": "CA",
+        "created_time": "2026-01-16T10:30:00Z",
+    }
+
+    res = await client.post(
+        f"/webhooks/zapier/{settings.webhook_id}",
+        data=payload,
+        headers={"X-Webhook-Token": secret},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["status"] == "converted"
+
+    surrogate = (
+        db.query(Surrogate)
+        .filter(Surrogate.organization_id == test_org.id)
+        .order_by(Surrogate.created_at.desc())
+        .first()
+    )
+    assert surrogate is not None
+    assert surrogate.full_name == "Form Lead"
+
+
+@pytest.mark.asyncio
+async def test_zapier_webhook_rejects_payload_too_large(client, db, test_org):
+    from app.services import zapier_settings_service
+    from app.services.webhooks import zapier as zapier_webhook_service
+
+    settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    secret = zapier_settings_service.decrypt_webhook_secret(settings.webhook_secret_encrypted)
+
+    oversized = b"x" * (zapier_webhook_service.MAX_PAYLOAD_BYTES + 1)
+
+    res = await client.post(
+        f"/webhooks/zapier/{settings.webhook_id}",
+        content=oversized,
+        headers={
+            "X-Webhook-Token": secret,
+            "Content-Type": "application/json",
+        },
+    )
+    assert res.status_code == 413
+
+
+@pytest.mark.asyncio
 async def test_zapier_webhook_dedupes_by_lead_id(client, db, test_org):
     from app.db.models import MetaLead, Surrogate
     from app.services import zapier_settings_service

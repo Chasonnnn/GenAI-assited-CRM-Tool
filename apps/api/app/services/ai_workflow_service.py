@@ -137,9 +137,9 @@ AVAILABLE_ACTIONS = {
         "description": "Assign the surrogate to a user or queue",
         "required_fields": ["owner_type", "owner_id"],
     },
-    "update_status": {
-        "description": "Update the surrogate status to a specific stage",
-        "required_fields": ["stage_id"],
+    "update_field": {
+        "description": "Update a surrogate field",
+        "required_fields": ["field", "value"],
     },
     "add_note": {
         "description": "Add a note to the surrogate",
@@ -162,8 +162,8 @@ CONDITION_OPERATORS = [
     "less_than",
     "is_empty",
     "is_not_empty",
-    "in_list",
-    "not_in_list",
+    "in",
+    "not_in",
 ]
 
 
@@ -397,6 +397,13 @@ def validate_workflow(
     if workflow.condition_logic not in ("AND", "OR"):
         errors.append(f"Invalid condition_logic: {workflow.condition_logic}. Must be AND or OR")
 
+    def _normalize_operator(operator: str) -> str:
+        if operator == "in_list":
+            return "in"
+        if operator == "not_in_list":
+            return "not_in"
+        return operator
+
     # Validate conditions
     for i, cond in enumerate(workflow.conditions):
         if "field" not in cond:
@@ -405,8 +412,10 @@ def validate_workflow(
             errors.append(f"Condition {i + 1} has invalid field: {cond['field']}")
         if "operator" not in cond:
             errors.append(f"Condition {i + 1} missing 'operator'")
-        elif cond["operator"] not in CONDITION_OPERATORS:
-            warnings.append(f"Condition {i + 1} has unknown operator: {cond['operator']}")
+        else:
+            cond["operator"] = _normalize_operator(str(cond["operator"]))
+            if cond["operator"] not in CONDITION_OPERATORS:
+                warnings.append(f"Condition {i + 1} has unknown operator: {cond['operator']}")
 
     # Validate actions
     if not workflow.actions:
@@ -417,6 +426,17 @@ def validate_workflow(
         if not action_type:
             errors.append(f"Action {i + 1} missing 'action_type'")
             continue
+
+        if action_type == "update_status":
+            stage_id = action.get("stage_id")
+            if not stage_id:
+                errors.append(f"Action {i + 1}: stage_id is required for update_status")
+                continue
+            action["action_type"] = "update_field"
+            action["field"] = "stage_id"
+            action["value"] = stage_id
+            action.pop("stage_id", None)
+            action_type = "update_field"
 
         if action_type not in AVAILABLE_ACTIONS:
             errors.append(f"Invalid action type: {action_type}")
@@ -444,21 +464,21 @@ def validate_workflow(
                     f"Action {i + 1}: Template ID does not exist: {action['template_id']}"
                 )
 
-        # Validate stage_id exists
-        if action_type == "update_status" and "stage_id" in action:
+        # Validate stage_id exists for stage updates
+        if action_type == "update_field" and action.get("field") == "stage_id":
             from app.db.models import PipelineStage, Pipeline
 
             stage = (
                 db.query(PipelineStage)
                 .join(Pipeline, PipelineStage.pipeline_id == Pipeline.id)
                 .filter(
-                    PipelineStage.id == action["stage_id"],
+                    PipelineStage.id == action.get("value"),
                     Pipeline.organization_id == org_id,
                 )
                 .first()
             )
             if not stage:
-                errors.append(f"Action {i + 1}: Stage ID does not exist: {action['stage_id']}")
+                errors.append(f"Action {i + 1}: Stage ID does not exist: {action.get('value')}")
 
         # Validate assign_surrogate owner
         if action_type == "assign_surrogate":

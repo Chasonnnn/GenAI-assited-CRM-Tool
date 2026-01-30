@@ -1,5 +1,6 @@
 """User service - user operations and session management."""
 
+from collections.abc import Iterable
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -10,6 +11,19 @@ from app.db.models import User
 def get_user_by_id(db: Session, user_id: UUID) -> User | None:
     """Get user by ID."""
     return db.query(User).filter(User.id == user_id).first()
+
+
+def get_display_names_by_ids(
+    db: Session,
+    user_ids: Iterable[UUID],
+) -> dict[UUID, str | None]:
+    """Return display names for a set of user IDs."""
+    ids = list({user_id for user_id in user_ids if user_id})
+    if not ids:
+        return {}
+
+    rows = db.query(User.id, User.display_name).filter(User.id.in_(ids)).all()
+    return {user_id: display_name for user_id, display_name in rows}
 
 
 def get_user_by_email(db: Session, email: str) -> User | None:

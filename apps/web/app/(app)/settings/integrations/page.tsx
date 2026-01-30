@@ -621,7 +621,7 @@ function EmailConfigurationSection() {
     // Sync state with fetched settings
     useEffect(() => {
         if (settings && !hasUserEdited) {
-            setProvider(settings.email_provider || "")
+            setProvider(settings.email_provider || "resend")
             setFromEmail(settings.from_email || "")
             setFromName(settings.from_name || "")
             setReplyTo(settings.reply_to_email || "")
