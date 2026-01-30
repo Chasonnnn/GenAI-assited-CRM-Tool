@@ -1,7 +1,6 @@
 "use client"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -178,7 +177,6 @@ export default function AIAssistantPage() {
         <div className="flex h-[calc(100vh-4rem)] flex-col">
             {/* Header */}
             <div className="flex shrink-0 items-center gap-3 border-b p-4">
-                <SidebarTrigger />
                 <div className="flex-1">
                     <h1 className="text-2xl font-semibold">AI Assistant</h1>
                     <p className="text-xs text-muted-foreground">Get help with your surrogates, tasks, and workflows</p>

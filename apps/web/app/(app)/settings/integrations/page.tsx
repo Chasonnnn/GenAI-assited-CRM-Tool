@@ -76,21 +76,20 @@ const integrationTypeConfig: Record<string, { icon: typeof FacebookIcon; label: 
 
 // AI provider options
 const AI_PROVIDERS = [
-    { value: "openai", label: "OpenAI", models: ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"] },
     {
         value: "gemini",
         label: "Google Gemini",
-        models: ["gemini-3-flash-preview"],
+        models: ["gemini-3-flash-preview", "gemini-3-pro-preview"],
     },
     {
         value: "vertex_api_key",
         label: "Vertex AI (API Key)",
-        models: ["gemini-3-flash-preview"],
+        models: ["gemini-3-flash-preview", "gemini-3-pro-preview"],
     },
     {
         value: "vertex_wif",
         label: "Vertex AI (WIF)",
-        models: ["gemini-3-flash-preview"],
+        models: ["gemini-3-flash-preview", "gemini-3-pro-preview"],
     },
 ] as const
 
@@ -111,7 +110,7 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
     const { refetch: refetchAuth } = useAuth()
 
     const [isEnabled, setIsEnabled] = useState(false)
-    const [provider, setProvider] = useState<AiProvider>("openai")
+    const [provider, setProvider] = useState<AiProvider>("gemini")
     const [apiKey, setApiKey] = useState("")
     const [model, setModel] = useState("")
     const [vertexProjectId, setVertexProjectId] = useState("")
@@ -130,7 +129,7 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
             if (isAiProvider(aiSettings.provider)) {
                 setProvider(aiSettings.provider)
             } else {
-                setProvider("openai")
+                setProvider("gemini")
             }
             setModel(aiSettings.model || "")
             setEditingKey(false)
@@ -175,7 +174,7 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
         setKeyTested(null)
         try {
             const payload: {
-                provider: "openai" | "gemini" | "vertex_api_key";
+                provider: "gemini" | "vertex_api_key";
                 api_key: string;
                 vertex_api_key?: { project_id: string | null; location: string | null };
             } = {
@@ -198,7 +197,7 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
     const handleSave = async () => {
         const update: {
             is_enabled?: boolean;
-            provider?: "openai" | "gemini" | "vertex_wif" | "vertex_api_key";
+            provider?: "gemini" | "vertex_wif" | "vertex_api_key";
             api_key?: string;
             model?: string;
             vertex_wif?: {
@@ -361,7 +360,7 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                         </Select>
                     </div>
 
-                    {/* API Key Input (OpenAI/Gemini only) */}
+                    {/* API Key Input (Gemini/Vertex API Key only) */}
                     {provider !== "vertex_wif" && (
                         <div className="space-y-2">
                             <Label htmlFor="ai-key">API Key</Label>
@@ -421,11 +420,9 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                                 <p className="text-xs text-red-600">API key is invalid. Please check and try again.</p>
                             )}
                             <p className="text-xs text-muted-foreground">
-                                {provider === "openai"
-                                    ? "Get your key from platform.openai.com"
-                                    : provider === "gemini"
-                                      ? "Get your key from aistudio.google.com"
-                                      : "Create a Vertex AI API key in Google Cloud"}
+                                {provider === "gemini"
+                                    ? "Get your key from aistudio.google.com"
+                                    : "Create a Vertex AI API key in Google Cloud"}
                             </p>
                         </div>
                     )}
