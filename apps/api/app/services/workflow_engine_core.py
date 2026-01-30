@@ -756,6 +756,7 @@ class WorkflowEngineCore:
         condition_value: Any,
     ) -> bool:
         """Evaluate a single condition."""
+
         def _normalize_list_value(value: Any) -> list[str]:
             if value is None:
                 return []

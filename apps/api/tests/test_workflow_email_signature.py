@@ -6,7 +6,9 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_workflow_email_appends_org_signature_for_org_scope(db, test_org, test_user, monkeypatch):
+async def test_workflow_email_appends_org_signature_for_org_scope(
+    db, test_org, test_user, monkeypatch
+):
     from app.db.enums import JobType
     from app.db.models import EmailLog, EmailTemplate, Job
     from app.services import workflow_email_provider
@@ -34,7 +36,10 @@ async def test_workflow_email_appends_org_signature_for_org_scope(db, test_org, 
     monkeypatch.setattr(
         workflow_email_provider,
         "resolve_workflow_email_provider",
-        lambda **kwargs: ("resend", {"api_key_encrypted": "fake", "from_email": "no-reply@test.com"}),
+        lambda **kwargs: (
+            "resend",
+            {"api_key_encrypted": "fake", "from_email": "no-reply@test.com"},
+        ),
     )
     monkeypatch.setattr(resend_settings_service, "decrypt_api_key", lambda _: "key")
 
@@ -72,7 +77,9 @@ async def test_workflow_email_appends_org_signature_for_org_scope(db, test_org, 
 
 
 @pytest.mark.asyncio
-async def test_workflow_email_appends_personal_signature_for_personal_scope(db, test_org, test_user, monkeypatch):
+async def test_workflow_email_appends_personal_signature_for_personal_scope(
+    db, test_org, test_user, monkeypatch
+):
     from app.db.enums import JobType
     from app.db.models import EmailLog, EmailTemplate, Job
     from app.services import workflow_email_provider
@@ -100,7 +107,10 @@ async def test_workflow_email_appends_personal_signature_for_personal_scope(db, 
     monkeypatch.setattr(
         workflow_email_provider,
         "resolve_workflow_email_provider",
-        lambda **kwargs: ("resend", {"api_key_encrypted": "fake", "from_email": "no-reply@test.com"}),
+        lambda **kwargs: (
+            "resend",
+            {"api_key_encrypted": "fake", "from_email": "no-reply@test.com"},
+        ),
     )
     monkeypatch.setattr(resend_settings_service, "decrypt_api_key", lambda _: "key")
 

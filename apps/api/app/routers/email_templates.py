@@ -140,38 +140,24 @@ def create_template(
                 detail="You don't have permission to create organization templates",
             )
 
-        # Check for duplicate name in org templates
-        from app.db.models import EmailTemplate
-
-        existing = (
-            db.query(EmailTemplate)
-            .filter(
-                EmailTemplate.organization_id == session.org_id,
-                EmailTemplate.scope == "org",
-                EmailTemplate.name == data.name,
-            )
-            .first()
-        )
-        if existing:
+        if email_service.template_name_exists(
+            db=db,
+            org_id=session.org_id,
+            name=data.name,
+            scope="org",
+        ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"An organization template named '{data.name}' already exists",
             )
     else:
-        # Personal templates: check for duplicate in user's personal templates
-        from app.db.models import EmailTemplate
-
-        existing = (
-            db.query(EmailTemplate)
-            .filter(
-                EmailTemplate.organization_id == session.org_id,
-                EmailTemplate.scope == "personal",
-                EmailTemplate.owner_user_id == session.user_id,
-                EmailTemplate.name == data.name,
-            )
-            .first()
-        )
-        if existing:
+        if email_service.template_name_exists(
+            db=db,
+            org_id=session.org_id,
+            name=data.name,
+            scope="personal",
+            owner_user_id=session.user_id,
+        ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"You already have a personal template named '{data.name}'",
@@ -228,7 +214,6 @@ def update_template(
     - Personal templates: only owner can edit
     """
     from app.services import version_service
-    from app.db.models import EmailTemplate
 
     template = email_service.get_template(db, template_id, session.org_id)
     if not template:
@@ -251,31 +236,14 @@ def update_template(
 
     # Check for duplicate name if changing
     if data.name and data.name != template.name:
-        if template.scope == "org":
-            existing = (
-                db.query(EmailTemplate)
-                .filter(
-                    EmailTemplate.organization_id == session.org_id,
-                    EmailTemplate.scope == "org",
-                    EmailTemplate.name == data.name,
-                    EmailTemplate.id != template_id,
-                )
-                .first()
-            )
-        else:
-            existing = (
-                db.query(EmailTemplate)
-                .filter(
-                    EmailTemplate.organization_id == session.org_id,
-                    EmailTemplate.scope == "personal",
-                    EmailTemplate.owner_user_id == session.user_id,
-                    EmailTemplate.name == data.name,
-                    EmailTemplate.id != template_id,
-                )
-                .first()
-            )
-
-        if existing:
+        if email_service.template_name_exists(
+            db=db,
+            org_id=session.org_id,
+            name=data.name,
+            scope=template.scope,
+            owner_user_id=template.owner_user_id,
+            exclude_id=template_id,
+        ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Template with name '{data.name}' already exists",

@@ -688,10 +688,7 @@ def get_workflow_options(
         template_query = template_query.filter(EmailTemplate.scope == "org")
 
     templates = template_query.order_by(EmailTemplate.scope.desc(), EmailTemplate.name).all()
-    email_templates = [
-        {"id": str(t.id), "name": t.name, "scope": t.scope}
-        for t in templates
-    ]
+    email_templates = [{"id": str(t.id), "name": t.name, "scope": t.scope} for t in templates]
 
     # Users in org
     from app.db.models import Membership

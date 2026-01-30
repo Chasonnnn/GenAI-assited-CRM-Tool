@@ -194,7 +194,9 @@ def use_template(
         template.trigger_config or {},
     )
     for action in actions:
-        workflow_service._validate_action_config(db, org_id, action, scope, user_id if scope == "personal" else None)
+        workflow_service._validate_action_config(
+            db, org_id, action, scope, user_id if scope == "personal" else None
+        )
 
     effective_enabled = is_enabled
 

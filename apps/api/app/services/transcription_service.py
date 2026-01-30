@@ -228,7 +228,12 @@ async def transcribe_audio(
         return _extract_gemini_text(payload)
 
     if provider == "vertex_wif":
-        if not (vertex_project_id and vertex_location and vertex_audience and vertex_service_account_email):
+        if not (
+            vertex_project_id
+            and vertex_location
+            and vertex_audience
+            and vertex_service_account_email
+        ):
             raise TranscriptionError("Vertex AI configuration is incomplete")
         if not settings.WIF_OIDC_PRIVATE_KEY:
             raise TranscriptionError("Vertex WIF is not configured")

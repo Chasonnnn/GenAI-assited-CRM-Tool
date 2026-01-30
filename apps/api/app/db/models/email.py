@@ -67,9 +67,7 @@ class EmailTemplate(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
 
     # Scope: 'org' (shared) or 'personal' (user-owned)
-    scope: Mapped[str] = mapped_column(
-        String(20), server_default=text("'org'"), nullable=False
-    )
+    scope: Mapped[str] = mapped_column(String(20), server_default=text("'org'"), nullable=False)
     # Owner for personal templates (NULL for org templates)
     owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True

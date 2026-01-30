@@ -162,9 +162,7 @@ def list_surrogates(
     db.commit()
 
     surrogate_ids = [surrogate.id for surrogate in surrogates]
-    last_activity_map = surrogate_service.get_last_activity_map(
-        db, session.org_id, surrogate_ids
-    )
+    last_activity_map = surrogate_service.get_last_activity_map(db, session.org_id, surrogate_ids)
 
     return SurrogateListResponse(
         items=[

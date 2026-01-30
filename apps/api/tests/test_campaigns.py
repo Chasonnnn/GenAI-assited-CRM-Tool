@@ -222,9 +222,7 @@ def test_campaign_service_create(db, test_org, test_user, test_template):
     assert campaign.status == "draft"
 
 
-def test_campaign_service_create_rejects_past_scheduled_at(
-    db, test_org, test_user, test_template
-):
+def test_campaign_service_create_rejects_past_scheduled_at(db, test_org, test_user, test_template):
     """Campaign create should reject scheduled_at in the past."""
     from app.services import campaign_service
     from app.schemas.campaign import CampaignCreate
@@ -242,9 +240,7 @@ def test_campaign_service_create_rejects_past_scheduled_at(
         campaign_service.create_campaign(db, test_org.id, test_user.id, create_data)
 
 
-def test_campaign_service_update_rejects_past_scheduled_at(
-    db, test_org, test_user, test_campaign
-):
+def test_campaign_service_update_rejects_past_scheduled_at(db, test_org, test_user, test_campaign):
     """Campaign update should reject scheduled_at in the past."""
     from app.services import campaign_service
     from app.schemas.campaign import CampaignUpdate
@@ -440,9 +436,7 @@ def test_campaign_send_requires_scheduled_at_when_send_now_false(
         )
 
 
-def test_campaign_send_rejects_past_scheduled_at(
-    db, test_org, test_user, test_campaign
-):
+def test_campaign_send_rejects_past_scheduled_at(db, test_org, test_user, test_campaign):
     """send_now=False should reject scheduled_at in the past."""
     from app.services import campaign_service
 

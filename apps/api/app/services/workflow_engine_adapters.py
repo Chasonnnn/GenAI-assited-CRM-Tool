@@ -234,24 +234,30 @@ class DefaultWorkflowDomainAdapter:
             if entity_type == "task":
                 surrogate_id = getattr(entity, "surrogate_id", None)
                 if not surrogate_id:
-                    return _with_action_type({
-                        "success": False,
-                        "error": "Task is not linked to a surrogate",
-                        "skipped": True,
-                    })
+                    return _with_action_type(
+                        {
+                            "success": False,
+                            "error": "Task is not linked to a surrogate",
+                            "skipped": True,
+                        }
+                    )
                 action_entity = db.query(Surrogate).filter(Surrogate.id == surrogate_id).first()
                 if not action_entity:
-                    return _with_action_type({
-                        "success": False,
-                        "error": "Surrogate not found for task",
-                        "skipped": True,
-                    })
+                    return _with_action_type(
+                        {
+                            "success": False,
+                            "error": "Surrogate not found for task",
+                            "skipped": True,
+                        }
+                    )
             elif entity_type != "surrogate":
-                return _with_action_type({
-                    "success": False,
-                    "error": f"Action '{action_type}' only supports Surrogate entities, got '{entity_type}'",
-                    "skipped": True,
-                })
+                return _with_action_type(
+                    {
+                        "success": False,
+                        "error": f"Action '{action_type}' only supports Surrogate entities, got '{entity_type}'",
+                        "skipped": True,
+                    }
+                )
 
         try:
             if action_type == WorkflowActionType.SEND_EMAIL.value:

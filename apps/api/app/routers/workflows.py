@@ -356,15 +356,11 @@ def test_workflow(
         elif entity_type == "match":
             entity = match_service.get_match(db, request.entity_id, session.org_id)
         elif entity_type == "appointment":
-            entity = appointment_service.get_appointment(
-                db, request.entity_id, session.org_id
-            )
+            entity = appointment_service.get_appointment(db, request.entity_id, session.org_id)
         elif entity_type == "note":
             entity = note_service.get_note(db, request.entity_id, session.org_id)
         elif entity_type == "document":
-            entity = attachment_service.get_attachment(
-                db, session.org_id, request.entity_id
-            )
+            entity = attachment_service.get_attachment(db, session.org_id, request.entity_id)
         else:
             raise HTTPException(status_code=422, detail="Unsupported entity type for test")
 

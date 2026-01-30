@@ -404,9 +404,7 @@ def get_oauth_connection(
     )
 
 
-def get_oauth_connection_by_id(
-    db: Session, connection_id: UUID
-) -> MetaOAuthConnection | None:
+def get_oauth_connection_by_id(db: Session, connection_id: UUID) -> MetaOAuthConnection | None:
     """Get OAuth connection by ID (no org scoping)."""
     return db.get(MetaOAuthConnection, connection_id)
 

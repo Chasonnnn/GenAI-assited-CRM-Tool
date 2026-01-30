@@ -103,9 +103,7 @@ def get_org_by_slug(
     return query.first()
 
 
-def get_org_by_signature_logo_urls(
-    db: Session, urls: list[str]
-) -> Organization | None:
+def get_org_by_signature_logo_urls(db: Session, urls: list[str]) -> Organization | None:
     """Get organization matching one of the provided signature logo URLs."""
     if not urls:
         return None
