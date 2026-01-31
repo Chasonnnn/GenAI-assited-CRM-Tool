@@ -960,24 +960,35 @@ async def summarize_all_interviews_stream(
             notes_text = anonymize_text(notes_text, pii_mapping, known_names)
 
         interviews_content.append(
-            f\"\"\"--- Interview {len(interviews_content) + 1} ---\nDate: {interview.conducted_at.strftime(\"%Y-%m-%d\")}\nType: {interview.interview_type}\nDuration: {interview.duration_minutes or \"unknown\"} minutes\n\nTranscript:\n{ai_interview_service._truncate_text(transcript, 10000)}\n\nNotes:\n{ai_interview_service._truncate_text(notes_text, 2000)}\n\"\"\"\n        )
+            f"""--- Interview {len(interviews_content) + 1} ---
+Date: {interview.conducted_at.strftime("%Y-%m-%d")}
+Type: {interview.interview_type}
+Duration: {interview.duration_minutes or "unknown"} minutes
 
-    combined_content = \"\\n\\n\".join(interviews_content)
+Transcript:
+{ai_interview_service._truncate_text(transcript, 10000)}
+
+Notes:
+{ai_interview_service._truncate_text(notes_text, 2000)}
+"""
+        )
+
+    combined_content = "\n\n".join(interviews_content)
     prompt = ai_interview_service.ALL_INTERVIEWS_SUMMARY_PROMPT.format(
         interviews_content=ai_interview_service._truncate_text(combined_content, 60000)
     )
 
     messages = [
         ChatMessage(
-            role=\"system\",
-            content=\"You are an expert interview analyst specializing in candidate evaluation.\",
+            role="system",
+            content="You are an expert interview analyst specializing in candidate evaluation.",
         ),
-        ChatMessage(role=\"user\", content=prompt),
+        ChatMessage(role="user", content=prompt),
     ]
 
     async def event_generator() -> AsyncIterator[str]:
-        yield format_sse(\"start\", {\"status\": \"thinking\"})
-        content = \"\"
+        yield format_sse("start", {"status": "thinking"})
+        content = ""
         prompt_tokens = 0
         completion_tokens = 0
         model_name = ai_settings.model or \"\"
@@ -986,7 +997,7 @@ async def summarize_all_interviews_stream(
             async for chunk in provider.stream_chat(messages=messages, temperature=0.3, max_tokens=3000):
                 if chunk.text:
                     content += chunk.text
-                    yield format_sse(\"delta\", {\"text\": chunk.text})
+                    yield format_sse("delta", {"text": chunk.text})
                 if chunk.is_final:
                     prompt_tokens = chunk.prompt_tokens
                     completion_tokens = chunk.completion_tokens
@@ -995,51 +1006,51 @@ async def summarize_all_interviews_stream(
         except asyncio.CancelledError:
             return
         except Exception as exc:
-            yield format_sse(\"error\", {\"message\": f\"AI error: {str(exc)}\"})
+            yield format_sse("error", {"message": f"AI error: {str(exc)}"})
             return
 
         try:
             result = ai_interview_service._parse_json_response(content)
         except Exception as exc:
-            yield format_sse(\"error\", {\"message\": f\"Failed to parse AI response: {str(exc)}\"})
+            yield format_sse("error", {"message": f"Failed to parse AI response: {str(exc)}"})
             return
 
         if ai_settings.anonymize_pii and pii_mapping:
             result = rehydrate_data(result, pii_mapping)
 
         cost = ChatResponse(
-            content=\"\",
+            content="",
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             total_tokens=prompt_tokens + completion_tokens,
-            model=model_name or (ai_settings.model or \"unknown\"),
+            model=model_name or (ai_settings.model or "unknown"),
         ).estimated_cost_usd
 
         log_usage(
             db=db,
             organization_id=session.org_id,
             user_id=session.user_id,
-            model=model_name or (ai_settings.model or \"unknown\"),
+            model=model_name or (ai_settings.model or "unknown"),
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             estimated_cost_usd=cost,
         )
 
         response = {
-            \"surrogate_id\": str(surrogate_id),
-            \"interview_count\": len(interviews),
-            \"overall_summary\": result.get(\"overall_summary\", \"\"),
-            \"timeline\": result.get(\"timeline\", []),
-            \"recurring_themes\": result.get(\"recurring_themes\", []),
-            \"candidate_strengths\": result.get(\"candidate_strengths\", []),
-            \"areas_of_concern\": result.get(\"areas_of_concern\", []),
-            \"recommended_actions\": result.get(\"recommended_actions\", []),
+            "surrogate_id": str(surrogate_id),
+            "interview_count": len(interviews),
+            "overall_summary": result.get("overall_summary", ""),
+            "timeline": result.get("timeline", []),
+            "recurring_themes": result.get("recurring_themes", []),
+            "candidate_strengths": result.get("candidate_strengths", []),
+            "areas_of_concern": result.get("areas_of_concern", []),
+            "recommended_actions": result.get("recommended_actions", []),
         }
-        yield format_sse(\"done\", response)
+        yield format_sse("done", response)
 
     return StreamingResponse(
         event_generator(),
-        media_type=\"text/event-stream\",
+        media_type="text/event-stream",
         headers=STREAM_HEADERS,
     )
 
