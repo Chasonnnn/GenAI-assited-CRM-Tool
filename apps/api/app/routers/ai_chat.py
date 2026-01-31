@@ -1,5 +1,6 @@
 """AI chat routes."""
 
+import asyncio
 import logging
 import uuid
 from collections.abc import AsyncIterator
@@ -22,7 +23,7 @@ from app.core.rate_limit import limiter
 from app.core.surrogate_access import check_surrogate_access
 from app.db.enums import Role
 from app.schemas.auth import UserSession
-from app.utils.sse import format_sse, sse_preamble, STREAM_HEADERS
+from app.utils.sse import format_sse, format_sse_comment, sse_preamble, STREAM_HEADERS
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -184,7 +185,7 @@ async def chat_stream(
         yield sse_preamble()
         with get_db_for_stream() as stream_db:
             try:
-                async for event in ai_chat_service.stream_chat_async(
+                event_stream = ai_chat_service.stream_chat_async(
                     db=stream_db,
                     organization_id=org_id,
                     user_id=user_id,
@@ -192,8 +193,34 @@ async def chat_stream(
                     entity_id=entity_id,
                     message=message,
                     user_integrations=user_integrations,
-                ):
-                    yield format_sse(event["type"], event["data"])
+                )
+                iterator = event_stream.__aiter__()
+                heartbeat_interval = 5.0
+                # Keep a single pending task so heartbeats don't cancel the generator.
+                pending_task = asyncio.create_task(iterator.__anext__())
+                try:
+                    while True:
+                        done, _ = await asyncio.wait(
+                            {pending_task}, timeout=heartbeat_interval
+                        )
+                        if not done:
+                            yield format_sse_comment("heartbeat")
+                            continue
+
+                        try:
+                            event = pending_task.result()
+                        except StopAsyncIteration:
+                            break
+
+                        pending_task = asyncio.create_task(iterator.__anext__())
+                        yield format_sse(event["type"], event["data"])
+                finally:
+                    if not pending_task.done():
+                        pending_task.cancel()
+                        try:
+                            await pending_task
+                        except asyncio.CancelledError:
+                            pass
             except Exception as exc:
                 logger.exception("AI chat stream failed", exc_info=exc)
                 yield format_sse("error", {"message": "Streaming error. Please try again."})
