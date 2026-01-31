@@ -384,3 +384,51 @@ async def test_zapier_webhook_stores_raw_payload_and_creates_form(client, db, te
         .first()
     )
     assert task is not None
+
+
+@pytest.mark.asyncio
+async def test_zapier_webhook_creates_form_when_missing_form_id(client, db, test_org):
+    from app.db.models import MetaForm, MetaLead
+    from app.services import zapier_settings_service
+
+    settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    secret = zapier_settings_service.decrypt_webhook_secret(settings.webhook_secret_encrypted)
+
+    payload = {
+        "lead_id": "lead_no_form",
+        "field_data": [
+            {"name": "full_name", "values": ["No Form"]},
+            {"name": "email", "values": ["noform@example.com"]},
+        ],
+    }
+
+    res = await client.post(
+        f"/webhooks/zapier/{settings.webhook_id}",
+        json=payload,
+        headers={"X-Webhook-Token": secret},
+    )
+    assert res.status_code == 200
+
+    expected_form_id = f"zapier-{settings.webhook_id}"
+
+    lead = (
+        db.query(MetaLead)
+        .filter(
+            MetaLead.organization_id == test_org.id,
+            MetaLead.meta_lead_id == "lead_no_form",
+        )
+        .first()
+    )
+    assert lead is not None
+    assert lead.meta_form_id == expected_form_id
+
+    form = (
+        db.query(MetaForm)
+        .filter(
+            MetaForm.organization_id == test_org.id,
+            MetaForm.form_external_id == expected_form_id,
+        )
+        .first()
+    )
+    assert form is not None
+    assert form.form_name.startswith("Zapier Lead Intake")

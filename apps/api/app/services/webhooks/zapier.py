@@ -156,6 +156,25 @@ def _parse_created_time(payload: dict[str, Any]) -> datetime | None:
     return None
 
 
+def _ensure_form_identifier(payload: Any, webhook_id: str) -> Any:
+    """
+    Ensure Zapier payloads include a stable form_id so mapping can be configured.
+    """
+    if isinstance(payload, list):
+        return [_ensure_form_identifier(item, webhook_id) for item in payload]
+    if not isinstance(payload, dict):
+        return payload
+
+    if payload.get("form_id") or payload.get("formId") or payload.get("meta_form_id"):
+        return payload
+
+    form_id = f"zapier-{webhook_id}"
+    payload["form_id"] = form_id
+    if not payload.get("form_name"):
+        payload["form_name"] = f"Zapier Lead Intake ({webhook_id[:8]})"
+    return payload
+
+
 def _build_status_message(status: str, duplicate: bool, surrogate_id: str | None) -> str:
     if duplicate:
         return "Duplicate lead received; existing record retained."
@@ -377,6 +396,8 @@ class ZapierWebhookHandler:
             payload = payload["data"]
         elif isinstance(payload, dict) and isinstance(payload.get("lead"), list):
             payload = payload["lead"]
+
+        payload = _ensure_form_identifier(payload, webhook_id)
 
         if isinstance(payload, list):
             if not payload:
