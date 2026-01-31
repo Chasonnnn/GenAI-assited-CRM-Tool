@@ -22,6 +22,8 @@ function hasAuthReturnToOpsCookie(): boolean {
     return document.cookie.split(";").some((c) => c.trim().startsWith("auth_return_to=ops"))
 }
 
+const duoVerifyAttempts = new Set<string>()
+
 function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: () => void }) {
     const [copied, setCopied] = useState(false)
 
@@ -132,6 +134,12 @@ function DuoCallbackContent() {
             setErrorMessage("Missing Duo response parameters. Please try again.")
             return
         }
+
+        const attemptKey = `${code}:${state}:${returnTo}`
+        if (duoVerifyAttempts.has(attemptKey)) {
+            return
+        }
+        duoVerifyAttempts.add(attemptKey)
 
         const verify = async () => {
             try {
