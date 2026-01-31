@@ -330,6 +330,7 @@ class Settings(BaseSettings):
     CLAMAV_SIGNATURES_PREFIX: str = "clamav"
     CLAMAV_SIGNATURES_DIR: str = "/var/lib/clamav"
     CLAMAV_SIGNATURES_MAX_AGE_HOURS: int = 72
+    CLAMAV_SIGNATURES_DOWNLOAD_ONLY: bool = False
 
     # Export Storage (optional separate endpoint)
     EXPORT_S3_ENDPOINT_URL: str = ""

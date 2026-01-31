@@ -140,10 +140,26 @@ def ensure_signatures(max_age_hours: int | None = None) -> None:
             if code not in {"NoSuchKey", "404"}:
                 logger.warning("ClamAV signature metadata check failed: %s", exc)
 
+    age_hours: float | None = None
     if local_dt is not None and max_age > 0:
         age_hours = (datetime.now(timezone.utc) - local_dt).total_seconds() / 3600
         if age_hours <= max_age:
             return
+
+    if settings.CLAMAV_SIGNATURES_DOWNLOAD_ONLY:
+        if not bucket:
+            logger.warning(
+                "CLAMAV_SIGNATURES_DOWNLOAD_ONLY is enabled but no bucket is configured"
+            )
+        elif local_dt is None:
+            logger.warning("ClamAV signatures missing after download attempt; skipping refresh")
+        elif age_hours is not None and max_age > 0:
+            logger.warning(
+                "ClamAV signatures are older than %s hours; skipping refresh", max_age
+            )
+        else:
+            logger.warning("ClamAV signatures stale; skipping refresh")
+        return
 
     logger.info("Refreshing ClamAV signatures via freshclam")
     _run_freshclam()

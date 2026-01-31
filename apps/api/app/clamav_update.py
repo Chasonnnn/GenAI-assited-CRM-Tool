@@ -1,4 +1,4 @@
-"""Daily ClamAV signature updater (Cloud Run job entrypoint)."""
+"""Scheduled ClamAV signature updater (Cloud Run job entrypoint)."""
 
 from __future__ import annotations
 
