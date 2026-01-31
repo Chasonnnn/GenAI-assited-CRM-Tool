@@ -20,6 +20,7 @@ FieldType = Literal[
     "checkbox",
     "file",
     "address",
+    "repeatable_table",
 ]
 
 
@@ -36,6 +37,34 @@ class FormFieldValidation(BaseModel):
     pattern: str | None = None
 
 
+ConditionOperator = Literal[
+    "equals",
+    "not_equals",
+    "contains",
+    "not_contains",
+    "is_empty",
+    "is_not_empty",
+]
+
+
+class FormFieldCondition(BaseModel):
+    field_key: str = Field(..., min_length=1, max_length=100)
+    operator: ConditionOperator
+    value: object | None = None
+
+
+TableColumnType = Literal["text", "number", "date", "select"]
+
+
+class FormFieldColumn(BaseModel):
+    key: str = Field(..., min_length=1, max_length=100)
+    label: str = Field(..., min_length=1, max_length=200)
+    type: TableColumnType
+    required: bool = False
+    options: list[FormFieldOption] | None = None
+    validation: FormFieldValidation | None = None
+
+
 class FormField(BaseModel):
     key: str = Field(..., min_length=1, max_length=100)
     label: str = Field(..., min_length=1, max_length=200)
@@ -44,6 +73,10 @@ class FormField(BaseModel):
     options: list[FormFieldOption] | None = None
     validation: FormFieldValidation | None = None
     help_text: str | None = None
+    show_if: FormFieldCondition | None = None
+    columns: list[FormFieldColumn] | None = None
+    min_rows: int | None = Field(None, ge=0)
+    max_rows: int | None = Field(None, ge=0)
 
 
 class FormPage(BaseModel):

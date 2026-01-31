@@ -22,6 +22,7 @@ export type FieldType =
     | 'checkbox'
     | 'file'
     | 'address'
+    | 'repeatable_table'
 
 export interface FormFieldOption {
     label: string
@@ -36,6 +37,31 @@ export interface FormFieldValidation {
     pattern?: string | null
 }
 
+export type ConditionOperator =
+    | 'equals'
+    | 'not_equals'
+    | 'contains'
+    | 'not_contains'
+    | 'is_empty'
+    | 'is_not_empty'
+
+export interface FormFieldCondition {
+    field_key: string
+    operator: ConditionOperator
+    value?: unknown
+}
+
+export type TableColumnType = 'text' | 'number' | 'date' | 'select'
+
+export interface FormFieldColumn {
+    key: string
+    label: string
+    type: TableColumnType
+    required?: boolean
+    options?: FormFieldOption[] | null
+    validation?: FormFieldValidation | null
+}
+
 export interface FormField {
     key: string
     label: string
@@ -44,6 +70,10 @@ export interface FormField {
     options?: FormFieldOption[] | null
     validation?: FormFieldValidation | null
     help_text?: string | null
+    show_if?: FormFieldCondition | null
+    columns?: FormFieldColumn[] | null
+    min_rows?: number | null
+    max_rows?: number | null
 }
 
 export interface FormPage {

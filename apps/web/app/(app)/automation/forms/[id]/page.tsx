@@ -53,7 +53,14 @@ import {
 } from "@/lib/hooks/use-forms"
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
 import { NotFoundState } from "@/components/not-found-state"
-import type { FieldType, FormSchema, FormFieldOption, FormRead, FormCreatePayload } from "@/lib/api/forms"
+import type {
+    FieldType,
+    FormSchema,
+    FormFieldOption,
+    FormRead,
+    FormCreatePayload,
+    FormFieldValidation,
+} from "@/lib/api/forms"
 import { useAuth } from "@/lib/auth-context"
 import { useOrgSignature } from "@/lib/hooks/use-signature"
 
@@ -67,6 +74,7 @@ type FieldTypeOption = {
 const fieldTypes: { basic: FieldTypeOption[]; advanced: FieldTypeOption[] } = {
     basic: [
         { id: "text", label: "Name", icon: TypeIcon },
+        { id: "textarea", label: "Long Text", icon: TypeIcon },
         { id: "email", label: "Email", icon: MailIcon },
         { id: "phone", label: "Phone", icon: PhoneIcon },
         { id: "date", label: "Date", icon: CalendarIcon },
@@ -110,6 +118,7 @@ type FormField = {
     required: boolean
     surrogateFieldMapping: string
     options?: string[]
+    validation?: FormFieldValidation | null
 }
 
 type FormPage = {
@@ -140,15 +149,16 @@ function buildFormSchema(pages: FormPage[], metadata: SchemaMetadata): FormSchem
     return {
         pages: pages.map((page) => ({
             title: page.name || null,
-        fields: page.fields.map((field) => ({
-            key: field.id,
-            label: field.label,
-            type: field.type,
-            required: field.required,
-            options: toFieldOptions(field.options),
-            help_text: field.helperText || null,
+            fields: page.fields.map((field) => ({
+                key: field.id,
+                label: field.label,
+                type: field.type,
+                required: field.required,
+                options: toFieldOptions(field.options),
+                validation: field.validation ?? null,
+                help_text: field.helperText || null,
+            })),
         })),
-    })),
         public_title: publicTitle || null,
         logo_url: logoUrl || null,
         privacy_notice: privacyNotice || null,
@@ -168,6 +178,7 @@ function schemaToPages(schema: FormSchema, mappings: Map<string, string>): FormP
                 helperText: field.help_text || "",
                 required: field.required ?? false,
                 surrogateFieldMapping: mappings.get(field.key) || "",
+                validation: field.validation ?? null,
                 ...(options ? { options } : {}),
             }
         }),
@@ -259,27 +270,32 @@ const buildFieldId = () => {
 }
 
 const buildDraftField = ({
+    id,
     label,
     type,
     required = false,
     helperText = "",
     surrogateFieldMapping = "",
     options,
+    validation,
 }: {
+    id?: string
     label: string
     type: FieldType
     required?: boolean
     helperText?: string
     surrogateFieldMapping?: string
     options?: string[]
+    validation?: FormFieldValidation | null
 }): FormField => ({
-    id: buildFieldId(),
+    id: id ?? buildFieldId(),
     type,
     label,
     helperText,
     required,
     surrogateFieldMapping,
     ...(options ? { options } : {}),
+    ...(validation ? { validation } : {}),
 })
 
 const translateLabel = (label: string) => TRANSLATION_MAP[label] || label
@@ -563,6 +579,470 @@ const generateFormDraft = (prompt: string): FormDraft => {
     }
 }
 
+const buildTemplateDraft = ({
+    formName,
+    description,
+    publicTitle,
+    privacyNotice,
+    pages,
+    requiredSections,
+    conditionalLogic,
+}: {
+    formName: string
+    description: string
+    publicTitle: string
+    privacyNotice: string
+    pages: FormPage[]
+    requiredSections: string[]
+    conditionalLogic: string[]
+}): FormDraft => {
+    const optionalSections = pages
+        .map((page) => page.name)
+        .filter((name) => !requiredSections.includes(name))
+
+    const typeLabels = new Map(
+        [...fieldTypes.basic, ...fieldTypes.advanced].map((type) => [type.id, type.label]),
+    )
+    const suggestedFieldTypes = Array.from(
+        new Set(
+            pages.flatMap((page) => page.fields.map((field) => typeLabels.get(field.type) || field.type)),
+        ),
+    )
+
+    return {
+        formName,
+        description,
+        publicTitle,
+        privacyNotice,
+        pages,
+        requiredSections,
+        optionalSections,
+        suggestedFieldTypes,
+        conditionalLogic,
+        readingLevelHints: READING_LEVEL_HINTS,
+        translationDraft: buildTranslationDraft(publicTitle, pages),
+    }
+}
+
+const buildJotformTemplate = (): FormDraft => {
+    const field = (
+        id: string,
+        label: string,
+        type: FieldType,
+        options: {
+            required?: boolean
+            helperText?: string
+            surrogateFieldMapping?: string
+            optionList?: string[]
+        } = {},
+    ) =>
+        buildDraftField({
+            id,
+            label,
+            type,
+            required: options.required,
+            helperText: options.helperText,
+            surrogateFieldMapping: options.surrogateFieldMapping,
+            options: options.optionList,
+        })
+
+    const pages: FormPage[] = [
+        {
+            id: 1,
+            name: "Surrogate Information",
+            fields: [
+                field("full_name", "Full Name", "text", {
+                    required: true,
+                    surrogateFieldMapping: "full_name",
+                    helperText: "First and last name.",
+                }),
+                field("date_of_birth", "Date of Birth", "date", {
+                    required: true,
+                    surrogateFieldMapping: "date_of_birth",
+                }),
+                field("height_ft", "Height (ft)", "number", {
+                    helperText: "Feet (e.g., 5.5).",
+                    surrogateFieldMapping: "height_ft",
+                }),
+                field("weight_lb", "Weight (lb)", "number", {
+                    helperText: "Pounds.",
+                    surrogateFieldMapping: "weight_lb",
+                }),
+                field("email", "Email", "email", {
+                    required: true,
+                    surrogateFieldMapping: "email",
+                }),
+                field("cell_phone", "Cell Phone", "phone", {
+                    required: true,
+                    surrogateFieldMapping: "phone",
+                }),
+                field("address_line_1", "Street Address", "text", {
+                    required: true,
+                }),
+                field("address_line_2", "Street Address Line 2", "text"),
+                field("city", "City", "text", { required: true }),
+                field("state", "State / Province", "text", {
+                    required: true,
+                    surrogateFieldMapping: "state",
+                }),
+                field("postal_code", "Postal / Zip Code", "text", { required: true }),
+                field("country", "Country", "text"),
+            ],
+        },
+        {
+            id: 2,
+            name: "Eligibility & Background",
+            fields: [
+                field("covid_vaccine_received", "Have you received Covid vaccine in the past?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("covid_vaccine_when", "If yes, when?", "date", {
+                    helperText: "Date of your most recent vaccine.",
+                }),
+                field("covid_vaccine_willing", "If no, are you willing to receive Covid vaccine?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("tattoos_past_year", "Have you received any tattoos in the past year?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("tattoo_last_date", "If yes, date of your last tattoo", "date"),
+                field("religion_yes_no", "Do you have a religion?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("religion_detail", "If yes, please specify your religion", "text"),
+                field("us_citizen", "Are you a US citizen or permanent resident?", "radio", {
+                    required: true,
+                    optionList: YES_NO_OPTIONS,
+                    surrogateFieldMapping: "is_citizen_or_pr",
+                }),
+                field("race", "What is your race?", "text", { surrogateFieldMapping: "race" }),
+                field("sexual_orientation", "Sexual Orientation", "text"),
+                field("marital_status", "Marital status", "text", {
+                    helperText: "Single, married, partnered, divorced, etc.",
+                }),
+                field("marriage_date", "If married, date of marriage", "date"),
+                field("biological_children_count", "How many biological children do you have?", "number", {
+                    helperText: "Enter 0 if none.",
+                }),
+                field("languages_spoken", "What languages do you speak?", "text"),
+                field("schedule_flexible", "Is your daily schedule flexible?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("drivers_license", "Do you have a valid driver's license?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("transportation", "Do you have reliable transportation?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("car_insurance", "Do you have car insurance?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("health_insurance_carrier", "Name of health insurance carrier?", "text"),
+                field("arrested", "Have you ever been arrested?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("arrested_explain", "If yes, please explain", "textarea"),
+                field("legal_cases_pending", "Are you currently involved in any legal cases that are pending?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("legal_cases_explain", "If yes, please explain", "textarea"),
+                field(
+                    "government_assistance",
+                    "Do you receive any government assistance (WIC, Medicaid, Food Stamps, Disability)?",
+                    "radio",
+                    { optionList: YES_NO_OPTIONS },
+                ),
+                field("government_assistance_explain", "If yes, please explain", "textarea"),
+            ],
+        },
+        {
+            id: 3,
+            name: "Education & Employment",
+            fields: [
+                field("education_level", "Highest level of education completed?", "text"),
+                field("further_education_plans", "Do you plan on furthering your education?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("further_education_details", "If yes, please explain", "textarea"),
+                field("currently_employed", "Are you currently employed?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("employer_title", "If yes, present employer and title", "text"),
+                field("employment_duration", "How long have you been employed there?", "text"),
+            ],
+        },
+        {
+            id: 4,
+            name: "Pregnancy Information",
+            fields: [
+                field("pregnancy_list", "List of pregnancies", "textarea", {
+                    helperText:
+                        "Include: own/surrogacy, # babies, delivery date, vaginal/C-section, gender, weight, weeks at birth, complications.",
+                }),
+                field("had_abortion", "Have you ever had an abortion?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("abortion_explain", "If yes, please explain", "textarea"),
+                field("had_miscarriage", "Have you ever had a miscarriage?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("miscarriage_explain", "If yes, please explain", "textarea"),
+                field(
+                    "pregnancy_conditions",
+                    "Have you ever experienced the following conditions?",
+                    "checkbox",
+                    { optionList: PREGNANCY_CONDITION_OPTIONS },
+                ),
+                field("pregnancy_conditions_explain", "If yes, please explain", "textarea"),
+                field("breastfeeding", "Are you currently breastfeeding?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("breastfeeding_stop", "If yes, when do you plan to stop?", "text"),
+                field("sexually_active", "Are you sexually active?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("birth_control", "Are you using birth control?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("birth_control_type", "If yes, what kind?", "text"),
+                field("regular_cycles", "Do you have regular monthly menstrual cycles?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("irregular_cycles_detail", "If no, please specify", "text"),
+                field("last_obgyn_visit", "When did you last see your Ob/Gyn?", "date"),
+                field("last_pap_smear", "Date of last Pap Smear and result?", "text"),
+                field("reproductive_illnesses", "List any reproductive illness you have experienced", "textarea"),
+            ],
+        },
+        {
+            id: 5,
+            name: "Family Support",
+            fields: [
+                field("spouse_significant_other", "Do you have a spouse/significant other?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field(
+                    "spouse_occupation",
+                    "If yes, what is your spouse/significant other's occupation?",
+                    "text",
+                ),
+                field("family_support", "Does your family support your decision to become a surrogate?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("bed_rest_help", "Who would help you if placed on bed rest?", "textarea"),
+                field("anticipate_difficulties", "Do you anticipate any difficulties in becoming a surrogate?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("difficulties_explain", "If yes, please explain", "textarea"),
+                field("living_conditions", "Describe your current living conditions", "textarea"),
+                field(
+                    "household_members",
+                    "List everyone living in household with you, including age and relationship",
+                    "textarea",
+                ),
+                field("pets_at_home", "Do you have pets at home?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("pets_details", "If yes, what kind?", "text"),
+            ],
+        },
+        {
+            id: 6,
+            name: "Medical Info",
+            fields: [
+                field("blood_type", "Blood type", "select", { optionList: BLOOD_TYPE_OPTIONS }),
+                field("rh_factor", "Rh factor", "select", { optionList: RH_FACTOR_OPTIONS }),
+                field("current_weight", "Weight (lb)", "number"),
+                field("current_height", "Height (ft)", "number"),
+                field("drink_alcohol", "Do you drink alcohol?", "radio", { optionList: YES_NO_OPTIONS }),
+                field("drink_alcohol_explain", "If yes, please explain", "textarea"),
+                field("household_smoke", "Does anyone in your household smoke?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("household_smoke_explain", "If yes, please explain", "textarea"),
+                field("used_illicit_drugs", "Have you ever used illicit drugs?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("used_illicit_drugs_explain", "If yes, please explain", "textarea"),
+                field(
+                    "used_tobacco_last_6_months",
+                    "Have you used tobacco, marijuana or illicit drugs within the past 6 months?",
+                    "radio",
+                    { optionList: YES_NO_OPTIONS },
+                ),
+                field("used_tobacco_last_6_months_explain", "If yes, please explain", "textarea"),
+                field("taking_medication", "Are you taking any medication?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("taking_medication_explain", "If yes, please explain", "textarea"),
+                field("treated_conditions", "Are you being treated for any medical conditions?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("treated_conditions_explain", "If yes, please explain", "textarea"),
+                field(
+                    "significant_illness_history",
+                    "Have you or your immediate family had a history of significant illness or medical condition?",
+                    "radio",
+                    { optionList: YES_NO_OPTIONS },
+                ),
+                field("significant_illness_history_explain", "If yes, please explain", "textarea"),
+                field(
+                    "hospitalized_operations",
+                    "Have you ever been hospitalized or had any operations (excluding birth)?",
+                    "radio",
+                    { optionList: YES_NO_OPTIONS },
+                ),
+                field("hospitalized_operations_explain", "If yes, please explain", "textarea"),
+                field("nearest_hospital", "How close are you to nearest hospital? Please list name and city.", "text"),
+                field("psychiatric_conditions", "Have you ever been diagnosed or treated for any psychiatric conditions?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("psychiatric_conditions_explain", "If yes, please explain", "textarea"),
+                field("depression_anxiety_meds", "Have you ever taken any medication for depression/anxiety?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("depression_anxiety_meds_explain", "If yes, please explain", "textarea"),
+                field(
+                    "partner_psychiatric_hospital",
+                    "Has your partner/spouse ever been hospitalized for psychiatric illness?",
+                    "radio",
+                    { optionList: YES_NO_OPTIONS },
+                ),
+                field("partner_psychiatric_hospital_explain", "If yes, please explain", "textarea"),
+                field("immunized_hep_b", "Have you ever been immunized for Hepatitis B? (past only)", "radio", {
+                    optionList: YES_NO_UNSURE_OPTIONS,
+                }),
+                field("immunized_hep_b_explain", "If yes or unsure, please explain", "textarea"),
+                field(
+                    "diseases_self",
+                    "Have you ever been diagnosed with any of the following diseases?",
+                    "checkbox",
+                    { optionList: DISEASE_OPTIONS },
+                ),
+                field(
+                    "diseases_partner",
+                    "Has your partner/spouse ever been diagnosed with any of the following diseases?",
+                    "checkbox",
+                    { optionList: DISEASE_OPTIONS },
+                ),
+            ],
+        },
+        {
+            id: 7,
+            name: "Characteristics",
+            fields: [
+                field("why_surrogate", "Why do you want to be a surrogate? Message to intended parents?", "textarea"),
+                field("personality", "Describe your personality and character", "textarea"),
+                field("hobbies", "What are your hobbies, interests, and talents?", "textarea"),
+                field("daily_diet", "What is your daily diet?", "textarea"),
+            ],
+        },
+        {
+            id: 8,
+            name: "Decisions",
+            fields: [
+                field("willing_ip_types", "Will you work with intended parents who are:", "checkbox", {
+                    optionList: IP_TYPE_OPTIONS,
+                }),
+                field("willing_international", "Would you be willing to work with intended parents from other countries?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("willing_travel_canada", "Would you be willing to travel to Canada?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("willing_ip_hep_b", "Would you be willing to carry for intended parents who carry Hepatitis B?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field(
+                    "willing_ip_hep_b_recovered",
+                    "Would you be willing to carry for intended parents who do not carry Hepatitis B but have recovered?",
+                    "radio",
+                    { optionList: YES_NO_OPTIONS },
+                ),
+                field("willing_ip_hiv", "Would you be willing to carry for intended parents who have HIV?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("willing_donor", "Would you be willing to carry a child with donor eggs or sperm?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("willing_different_religion", "Would you be willing to carry for intended parents of a different religion?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("relationship_with_ips", "What kind of relationship do you want with intended parents during conception and pregnancy?", "textarea"),
+                field("max_embryos_transfer", "Maximum number of embryos you are willing to transfer per cycle", "number"),
+                field("willing_twins", "Would you be willing to carry twins if embryo split or two transferred?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("terminate_abnormality", "Would you be willing to terminate a pregnancy due to a birth abnormality or deformity?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("terminate_life_risk", "Would you be willing to terminate a pregnancy if your life or baby's life was in danger?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("reduce_multiple_pregnancy", "Are you okay with reducing multiple pregnancy if it is medically necessary?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("terminate_gender", "Would you be willing to terminate a pregnancy due to gender?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field(
+                    "invasive_procedures",
+                    "Would you be willing to do any invasive procedures (D&C, Amniocentesis, Chronic Villus Sampling)?",
+                    "radio",
+                    { optionList: YES_NO_OPTIONS },
+                ),
+                field("pump_breast_milk", "Would you be willing to pump breast milk after delivery?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("ip_attend_ob", "Would you be comfortable with intended parents attending OB appointments?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field("delivery_room", "Who are you willing to have in the delivery room?", "textarea"),
+                field("agree_ivf_medications", "You will be required to take IVF medications. Do you agree?", "radio", {
+                    optionList: YES_NO_OPTIONS,
+                }),
+                field(
+                    "agree_abstain",
+                    "Will you abstain from sexual activity while undergoing treatment and throughout pregnancy?",
+                    "radio",
+                    { optionList: YES_NO_OPTIONS },
+                ),
+            ],
+        },
+        {
+            id: 9,
+            name: "Uploads & Signature",
+            fields: [
+                field("upload_photos", "Upload at least 4 pics of you and your family", "file", {
+                    required: true,
+                    helperText: "Upload 4+ clear photos.",
+                }),
+                field("supporting_documents", "Supporting documents (optional)", "file", {
+                    helperText: "Upload any additional documents.",
+                }),
+                field("signature_name", "Signature (type full legal name)", "text", {
+                    required: true,
+                }),
+            ],
+        },
+    ]
+
+    return buildTemplateDraft({
+        formName: "Surrogate Application Form (Official)",
+        description: "Template based on the Jotform surrogate intake sample.",
+        publicTitle: "Surrogate Intake Form",
+        privacyNotice: COMPLIANCE_NOTICE,
+        pages,
+        requiredSections: ["Surrogate Information", "Eligibility & Background"],
+        conditionalLogic: [
+            "If COVID vaccine is Yes, show date; if No, ask willingness.",
+            "If tattoos is Yes, request last tattoo date.",
+            "If any legal/assistance questions are Yes, collect explanation.",
+            "If pregnancy conditions are selected, request details.",
+        ],
+    })
+}
+
 // Page component
 export default function FormBuilderPage() {
     const params = useParams<{ id: string }>()
@@ -629,6 +1109,15 @@ export default function FormBuilderPage() {
     const [showPublishDialog, setShowPublishDialog] = useState(false)
     const [showDeletePageDialog, setShowDeletePageDialog] = useState(false)
     const [pageToDelete, setPageToDelete] = useState<number | null>(null)
+
+    const jotformTemplate = useMemo(() => buildJotformTemplate(), [])
+    const jotformTemplateSummary = useMemo(() => {
+        const questionCount = jotformTemplate.pages.reduce((sum, page) => sum + page.fields.length, 0)
+        return {
+            sections: jotformTemplate.pages.length,
+            questions: questionCount,
+        }
+    }, [jotformTemplate])
 
     useEffect(() => {
         setHasHydrated(false)
@@ -903,6 +1392,36 @@ export default function FormBuilderPage() {
         )
     }
 
+    const normalizeValidation = (
+        current: FormFieldValidation | null | undefined,
+        updates: Partial<FormFieldValidation>,
+    ) => {
+        const next: FormFieldValidation = {
+            min_length: current?.min_length ?? null,
+            max_length: current?.max_length ?? null,
+            min_value: current?.min_value ?? null,
+            max_value: current?.max_value ?? null,
+            pattern: current?.pattern ?? null,
+            ...updates,
+        }
+        if (next.pattern !== null && typeof next.pattern === "string" && next.pattern.trim() === "") {
+            next.pattern = null
+        }
+        const hasValue = Object.values(next).some((value) => value !== null && value !== undefined)
+        return hasValue ? next : null
+    }
+
+    const parseOptionalNumber = (value: string) => {
+        if (!value.trim()) return null
+        const parsed = Number(value)
+        return Number.isNaN(parsed) ? null : parsed
+    }
+
+    const handleValidationChange = (fieldId: string, updates: Partial<FormFieldValidation>) => {
+        const nextValidation = normalizeValidation(selectedFieldData?.validation, updates)
+        handleUpdateField(fieldId, { validation: nextValidation })
+    }
+
     const handleMappingChange = (fieldId: string, value: string | null) => {
         const nextValue = value && value !== "none" ? value : ""
         if (nextValue) {
@@ -1149,22 +1668,32 @@ export default function FormBuilderPage() {
         toast.success("Draft generated. Review and apply when ready.")
     }
 
-    const handleApplyDraft = () => {
-        if (!formDraft) return
+    const applyDraft = (draft: FormDraft) => {
         const hasExistingFields = pages.some((page) => page.fields.length > 0)
         if (hasExistingFields) {
             const confirmed = window.confirm("Replace current fields with this draft?")
             if (!confirmed) return
         }
-        setFormName(formDraft.formName)
-        setFormDescription(formDraft.description)
-        setPublicTitle(formDraft.publicTitle)
-        setPrivacyNotice(formDraft.privacyNotice)
-        const nextPages = formDraft.pages.length > 0 ? formDraft.pages : [{ id: 1, name: "Page 1", fields: [] }]
+        setFormName(draft.formName)
+        setFormDescription(draft.description)
+        setPublicTitle(draft.publicTitle)
+        setPrivacyNotice(draft.privacyNotice)
+        const nextPages = draft.pages.length > 0 ? draft.pages : [{ id: 1, name: "Page 1", fields: [] }]
         setPages(nextPages)
         setActivePage(nextPages[0]?.id ?? 1)
         setSelectedField(null)
         toast.success("Draft applied to the form.")
+    }
+
+    const handleApplyDraft = () => {
+        if (!formDraft) return
+        applyDraft(formDraft)
+    }
+
+    const handleUseJotformTemplate = () => {
+        const template = buildJotformTemplate()
+        setFormDraft(template)
+        applyDraft(template)
     }
 
     // Publish handler
@@ -1574,6 +2103,74 @@ export default function FormBuilderPage() {
                                     />
                                 </div>
 
+                                {/* Validation Rules */}
+                                {["text", "textarea", "email", "phone", "address"].includes(
+                                    selectedFieldData.type,
+                                ) && (
+                                    <div className="mt-4 space-y-2">
+                                        <Label>Validation</Label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <Input
+                                                inputMode="numeric"
+                                                placeholder="Min length"
+                                                value={selectedFieldData.validation?.min_length ?? ""}
+                                                onChange={(e) =>
+                                                    handleValidationChange(selectedFieldData.id, {
+                                                        min_length: parseOptionalNumber(e.target.value),
+                                                    })
+                                                }
+                                            />
+                                            <Input
+                                                inputMode="numeric"
+                                                placeholder="Max length"
+                                                value={selectedFieldData.validation?.max_length ?? ""}
+                                                onChange={(e) =>
+                                                    handleValidationChange(selectedFieldData.id, {
+                                                        max_length: parseOptionalNumber(e.target.value),
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                        <Input
+                                            placeholder="Regex pattern (optional)"
+                                            value={selectedFieldData.validation?.pattern ?? ""}
+                                            onChange={(e) =>
+                                                handleValidationChange(selectedFieldData.id, {
+                                                    pattern: e.target.value,
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                )}
+
+                                {selectedFieldData.type === "number" && (
+                                    <div className="mt-4 space-y-2">
+                                        <Label>Validation</Label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <Input
+                                                inputMode="numeric"
+                                                placeholder="Min value"
+                                                value={selectedFieldData.validation?.min_value ?? ""}
+                                                onChange={(e) =>
+                                                    handleValidationChange(selectedFieldData.id, {
+                                                        min_value: parseOptionalNumber(e.target.value),
+                                                    })
+                                                }
+                                            />
+                                            <Input
+                                                inputMode="numeric"
+                                                placeholder="Max value"
+                                                value={selectedFieldData.validation?.max_value ?? ""}
+                                                onChange={(e) =>
+                                                    handleValidationChange(selectedFieldData.id, {
+                                                        max_value: parseOptionalNumber(e.target.value),
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Options for Select/Radio/Multi-select */}
                                 {selectedFieldData.options && (
                                     <div className="mt-4 space-y-2">
@@ -1647,6 +2244,37 @@ export default function FormBuilderPage() {
                         </div>
                     ) : (
                         <div className="space-y-6">
+                            <div className="rounded-lg border border-stone-200 bg-stone-50 p-4 dark:border-stone-800 dark:bg-stone-900">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-sm font-semibold">Template Library</h3>
+                                    <Badge variant="outline">Starter</Badge>
+                                </div>
+                                <p className="mt-2 text-xs text-stone-500 dark:text-stone-400">
+                                    Start from a proven intake template modeled after the Jotform surrogate application.
+                                </p>
+                                <div className="mt-3 rounded-md border border-stone-200 bg-white p-3 text-sm dark:border-stone-800 dark:bg-stone-950">
+                                    <div className="flex items-center justify-between">
+                                        <p className="font-semibold">Jotform Surrogate Intake</p>
+                                        <Badge variant="secondary" className="text-[11px]">
+                                            {jotformTemplateSummary.sections} sections
+                                        </Badge>
+                                    </div>
+                                    <p className="mt-1 text-xs text-stone-500">
+                                        {jotformTemplateSummary.questions} questions • Includes uploads and signature
+                                    </p>
+                                    <Button
+                                        size="sm"
+                                        className="mt-3 w-full"
+                                        onClick={handleUseJotformTemplate}
+                                    >
+                                        Use Jotform Surrogate Intake Template
+                                    </Button>
+                                    <p className="mt-2 text-[11px] text-stone-500">
+                                        Applying a template will replace current fields.
+                                    </p>
+                                </div>
+                            </div>
+
                             <div className="rounded-lg border border-stone-200 bg-stone-50 p-4 dark:border-stone-800 dark:bg-stone-900">
                                 <div className="flex items-center justify-between">
                                     <h3 className="text-sm font-semibold">Generate from Prompt</h3>

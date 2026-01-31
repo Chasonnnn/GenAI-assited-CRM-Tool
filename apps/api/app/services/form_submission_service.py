@@ -1,5 +1,6 @@
 """Form submission service for tokens, submissions, and review flows."""
 
+import re
 import secrets
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -10,7 +11,13 @@ from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.enums import AuditEventType, FormStatus, FormSubmissionStatus, JobType, SurrogateActivityType
+from app.db.enums import (
+    AuditEventType,
+    FormStatus,
+    FormSubmissionStatus,
+    JobType,
+    SurrogateActivityType,
+)
 from app.db.models import (
     Form,
     FormFieldMapping,
@@ -19,7 +26,7 @@ from app.db.models import (
     FormSubmissionToken,
     Surrogate,
 )
-from app.schemas.forms import FormField, FormSchema
+from app.schemas.forms import FormField, FormFieldCondition, FormFieldColumn, FormSchema
 from app.schemas.surrogate import SurrogateUpdate
 from app.services.attachment_service import (
     calculate_checksum,
@@ -148,7 +155,7 @@ def create_submission(
     schema = parse_schema(form.published_schema_json)
     _validate_answers(schema, answers)
 
-    file_fields = _get_file_fields(schema)
+    file_fields = _get_file_fields(schema, answers)
     resolved_file_field_keys = _resolve_file_field_keys(
         file_fields=file_fields,
         files=files or [],
@@ -689,10 +696,12 @@ def _validate_answers(schema: FormSchema, answers: dict[str, Any]) -> None:
         raise ValueError("Answers must be an object")
     fields = flatten_fields(schema)
     for key, field in fields.items():
+        if not _is_field_visible(field, answers, fields):
+            continue
         value = answers.get(key)
         if field.type == "file":
             continue
-        if field.required and (value is None or value == ""):
+        if field.required and (value is None or value == "" or value == []):
             raise ValueError(f"Missing required field: {field.label}")
         if value is None or value == "":
             continue
@@ -704,18 +713,46 @@ def _validate_field_value(field: FormField, value: Any) -> None:
     if field_type in {"text", "textarea", "email", "phone", "address"}:
         if not isinstance(value, str):
             raise ValueError(f"Field '{field.label}' must be a string")
+        validation = field.validation
+        if validation:
+            if validation.min_length is not None and len(value) < validation.min_length:
+                raise ValueError(
+                    f"Field '{field.label}' must be at least {validation.min_length} characters"
+                )
+            if validation.max_length is not None and len(value) > validation.max_length:
+                raise ValueError(
+                    f"Field '{field.label}' must be at most {validation.max_length} characters"
+                )
+            if validation.pattern:
+                try:
+                    if re.fullmatch(validation.pattern, value) is None:
+                        raise ValueError(f"Field '{field.label}' does not match required pattern")
+                except re.error as exc:
+                    raise ValueError(f"Invalid validation pattern for '{field.label}'") from exc
         return
 
     if field_type == "number":
+        numeric_value: float | None = None
         if isinstance(value, (int, float)):
-            return
-        if isinstance(value, str):
+            numeric_value = float(value)
+        elif isinstance(value, str):
             try:
-                float(value)
-                return
+                numeric_value = float(value)
             except ValueError:
                 pass
-        raise ValueError(f"Field '{field.label}' must be a number")
+        if numeric_value is None:
+            raise ValueError(f"Field '{field.label}' must be a number")
+        validation = field.validation
+        if validation:
+            if validation.min_value is not None and numeric_value < validation.min_value:
+                raise ValueError(
+                    f"Field '{field.label}' must be at least {validation.min_value}"
+                )
+            if validation.max_value is not None and numeric_value > validation.max_value:
+                raise ValueError(
+                    f"Field '{field.label}' must be at most {validation.max_value}"
+                )
+        return
 
     if field_type == "date":
         if isinstance(value, date):
@@ -753,7 +790,118 @@ def _validate_field_value(field: FormField, value: Any) -> None:
     if field_type == "file":
         return
 
+    if field_type == "repeatable_table":
+        _validate_repeatable_table(field, value)
+        return
+
     raise ValueError(f"Unsupported field type: {field_type}")
+
+
+def _validate_repeatable_table(field: FormField, value: Any) -> None:
+    if not isinstance(value, list):
+        raise ValueError(f"Field '{field.label}' must be a list")
+    columns = field.columns or []
+    if not columns:
+        raise ValueError(f"Field '{field.label}' must define columns")
+    min_rows = field.min_rows
+    max_rows = field.max_rows
+    if min_rows is not None and len(value) < min_rows:
+        raise ValueError(f"Field '{field.label}' requires at least {min_rows} rows")
+    if max_rows is not None and len(value) > max_rows:
+        raise ValueError(f"Field '{field.label}' allows at most {max_rows} rows")
+
+    for row in value:
+        if not isinstance(row, dict):
+            raise ValueError(f"Field '{field.label}' rows must be objects")
+        for column in columns:
+            column_value = row.get(column.key)
+            if column.required and (column_value is None or column_value == ""):
+                raise ValueError(f"Missing required value: {column.label}")
+            if column_value is None or column_value == "":
+                continue
+            _validate_table_column_value(field.label, column, column_value)
+
+
+def _validate_table_column_value(field_label: str, column: FormFieldColumn, value: Any) -> None:
+    column_type = column.type
+    if column_type == "text":
+        if not isinstance(value, str):
+            raise ValueError(f"Column '{column.label}' must be a string")
+        return
+
+    if column_type == "number":
+        if isinstance(value, (int, float)):
+            return
+        if isinstance(value, str):
+            try:
+                float(value)
+                return
+            except ValueError:
+                pass
+        raise ValueError(f"Column '{column.label}' must be a number")
+
+    if column_type == "date":
+        if isinstance(value, date):
+            return
+        if isinstance(value, str):
+            try:
+                date.fromisoformat(value)
+                return
+            except ValueError:
+                pass
+        raise ValueError(f"Column '{column.label}' must be a date (YYYY-MM-DD)")
+
+    if column_type == "select":
+        if not isinstance(value, str):
+            raise ValueError(f"Column '{column.label}' must be a string")
+        if column.options:
+            allowed = {o.value for o in column.options}
+            if value not in allowed:
+                raise ValueError(f"Invalid option for '{column.label}'")
+        return
+
+    raise ValueError(f"Unsupported column type: {column_type}")
+
+
+def _is_field_visible(
+    field: FormField, answers: dict[str, Any], fields: dict[str, FormField]
+) -> bool:
+    condition = field.show_if
+    if not condition:
+        return True
+    target_field = fields.get(condition.field_key)
+    if not target_field:
+        return True
+    return _evaluate_condition(condition, answers.get(condition.field_key))
+
+
+def _evaluate_condition(condition: FormFieldCondition, value: Any) -> bool:
+    operator = condition.operator
+    expected = condition.value
+
+    if operator == "is_empty":
+        return value is None or value == "" or value == []
+    if operator == "is_not_empty":
+        return not (value is None or value == "" or value == [])
+
+    if operator == "equals":
+        return value == expected
+    if operator == "not_equals":
+        return value != expected
+    if operator == "contains":
+        if isinstance(value, list):
+            return expected in value if expected is not None else False
+        if isinstance(value, str) and isinstance(expected, str):
+            return expected in value
+        return False
+    if operator == "not_contains":
+        if isinstance(value, list):
+            return expected not in value if expected is not None else True
+        if isinstance(value, str) and isinstance(expected, str):
+            return expected not in value
+        return True
+
+    return True
 
 
 def _validate_files(form: Form, files: list[UploadFile]) -> None:
@@ -881,11 +1029,14 @@ def _get_submission_mappings(db: Session, submission: FormSubmission) -> list[di
     return _snapshot_mappings(db, submission.form_id)
 
 
-def _get_file_fields(schema: FormSchema) -> dict[str, FormField]:
+def _get_file_fields(schema: FormSchema, answers: dict[str, Any] | None = None) -> dict[str, FormField]:
     fields: dict[str, FormField] = {}
+    field_map = flatten_fields(schema)
     for page in schema.pages:
         for field in page.fields:
             if field.type == "file":
+                if answers is not None and not _is_field_visible(field, answers, field_map):
+                    continue
                 fields[field.key] = field
     return fields
 

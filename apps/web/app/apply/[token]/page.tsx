@@ -470,6 +470,82 @@ export default function PublicApplicationForm() {
         setAnswers((prev) => ({ ...prev, [field]: value }))
     }
 
+    const isEmptyValue = (value: AnswerValue) => {
+        if (value === null || value === undefined) return true
+        if (typeof value === "string") return value.trim() === ""
+        if (Array.isArray(value)) return value.length === 0
+        return false
+    }
+
+    const getFieldValidationError = (
+        field: FormSchema["pages"][number]["fields"][number],
+        value: AnswerValue,
+    ): string | null => {
+        if (field.type === "file") return null
+        if (field.required && isEmptyValue(value)) {
+            return `Please complete: ${field.label}`
+        }
+        if (isEmptyValue(value)) return null
+
+        const validation = field.validation
+        if (!validation) return null
+
+        if (
+            field.type === "text" ||
+            field.type === "textarea" ||
+            field.type === "email" ||
+            field.type === "phone" ||
+            field.type === "address"
+        ) {
+            if (typeof value !== "string") return `Please review: ${field.label}`
+            if (validation.min_length !== null && validation.min_length !== undefined) {
+                if (value.length < validation.min_length) {
+                    return `Please enter at least ${validation.min_length} characters for ${field.label}`
+                }
+            }
+            if (validation.max_length !== null && validation.max_length !== undefined) {
+                if (value.length > validation.max_length) {
+                    return `Please limit ${field.label} to ${validation.max_length} characters`
+                }
+            }
+            if (validation.pattern) {
+                try {
+                    const rawPattern = validation.pattern
+                    const anchored =
+                        rawPattern.startsWith("^") && rawPattern.endsWith("$")
+                            ? rawPattern
+                            : `^(?:${rawPattern})$`
+                    const regex = new RegExp(anchored)
+                    if (!regex.test(value)) {
+                        return `Please enter a valid ${field.label}`
+                    }
+                } catch {
+                    return `Validation rule invalid for ${field.label}`
+                }
+            }
+        }
+
+        if (field.type === "number") {
+            const numericValue =
+                typeof value === "number" ? value : Number(typeof value === "string" ? value : NaN)
+            if (Number.isNaN(numericValue)) {
+                return `Please enter a valid number for ${field.label}`
+            }
+            if (validation.min_value !== null && validation.min_value !== undefined) {
+                if (numericValue < validation.min_value) {
+                    return `Please enter ${field.label} of at least ${validation.min_value}`
+                }
+            }
+            if (validation.max_value !== null && validation.max_value !== undefined) {
+                if (numericValue > validation.max_value) {
+                    return `Please enter ${field.label} of at most ${validation.max_value}`
+                }
+            }
+        }
+
+        return null
+    }
+
     React.useEffect(() => {
         if (currentStep > steps.length) {
             setCurrentStep(steps.length)
@@ -482,18 +558,12 @@ export default function PublicApplicationForm() {
 
         const page = pages[step - 1]
         if (!page) return false
-        const missingFields = page.fields.filter((field) => {
-            if (!field.required || field.type === "file") return false
-            const value = answers[field.key]
-            if (value === null || value === undefined) return true
-            if (typeof value === "string" && value.trim() === "") return true
-            if (Array.isArray(value) && value.length === 0) return true
-            return false
-        })
-
-        if (missingFields.length > 0) {
-            toast.error(`Please complete: ${missingFields[0]?.label}`)
-            return false
+        for (const field of page.fields) {
+            const error = getFieldValidationError(field, answers[field.key])
+            if (error) {
+                toast.error(error)
+                return false
+            }
         }
 
         return true
@@ -522,6 +592,20 @@ export default function PublicApplicationForm() {
         if (!agreed) {
             toast.error("Please confirm the agreement before submitting.")
             return
+        }
+
+        for (let index = 0; index < pages.length; index += 1) {
+            const page = pages[index]
+            if (!page) continue
+            for (const field of page.fields) {
+                const error = getFieldValidationError(field, answers[field.key])
+                if (error) {
+                    toast.error(error)
+                    setCurrentStep(index + 1)
+                    window.scrollTo({ top: 0, behavior: "smooth" })
+                    return
+                }
+            }
         }
 
         const missingFileField = fileFields.find(
