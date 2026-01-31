@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.53.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.53.0...surrogacy-crm-platform-v0.53.1) (2026-01-31)
+
+
+### Bug Fixes
+
+* **api/web:** enhance AI stream reliability and add debug overlay ([d1b80a4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d1b80a4579dc16da3e8750a7cd2b0cb0aff66aa3))
+* **api:** implement dedicated database session handling for AI streaming ([0651c21](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0651c21478f60fe6de8014b07e74f5060083224b))
+* **api:** optimize SSE headers and CORS for reliable cross-origin streaming ([30b079d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/30b079d7117a18be895a71f059d2a6f0435e01b2))
+* **web/auth:** prevent duplicate Duo MFA verify attempts in callback ([8be2662](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8be2662e393f78ed97a87102ef3de329e9950e26))
+* **web:** resolve multi-line data parsing in SSE client ([954964e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/954964e10ebd351bb6efd63ffa942d1d063e67f1))
+
 ## [0.53.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.52.0...surrogacy-crm-platform-v0.53.0) (2026-01-31)
 
 
