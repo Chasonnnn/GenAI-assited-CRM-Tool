@@ -3,6 +3,7 @@
 import logging
 import os
 import tempfile
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from botocore.client import BaseClient
@@ -23,6 +24,9 @@ from app.services.ai_settings_service import (
     get_effective_model,
     is_consent_required,
 )
+
+if TYPE_CHECKING:
+    from app.services.ai_provider import GoogleGenAIProvider
 
 logger = logging.getLogger(__name__)
 

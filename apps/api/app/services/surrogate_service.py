@@ -1,8 +1,8 @@
 """Surrogate service - business logic for surrogate operations."""
 
 from datetime import datetime, timezone
-from uuid import UUID
 import logging
+from uuid import UUID
 
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
@@ -18,9 +18,6 @@ from app.db.enums import (
 )
 from app.db.models import Surrogate, SurrogateStatusHistory, User
 from app.schemas.surrogate import SurrogateCreate, SurrogateUpdate
-from app.services.surrogate_status_service import StatusChangeResult
-
-logger = logging.getLogger(__name__)
 from app.utils.normalization import (
     extract_email_domain,
     extract_phone_last4,
@@ -30,6 +27,9 @@ from app.utils.normalization import (
     normalize_phone,
     normalize_search_text,
 )
+from app.services.surrogate_status_service import StatusChangeResult
+
+logger = logging.getLogger(__name__)
 
 
 def generate_surrogate_number(db: Session, org_id: UUID) -> str:
