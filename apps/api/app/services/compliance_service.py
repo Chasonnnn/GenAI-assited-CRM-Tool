@@ -36,6 +36,7 @@ from app.db.models import (
     AIEntitySummary,
 )
 from app.services import audit_service, job_service
+from app.utils.pagination import PaginationParams, paginate_query
 
 
 EXPORT_STATUS_PENDING = "pending"
@@ -656,13 +657,17 @@ def upsert_retention_policy(
     return policy
 
 
-def list_legal_holds(db: Session, org_id: UUID) -> list[LegalHold]:
-    return (
+def list_legal_holds(
+    db: Session,
+    org_id: UUID,
+    pagination: PaginationParams,
+) -> tuple[list[LegalHold], int]:
+    query = (
         db.query(LegalHold)
         .filter(LegalHold.organization_id == org_id)
         .order_by(LegalHold.created_at.desc())
-        .all()
     )
+    return paginate_query(query, pagination)
 
 
 def create_legal_hold(

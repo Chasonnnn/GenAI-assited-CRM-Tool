@@ -13,12 +13,14 @@ import {
     executePurge,
     RetentionPolicyUpsert,
     LegalHoldCreate,
+    LegalHoldListParams,
 } from '@/lib/api/compliance'
 
 export const complianceKeys = {
     all: ['compliance'] as const,
     policies: () => [...complianceKeys.all, 'policies'] as const,
     holds: () => [...complianceKeys.all, 'holds'] as const,
+    holdsList: (params: LegalHoldListParams) => [...complianceKeys.holds(), params] as const,
     purgePreview: () => [...complianceKeys.all, 'purge-preview'] as const,
 }
 
@@ -39,10 +41,10 @@ export function useUpsertRetentionPolicy() {
     })
 }
 
-export function useLegalHolds() {
+export function useLegalHolds(params: LegalHoldListParams = {}) {
     return useQuery({
-        queryKey: complianceKeys.holds(),
-        queryFn: listLegalHolds,
+        queryKey: complianceKeys.holdsList(params),
+        queryFn: () => listLegalHolds(params),
     })
 }
 

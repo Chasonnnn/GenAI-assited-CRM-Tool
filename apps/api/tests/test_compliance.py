@@ -19,6 +19,7 @@ from app.db.models import (
     AIEntitySummary,
 )
 from app.services import compliance_service
+from app.utils.pagination import PaginationParams
 from app.utils.normalization import normalize_email
 
 
@@ -383,6 +384,43 @@ def test_specific_entity_legal_hold_blocks_related(db, test_org, test_user):
     surrogate_result = next((r for r in results if r.entity_type == "surrogates"), None)
     assert surrogate_result is not None
     assert surrogate_result.count == 1  # Only surrogate2
+
+
+def test_list_legal_holds_paginates(db, test_org, test_user):
+    compliance_service.create_legal_hold(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        entity_type=None,
+        entity_id=None,
+        reason="Hold 1",
+    )
+    compliance_service.create_legal_hold(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        entity_type=None,
+        entity_id=None,
+        reason="Hold 2",
+    )
+    compliance_service.create_legal_hold(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        entity_type=None,
+        entity_id=None,
+        reason="Hold 3",
+    )
+
+    page_one = PaginationParams(page=1, per_page=2)
+    items, total = compliance_service.list_legal_holds(db, test_org.id, page_one)
+    assert total == 3
+    assert len(items) == 2
+
+    page_two = PaginationParams(page=2, per_page=2)
+    items_two, total_two = compliance_service.list_legal_holds(db, test_org.id, page_two)
+    assert total_two == 3
+    assert len(items_two) == 1
 
 
 def test_rate_limit_exceeded(db, test_org, test_user, export_settings):

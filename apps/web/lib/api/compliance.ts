@@ -37,6 +37,19 @@ export interface LegalHoldCreate {
     reason: string
 }
 
+export interface LegalHoldListParams {
+    page?: number
+    per_page?: number
+}
+
+export interface LegalHoldListResponse {
+    items: LegalHold[]
+    total: number
+    page: number
+    per_page: number
+    pages: number
+}
+
 export interface PurgePreviewItem {
     entity_type: string
     count: number
@@ -60,8 +73,14 @@ export async function upsertRetentionPolicy(
     return api.post<RetentionPolicy>('/compliance/policies', data)
 }
 
-export async function listLegalHolds(): Promise<LegalHold[]> {
-    return api.get<LegalHold[]>('/compliance/legal-holds')
+export async function listLegalHolds(
+    params: LegalHoldListParams = {}
+): Promise<LegalHoldListResponse> {
+    const searchParams = new URLSearchParams()
+    if (params.page) searchParams.set('page', String(params.page))
+    if (params.per_page) searchParams.set('per_page', String(params.per_page))
+    const query = searchParams.toString()
+    return api.get<LegalHoldListResponse>(`/compliance/legal-holds${query ? `?${query}` : ''}`)
 }
 
 export async function createLegalHold(data: LegalHoldCreate): Promise<LegalHold> {

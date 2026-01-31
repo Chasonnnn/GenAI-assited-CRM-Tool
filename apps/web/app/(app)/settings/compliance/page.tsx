@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { PaginationJump } from "@/components/ui/pagination-jump"
 import { Loader2Icon, ShieldCheck, Trash2 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import {
@@ -51,7 +52,12 @@ export default function ComplianceSettingsPage() {
     const { data: policies, isLoading: policiesLoading } = useRetentionPolicies()
     const upsertPolicy = useUpsertRetentionPolicy()
 
-    const { data: legalHolds, isLoading: holdsLoading } = useLegalHolds()
+    const perPage = 20
+    const [holdsPage, setHoldsPage] = useState(1)
+    const { data: legalHolds, isLoading: holdsLoading } = useLegalHolds({
+        page: holdsPage,
+        per_page: perPage,
+    })
     const createHold = useCreateLegalHold()
     const releaseHold = useReleaseLegalHold()
 
@@ -79,6 +85,13 @@ export default function ComplianceSettingsPage() {
         if (!policies) return
         setPolicyEdits((prev) => (Object.keys(prev).length ? prev : { ...policyMap }))
     }, [policies, policyMap])
+
+    useEffect(() => {
+        if (!legalHolds?.pages) return
+        if (holdsPage > legalHolds.pages) {
+            setHoldsPage(legalHolds.pages)
+        }
+    }, [holdsPage, legalHolds?.pages])
 
     const updatePolicyEdit = (entityType: string, field: "retention_days" | "is_active", value: number | boolean) => {
         setPolicyEdits((prev) => ({
@@ -109,6 +122,7 @@ export default function ComplianceSettingsPage() {
         })
         setHoldReason("")
         setHoldEntityId("")
+        setHoldsPage(1)
     }
 
     const handlePreviewPurge = async () => {
@@ -265,55 +279,101 @@ export default function ComplianceSettingsPage() {
                                 <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                             </div>
                         ) : (
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Scope</TableHead>
-                                        <TableHead>Entity ID</TableHead>
-                                        <TableHead>Reason</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead className="text-right">Action</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {legalHolds?.length ? (
-                                        legalHolds.map((hold) => (
-                                            <TableRow key={hold.id}>
-                                                <TableCell>{hold.entity_type ?? "org"}</TableCell>
-                                                <TableCell className="text-xs text-muted-foreground">
-                                                    {hold.entity_id ?? "—"}
-                                                </TableCell>
-                                                <TableCell className="max-w-xs truncate">{hold.reason}</TableCell>
-                                                <TableCell>
-                                                    {hold.released_at ? (
-                                                        <Badge variant="outline">Released</Badge>
-                                                    ) : (
-                                                        <Badge>Active</Badge>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    {!hold.released_at && (
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            onClick={() => releaseHold.mutateAsync(hold.id)}
-                                                            disabled={releaseHold.isPending}
-                                                        >
-                                                            Release
-                                                        </Button>
-                                                    )}
+                            <>
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Scope</TableHead>
+                                            <TableHead>Entity ID</TableHead>
+                                            <TableHead>Reason</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead className="text-right">Action</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {legalHolds?.items?.length ? (
+                                            legalHolds.items.map((hold) => (
+                                                <TableRow key={hold.id}>
+                                                    <TableCell>{hold.entity_type ?? "org"}</TableCell>
+                                                    <TableCell className="text-xs text-muted-foreground">
+                                                        {hold.entity_id ?? "—"}
+                                                    </TableCell>
+                                                    <TableCell className="max-w-xs truncate">{hold.reason}</TableCell>
+                                                    <TableCell>
+                                                        {hold.released_at ? (
+                                                            <Badge variant="outline">Released</Badge>
+                                                        ) : (
+                                                            <Badge>Active</Badge>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        {!hold.released_at && (
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={() => releaseHold.mutateAsync(hold.id)}
+                                                                disabled={releaseHold.isPending}
+                                                            >
+                                                                Release
+                                                            </Button>
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow>
+                                                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                                                    No legal holds in place.
                                                 </TableCell>
                                             </TableRow>
-                                        ))
-                                    ) : (
-                                        <TableRow>
-                                            <TableCell colSpan={5} className="text-center text-muted-foreground">
-                                                No legal holds in place.
-                                            </TableCell>
-                                        </TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                                {legalHolds?.pages && legalHolds.pages > 1 && (
+                                    <div className="flex items-center justify-between border-t border-border px-6 py-4">
+                                        <div className="text-sm text-muted-foreground">
+                                            Showing {((holdsPage - 1) * perPage) + 1}-{Math.min(holdsPage * perPage, legalHolds.total)} of {legalHolds.total} legal holds
+                                        </div>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={holdsPage === 1}
+                                                onClick={() => setHoldsPage(Math.max(1, holdsPage - 1))}
+                                            >
+                                                Previous
+                                            </Button>
+                                            {[...Array(Math.min(5, legalHolds.pages))].map((_, i) => {
+                                                const pageNum = i + 1
+                                                return (
+                                                    <Button
+                                                        key={pageNum}
+                                                        variant={holdsPage === pageNum ? "default" : "outline"}
+                                                        size="sm"
+                                                        onClick={() => setHoldsPage(pageNum)}
+                                                    >
+                                                        {pageNum}
+                                                    </Button>
+                                                )
+                                            })}
+                                            {legalHolds.pages > 5 && <span className="text-muted-foreground">...</span>}
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={holdsPage >= legalHolds.pages}
+                                                onClick={() => setHoldsPage(Math.min(legalHolds.pages, holdsPage + 1))}
+                                            >
+                                                Next
+                                            </Button>
+                                            <PaginationJump
+                                                page={holdsPage}
+                                                totalPages={legalHolds.pages}
+                                                onPageChange={setHoldsPage}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </>
                         )}
                     </CardContent>
                 </Card>

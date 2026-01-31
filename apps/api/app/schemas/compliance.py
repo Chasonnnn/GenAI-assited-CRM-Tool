@@ -73,6 +73,14 @@ class LegalHoldRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class LegalHoldListResponse(BaseModel):
+    items: list[LegalHoldRead]
+    total: int
+    page: int
+    per_page: int
+    pages: int
+
+
 class PurgePreviewItem(BaseModel):
     entity_type: str
     count: int

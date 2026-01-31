@@ -11,6 +11,7 @@ from app.schemas.auth import UserSession
 from app.schemas.compliance import (
     LegalHoldCreate,
     LegalHoldRead,
+    LegalHoldListResponse,
     PurgePreviewItem,
     PurgePreviewResponse,
     PurgeExecuteResponse,
@@ -18,6 +19,7 @@ from app.schemas.compliance import (
     RetentionPolicyUpsert,
 )
 from app.services import audit_service, compliance_service, job_service
+from app.utils.pagination import PaginationParams, get_pagination
 from app.db.enums import JobType
 
 
@@ -57,13 +59,22 @@ def upsert_policy(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.get("/legal-holds", response_model=list[LegalHoldRead])
+@router.get("/legal-holds", response_model=LegalHoldListResponse)
 def list_legal_holds(
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_permission(P.COMPLIANCE_MANAGE)),
-) -> list[LegalHoldRead]:
+    pagination: PaginationParams = Depends(get_pagination),
+) -> LegalHoldListResponse:
     """List legal holds for the organization."""
-    return compliance_service.list_legal_holds(db, session.org_id)
+    items, total = compliance_service.list_legal_holds(db, session.org_id, pagination)
+    pages = (total + pagination.per_page - 1) // pagination.per_page if pagination.per_page > 0 else 0
+    return LegalHoldListResponse(
+        items=items,
+        total=total,
+        page=pagination.page,
+        per_page=pagination.per_page,
+        pages=pages,
+    )
 
 
 @router.post(
