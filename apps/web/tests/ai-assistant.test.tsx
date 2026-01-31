@@ -34,12 +34,14 @@ vi.mock('@tanstack/react-query', () => ({
 const mockSendMessage = vi.fn()
 const mockApproveAction = vi.fn()
 const mockRejectAction = vi.fn()
+const mockUseConversation = vi.fn()
 
 vi.mock('@/lib/hooks/use-ai', () => ({
     useAISettings: () => ({ data: { is_enabled: true } }),
     useSendMessage: () => ({ mutateAsync: mockSendMessage, isPending: false }),
     useApproveAction: () => ({ mutateAsync: mockApproveAction, isPending: false }),
     useRejectAction: () => ({ mutateAsync: mockRejectAction, isPending: false }),
+    useConversation: () => mockUseConversation(),
 }))
 
 describe('AIAssistantPage', () => {
@@ -49,6 +51,11 @@ describe('AIAssistantPage', () => {
                 { id: 's1', surrogate_number: 'S12345', full_name: 'Jane Applicant' },
             ],
             isLoading: false,
+        })
+        mockUseConversation.mockReturnValue({
+            data: { messages: [] },
+            isLoading: false,
+            isFetching: false,
         })
 
         mockSendMessage.mockResolvedValue({

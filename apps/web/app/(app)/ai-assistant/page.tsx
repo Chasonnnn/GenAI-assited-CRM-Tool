@@ -105,7 +105,7 @@ export default function AIAssistantPage() {
             timestamp: msg.created_at
                 ? new Date(msg.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
                 : new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-            proposed_actions: msg.proposed_actions,
+            ...(msg.proposed_actions ? { proposed_actions: msg.proposed_actions } : {}),
         }))
     }, [conversation])
 
@@ -169,7 +169,7 @@ export default function AIAssistantPage() {
                 role: "assistant",
                 content: response.content,
                 timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-                proposed_actions: response.proposed_actions,
+                ...(response.proposed_actions ? { proposed_actions: response.proposed_actions } : {}),
             }
 
             setMessages(prev => [...prev, aiMessage])
