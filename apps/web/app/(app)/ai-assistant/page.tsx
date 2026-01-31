@@ -3,7 +3,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SendIcon, SparklesIcon, FileTextIcon, UserIcon, CalendarIcon, ClockIcon, BotIcon, Loader2Icon, AlertCircleIcon, CheckIcon, XIcon, StopCircleIcon } from "lucide-react"
@@ -60,7 +59,7 @@ export default function AIAssistantPage() {
             status: "done",
         },
     ])
-    const messagesEndRef = useRef<HTMLDivElement>(null)
+    const scrollRef = useRef<HTMLDivElement>(null)
     const streamingMessageIdRef = useRef<string | null>(null)
     const streamAbortRef = useRef<AbortController | null>(null)
     const stopRequestedRef = useRef(false)
@@ -164,7 +163,9 @@ export default function AIAssistantPage() {
 
     // Scroll to bottom when messages change
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        const container = scrollRef.current
+        if (!container) return
+        container.scrollTop = container.scrollHeight
     }, [messages])
 
     useEffect(() => {
@@ -513,7 +514,7 @@ export default function AIAssistantPage() {
                     </CardHeader>
 
                     {/* Chat Messages - scrollable */}
-                    <ScrollArea className="flex-1 min-h-0">
+                    <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
                         <div className="space-y-3 p-4">
                             {messages.map((msg) => (
                                 <div key={msg.id} className="space-y-2">
@@ -598,10 +599,8 @@ export default function AIAssistantPage() {
                                 </div>
                             ))}
 
-                            {/* Scroll anchor */}
-                            <div ref={messagesEndRef} />
                         </div>
-                    </ScrollArea>
+                    </div>
 
                     {/* Input Area */}
                     <CardContent className="shrink-0 border-t bg-background p-3">

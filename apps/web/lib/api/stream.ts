@@ -50,43 +50,54 @@ export async function streamSSE<T>(
     let buffer = '';
     let finalResponse: T | null = null;
 
-    while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
+    const emitEvent = (rawEvent: string) => {
+        if (!rawEvent) return;
+        let eventType = 'message';
+        let data = '';
+        for (const line of rawEvent.split('\n')) {
+            if (line.startsWith('event:')) {
+                eventType = line.slice(6).trim();
+            } else if (line.startsWith('data:')) {
+                data += line.slice(5).trim();
+            }
+        }
 
+        if (!data) return;
+        const parsed = JSON.parse(data);
+        const event = { type: eventType, data: parsed } as StreamEvent<T>;
+        onEvent?.(event);
+        if (event.type === 'done') {
+            finalResponse = event.data;
+        }
+        if (event.type === 'error') {
+            throw new Error(event.data.message || 'AI stream error');
+        }
+    };
+
+    const processBuffer = (flush = false) => {
+        buffer = buffer.replace(/\r\n/g, '\n');
         let separatorIndex = buffer.indexOf('\n\n');
         while (separatorIndex !== -1) {
             const rawEvent = buffer.slice(0, separatorIndex).trim();
             buffer = buffer.slice(separatorIndex + 2);
-
-            if (rawEvent) {
-                let eventType = 'message';
-                let data = '';
-                for (const line of rawEvent.split('\n')) {
-                    if (line.startsWith('event:')) {
-                        eventType = line.slice(6).trim();
-                    } else if (line.startsWith('data:')) {
-                        data += line.slice(5).trim();
-                    }
-                }
-
-                if (data) {
-                    const parsed = JSON.parse(data);
-                    const event = { type: eventType, data: parsed } as StreamEvent<T>;
-                    onEvent?.(event);
-                    if (event.type === 'done') {
-                        finalResponse = event.data;
-                    }
-                    if (event.type === 'error') {
-                        throw new Error(event.data.message || 'AI stream error');
-                    }
-                }
-            }
-
+            emitEvent(rawEvent);
             separatorIndex = buffer.indexOf('\n\n');
         }
+
+        if (flush && buffer.trim()) {
+            emitEvent(buffer.trim());
+            buffer = '';
+        }
+    };
+
+    while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        processBuffer();
     }
+
+    processBuffer(true);
 
     if (finalResponse) {
         return finalResponse;

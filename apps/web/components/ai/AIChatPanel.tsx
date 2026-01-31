@@ -4,7 +4,6 @@ import * as React from "react"
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import {
@@ -69,7 +68,7 @@ export function AIChatPanel({
     const [messages, setMessages] = useState<PanelMessage[]>([])
     const [isStreaming, setIsStreaming] = useState(false)
     const [scheduleParserOpen, setScheduleParserOpen] = useState(false)
-    const messagesEndRef = useRef<HTMLDivElement>(null)
+    const scrollRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLInputElement>(null)
     const streamAbortRef = useRef<AbortController | null>(null)
     const streamingMessageIdRef = useRef<string | null>(null)
@@ -97,7 +96,9 @@ export function AIChatPanel({
 
     // Scroll to bottom on new messages
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "auto" })
+        const container = scrollRef.current
+        if (!container) return
+        container.scrollTop = container.scrollHeight
     }, [messages])
 
     // Focus input on mount
@@ -273,7 +274,7 @@ export function AIChatPanel({
             </div>
 
             {/* Messages */}
-            <ScrollArea className="flex-1 min-h-0">
+            <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
                 <div className="p-4">
                     {loadingConversation ? (
                         <div className="flex items-center justify-center py-8">
@@ -343,11 +344,10 @@ export function AIChatPanel({
                                     )}
                                 </div>
                             ))}
-                            <div ref={messagesEndRef} />
                         </div>
                     )}
                 </div>
-            </ScrollArea>
+            </div>
 
             {/* Quick actions */}
             <div className="border-t px-4 py-2">
