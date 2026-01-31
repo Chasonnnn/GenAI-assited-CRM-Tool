@@ -39,7 +39,9 @@ def main() -> None:
     import uvicorn
 
     port = int(os.getenv("PORT", "8080"))
-    uvicorn.run("app.worker_service:app", host="0.0.0.0", port=port)
+    host = os.getenv("HOST", "0.0.0.0")
+    # nosec B104 - Cloud Run requires binding to all interfaces.
+    uvicorn.run("app.worker_service:app", host=host, port=port)
 
 
 if __name__ == "__main__":
