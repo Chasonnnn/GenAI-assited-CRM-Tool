@@ -139,6 +139,7 @@ def chat(
     from app.services import (
         ai_chat_service,
     )
+
     entity_type, entity_id, user_integrations = _prepare_chat_request(body, db, session)
 
     # Process chat
@@ -200,9 +201,7 @@ async def chat_stream(
                 pending_task = asyncio.create_task(iterator.__anext__())
                 try:
                     while True:
-                        done, _ = await asyncio.wait(
-                            {pending_task}, timeout=heartbeat_interval
-                        )
+                        done, _ = await asyncio.wait({pending_task}, timeout=heartbeat_interval)
                         if not done:
                             yield format_sse_comment("heartbeat")
                             continue
@@ -225,4 +224,6 @@ async def chat_stream(
                 logger.exception("AI chat stream failed", exc_info=exc)
                 yield format_sse("error", {"message": "Streaming error. Please try again."})
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=STREAM_HEADERS)
+    return StreamingResponse(
+        event_generator(), media_type="text/event-stream", headers=STREAM_HEADERS
+    )

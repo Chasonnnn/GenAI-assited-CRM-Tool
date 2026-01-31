@@ -272,6 +272,7 @@ async def parse_schedule_stream(
 
     # AI settings check
     if not settings or not settings.is_enabled:
+
         async def _disabled_events() -> AsyncIterator[str]:
             yield sse_preamble()
             yield format_sse("start", {"status": "thinking"})
@@ -334,7 +335,9 @@ async def parse_schedule_stream(
         content = ""
 
         try:
-            async for chunk in provider.stream_chat(messages=messages, temperature=0.3, max_tokens=2000):
+            async for chunk in provider.stream_chat(
+                messages=messages, temperature=0.3, max_tokens=2000
+            ):
                 if chunk.text:
                     content += chunk.text
                     yield format_sse("delta", {"text": chunk.text})

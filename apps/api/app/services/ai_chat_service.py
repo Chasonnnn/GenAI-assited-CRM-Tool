@@ -673,9 +673,7 @@ def _prepare_chat_context(
     elif normalized_entity_type == "global":
         # Global mode - use simplified prompt with performance data
         system_prompt = GLOBAL_SYSTEM_PROMPT
-        integrations_ctx = (
-            f"User's connected integrations: {', '.join(user_integrations) if user_integrations else 'none'}"
-        )
+        integrations_ctx = f"User's connected integrations: {', '.join(user_integrations) if user_integrations else 'none'}"
         performance_ctx = ""
         if _should_fetch_performance(message) and _user_can_view_reports(
             db, organization_id, user_id
@@ -711,8 +709,10 @@ def _prepare_chat_context(
     # Add current user message (anonymized if enabled)
     ai_messages.append(ChatMessage(role="user", content=anonymized_message))
 
-    model_name = ai_settings.model if ai_settings and ai_settings.model else getattr(
-        provider, "default_model", None
+    model_name = (
+        ai_settings.model
+        if ai_settings and ai_settings.model
+        else getattr(provider, "default_model", None)
     )
 
     return (

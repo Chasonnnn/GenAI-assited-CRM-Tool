@@ -144,6 +144,7 @@ async def generate_email_template_stream(
 
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
     if not settings or not settings.is_enabled:
+
         async def _disabled_events() -> AsyncIterator[str]:
             yield sse_preamble()
             yield format_sse("start", {"status": "thinking"})
@@ -160,6 +161,7 @@ async def generate_email_template_stream(
         )
 
     if ai_settings_service.is_consent_required(settings):
+
         async def _consent_events() -> AsyncIterator[str]:
             yield sse_preamble()
             yield format_sse("start", {"status": "thinking"})
@@ -1118,6 +1120,7 @@ async def analyze_dashboard_stream(
         settings, session.org_id, user_id=session.user_id
     )
     if not provider:
+
         async def _fallback_events() -> AsyncIterator[str]:
             yield sse_preamble()
             yield format_sse("start", {"status": "thinking"})

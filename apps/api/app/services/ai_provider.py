@@ -249,7 +249,7 @@ class GoogleGenAIProvider(AIProvider):
                 continue
 
             if chunk_text.startswith(accumulated):
-                delta = chunk_text[len(accumulated):]
+                delta = chunk_text[len(accumulated) :]
                 accumulated = chunk_text
             else:
                 delta = chunk_text

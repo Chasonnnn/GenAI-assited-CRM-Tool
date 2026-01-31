@@ -729,9 +729,13 @@ async def summarize_interview_stream(
 
     ai_settings = ai_interview_service.get_ai_settings(db, session.org_id)
     if not ai_settings or not ai_settings.is_enabled:
-        raise HTTPException(status_code=403, detail="AI features are not enabled for this organization")
+        raise HTTPException(
+            status_code=403, detail="AI features are not enabled for this organization"
+        )
     if ai_interview_service.is_consent_required(ai_settings):
-        raise HTTPException(status_code=403, detail="AI consent has not been accepted for this organization")
+        raise HTTPException(
+            status_code=403, detail="AI consent has not been accepted for this organization"
+        )
 
     provider = ai_interview_service.get_provider(ai_settings, session.org_id, session.user_id)
     if not provider:
@@ -791,7 +795,9 @@ async def summarize_interview_stream(
         model_name = ai_settings.model or ""
 
         try:
-            async for chunk in provider.stream_chat(messages=messages, temperature=0.3, max_tokens=2000):
+            async for chunk in provider.stream_chat(
+                messages=messages, temperature=0.3, max_tokens=2000
+            ):
                 if chunk.text:
                     content += chunk.text
                     yield format_sse("delta", {"text": chunk.text})
@@ -903,9 +909,13 @@ async def summarize_all_interviews_stream(
 
     ai_settings = ai_interview_service.get_ai_settings(db, session.org_id)
     if not ai_settings or not ai_settings.is_enabled:
-        raise HTTPException(status_code=403, detail="AI features are not enabled for this organization")
+        raise HTTPException(
+            status_code=403, detail="AI features are not enabled for this organization"
+        )
     if ai_interview_service.is_consent_required(ai_settings):
-        raise HTTPException(status_code=403, detail="AI consent has not been accepted for this organization")
+        raise HTTPException(
+            status_code=403, detail="AI consent has not been accepted for this organization"
+        )
 
     provider = ai_interview_service.get_provider(ai_settings, session.org_id, session.user_id)
     if not provider:
@@ -917,7 +927,9 @@ async def summarize_all_interviews_stream(
         raise HTTPException(status_code=400, detail=message)
 
     interviews = interview_service.list_interviews(db, session.org_id, surrogate_id)
-    interviews = sorted(interviews, key=lambda interview: interview.conducted_at or interview.created_at)
+    interviews = sorted(
+        interviews, key=lambda interview: interview.conducted_at or interview.created_at
+    )
 
     if not interviews:
         raise HTTPException(status_code=400, detail="No interviews found for this surrogate")
@@ -986,7 +998,9 @@ Notes:
         model_name = ai_settings.model or ""
 
         try:
-            async for chunk in provider.stream_chat(messages=messages, temperature=0.3, max_tokens=3000):
+            async for chunk in provider.stream_chat(
+                messages=messages, temperature=0.3, max_tokens=3000
+            ):
                 if chunk.text:
                     content += chunk.text
                     yield format_sse("delta", {"text": chunk.text})
