@@ -1,9 +1,13 @@
 """AI workflow generation routes."""
 
+import asyncio
+import json
 import logging
+from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -11,6 +15,10 @@ from app.core.deps import get_db, require_ai_enabled, require_permission, requir
 from app.core.permissions import PermissionKey as P
 from app.core.rate_limit import limiter
 from app.schemas.auth import UserSession
+from app.services.ai_provider import ChatMessage
+from app.services.ai_response_validation import parse_json_object, validate_model
+from app.services.ai_prompt_registry import get_prompt
+from app.utils.sse import format_sse, STREAM_HEADERS
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -105,6 +113,185 @@ def generate_workflow(
         explanation=result.explanation,
         validation_errors=result.validation_errors,
         warnings=result.warnings,
+    )
+
+
+@router.post(
+    "/workflows/generate/stream",
+    dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
+)
+@limiter.limit("10/minute")
+async def generate_workflow_stream(
+    request: Request,
+    body: GenerateWorkflowRequest,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_permission(P.AI_USE)),
+) -> StreamingResponse:
+    """Stream workflow generation via SSE."""
+    from app.services import ai_workflow_service, ai_settings_service
+    from app.services.ai_workflow_service import GeneratedWorkflow
+
+    if body.scope == "org":
+        from app.services import permission_service
+
+        if not permission_service.check_permission(
+            db, session.org_id, session.user_id, session.role.value, P.AUTOMATION_MANAGE.value
+        ):
+            raise HTTPException(status_code=403, detail="Missing permission: manage_automation")
+
+    settings = ai_settings_service.get_ai_settings(db, session.org_id)
+    if not settings or not settings.is_enabled:
+        async def _disabled_events() -> AsyncIterator[str]:
+            yield format_sse("start", {"status": "thinking"})
+            response = GenerateWorkflowResponse(
+                success=False,
+                explanation="AI is not enabled for this organization",
+            )
+            yield format_sse("done", response.model_dump())
+
+        return StreamingResponse(
+            _disabled_events(),
+            media_type="text/event-stream",
+            headers=STREAM_HEADERS,
+        )
+
+    if ai_settings_service.is_consent_required(settings):
+        async def _consent_events() -> AsyncIterator[str]:
+            yield format_sse("start", {"status": "thinking"})
+            response = GenerateWorkflowResponse(
+                success=False,
+                explanation="AI consent not accepted",
+            )
+            yield format_sse("done", response.model_dump())
+
+        return StreamingResponse(
+            _consent_events(),
+            media_type="text/event-stream",
+            headers=STREAM_HEADERS,
+        )
+
+    provider = ai_settings_service.get_ai_provider_for_settings(
+        settings, session.org_id, user_id=session.user_id
+    )
+    if not provider:
+        message = (
+            "Vertex AI configuration is incomplete"
+            if settings.provider == "vertex_wif"
+            else "AI API key not configured"
+        )
+
+        async def _missing_events() -> AsyncIterator[str]:
+            yield format_sse("start", {"status": "thinking"})
+            response = GenerateWorkflowResponse(
+                success=False,
+                explanation=message,
+            )
+            yield format_sse("done", response.model_dump())
+
+        return StreamingResponse(
+            _missing_events(),
+            media_type="text/event-stream",
+            headers=STREAM_HEADERS,
+        )
+
+    context = ai_workflow_service._get_context_for_prompt(
+        db,
+        session.org_id,
+        anonymize_pii=settings.anonymize_pii,
+        scope=body.scope,
+        owner_user_id=session.user_id,
+    )
+    prompt_template = get_prompt("workflow_generation")
+    prompt = prompt_template.render_user(
+        triggers=context["triggers"],
+        actions=context["actions"],
+        templates=context["templates"],
+        users=context["users"],
+        stages=context["stages"],
+        user_input=body.description,
+    )
+
+    messages = [
+        ChatMessage(role="system", content=prompt_template.system),
+        ChatMessage(role="user", content=prompt),
+    ]
+
+    async def event_generator() -> AsyncIterator[str]:
+        yield format_sse("start", {"status": "thinking"})
+        content = ""
+        try:
+            async for chunk in provider.stream_chat(messages=messages, temperature=0.3):
+                if chunk.text:
+                    content += chunk.text
+                    yield format_sse("delta", {"text": chunk.text})
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:
+            ai_workflow_service._create_workflow_generation_alert(
+                db, session.org_id, str(exc), type(exc).__name__
+            )
+            response = GenerateWorkflowResponse(
+                success=False,
+                explanation=f"Error generating workflow: {str(exc)}",
+            )
+            yield format_sse("done", response.model_dump())
+            return
+
+        try:
+            workflow_data = parse_json_object(content)
+            workflow_model = validate_model(GeneratedWorkflow, workflow_data)
+            if not workflow_model:
+                raise json.JSONDecodeError("Invalid workflow JSON", content, 0)
+
+            validation_result = ai_workflow_service.validate_workflow(
+                db,
+                session.org_id,
+                workflow_model,
+                scope=body.scope,
+                owner_user_id=session.user_id if body.scope == "personal" else None,
+            )
+
+            if not validation_result.valid:
+                response = GenerateWorkflowResponse(
+                    success=False,
+                    workflow=workflow_model.model_dump(),
+                    explanation="Generated workflow has validation errors",
+                    validation_errors=validation_result.errors,
+                    warnings=validation_result.warnings,
+                )
+                yield format_sse("done", response.model_dump())
+                return
+
+            response = GenerateWorkflowResponse(
+                success=True,
+                workflow=workflow_model.model_dump(),
+                explanation="Workflow generated successfully. Please review before saving.",
+                warnings=validation_result.warnings,
+            )
+            yield format_sse("done", response.model_dump())
+        except json.JSONDecodeError as exc:
+            ai_workflow_service._create_workflow_generation_alert(
+                db, session.org_id, str(exc), "JSONDecodeError"
+            )
+            response = GenerateWorkflowResponse(
+                success=False,
+                explanation=f"Failed to parse AI response as JSON: {str(exc)}",
+            )
+            yield format_sse("done", response.model_dump())
+        except Exception as exc:
+            ai_workflow_service._create_workflow_generation_alert(
+                db, session.org_id, str(exc), type(exc).__name__
+            )
+            response = GenerateWorkflowResponse(
+                success=False,
+                explanation=f"Error generating workflow: {str(exc)}",
+            )
+            yield format_sse("done", response.model_dump())
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers=STREAM_HEADERS,
     )
 
 

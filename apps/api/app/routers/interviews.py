@@ -9,11 +9,14 @@ Endpoints:
 - Export (PDF, JSON)
 """
 
+import asyncio
+from collections.abc import AsyncIterator
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.surrogate_access import can_modify_surrogate, check_surrogate_access
@@ -26,7 +29,9 @@ from app.core.deps import (
 )
 from app.core.permissions import PermissionKey as P
 from app.db.enums import Role
+from app.db.models import InterviewNote, SurrogateInterview, Surrogate
 from app.schemas.auth import UserSession
+from app.utils.sse import format_sse, STREAM_HEADERS
 from app.schemas.interview import (
     InterviewAttachmentRead,
     InterviewCreate,
@@ -708,6 +713,147 @@ async def summarize_interview(
 
 
 @router.post(
+    "/interviews/{interview_id}/ai/summarize/stream",
+    dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
+)
+async def summarize_interview_stream(
+    interview_id: UUID,
+    session: UserSession = Depends(require_permission(P.AI_USE)),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    """Stream AI summary of a single interview via SSE."""
+    from app.services import ai_interview_service
+    from app.services.ai_provider import ChatMessage, ChatResponse
+    from app.services.ai_usage_service import log_usage
+    from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_data
+
+    interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
+
+    ai_settings = ai_interview_service.get_ai_settings(db, session.org_id)
+    if not ai_settings or not ai_settings.is_enabled:
+        raise HTTPException(status_code=403, detail="AI features are not enabled for this organization")
+    if ai_interview_service.is_consent_required(ai_settings):
+        raise HTTPException(status_code=403, detail="AI consent has not been accepted for this organization")
+
+    provider = ai_interview_service.get_provider(ai_settings, session.org_id, session.user_id)
+    if not provider:
+        message = (
+            "Vertex AI configuration is incomplete"
+            if ai_settings.provider == "vertex_wif"
+            else "AI API key not configured"
+        )
+        raise HTTPException(status_code=400, detail=message)
+
+    transcript = interview.transcript_text or ""
+    if not transcript:
+        raise HTTPException(status_code=400, detail="Interview has no transcript to summarize")
+
+    pii_mapping = None
+    known_names: list[str] = []
+    if ai_settings.anonymize_pii:
+        pii_mapping = PIIMapping()
+        surrogate = (
+            db.query(Surrogate)
+            .filter(Surrogate.id == interview.surrogate_id, Surrogate.organization_id == session.org_id)
+            .first()
+        )
+        if surrogate and surrogate.full_name:
+            known_names.append(surrogate.full_name)
+            known_names.extend(surrogate.full_name.split())
+        ai_interview_service._extend_known_names_from_text(known_names, transcript)
+        transcript = anonymize_text(transcript, pii_mapping, known_names)
+
+    notes = db.scalars(
+        select(InterviewNote).where(
+            InterviewNote.interview_id == interview.id,
+            InterviewNote.organization_id == session.org_id,
+        )
+    ).all()
+    notes_text = (
+        "\n".join([ai_interview_service._strip_html(n.content) for n in notes]) if notes else "No notes"
+    )
+    if ai_settings.anonymize_pii and pii_mapping:
+        ai_interview_service._extend_known_names_from_text(known_names, notes_text)
+        notes_text = anonymize_text(notes_text, pii_mapping, known_names)
+
+    prompt = ai_interview_service.INTERVIEW_SUMMARY_PROMPT.format(
+        transcript=ai_interview_service._truncate_text(transcript),
+        notes=ai_interview_service._truncate_text(notes_text, 5000),
+    )
+
+    messages = [
+        ChatMessage(role="system", content="You are an expert interview analyst."),
+        ChatMessage(role="user", content=prompt),
+    ]
+
+    async def event_generator() -> AsyncIterator[str]:
+        yield format_sse("start", {"status": "thinking"})
+        content = ""
+        prompt_tokens = 0
+        completion_tokens = 0
+        model_name = ai_settings.model or ""
+
+        try:
+            async for chunk in provider.stream_chat(messages=messages, temperature=0.3, max_tokens=2000):
+                if chunk.text:
+                    content += chunk.text
+                    yield format_sse("delta", {"text": chunk.text})
+                if chunk.is_final:
+                    prompt_tokens = chunk.prompt_tokens
+                    completion_tokens = chunk.completion_tokens
+                    if chunk.model:
+                        model_name = chunk.model
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:
+            yield format_sse("error", {"message": f"AI error: {str(exc)}"})
+            return
+
+        try:
+            result = ai_interview_service._parse_json_response(content)
+        except Exception as exc:
+            yield format_sse("error", {"message": f"Failed to parse AI response: {str(exc)}"})
+            return
+
+        if ai_settings.anonymize_pii and pii_mapping:
+            result = rehydrate_data(result, pii_mapping)
+
+        cost = ChatResponse(
+            content="",
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
+            model=model_name or (ai_settings.model or "unknown"),
+        ).estimated_cost_usd
+
+        log_usage(
+            db=db,
+            organization_id=session.org_id,
+            user_id=session.user_id,
+            model=model_name or (ai_settings.model or "unknown"),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            estimated_cost_usd=cost,
+        )
+
+        response = {
+            "interview_id": str(interview.id),
+            "summary": result.get("summary", ""),
+            "key_points": result.get("key_points", []),
+            "concerns": result.get("concerns", []),
+            "sentiment": result.get("sentiment", "neutral"),
+            "follow_up_items": result.get("follow_up_items", []),
+        }
+        yield format_sse("done", response)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers=STREAM_HEADERS,
+    )
+
+
+@router.post(
     "/surrogates/{surrogate_id}/interviews/ai/summarize-all",
     response_model=AllInterviewsSummaryResponse,
     dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
@@ -735,6 +881,167 @@ async def summarize_all_interviews(
         detail = str(e)
         status_code = 403 if "not enabled" in detail or "consent" in detail else 400
         raise HTTPException(status_code=status_code, detail=detail)
+
+
+@router.post(
+    "/surrogates/{surrogate_id}/interviews/ai/summarize-all/stream",
+    dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
+)
+async def summarize_all_interviews_stream(
+    surrogate_id: UUID,
+    session: UserSession = Depends(require_permission(P.AI_USE)),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    """Stream AI summary of all interviews via SSE."""
+    from app.services import ai_interview_service
+    from app.services.ai_provider import ChatMessage, ChatResponse
+    from app.services.ai_usage_service import log_usage
+    from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_data
+
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    ai_settings = ai_interview_service.get_ai_settings(db, session.org_id)
+    if not ai_settings or not ai_settings.is_enabled:
+        raise HTTPException(status_code=403, detail="AI features are not enabled for this organization")
+    if ai_interview_service.is_consent_required(ai_settings):
+        raise HTTPException(status_code=403, detail="AI consent has not been accepted for this organization")
+
+    provider = ai_interview_service.get_provider(ai_settings, session.org_id, session.user_id)
+    if not provider:
+        message = (
+            "Vertex AI configuration is incomplete"
+            if ai_settings.provider == "vertex_wif"
+            else "AI API key not configured"
+        )
+        raise HTTPException(status_code=400, detail=message)
+
+    interviews = db.scalars(
+        select(SurrogateInterview)
+        .where(
+            SurrogateInterview.surrogate_id == surrogate_id,
+            SurrogateInterview.organization_id == session.org_id,
+        )
+        .order_by(SurrogateInterview.conducted_at)
+    ).all()
+
+    if not interviews:
+        raise HTTPException(status_code=400, detail="No interviews found for this surrogate")
+
+    pii_mapping = None
+    known_names: list[str] = []
+    if ai_settings.anonymize_pii:
+        pii_mapping = PIIMapping()
+        if surrogate.full_name:
+            known_names.append(surrogate.full_name)
+            known_names.extend(surrogate.full_name.split())
+
+    interviews_content = []
+    for interview in interviews:
+        transcript = interview.transcript_text or "No transcript"
+        notes = db.scalars(
+            select(InterviewNote).where(
+                InterviewNote.interview_id == interview.id,
+                InterviewNote.organization_id == session.org_id,
+            )
+        ).all()
+        notes_text = (
+            "\n".join([ai_interview_service._strip_html(n.content) for n in notes])
+            if notes
+            else "No notes"
+        )
+        if ai_settings.anonymize_pii and pii_mapping:
+            ai_interview_service._extend_known_names_from_text(known_names, transcript)
+            ai_interview_service._extend_known_names_from_text(known_names, notes_text)
+            transcript = anonymize_text(transcript, pii_mapping, known_names)
+            notes_text = anonymize_text(notes_text, pii_mapping, known_names)
+
+        interviews_content.append(
+            f\"\"\"--- Interview {len(interviews_content) + 1} ---\nDate: {interview.conducted_at.strftime(\"%Y-%m-%d\")}\nType: {interview.interview_type}\nDuration: {interview.duration_minutes or \"unknown\"} minutes\n\nTranscript:\n{ai_interview_service._truncate_text(transcript, 10000)}\n\nNotes:\n{ai_interview_service._truncate_text(notes_text, 2000)}\n\"\"\"\n        )
+
+    combined_content = \"\\n\\n\".join(interviews_content)
+    prompt = ai_interview_service.ALL_INTERVIEWS_SUMMARY_PROMPT.format(
+        interviews_content=ai_interview_service._truncate_text(combined_content, 60000)
+    )
+
+    messages = [
+        ChatMessage(
+            role=\"system\",
+            content=\"You are an expert interview analyst specializing in candidate evaluation.\",
+        ),
+        ChatMessage(role=\"user\", content=prompt),
+    ]
+
+    async def event_generator() -> AsyncIterator[str]:
+        yield format_sse(\"start\", {\"status\": \"thinking\"})
+        content = \"\"
+        prompt_tokens = 0
+        completion_tokens = 0
+        model_name = ai_settings.model or \"\"
+
+        try:
+            async for chunk in provider.stream_chat(messages=messages, temperature=0.3, max_tokens=3000):
+                if chunk.text:
+                    content += chunk.text
+                    yield format_sse(\"delta\", {\"text\": chunk.text})
+                if chunk.is_final:
+                    prompt_tokens = chunk.prompt_tokens
+                    completion_tokens = chunk.completion_tokens
+                    if chunk.model:
+                        model_name = chunk.model
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:
+            yield format_sse(\"error\", {\"message\": f\"AI error: {str(exc)}\"})
+            return
+
+        try:
+            result = ai_interview_service._parse_json_response(content)
+        except Exception as exc:
+            yield format_sse(\"error\", {\"message\": f\"Failed to parse AI response: {str(exc)}\"})
+            return
+
+        if ai_settings.anonymize_pii and pii_mapping:
+            result = rehydrate_data(result, pii_mapping)
+
+        cost = ChatResponse(
+            content=\"\",
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
+            model=model_name or (ai_settings.model or \"unknown\"),
+        ).estimated_cost_usd
+
+        log_usage(
+            db=db,
+            organization_id=session.org_id,
+            user_id=session.user_id,
+            model=model_name or (ai_settings.model or \"unknown\"),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            estimated_cost_usd=cost,
+        )
+
+        response = {
+            \"surrogate_id\": str(surrogate_id),
+            \"interview_count\": len(interviews),
+            \"overall_summary\": result.get(\"overall_summary\", \"\"),
+            \"timeline\": result.get(\"timeline\", []),
+            \"recurring_themes\": result.get(\"recurring_themes\", []),
+            \"candidate_strengths\": result.get(\"candidate_strengths\", []),
+            \"areas_of_concern\": result.get(\"areas_of_concern\", []),
+            \"recommended_actions\": result.get(\"recommended_actions\", []),
+        }
+        yield format_sse(\"done\", response)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type=\"text/event-stream\",
+        headers=STREAM_HEADERS,
+    )
 
 
 # =============================================================================

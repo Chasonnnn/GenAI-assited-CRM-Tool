@@ -1,9 +1,11 @@
 """AI chat routes."""
 
 import uuid
+from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -13,6 +15,7 @@ from app.core.rate_limit import limiter
 from app.core.surrogate_access import check_surrogate_access
 from app.db.enums import Role
 from app.schemas.auth import UserSession
+from app.utils.sse import format_sse, STREAM_HEADERS
 
 router = APIRouter()
 
@@ -39,24 +42,12 @@ class ChatResponseModel(BaseModel):
     assistant_message_id: str | None = None
 
 
-@router.post(
-    "/chat",
-    response_model=ChatResponseModel,
-    dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
-)
-@limiter.limit("60/minute")
-def chat(
-    request: Request,  # Required by limiter
+def _prepare_chat_request(
     body: ChatRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USE)),
-) -> ChatResponseModel:
-    """Send a message to the AI assistant.
-
-    Requires: use_ai_assistant permission
-    """
+    db: Session,
+    session: UserSession,
+) -> tuple[str, uuid.UUID, list[str]]:
     from app.services import (
-        ai_chat_service,
         ai_settings_service,
         oauth_service,
         surrogate_service,
@@ -78,7 +69,6 @@ def chat(
     # For global mode, use a special "global" entity ID based on user
     if entity_type == "global" or entity_id is None:
         entity_type = "global"
-        # Use user_id as entity_id for global conversations
         entity_id = session.user_id
 
     # Check if user has access to the entity
@@ -98,19 +88,16 @@ def chat(
             org_id=session.org_id,
         )
     elif entity_type == "task":
-        # Users can only access tasks they own or are assigned to
         task = task_service.get_task(db, entity_id, session.org_id)
         if not task:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Task not found",
             )
-        # Check if user owns or is assigned to the task
         if (
             task.created_by_user_id != session.user_id
             and task.assigned_to_user_id != session.user_id
         ):
-            # Allow admins to access any task in their org
             is_manager = session.role in (Role.ADMIN, Role.CASE_MANAGER, Role.DEVELOPER)
             if not is_manager:
                 raise HTTPException(
@@ -118,9 +105,32 @@ def chat(
                     detail="Not authorized to access this task",
                 )
 
-    # Get user's connected integrations
     integrations = oauth_service.get_user_integrations(db, session.user_id)
     user_integrations = [i.integration_type for i in integrations]
+
+    return entity_type, entity_id, user_integrations
+
+
+@router.post(
+    "/chat",
+    response_model=ChatResponseModel,
+    dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
+)
+@limiter.limit("60/minute")
+def chat(
+    request: Request,  # Required by limiter
+    body: ChatRequest,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_permission(P.AI_USE)),
+) -> ChatResponseModel:
+    """Send a message to the AI assistant.
+
+    Requires: use_ai_assistant permission
+    """
+    from app.services import (
+        ai_chat_service,
+    )
+    entity_type, entity_id, user_integrations = _prepare_chat_request(body, db, session)
 
     # Process chat
     response = ai_chat_service.chat(
@@ -142,3 +152,32 @@ def chat(
     )
 
 
+@router.post(
+    "/chat/stream",
+    dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
+)
+@limiter.limit("60/minute")
+async def chat_stream(
+    request: Request,  # Required by limiter
+    body: ChatRequest,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_permission(P.AI_USE)),
+) -> StreamingResponse:
+    """Stream messages from the AI assistant via SSE."""
+    from app.services import ai_chat_service
+
+    entity_type, entity_id, user_integrations = _prepare_chat_request(body, db, session)
+
+    async def event_generator() -> AsyncIterator[str]:
+        async for event in ai_chat_service.stream_chat_async(
+            db=db,
+            organization_id=session.org_id,
+            user_id=session.user_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            message=body.message,
+            user_integrations=user_integrations,
+        ):
+            yield format_sse(event["type"], event["data"])
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=STREAM_HEADERS)

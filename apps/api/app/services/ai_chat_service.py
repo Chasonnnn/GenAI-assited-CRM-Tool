@@ -3,9 +3,12 @@
 Handles AI conversations with context injection and action parsing.
 """
 
+import asyncio
 import logging
 import re
 import uuid
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone, date
 
 import nh3
@@ -24,7 +27,7 @@ from app.db.models import (
     UserIntegration,
 )
 from app.db.enums import TaskType
-from app.services.ai_provider import ChatMessage, ChatResponse
+from app.services.ai_provider import ChatMessage, ChatResponse, AIProvider
 from app.services import ai_settings_service
 from app.services.ai_prompt_registry import get_prompt
 from app.services.ai_prompt_schemas import AIChatActionProposal
@@ -549,7 +552,26 @@ def _user_can_view_reports(db: Session, organization_id: uuid.UUID, user_id: uui
     return P.REPORTS_VIEW in effective
 
 
-async def chat_async(
+def _empty_ai_response(message: str) -> JsonObject:
+    return {
+        "content": message,
+        "proposed_actions": [],
+        "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
+    }
+
+
+@dataclass
+class ChatPreparation:
+    provider: AIProvider
+    conversation: AIConversation
+    ai_messages: list[ChatMessage]
+    should_anonymize: bool
+    pii_mapping: PIIMapping | None
+    known_names: list[str]
+    model_name: str | None
+
+
+def _prepare_chat_context(
     db: Session,
     organization_id: uuid.UUID,
     user_id: uuid.UUID,
@@ -557,27 +579,16 @@ async def chat_async(
     entity_id: uuid.UUID,
     message: str,
     user_integrations: list[str] | None = None,
-) -> JsonObject:
-    """Process a chat message and return AI response.
-
-    Returns:
-        {
-            "content": "AI response text",
-            "proposed_actions": [...],  # Optional
-            "tokens_used": {...},
-        }
-    """
+) -> tuple[ChatPreparation | None, JsonObject | None]:
     if user_integrations is None:
         user_integrations = get_user_integrations(db, user_id)
 
     # Get settings for limits and privacy
     ai_settings = ai_settings_service.get_ai_settings(db, organization_id)
     if ai_settings and ai_settings_service.is_consent_required(ai_settings):
-        return {
-            "content": "AI consent not accepted. An admin must accept the data processing consent before using AI.",
-            "proposed_actions": [],
-            "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
-        }
+        return None, _empty_ai_response(
+            "AI consent not accepted. An admin must accept the data processing consent before using AI."
+        )
 
     # Get AI provider
     try:
@@ -586,11 +597,9 @@ async def chat_async(
         # Backwards-compatible for tests that monkeypatch without user_id
         provider = ai_settings_service.get_ai_provider_for_org(db, organization_id)
     if not provider:
-        return {
-            "content": "AI is not configured for this organization. Please ask an admin to enable AI in settings.",
-            "proposed_actions": [],
-            "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
-        }
+        return None, _empty_ai_response(
+            "AI is not configured for this organization. Please ask an admin to enable AI in settings."
+        )
 
     notes_limit = ai_settings.context_notes_limit if ai_settings else 5
     history_limit = ai_settings.conversation_history_limit if ai_settings else 10
@@ -625,11 +634,7 @@ async def chat_async(
                 .first()
             )
             if not surrogate:
-                return {
-                    "content": "Surrogate not found.",
-                    "proposed_actions": [],
-                    "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
-                }
+                return None, _empty_ai_response("Surrogate not found.")
             summary_text = cached_summary
         else:
             surrogate, notes, tasks = get_surrogate_context(
@@ -639,11 +644,7 @@ async def chat_async(
                 notes_limit=notes_limit,
             )
             if not surrogate:
-                return {
-                    "content": "Surrogate not found.",
-                    "proposed_actions": [],
-                    "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
-                }
+                return None, _empty_ai_response("Surrogate not found.")
             summary_text = _build_dynamic_context(
                 surrogate,
                 notes,
@@ -665,18 +666,16 @@ async def chat_async(
     elif normalized_entity_type == "task":
         task, related_surrogate = get_task_context(db, entity_id, organization_id)
         if not task:
-            return {
-                "content": "Task not found.",
-                "proposed_actions": [],
-                "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
-            }
+            return None, _empty_ai_response("Task not found.")
         system_prompt = TASK_SYSTEM_PROMPT
         surrogate = related_surrogate
         dynamic_context = _build_task_context(task, related_surrogate, user_integrations)
     elif normalized_entity_type == "global":
         # Global mode - use simplified prompt with performance data
         system_prompt = GLOBAL_SYSTEM_PROMPT
-        integrations_ctx = f"User's connected integrations: {', '.join(user_integrations) if user_integrations else 'none'}"
+        integrations_ctx = (
+            f"User's connected integrations: {', '.join(user_integrations) if user_integrations else 'none'}"
+        )
         performance_ctx = ""
         if _should_fetch_performance(message) and _user_can_view_reports(
             db, organization_id, user_id
@@ -712,9 +711,60 @@ async def chat_async(
     # Add current user message (anonymized if enabled)
     ai_messages.append(ChatMessage(role="user", content=anonymized_message))
 
+    model_name = ai_settings.model if ai_settings and ai_settings.model else getattr(
+        provider, "default_model", None
+    )
+
+    return (
+        ChatPreparation(
+            provider=provider,
+            conversation=conversation,
+            ai_messages=ai_messages,
+            should_anonymize=should_anonymize,
+            pii_mapping=pii_mapping,
+            known_names=known_names,
+            model_name=model_name,
+        ),
+        None,
+    )
+
+
+async def chat_async(
+    db: Session,
+    organization_id: uuid.UUID,
+    user_id: uuid.UUID,
+    entity_type: str,
+    entity_id: uuid.UUID,
+    message: str,
+    user_integrations: list[str] | None = None,
+) -> JsonObject:
+    """Process a chat message and return AI response.
+
+    Returns:
+        {
+            "content": "AI response text",
+            "proposed_actions": [...],  # Optional
+            "tokens_used": {...},
+        }
+    """
+    preparation, error = _prepare_chat_context(
+        db=db,
+        organization_id=organization_id,
+        user_id=user_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        message=message,
+        user_integrations=user_integrations,
+    )
+    if error:
+        return error
+    assert preparation is not None
+
     # Call AI provider
     try:
-        response: ChatResponse = await provider.chat(ai_messages)
+        response: ChatResponse = await preparation.provider.chat(preparation.ai_messages)
+    except asyncio.CancelledError:
+        return
     except Exception as e:
         logger.exception(f"AI provider error: {e}")
         # Create system alert for AI provider error
@@ -734,28 +784,24 @@ async def chat_async(
             )
         except Exception as alert_err:
             logger.warning(f"Failed to create AI provider alert: {alert_err}")
-        return {
-            "content": f"AI error: {str(e)}",
-            "proposed_actions": [],
-            "tokens_used": {"prompt": 0, "completion": 0, "total": 0},
-        }
+        return _empty_ai_response(f"AI error: {str(e)}")
 
     # Parse actions from response
     proposed_actions = _parse_actions(response.content)
     clean_content = _clean_content(response.content)
 
     # Rehydrate response with real PII values
-    if should_anonymize and pii_mapping:
-        clean_content = rehydrate_text(clean_content, pii_mapping)
+    if preparation.should_anonymize and preparation.pii_mapping:
+        clean_content = rehydrate_text(clean_content, preparation.pii_mapping)
         # Also rehydrate action payloads
         for action in proposed_actions:
             for key, value in action.items():
                 if isinstance(value, str):
-                    action[key] = rehydrate_text(value, pii_mapping)
+                    action[key] = rehydrate_text(value, preparation.pii_mapping)
 
     # Save user message
     user_message = AIMessage(
-        conversation_id=conversation.id,
+        conversation_id=preparation.conversation.id,
         role="user",
         content=message,
     )
@@ -763,7 +809,7 @@ async def chat_async(
 
     # Save assistant message
     assistant_message = AIMessage(
-        conversation_id=conversation.id,
+        conversation_id=preparation.conversation.id,
         role="assistant",
         content=clean_content,
         proposed_actions=proposed_actions if proposed_actions else None,
@@ -799,7 +845,7 @@ async def chat_async(
     usage_log = AIUsageLog(
         organization_id=organization_id,
         user_id=user_id,
-        conversation_id=conversation.id,
+        conversation_id=preparation.conversation.id,
         model=response.model,
         prompt_tokens=response.prompt_tokens,
         completion_tokens=response.completion_tokens,
@@ -809,7 +855,7 @@ async def chat_async(
     db.add(usage_log)
 
     # Update conversation timestamp
-    conversation.updated_at = datetime.now(timezone.utc)
+    preparation.conversation.updated_at = datetime.now(timezone.utc)
 
     db.commit()
 
@@ -822,8 +868,165 @@ async def chat_async(
             "total": response.total_tokens,
             "estimated_cost_usd": str(response.estimated_cost_usd),
         },
-        "conversation_id": str(conversation.id),
+        "conversation_id": str(preparation.conversation.id),
         "assistant_message_id": str(assistant_message.id),
+    }
+
+
+async def stream_chat_async(
+    db: Session,
+    organization_id: uuid.UUID,
+    user_id: uuid.UUID,
+    entity_type: str,
+    entity_id: uuid.UUID,
+    message: str,
+    user_integrations: list[str] | None = None,
+) -> AsyncIterator[dict[str, JsonObject]]:
+    """Stream a chat response as incremental events."""
+    preparation, error = _prepare_chat_context(
+        db=db,
+        organization_id=organization_id,
+        user_id=user_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        message=message,
+        user_integrations=user_integrations,
+    )
+    if error:
+        yield {"type": "error", "data": {"message": error["content"]}}
+        return
+    assert preparation is not None
+
+    yield {"type": "start", "data": {"status": "thinking"}}
+
+    content = ""
+    prompt_tokens = 0
+    completion_tokens = 0
+    total_tokens = 0
+    model_name = preparation.model_name
+
+    try:
+        async for chunk in preparation.provider.stream_chat(preparation.ai_messages):
+            if chunk.text:
+                content += chunk.text
+                yield {"type": "delta", "data": {"text": chunk.text}}
+            if chunk.is_final:
+                prompt_tokens = chunk.prompt_tokens
+                completion_tokens = chunk.completion_tokens
+                total_tokens = chunk.total_tokens
+                if chunk.model:
+                    model_name = chunk.model
+    except Exception as e:
+        logger.exception(f"AI provider error: {e}")
+        # Create system alert for AI provider error
+        try:
+            from app.services import alert_service
+            from app.db.enums import AlertType, AlertSeverity
+
+            alert_service.create_or_update_alert(
+                db=db,
+                org_id=organization_id,
+                alert_type=AlertType.AI_PROVIDER_ERROR,
+                severity=AlertSeverity.ERROR,
+                title="AI provider error",
+                message=str(e)[:500],
+                integration_key="ai_chat",
+                error_class=type(e).__name__,
+            )
+        except Exception as alert_err:
+            logger.warning(f"Failed to create AI provider alert: {alert_err}")
+        yield {"type": "error", "data": {"message": f"AI error: {str(e)}"}}
+        return
+
+    # Parse actions from response
+    proposed_actions = _parse_actions(content)
+    clean_content = _clean_content(content)
+
+    # Rehydrate response with real PII values
+    if preparation.should_anonymize and preparation.pii_mapping:
+        clean_content = rehydrate_text(clean_content, preparation.pii_mapping)
+        for action in proposed_actions:
+            for key, value in action.items():
+                if isinstance(value, str):
+                    action[key] = rehydrate_text(value, preparation.pii_mapping)
+
+    # Save user message
+    user_message = AIMessage(
+        conversation_id=preparation.conversation.id,
+        role="user",
+        content=message,
+    )
+    db.add(user_message)
+
+    # Save assistant message
+    assistant_message = AIMessage(
+        conversation_id=preparation.conversation.id,
+        role="assistant",
+        content=clean_content,
+        proposed_actions=proposed_actions if proposed_actions else None,
+    )
+    db.add(assistant_message)
+    db.flush()
+
+    approval_responses: list[dict[str, JsonObject]] = []
+    if proposed_actions:
+        for i, action in enumerate(proposed_actions):
+            approval = AIActionApproval(
+                message_id=assistant_message.id,
+                action_index=i,
+                action_type=action.get("type", "unknown"),
+                action_payload=action,
+                status="pending",
+            )
+            db.add(approval)
+            db.flush()
+            approval_responses.append(
+                {
+                    "approval_id": str(approval.id),
+                    "action_type": approval.action_type,
+                    "action_data": approval.action_payload,
+                    "status": approval.status,
+                }
+            )
+
+    response_meta = ChatResponse(
+        content=clean_content,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        model=model_name or "unknown",
+    )
+
+    usage_log = AIUsageLog(
+        organization_id=organization_id,
+        user_id=user_id,
+        conversation_id=preparation.conversation.id,
+        model=response_meta.model,
+        prompt_tokens=response_meta.prompt_tokens,
+        completion_tokens=response_meta.completion_tokens,
+        total_tokens=response_meta.total_tokens,
+        estimated_cost_usd=response_meta.estimated_cost_usd,
+    )
+    db.add(usage_log)
+
+    preparation.conversation.updated_at = datetime.now(timezone.utc)
+
+    db.commit()
+
+    yield {
+        "type": "done",
+        "data": {
+            "content": clean_content,
+            "proposed_actions": approval_responses,
+            "tokens_used": {
+                "prompt": response_meta.prompt_tokens,
+                "completion": response_meta.completion_tokens,
+                "total": response_meta.total_tokens,
+                "estimated_cost_usd": str(response_meta.estimated_cost_usd),
+            },
+            "conversation_id": str(preparation.conversation.id),
+            "assistant_message_id": str(assistant_message.id),
+        },
     }
 
 

@@ -6,6 +6,7 @@ Supports Google Gemini and Vertex AI with a unified interface.
 import asyncio
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from decimal import Decimal
 from datetime import datetime, timezone, timedelta
@@ -55,6 +56,18 @@ class ChatResponse:
         return input_cost + output_cost
 
 
+@dataclass
+class ChatStreamChunk:
+    """Streaming chunk from an AI provider."""
+
+    text: str
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    model: str | None = None
+    is_final: bool = False
+
+
 class AIProvider(ABC):
     """Abstract base class for AI providers."""
 
@@ -67,6 +80,17 @@ class AIProvider(ABC):
         max_tokens: int = 2000,
     ) -> ChatResponse:
         """Send a chat completion request."""
+        pass
+
+    @abstractmethod
+    async def stream_chat(
+        self,
+        messages: list[ChatMessage],
+        model: str | None = None,
+        temperature: float = 0.7,
+        max_tokens: int = 2000,
+    ) -> AsyncIterator[ChatStreamChunk]:
+        """Stream chat completion chunks."""
         pass
 
     @abstractmethod
@@ -123,6 +147,14 @@ def _extract_genai_text(response: object) -> str:
     if not combined:
         raise ValueError("Provider response missing text")
     return combined
+
+
+def _extract_genai_text_optional(response: object) -> str:
+    """Extract text from streaming response chunks when available."""
+    try:
+        return _extract_genai_text(response)
+    except Exception:
+        return ""
 
 
 def _extract_usage_counts(response: object) -> tuple[int, int, int]:
@@ -189,6 +221,51 @@ class GoogleGenAIProvider(AIProvider):
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
             model=model,
+        )
+
+    async def stream_chat(
+        self,
+        messages: list[ChatMessage],
+        model: str | None = None,
+        temperature: float = 0.7,
+        max_tokens: int = 2000,
+    ) -> AsyncIterator[ChatStreamChunk]:
+        model = model or self.default_model
+        contents, system_instruction = _build_google_contents(messages)
+        config = _build_google_config(temperature, max_tokens, system_instruction)
+        stream = await self._client.aio.models.generate_content_stream(
+            model=model,
+            contents=contents,
+            config=config,
+        )
+
+        accumulated = ""
+        last_response: object | None = None
+
+        async for chunk in stream:
+            last_response = chunk
+            chunk_text = _extract_genai_text_optional(chunk)
+            if not chunk_text:
+                continue
+
+            if chunk_text.startswith(accumulated):
+                delta = chunk_text[len(accumulated):]
+                accumulated = chunk_text
+            else:
+                delta = chunk_text
+                accumulated += chunk_text
+
+            if delta:
+                yield ChatStreamChunk(text=delta, model=model)
+
+        prompt_tokens, completion_tokens, total_tokens = _extract_usage_counts(last_response)
+        yield ChatStreamChunk(
+            text="",
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            model=model,
+            is_final=True,
         )
 
     async def generate_text_with_parts(
@@ -358,6 +435,23 @@ class VertexWIFProvider(GoogleGenAIProvider):
             max_tokens=max_tokens,
             system_instruction=system_instruction,
         )
+
+    async def stream_chat(
+        self,
+        messages: list[ChatMessage],
+        model: str | None = None,
+        temperature: float = 0.7,
+        max_tokens: int = 2000,
+    ) -> AsyncIterator[ChatStreamChunk]:
+        if not self._credentials.token or not self._credentials.expiry or self._credentials.expired:
+            await asyncio.to_thread(self._credentials.refresh, Request())
+        async for chunk in super().stream_chat(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        ):
+            yield chunk
 
     async def validate_key(self) -> bool:
         """Validate WIF configuration by attempting a token exchange."""
