@@ -221,6 +221,15 @@ KEYWORD_PATTERNS: dict[str, list[str]] = {
         "time submitted",
         "date submitted",
     ],
+    "source": [
+        "how did you hear",
+        "heard about",
+        "hear about",
+        "where did you hear",
+        "lead source",
+        "referral source",
+        "referrer",
+    ],
 }
 
 # Patterns that should BLOCK mapping to certain fields (guards)
@@ -279,6 +288,11 @@ META_TRACKING_PATTERNS: list[str] = [
     "platform",
     "is_organic",
 ]
+
+META_PLATFORM_VALUE_PATTERN = re.compile(
+    r"(facebook|fb|instagram|ig|meta|messenger|audience\s*network)",
+    re.IGNORECASE,
+)
 
 
 # =============================================================================
@@ -578,6 +592,25 @@ def is_meta_tracking_column(column: str) -> bool:
     return False
 
 
+def is_meta_platform_value(value: str) -> bool:
+    """Check if a value looks like a Meta platform (Facebook/Instagram)."""
+    normalized = value.strip()
+    if not normalized:
+        return False
+    return bool(META_PLATFORM_VALUE_PATTERN.search(normalized))
+
+
+def is_meta_platform_column(column: str, samples: list[str]) -> bool:
+    """Detect platform columns that likely indicate Meta source."""
+    normalized = normalize_column_name(column)
+    if "platform" not in normalized:
+        return False
+    if not samples:
+        return False
+    meta_hits = sum(1 for sample in samples if is_meta_platform_value(sample))
+    return meta_hits / len(samples) >= 0.6
+
+
 def suggest_custom_field(column: str) -> dict[str, object] | None:
     """Check if a column should suggest creating a custom field."""
     for key, config in CUSTOM_FIELD_SUGGESTIONS.items():
@@ -727,6 +760,17 @@ def analyze_column(
             sample_values=samples,
             reason=f"Similar column name match ({int(fuzzy_score * 100)}% similarity)",
             needs_inversion=needs_inversion,
+        )
+
+    if is_meta_platform_column(column, samples):
+        return ColumnSuggestion(
+            csv_column=column,
+            suggested_field="source",
+            confidence=0.85,
+            confidence_level=ConfidenceLevel.HIGH,
+            transformation="source_meta_platform",
+            sample_values=samples,
+            reason="Platform values indicate Meta (Facebook/Instagram) source",
         )
 
     # Check if it's Meta tracking data

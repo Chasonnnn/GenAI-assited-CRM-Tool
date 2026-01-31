@@ -22,6 +22,7 @@ from uuid import UUID
 
 from pydantic import ValidationError
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.encryption import hash_email
@@ -342,6 +343,18 @@ def _format_validation_errors(exc: ValidationError) -> list[str]:
     return messages
 
 
+def _is_duplicate_email_violation(exc: IntegrityError) -> bool:
+    """Check if an IntegrityError is due to duplicate email hash constraint."""
+    orig = getattr(exc, "orig", None)
+    constraint = getattr(getattr(orig, "diag", None), "constraint_name", None)
+    if constraint == "uq_surrogate_email_hash_active":
+        return True
+    message = str(orig) if orig else ""
+    if "uq_surrogate_email_hash_active" in message:
+        return True
+    return "uq_surrogate_email_hash_active" in str(exc)
+
+
 def _validate_row_with_mode(
     row_data: dict[str, Any],
     default_source: SurrogateSource | str | None,
@@ -500,11 +513,19 @@ def execute_import(
                 user_id=user_id,
                 data=surrogate_data,
             )
-            result.imported += 1
-
-            if email:
-                existing_emails.add(email)  # Prevent within-batch duplicates
-
+        except IntegrityError as e:
+            if _is_duplicate_email_violation(e):
+                result.skipped += 1
+                if surrogate_data.email:
+                    existing_emails.add(hash_email(surrogate_data.email))
+                continue
+            result.errors.append(
+                {
+                    "row": row_num,
+                    "errors": [str(e)],
+                }
+            )
+            continue
         except Exception as e:
             result.errors.append(
                 {
@@ -512,6 +533,11 @@ def execute_import(
                     "errors": [str(e)],
                 }
             )
+            continue
+
+        result.imported += 1
+        if surrogate_data.email:
+            existing_emails.add(hash_email(surrogate_data.email))  # Prevent within-batch duplicates
 
     # Update import record
     if dropped_field_counts:
@@ -1188,27 +1214,6 @@ def execute_import_with_mappings(
                 normalized_validation_mode,
                 dropped_field_counts,
             )
-            surrogate = surrogate_service.create_surrogate(
-                db=db,
-                org_id=org_id,
-                user_id=user_id,
-                data=surrogate_data,
-                created_at_override=row_created_at,
-            )
-            result.imported += 1
-
-            # Set custom field values
-            if custom_values:
-                custom_field_service.set_bulk_custom_values(
-                    db=db,
-                    org_id=org_id,
-                    surrogate_id=surrogate.id,
-                    values=custom_values,
-                )
-
-            if email_hash:
-                existing_emails.add(email_hash)
-
         except ValidationError as e:
             result.errors.append(
                 {
@@ -1216,6 +1221,29 @@ def execute_import_with_mappings(
                     "errors": _format_validation_errors(e),
                 }
             )
+            continue
+
+        try:
+            surrogate = surrogate_service.create_surrogate(
+                db=db,
+                org_id=org_id,
+                user_id=user_id,
+                data=surrogate_data,
+                created_at_override=row_created_at,
+            )
+        except IntegrityError as e:
+            if _is_duplicate_email_violation(e):
+                result.skipped += 1
+                if surrogate_data.email:
+                    existing_emails.add(hash_email(surrogate_data.email))
+                continue
+            result.errors.append(
+                {
+                    "row": row_num,
+                    "errors": [str(e)],
+                }
+            )
+            continue
         except Exception as e:
             result.errors.append(
                 {
@@ -1223,6 +1251,21 @@ def execute_import_with_mappings(
                     "errors": [str(e)],
                 }
             )
+            continue
+
+        result.imported += 1
+
+        # Set custom field values
+        if custom_values:
+            custom_field_service.set_bulk_custom_values(
+                db=db,
+                org_id=org_id,
+                surrogate_id=surrogate.id,
+                values=custom_values,
+            )
+
+        if surrogate_data.email:
+            existing_emails.add(hash_email(surrogate_data.email))
 
     # Update import record
     if warning_counts:

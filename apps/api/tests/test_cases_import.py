@@ -823,6 +823,90 @@ async def test_csv_import_job_uses_mapping_snapshot(db, test_org, test_user):
 
 
 @pytest.mark.asyncio
+async def test_import_skips_duplicate_email_on_unique_violation(
+    db, test_org, test_user, monkeypatch
+):
+    """Duplicate email unique violations should be counted as skipped, not errors."""
+    from types import SimpleNamespace
+    from app.core.encryption import hash_email
+    from app.db.models import Surrogate, SurrogateImport
+    from app.services import import_service
+    from sqlalchemy.exc import IntegrityError
+
+    csv_data = create_csv_content(
+        [
+            {"full_name": "Dup Row", "email": "duplicate@example.com"},
+            {"full_name": "New Row", "email": "new@example.com"},
+        ]
+    )
+
+    import_record = SurrogateImport(
+        organization_id=test_org.id,
+        created_by_user_id=test_user.id,
+        filename="dup-email.csv",
+        file_content=csv_data,
+        status="approved",
+        total_rows=2,
+        column_mapping_snapshot=[
+            {
+                "csv_column": "full_name",
+                "surrogate_field": "full_name",
+                "transformation": None,
+                "action": "map",
+                "custom_field_key": None,
+            },
+            {
+                "csv_column": "email",
+                "surrogate_field": "email",
+                "transformation": None,
+                "action": "map",
+                "custom_field_key": None,
+            },
+        ],
+        unknown_column_behavior="ignore",
+    )
+    db.add(import_record)
+    db.flush()
+
+    real_create = import_service.surrogate_service.create_surrogate
+    created: list[str] = []
+
+    def _fake_create_surrogate(*, data, **kwargs):
+        if data.email == "duplicate@example.com":
+            orig = SimpleNamespace(diag=SimpleNamespace(constraint_name="uq_surrogate_email_hash_active"))
+            raise IntegrityError("insert", {}, orig)
+        created.append(data.email)
+        return real_create(data=data, **kwargs)
+
+    monkeypatch.setattr(import_service.surrogate_service, "create_surrogate", _fake_create_surrogate)
+
+    import_service.run_import_execution(
+        db=db,
+        org_id=test_org.id,
+        import_record=import_record,
+        use_mappings=True,
+    )
+
+    db.refresh(import_record)
+
+    assert import_record.imported_count == 1
+    assert import_record.skipped_count == 1
+    assert import_record.error_count == 0
+    assert not import_record.errors
+
+    new_hash = hash_email("new@example.com")
+    created = (
+        db.query(Surrogate)
+        .filter(
+            Surrogate.organization_id == test_org.id,
+            Surrogate.email_hash == new_hash,
+        )
+        .first()
+    )
+    assert created is not None
+
+
+@pytest.mark.asyncio
 async def test_list_imports_returns_history(authed_client: AsyncClient, db, test_org, test_user):
     """Test listing import history."""
     from app.db.models import SurrogateImport

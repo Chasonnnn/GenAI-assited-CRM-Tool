@@ -76,11 +76,12 @@ const ACTION_OPTIONS = [
 
 const SOURCE_OPTIONS: Array<{ value: SurrogateSource; label: string }> = [
     { value: "manual", label: "Manual" },
-    { value: "import", label: "Import" },
     { value: "referral", label: "Referral" },
     { value: "website", label: "Website" },
     { value: "meta", label: "Meta" },
-    { value: "agency", label: "Agency" },
+    { value: "tiktok", label: "TikTok" },
+    { value: "google", label: "Google" },
+    { value: "other", label: "Others" },
 ]
 
 interface CSVUploadProps {

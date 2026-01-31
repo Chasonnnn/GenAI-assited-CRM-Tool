@@ -30,6 +30,24 @@ TransformResult: TypeAlias = tuple[Any, list[str]]  # (value, warnings)
 TransformerFn: TypeAlias = Callable[[str], TransformResult]
 
 
+META_PLATFORM_VALUE_PATTERN = re.compile(
+    r"(facebook|fb|instagram|ig|meta|messenger|audience\s*network)",
+    re.IGNORECASE,
+)
+
+SOURCE_VALUE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"(facebook|fb|instagram|ig|meta)", re.IGNORECASE), "meta"),
+    (re.compile(r"(tiktok|tik\s*tok|\btt\b|\btk\b)", re.IGNORECASE), "tiktok"),
+    (re.compile(r"(google)", re.IGNORECASE), "google"),
+    (
+        re.compile(r"(referral|refer|friend|friends|family|word\s*of\s*mouth)", re.IGNORECASE),
+        "referral",
+    ),
+    (re.compile(r"(website|web|site|organic|seo)", re.IGNORECASE), "website"),
+    (re.compile(r"(other|others|misc|unknown)", re.IGNORECASE), "other"),
+]
+
+
 @dataclass
 class TransformOutput:
     """Result of a transformation operation."""
@@ -536,6 +554,53 @@ def transform_boolean_inverted(raw_value: str) -> TransformOutput:
 
 
 # =============================================================================
+# Source Transformers
+# =============================================================================
+
+
+def transform_source_meta_platform(raw_value: str) -> TransformOutput:
+    """
+    Normalize platform values (ig/fb/etc.) to SurrogateSource.META.
+    """
+    value = raw_value.strip()
+    if not value:
+        return TransformOutput(value=None, success=True, warnings=[])
+
+    if META_PLATFORM_VALUE_PATTERN.search(value):
+        return TransformOutput(value="meta", success=True, warnings=[])
+
+    return TransformOutput(value="meta", success=True, warnings=[])
+
+
+def transform_source_channel_guess(raw_value: str) -> TransformOutput:
+    """
+    Map free-form source values to known surrogate sources.
+    """
+    value = raw_value.strip()
+    if not value:
+        return TransformOutput(value="other", success=True, warnings=[])
+
+    normalized = re.sub(r"[\s\-]+", "_", value.strip().lower())
+    valid_sources = {
+        "manual",
+        "meta",
+        "tiktok",
+        "google",
+        "website",
+        "referral",
+        "other",
+    }
+    if normalized in valid_sources:
+        return TransformOutput(value=normalized, success=True, warnings=[])
+
+    for pattern, source in SOURCE_VALUE_PATTERNS:
+        if pattern.search(value):
+            return TransformOutput(value=source, success=True, warnings=[])
+
+    return TransformOutput(value="other", success=True, warnings=[])
+
+
+# =============================================================================
 # Transformer Registry
 # =============================================================================
 
@@ -548,6 +613,8 @@ TRANSFORMERS: dict[str, Callable[[str], TransformOutput]] = {
     "boolean_flexible": transform_boolean_flexible,
     "boolean_inverted": transform_boolean_inverted,
     "int_flexible": transform_int_flexible,
+    "source_meta_platform": transform_source_meta_platform,
+    "source_channel_guess": transform_source_channel_guess,
 }
 
 
@@ -596,6 +663,7 @@ FIELD_TRANSFORMERS: dict[str, str] = {
     "has_surrogate_experience": "boolean_flexible",
     "num_deliveries": "int_flexible",
     "num_csections": "int_flexible",
+    "source": "source_channel_guess",
     # Insurance info
     "insurance_phone": "phone_normalize",
     "insurance_subscriber_dob": "date_flexible",

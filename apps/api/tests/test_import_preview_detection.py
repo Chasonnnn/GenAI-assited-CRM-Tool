@@ -122,3 +122,57 @@ async def test_preview_maps_created_time_variants(authed_client: AsyncClient):
     )
     assert created_suggestion is not None
     assert created_suggestion.get("suggested_field") == "created_at"
+
+
+@pytest.mark.asyncio
+async def test_preview_maps_platform_values_to_meta_source(authed_client: AsyncClient):
+    rows = [
+        {
+            "full_name": "Meta Lead",
+            "email": "meta@example.com",
+            "platform": "ig, fb",
+        }
+    ]
+    csv_data = make_delimited_content(rows, delimiter=",", encoding="utf-8")
+
+    response = await authed_client.post(
+        "/surrogates/import/preview/enhanced",
+        files={"file": ("platform.csv", io.BytesIO(csv_data), "text/csv")},
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    platform_suggestion = next(
+        (s for s in data["column_suggestions"] if s.get("csv_column") == "platform"),
+        None,
+    )
+    assert platform_suggestion is not None
+    assert platform_suggestion.get("suggested_field") == "source"
+    assert platform_suggestion.get("transformation") == "source_meta_platform"
+
+
+@pytest.mark.asyncio
+async def test_preview_maps_heard_about_question_to_source(authed_client: AsyncClient):
+    rows = [
+        {
+            "full_name": "Source Lead",
+            "email": "source@example.com",
+            "How did you hear about us?": "TikTok",
+        }
+    ]
+    csv_data = make_delimited_content(rows, delimiter=",", encoding="utf-8")
+
+    response = await authed_client.post(
+        "/surrogates/import/preview/enhanced",
+        files={"file": ("heard-about.csv", io.BytesIO(csv_data), "text/csv")},
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    suggestion = next(
+        (s for s in data["column_suggestions"] if s.get("csv_column") == "How did you hear about us?"),
+        None,
+    )
+    assert suggestion is not None
+    assert suggestion.get("suggested_field") == "source"
+    assert suggestion.get("transformation") == "source_channel_guess"
