@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
     CheckCircleIcon,
     AlertTriangleIcon,
@@ -1215,10 +1216,10 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
     const zapierForms = metaForms.filter(
         (form) => form.page_id === "zapier" || form.form_external_id?.startsWith("zapier-")
     )
-    const mappingHref =
-        zapierForms.length === 1
-            ? `/settings/integrations/meta/forms/${zapierForms[0].id}`
-            : "/settings/integrations/meta/forms"
+    const singleZapierForm = zapierForms.length === 1 ? zapierForms[0] : null
+    const mappingHref = singleZapierForm
+        ? `/settings/integrations/meta/forms/${singleZapierForm.id}`
+        : "/settings/integrations/meta/forms"
 
     if (isLoading) {
         return (
