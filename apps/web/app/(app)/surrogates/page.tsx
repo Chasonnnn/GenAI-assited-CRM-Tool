@@ -123,7 +123,16 @@ function FloatingActionBar({
     )
 }
 
-const VALID_SOURCES = ["all", "manual", "meta", "website", "referral", "agency", "import"] as const
+const VALID_SOURCES = [
+    "all",
+    "manual",
+    "meta",
+    "tiktok",
+    "google",
+    "website",
+    "referral",
+    "other",
+] as const
 type SourceFilter = (typeof VALID_SOURCES)[number]
 const isSourceFilter = (value: string | null): value is SourceFilter =>
     value !== null && VALID_SOURCES.includes(value as SourceFilter)
@@ -132,8 +141,10 @@ const CREATE_SOURCE_OPTIONS: { value: SurrogateSource; label: string }[] = [
     { value: "manual", label: "Manual" },
     { value: "website", label: "Website" },
     { value: "referral", label: "Referral" },
-    { value: "agency", label: "Agency" },
     { value: "meta", label: "Meta" },
+    { value: "tiktok", label: "TikTok" },
+    { value: "google", label: "Google" },
+    { value: "other", label: "Others" },
 ]
 
 const VALID_DATE_RANGES: DateRangePreset[] = ["all", "today", "week", "month", "custom"]
@@ -570,10 +581,11 @@ export default function SurrogatesPage() {
                                     const labels: Record<string, string> = {
                                         manual: "Manual",
                                         meta: "Meta",
+                                        tiktok: "TikTok",
+                                        google: "Google",
                                         website: "Website",
                                         referral: "Referral",
-                                        agency: "Agency",
-                                        import: "Import",
+                                        other: "Others",
                                     }
                                     return labels[value] ?? value
                                 }}
@@ -583,10 +595,11 @@ export default function SurrogatesPage() {
                             <SelectItem value="all">All Sources</SelectItem>
                             <SelectItem value="manual">Manual</SelectItem>
                             <SelectItem value="meta">Meta</SelectItem>
+                            <SelectItem value="tiktok">TikTok</SelectItem>
+                            <SelectItem value="google">Google</SelectItem>
                             <SelectItem value="website">Website</SelectItem>
                             <SelectItem value="referral">Referral</SelectItem>
-                            <SelectItem value="agency">Agency</SelectItem>
-                            <SelectItem value="import">Import</SelectItem>
+                            <SelectItem value="other">Others</SelectItem>
                         </SelectContent>
                     </Select>
 
@@ -838,7 +851,20 @@ export default function SurrogatesPage() {
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Badge variant="secondary" className="capitalize">{surrogateItem.source}</Badge>
+                                                    <Badge variant="secondary" className="capitalize">
+                                                        {(() => {
+                                                            const labels: Record<string, string> = {
+                                                                manual: "Manual",
+                                                                meta: "Meta",
+                                                                tiktok: "TikTok",
+                                                                google: "Google",
+                                                                website: "Website",
+                                                                referral: "Referral",
+                                                                other: "Others",
+                                                            }
+                                                            return labels[surrogateItem.source] ?? surrogateItem.source
+                                                        })()}
+                                                    </Badge>
                                                 </TableCell>
                                                 <TableCell>
                                                     {surrogateItem.owner_name ? (

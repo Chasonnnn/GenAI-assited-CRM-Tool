@@ -81,10 +81,13 @@ class SurrogateSource(str, Enum):
 
     MANUAL = "manual"
     META = "meta"
+    TIKTOK = "tiktok"
+    GOOGLE = "google"
     WEBSITE = "website"
     REFERRAL = "referral"
     IMPORT = "import"  # CSV bulk import
     AGENCY = "agency"  # Created by agency staff
+    OTHER = "other"
 
 
 class SurrogateActivityType(str, Enum):

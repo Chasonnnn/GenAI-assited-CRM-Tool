@@ -47,7 +47,10 @@ def list_surrogate_sources(
     Returns list of {value, label} for populating dropdowns.
     """
     sources = [
-        {"value": source.value, "label": source.value.replace("_", " ").title()}
+        {
+            "value": source.value,
+            "label": "Others" if source.value == "other" else source.value.replace("_", " ").title(),
+        }
         for source in SurrogateSource
     ]
     return {"sources": sources}
