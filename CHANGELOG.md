@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.47.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.46.0...surrogacy-crm-platform-v0.47.0) (2026-01-31)
+
+
+### Features
+
+* **api:** add ClamAV for virus scanning of uploaded attachments ([04bcf17](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/04bcf17d8e8cfe4ac136ab85c048466388e611ba))
+* enforce virus scanning for form submission file uploads ([3bbf6dd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3bbf6dd0175257dc9d5a7acc05ef00e231dd1b81))
+* integrate ClamAV scanning for attachments and worker signatures ([43297d1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/43297d15807e9f2e9099c1dc984c1aa4ecde2b90))
+
+
+### Maintenance
+
+* maintenance cleanup and sync contract tests across AI services ([6d0a667](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6d0a6674f545eab6f0a4ea37005ec1813089c27f))
+
 ## [0.46.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.45.0...surrogacy-crm-platform-v0.46.0) (2026-01-30)
 
 
