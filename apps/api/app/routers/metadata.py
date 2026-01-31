@@ -46,12 +46,22 @@ def list_surrogate_sources(
 
     Returns list of {value, label} for populating dropdowns.
     """
+    allowed_sources = {
+        "manual",
+        "meta",
+        "tiktok",
+        "google",
+        "website",
+        "referral",
+        "other",
+    }
     sources = [
         {
             "value": source.value,
             "label": "Others" if source.value == "other" else source.value.replace("_", " ").title(),
         }
         for source in SurrogateSource
+        if source.value in allowed_sources
     ]
     return {"sources": sources}
 

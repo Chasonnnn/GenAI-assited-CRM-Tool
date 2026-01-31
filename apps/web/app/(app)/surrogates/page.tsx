@@ -861,6 +861,8 @@ export default function SurrogatesPage() {
                                                                 website: "Website",
                                                                 referral: "Referral",
                                                                 other: "Others",
+                                                                agency: "Others",
+                                                                import: "Others",
                                                             }
                                                             return labels[surrogateItem.source] ?? surrogateItem.source
                                                         })()}
