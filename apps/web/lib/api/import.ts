@@ -3,6 +3,7 @@
  */
 
 import api from './index'
+import { streamSSE, type StreamEvent } from './stream'
 import type { SurrogateSource } from '@/lib/types/surrogate'
 
 export type ColumnAction = 'map' | 'metadata' | 'custom' | 'ignore'
@@ -190,7 +191,15 @@ export async function listPendingImportApprovals(): Promise<ImportApprovalItem[]
 }
 
 export async function aiMapColumns(payload: AiMapRequest): Promise<AiMapResponse> {
-    return api.post<AiMapResponse>('/surrogates/import/ai-map', payload)
+    return streamAiMapColumns(payload)
+}
+
+export async function streamAiMapColumns(
+    payload: AiMapRequest,
+    onEvent?: (event: StreamEvent<AiMapResponse>) => void,
+    options?: { signal?: AbortSignal }
+): Promise<AiMapResponse> {
+    return streamSSE<AiMapResponse>('/surrogates/import/ai-map/stream', payload, onEvent, options)
 }
 
 export async function listImports(): Promise<ImportHistoryItem[]> {

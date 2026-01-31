@@ -134,7 +134,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
     const [touchedColumns, setTouchedColumns] = useState<Set<string>>(new Set())
     const [backdateCreatedAt, setBackdateCreatedAt] = useState(false)
     const [backdateTouched, setBackdateTouched] = useState(false)
-    const [allowAiAssist, setAllowAiAssist] = useState(false)
+    const [showAiPrompt, setShowAiPrompt] = useState(false)
     const [defaultSource, setDefaultSource] = useState<SurrogateSource>("manual")
     const [error, setError] = useState<string>("")
     const [submitMessage, setSubmitMessage] = useState<string | null>(null)
@@ -212,9 +212,14 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
             const previewData = await previewMutation.mutateAsync({
                 file: selectedFile,
                 applyTemplate: true,
-                enableAi: allowAiAssist,
+                enableAi: false,
             })
             setPreview(previewData)
+            if (previewData.unmatched_count > 0 && previewData.ai_available && !previewData.ai_auto_triggered) {
+                setShowAiPrompt(true)
+            } else {
+                setShowAiPrompt(false)
+            }
             const baseMappings = buildColumnMappingsFromSuggestions(previewData.column_suggestions)
             const nextTouched = new Set<string>()
             setTouchedColumns(nextTouched)
@@ -231,7 +236,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
             setError(resolveErrorDetail(err, "Failed to preview CSV"))
             setFile(null)
         }
-    }, [previewMutation, unknownColumnBehavior, allowAiAssist])
+    }, [previewMutation, unknownColumnBehavior])
 
     const handleDrop = useCallback((e: DragEvent<HTMLDivElement>) => {
         e.preventDefault()
@@ -255,6 +260,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         setApproveMessage(null)
         setValidationMode("drop_invalid_fields")
         setShowValidationDialog(false)
+        setShowAiPrompt(false)
     }
 
     const handleBackdateToggle = (checked: boolean) => {
@@ -298,6 +304,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                 unmatched_columns: unmatched,
                 sample_values: sampleValues,
             })
+            setShowAiPrompt(false)
 
             setMappings((prev) =>
                 prev.map((mapping) => {
@@ -466,14 +473,6 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                         </div>
                     )}
 
-                    <div className="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
-                        <Switch
-                            id="ai-auto-map"
-                            checked={allowAiAssist}
-                            onCheckedChange={setAllowAiAssist}
-                        />
-                        <Label htmlFor="ai-auto-map">Allow AI to auto-suggest mappings</Label>
-                    </div>
                 </div>
             </Card>
         )}
@@ -566,9 +565,18 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                             const previewData = await previewMutation.mutateAsync({
                                                 file,
                                                 applyTemplate: false,
-                                                enableAi: allowAiAssist,
+                                                enableAi: false,
                                             })
                                             setPreview(previewData)
+                                            if (
+                                                previewData.unmatched_count > 0 &&
+                                                previewData.ai_available &&
+                                                !previewData.ai_auto_triggered
+                                            ) {
+                                                setShowAiPrompt(true)
+                                            } else {
+                                                setShowAiPrompt(false)
+                                            }
                                             const baseMappings = buildColumnMappingsFromSuggestions(
                                                 previewData.column_suggestions
                                             )
@@ -597,6 +605,39 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                             <SparklesIcon className="size-4" />
                             AI suggested mappings for {preview.ai_mapped_columns.length} unmatched column(s)
                         </div>
+                    )}
+
+                    {preview.ai_available && preview.unmatched_count > 0 && (
+                        <Dialog open={showAiPrompt} onOpenChange={setShowAiPrompt}>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Unmatched columns detected</DialogTitle>
+                                    <DialogDescription>
+                                        We couldn&rsquo;t map {preview.unmatched_count} column
+                                        {preview.unmatched_count === 1 ? "" : "s"}. Want AI to suggest mappings?
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <DialogFooter>
+                                    <Button variant="outline" onClick={() => setShowAiPrompt(false)}>
+                                        Not now
+                                    </Button>
+                                    <Button
+                                        onClick={async () => {
+                                            await handleAiHelp()
+                                            setShowAiPrompt(false)
+                                        }}
+                                        disabled={aiMapMutation.isPending}
+                                    >
+                                        {aiMapMutation.isPending ? (
+                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                        ) : (
+                                            <SparklesIcon className="mr-2 size-4" />
+                                        )}
+                                        Use AI suggestions
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
                     )}
 
                     <Card className="overflow-hidden">

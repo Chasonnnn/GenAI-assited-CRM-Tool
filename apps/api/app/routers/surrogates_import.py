@@ -4,11 +4,14 @@ CSV Import API endpoints.
 Provides REST interface for bulk surrogate imports via CSV upload.
 """
 
+import asyncio
+from collections.abc import AsyncIterator
 from uuid import UUID
 
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
@@ -33,6 +36,7 @@ from app.core.policies import POLICIES
 from app.db.enums import Role, SurrogateSource
 from app.schemas.auth import UserSession
 from app.services import import_service
+from app.utils.sse import format_sse, STREAM_HEADERS
 
 
 router = APIRouter(
@@ -430,7 +434,12 @@ async def get_ai_mapping_suggestions(
     PII is masked before sending to AI.
     """
     from app.services.import_ai_mapper_service import ai_suggest_mappings, is_ai_available
-    from app.services.import_detection_service import ColumnSuggestion, ConfidenceLevel
+    from app.services.import_detection_service import (
+        ColumnSuggestion,
+        ConfidenceLevel,
+        AVAILABLE_SURROGATE_FIELDS,
+    )
+    from app.services.ai_prompt_registry import get_prompt
 
     if not is_ai_available(db, session.org_id):
         raise HTTPException(
@@ -475,6 +484,147 @@ async def get_ai_mapping_suggestions(
             )
             for s in suggestions
         ]
+    )
+
+
+@router.post(
+    "/ai-map/stream",
+    dependencies=[Depends(require_csrf_header), Depends(require_permission(P.AI_USE))],
+)
+async def get_ai_mapping_suggestions_stream(
+    data: AIMapRequest,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    """Stream AI-powered column mapping suggestions via SSE."""
+    from app.services.import_ai_mapper_service import (
+        ai_suggestion_to_column_suggestion,
+        build_mapping_prompt,
+        is_ai_available,
+        mask_samples,
+        parse_ai_response,
+    )
+    from app.services.ai_settings_service import get_ai_provider_for_org
+    from app.services.ai_provider import ChatMessage
+    from app.services.import_detection_service import ColumnSuggestion, ConfidenceLevel
+
+    if not is_ai_available(db, session.org_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="AI is not enabled for this organization",
+        )
+
+    unmatched = [
+        ColumnSuggestion(
+            csv_column=col,
+            suggested_field=None,
+            confidence=0,
+            confidence_level=ConfidenceLevel.NONE,
+            transformation=None,
+            sample_values=data.sample_values.get(col, [])[:5],
+            reason="User requested AI analysis",
+        )
+        for col in data.unmatched_columns
+    ]
+
+    provider = get_ai_provider_for_org(db, session.org_id, user_id=session.user_id)
+    if not provider:
+        async def _missing_events() -> AsyncIterator[str]:
+            yield format_sse("start", {"status": "thinking"})
+            response = AIMapResponse(suggestions=[])
+            yield format_sse("done", response.model_dump())
+
+        return StreamingResponse(
+            _missing_events(),
+            media_type="text/event-stream",
+            headers=STREAM_HEADERS,
+        )
+
+    columns_for_ai = []
+    original_samples_map: dict[str, list[str]] = {}
+    for col in unmatched:
+        original_samples_map[col.csv_column] = col.sample_values
+        masked_samples = mask_samples(col.sample_values)
+        columns_for_ai.append({"column": col.csv_column, "samples": masked_samples})
+
+    prompt = build_mapping_prompt(columns_for_ai, AVAILABLE_SURROGATE_FIELDS)
+    messages = [
+        ChatMessage(role="system", content=get_prompt("import_mapping").system),
+        ChatMessage(role="user", content=prompt),
+    ]
+
+    async def event_generator() -> AsyncIterator[str]:
+        yield format_sse("start", {"status": "thinking"})
+        content = ""
+        try:
+            async for chunk in provider.stream_chat(messages=messages, temperature=0.3, max_tokens=2000):
+                if chunk.text:
+                    content += chunk.text
+                    yield format_sse("delta", {"text": chunk.text})
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:
+            for col in unmatched:
+                col.reason = f"{col.reason} (AI unavailable: {str(exc)[:50]})"
+            response = AIMapResponse(
+                suggestions=[
+                    ColumnSuggestionResponse(
+                        csv_column=s.csv_column,
+                        suggested_field=s.suggested_field,
+                        confidence=s.confidence,
+                        confidence_level=s.confidence_level.value,
+                        transformation=s.transformation,
+                        sample_values=s.sample_values,
+                        reason=s.reason,
+                        warnings=s.warnings,
+                        default_action=s.default_action,
+                        needs_inversion=s.needs_inversion,
+                    )
+                    for s in unmatched
+                ]
+            )
+            yield format_sse("done", response.model_dump())
+            return
+
+        ai_suggestions = parse_ai_response(content)
+        ai_map = {s.column: s for s in ai_suggestions}
+
+        updated_suggestions = []
+        for col in unmatched:
+            if col.csv_column in ai_map:
+                ai_suggestion = ai_map[col.csv_column]
+                updated = ai_suggestion_to_column_suggestion(
+                    ai_suggestion,
+                    original_samples_map.get(col.csv_column, []),
+                )
+                updated_suggestions.append(updated)
+            else:
+                col.reason = f"{col.reason} (AI: no suggestion)"
+                updated_suggestions.append(col)
+
+        response = AIMapResponse(
+            suggestions=[
+                ColumnSuggestionResponse(
+                    csv_column=s.csv_column,
+                    suggested_field=s.suggested_field,
+                    confidence=s.confidence,
+                    confidence_level=s.confidence_level.value,
+                    transformation=s.transformation,
+                    sample_values=s.sample_values,
+                    reason=s.reason,
+                    warnings=s.warnings,
+                    default_action=s.default_action,
+                    needs_inversion=s.needs_inversion,
+                )
+                for s in updated_suggestions
+            ]
+        )
+        yield format_sse("done", response.model_dump())
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers=STREAM_HEADERS,
     )
 
 
