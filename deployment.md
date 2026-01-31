@@ -151,16 +151,18 @@ gcloud run jobs execute crm-migrate --region "$REGION"
 Optional: enable automatic migrations on API startup by setting `DB_AUTO_MIGRATE=true`.
 Readiness checks will fail when migrations are pending unless `DB_MIGRATION_CHECK=false`.
 
-## 11) Worker (Cloud Run Job)
+## 11) Worker (Cloud Run Service)
 ```bash
-gcloud run jobs create crm-worker \
-  --image "$IMAGE_API" \
+gcloud run deploy crm-worker \
+  --image "$IMAGE_WORKER" \
   --region "$REGION" \
-  --command "python" --args "-m","app.worker" \
   --add-cloudsql-instances "$PROJECT_ID:$REGION:crm-db" \
   --service-account "crm-worker-sa@$PROJECT_ID.iam.gserviceaccount.com" \
   --set-env-vars "ENV=production,DATABASE_URL=postgresql+psycopg://crm_user:PASS@/crm?host=/cloudsql/$PROJECT_ID:$REGION:crm-db" \
-  --set-secrets "REDIS_URL=REDIS_URL:latest"
+  --set-secrets "REDIS_URL=REDIS_URL:latest" \
+  --port 8080 \
+  --no-allow-unauthenticated \
+  --ingress internal
 ```
 
 ## 12) Build + Deploy Web (Cloud Run)

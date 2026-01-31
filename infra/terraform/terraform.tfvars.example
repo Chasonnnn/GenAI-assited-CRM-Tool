@@ -27,6 +27,19 @@ enable_domain_mapping = true
 # run_max_instances = 10
 # run_cpu = "1"
 # run_cpu_idle = true
+# worker_cpu = "1"
+# worker_memory = "1Gi"
+# worker_min_instances = 0
+# worker_max_instances = 1
+# worker_cpu_idle = false
+
+# Worker schedule (business hours)
+# worker_schedule_enabled = true
+# worker_schedule_timezone = "America/Los_Angeles"
+# worker_scale_up_cron = "0 8 * * 1-5"
+# worker_scale_down_cron = "0 17 * * 1-5"
+# worker_min_instances_day = 1
+# worker_min_instances_night = 0
 
 # Monitoring + budgets (recommended)
 # alert_notification_channel_ids = ["projects/PROJECT_ID/notificationChannels/CHANNEL_ID"]

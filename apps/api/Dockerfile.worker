@@ -64,5 +64,5 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV ENV=production
 
-# Run worker
-CMD ["python", "-m", "app.worker"]
+# Run worker service
+CMD ["python", "-m", "app.worker_service"]

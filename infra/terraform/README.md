@@ -247,4 +247,4 @@ Push to `main` to build + deploy both services.
   `gcloud run jobs execute crm-migrate --region us-central1`
 - You can enable automatic migrations on API startup with `db_auto_migrate=true`.
   Readiness checks fail when migrations are pending unless `db_migration_check=false`.
-- Worker job is updated by the API build trigger.
+- Worker service is updated by the API build trigger.

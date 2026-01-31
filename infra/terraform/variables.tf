@@ -89,9 +89,80 @@ variable "web_service_name" {
 }
 
 variable "worker_job_name" {
-  description = "Name of the Cloud Run worker job."
+  description = "Name of the Cloud Run worker service."
   type        = string
   default     = "crm-worker"
+}
+
+variable "worker_min_instances" {
+  description = "Base min instances for the worker service (overridden by scheduler)."
+  type        = number
+  default     = 0
+}
+
+variable "worker_max_instances" {
+  description = "Max instances for the worker service."
+  type        = number
+  default     = 1
+}
+
+variable "worker_cpu" {
+  description = "CPU allocation for the worker service."
+  type        = string
+  default     = "1"
+
+  validation {
+    condition     = contains(["0.5", "500m", "1", "1000m"], var.worker_cpu)
+    error_message = "worker_cpu must be 0.5 or 1 vCPU (\"0.5\"/\"500m\" or \"1\"/\"1000m\")."
+  }
+}
+
+variable "worker_memory" {
+  description = "Memory allocation for the worker service."
+  type        = string
+  default     = "1Gi"
+}
+
+variable "worker_cpu_idle" {
+  description = "Whether Cloud Run should throttle CPU when idle for the worker."
+  type        = bool
+  default     = false
+}
+
+variable "worker_schedule_enabled" {
+  description = "Enable Cloud Scheduler jobs to scale the worker service."
+  type        = bool
+  default     = true
+}
+
+variable "worker_schedule_timezone" {
+  description = "Timezone for worker scale schedules."
+  type        = string
+  default     = "America/Los_Angeles"
+}
+
+variable "worker_scale_up_cron" {
+  description = "Cron schedule to scale worker up (weekday mornings)."
+  type        = string
+  default     = "0 8 * * 1-5"
+}
+
+variable "worker_scale_down_cron" {
+  description = "Cron schedule to scale worker down (weekday evenings)."
+  type        = string
+  default     = "0 17 * * 1-5"
+}
+
+variable "worker_min_instances_day" {
+  description = "Min instances during business hours."
+  type        = number
+  default     = 1
+}
+
+variable "worker_min_instances_night" {
+  description = "Min instances outside business hours."
+  type        = number
+  default     = 0
 }
 
 variable "clamav_update_job_name" {

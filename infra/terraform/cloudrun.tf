@@ -180,66 +180,79 @@ resource "google_cloud_run_v2_service_iam_member" "web_invoker" {
   member   = "allUsers"
 }
 
-resource "google_cloud_run_v2_job" "worker" {
-  provider = google-beta
+resource "google_cloud_run_v2_service" "worker" {
   name     = var.worker_job_name
   location = var.region
+  ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 
-  # Ensure the job service account has Secret Manager access before we update
-  # the job template to reference Secret Manager env vars.
+  # Ensure the service account has Secret Manager access before we update
+  # the service template to reference Secret Manager env vars.
   depends_on = [google_secret_manager_secret_iam_member.worker_secret_access]
 
   template {
-    template {
-      service_account = google_service_account.worker.email
+    annotations = {
+      "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.crm.connection_name
+    }
 
-      containers {
-        image   = local.worker_image
-        command = ["python", "-m", "app.worker"]
-        volume_mounts {
-          name       = "cloudsql"
-          mount_path = "/cloudsql"
+    service_account = google_service_account.worker.email
+
+    scaling {
+      min_instance_count = var.worker_min_instances
+      max_instance_count = var.worker_max_instances
+    }
+
+    vpc_access {
+      connector = google_vpc_access_connector.crm.id
+      egress    = "PRIVATE_RANGES_ONLY"
+    }
+
+    containers {
+      image = local.worker_image
+
+      resources {
+        limits = {
+          cpu    = var.worker_cpu
+          memory = var.worker_memory
         }
+        cpu_idle = var.worker_cpu_idle
+      }
 
-        dynamic "env" {
-          for_each = local.common_env
-          content {
-            name  = env.key
-            value = env.value
-          }
+      ports {
+        container_port = 8080
+      }
+
+      dynamic "env" {
+        for_each = local.common_env
+        content {
+          name  = env.key
+          value = env.value
         }
+      }
 
-        dynamic "env" {
-          for_each = { for key in sort(local.common_secret_keys) : key => key }
-          content {
-            name = env.value
-            value_source {
-              secret_key_ref {
-                secret  = google_secret_manager_secret.secrets[env.value].secret_id
-                version = "latest"
-              }
+      dynamic "env" {
+        for_each = { for key in sort(local.common_secret_keys) : key => key }
+        content {
+          name = env.value
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.secrets[env.value].secret_id
+              version = "latest"
             }
           }
-        }
-      }
-
-      vpc_access {
-        connector = google_vpc_access_connector.crm.id
-        egress    = "PRIVATE_RANGES_ONLY"
-      }
-
-      volumes {
-        name = "cloudsql"
-        cloud_sql_instance {
-          instances = [google_sql_database_instance.crm.connection_name]
         }
       }
     }
   }
 
+  traffic {
+    percent = 100
+    type    = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
+  }
+
   lifecycle {
     ignore_changes = [
-      template[0].template[0].containers[0].image
+      template[0].containers[0].image,
+      template[0].scaling[0].min_instance_count
     ]
   }
 }
