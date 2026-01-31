@@ -16,7 +16,7 @@ def format_sse_comment(comment: str = "ping") -> str:
     return f": {comment}\n\n"
 
 
-def sse_preamble(padding_bytes: int = 2048) -> str:
+def sse_preamble(padding_bytes: int = 8192) -> str:
     """Send a padding comment to encourage proxies to flush SSE early."""
     if padding_bytes < 1:
         padding_bytes = 1
@@ -25,6 +25,7 @@ def sse_preamble(padding_bytes: int = 2048) -> str:
 
 STREAM_HEADERS = {
     "Cache-Control": "no-cache, no-transform",
+    "Content-Encoding": "identity",
     "Connection": "keep-alive",
     "X-Accel-Buffering": "no",
 }
