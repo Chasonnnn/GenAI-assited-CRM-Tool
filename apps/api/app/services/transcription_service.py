@@ -20,6 +20,7 @@ from app.services import interview_service, storage_client
 from app.services.ai_settings_service import (
     get_ai_settings,
     get_decrypted_key,
+    get_effective_model,
     is_consent_required,
 )
 
@@ -334,7 +335,7 @@ async def request_transcription(
     if provider not in {"gemini", "vertex_api_key", "vertex_wif"}:
         raise TranscriptionError("Transcription provider not supported")
 
-    model = ai_settings.model or "gemini-3-flash-preview"
+    model = get_effective_model(ai_settings) or "gemini-3-flash-preview"
     if model not in {"gemini-3-flash-preview", "gemini-3-pro-preview"}:
         raise TranscriptionError("Unsupported transcription model configured")
 

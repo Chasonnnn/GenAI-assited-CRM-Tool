@@ -24,6 +24,21 @@ from app.services import version_service
 
 ENTITY_TYPE = "ai_settings"
 
+GEMINI_MODELS = {"gemini-3-flash-preview", "gemini-3-pro-preview"}
+DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview"
+
+
+def _normalize_gemini_model(model: str | None) -> str:
+    return model if model in GEMINI_MODELS else DEFAULT_GEMINI_MODEL
+
+
+def get_effective_model(ai_settings: AISettings | None) -> str | None:
+    if not ai_settings:
+        return None
+    if ai_settings.provider in ("gemini", "vertex_wif", "vertex_api_key"):
+        return _normalize_gemini_model(ai_settings.model)
+    return ai_settings.model
+
 
 def _get_fernet() -> Fernet:
     """Get Fernet instance for encryption/decryption."""
@@ -142,8 +157,6 @@ def update_ai_settings(
 ) -> AISettings:
     """Update AI settings with version control."""
     ai_settings = get_or_create_ai_settings(db, organization_id, user_id)
-    gemini_only_models = {"gemini-3-flash-preview", "gemini-3-pro-preview"}
-
     # Optimistic locking
     if expected_version is not None:
         version_service.check_version(ai_settings.current_version, expected_version)
@@ -159,12 +172,12 @@ def update_ai_settings(
     if api_key is not None:
         ai_settings.api_key_encrypted = encrypt_api_key(api_key)
     if ai_settings.provider in ("gemini", "vertex_wif", "vertex_api_key"):
-        if model is not None and model not in gemini_only_models:
+        if model is not None and model not in GEMINI_MODELS:
             raise ValueError(
                 "Only gemini-3-flash-preview or gemini-3-pro-preview is supported for this provider."
             )
-        if model is None and ai_settings.model not in gemini_only_models:
-            ai_settings.model = "gemini-3-flash-preview"
+        if model is None and ai_settings.model not in GEMINI_MODELS:
+            ai_settings.model = DEFAULT_GEMINI_MODEL
     else:
         if model is not None:
             ai_settings.model = model
@@ -259,6 +272,7 @@ def get_ai_provider_for_settings(
             return None
         if not settings.WIF_OIDC_PRIVATE_KEY:
             return None
+        effective_model = get_effective_model(ai_settings) or DEFAULT_GEMINI_MODEL
         config = VertexWIFConfig(
             project_id=ai_settings.vertex_project_id,
             location=ai_settings.vertex_location,
@@ -267,9 +281,7 @@ def get_ai_provider_for_settings(
             organization_id=organization_id,
             user_id=user_id,
         )
-        return VertexWIFProvider(
-            config, default_model=ai_settings.model or "gemini-3-flash-preview"
-        )
+        return VertexWIFProvider(config, default_model=effective_model)
 
     if ai_settings.provider == "vertex_api_key":
         if not ai_settings.api_key_encrypted:
@@ -283,9 +295,8 @@ def get_ai_provider_for_settings(
             project_id=ai_settings.vertex_project_id,
             location=ai_settings.vertex_location,
         )
-        return VertexAPIKeyProvider(
-            config, default_model=ai_settings.model or "gemini-3-flash-preview"
-        )
+        effective_model = get_effective_model(ai_settings) or DEFAULT_GEMINI_MODEL
+        return VertexAPIKeyProvider(config, default_model=effective_model)
 
     if not ai_settings.api_key_encrypted:
         return None
@@ -296,7 +307,9 @@ def get_ai_provider_for_settings(
         return None
     from app.services import ai_provider as ai_provider_module
 
-    return ai_provider_module.get_provider(ai_settings.provider, api_key, ai_settings.model)
+    return ai_provider_module.get_provider(
+        ai_settings.provider, api_key, get_effective_model(ai_settings)
+    )
 
 
 async def test_api_key(

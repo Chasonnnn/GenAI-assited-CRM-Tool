@@ -81,10 +81,12 @@ def get_settings(
 
     settings = ai_settings_service.get_or_create_ai_settings(db, session.org_id, session.user_id)
 
+    effective_model = ai_settings_service.get_effective_model(settings)
+
     return AISettingsResponse(
         is_enabled=settings.is_enabled,
         provider=settings.provider,
-        model=settings.model,
+        model=effective_model,
         api_key_masked=ai_settings_service.mask_api_key(settings.api_key_encrypted),
         vertex_wif=VertexWIFConfig(
             project_id=settings.vertex_project_id,
