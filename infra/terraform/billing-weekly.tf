@@ -24,12 +24,35 @@ resource "google_cloud_run_v2_job" "billing_weekly" {
           <<-EOT
           set -euo pipefail
 
+          log() {
+            echo "[$(date -u +%FT%TZ)] $*"
+          }
+
           PROJECT_ID="$${PROJECT_ID}"
           DATASET="$${BILLING_EXPORT_DATASET}"
           TABLE="$${BILLING_EXPORT_TABLE}"
+          LOCATION="$${BILLING_EXPORT_LOCATION}"
+
+          log "Starting weekly billing summary"
+          log "Project: $${PROJECT_ID}"
+          log "Dataset: $${DATASET}"
+          log "Table: $${TABLE}"
+          log "Location: $${LOCATION}"
+
+          if ! bq --project_id="$${PROJECT_ID}" --location="$${LOCATION}" show "$${DATASET}.$${TABLE}" >/dev/null 2>&1; then
+            START_DATE=$(date -u -d '7 days ago' +%F)
+            END_DATE=$(date -u +%F)
+            MESSAGE="Weekly spend ($${START_DATE} to $${END_DATE} UTC): billing export table not found ($${DATASET}.$${TABLE}). Enable Cloud Billing export to BigQuery."
+            PAYLOAD=$(printf '{"text":"%s"}' "$${MESSAGE}")
+            log "Billing export table missing; sending Slack notification"
+            curl -sS -X POST -H 'Content-type: application/json' --data "$${PAYLOAD}" "$${BILLING_SLACK_WEBHOOK_URL}" >/dev/null
+            log "Done"
+            exit 0
+          fi
 
           QUERY="SELECT ROUND(SUM(cost) + IFNULL(SUM((SELECT SUM(c.amount) FROM UNNEST(credits) c)), 0), 2) AS total_cost FROM \`$${PROJECT_ID}.$${DATASET}.$${TABLE}\` WHERE usage_start_time >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)"
-          TOTAL=$(bq --project_id="$${PROJECT_ID}" query --use_legacy_sql=false --format=csv "$${QUERY}" | tail -n 1 | tr -d '\\r')
+          log "Running BigQuery aggregation"
+          TOTAL=$(bq --project_id="$${PROJECT_ID}" --location="$${LOCATION}" query --use_legacy_sql=false --format=csv "$${QUERY}" | tail -n 1 | tr -d '\\r')
           if [ -z "$${TOTAL}" ] || [ "$${TOTAL}" = "total_cost" ]; then
             TOTAL="0"
           fi
@@ -37,9 +60,12 @@ resource "google_cloud_run_v2_job" "billing_weekly" {
           START_DATE=$(date -u -d '7 days ago' +%F)
           END_DATE=$(date -u +%F)
           MESSAGE="Weekly spend ($${START_DATE} to $${END_DATE} UTC): $${TOTAL} USD"
+          log "Computed total: $${TOTAL} USD"
 
           PAYLOAD=$(printf '{"text":"%s"}' "$${MESSAGE}")
-          curl -sS -X POST -H 'Content-type: application/json' --data "$${PAYLOAD}" "$${BILLING_SLACK_WEBHOOK_URL}"
+          log "Sending Slack notification"
+          curl -sS -X POST -H 'Content-type: application/json' --data "$${PAYLOAD}" "$${BILLING_SLACK_WEBHOOK_URL}" >/dev/null
+          log "Done"
           EOT
         ]
 
@@ -56,6 +82,11 @@ resource "google_cloud_run_v2_job" "billing_weekly" {
         env {
           name  = "BILLING_EXPORT_TABLE"
           value = local.billing_export_table
+        }
+
+        env {
+          name  = "BILLING_EXPORT_LOCATION"
+          value = var.billing_export_dataset_location
         }
 
         env {

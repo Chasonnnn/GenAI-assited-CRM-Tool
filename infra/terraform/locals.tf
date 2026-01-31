@@ -47,6 +47,7 @@ locals {
     CLAMAV_SIGNATURES_BUCKET        = var.clamav_signatures_bucket
     CLAMAV_SIGNATURES_PREFIX        = var.clamav_signatures_prefix
     CLAMAV_SIGNATURES_MAX_AGE_HOURS = tostring(var.clamav_signatures_max_age_hours)
+    CLAMAV_SIGNATURES_DOWNLOAD_ONLY = tostring(var.clamav_signatures_download_only)
     ALLOWED_EMAIL_DOMAINS           = var.allowed_email_domains
     GCP_MONITORING_ENABLED          = tostring(var.gcp_monitoring_enabled)
     GCP_PROJECT_ID                  = var.project_id

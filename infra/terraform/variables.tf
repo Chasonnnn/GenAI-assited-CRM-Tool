@@ -109,7 +109,7 @@ variable "clamav_update_enabled" {
 variable "clamav_update_cron" {
   description = "Cron schedule for ClamAV signature updates."
   type        = string
-  default     = "0 3 * * *"
+  default     = "0 3 * * 1"
 }
 
 variable "clamav_update_timezone" {
@@ -348,7 +348,13 @@ variable "clamav_signatures_prefix" {
 variable "clamav_signatures_max_age_hours" {
   description = "Max age for ClamAV signatures before refreshing."
   type        = number
-  default     = 72
+  default     = 168
+}
+
+variable "clamav_signatures_download_only" {
+  description = "If true, workers will only download ClamAV signatures from storage."
+  type        = bool
+  default     = true
 }
 
 variable "allowed_email_domains" {

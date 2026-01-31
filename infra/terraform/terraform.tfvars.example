@@ -35,6 +35,14 @@ enable_domain_mapping = true
 # billing_budget_amount_usd = 300
 # billing_budget_thresholds = [0.5, 0.75, 0.9, 1.0]
 
+# ClamAV signature sync (optional)
+# clamav_signatures_bucket = "your-signature-bucket"
+# clamav_signatures_prefix = "clamav"
+# clamav_signatures_max_age_hours = 168
+# clamav_signatures_download_only = true
+# clamav_update_cron = "0 3 * * 1"
+# clamav_update_timezone = "UTC"
+
 # Weekly billing summary (optional)
 # billing_weekly_summary_enabled = true
 # billing_export_dataset = "billing_export"
