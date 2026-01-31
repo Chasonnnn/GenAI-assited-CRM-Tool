@@ -87,6 +87,7 @@ const fieldTypes: { basic: FieldTypeOption[]; advanced: FieldTypeOption[] } = {
         { id: "checkbox", label: "Checkbox", icon: CheckSquareIcon },
         { id: "file", label: "File Upload", icon: FileIcon },
         { id: "address", label: "Address", icon: HomeIcon },
+        { id: "repeatable_table", label: "Repeating Table", icon: ListIcon },
     ],
 }
 
@@ -130,10 +131,13 @@ type FormField = {
         type: "text" | "number" | "date" | "select"
         required: boolean
         options?: string[]
+        validation?: FormFieldValidation | null
     }[]
     minRows?: number | null
     maxRows?: number | null
 }
+
+type ShowIfOperator = NonNullable<FormField["showIf"]>["operator"]
 
 type FormPage = {
     id: number
@@ -185,6 +189,7 @@ function buildFormSchema(pages: FormPage[], metadata: SchemaMetadata): FormSchem
                         type: column.type,
                         required: column.required,
                         options: toFieldOptions(column.options),
+                        validation: column.validation ?? null,
                     }))
                     : null,
                 min_rows: field.minRows ?? null,
@@ -203,6 +208,27 @@ function schemaToPages(schema: FormSchema, mappings: Map<string, string>): FormP
         name: page.title || `Page ${index + 1}`,
         fields: page.fields.map((field) => {
             const options = field.options?.map((option) => option.label || option.value)
+            const columns = field.columns?.map((column) => {
+                const columnOptions = column.options?.map((option) => option.label || option.value)
+                return {
+                    id: column.key,
+                    label: column.label,
+                    type: column.type,
+                    required: column.required ?? false,
+                    ...(columnOptions ? { options: columnOptions } : {}),
+                    validation: column.validation ?? null,
+                }
+            })
+            const showIf =
+                field.show_if
+                    ? {
+                        fieldKey: field.show_if.field_key,
+                        operator: field.show_if.operator,
+                        ...(field.show_if.value !== null && field.show_if.value !== undefined
+                            ? { value: String(field.show_if.value) }
+                            : {}),
+                    }
+                    : null
             return {
                 id: field.key,
                 type: field.type,
@@ -211,6 +237,10 @@ function schemaToPages(schema: FormSchema, mappings: Map<string, string>): FormP
                 required: field.required ?? false,
                 surrogateFieldMapping: mappings.get(field.key) || "",
                 validation: field.validation ?? null,
+                showIf,
+                ...(columns && columns.length > 0 ? { columns } : {}),
+                minRows: field.min_rows ?? null,
+                maxRows: field.max_rows ?? null,
                 ...(options ? { options } : {}),
             }
         }),
@@ -243,6 +273,18 @@ function buildMappings(pages: FormPage[]): { field_key: string; surrogate_field:
 }
 
 const YES_NO_OPTIONS = ["Yes", "No"]
+const YES_NO_UNSURE_OPTIONS = ["Yes", "No", "Not sure"]
+const BLOOD_TYPE_OPTIONS = ["A", "B", "AB", "O"]
+const RH_FACTOR_OPTIONS = ["Positive", "Negative", "Unknown"]
+const PREGNANCY_CONDITION_OPTIONS = [
+    "Gestational diabetes",
+    "Preeclampsia",
+    "Preterm labor",
+    "Placenta previa",
+    "Other complications",
+]
+const DISEASE_OPTIONS = ["HIV", "Hepatitis B", "Hepatitis C", "Herpes", "Syphilis", "Other"]
+const IP_TYPE_OPTIONS = ["Heterosexual couple", "Same-sex couple", "Single parent", "Not sure"]
 const COMPLIANCE_NOTICE =
     "By submitting this form, you consent to the collection and use of your information, including health-related details, for eligibility review and care coordination. Access is limited to authorized staff and retained per policy."
 const COMPLIANCE_NOTICE_ES =
@@ -292,6 +334,9 @@ type FormDraft = {
     conditionalLogic: string[]
     readingLevelHints: string[]
     translationDraft: string
+    maxFileSizeMb?: number
+    maxFileCount?: number
+    allowedMimeTypesText?: string
 }
 
 const buildFieldId = () => {
@@ -299,6 +344,13 @@ const buildFieldId = () => {
         return crypto.randomUUID()
     }
     return `field-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+const buildColumnId = () => {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+        return crypto.randomUUID()
+    }
+    return `col-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
 const buildDraftField = ({
@@ -620,6 +672,9 @@ const generateFormDraft = (prompt: string): FormDraft => {
         conditionalLogic,
         readingLevelHints: READING_LEVEL_HINTS,
         translationDraft,
+        maxFileSizeMb: 10,
+        maxFileCount: 10,
+        allowedMimeTypesText: "",
     }
 }
 
@@ -631,6 +686,9 @@ const buildTemplateDraft = ({
     pages,
     requiredSections,
     conditionalLogic,
+    maxFileSizeMb,
+    maxFileCount,
+    allowedMimeTypesText,
 }: {
     formName: string
     description: string
@@ -639,6 +697,9 @@ const buildTemplateDraft = ({
     pages: FormPage[]
     requiredSections: string[]
     conditionalLogic: string[]
+    maxFileSizeMb?: number
+    maxFileCount?: number
+    allowedMimeTypesText?: string
 }): FormDraft => {
     const optionalSections = pages
         .map((page) => page.name)
@@ -653,7 +714,7 @@ const buildTemplateDraft = ({
         ),
     )
 
-    return {
+    const draft: FormDraft = {
         formName,
         description,
         publicTitle,
@@ -666,6 +727,16 @@ const buildTemplateDraft = ({
         readingLevelHints: READING_LEVEL_HINTS,
         translationDraft: buildTranslationDraft(publicTitle, pages),
     }
+    if (maxFileSizeMb !== undefined) {
+        draft.maxFileSizeMb = maxFileSizeMb
+    }
+    if (maxFileCount !== undefined) {
+        draft.maxFileCount = maxFileCount
+    }
+    if (allowedMimeTypesText !== undefined) {
+        draft.allowedMimeTypesText = allowedMimeTypesText
+    }
+    return draft
 }
 
 const buildJotformTemplate = (): FormDraft => {
@@ -678,16 +749,24 @@ const buildJotformTemplate = (): FormDraft => {
             helperText?: string
             surrogateFieldMapping?: string
             optionList?: string[]
+            showIf?: FormField["showIf"] | null
+            columns?: FormField["columns"]
+            minRows?: number | null
+            maxRows?: number | null
         } = {},
     ) =>
         buildDraftField({
             id,
             label,
             type,
-            required: options.required,
-            helperText: options.helperText,
-            surrogateFieldMapping: options.surrogateFieldMapping,
-            options: options.optionList,
+            required: options.required ?? false,
+            helperText: options.helperText ?? "",
+            surrogateFieldMapping: options.surrogateFieldMapping ?? "",
+            ...(options.optionList ? { options: options.optionList } : {}),
+            showIf: options.showIf ?? null,
+            ...(options.columns ? { columns: options.columns } : {}),
+            ...(options.minRows !== undefined ? { minRows: options.minRows } : {}),
+            ...(options.maxRows !== undefined ? { maxRows: options.maxRows } : {}),
         })
 
     const pages: FormPage[] = [
@@ -742,18 +821,24 @@ const buildJotformTemplate = (): FormDraft => {
                 }),
                 field("covid_vaccine_when", "If yes, when?", "date", {
                     helperText: "Date of your most recent vaccine.",
+                    showIf: { fieldKey: "covid_vaccine_received", operator: "equals", value: "Yes" },
                 }),
                 field("covid_vaccine_willing", "If no, are you willing to receive Covid vaccine?", "radio", {
                     optionList: YES_NO_OPTIONS,
+                    showIf: { fieldKey: "covid_vaccine_received", operator: "equals", value: "No" },
                 }),
                 field("tattoos_past_year", "Have you received any tattoos in the past year?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("tattoo_last_date", "If yes, date of your last tattoo", "date"),
+                field("tattoo_last_date", "If yes, date of your last tattoo", "date", {
+                    showIf: { fieldKey: "tattoos_past_year", operator: "equals", value: "Yes" },
+                }),
                 field("religion_yes_no", "Do you have a religion?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("religion_detail", "If yes, please specify your religion", "text"),
+                field("religion_detail", "If yes, please specify your religion", "text", {
+                    showIf: { fieldKey: "religion_yes_no", operator: "equals", value: "Yes" },
+                }),
                 field("us_citizen", "Are you a US citizen or permanent resident?", "radio", {
                     required: true,
                     optionList: YES_NO_OPTIONS,
@@ -785,18 +870,24 @@ const buildJotformTemplate = (): FormDraft => {
                 field("arrested", "Have you ever been arrested?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("arrested_explain", "If yes, please explain", "textarea"),
+                field("arrested_explain", "If yes, please explain", "textarea", {
+                    showIf: { fieldKey: "arrested", operator: "equals", value: "Yes" },
+                }),
                 field("legal_cases_pending", "Are you currently involved in any legal cases that are pending?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("legal_cases_explain", "If yes, please explain", "textarea"),
+                field("legal_cases_explain", "If yes, please explain", "textarea", {
+                    showIf: { fieldKey: "legal_cases_pending", operator: "equals", value: "Yes" },
+                }),
                 field(
                     "government_assistance",
                     "Do you receive any government assistance (WIC, Medicaid, Food Stamps, Disability)?",
                     "radio",
                     { optionList: YES_NO_OPTIONS },
                 ),
-                field("government_assistance_explain", "If yes, please explain", "textarea"),
+                field("government_assistance_explain", "If yes, please explain", "textarea", {
+                    showIf: { fieldKey: "government_assistance", operator: "equals", value: "Yes" },
+                }),
             ],
         },
         {
@@ -807,52 +898,83 @@ const buildJotformTemplate = (): FormDraft => {
                 field("further_education_plans", "Do you plan on furthering your education?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("further_education_details", "If yes, please explain", "textarea"),
+                field("further_education_details", "If yes, please explain", "textarea", {
+                    showIf: { fieldKey: "further_education_plans", operator: "equals", value: "Yes" },
+                }),
                 field("currently_employed", "Are you currently employed?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("employer_title", "If yes, present employer and title", "text"),
-                field("employment_duration", "How long have you been employed there?", "text"),
+                field("employer_title", "If yes, present employer and title", "text", {
+                    showIf: { fieldKey: "currently_employed", operator: "equals", value: "Yes" },
+                }),
+                field("employment_duration", "How long have you been employed there?", "text", {
+                    showIf: { fieldKey: "currently_employed", operator: "equals", value: "Yes" },
+                }),
             ],
         },
         {
             id: 4,
             name: "Pregnancy Information",
             fields: [
-                field("pregnancy_list", "List of pregnancies", "textarea", {
+                buildDraftField({
+                    id: "pregnancy_list",
+                    label: "List of pregnancies",
+                    type: "repeatable_table",
                     helperText:
                         "Include: own/surrogacy, # babies, delivery date, vaginal/C-section, gender, weight, weeks at birth, complications.",
+                    columns: [
+                        { id: "preg_type", label: "Type", type: "select", required: true, options: ["Own", "Surrogacy"] },
+                        { id: "babies", label: "# Babies", type: "number", required: true },
+                        { id: "delivery_date", label: "Delivery Date", type: "date", required: false },
+                        { id: "delivery_type", label: "Delivery Type", type: "select", required: false, options: ["Vaginal", "C-Section"] },
+                        { id: "gender", label: "Gender", type: "text", required: false },
+                        { id: "weight", label: "Birth Weight", type: "text", required: false },
+                        { id: "weeks", label: "Weeks at Birth", type: "number", required: false },
+                        { id: "complications", label: "Complications", type: "text", required: false },
+                    ],
                 }),
                 field("had_abortion", "Have you ever had an abortion?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("abortion_explain", "If yes, please explain", "textarea"),
+                field("abortion_explain", "If yes, please explain", "textarea", {
+                    showIf: { fieldKey: "had_abortion", operator: "equals", value: "Yes" },
+                }),
                 field("had_miscarriage", "Have you ever had a miscarriage?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("miscarriage_explain", "If yes, please explain", "textarea"),
+                field("miscarriage_explain", "If yes, please explain", "textarea", {
+                    showIf: { fieldKey: "had_miscarriage", operator: "equals", value: "Yes" },
+                }),
                 field(
                     "pregnancy_conditions",
                     "Have you ever experienced the following conditions?",
                     "checkbox",
                     { optionList: PREGNANCY_CONDITION_OPTIONS },
                 ),
-                field("pregnancy_conditions_explain", "If yes, please explain", "textarea"),
+                field("pregnancy_conditions_explain", "If yes, please explain", "textarea", {
+                    showIf: { fieldKey: "pregnancy_conditions", operator: "is_not_empty", value: "" },
+                }),
                 field("breastfeeding", "Are you currently breastfeeding?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("breastfeeding_stop", "If yes, when do you plan to stop?", "text"),
+                field("breastfeeding_stop", "If yes, when do you plan to stop?", "text", {
+                    showIf: { fieldKey: "breastfeeding", operator: "equals", value: "Yes" },
+                }),
                 field("sexually_active", "Are you sexually active?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
                 field("birth_control", "Are you using birth control?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("birth_control_type", "If yes, what kind?", "text"),
+                field("birth_control_type", "If yes, what kind?", "text", {
+                    showIf: { fieldKey: "birth_control", operator: "equals", value: "Yes" },
+                }),
                 field("regular_cycles", "Do you have regular monthly menstrual cycles?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("irregular_cycles_detail", "If no, please specify", "text"),
+                field("irregular_cycles_detail", "If no, please specify", "text", {
+                    showIf: { fieldKey: "regular_cycles", operator: "equals", value: "No" },
+                }),
                 field("last_obgyn_visit", "When did you last see your Ob/Gyn?", "date"),
                 field("last_pap_smear", "Date of last Pap Smear and result?", "text"),
                 field("reproductive_illnesses", "List any reproductive illness you have experienced", "textarea"),
@@ -869,6 +991,7 @@ const buildJotformTemplate = (): FormDraft => {
                     "spouse_occupation",
                     "If yes, what is your spouse/significant other's occupation?",
                     "text",
+                    { showIf: { fieldKey: "spouse_significant_other", operator: "equals", value: "Yes" } },
                 ),
                 field("family_support", "Does your family support your decision to become a surrogate?", "radio", {
                     optionList: YES_NO_OPTIONS,
@@ -877,17 +1000,26 @@ const buildJotformTemplate = (): FormDraft => {
                 field("anticipate_difficulties", "Do you anticipate any difficulties in becoming a surrogate?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("difficulties_explain", "If yes, please explain", "textarea"),
+                field("difficulties_explain", "If yes, please explain", "textarea", {
+                    showIf: { fieldKey: "anticipate_difficulties", operator: "equals", value: "Yes" },
+                }),
                 field("living_conditions", "Describe your current living conditions", "textarea"),
-                field(
-                    "household_members",
-                    "List everyone living in household with you, including age and relationship",
-                    "textarea",
-                ),
+                buildDraftField({
+                    id: "household_members",
+                    label: "List everyone living in household with you, including age and relationship",
+                    type: "repeatable_table",
+                    columns: [
+                        { id: "member_name", label: "Name", type: "text", required: true },
+                        { id: "member_age", label: "Age", type: "number", required: true },
+                        { id: "relationship", label: "Relationship", type: "text", required: true },
+                    ],
+                }),
                 field("pets_at_home", "Do you have pets at home?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("pets_details", "If yes, what kind?", "text"),
+                field("pets_details", "If yes, what kind?", "text", {
+                    showIf: { fieldKey: "pets_at_home", operator: "equals", value: "Yes" },
+                }),
             ],
         },
         {
@@ -899,64 +1031,88 @@ const buildJotformTemplate = (): FormDraft => {
                 field("current_weight", "Weight (lb)", "number"),
                 field("current_height", "Height (ft)", "number"),
                 field("drink_alcohol", "Do you drink alcohol?", "radio", { optionList: YES_NO_OPTIONS }),
-                field("drink_alcohol_explain", "If yes, please explain", "textarea"),
+                field("drink_alcohol_explain", "If yes, please explain", "textarea", {
+                    showIf: { fieldKey: "drink_alcohol", operator: "equals", value: "Yes" },
+                }),
                 field("household_smoke", "Does anyone in your household smoke?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("household_smoke_explain", "If yes, please explain", "textarea"),
+                field("household_smoke_explain", "If yes, please explain", "textarea", {
+                    showIf: { fieldKey: "household_smoke", operator: "equals", value: "Yes" },
+                }),
                 field("used_illicit_drugs", "Have you ever used illicit drugs?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("used_illicit_drugs_explain", "If yes, please explain", "textarea"),
+                field("used_illicit_drugs_explain", "If yes, please explain", "textarea", {
+                    showIf: { fieldKey: "used_illicit_drugs", operator: "equals", value: "Yes" },
+                }),
                 field(
                     "used_tobacco_last_6_months",
                     "Have you used tobacco, marijuana or illicit drugs within the past 6 months?",
                     "radio",
                     { optionList: YES_NO_OPTIONS },
                 ),
-                field("used_tobacco_last_6_months_explain", "If yes, please explain", "textarea"),
+                field("used_tobacco_last_6_months_explain", "If yes, please explain", "textarea", {
+                    showIf: { fieldKey: "used_tobacco_last_6_months", operator: "equals", value: "Yes" },
+                }),
                 field("taking_medication", "Are you taking any medication?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("taking_medication_explain", "If yes, please explain", "textarea"),
+                field("taking_medication_explain", "If yes, please explain", "textarea", {
+                    showIf: { fieldKey: "taking_medication", operator: "equals", value: "Yes" },
+                }),
                 field("treated_conditions", "Are you being treated for any medical conditions?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("treated_conditions_explain", "If yes, please explain", "textarea"),
+                field("treated_conditions_explain", "If yes, please explain", "textarea", {
+                    showIf: { fieldKey: "treated_conditions", operator: "equals", value: "Yes" },
+                }),
                 field(
                     "significant_illness_history",
                     "Have you or your immediate family had a history of significant illness or medical condition?",
                     "radio",
                     { optionList: YES_NO_OPTIONS },
                 ),
-                field("significant_illness_history_explain", "If yes, please explain", "textarea"),
+                field("significant_illness_history_explain", "If yes, please explain", "textarea", {
+                    showIf: { fieldKey: "significant_illness_history", operator: "equals", value: "Yes" },
+                }),
                 field(
                     "hospitalized_operations",
                     "Have you ever been hospitalized or had any operations (excluding birth)?",
                     "radio",
                     { optionList: YES_NO_OPTIONS },
                 ),
-                field("hospitalized_operations_explain", "If yes, please explain", "textarea"),
+                field("hospitalized_operations_explain", "If yes, please explain", "textarea", {
+                    showIf: { fieldKey: "hospitalized_operations", operator: "equals", value: "Yes" },
+                }),
                 field("nearest_hospital", "How close are you to nearest hospital? Please list name and city.", "text"),
                 field("psychiatric_conditions", "Have you ever been diagnosed or treated for any psychiatric conditions?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("psychiatric_conditions_explain", "If yes, please explain", "textarea"),
+                field("psychiatric_conditions_explain", "If yes, please explain", "textarea", {
+                    showIf: { fieldKey: "psychiatric_conditions", operator: "equals", value: "Yes" },
+                }),
                 field("depression_anxiety_meds", "Have you ever taken any medication for depression/anxiety?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("depression_anxiety_meds_explain", "If yes, please explain", "textarea"),
+                field("depression_anxiety_meds_explain", "If yes, please explain", "textarea", {
+                    showIf: { fieldKey: "depression_anxiety_meds", operator: "equals", value: "Yes" },
+                }),
                 field(
                     "partner_psychiatric_hospital",
                     "Has your partner/spouse ever been hospitalized for psychiatric illness?",
                     "radio",
                     { optionList: YES_NO_OPTIONS },
                 ),
-                field("partner_psychiatric_hospital_explain", "If yes, please explain", "textarea"),
+                field("partner_psychiatric_hospital_explain", "If yes, please explain", "textarea", {
+                    showIf: { fieldKey: "partner_psychiatric_hospital", operator: "equals", value: "Yes" },
+                }),
                 field("immunized_hep_b", "Have you ever been immunized for Hepatitis B? (past only)", "radio", {
                     optionList: YES_NO_UNSURE_OPTIONS,
                 }),
-                field("immunized_hep_b_explain", "If yes or unsure, please explain", "textarea"),
+                field("immunized_hep_b_explain", "If yes or unsure, please explain", "textarea", {
+                    showIf: { fieldKey: "immunized_hep_b", operator: "not_equals", value: "No" },
+                }),
                 field(
                     "diseases_self",
                     "Have you ever been diagnosed with any of the following diseases?",
@@ -1064,6 +1220,9 @@ const buildJotformTemplate = (): FormDraft => {
                 field("supporting_documents", "Supporting documents (optional)", "file", {
                     helperText: "Upload any additional documents.",
                 }),
+                field("medical_records", "Medical records (optional)", "file", {
+                    helperText: "Upload recent medical records if available.",
+                }),
                 field("signature_name", "Signature (type full legal name)", "text", {
                     required: true,
                 }),
@@ -1084,6 +1243,9 @@ const buildJotformTemplate = (): FormDraft => {
             "If any legal/assistance questions are Yes, collect explanation.",
             "If pregnancy conditions are selected, request details.",
         ],
+        maxFileSizeMb: 15,
+        maxFileCount: 12,
+        allowedMimeTypesText: "image/*,application/pdf",
     })
 }
 
@@ -1119,6 +1281,9 @@ export default function FormBuilderPage() {
     const [publicTitle, setPublicTitle] = useState("")
     const [logoUrl, setLogoUrl] = useState("")
     const [privacyNotice, setPrivacyNotice] = useState("")
+    const [maxFileSizeMb, setMaxFileSizeMb] = useState(10)
+    const [maxFileCount, setMaxFileCount] = useState(10)
+    const [allowedMimeTypesText, setAllowedMimeTypesText] = useState("")
     const [isPublished, setIsPublished] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [isPublishing, setIsPublishing] = useState(false)
@@ -1174,6 +1339,9 @@ export default function FormBuilderPage() {
         setUseOrgLogo(false)
         setCustomLogoUrl("")
         setIsMobilePreview(false)
+        setMaxFileSizeMb(10)
+        setMaxFileCount(10)
+        setAllowedMimeTypesText("")
     }, [formId])
 
     useEffect(() => {
@@ -1196,6 +1364,9 @@ export default function FormBuilderPage() {
         setPublicTitle(metadata.publicTitle)
         setLogoUrl(metadata.logoUrl)
         setPrivacyNotice(metadata.privacyNotice)
+        setMaxFileSizeMb(Math.max(1, Math.round((formData.max_file_size_bytes ?? 10485760) / (1024 * 1024))))
+        setMaxFileCount(formData.max_file_count ?? 10)
+        setAllowedMimeTypesText((formData.allowed_mime_types || []).join(", "))
         setIsPublished(formData.status === "published")
         setPages(schema ? schemaToPages(schema, mappingMap) : [{ id: 1, name: "Page 1", fields: [] }])
         setActivePage(1)
@@ -1217,8 +1388,12 @@ export default function FormBuilderPage() {
     const fallbackPage: FormPage = { id: 1, name: "Page 1", fields: [] }
     const currentPage = pages.find((p) => p.id === activePage) ?? pages[0] ?? fallbackPage
 
-    const draftPayload = useMemo<FormCreatePayload>(
-        () => ({
+    const draftPayload = useMemo<FormCreatePayload>(() => {
+        const allowedMimeTypes = allowedMimeTypesText
+            .split(",")
+            .map((entry) => entry.trim())
+            .filter(Boolean)
+        return {
             name: formName.trim(),
             description: formDescription.trim() || null,
             form_schema: buildFormSchema(pages, {
@@ -1226,9 +1401,21 @@ export default function FormBuilderPage() {
                 logoUrl,
                 privacyNotice,
             }),
-        }),
-        [formName, formDescription, pages, publicTitle, logoUrl, privacyNotice],
-    )
+            max_file_size_bytes: Math.max(1, Math.round(maxFileSizeMb * 1024 * 1024)),
+            max_file_count: Math.max(0, Math.round(maxFileCount)),
+            allowed_mime_types: allowedMimeTypes.length > 0 ? allowedMimeTypes : null,
+        }
+    }, [
+        formName,
+        formDescription,
+        pages,
+        publicTitle,
+        logoUrl,
+        privacyNotice,
+        maxFileSizeMb,
+        maxFileCount,
+        allowedMimeTypesText,
+    ])
     const draftFingerprint = useMemo(() => JSON.stringify(draftPayload), [draftPayload])
     const debouncedPayload = useDebouncedValue(draftPayload, 1200)
     const debouncedFingerprint = useMemo(
@@ -1303,6 +1490,28 @@ export default function FormBuilderPage() {
         }
         if (["select", "multiselect", "radio"].includes(draggedField.type)) {
             return { ...baseField, options: ["Option 1", "Option 2", "Option 3"] }
+        }
+        if (draggedField.type === "repeatable_table") {
+            return {
+                ...baseField,
+                label: "Repeating Table",
+                columns: [
+                    {
+                        id: buildColumnId(),
+                        label: "Column 1",
+                        type: "text",
+                        required: false,
+                    },
+                    {
+                        id: buildColumnId(),
+                        label: "Column 2",
+                        type: "text",
+                        required: false,
+                    },
+                ],
+                minRows: 0,
+                maxRows: null,
+            }
         }
         return baseField
     }
@@ -1461,9 +1670,68 @@ export default function FormBuilderPage() {
         return Number.isNaN(parsed) ? null : parsed
     }
 
+    const parseOptionalInt = (value: string) => {
+        if (!value.trim()) return null
+        const parsed = Number.parseInt(value, 10)
+        return Number.isNaN(parsed) ? null : parsed
+    }
+
     const handleValidationChange = (fieldId: string, updates: Partial<FormFieldValidation>) => {
         const nextValidation = normalizeValidation(selectedFieldData?.validation, updates)
         handleUpdateField(fieldId, { validation: nextValidation })
+    }
+
+    const handleAddColumn = (fieldId: string) => {
+        const existing = selectedFieldData?.columns ?? []
+        const nextColumns = [
+            ...existing,
+            {
+                id: buildColumnId(),
+                label: `Column ${existing.length + 1}`,
+                type: "text" as const,
+                required: false,
+            },
+        ]
+        handleUpdateField(fieldId, { columns: nextColumns })
+    }
+
+    const handleUpdateColumn = (
+        fieldId: string,
+        columnId: string,
+        updates: Partial<NonNullable<FormField["columns"]>[number]>,
+    ) => {
+        const existing = selectedFieldData?.columns ?? []
+        const nextColumns = existing.map((column) =>
+            column.id === columnId ? { ...column, ...updates } : column,
+        )
+        handleUpdateField(fieldId, { columns: nextColumns })
+    }
+
+    const handleRemoveColumn = (fieldId: string, columnId: string) => {
+        const existing = selectedFieldData?.columns ?? []
+        const nextColumns = existing.filter((column) => column.id !== columnId)
+        handleUpdateField(fieldId, { columns: nextColumns })
+    }
+
+    const handleShowIfChange = (
+        fieldId: string,
+        updates: Partial<NonNullable<FormField["showIf"]>>,
+    ) => {
+        const current = selectedFieldData?.showIf ?? {
+            fieldKey: "",
+            operator: "equals" as const,
+            value: "",
+        }
+        const next = { ...current, ...updates }
+        if (!next.fieldKey) {
+            handleUpdateField(fieldId, { showIf: null })
+            return
+        }
+        if (["is_empty", "is_not_empty"].includes(next.operator)) {
+            handleUpdateField(fieldId, { showIf: { ...next, value: "" } })
+            return
+        }
+        handleUpdateField(fieldId, { showIf: next })
     }
 
     const handleMappingChange = (fieldId: string, value: string | null) => {
@@ -1722,6 +1990,15 @@ export default function FormBuilderPage() {
         setFormDescription(draft.description)
         setPublicTitle(draft.publicTitle)
         setPrivacyNotice(draft.privacyNotice)
+        if (draft.maxFileSizeMb !== undefined) {
+            setMaxFileSizeMb(draft.maxFileSizeMb)
+        }
+        if (draft.maxFileCount !== undefined) {
+            setMaxFileCount(draft.maxFileCount)
+        }
+        if (draft.allowedMimeTypesText !== undefined) {
+            setAllowedMimeTypesText(draft.allowedMimeTypesText)
+        }
         const nextPages = draft.pages.length > 0 ? draft.pages : [{ id: 1, name: "Page 1", fields: [] }]
         setPages(nextPages)
         setActivePage(nextPages[0]?.id ?? 1)
@@ -1769,9 +2046,15 @@ export default function FormBuilderPage() {
                 logoUrl,
                 privacyNotice,
             }),
-            max_file_size_bytes: formData?.max_file_size_bytes ?? 10 * 1024 * 1024,
-            max_file_count: formData?.max_file_count ?? 10,
-            allowed_mime_types: formData?.allowed_mime_types ?? null,
+            max_file_size_bytes: Math.max(1, Math.round(maxFileSizeMb * 1024 * 1024)),
+            max_file_count: Math.max(0, Math.round(maxFileCount)),
+            allowed_mime_types: (() => {
+                const parsed = allowedMimeTypesText
+                    .split(",")
+                    .map((entry) => entry.trim())
+                    .filter(Boolean)
+                return parsed.length > 0 ? parsed : null
+            })(),
             generated_at: new Date().toISOString(),
         }
 
@@ -1805,6 +2088,22 @@ export default function FormBuilderPage() {
 
     // Get selected field data
     const selectedFieldData = selectedField ? currentPage.fields.find((f) => f.id === selectedField) : null
+    const conditionFieldOptions = useMemo(() => {
+        const allFields = pages.flatMap((page) =>
+            page.fields.map((field) => ({
+                id: field.id,
+                label: field.label || field.id,
+                type: field.type,
+                options: field.options,
+            })),
+        )
+        return allFields.filter(
+            (field) =>
+                field.id !== selectedField &&
+                field.type !== "file" &&
+                field.type !== "repeatable_table",
+        )
+    }, [pages, selectedField])
 
     // Get field icon by type
     const getFieldIcon = (type: string) => {
@@ -2147,6 +2446,153 @@ export default function FormBuilderPage() {
                                     />
                                 </div>
 
+                                {/* Conditional Logic */}
+                                <div className="mt-4 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <Label>Conditional Logic</Label>
+                                        {selectedFieldData.showIf && (
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => handleUpdateField(selectedFieldData.id, { showIf: null })}
+                                            >
+                                                Clear
+                                            </Button>
+                                        )}
+                                    </div>
+                                    {conditionFieldOptions.length === 0 ? (
+                                        <p className="text-xs text-stone-500">
+                                            Add another field to enable conditional logic.
+                                        </p>
+                                    ) : (
+                                        <>
+                                            <Select
+                                                value={selectedFieldData.showIf?.fieldKey || "none"}
+                                                onValueChange={(value) => {
+                                                    const safeValue = value ?? "none"
+                                                    handleShowIfChange(selectedFieldData.id, {
+                                                        fieldKey: safeValue === "none" ? "" : safeValue,
+                                                    })
+                                                }}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select field" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="none">No condition</SelectItem>
+                                                    {conditionFieldOptions.map((option) => (
+                                                        <SelectItem key={option.id} value={option.id}>
+                                                            {option.label}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            {selectedFieldData.showIf && (
+                                                <>
+                                                    <Select
+                                                        value={selectedFieldData.showIf.operator}
+                                                        onValueChange={(value) =>
+                                                            handleShowIfChange(selectedFieldData.id, {
+                                                                operator: value as ShowIfOperator,
+                                                            })
+                                                        }
+                                                    >
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="Condition" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {(() => {
+                                                                const controlling = conditionFieldOptions.find(
+                                                                    (field) =>
+                                                                        field.id === selectedFieldData.showIf?.fieldKey,
+                                                                )
+                                                                const isMulti =
+                                                                    controlling?.type === "checkbox" ||
+                                                                    controlling?.type === "multiselect"
+                                                                const ops = isMulti
+                                                                    ? [
+                                                                        { value: "contains", label: "contains" },
+                                                                        { value: "not_contains", label: "not contains" },
+                                                                        { value: "is_empty", label: "is empty" },
+                                                                        { value: "is_not_empty", label: "is not empty" },
+                                                                    ]
+                                                                    : [
+                                                                        { value: "equals", label: "equals" },
+                                                                        { value: "not_equals", label: "not equals" },
+                                                                        { value: "is_empty", label: "is empty" },
+                                                                        { value: "is_not_empty", label: "is not empty" },
+                                                                    ]
+                                                                return ops.map((op) => (
+                                                                    <SelectItem key={op.value} value={op.value}>
+                                                                        {op.label}
+                                                                    </SelectItem>
+                                                                ))
+                                                            })()}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    {!["is_empty", "is_not_empty"].includes(
+                                                        selectedFieldData.showIf.operator,
+                                                    ) && (
+                                                        <>
+                                                            {(() => {
+                                                                const controlling = conditionFieldOptions.find(
+                                                                    (field) =>
+                                                                        field.id === selectedFieldData.showIf?.fieldKey,
+                                                                )
+                                                                const optionList = controlling?.options || []
+                                                                if (
+                                                                    optionList.length > 0 &&
+                                                                    (controlling?.type === "select" ||
+                                                                        controlling?.type === "radio" ||
+                                                                        controlling?.type === "checkbox" ||
+                                                                        controlling?.type === "multiselect")
+                                                                ) {
+                                                                    return (
+                                                                        <Select
+                                                                            value={selectedFieldData.showIf?.value || ""}
+                                                                            onValueChange={(value) =>
+                                                                                handleShowIfChange(selectedFieldData.id, {
+                                                                                    value: value ?? "",
+                                                                                })
+                                                                            }
+                                                                        >
+                                                                            <SelectTrigger>
+                                                                                <SelectValue placeholder="Value" />
+                                                                            </SelectTrigger>
+                                                                            <SelectContent>
+                                                                                {optionList.map((option) => (
+                                                                                    <SelectItem
+                                                                                        key={option}
+                                                                                        value={option}
+                                                                                    >
+                                                                                        {option}
+                                                                                    </SelectItem>
+                                                                                ))}
+                                                                            </SelectContent>
+                                                                        </Select>
+                                                                    )
+                                                                }
+                                                                return (
+                                                                    <Input
+                                                                        value={selectedFieldData.showIf?.value || ""}
+                                                                        onChange={(e) =>
+                                                                            handleShowIfChange(selectedFieldData.id, {
+                                                                                value: e.target.value,
+                                                                            })
+                                                                        }
+                                                                        placeholder="Value to match"
+                                                                    />
+                                                                )
+                                                            })()}
+                                                        </>
+                                                    )}
+                                                </>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+
                                 {/* Validation Rules */}
                                 {["text", "textarea", "email", "phone", "address"].includes(
                                     selectedFieldData.type,
@@ -2212,6 +2658,124 @@ export default function FormBuilderPage() {
                                                 }
                                             />
                                         </div>
+                                    </div>
+                                )}
+
+                                {selectedFieldData.type === "repeatable_table" && (
+                                    <div className="mt-4 space-y-3">
+                                        <Label>Table Columns</Label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <Input
+                                                inputMode="numeric"
+                                                placeholder="Min rows"
+                                                value={selectedFieldData.minRows ?? ""}
+                                                onChange={(e) =>
+                                                    handleUpdateField(selectedFieldData.id, {
+                                                        minRows: parseOptionalInt(e.target.value),
+                                                    })
+                                                }
+                                            />
+                                            <Input
+                                                inputMode="numeric"
+                                                placeholder="Max rows"
+                                                value={selectedFieldData.maxRows ?? ""}
+                                                onChange={(e) =>
+                                                    handleUpdateField(selectedFieldData.id, {
+                                                        maxRows: parseOptionalInt(e.target.value),
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                        <div className="space-y-3">
+                                            {(selectedFieldData.columns || []).map((column) => (
+                                                <div
+                                                    key={column.id}
+                                                    className="rounded-lg border border-stone-200 p-3"
+                                                >
+                                                    <div className="flex items-center gap-2">
+                                                        <Input
+                                                            value={column.label}
+                                                            onChange={(e) =>
+                                                                handleUpdateColumn(selectedFieldData.id, column.id, {
+                                                                    label: e.target.value,
+                                                                })
+                                                            }
+                                                            placeholder="Column label"
+                                                        />
+                                                        <Select
+                                                            value={column.type}
+                                                            onValueChange={(value) => {
+                                                                const nextType = (value ?? "text") as
+                                                                    | "text"
+                                                                    | "number"
+                                                                    | "date"
+                                                                    | "select"
+                                                                handleUpdateColumn(selectedFieldData.id, column.id, {
+                                                                    type: nextType,
+                                                                    options:
+                                                                        nextType === "select"
+                                                                            ? column.options || ["Option 1", "Option 2"]
+                                                                            : [],
+                                                                })
+                                                            }}
+                                                        >
+                                                            <SelectTrigger className="w-[120px]">
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="text">Text</SelectItem>
+                                                                <SelectItem value="number">Number</SelectItem>
+                                                                <SelectItem value="date">Date</SelectItem>
+                                                                <SelectItem value="select">Select</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <Switch
+                                                            checked={column.required}
+                                                            onCheckedChange={(checked) =>
+                                                                handleUpdateColumn(selectedFieldData.id, column.id, {
+                                                                    required: checked,
+                                                                })
+                                                            }
+                                                        />
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() =>
+                                                                handleRemoveColumn(selectedFieldData.id, column.id)
+                                                            }
+                                                        >
+                                                            <XIcon className="size-4" />
+                                                        </Button>
+                                                    </div>
+                                                    {column.type === "select" && (
+                                                        <Input
+                                                            className="mt-2"
+                                                            value={(column.options || []).join(", ")}
+                                                            onChange={(e) =>
+                                                                handleUpdateColumn(selectedFieldData.id, column.id, {
+                                                                    options: e.target.value
+                                                                        .split(",")
+                                                                        .map((entry) => entry.trim())
+                                                                        .filter(Boolean),
+                                                                })
+                                                            }
+                                                            placeholder="Options (comma separated)"
+                                                        />
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="w-full bg-transparent"
+                                            onClick={() => handleAddColumn(selectedFieldData.id)}
+                                        >
+                                            <PlusIcon className="mr-2 size-4" />
+                                            Add Column
+                                        </Button>
                                     </div>
                                 )}
 
@@ -2532,6 +3096,55 @@ export default function FormBuilderPage() {
                                         rows={4}
                                         placeholder="Describe how applicant data is protected or paste a privacy policy URL"
                                     />
+                                </div>
+
+                                <div className="mt-6 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="text-sm font-semibold">Upload Rules</h4>
+                                        <Badge variant="outline">Files</Badge>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="max-file-size">Max file size (MB)</Label>
+                                            <Input
+                                                id="max-file-size"
+                                                inputMode="numeric"
+                                                value={maxFileSizeMb}
+                                                onChange={(e) =>
+                                                    setMaxFileSizeMb(
+                                                        Number.parseFloat(e.target.value || "0") || 1,
+                                                    )
+                                                }
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="max-file-count">Max files total</Label>
+                                            <Input
+                                                id="max-file-count"
+                                                inputMode="numeric"
+                                                value={maxFileCount}
+                                                onChange={(e) =>
+                                                    setMaxFileCount(
+                                                        Number.parseInt(e.target.value || "0", 10) || 0,
+                                                    )
+                                                }
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="allowed-mime-types">
+                                            Allowed MIME types (comma separated)
+                                        </Label>
+                                        <Input
+                                            id="allowed-mime-types"
+                                            value={allowedMimeTypesText}
+                                            onChange={(e) => setAllowedMimeTypesText(e.target.value)}
+                                            placeholder="image/*,application/pdf"
+                                        />
+                                        <p className="text-xs text-stone-500">
+                                            Leave blank to allow any file types. Per-field uploads are still capped at 5 files.
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
 

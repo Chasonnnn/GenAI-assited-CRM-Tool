@@ -36,7 +36,8 @@ type Step = {
     shortLabel: string
 }
 
-type AnswerValue = string | number | boolean | string[] | null
+type TableRow = Record<string, string | number | null>
+type AnswerValue = string | number | boolean | string[] | TableRow[] | null
 type Answers = Record<string, AnswerValue>
 type UnknownRecord = Record<string, unknown>
 type FileUploads = Record<string, File[]>
@@ -433,9 +434,6 @@ export default function PublicApplicationForm() {
         { id: pages.length + 1, label: "Review & Submit", shortLabel: "Review" },
     ]
 
-    const fileFields = pages.flatMap((page) =>
-        page.fields.filter((field) => field.type === "file"),
-    )
     const totalFiles = Object.values(fileUploads).reduce((sum, group) => sum + group.length, 0)
     const maxTotalFiles = formConfig?.max_file_count ?? 10
 
@@ -477,6 +475,67 @@ export default function PublicApplicationForm() {
         return false
     }
 
+    const evaluateCondition = (
+        condition: FormSchema["pages"][number]["fields"][number]["show_if"],
+        value: AnswerValue,
+    ) => {
+        if (!condition) return true
+        const expected = condition.value
+        switch (condition.operator) {
+            case "is_empty":
+                return isEmptyValue(value)
+            case "is_not_empty":
+                return !isEmptyValue(value)
+            case "equals":
+                if (expected !== undefined && expected !== null && typeof expected === "string") {
+                    return value !== null && value !== undefined
+                        ? String(value) === expected
+                        : false
+                }
+                return value === expected
+            case "not_equals":
+                if (expected !== undefined && expected !== null && typeof expected === "string") {
+                    return value !== null && value !== undefined
+                        ? String(value) !== expected
+                        : true
+                }
+                return value !== expected
+            case "contains":
+                if (Array.isArray(value)) {
+                    const list = value.filter((item): item is string => typeof item === "string")
+                    return expected ? list.includes(String(expected)) : false
+                }
+                if (typeof value === "string" && typeof expected === "string") {
+                    return value.includes(expected)
+                }
+                return false
+            case "not_contains":
+                if (Array.isArray(value)) {
+                    const list = value.filter((item): item is string => typeof item === "string")
+                    return expected ? !list.includes(String(expected)) : true
+                }
+                if (typeof value === "string" && typeof expected === "string") {
+                    return !value.includes(expected)
+                }
+                return true
+            default:
+                return true
+        }
+    }
+
+    const isFieldVisible = (
+        field: FormSchema["pages"][number]["fields"][number],
+        values: Answers,
+    ) => {
+        if (!field.show_if) return true
+        const controllingValue = values[field.show_if.field_key] ?? null
+        return evaluateCondition(field.show_if, controllingValue)
+    }
+
+    const fileFields = pages.flatMap((page) =>
+        page.fields.filter((field) => field.type === "file" && isFieldVisible(field, answers)),
+    )
+
     const getFieldValidationError = (
         field: FormSchema["pages"][number]["fields"][number],
         value: AnswerValue,
@@ -486,6 +545,34 @@ export default function PublicApplicationForm() {
             return `Please complete: ${field.label}`
         }
         if (isEmptyValue(value)) return null
+
+        if (field.type === "repeatable_table") {
+            if (!Array.isArray(value)) {
+                return `Please add at least one row for ${field.label}`
+            }
+            const minRows = field.min_rows ?? null
+            const maxRows = field.max_rows ?? null
+            if (minRows !== null && value.length < minRows) {
+                return `Please add at least ${minRows} rows for ${field.label}`
+            }
+            if (maxRows !== null && value.length > maxRows) {
+                return `Please limit ${field.label} to ${maxRows} rows`
+            }
+            const columns = field.columns || []
+            for (const row of value) {
+                if (!row || typeof row !== "object") {
+                    return `Please complete ${field.label}`
+                }
+                for (const column of columns) {
+                    if (!column.required) continue
+                    const rowValue = (row as Record<string, unknown>)[column.key]
+                    if (rowValue === null || rowValue === undefined || rowValue === "") {
+                        return `Please complete: ${column.label}`
+                    }
+                }
+            }
+            return null
+        }
 
         const validation = field.validation
         if (!validation) return null
@@ -559,7 +646,8 @@ export default function PublicApplicationForm() {
         const page = pages[step - 1]
         if (!page) return false
         for (const field of page.fields) {
-            const error = getFieldValidationError(field, answers[field.key])
+            if (!isFieldVisible(field, answers)) continue
+            const error = getFieldValidationError(field, answers[field.key] ?? null)
             if (error) {
                 toast.error(error)
                 return false
@@ -598,7 +686,8 @@ export default function PublicApplicationForm() {
             const page = pages[index]
             if (!page) continue
             for (const field of page.fields) {
-                const error = getFieldValidationError(field, answers[field.key])
+                if (!isFieldVisible(field, answers)) continue
+                const error = getFieldValidationError(field, answers[field.key] ?? null)
                 if (error) {
                     toast.error(error)
                     setCurrentStep(index + 1)
@@ -651,6 +740,13 @@ export default function PublicApplicationForm() {
         }
         if (field.type === "date" && typeof value === "string") {
             return <span className="font-medium">{formatDate(value)}</span>
+        }
+        if (field.type === "repeatable_table" && Array.isArray(value)) {
+            return (
+                <span className="font-medium">
+                    {value.length} row{value.length === 1 ? "" : "s"}
+                </span>
+            )
         }
         if (typeof value === "boolean") {
             return value ? <Badge className="bg-primary">Yes</Badge> : <Badge variant="secondary">No</Badge>
@@ -756,7 +852,9 @@ export default function PublicApplicationForm() {
 
         if (field.type === "multiselect" || field.type === "checkbox") {
             const options = field.options || []
-            const selectedValues = Array.isArray(value) ? value : []
+            const selectedValues = Array.isArray(value)
+                ? value.filter((item): item is string => typeof item === "string")
+                : []
             return (
                 <div key={field.key} className="space-y-3">
                     <Label className="text-sm font-medium">
@@ -779,6 +877,123 @@ export default function PublicApplicationForm() {
                                     label={option.label}
                                 />
                             ))}
+                        </div>
+                    )}
+                    {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
+                </div>
+            )
+        }
+
+        if (field.type === "repeatable_table") {
+            const columns = field.columns || []
+            const rows = Array.isArray(value)
+                ? value.filter((item): item is TableRow => typeof item === "object" && item !== null)
+                : []
+            const minRows = field.min_rows ?? 0
+            const maxRows = field.max_rows ?? null
+
+            const addRow = () => {
+                if (maxRows !== null && rows.length >= maxRows) return
+                const newRow: TableRow = {}
+                columns.forEach((column) => {
+                    newRow[column.key] = ""
+                })
+                updateField(field.key, [...rows, newRow])
+            }
+
+            const removeRow = (index: number) => {
+                const nextRows = rows.filter((_, rowIndex) => rowIndex !== index)
+                updateField(field.key, nextRows)
+            }
+
+            const updateRow = (rowIndex: number, columnKey: string, nextValue: string) => {
+                const nextRows = [...rows]
+                const row = { ...(nextRows[rowIndex] || {}) }
+                row[columnKey] = nextValue
+                nextRows[rowIndex] = row
+                updateField(field.key, nextRows)
+            }
+
+            return (
+                <div key={field.key} className="space-y-3">
+                    <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">
+                            {field.label} {requiredMark}
+                        </Label>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={addRow}
+                            disabled={maxRows !== null && rows.length >= maxRows}
+                        >
+                            Add Row
+                        </Button>
+                    </div>
+                    {columns.length === 0 ? (
+                        <p className="text-sm text-stone-500">No columns configured.</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {rows.length === 0 && minRows === 0 ? (
+                                <p className="text-sm text-stone-500">
+                                    No rows yet. Add a row to get started.
+                                </p>
+                            ) : (
+                                rows.map((row, rowIndex) => (
+                                    <div
+                                        key={`${field.key}-row-${rowIndex}`}
+                                        className="rounded-xl border border-stone-200 p-3"
+                                    >
+                                        <div className="grid gap-3 md:grid-cols-2">
+                                            {columns.map((column) => (
+                                                <div key={column.key} className="space-y-2">
+                                                    <Label className="text-xs font-medium">
+                                                        {column.label}
+                                                        {column.required && (
+                                                            <span className="text-red-500"> *</span>
+                                                        )}
+                                                    </Label>
+                                                    {column.type === "select" ? (
+                                                        <select
+                                                            className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm"
+                                                            value={String(row[column.key] ?? "")}
+                                                            onChange={(e) =>
+                                                                updateRow(rowIndex, column.key, e.target.value)
+                                                            }
+                                                        >
+                                                            <option value="">Select...</option>
+                                                            {(column.options || []).map((option) => (
+                                                                <option key={option.value} value={option.value}>
+                                                                    {option.label}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    ) : (
+                                                        <Input
+                                                            type={column.type === "number" ? "number" : column.type === "date" ? "date" : "text"}
+                                                            value={String(row[column.key] ?? "")}
+                                                            onChange={(e) =>
+                                                                updateRow(rowIndex, column.key, e.target.value)
+                                                            }
+                                                        />
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="mt-3 flex justify-end">
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="ghost"
+                                                onClick={() => removeRow(rowIndex)}
+                                                disabled={rows.length <= minRows}
+                                            >
+                                                Remove
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
                         </div>
                     )}
                     {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
@@ -945,14 +1160,24 @@ export default function PublicApplicationForm() {
                                             </Button>
                                         </div>
                                         <div className="grid gap-2 text-sm">
-                                            {page.fields.filter((field) => field.type !== "file").map((field) => (
+                                            {page.fields
+                                                .filter(
+                                                    (field) =>
+                                                        field.type !== "file" &&
+                                                        isFieldVisible(field, answers),
+                                                )
+                                                .map((field) => (
                                                 <div key={field.key} className="flex justify-between">
                                                     <span className="text-stone-500">{field.label}</span>
                                                     {renderReviewValue(field, answers[field.key] ?? null)}
                                                 </div>
                                             ))}
                                             {page.fields
-                                                .filter((field) => field.type === "file")
+                                                .filter(
+                                                    (field) =>
+                                                        field.type === "file" &&
+                                                        isFieldVisible(field, answers),
+                                                )
                                                 .map((field) => {
                                                     const count = fileUploads[field.key]?.length ?? 0
                                                     return (
@@ -997,18 +1222,27 @@ export default function PublicApplicationForm() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-6 pt-4">
-                            {currentPage.fields.filter((field) => field.type !== "file").length === 0 ? (
+                            {currentPage.fields.filter(
+                                (field) =>
+                                    field.type !== "file" && isFieldVisible(field, answers),
+                            ).length === 0 ? (
                                 <div className="rounded-xl border border-stone-200 p-4 text-sm text-stone-500">
                                     No fields on this page.
                                 </div>
                             ) : (
                                 currentPage.fields
-                                    .filter((field) => field.type !== "file")
+                                    .filter(
+                                        (field) =>
+                                            field.type !== "file" && isFieldVisible(field, answers),
+                                    )
                                     .map((field) => renderFieldInput(field))
                             )}
 
                             {currentPage.fields
-                                .filter((field) => field.type === "file")
+                                .filter(
+                                    (field) =>
+                                        field.type === "file" && isFieldVisible(field, answers),
+                                )
                                 .map((field) => (
                                     <div key={field.key} className="space-y-2">
                                         <Label className="text-sm font-medium">

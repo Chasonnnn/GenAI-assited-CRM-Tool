@@ -82,6 +82,37 @@ function formatDateTime(dateString: string): string {
     })
 }
 
+type TableRow = Record<string, unknown>
+type TableColumn = NonNullable<FormSchema["pages"][number]["fields"][number]["columns"]>[number]
+
+function normalizeTableRows(value: unknown): TableRow[] {
+    if (!Array.isArray(value)) return []
+    return value.filter((row): row is TableRow => Boolean(row) && typeof row === "object")
+}
+
+function resolveTableColumns(
+    field: FormSchema["pages"][number]["fields"][number],
+    rows: TableRow[],
+): TableColumn[] {
+    if (field.columns && field.columns.length > 0) {
+        return field.columns
+    }
+    if (rows.length === 0) return []
+    return Object.keys(rows[0] || {}).map((key) => ({
+        key,
+        label: key,
+        type: "text",
+        required: false,
+        options: null,
+    }))
+}
+
+function formatTableCellValue(value: unknown): string {
+    if (value === null || value === undefined || value === "") return "—"
+    if (typeof value === "boolean") return value ? "Yes" : "No"
+    return String(value)
+}
+
 export function SurrogateApplicationTab({
     surrogateId,
     formId,
@@ -357,6 +388,133 @@ export function SurrogateApplicationTab({
         field: FormSchema["pages"][number]["fields"][number],
         value: unknown,
     ) => {
+        if (field.type === "repeatable_table") {
+            const rows = normalizeTableRows(value)
+            const columns = resolveTableColumns(field, rows)
+            const minRows = field.min_rows ?? 0
+            const maxRows = field.max_rows ?? null
+
+            if (columns.length === 0) {
+                return <span className="text-xs text-muted-foreground">No columns configured</span>
+            }
+
+            const addRow = () => {
+                if (maxRows !== null && rows.length >= maxRows) return
+                const nextRow: TableRow = {}
+                columns.forEach((column) => {
+                    nextRow[column.key] = ""
+                })
+                handleFieldChange(field.key, [...rows, nextRow])
+            }
+
+            const updateRow = (rowIndex: number, columnKey: string, nextValue: string) => {
+                const nextRows = rows.map((row, index) =>
+                    index === rowIndex ? { ...row, [columnKey]: nextValue } : row,
+                )
+                handleFieldChange(field.key, nextRows)
+            }
+
+            const removeRow = (rowIndex: number) => {
+                if (rows.length <= minRows) return
+                const nextRows = rows.filter((_, index) => index !== rowIndex)
+                handleFieldChange(field.key, nextRows)
+            }
+
+            return (
+                <div className="space-y-2">
+                    {rows.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">No rows added yet.</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {rows.map((row, rowIndex) => (
+                                <div
+                                    key={`row-${rowIndex}`}
+                                    className="rounded-md border border-border p-2"
+                                >
+                                    <div className="grid gap-2 md:grid-cols-2">
+                                        {columns.map((column) => {
+                                            const cellValue = row[column.key]
+                                            const valueText =
+                                                cellValue === null || cellValue === undefined
+                                                    ? ""
+                                                    : String(cellValue)
+                                            return (
+                                                <div key={column.key} className="space-y-1">
+                                                    <Label className="text-xs text-muted-foreground">
+                                                        {column.label}
+                                                    </Label>
+                                                    {column.type === "select" ? (
+                                                        <NativeSelect
+                                                            value={valueText}
+                                                            onChange={(e) =>
+                                                                updateRow(rowIndex, column.key, e.target.value)
+                                                            }
+                                                            size="sm"
+                                                            className="w-full"
+                                                        >
+                                                            <NativeSelectOption value="">
+                                                                Select
+                                                            </NativeSelectOption>
+                                                            {(column.options || []).map((option) => (
+                                                                <NativeSelectOption
+                                                                    key={option.value}
+                                                                    value={option.value}
+                                                                >
+                                                                    {option.label}
+                                                                </NativeSelectOption>
+                                                            ))}
+                                                        </NativeSelect>
+                                                    ) : (
+                                                        <Input
+                                                            type={
+                                                                column.type === "number"
+                                                                    ? "number"
+                                                                    : column.type === "date"
+                                                                        ? "date"
+                                                                        : "text"
+                                                            }
+                                                            value={valueText}
+                                                            onChange={(e) =>
+                                                                updateRow(rowIndex, column.key, e.target.value)
+                                                            }
+                                                            className="h-8 text-sm"
+                                                        />
+                                                    )}
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                    <div className="mt-2 flex justify-end">
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => removeRow(rowIndex)}
+                                            disabled={rows.length <= minRows}
+                                        >
+                                            Remove
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <div className="flex justify-end">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={addRow}
+                            disabled={maxRows !== null && rows.length >= maxRows}
+                        >
+                            <PlusIcon className="h-3.5 w-3.5 mr-1" />
+                            Add row
+                        </Button>
+                    </div>
+                </div>
+            )
+        }
+
         if (field.type === "textarea") {
             return (
                 <Textarea
@@ -593,6 +751,39 @@ export function SurrogateApplicationTab({
         if (value === null || value === undefined || value === "") {
             return <span className="text-sm text-muted-foreground">—</span>
         }
+        if (field.type === "repeatable_table") {
+            const rows = normalizeTableRows(value)
+            const columns = resolveTableColumns(field, rows)
+            if (rows.length === 0 || columns.length === 0) {
+                return <span className="text-sm text-muted-foreground">—</span>
+            }
+            return (
+                <div className="max-w-[360px] overflow-x-auto">
+                    <table className="w-full text-xs text-left border-collapse">
+                        <thead>
+                            <tr className="text-muted-foreground">
+                                {columns.map((column) => (
+                                    <th key={column.key} className="border-b border-border pb-1 pr-2">
+                                        {column.label}
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows.map((row, rowIndex) => (
+                                <tr key={`row-${rowIndex}`}>
+                                    {columns.map((column) => (
+                                        <td key={column.key} className="py-1 pr-2 align-top">
+                                            {formatTableCellValue(row[column.key])}
+                                        </td>
+                                    ))}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )
+        }
         if (field.type === "date" && typeof value === "string") {
             return <span className="text-sm text-right">{formatLocalDate(parseDateInput(value))}</span>
         }
@@ -737,6 +928,11 @@ export function SurrogateApplicationTab({
                                                     const isEditing = isEditMode && editingField === field.key
                                                     const hasEdit = editedValue !== undefined
                                                     const displayValue = hasEdit ? editedValue : originalValue
+                                                    const isTableField = field.type === "repeatable_table"
+                                                    const valueWrapperClass = cn(
+                                                        hasEdit &&
+                                                            "bg-yellow-100 dark:bg-yellow-900/30 px-1.5 py-0.5 rounded",
+                                                    )
 
                                                     return (
                                                         <div key={field.key} className="flex justify-between items-start gap-4 group py-1">
@@ -745,7 +941,7 @@ export function SurrogateApplicationTab({
                                                             </span>
                                                             <div className="flex items-center gap-2">
                                                                 {isEditing ? (
-                                                                    <div className="flex items-center gap-2">
+                                                                    <div className={cn("flex gap-2", isTableField ? "items-start" : "items-center")}>
                                                                         {renderEditField(field, editedValue ?? originalValue)}
                                                                         <Button
                                                                             size="sm"
@@ -758,11 +954,15 @@ export function SurrogateApplicationTab({
                                                                     </div>
                                                                 ) : (
                                                                     <>
-                                                                        <span className={cn(
-                                                                            hasEdit && "bg-yellow-100 dark:bg-yellow-900/30 px-1.5 py-0.5 rounded"
-                                                                        )}>
-                                                                            {renderFieldValue(field, displayValue)}
-                                                                        </span>
+                                                                        {isTableField ? (
+                                                                            <div className={valueWrapperClass}>
+                                                                                {renderFieldValue(field, displayValue)}
+                                                                            </div>
+                                                                        ) : (
+                                                                            <span className={valueWrapperClass}>
+                                                                                {renderFieldValue(field, displayValue)}
+                                                                            </span>
+                                                                        )}
                                                                         {isEditMode && (
                                                                             <Button
                                                                                 size="sm"
