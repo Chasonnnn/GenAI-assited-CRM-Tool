@@ -112,6 +112,14 @@ const INTENDED_PARENT_STAGE_OPTIONS = [
     { id: "delivered", label: "Delivered", color: "#14B8A6" },
 ] as const
 
+const TOTAL_STEPS = 7
+const TERRITORY_CODES = new Set(["PR", "GU", "VI", "AS", "MP"])
+const STATE_OPTIONS = US_STATES.filter((state) => !TERRITORY_CODES.has(state.value))
+const TERRITORY_OPTIONS = US_STATES.filter((state) => TERRITORY_CODES.has(state.value))
+
+const normalizeStageLabel = (label: string) =>
+    label.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+
 export default function CampaignsPage() {
     const router = useRouter()
     const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
@@ -132,10 +140,13 @@ export default function CampaignsPage() {
     const [recipientType, setRecipientType] = useState<"case" | "intended_parent">("case")
     const [selectedStages, setSelectedStages] = useState<string[]>([])
     const [selectedStates, setSelectedStates] = useState<string[]>([])
+    const [stateSearch, setStateSearch] = useState("")
+    const [showTerritories, setShowTerritories] = useState(false)
     const [scheduleFor, setScheduleFor] = useState<"now" | "later">("now")
     const [scheduledDate, setScheduledDate] = useState("")
     const [deleteDialogId, setDeleteDialogId] = useState<string | null>(null)
     const [cancelDialogId, setCancelDialogId] = useState<string | null>(null)
+    const [sendNowDialogId, setSendNowDialogId] = useState<string | null>(null)
     const minScheduleDate = toLocalDateTimeInput(new Date())
 
     // API hooks
@@ -173,6 +184,112 @@ export default function CampaignsPage() {
             ? INTENDED_PARENT_STAGE_OPTIONS
             : pipelineStages.filter(stage => stage.is_active)
 
+    const normalizedStateSearch = stateSearch.trim().toLowerCase()
+    const filteredStates = STATE_OPTIONS.filter((state) =>
+        normalizedStateSearch
+            ? state.label.toLowerCase().includes(normalizedStateSearch)
+            : true
+    )
+    const filteredTerritories = TERRITORY_OPTIONS.filter((state) =>
+        normalizedStateSearch
+            ? state.label.toLowerCase().includes(normalizedStateSearch)
+            : true
+    )
+    const includeTerritories = showTerritories || normalizedStateSearch.length > 0
+    const visibleStateOptions = includeTerritories
+        ? [...filteredStates, ...filteredTerritories]
+        : filteredStates
+
+    const stagePresets =
+        recipientType === "intended_parent"
+            ? [
+                  {
+                      key: "ip-new-ready",
+                      label: "New + Ready",
+                      stageIds: stageOptions
+                          .filter((stage) =>
+                              ["new", "ready to match"].includes(normalizeStageLabel(stage.label))
+                          )
+                          .map((stage) => stage.id),
+                  },
+                  {
+                      key: "ip-active",
+                      label: "Active",
+                      stageIds: stageOptions
+                          .filter((stage) =>
+                              ["new", "ready to match", "matched"].includes(
+                                  normalizeStageLabel(stage.label)
+                              )
+                          )
+                          .map((stage) => stage.id),
+                  },
+                  {
+                      key: "ip-delivered",
+                      label: "Delivered",
+                      stageIds: stageOptions
+                          .filter((stage) => normalizeStageLabel(stage.label) === "delivered")
+                          .map((stage) => stage.id),
+                  },
+              ]
+            : [
+                  {
+                      key: "surrogate-intake",
+                      label: "Intake",
+                      stageIds: stageOptions
+                          .filter((stage) =>
+                              [
+                                  "new unread",
+                                  "contacted",
+                                  "qualified",
+                                  "interview scheduled",
+                                  "application submitted",
+                                  "under review",
+                              ].includes(normalizeStageLabel(stage.label))
+                          )
+                          .map((stage) => stage.id),
+                  },
+                  {
+                      key: "surrogate-match",
+                      label: "Match Ready+",
+                      stageIds: stageOptions
+                          .filter((stage) =>
+                              [
+                                  "approved",
+                                  "ready to match",
+                                  "matched",
+                                  "medical clearance passed",
+                                  "legal clearance passed",
+                              ].includes(normalizeStageLabel(stage.label))
+                          )
+                          .map((stage) => stage.id),
+                  },
+                  {
+                      key: "surrogate-pregnancy",
+                      label: "Pregnancy+",
+                      stageIds: stageOptions
+                          .filter((stage) =>
+                              [
+                                  "transfer cycle initiated",
+                                  "transfer cycle",
+                                  "second hcg confirmed",
+                                  "heartbeat confirmed",
+                                  "ob care established",
+                                  "anatomy scanned",
+                                  "delivered",
+                              ].includes(normalizeStageLabel(stage.label))
+                          )
+                          .map((stage) => stage.id),
+                  },
+              ]
+
+    const stagePresetsAvailable = stagePresets.filter((preset) => preset.stageIds.length > 0)
+    const selectedStageLabels = selectedStages
+        .map((stageId) => stageOptions.find((stage) => stage.id === stageId)?.label)
+        .filter(Boolean) as string[]
+    const selectedStateLabels = selectedStates
+        .map((stateCode) => US_STATES.find((state) => state.value === stateCode)?.label)
+        .filter(Boolean) as string[]
+
     // Filtered campaigns
     const filteredCampaigns = campaigns || []
 
@@ -184,6 +301,8 @@ export default function CampaignsPage() {
         setRecipientType("case")
         setSelectedStages([])
         setSelectedStates([])
+        setStateSearch("")
+        setShowTerritories(false)
         setScheduleFor("now")
         setScheduledDate("")
         setShowCreateWizard(false)
@@ -277,6 +396,19 @@ export default function CampaignsPage() {
             toast.error("Failed to stop campaign")
         } finally {
             setCancelDialogId(null)
+        }
+    }
+
+    const handleSendNowCampaign = async () => {
+        if (!sendNowDialogId) return
+
+        try {
+            await sendCampaign.mutateAsync({ id: sendNowDialogId, sendNow: true })
+            toast.success("Campaign queued for sending")
+        } catch {
+            toast.error("Failed to send campaign")
+        } finally {
+            setSendNowDialogId(null)
         }
     }
 
@@ -427,17 +559,25 @@ export default function CampaignsPage() {
                                                                     </span>
                                                                 </DropdownMenuTrigger>
                                                                 <DropdownMenuContent align="end">
-                                                                <DropdownMenuItem
-                                                                    onClick={() => router.push(`/automation/campaigns/${campaign.id}`)}
-                                                                >
-                                                                    <EyeIcon className="mr-2 size-4" />
-                                                                    View Details
-                                                                </DropdownMenuItem>
-                                                                {(campaign.status === "draft" || campaign.status === "scheduled") && (
                                                                     <DropdownMenuItem
-                                                                        onClick={() => router.push(`/automation/campaigns/${campaign.id}?edit=1`)}
+                                                                        onClick={() => router.push(`/automation/campaigns/${campaign.id}`)}
                                                                     >
-                                                                        <PencilIcon className="mr-2 size-4" />
+                                                                        <EyeIcon className="mr-2 size-4" />
+                                                                        View Details
+                                                                    </DropdownMenuItem>
+                                                                    {campaign.status === "draft" && (
+                                                                        <DropdownMenuItem
+                                                                            onClick={() => setSendNowDialogId(campaign.id)}
+                                                                        >
+                                                                            <SendIcon className="mr-2 size-4" />
+                                                                            Send Now
+                                                                        </DropdownMenuItem>
+                                                                    )}
+                                                                    {(campaign.status === "draft" || campaign.status === "scheduled") && (
+                                                                        <DropdownMenuItem
+                                                                            onClick={() => router.push(`/automation/campaigns/${campaign.id}?edit=1`)}
+                                                                        >
+                                                                            <PencilIcon className="mr-2 size-4" />
                                                                         Edit
                                                                     </DropdownMenuItem>
                                                                 )}
@@ -510,13 +650,13 @@ export default function CampaignsPage() {
                     <DialogHeader>
                         <DialogTitle>Create Campaign</DialogTitle>
                         <DialogDescription>
-                            Step {wizardStep} of 6
+                            Step {wizardStep} of {TOTAL_STEPS}
                         </DialogDescription>
                     </DialogHeader>
 
                     {/* Progress Indicator */}
                     <div className="flex items-center justify-between py-4">
-                        {[1, 2, 3, 4, 5, 6].map((step) => (
+                        {Array.from({ length: TOTAL_STEPS }, (_, index) => index + 1).map((step) => (
                             <div key={step} className="flex items-center flex-1 last:flex-none">
                                 <div
                                     className={`flex size-8 items-center justify-center rounded-full text-sm font-medium shrink-0 ${step <= wizardStep
@@ -526,7 +666,7 @@ export default function CampaignsPage() {
                                 >
                                     {step}
                                 </div>
-                                {step < 6 && (
+                                {step < TOTAL_STEPS && (
                                     <div
                                         className={`flex-1 h-0.5 mx-2 ${step < wizardStep ? "bg-primary" : "bg-muted"
                                             }`}
@@ -635,55 +775,80 @@ export default function CampaignsPage() {
                                     </Select>
                                 </div>
                                 <div className="space-y-2">
-                                    <Label>{recipientType === "intended_parent" ? "Filter by Status" : "Filter by Stage"}</Label>
-                                    <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                                    <div className="flex items-center justify-between">
+                                        <Label>
+                                            {recipientType === "intended_parent"
+                                                ? "Filter by Status (optional)"
+                                                : "Filter by Stage (optional)"}
+                                        </Label>
+                                        <div className="flex items-center gap-2">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setSelectedStages(stageOptions.map((stage) => stage.id))}
+                                                disabled={stageOptions.length === 0}
+                                            >
+                                                Select all
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setSelectedStages([])}
+                                                disabled={selectedStages.length === 0}
+                                            >
+                                                Clear
+                                            </Button>
+                                        </div>
+                                    </div>
+                                    {stagePresetsAvailable.length > 0 && (
+                                        <div className="flex flex-wrap gap-2">
+                                            {stagePresetsAvailable.map((preset) => (
+                                                <Button
+                                                    key={preset.key}
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => setSelectedStages(preset.stageIds)}
+                                                >
+                                                    {preset.label}
+                                                </Button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
                                         {stageOptions.map((stage) => (
                                             <div key={stage.id} className="flex items-center space-x-2">
                                                 <Checkbox
                                                     id={stage.id}
                                                     checked={selectedStages.includes(stage.id)}
                                                     onCheckedChange={(checked) => {
-                                                        if (checked) {
-                                                            setSelectedStages([...selectedStages, stage.id])
-                                                        } else {
-                                                            setSelectedStages(selectedStages.filter((s) => s !== stage.id))
-                                                        }
+                                                        setSelectedStages((prev) =>
+                                                            checked
+                                                                ? [...prev, stage.id]
+                                                                : prev.filter((s) => s !== stage.id)
+                                                        )
                                                     }}
                                                 />
-                                                <Label htmlFor={stage.id} className="text-sm">
-                                                    <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: stage.color }} />
+                                                <Label htmlFor={stage.id} className="text-sm cursor-pointer">
+                                                    <span
+                                                        className="inline-block w-2 h-2 rounded-full mr-1.5"
+                                                        style={{ backgroundColor: stage.color }}
+                                                    />
                                                     {stage.label}
                                                 </Label>
                                             </div>
                                         ))}
                                     </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Filter by State (optional)</Label>
-                                    <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
-                                        {US_STATES.map((state) => (
-                                            <div key={state.value} className="flex items-center space-x-2">
-                                                <Checkbox
-                                                    id={`state-${state.value}`}
-                                                    checked={selectedStates.includes(state.value)}
-                                                    onCheckedChange={(checked) => {
-                                                        if (checked) {
-                                                            setSelectedStates([...selectedStates, state.value])
-                                                        } else {
-                                                            setSelectedStates(selectedStates.filter((s) => s !== state.value))
-                                                        }
-                                                    }}
-                                                />
-                                                <Label htmlFor={`state-${state.value}`} className="text-sm cursor-pointer">
-                                                    {state.label}
-                                                </Label>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    {selectedStates.length > 0 && (
-                                        <p className="text-xs text-muted-foreground">
-                                            {selectedStates.length} state{selectedStates.length !== 1 ? "s" : ""} selected
-                                        </p>
+                                    {selectedStageLabels.length > 0 ? (
+                                        <div className="flex flex-wrap gap-2">
+                                            {selectedStageLabels.map((label) => (
+                                                <Badge key={label} variant="secondary" className="text-xs">
+                                                    {label}
+                                                </Badge>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs text-muted-foreground">All stages included.</p>
                                     )}
                                 </div>
                                 <Card className="bg-muted/50">
@@ -698,6 +863,93 @@ export default function CampaignsPage() {
                         )}
 
                         {wizardStep === 4 && (
+                            <div className="space-y-4">
+                                <h3 className="font-medium">Filter by State (optional)</h3>
+                                <div className="space-y-2">
+                                    <Label htmlFor="state-search">Search states</Label>
+                                    <Input
+                                        id="state-search"
+                                        placeholder="Search by state name"
+                                        value={stateSearch}
+                                        onChange={(e) => setStateSearch(e.target.value)}
+                                    />
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() =>
+                                            setSelectedStates((prev) => {
+                                                const next = new Set(prev)
+                                                visibleStateOptions.forEach((state) => next.add(state.value))
+                                                return Array.from(next)
+                                            })
+                                        }
+                                        disabled={visibleStateOptions.length === 0}
+                                    >
+                                        {normalizedStateSearch ? "Select results" : "Select all"}
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setSelectedStates([])}
+                                        disabled={selectedStates.length === 0}
+                                    >
+                                        Clear
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setShowTerritories((prev) => !prev)}
+                                    >
+                                        {showTerritories ? "Hide territories" : "Show territories"}
+                                    </Button>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 max-h-56 overflow-y-auto border rounded-md p-3">
+                                    {visibleStateOptions.length === 0 && (
+                                        <p className="text-sm text-muted-foreground col-span-3">
+                                            No states match your search.
+                                        </p>
+                                    )}
+                                    {visibleStateOptions.map((state) => (
+                                        <div key={state.value} className="flex items-center space-x-2">
+                                            <Checkbox
+                                                id={`state-${state.value}`}
+                                                checked={selectedStates.includes(state.value)}
+                                                onCheckedChange={(checked) => {
+                                                    setSelectedStates((prev) =>
+                                                        checked
+                                                            ? [...prev, state.value]
+                                                            : prev.filter((s) => s !== state.value)
+                                                    )
+                                                }}
+                                            />
+                                            <Label htmlFor={`state-${state.value}`} className="text-sm cursor-pointer">
+                                                {state.label}
+                                            </Label>
+                                        </div>
+                                    ))}
+                                </div>
+                                {includeTerritories && filteredTerritories.length > 0 && (
+                                    <p className="text-xs text-muted-foreground">
+                                        Territories included in results.
+                                    </p>
+                                )}
+                                {selectedStates.length > 0 ? (
+                                    <div className="flex flex-wrap gap-2">
+                                        {selectedStateLabels.map((label) => (
+                                            <Badge key={label} variant="secondary" className="text-xs">
+                                                {label}
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-muted-foreground">All states included.</p>
+                                )}
+                            </div>
+                        )}
+
+                        {wizardStep === 5 && (
                             <div className="space-y-4">
                                 <h3 className="font-medium">Review Selection</h3>
                                 <Card>
@@ -718,7 +970,11 @@ export default function CampaignsPage() {
                                         </div>
                                         {selectedStages.length > 0 && (
                                             <div className="flex justify-between items-start">
-                                                <span className="text-muted-foreground">Filtered by Stage:</span>
+                                                <span className="text-muted-foreground">
+                                                    {recipientType === "intended_parent"
+                                                        ? "Filtered by Status:"
+                                                        : "Filtered by Stage:"}
+                                                </span>
                                             <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
                                                 {selectedStages.map((stageId) => {
                                                     const stage = stageOptions.find(s => s.id === stageId)
@@ -752,7 +1008,7 @@ export default function CampaignsPage() {
                             </div>
                         )}
 
-                        {wizardStep === 5 && (
+                        {wizardStep === 6 && (
                             <div className="space-y-4">
                                 <h3 className="font-medium">Recipient Preview</h3>
                                 <RecipientPreviewCard
@@ -775,7 +1031,7 @@ export default function CampaignsPage() {
                             </div>
                         )}
 
-                        {wizardStep === 6 && (
+                        {wizardStep === 7 && (
                             <div className="space-y-4">
                                 <h3 className="font-medium">Schedule & Send</h3>
 
@@ -835,13 +1091,36 @@ export default function CampaignsPage() {
                                 Back
                             </Button>
                         )}
-                        {wizardStep < 6 ? (
+                        {(wizardStep === 3 || wizardStep === 4) && (
+                            <Button
+                                variant="ghost"
+                                onClick={() => {
+                                    if (wizardStep === 3) {
+                                        setSelectedStages([])
+                                    }
+                                    if (wizardStep === 4) {
+                                        setSelectedStates([])
+                                    }
+                                    const nextStep = wizardStep + 1
+                                    setWizardStep(nextStep)
+                                    if (nextStep === 6) {
+                                        previewFilters.mutate({
+                                            recipientType,
+                                            filterCriteria: buildFilterCriteria(),
+                                        })
+                                    }
+                                }}
+                            >
+                                Skip
+                            </Button>
+                        )}
+                        {wizardStep < TOTAL_STEPS ? (
                             <Button
                                 onClick={() => {
                                     const nextStep = wizardStep + 1
                                     setWizardStep(nextStep)
-                                    // Fetch recipient preview when entering Step 5
-                                    if (nextStep === 5) {
+                                    // Fetch recipient preview when entering Step 6
+                                    if (nextStep === 6) {
                                         previewFilters.mutate({
                                             recipientType,
                                             filterCriteria: buildFilterCriteria(),
@@ -920,6 +1199,24 @@ export default function CampaignsPage() {
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
                             Stop
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Send Now Confirmation Dialog */}
+            <AlertDialog open={!!sendNowDialogId} onOpenChange={(open) => !open && setSendNowDialogId(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Send Campaign Now</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will immediately start sending this campaign. You can stop it once it begins, but some emails may still deliver.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleSendNowCampaign}>
+                            Send now
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

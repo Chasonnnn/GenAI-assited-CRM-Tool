@@ -69,6 +69,7 @@ vi.mock("@/lib/hooks/use-campaigns", () => ({
     useDeleteCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useDuplicateCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useCancelCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useSendCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useUpdateCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useRetryFailedCampaignRun: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))

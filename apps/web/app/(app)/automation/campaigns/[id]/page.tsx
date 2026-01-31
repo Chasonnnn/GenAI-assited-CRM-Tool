@@ -64,6 +64,7 @@ import {
     useDeleteCampaign,
     useDuplicateCampaign,
     useCancelCampaign,
+    useSendCampaign,
     useUpdateCampaign,
     useRetryFailedCampaignRun,
 } from "@/lib/hooks/use-campaigns"
@@ -133,6 +134,7 @@ export default function CampaignDetailPage() {
     const [showDeleteDialog, setShowDeleteDialog] = useState(false)
     const [showRetryDialog, setShowRetryDialog] = useState(false)
     const [showCancelDialog, setShowCancelDialog] = useState(false)
+    const [showSendDialog, setShowSendDialog] = useState(false)
     const [recipientFilter, setRecipientFilter] = useState("all")
     const [showTemplatePreview, setShowTemplatePreview] = useState(true)
     const [showEditDialog, setShowEditDialog] = useState(false)
@@ -165,6 +167,7 @@ export default function CampaignDetailPage() {
     const deleteCampaign = useDeleteCampaign()
     const duplicateCampaign = useDuplicateCampaign()
     const cancelCampaign = useCancelCampaign()
+    const sendCampaign = useSendCampaign()
     const updateCampaign = useUpdateCampaign()
     const retryFailed = useRetryFailedCampaignRun()
 
@@ -307,6 +310,16 @@ export default function CampaignDetailPage() {
         setShowCancelDialog(false)
     }
 
+    const handleSendNow = async () => {
+        try {
+            await sendCampaign.mutateAsync({ id: campaignId, sendNow: true })
+            toast.success("Campaign queued for sending")
+        } catch {
+            toast.error("Failed to send campaign")
+        }
+        setShowSendDialog(false)
+    }
+
     if (isLoading) {
         return (
             <div className="flex min-h-screen items-center justify-center">
@@ -378,6 +391,12 @@ export default function CampaignDetailPage() {
                             <PencilIcon className="size-4" />
                             Edit
                         </Button>
+                        {campaign.status === "draft" && (
+                            <Button onClick={() => setShowSendDialog(true)}>
+                                <SendIcon className="size-4" />
+                                Send Now
+                            </Button>
+                        )}
                         {(campaign.status === "scheduled" || campaign.status === "sending") && (
                             <Button
                                 variant="destructive"
@@ -868,6 +887,23 @@ export default function CampaignDetailPage() {
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction onClick={handleCancel} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                             Stop
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={showSendDialog} onOpenChange={setShowSendDialog}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Send Campaign Now</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will immediately start sending this campaign. You can stop it once it begins, but some emails may still deliver.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleSendNow}>
+                            Send now
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
