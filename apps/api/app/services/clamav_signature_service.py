@@ -63,11 +63,17 @@ def _local_latest_mtime(sig_dir: str) -> float | None:
 
 def _safe_extract(tar: tarfile.TarFile, path: str) -> None:
     abs_path = os.path.abspath(path)
-    for member in tar.getmembers():
+    members = tar.getmembers()
+    for member in members:
+        if member.islnk() or member.issym():
+            raise RuntimeError("Invalid signature archive contents")
+        if not (member.isdir() or member.isreg()):
+            raise RuntimeError("Invalid signature archive contents")
         member_path = os.path.abspath(os.path.join(path, member.name))
         if not member_path.startswith(abs_path + os.sep):
             raise RuntimeError("Invalid signature archive contents")
-    tar.extractall(path)
+    for member in members:
+        tar.extract(member, path)
 
 
 def _run_freshclam() -> None:
