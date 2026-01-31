@@ -16,7 +16,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.surrogate_access import can_modify_surrogate, check_surrogate_access
@@ -29,7 +28,6 @@ from app.core.deps import (
 )
 from app.core.permissions import PermissionKey as P
 from app.db.enums import Role
-from app.db.models import InterviewNote, SurrogateInterview, Surrogate
 from app.schemas.auth import UserSession
 from app.utils.sse import format_sse, STREAM_HEADERS
 from app.schemas.interview import (
@@ -752,25 +750,23 @@ async def summarize_interview_stream(
     known_names: list[str] = []
     if ai_settings.anonymize_pii:
         pii_mapping = PIIMapping()
-        surrogate = (
-            db.query(Surrogate)
-            .filter(Surrogate.id == interview.surrogate_id, Surrogate.organization_id == session.org_id)
-            .first()
-        )
+        surrogate = surrogate_service.get_surrogate(db, session.org_id, interview.surrogate_id)
         if surrogate and surrogate.full_name:
             known_names.append(surrogate.full_name)
             known_names.extend(surrogate.full_name.split())
         ai_interview_service._extend_known_names_from_text(known_names, transcript)
         transcript = anonymize_text(transcript, pii_mapping, known_names)
 
-    notes = db.scalars(
-        select(InterviewNote).where(
-            InterviewNote.interview_id == interview.id,
-            InterviewNote.organization_id == session.org_id,
-        )
-    ).all()
+    notes = interview_note_service.list_notes(db, session.org_id, interview.id)
+    note_texts: list[str] = []
+    for note in notes:
+        note_texts.append(note.content)
+        for reply in note.replies or []:
+            note_texts.append(reply.content)
     notes_text = (
-        "\n".join([ai_interview_service._strip_html(n.content) for n in notes]) if notes else "No notes"
+        "\n".join([ai_interview_service._strip_html(content) for content in note_texts])
+        if note_texts
+        else "No notes"
     )
     if ai_settings.anonymize_pii and pii_mapping:
         ai_interview_service._extend_known_names_from_text(known_names, notes_text)
@@ -919,14 +915,8 @@ async def summarize_all_interviews_stream(
         )
         raise HTTPException(status_code=400, detail=message)
 
-    interviews = db.scalars(
-        select(SurrogateInterview)
-        .where(
-            SurrogateInterview.surrogate_id == surrogate_id,
-            SurrogateInterview.organization_id == session.org_id,
-        )
-        .order_by(SurrogateInterview.conducted_at)
-    ).all()
+    interviews = interview_service.list_interviews(db, session.org_id, surrogate_id)
+    interviews = sorted(interviews, key=lambda interview: interview.conducted_at or interview.created_at)
 
     if not interviews:
         raise HTTPException(status_code=400, detail="No interviews found for this surrogate")
@@ -942,15 +932,15 @@ async def summarize_all_interviews_stream(
     interviews_content = []
     for interview in interviews:
         transcript = interview.transcript_text or "No transcript"
-        notes = db.scalars(
-            select(InterviewNote).where(
-                InterviewNote.interview_id == interview.id,
-                InterviewNote.organization_id == session.org_id,
-            )
-        ).all()
+        notes = interview_note_service.list_notes(db, session.org_id, interview.id)
+        note_texts: list[str] = []
+        for note in notes:
+            note_texts.append(note.content)
+            for reply in note.replies or []:
+                note_texts.append(reply.content)
         notes_text = (
-            "\n".join([ai_interview_service._strip_html(n.content) for n in notes])
-            if notes
+            "\n".join([ai_interview_service._strip_html(content) for content in note_texts])
+            if note_texts
             else "No notes"
         )
         if ai_settings.anonymize_pii and pii_mapping:
@@ -991,7 +981,7 @@ Notes:
         content = ""
         prompt_tokens = 0
         completion_tokens = 0
-        model_name = ai_settings.model or \"\"
+        model_name = ai_settings.model or ""
 
         try:
             async for chunk in provider.stream_chat(messages=messages, temperature=0.3, max_tokens=3000):
