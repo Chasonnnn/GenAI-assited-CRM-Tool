@@ -171,6 +171,24 @@ function buildFormSchema(pages: FormPage[], metadata: SchemaMetadata): FormSchem
                 options: toFieldOptions(field.options),
                 validation: field.validation ?? null,
                 help_text: field.helperText || null,
+                show_if: field.showIf
+                    ? {
+                        field_key: field.showIf.fieldKey,
+                        operator: field.showIf.operator,
+                        value: field.showIf.value ?? null,
+                    }
+                    : null,
+                columns: field.columns
+                    ? field.columns.map((column) => ({
+                        key: column.id,
+                        label: column.label,
+                        type: column.type,
+                        required: column.required,
+                        options: toFieldOptions(column.options),
+                    }))
+                    : null,
+                min_rows: field.minRows ?? null,
+                max_rows: field.maxRows ?? null,
             })),
         })),
         public_title: publicTitle || null,
