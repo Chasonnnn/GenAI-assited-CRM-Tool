@@ -327,9 +327,7 @@ async def download_attachment(
 
     if attachment.scan_status in ("infected", "error"):
         detail = (
-            "File is infected"
-            if attachment.scan_status == "infected"
-            else "File failed virus scan"
+            "File is infected" if attachment.scan_status == "infected" else "File failed virus scan"
         )
         raise HTTPException(status_code=403, detail=detail)
 
@@ -467,9 +465,7 @@ async def download_local_attachment(
         raise HTTPException(status_code=404, detail="Attachment not found")
     if attachment.scan_status in ("infected", "error"):
         detail = (
-            "File is infected"
-            if attachment.scan_status == "infected"
-            else "File failed virus scan"
+            "File is infected" if attachment.scan_status == "infected" else "File failed virus scan"
         )
         raise HTTPException(status_code=403, detail=detail)
 

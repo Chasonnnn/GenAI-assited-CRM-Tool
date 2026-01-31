@@ -120,7 +120,9 @@ def test_scan_attachment_fail_closed_when_scanner_missing_non_dev(
     assert attachment.quarantined is True
 
 
-def test_form_submission_file_enqueues_scan_job(db, test_org, test_user, default_stage, monkeypatch):
+def test_form_submission_file_enqueues_scan_job(
+    db, test_org, test_user, default_stage, monkeypatch
+):
     monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", True, raising=False)
     monkeypatch.setattr(form_submission_service, "store_file", lambda *_args, **_kwargs: None)
 

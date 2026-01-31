@@ -58,7 +58,9 @@ def list_surrogate_sources(
     sources = [
         {
             "value": source.value,
-            "label": "Others" if source.value == "other" else source.value.replace("_", " ").title(),
+            "label": "Others"
+            if source.value == "other"
+            else source.value.replace("_", " ").title(),
         }
         for source in SurrogateSource
         if source.value in allowed_sources

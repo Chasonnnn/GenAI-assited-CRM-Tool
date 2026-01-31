@@ -13,6 +13,7 @@ from app.db.models import MetaLead, PipelineStage, Surrogate
 
 logger = logging.getLogger(__name__)
 
+
 def _get_org_user(db: Session, org_id: UUID, user_id: UUID | None):
     if not user_id:
         return None

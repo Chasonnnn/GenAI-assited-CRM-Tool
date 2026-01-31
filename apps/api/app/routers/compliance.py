@@ -67,7 +67,9 @@ def list_legal_holds(
 ) -> LegalHoldListResponse:
     """List legal holds for the organization."""
     items, total = compliance_service.list_legal_holds(db, session.org_id, pagination)
-    pages = (total + pagination.per_page - 1) // pagination.per_page if pagination.per_page > 0 else 0
+    pages = (
+        (total + pagination.per_page - 1) // pagination.per_page if pagination.per_page > 0 else 0
+    )
     return LegalHoldListResponse(
         items=items,
         total=total,

@@ -123,7 +123,9 @@ def ensure_signatures(max_age_hours: int | None = None) -> None:
 
     bucket = _signature_bucket()
     key = _archive_key()
-    max_age = max_age_hours if max_age_hours is not None else settings.CLAMAV_SIGNATURES_MAX_AGE_HOURS
+    max_age = (
+        max_age_hours if max_age_hours is not None else settings.CLAMAV_SIGNATURES_MAX_AGE_HOURS
+    )
 
     local_mtime = _local_latest_mtime(sig_dir)
     local_dt = (
@@ -152,15 +154,11 @@ def ensure_signatures(max_age_hours: int | None = None) -> None:
 
     if settings.CLAMAV_SIGNATURES_DOWNLOAD_ONLY:
         if not bucket:
-            logger.warning(
-                "CLAMAV_SIGNATURES_DOWNLOAD_ONLY is enabled but no bucket is configured"
-            )
+            logger.warning("CLAMAV_SIGNATURES_DOWNLOAD_ONLY is enabled but no bucket is configured")
         elif local_dt is None:
             logger.warning("ClamAV signatures missing after download attempt; skipping refresh")
         elif age_hours is not None and max_age > 0:
-            logger.warning(
-                "ClamAV signatures are older than %s hours; skipping refresh", max_age
-            )
+            logger.warning("ClamAV signatures are older than %s hours; skipping refresh", max_age)
         else:
             logger.warning("ClamAV signatures stale; skipping refresh")
         return

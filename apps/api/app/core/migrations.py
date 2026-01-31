@@ -21,6 +21,7 @@ MIGRATION_LOCK_ID = 9823417
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass(frozen=True)
 class MigrationStatus:
     current_heads: tuple[str, ...]

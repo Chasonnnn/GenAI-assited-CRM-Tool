@@ -913,9 +913,7 @@ def _delete_old_signature_photo(photo_url: str):
         s3 = storage_client.get_s3_client()
         s3.delete_object(Bucket=bucket, Key=key)
     except Exception as exc:
-        logger.debug(
-            "Failed to delete old signature photo %s: %s", photo_url, exc, exc_info=exc
-        )
+        logger.debug("Failed to delete old signature photo %s: %s", photo_url, exc, exc_info=exc)
 
 
 @router.post(
