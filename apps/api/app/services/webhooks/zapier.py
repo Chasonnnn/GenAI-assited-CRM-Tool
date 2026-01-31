@@ -156,6 +156,20 @@ def _parse_created_time(payload: dict[str, Any]) -> datetime | None:
     return None
 
 
+def _build_status_message(status: str, duplicate: bool, surrogate_id: str | None) -> str:
+    if duplicate:
+        return "Duplicate lead received; existing record retained."
+    if status == "converted" and surrogate_id:
+        return "Webhook received. Lead converted into a surrogate."
+    if status == "awaiting_mapping":
+        return "Webhook received. Lead stored; mapping is required before conversion."
+    if status == "stored":
+        return "Webhook received. Lead stored successfully."
+    if status == "convert_failed":
+        return "Webhook received. Lead stored but conversion failed; check mappings."
+    return f"Webhook received with status: {status}."
+
+
 def build_test_payload(form_id: str | None, fields: dict[str, Any] | None = None) -> dict[str, Any]:
     """Build a test payload that exercises the Meta lead mapping pipeline."""
     created_time = datetime.now(timezone.utc).isoformat()
@@ -297,11 +311,15 @@ def process_zapier_payload(
 
     status, surrogate = meta_lead_service.process_stored_meta_lead(db, meta_lead)
 
+    surrogate_id = str(surrogate.id) if surrogate else None
+    message = _build_status_message(status, duplicate, surrogate_id)
+
     return {
         "status": status,
         "duplicate": duplicate,
         "meta_lead_id": str(meta_lead.id),
-        "surrogate_id": str(surrogate.id) if surrogate else None,
+        "surrogate_id": surrogate_id,
+        "message": message,
     }
 
 

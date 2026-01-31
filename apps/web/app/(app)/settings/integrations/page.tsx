@@ -1162,11 +1162,11 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
             const payload = formId ? { form_id: formId } : {}
             const result = await sendTestLead.mutateAsync(payload)
             if (result.status === "converted") {
-                toast.success("Test lead converted successfully")
+                toast.success(result.message ?? "Test lead converted successfully")
             } else if (result.status === "awaiting_mapping") {
-                toast.message("Test lead stored. Mapping review required.")
+                toast.message(result.message ?? "Test lead stored. Mapping review required.")
             } else {
-                toast.message(`Test lead stored with status: ${result.status}`)
+                toast.message(result.message ?? `Test lead stored with status: ${result.status}`)
             }
         } catch {
             toast.error("Failed to send test lead")
@@ -1330,6 +1330,12 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                             />
                             <p className="text-xs text-muted-foreground">
                                 Sends a dummy lead through the same mapping pipeline as Meta leads.
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                                Mapping for Zapier leads is managed in Meta Lead Forms.{" "}
+                                <Link href="/settings/integrations/meta/forms" className="text-primary underline">
+                                    Manage form mappings
+                                </Link>
                             </p>
                         </div>
                         <Button
