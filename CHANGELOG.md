@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.49.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.49.0...surrogacy-crm-platform-v0.49.1) (2026-01-31)
+
+
+### Bug Fixes
+
+* Fixed the Bandit B104 ([ebc9247](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ebc9247499e256daed2ce1d2d626b5cbdc7f29eb))
+* Fixed the campaign detail test mocks ([62ea76b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/62ea76b4382bafd58cfd7766a1ca79538c77a2dc))
+
 ## [0.49.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.48.0...surrogacy-crm-platform-v0.49.0) (2026-01-31)
 
 
