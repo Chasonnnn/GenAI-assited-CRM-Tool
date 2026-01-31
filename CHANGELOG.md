@@ -7,15 +7,8 @@ All notable changes to this project will be documented in this file.
 
 ### Bug Fixes
 
-* **api/worker:** enhance security and error handling in background worker and scanning ([559eb11](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/559eb11ddb3742cbad0cb228a6f62fb04467598b))
 * Fixed the Bandit B104 ([ebc9247](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ebc9247499e256daed2ce1d2d626b5cbdc7f29eb))
 * Fixed the campaign detail test mocks ([62ea76b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/62ea76b4382bafd58cfd7766a1ca79538c77a2dc))
-
-
-### Maintenance
-
-* **api/core:** security and logging improvements for core infrastructure ([d60b228](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d60b22883345ac28c80a1135a4dbf8437d6cac80))
-* **api/services:** standardize exception handling and security in domain services ([2fb21c4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2fb21c42c1c85448a1fe41cc3c64aa3bdfac0ccf))
 
 ## [0.49.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.48.0...surrogacy-crm-platform-v0.49.0) (2026-01-31)
 
