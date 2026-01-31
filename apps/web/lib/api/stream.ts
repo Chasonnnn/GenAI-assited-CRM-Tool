@@ -168,15 +168,16 @@ export async function streamSSE<T>(
     const emitEvent = (rawEvent: string) => {
         if (!rawEvent) return;
         let eventType = 'message';
-        let data = '';
+        const dataLines: string[] = [];
         for (const line of rawEvent.split('\n')) {
             if (line.startsWith('event:')) {
                 eventType = line.slice(6).trim();
             } else if (line.startsWith('data:')) {
-                data += line.slice(5).trim();
+                dataLines.push(line.slice(5));
             }
         }
 
+        const data = dataLines.join('\n').trim();
         if (!data) return;
         const parsed = JSON.parse(data);
         const event = { type: eventType, data: parsed } as StreamEvent<T>;
