@@ -19,7 +19,7 @@ from uuid import UUID
 
 
 from app.core.config import settings
-from app.db.models import Attachment
+from app.db.models import Attachment, FormSubmissionFile
 from app.db.session import SessionLocal
 from app.services import attachment_service, notification_service, alert_service
 from app.db.enums import AlertSeverity, AlertType
@@ -27,8 +27,8 @@ from app.db.enums import AlertSeverity, AlertType
 logger = logging.getLogger(__name__)
 
 
-def _download_to_temp(attachment: Attachment) -> str:
-    """Download attachment to temporary file for scanning."""
+def _download_storage_key_to_temp(storage_key: str) -> str:
+    """Download storage key to a temporary file for scanning."""
     backend = attachment_service._get_storage_backend()
 
     if backend == "s3":
@@ -38,11 +38,16 @@ def _download_to_temp(attachment: Attachment) -> str:
         bucket = getattr(settings, "S3_BUCKET", "crm-attachments")
 
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
-            s3.download_fileobj(bucket, attachment.storage_key, tmp)
+            s3.download_fileobj(bucket, storage_key, tmp)
             return tmp.name
-    else:
-        # Local storage - file already on disk
-        return os.path.join(attachment_service._get_local_storage_path(), attachment.storage_key)
+
+    # Local storage - file already on disk
+    return os.path.join(attachment_service._get_local_storage_path(), storage_key)
+
+
+def _download_to_temp(attachment: Attachment) -> str:
+    """Download attachment to temporary file for scanning."""
+    return _download_storage_key_to_temp(attachment.storage_key)
 
 
 def get_available_scanner() -> str | None:
@@ -213,6 +218,113 @@ def scan_attachment_job(attachment_id: UUID) -> bool:
         db.close()
 
 
+def scan_form_submission_file_job(file_id: UUID) -> bool:
+    """
+    Scan a form submission file for viruses and update its status.
+
+    Returns:
+        True if scan completed (regardless of result), False on error
+    """
+    if not getattr(settings, "ATTACHMENT_SCAN_ENABLED", False):
+        logger.info("Scanning disabled, marking form submission file %s as clean", file_id)
+        db = SessionLocal()
+        try:
+            from app.services import form_submission_service
+
+            form_submission_service.mark_submission_file_scanned(db, file_id, "clean")
+            db.commit()
+            return True
+        finally:
+            db.close()
+
+    db = SessionLocal()
+    temp_file = None
+    try:
+        file_record = (
+            db.query(FormSubmissionFile)
+            .filter(
+                FormSubmissionFile.id == file_id,
+                FormSubmissionFile.scan_status == "pending",
+            )
+            .first()
+        )
+
+        if not file_record:
+            logger.info("Form submission file %s not found or already scanned", file_id)
+            return False
+
+        temp_file = _download_storage_key_to_temp(file_record.storage_key)
+        scan_status, message = _run_clamav_scan(temp_file)
+
+        from app.services import form_submission_service
+
+        if scan_status == "clean":
+            form_submission_service.mark_submission_file_scanned(db, file_id, "clean")
+            logger.info("Form submission file %s is clean", file_id)
+        elif scan_status == "infected":
+            form_submission_service.mark_submission_file_scanned(db, file_id, "infected")
+            logger.warning("Form submission file %s is infected: %s", file_id, message)
+        else:
+            if settings.is_dev:
+                form_submission_service.mark_submission_file_scanned(db, file_id, "clean")
+                logger.warning(
+                    "Form submission scan unavailable in dev/test (%s); treating as clean",
+                    scan_status,
+                )
+            else:
+                form_submission_service.mark_submission_file_scanned(db, file_id, "error")
+                logger.error(
+                    "Form submission scan failed (%s) for %s: %s",
+                    scan_status,
+                    file_id,
+                    message,
+                )
+                try:
+                    alert_service.create_or_update_alert(
+                        db=db,
+                        org_id=file_record.organization_id,
+                        alert_type=AlertType.WORKER_JOB_FAILED,
+                        severity=AlertSeverity.ERROR,
+                        title="Form submission file scan failed",
+                        message=f"Form submission file scan failed ({scan_status}): {message}",
+                        integration_key="form_submission_file_scan",
+                        error_class=scan_status,
+                        details={
+                            "submission_file_id": str(file_record.id),
+                            "storage_key": file_record.storage_key,
+                        },
+                    )
+                except Exception as alert_error:
+                    logger.warning(
+                        "Failed to create scan failure alert for %s: %s",
+                        file_id,
+                        alert_error,
+                    )
+
+        db.commit()
+        return True
+
+    except Exception as e:
+        logger.error("Failed to scan form submission file %s: %s", file_id, e)
+        db.rollback()
+        try:
+            from app.services import form_submission_service
+
+            form_submission_service.mark_submission_file_scanned(db, file_id, "error")
+            db.commit()
+        except Exception:
+            pass
+        return False
+
+    finally:
+        if temp_file and attachment_service._get_storage_backend() == "s3":
+            try:
+                os.unlink(temp_file)
+            except Exception:
+                pass
+        db.close()
+
+
 def scan_pending_attachments() -> int:
     """
     Scan all pending attachments. Useful for batch processing.
@@ -230,7 +342,6 @@ def scan_pending_attachments() -> int:
             db.query(Attachment)
             .filter(
                 Attachment.scan_status == "pending",
-                Attachment.quarantined == True,  # noqa: E712
             )
             .limit(100)
             .all()

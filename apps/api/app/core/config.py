@@ -326,6 +326,10 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     ATTACHMENT_SCAN_ENABLED: bool = False
+    CLAMAV_SIGNATURES_BUCKET: str = ""
+    CLAMAV_SIGNATURES_PREFIX: str = "clamav"
+    CLAMAV_SIGNATURES_DIR: str = "/var/lib/clamav"
+    CLAMAV_SIGNATURES_MAX_AGE_HOURS: int = 72
 
     # Export Storage (optional separate endpoint)
     EXPORT_S3_ENDPOINT_URL: str = ""

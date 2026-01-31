@@ -74,12 +74,12 @@ class Attachment(Base):
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
 
-    # Security / Virus scan
+    # Security / Virus scan (infected or failed scans are quarantined)
     scan_status: Mapped[str] = mapped_column(
         String(20), server_default=text("'pending'"), nullable=False
     )  # pending | clean | infected | error
     scanned_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    quarantined: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
+    quarantined: Mapped[bool] = mapped_column(Boolean, server_default=text("FALSE"), nullable=False)
 
     # Soft-delete
     deleted_at: Mapped[datetime | None] = mapped_column(nullable=True)

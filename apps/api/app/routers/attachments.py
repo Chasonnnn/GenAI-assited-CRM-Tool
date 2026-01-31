@@ -86,7 +86,7 @@ async def upload_attachment(
     """
     Upload a file attachment to a surrogate.
 
-    File is quarantined until virus scan completes.
+    File is scanned asynchronously; only infected/failed scans are quarantined.
     """
     surrogate = _get_surrogate_with_access(db, surrogate_id, session, require_write=True)
 
@@ -146,7 +146,7 @@ async def list_attachments(
     session: UserSession = Depends(require_permission(POLICIES["surrogates"].default)),
     type: str | None = None,
 ):
-    """List attachments for a surrogate (excludes quarantined and deleted).
+    """List attachments for a surrogate (excludes infected/failed scans and deleted).
 
     Args:
         type: Filter by file type. Supported: "image" (filters to image/* content types)
@@ -325,8 +325,13 @@ async def download_attachment(
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
-    if attachment.quarantined:
-        raise HTTPException(status_code=403, detail="File is pending virus scan")
+    if attachment.scan_status in ("infected", "error"):
+        detail = (
+            "File is infected"
+            if attachment.scan_status == "infected"
+            else "File failed virus scan"
+        )
+        raise HTTPException(status_code=403, detail=detail)
 
     # Verify access: case attachment requires case access, IP attachment uses org-wide access
     if attachment.surrogate_id:
@@ -460,8 +465,13 @@ async def download_local_attachment(
     )
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
-    if attachment.quarantined:
-        raise HTTPException(status_code=403, detail="File is pending virus scan")
+    if attachment.scan_status in ("infected", "error"):
+        detail = (
+            "File is infected"
+            if attachment.scan_status == "infected"
+            else "File failed virus scan"
+        )
+        raise HTTPException(status_code=403, detail=detail)
 
     # Verify access: case attachment requires case access, IP attachment uses org-wide access
     if attachment.surrogate_id:

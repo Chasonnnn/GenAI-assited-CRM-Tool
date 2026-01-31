@@ -28,6 +28,7 @@ class JobType(str, Enum):
     CONTACT_REMINDER_CHECK = "contact_reminder_check"  # Daily contact follow-up check
     INTERVIEW_TRANSCRIPTION = "interview_transcription"
     ATTACHMENT_SCAN = "attachment_scan"
+    FORM_SUBMISSION_FILE_SCAN = "form_submission_file_scan"
     WORKFLOW_APPROVAL_EXPIRY = "workflow_approval_expiry"  # Sweep for expired approvals
     WORKFLOW_RESUME = "workflow_resume"  # Resume workflow after approval resolution
     ORG_DELETE = "org_delete"  # Hard delete org after grace period

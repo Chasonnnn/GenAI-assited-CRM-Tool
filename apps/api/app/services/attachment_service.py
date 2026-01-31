@@ -252,7 +252,7 @@ def upload_attachment(
     """
     Upload and store an attachment.
 
-    File is quarantined until virus scan passes.
+    File is scanned asynchronously; only infected/failed scans are quarantined.
     Either surrogate_id or intended_parent_id should be provided.
     """
     # Validate
@@ -297,7 +297,7 @@ def upload_attachment(
         file_size=file_size,
         checksum_sha256=checksum,
         scan_status="pending" if scan_enabled else "clean",
-        quarantined=scan_enabled,
+        quarantined=False,
     )
     db.add(attachment)
 
@@ -357,7 +357,7 @@ def list_attachments(
         query = query.filter(Attachment.intended_parent_id == intended_parent_id)
 
     if not include_quarantined:
-        query = query.filter(Attachment.quarantined == False)  # noqa: E712
+        query = query.filter(Attachment.scan_status.notin_(["infected", "error"]))
 
     if content_type_prefix:
         query = query.filter(Attachment.content_type.startswith(content_type_prefix))
@@ -407,7 +407,7 @@ def get_download_url(
 ) -> str | None:
     """Get signed download URL and log access."""
     attachment = get_attachment(db, org_id, attachment_id)
-    if not attachment or attachment.quarantined:
+    if not attachment or attachment.scan_status in ("infected", "error"):
         return None
 
     # Audit log
@@ -492,5 +492,7 @@ def mark_attachment_scanned(
 
         db.flush()  # Ensure attachment is saved before trigger
         trigger_document_uploaded(db, attachment)
+    else:
+        attachment.quarantined = True
 
     db.flush()

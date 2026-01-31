@@ -99,6 +99,16 @@ def _ensure_attachment_scanner_available() -> None:
         logger.info("Attachment scanning enabled; using %s", scanner)
 
 
+def _sync_clamav_signatures() -> None:
+    if settings.ATTACHMENT_SCAN_ENABLED and not settings.is_dev:
+        from app.services import clamav_signature_service
+
+        try:
+            clamav_signature_service.ensure_signatures()
+        except Exception as exc:
+            logger.warning("ClamAV signature sync failed: %s", exc)
+
+
 async def process_job(db, job) -> None:
     """Process a single job based on its type."""
     logger.info("Processing job %s (type=%s, attempt=%s)", job.id, job.job_type, job.attempts)
@@ -404,6 +414,7 @@ async def worker_loop() -> None:
 def main() -> None:
     """Entry point for the worker."""
     try:
+        _sync_clamav_signatures()
         _ensure_attachment_scanner_available()
         asyncio.run(worker_loop())
     except KeyboardInterrupt:
