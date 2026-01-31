@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.51.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.50.0...surrogacy-crm-platform-v0.51.0) (2026-01-31)
+
+
+### Features
+
+* **ai:** optimize chat scrolling and enhance SSE stream parsing robustness ([50f11b9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/50f11b9e36d7d9b69d6a3f03a62e92ca0019607b))
+* **api:** improve global search with fallback partial matching for surrogates ([300a387](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/300a38739b94b0c880486cc73098a0f27a6e244f))
+* **import:** enhance deduplication and add flexible source channel detection ([f9c7796](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f9c77965f80f70e3fe94b8a59c975f38c9d85004))
+* **surrogates:** expand lead sources and refine dashboard rendering ([a7679b9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a7679b911ce05d296ffda5e74aaf746c79fa293d))
+* **zapier:** implement detailed status messages for webhook lead processing ([5a7943f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5a7943f6524a2b33db17084ea76cbfa673cc0843))
+
+
+### Bug Fixes
+
+* narrow surrogate source filter type ([7c84306](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7c843069865c08c4e998fa265f02383a04cc3ba2))
+
 ## [0.50.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.49.1...surrogacy-crm-platform-v0.50.0) (2026-01-31)
 
 
