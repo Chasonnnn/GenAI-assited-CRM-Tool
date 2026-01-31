@@ -283,7 +283,7 @@ class FormSubmissionFile(Base):
     scan_status: Mapped[str] = mapped_column(
         String(20), server_default=text("'pending'"), nullable=False
     )
-    quarantined: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
+    quarantined: Mapped[bool] = mapped_column(Boolean, server_default=text("FALSE"), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
     deleted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True

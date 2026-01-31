@@ -10,7 +10,7 @@ from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.enums import AuditEventType, FormStatus, FormSubmissionStatus, SurrogateActivityType
+from app.db.enums import AuditEventType, FormStatus, FormSubmissionStatus, JobType, SurrogateActivityType
 from app.db.models import (
     Form,
     FormFieldMapping,
@@ -28,6 +28,7 @@ from app.services.attachment_service import (
     store_file,
     strip_exif_data,
 )
+from app.services import job_service
 
 
 DEFAULT_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
@@ -377,7 +378,7 @@ def add_submission_file(
         file_size=file_size,
         checksum_sha256=checksum,
         scan_status="pending" if scan_enabled else "clean",
-        quarantined=scan_enabled,
+        quarantined=False,
     )
     db.add(record)
 
@@ -398,6 +399,16 @@ def add_submission_file(
     )
 
     db.flush()
+
+    if scan_enabled:
+        job_service.enqueue_job(
+            db=db,
+            org_id=org_id,
+            job_type=JobType.FORM_SUBMISSION_FILE_SCAN,
+            payload={"submission_file_id": str(record.id)},
+            run_at=datetime.now(timezone.utc),
+            commit=False,
+        )
     return record
 
 
@@ -444,7 +455,7 @@ def get_submission_file_download_url(
     file_record: FormSubmissionFile,
     user_id: uuid.UUID,
 ) -> str | None:
-    if file_record.quarantined:
+    if file_record.scan_status in ("infected", "error"):
         return None
 
     ext = file_record.filename.rsplit(".", 1)[-1].lower() if "." in file_record.filename else ""
@@ -467,6 +478,18 @@ def get_submission_file_download_url(
     db.flush()
 
     return generate_signed_url(file_record.storage_key)
+
+
+def mark_submission_file_scanned(
+    db: Session, file_id: uuid.UUID, status: str
+) -> FormSubmissionFile | None:
+    record = db.query(FormSubmissionFile).filter(FormSubmissionFile.id == file_id).first()
+    if not record:
+        return None
+    record.scan_status = status
+    record.quarantined = status in ("infected", "error")
+    db.flush()
+    return record
 
 
 def approve_submission(
@@ -811,9 +834,20 @@ def _store_submission_file(
         file_size=file_size,
         checksum_sha256=checksum,
         scan_status="pending" if scan_enabled else "clean",
-        quarantined=scan_enabled,
+        quarantined=False,
     )
     db.add(record)
+    db.flush()
+
+    if scan_enabled:
+        job_service.enqueue_job(
+            db=db,
+            org_id=submission.organization_id,
+            job_type=JobType.FORM_SUBMISSION_FILE_SCAN,
+            payload={"submission_file_id": str(record.id)},
+            run_at=datetime.now(timezone.utc),
+            commit=False,
+        )
 
 
 def _build_surrogate_updates(

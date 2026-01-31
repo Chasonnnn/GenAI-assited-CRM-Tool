@@ -574,8 +574,13 @@ def download_submission_file(
     )
     if not file_record:
         raise HTTPException(status_code=404, detail="File not found")
-    if file_record.quarantined:
-        raise HTTPException(status_code=403, detail="File is pending virus scan")
+    if file_record.scan_status in ("infected", "error"):
+        detail = (
+            "File is infected"
+            if file_record.scan_status == "infected"
+            else "File failed virus scan"
+        )
+        raise HTTPException(status_code=403, detail=detail)
 
     url = form_submission_service.get_submission_file_download_url(
         db=db,
