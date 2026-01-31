@@ -8,6 +8,7 @@ export interface ZapierSettings {
     webhook_url: string;
     is_active: boolean;
     secret_configured: boolean;
+    inbound_webhooks: ZapierInboundWebhook[];
     outbound_webhook_url?: string | null;
     outbound_enabled: boolean;
     outbound_secret_configured: boolean;
@@ -19,9 +20,19 @@ export interface ZapierSettings {
     }>;
 }
 
+export interface ZapierInboundWebhook {
+    webhook_id: string;
+    webhook_url: string;
+    label?: string | null;
+    is_active: boolean;
+    secret_configured: boolean;
+    created_at: string;
+}
+
 export interface RotateZapierSecretResponse {
     webhook_url: string;
     webhook_secret: string;
+    webhook_id?: string | null;
 }
 
 export interface ZapierOutboundSettingsRequest {
@@ -49,6 +60,23 @@ export interface ZapierTestLeadResponse {
     message?: string | null;
 }
 
+export interface ZapierInboundWebhookCreateRequest {
+    label?: string | null;
+}
+
+export interface ZapierInboundWebhookCreateResponse {
+    webhook_id: string;
+    webhook_url: string;
+    webhook_secret: string;
+    label?: string | null;
+    is_active: boolean;
+}
+
+export interface ZapierInboundWebhookUpdateRequest {
+    label?: string | null;
+    is_active?: boolean | null;
+}
+
 export interface ZapierOutboundTestRequest {
     stage_slug?: string;
     lead_id?: string;
@@ -66,6 +94,25 @@ export async function getZapierSettings(): Promise<ZapierSettings> {
 
 export async function rotateZapierSecret(): Promise<RotateZapierSecretResponse> {
     return api.post<RotateZapierSecretResponse>('/integrations/zapier/settings/rotate-secret');
+}
+
+export async function createZapierInboundWebhook(
+    payload: ZapierInboundWebhookCreateRequest,
+): Promise<ZapierInboundWebhookCreateResponse> {
+    return api.post<ZapierInboundWebhookCreateResponse>('/integrations/zapier/webhooks', payload);
+}
+
+export async function rotateZapierInboundWebhookSecret(
+    webhookId: string,
+): Promise<RotateZapierSecretResponse> {
+    return api.post<RotateZapierSecretResponse>(`/integrations/zapier/webhooks/${webhookId}/rotate-secret`);
+}
+
+export async function updateZapierInboundWebhook(
+    webhookId: string,
+    payload: ZapierInboundWebhookUpdateRequest,
+): Promise<ZapierInboundWebhook> {
+    return api.patch<ZapierInboundWebhook>(`/integrations/zapier/webhooks/${webhookId}`, payload);
 }
 
 export async function updateZapierOutboundSettings(

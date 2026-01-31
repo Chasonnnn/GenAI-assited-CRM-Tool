@@ -34,10 +34,18 @@ import { useAuth } from "@/lib/auth-context"
 import { useUserIntegrations, useConnectZoom, useConnectGmail, useConnectGoogleCalendar, useConnectGcp, useDisconnectIntegration } from "@/lib/hooks/use-user-integrations"
 import { useAISettings, useUpdateAISettings, useTestAPIKey, useAIConsent, useAcceptConsent } from "@/lib/hooks/use-ai"
 import { useResendSettings, useUpdateResendSettings, useTestResendKey, useRotateWebhook, useEligibleSenders } from "@/lib/hooks/use-resend"
-import { useZapierSettings, useRotateZapierSecret, useZapierTestLead, useUpdateZapierOutboundSettings, useZapierOutboundTest } from "@/lib/hooks/use-zapier"
+import {
+    useZapierSettings,
+    useZapierTestLead,
+    useUpdateZapierOutboundSettings,
+    useZapierOutboundTest,
+    useCreateZapierInboundWebhook,
+    useRotateZapierInboundWebhook,
+    useUpdateZapierInboundWebhook,
+} from "@/lib/hooks/use-zapier"
 import { useMetaForms } from "@/lib/hooks/use-meta-forms"
 import { formatRelativeTime } from "@/lib/formatters"
-import { CopyIcon, SendIcon, RotateCwIcon, ActivityIcon } from "lucide-react"
+import { CopyIcon, SendIcon, RotateCwIcon, ActivityIcon, PlusIcon } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { toast } from "sonner"
 
@@ -1113,9 +1121,13 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
 function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
     const { data: settings, isLoading } = useZapierSettings()
     const { data: metaForms = [], isLoading: metaFormsLoading } = useMetaForms()
-    const rotateSecret = useRotateZapierSecret()
+    const createInboundWebhook = useCreateZapierInboundWebhook()
+    const rotateInboundWebhook = useRotateZapierInboundWebhook()
+    const updateInboundWebhook = useUpdateZapierInboundWebhook()
     const updateOutbound = useUpdateZapierOutboundSettings()
-    const [webhookSecret, setWebhookSecret] = useState<string | null>(null)
+    const [webhookSecrets, setWebhookSecrets] = useState<Record<string, string>>({})
+    const [labelDrafts, setLabelDrafts] = useState<Record<string, string>>({})
+    const [rotatingWebhookId, setRotatingWebhookId] = useState<string | null>(null)
     const [testFormId, setTestFormId] = useState('')
     const sendTestLead = useZapierTestLead()
     const sendOutboundTest = useZapierOutboundTest()
@@ -1127,8 +1139,23 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
     const [selectedOutboundStage, setSelectedOutboundStage] = useState<string>('')
 
     useEffect(() => {
-        setWebhookSecret(null)
-    }, [settings?.webhook_url])
+        if (!settings?.inbound_webhooks) return
+        const drafts: Record<string, string> = {}
+        settings.inbound_webhooks.forEach((webhook) => {
+            drafts[webhook.webhook_id] = webhook.label || ""
+        })
+        setLabelDrafts(drafts)
+        setWebhookSecrets((prev) => {
+            const next: Record<string, string> = {}
+            settings.inbound_webhooks.forEach((webhook) => {
+                const existing = prev[webhook.webhook_id]
+                if (existing) {
+                    next[webhook.webhook_id] = existing
+                }
+            })
+            return next
+        })
+    }, [settings?.inbound_webhooks])
 
     useEffect(() => {
         if (!settings) return
@@ -1149,13 +1176,56 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
             .catch(() => toast.error("Failed to copy"))
     }
 
-    const handleRotate = async () => {
+    const handleCreateInbound = async () => {
         try {
-            const result = await rotateSecret.mutateAsync()
-            setWebhookSecret(result.webhook_secret)
+            const result = await createInboundWebhook.mutateAsync({ label: null })
+            setWebhookSecrets((prev) => ({ ...prev, [result.webhook_id]: result.webhook_secret }))
+            toast.success("Webhook created")
+        } catch {
+            toast.error("Failed to create webhook")
+        }
+    }
+
+    const handleRotateInbound = async (webhookId: string) => {
+        try {
+            setRotatingWebhookId(webhookId)
+            const result = await rotateInboundWebhook.mutateAsync({ webhookId })
+            const secretId = result.webhook_id ?? webhookId
+            setWebhookSecrets((prev) => ({ ...prev, [secretId]: result.webhook_secret }))
             toast.success("Webhook secret rotated")
         } catch {
             toast.error("Failed to rotate webhook secret")
+        } finally {
+            setRotatingWebhookId(null)
+        }
+    }
+
+    const handleLabelBlur = async (webhookId: string) => {
+        const draft = (labelDrafts[webhookId] || "").trim()
+        const current = settings?.inbound_webhooks?.find((item) => item.webhook_id === webhookId)?.label || ""
+        if (draft === (current || "")) {
+            return
+        }
+        try {
+            await updateInboundWebhook.mutateAsync({
+                webhookId,
+                payload: { label: draft || null },
+            })
+            toast.success("Webhook updated")
+        } catch {
+            toast.error("Failed to update webhook")
+        }
+    }
+
+    const handleToggleInbound = async (webhookId: string, enabled: boolean) => {
+        try {
+            await updateInboundWebhook.mutateAsync({
+                webhookId,
+                payload: { is_active: enabled },
+            })
+            toast.success(enabled ? "Webhook enabled" : "Webhook disabled")
+        } catch {
+            toast.error("Failed to update webhook")
         }
     }
 
@@ -1275,69 +1345,153 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                 </CardHeader>
 
                 <CardContent className="space-y-6">
-                    <div className="space-y-2">
-                        <Label>Webhook URL</Label>
-                        <div className="flex gap-2">
-                            <Input value={settings?.webhook_url || ""} readOnly />
+                    <div className="space-y-4">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <Label>Inbound Webhooks</Label>
+                                <p className="text-xs text-muted-foreground">
+                                    Create a webhook per Zapier flow or lead source.
+                                </p>
+                            </div>
                             <Button
                                 variant="outline"
-                                size="icon"
-                                onClick={() => settings?.webhook_url && copyToClipboard(settings.webhook_url)}
-                                aria-label="Copy webhook URL"
+                                onClick={handleCreateInbound}
+                                disabled={createInboundWebhook.isPending}
                             >
-                                <CopyIcon className="size-4" aria-hidden="true" />
+                                {createInboundWebhook.isPending ? (
+                                    <>
+                                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                        Creating…
+                                    </>
+                                ) : (
+                                    <>
+                                        <PlusIcon className="mr-2 size-4" aria-hidden="true" />
+                                        Add webhook
+                                    </>
+                                )}
                             </Button>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                            Send a JSON payload to this URL from Zapier.
-                        </p>
-                    </div>
 
-                    <div className="space-y-2">
-                        <Label>Authentication Header</Label>
-                        <div className="rounded-md border border-dashed bg-muted/50 p-3 text-xs">
-                            <div className="flex items-center justify-between">
-                                <span>X-Webhook-Token: &lt;your secret&gt;</span>
-                            </div>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                            Rotate the secret if you need to reconfigure Zapier.
-                        </p>
-                    </div>
+                        {!settings?.inbound_webhooks?.length ? (
+                            <p className="text-xs text-muted-foreground">No inbound webhooks configured yet.</p>
+                        ) : (
+                            <div className="space-y-4">
+                                {settings.inbound_webhooks.map((webhook) => {
+                                    const secret = webhookSecrets[webhook.webhook_id]
+                                    const labelValue = labelDrafts[webhook.webhook_id] ?? ""
+                                    return (
+                                    <div key={webhook.webhook_id} className="space-y-3 rounded-md border p-4">
+                                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                            <div className="flex-1 space-y-2">
+                                                <Label>Label</Label>
+                                                <Input
+                                                    value={labelValue}
+                                                    onChange={(event) =>
+                                                        setLabelDrafts((prev) => ({
+                                                            ...prev,
+                                                            [webhook.webhook_id]: event.target.value,
+                                                        }))
+                                                    }
+                                                    onBlur={() => handleLabelBlur(webhook.webhook_id)}
+                                                    placeholder="Optional label"
+                                                    name={`zapier-label-${webhook.webhook_id}`}
+                                                />
+                                                <p className="text-xs text-muted-foreground">
+                                                    Created {formatRelativeTime(webhook.created_at)}
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Badge variant={webhook.is_active ? "default" : "secondary"}>
+                                                    {webhook.is_active ? "Active" : "Inactive"}
+                                                </Badge>
+                                                <Switch
+                                                    checked={webhook.is_active}
+                                                    onCheckedChange={(checked) =>
+                                                        handleToggleInbound(webhook.webhook_id, checked)
+                                                    }
+                                                    aria-label={`Toggle ${webhook.webhook_id}`}
+                                                />
+                                            </div>
+                                        </div>
 
-                    <div className="space-y-3">
-                        <Button
-                            variant="outline"
-                            onClick={handleRotate}
-                            disabled={rotateSecret.isPending}
-                        >
-                            {rotateSecret.isPending ? (
-                                <>
-                                    <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                    Rotating…
-                                </>
-                            ) : (
-                                <>
-                                    <RotateCwIcon className="mr-2 size-4" aria-hidden="true" />
-                                    Rotate Webhook Secret
-                                </>
-                            )}
-                        </Button>
+                                        <div className="space-y-2">
+                                            <Label>Webhook URL</Label>
+                                            <div className="flex min-w-0 gap-2">
+                                                <Input
+                                                    value={webhook.webhook_url}
+                                                    readOnly
+                                                    className="flex-1 text-xs font-mono"
+                                                />
+                                                <Button
+                                                    variant="outline"
+                                                    size="icon"
+                                                    onClick={() => copyToClipboard(webhook.webhook_url)}
+                                                    aria-label="Copy webhook URL"
+                                                >
+                                                    <CopyIcon className="size-4" aria-hidden="true" />
+                                                </Button>
+                                            </div>
+                                        </div>
 
-                        {webhookSecret && (
-                            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-100">
-                                <p className="mb-2 font-medium">New Webhook Secret (copy now — shown once):</p>
-                                <div className="flex items-center gap-2">
-                                    <code className="flex-1 break-all">{webhookSecret}</code>
-                                    <Button
-                                        variant="outline"
-                                        size="icon"
-                                        onClick={() => copyToClipboard(webhookSecret)}
-                                        aria-label="Copy webhook secret"
-                                    >
-                                        <CopyIcon className="size-4" aria-hidden="true" />
-                                    </Button>
-                                </div>
+                                        <div className="space-y-2">
+                                            <Label>Authentication Header</Label>
+                                            <div className="rounded-md border border-dashed bg-muted/50 p-3 text-xs">
+                                                <div className="flex items-center justify-between">
+                                                    <span>X-Webhook-Token: &lt;your secret&gt;</span>
+                                                </div>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">
+                                                Rotate the secret if you need to reconfigure Zapier.
+                                            </p>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <Button
+                                                variant="outline"
+                                                onClick={() => handleRotateInbound(webhook.webhook_id)}
+                                                disabled={
+                                                    rotateInboundWebhook.isPending &&
+                                                    rotatingWebhookId === webhook.webhook_id
+                                                }
+                                            >
+                                                {rotateInboundWebhook.isPending &&
+                                                rotatingWebhookId === webhook.webhook_id ? (
+                                                    <>
+                                                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                                        Rotating…
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <RotateCwIcon className="mr-2 size-4" aria-hidden="true" />
+                                                        Rotate Webhook Secret
+                                                    </>
+                                                )}
+                                            </Button>
+
+                                            {secret ? (
+                                                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-100">
+                                                    <p className="mb-2 font-medium">
+                                                        New Webhook Secret (copy now — shown once):
+                                                    </p>
+                                                    <div className="flex items-center gap-2">
+                                                        <code className="flex-1 break-all">
+                                                            {secret}
+                                                        </code>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            onClick={() => copyToClipboard(secret)}
+                                                            aria-label="Copy webhook secret"
+                                                        >
+                                                            <CopyIcon className="size-4" aria-hidden="true" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                    )
+                                })}
                             </div>
                         )}
                     </div>
@@ -1570,8 +1724,9 @@ export default function IntegrationsPage() {
             ? resendSettings?.from_email ?? "Resend configured"
             : resendSettings?.default_sender_email ?? "Gmail sender selected"
         : "Choose a provider"
-    const zapierConfigured = Boolean(zapierSettings?.secret_configured)
-    const zapierActive = Boolean(zapierSettings?.is_active)
+    const inboundWebhooks = zapierSettings?.inbound_webhooks ?? []
+    const zapierConfigured = inboundWebhooks.some((hook) => hook.secret_configured) || Boolean(zapierSettings?.secret_configured)
+    const zapierActive = inboundWebhooks.some((hook) => hook.is_active) || Boolean(zapierSettings?.is_active)
     const zapierStatusLabel = zapierConfigured
         ? (zapierActive ? "Active" : "Configured")
         : "Not configured"
@@ -1579,8 +1734,11 @@ export default function IntegrationsPage() {
     const zapierStatusIcon = zapierConfigured
         ? (zapierActive ? CheckCircleIcon : AlertTriangleIcon)
         : XCircleIcon
+    const inboundSummary = inboundWebhooks.length
+        ? `${inboundWebhooks.length} inbound webhook${inboundWebhooks.length === 1 ? "" : "s"}`
+        : "Inbound webhook ready"
     const zapierDetail = zapierConfigured
-        ? (zapierSettings?.outbound_enabled ? "Inbound + outbound enabled" : "Inbound webhook ready")
+        ? (zapierSettings?.outbound_enabled ? `${inboundSummary} + outbound enabled` : inboundSummary)
         : "Configure webhook secret"
     const AiStatusIcon = aiStatusIcon
     const EmailStatusIcon = emailStatusIcon

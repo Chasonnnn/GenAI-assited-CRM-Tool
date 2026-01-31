@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -19,10 +21,20 @@ from app.services.webhooks import zapier as zapier_webhook_service
 router = APIRouter(prefix="/integrations/zapier", tags=["zapier"])
 
 
+class ZapierInboundWebhookResponse(BaseModel):
+    webhook_id: str
+    webhook_url: str
+    label: str | None
+    is_active: bool
+    secret_configured: bool
+    created_at: datetime
+
+
 class ZapierSettingsResponse(BaseModel):
     webhook_url: str
     is_active: bool
     secret_configured: bool
+    inbound_webhooks: list[ZapierInboundWebhookResponse]
     outbound_webhook_url: str | None
     outbound_enabled: bool
     outbound_secret_configured: bool
@@ -33,6 +45,24 @@ class ZapierSettingsResponse(BaseModel):
 class RotateSecretResponse(BaseModel):
     webhook_url: str
     webhook_secret: str
+    webhook_id: str | None = None
+
+
+class ZapierInboundWebhookCreateRequest(BaseModel):
+    label: str | None = None
+
+
+class ZapierInboundWebhookCreateResponse(BaseModel):
+    webhook_id: str
+    webhook_url: str
+    webhook_secret: str
+    label: str | None
+    is_active: bool
+
+
+class ZapierInboundWebhookUpdateRequest(BaseModel):
+    label: str | None = None
+    is_active: bool | None = None
 
 
 class ZapierEventMappingItem(BaseModel):
@@ -79,7 +109,8 @@ def get_settings(
     session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
 ):
     settings = zapier_settings_service.get_or_create_settings(db, session.org_id)
-    return _serialize_settings(settings)
+    inbound_webhooks = zapier_settings_service.list_inbound_webhooks(db, session.org_id)
+    return _serialize_settings(settings, inbound_webhooks)
 
 
 @router.post("/settings/rotate-secret", response_model=RotateSecretResponse)
@@ -89,9 +120,85 @@ def rotate_secret(
     session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
 ):
     settings, secret = zapier_settings_service.rotate_webhook_secret(db, session.org_id)
+    inbound = zapier_settings_service.get_primary_inbound_webhook(db, session.org_id)
+    webhook_id = inbound.webhook_id if inbound else settings.webhook_id
+    webhook_url = (
+        zapier_settings_service.get_webhook_url(webhook_id)
+        if webhook_id
+        else zapier_settings_service.get_webhook_url(settings.webhook_id)
+    )
     return RotateSecretResponse(
-        webhook_url=zapier_settings_service.get_webhook_url(settings.webhook_id),
+        webhook_url=webhook_url,
         webhook_secret=secret,
+        webhook_id=webhook_id,
+    )
+
+
+@router.post("/webhooks", response_model=ZapierInboundWebhookCreateResponse)
+def create_inbound_webhook(
+    data: ZapierInboundWebhookCreateRequest,
+    _csrf: None = Depends(require_csrf_header),
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
+):
+    zapier_settings_service.get_or_create_settings(db, session.org_id)
+    inbound, secret = zapier_settings_service.create_inbound_webhook(
+        db, session.org_id, label=data.label
+    )
+    return ZapierInboundWebhookCreateResponse(
+        webhook_id=inbound.webhook_id,
+        webhook_url=zapier_settings_service.get_webhook_url(inbound.webhook_id),
+        webhook_secret=secret,
+        label=inbound.label,
+        is_active=inbound.is_active,
+    )
+
+
+@router.post("/webhooks/{webhook_id}/rotate-secret", response_model=RotateSecretResponse)
+def rotate_inbound_secret(
+    webhook_id: str,
+    _csrf: None = Depends(require_csrf_header),
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
+):
+    try:
+        inbound, secret = zapier_settings_service.rotate_inbound_webhook_secret(
+            db, session.org_id, webhook_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return RotateSecretResponse(
+        webhook_url=zapier_settings_service.get_webhook_url(inbound.webhook_id),
+        webhook_secret=secret,
+        webhook_id=inbound.webhook_id,
+    )
+
+
+@router.patch("/webhooks/{webhook_id}", response_model=ZapierInboundWebhookResponse)
+def update_inbound_webhook(
+    webhook_id: str,
+    data: ZapierInboundWebhookUpdateRequest,
+    _csrf: None = Depends(require_csrf_header),
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
+):
+    try:
+        inbound = zapier_settings_service.update_inbound_webhook(
+            db,
+            session.org_id,
+            webhook_id,
+            label=data.label,
+            is_active=data.is_active,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return ZapierInboundWebhookResponse(
+        webhook_id=inbound.webhook_id,
+        webhook_url=zapier_settings_service.get_webhook_url(inbound.webhook_id),
+        label=inbound.label,
+        is_active=inbound.is_active,
+        secret_configured=bool(inbound.webhook_secret_encrypted),
+        created_at=inbound.created_at,
     )
 
 
@@ -111,7 +218,8 @@ def update_outbound_settings(
         send_hashed_pii=data.send_hashed_pii,
         event_mapping=[m.model_dump() for m in data.event_mapping] if data.event_mapping else None,
     )
-    return _serialize_settings(settings)
+    inbound_webhooks = zapier_settings_service.list_inbound_webhooks(db, session.org_id)
+    return _serialize_settings(settings, inbound_webhooks)
 
 
 @router.post("/test-lead", response_model=ZapierTestLeadResponse)
@@ -184,12 +292,31 @@ def send_outbound_test(
     return ZapierOutboundTestResponse(status="queued", **result)
 
 
-def _serialize_settings(settings) -> ZapierSettingsResponse:
+def _serialize_settings(
+    settings,
+    inbound_webhooks: list,
+) -> ZapierSettingsResponse:
     mapping = zapier_settings_service.normalize_event_mapping(settings.outbound_event_mapping)
+    inbound_payload = [
+        ZapierInboundWebhookResponse(
+            webhook_id=inbound.webhook_id,
+            webhook_url=zapier_settings_service.get_webhook_url(inbound.webhook_id),
+            label=inbound.label,
+            is_active=inbound.is_active,
+            secret_configured=bool(inbound.webhook_secret_encrypted),
+            created_at=inbound.created_at,
+        )
+        for inbound in inbound_webhooks
+    ]
+    primary = inbound_webhooks[0] if inbound_webhooks else None
+    webhook_id = primary.webhook_id if primary else settings.webhook_id
     return ZapierSettingsResponse(
-        webhook_url=zapier_settings_service.get_webhook_url(settings.webhook_id),
-        is_active=settings.is_active,
-        secret_configured=bool(settings.webhook_secret_encrypted),
+        webhook_url=zapier_settings_service.get_webhook_url(webhook_id),
+        is_active=primary.is_active if primary else settings.is_active,
+        secret_configured=bool(primary.webhook_secret_encrypted)
+        if primary
+        else bool(settings.webhook_secret_encrypted),
+        inbound_webhooks=inbound_payload,
         outbound_webhook_url=settings.outbound_webhook_url,
         outbound_enabled=bool(settings.outbound_enabled),
         outbound_secret_configured=bool(settings.outbound_webhook_secret_encrypted),

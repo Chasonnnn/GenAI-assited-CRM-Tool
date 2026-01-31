@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -41,6 +42,86 @@ _META_NAME_KEYS = {
     "form_name": ("form_name",),
     "page_name": ("page_name",),
 }
+
+_META_FIELD_KEYS = set(_META_ID_KEYS.keys()) | set(_META_NAME_KEYS.keys())
+
+
+def _normalize_field_key(value: Any) -> str:
+    key = str(value or "").strip()
+    if not key:
+        return ""
+    key = re.sub(r"^\s*\d+\s*[\.\)\-:]\s*", "", key)
+    key = re.sub(r"[^0-9a-zA-Z]+", "_", key).strip("_")
+    return key.lower()
+
+
+def _coerce_simple_value(value: Any) -> Any:
+    if hasattr(value, "filename"):
+        return value.filename
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def _extract_values(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        values: list[Any] = []
+        for item in value:
+            values.extend(_extract_values(item))
+        return values
+    if isinstance(value, dict):
+        if "values" in value:
+            return _extract_values(value.get("values"))
+        if "value" in value:
+            return _extract_values(value.get("value"))
+        if len(value) == 1:
+            return _extract_values(next(iter(value.values())))
+        return [value]
+    return [value]
+
+
+def _accumulate_field(field_map: dict[str, list[Any]], key: Any, value: Any) -> None:
+    normalized = _normalize_field_key(key)
+    if not normalized or normalized in _META_FIELD_KEYS:
+        return
+    values = [_coerce_simple_value(item) for item in _extract_values(value)]
+    if not values:
+        return
+    existing = field_map.setdefault(normalized, [])
+    existing.extend(values)
+
+
+def _accumulate_field_data(field_map: dict[str, list[Any]], field_data: Any) -> None:
+    if isinstance(field_data, list):
+        for item in field_data:
+            if isinstance(item, dict):
+                lowered = {str(k).lower(): k for k in item.keys()}
+                name_key = (
+                    lowered.get("name")
+                    or lowered.get("field")
+                    or lowered.get("key")
+                    or lowered.get("label")
+                )
+                if name_key:
+                    raw_name = item.get(name_key)
+                    value_key = lowered.get("values") or lowered.get("value")
+                    values = item.get(value_key) if value_key else item.get("values")
+                    _accumulate_field(field_map, raw_name, values)
+                elif len(item) == 1:
+                    k, v = next(iter(item.items()))
+                    _accumulate_field(field_map, k, v)
+                else:
+                    for k, v in item.items():
+                        _accumulate_field(field_map, k, v)
+            else:
+                _accumulate_field(field_map, "value", item)
+        return
+
+    if isinstance(field_data, dict):
+        for key, value in field_data.items():
+            _accumulate_field(field_map, key, value)
 
 
 def _coerce_dict(value: Any) -> dict[str, Any]:
@@ -92,52 +173,57 @@ def _normalize_payload(value: Any) -> dict[str, Any]:
     return {"payload": unwrapped}
 
 
-def _get_any(payload: dict[str, Any], raw_fields: dict[str, Any], keys: tuple[str, ...]) -> Any:
+def _get_any(
+    payload: dict[str, Any],
+    raw_fields: dict[str, Any],
+    keys: tuple[str, ...],
+    normalized_payload: dict[str, Any] | None = None,
+) -> Any:
     for key in keys:
         if key in payload:
             return payload.get(key)
+        if normalized_payload and key in normalized_payload:
+            return normalized_payload.get(key)
         if key in raw_fields:
             return raw_fields.get(key)
     return None
 
 
 def _build_field_data_list(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    field_map: dict[str, list[Any]] = {}
+
     for key in _FIELD_DATA_KEYS:
-        field_data = payload.get(key)
-        if isinstance(field_data, list):
-            return field_data
+        if key in payload:
+            _accumulate_field_data(field_map, payload.get(key))
+            if field_map:
+                return [{"name": name, "values": values} for name, values in field_map.items()]
 
     for key in _FIELDS_KEYS:
-        fields = payload.get(key)
-        if isinstance(fields, dict):
-            return [
-                {"name": k, "values": [v] if not isinstance(v, list) else v}
-                for k, v in fields.items()
-            ]
+        if key in payload:
+            _accumulate_field_data(field_map, payload.get(key))
+            if field_map:
+                return [{"name": name, "values": values} for name, values in field_map.items()]
 
     # Fallback: treat payload as flat fields (exclude meta keys)
-    candidates = {}
     for key, value in payload.items():
         if key in _FIELD_DATA_KEYS or key in _FIELDS_KEYS:
             continue
-        if key in _META_ID_KEYS or key in _META_NAME_KEYS:
-            continue
-        candidates[key] = value
-    return [
-        {"name": k, "values": [v] if not isinstance(v, list) else v} for k, v in candidates.items()
-    ]
+        _accumulate_field(field_map, key, value)
+
+    return [{"name": name, "values": values} for name, values in field_map.items()]
 
 
 def _extract_tracking_fields(payload: dict[str, Any], raw_fields: dict[str, Any]) -> dict[str, Any]:
     tracking: dict[str, Any] = {}
+    normalized_payload = {_normalize_field_key(k): v for k, v in payload.items()}
 
     for key, candidates in _META_ID_KEYS.items():
-        value = _get_any(payload, raw_fields, candidates)
+        value = _get_any(payload, raw_fields, candidates, normalized_payload)
         if value:
             tracking[key] = value
 
     for key, candidates in _META_NAME_KEYS.items():
-        value = _get_any(payload, raw_fields, candidates)
+        value = _get_any(payload, raw_fields, candidates, normalized_payload)
         if value:
             tracking[key] = value
 
@@ -148,6 +234,13 @@ def _parse_created_time(payload: dict[str, Any]) -> datetime | None:
     value = (
         payload.get("created_time") or payload.get("submitted_at") or payload.get("submission_time")
     )
+    if not value:
+        normalized = {_normalize_field_key(k): v for k, v in payload.items()}
+        value = (
+            normalized.get("created_time")
+            or normalized.get("submitted_at")
+            or normalized.get("submission_time")
+        )
     if not value:
         return None
     parsed = meta_api.parse_meta_timestamp(str(value))
@@ -167,6 +260,15 @@ def _ensure_form_identifier(payload: Any, webhook_id: str) -> Any:
 
     if payload.get("form_id") or payload.get("formId") or payload.get("meta_form_id"):
         return payload
+
+    normalized = {_normalize_field_key(k): k for k in payload.keys()}
+    if "form_id" in normalized:
+        normalized_value = payload.get(normalized["form_id"])
+        if normalized_value:
+            payload["form_id"] = normalized_value
+            if "form_name" not in payload and "form_name" in normalized:
+                payload["form_name"] = payload.get(normalized["form_name"])
+            return payload
 
     form_id = f"zapier-{webhook_id}"
     payload["form_id"] = form_id
@@ -233,8 +335,14 @@ def process_zapier_payload(
         for item in field_data_list
         if isinstance(item, dict) and item.get("name")
     ]
+    normalized_payload = {_normalize_field_key(k): v for k, v in payload.items()}
     if (
-        payload.get("created_time") or payload.get("submitted_at") or payload.get("submission_time")
+        payload.get("created_time")
+        or payload.get("submitted_at")
+        or payload.get("submission_time")
+        or normalized_payload.get("created_time")
+        or normalized_payload.get("submitted_at")
+        or normalized_payload.get("submission_time")
     ) and "created_time" not in field_keys:
         field_keys.append("created_time")
     field_data = meta_api.normalize_field_data(field_data_list)
@@ -348,15 +456,15 @@ class ZapierWebhookHandler:
         if not webhook_id:
             raise HTTPException(status_code=400, detail="Missing webhook_id")
 
-        settings = zapier_settings_service.get_settings_by_webhook_id(db, webhook_id)
-        if not settings or not settings.is_active:
+        inbound = zapier_settings_service.get_inbound_webhook_by_id(db, webhook_id)
+        if not inbound or not inbound.is_active:
             raise HTTPException(status_code=404, detail="Webhook not found")
 
         token = request.headers.get("X-Webhook-Token") or request.query_params.get("token")
         if not token:
             raise HTTPException(status_code=401, detail="Missing webhook token")
 
-        secret = zapier_settings_service.decrypt_webhook_secret(settings.webhook_secret_encrypted)
+        secret = zapier_settings_service.decrypt_webhook_secret(inbound.webhook_secret_encrypted)
         if not secret or not hmac.compare_digest(token, secret):
             raise HTTPException(status_code=401, detail="Invalid webhook token")
 
@@ -408,7 +516,7 @@ class ZapierWebhookHandler:
                 results.append(
                     process_zapier_payload(
                         db,
-                        settings.organization_id,
+                        inbound.organization_id,
                         normalized,
                         raw_payload=item if isinstance(item, (dict, list)) else payload,
                     )
@@ -421,11 +529,11 @@ class ZapierWebhookHandler:
             normalized = _normalize_payload(payload)
             result = process_zapier_payload(
                 db,
-                settings.organization_id,
+                inbound.organization_id,
                 normalized,
                 raw_payload=payload if isinstance(payload, (dict, list)) else None,
             )
 
-        logger.info("Zapier lead ingested for org=%s", settings.organization_id)
+        logger.info("Zapier lead ingested for org=%s", inbound.organization_id)
 
         return result

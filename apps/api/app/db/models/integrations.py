@@ -135,6 +135,46 @@ class ZapierWebhookSettings(Base):
     __table_args__ = (Index("idx_zapier_webhook_settings_webhook_id", "webhook_id", unique=True),)
 
 
+class ZapierInboundWebhook(Base):
+    """
+    Org-level Zapier inbound webhook endpoints.
+
+    Supports multiple inbound webhook URLs per organization for lead intake.
+    """
+
+    __tablename__ = "zapier_inbound_webhooks"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    webhook_id: Mapped[str] = mapped_column(
+        String(36), server_default=text("gen_random_uuid()::text"), nullable=False
+    )
+    webhook_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    is_active: Mapped[bool] = mapped_column(nullable=False, server_default=text("true"))
+
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+
+    organization: Mapped["Organization"] = relationship()
+
+    __table_args__ = (
+        Index("idx_zapier_inbound_webhooks_webhook_id", "webhook_id", unique=True),
+        Index("idx_zapier_inbound_webhooks_org_id", "organization_id"),
+    )
+
+
 class UserIntegration(Base):
     """
     Per-user OAuth integrations.

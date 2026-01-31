@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.models import ZapierWebhookSettings
+from app.db.models import ZapierInboundWebhook, ZapierWebhookSettings
 from app.services import oauth_service
 
 logger = logging.getLogger(__name__)
@@ -51,10 +51,28 @@ def get_settings(db: Session, organization_id: uuid.UUID) -> ZapierWebhookSettin
     )
 
 
-def get_settings_by_webhook_id(db: Session, webhook_id: str) -> ZapierWebhookSettings | None:
+def list_inbound_webhooks(db: Session, organization_id: uuid.UUID) -> list[ZapierInboundWebhook]:
+    return list(
+        db.query(ZapierInboundWebhook)
+        .filter(ZapierInboundWebhook.organization_id == organization_id)
+        .order_by(ZapierInboundWebhook.created_at.asc())
+        .all()
+    )
+
+
+def get_inbound_webhook_by_id(db: Session, webhook_id: str) -> ZapierInboundWebhook | None:
     return (
-        db.query(ZapierWebhookSettings)
-        .filter(ZapierWebhookSettings.webhook_id == webhook_id)
+        db.query(ZapierInboundWebhook).filter(ZapierInboundWebhook.webhook_id == webhook_id).first()
+    )
+
+
+def get_primary_inbound_webhook(
+    db: Session, organization_id: uuid.UUID
+) -> ZapierInboundWebhook | None:
+    return (
+        db.query(ZapierInboundWebhook)
+        .filter(ZapierInboundWebhook.organization_id == organization_id)
+        .order_by(ZapierInboundWebhook.created_at.asc())
         .first()
     )
 
@@ -64,24 +82,133 @@ def get_or_create_settings(
     organization_id: uuid.UUID,
 ) -> ZapierWebhookSettings:
     settings_row = get_settings(db, organization_id)
-    if settings_row:
-        return settings_row
+    if not settings_row:
+        webhook_id = str(uuid.uuid4())
+        secret = _generate_webhook_secret()
+        settings_row = ZapierWebhookSettings(
+            organization_id=organization_id,
+            webhook_id=webhook_id,
+            webhook_secret_encrypted=encrypt_secret(secret),
+            is_active=True,
+            outbound_enabled=False,
+            outbound_send_hashed_pii=False,
+            outbound_event_mapping=DEFAULT_EVENT_MAPPING,
+        )
+        db.add(settings_row)
+        db.commit()
+        db.refresh(settings_row)
 
-    webhook_id = str(uuid.uuid4())
+    _ensure_primary_inbound_webhook(db, settings_row)
+    return settings_row
+
+
+def _default_inbound_label(index: int) -> str:
+    return f"Zapier Webhook {index}"
+
+
+def _ensure_primary_inbound_webhook(
+    db: Session, settings_row: ZapierWebhookSettings
+) -> ZapierInboundWebhook:
+    inbound = get_primary_inbound_webhook(db, settings_row.organization_id)
+    if inbound:
+        return inbound
+
+    secret = decrypt_webhook_secret(settings_row.webhook_secret_encrypted)
+    if not secret:
+        secret = _generate_webhook_secret()
+        settings_row.webhook_secret_encrypted = encrypt_secret(secret)
+
+    if not settings_row.webhook_id:
+        settings_row.webhook_id = str(uuid.uuid4())
+
+    inbound = ZapierInboundWebhook(
+        organization_id=settings_row.organization_id,
+        webhook_id=settings_row.webhook_id,
+        webhook_secret_encrypted=settings_row.webhook_secret_encrypted,
+        is_active=settings_row.is_active,
+        label="Primary",
+    )
+    settings_row.updated_at = _now_utc()
+    db.add(inbound)
+    db.commit()
+    db.refresh(inbound)
+    return inbound
+
+
+def create_inbound_webhook(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    label: str | None = None,
+) -> tuple[ZapierInboundWebhook, str]:
+    count = (
+        db.query(ZapierInboundWebhook)
+        .filter(ZapierInboundWebhook.organization_id == organization_id)
+        .count()
+    )
     secret = _generate_webhook_secret()
-    settings_row = ZapierWebhookSettings(
+    inbound = ZapierInboundWebhook(
         organization_id=organization_id,
-        webhook_id=webhook_id,
+        webhook_id=str(uuid.uuid4()),
         webhook_secret_encrypted=encrypt_secret(secret),
         is_active=True,
-        outbound_enabled=False,
-        outbound_send_hashed_pii=False,
-        outbound_event_mapping=DEFAULT_EVENT_MAPPING,
+        label=label or _default_inbound_label(count + 1),
     )
-    db.add(settings_row)
+    db.add(inbound)
     db.commit()
-    db.refresh(settings_row)
-    return settings_row
+    db.refresh(inbound)
+    return inbound, secret
+
+
+def rotate_inbound_webhook_secret(
+    db: Session,
+    organization_id: uuid.UUID,
+    webhook_id: str,
+) -> tuple[ZapierInboundWebhook, str]:
+    inbound = (
+        db.query(ZapierInboundWebhook)
+        .filter(
+            ZapierInboundWebhook.organization_id == organization_id,
+            ZapierInboundWebhook.webhook_id == webhook_id,
+        )
+        .first()
+    )
+    if not inbound:
+        raise ValueError("Webhook not found")
+    secret = _generate_webhook_secret()
+    inbound.webhook_secret_encrypted = encrypt_secret(secret)
+    inbound.updated_at = _now_utc()
+    db.commit()
+    db.refresh(inbound)
+    return inbound, secret
+
+
+def update_inbound_webhook(
+    db: Session,
+    organization_id: uuid.UUID,
+    webhook_id: str,
+    *,
+    label: str | None = None,
+    is_active: bool | None = None,
+) -> ZapierInboundWebhook:
+    inbound = (
+        db.query(ZapierInboundWebhook)
+        .filter(
+            ZapierInboundWebhook.organization_id == organization_id,
+            ZapierInboundWebhook.webhook_id == webhook_id,
+        )
+        .first()
+    )
+    if not inbound:
+        raise ValueError("Webhook not found")
+    if label is not None:
+        inbound.label = label.strip() or None
+    if is_active is not None:
+        inbound.is_active = is_active
+    inbound.updated_at = _now_utc()
+    db.commit()
+    db.refresh(inbound)
+    return inbound
 
 
 def normalize_event_mapping(mapping: list[dict] | None) -> list[dict]:
@@ -140,11 +267,23 @@ def rotate_webhook_secret(
     organization_id: uuid.UUID,
 ) -> tuple[ZapierWebhookSettings, str]:
     settings_row = get_or_create_settings(db, organization_id)
-    secret = _generate_webhook_secret()
-    settings_row.webhook_secret_encrypted = encrypt_secret(secret)
-    settings_row.updated_at = _now_utc()
-    db.commit()
-    db.refresh(settings_row)
+    inbound = get_primary_inbound_webhook(db, organization_id)
+    if not inbound:
+        inbound = _ensure_primary_inbound_webhook(db, settings_row)
+    inbound, secret = rotate_inbound_webhook_secret(db, organization_id, inbound.webhook_id)
+
+    # Keep legacy settings row in sync with primary inbound webhook.
+    if (
+        settings_row.webhook_id != inbound.webhook_id
+        or settings_row.webhook_secret_encrypted != inbound.webhook_secret_encrypted
+        or settings_row.is_active != inbound.is_active
+    ):
+        settings_row.webhook_id = inbound.webhook_id
+        settings_row.webhook_secret_encrypted = inbound.webhook_secret_encrypted
+        settings_row.is_active = inbound.is_active
+        settings_row.updated_at = _now_utc()
+        db.commit()
+        db.refresh(settings_row)
     return settings_row, secret
 
 

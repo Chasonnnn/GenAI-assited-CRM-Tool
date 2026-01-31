@@ -23,6 +23,38 @@ export function useRotateZapierSecret() {
     });
 }
 
+export function useCreateZapierInboundWebhook() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: zapierApi.createZapierInboundWebhook,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: zapierKeys.settings() });
+        },
+    });
+}
+
+export function useRotateZapierInboundWebhook() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ webhookId }: { webhookId: string }) =>
+            zapierApi.rotateZapierInboundWebhookSecret(webhookId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: zapierKeys.settings() });
+        },
+    });
+}
+
+export function useUpdateZapierInboundWebhook() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ webhookId, payload }: { webhookId: string; payload: zapierApi.ZapierInboundWebhookUpdateRequest }) =>
+            zapierApi.updateZapierInboundWebhook(webhookId, payload),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: zapierKeys.settings() });
+        },
+    });
+}
+
 export function useUpdateZapierOutboundSettings() {
     const queryClient = useQueryClient();
     return useMutation({

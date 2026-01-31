@@ -11,6 +11,9 @@ const mockConnectGoogleCalendar = vi.fn()
 const mockConnectGcp = vi.fn()
 const mockDisconnectIntegration = vi.fn()
 const mockZapierRotate = vi.fn()
+const mockZapierInboundCreate = vi.fn()
+const mockZapierInboundRotate = vi.fn()
+const mockZapierInboundUpdate = vi.fn()
 const mockZapierTestLead = vi.fn()
 const mockZapierOutboundUpdate = vi.fn()
 const mockZapierOutboundTest = vi.fn()
@@ -25,6 +28,16 @@ const zapierSettingsData = {
     webhook_url: 'https://api.test/webhooks/zapier/abc',
     is_active: true,
     secret_configured: true,
+    inbound_webhooks: [
+        {
+            webhook_id: 'abc',
+            webhook_url: 'https://api.test/webhooks/zapier/abc',
+            label: 'Primary',
+            is_active: true,
+            secret_configured: true,
+            created_at: '2026-01-01T00:00:00Z',
+        },
+    ],
     outbound_webhook_url: null,
     outbound_enabled: false,
     outbound_secret_configured: false,
@@ -117,6 +130,9 @@ vi.mock('@/lib/hooks/use-zapier', () => ({
         isLoading: false,
     }),
     useRotateZapierSecret: () => ({ mutateAsync: mockZapierRotate, isPending: false }),
+    useCreateZapierInboundWebhook: () => ({ mutateAsync: mockZapierInboundCreate, isPending: false }),
+    useRotateZapierInboundWebhook: () => ({ mutateAsync: mockZapierInboundRotate, isPending: false }),
+    useUpdateZapierInboundWebhook: () => ({ mutateAsync: mockZapierInboundUpdate, isPending: false }),
     useZapierTestLead: () => ({ mutateAsync: mockZapierTestLead, isPending: false }),
     useUpdateZapierOutboundSettings: () => ({ mutateAsync: mockZapierOutboundUpdate, isPending: false }),
     useZapierOutboundTest: () => ({ mutateAsync: mockZapierOutboundTest, isPending: false }),
@@ -149,6 +165,9 @@ describe('IntegrationsPage', () => {
         mockConnectGoogleCalendar.mockReset()
         mockConnectGcp.mockReset()
         mockDisconnectIntegration.mockReset()
+        mockZapierInboundCreate.mockReset()
+        mockZapierInboundRotate.mockReset()
+        mockZapierInboundUpdate.mockReset()
     })
 
     it('renders integration health and can refresh', () => {

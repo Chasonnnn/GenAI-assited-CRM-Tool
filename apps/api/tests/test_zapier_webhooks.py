@@ -118,6 +118,52 @@ async def test_zapier_settings_endpoint_returns_webhook_url(
     assert res.status_code == 200
     data = res.json()
     assert data["webhook_url"].startswith("https://api.test/webhooks/zapier/")
+    assert data["inbound_webhooks"]
+
+
+@pytest.mark.asyncio
+async def test_zapier_allows_multiple_inbound_webhooks(
+    authed_client, client, db, test_org, monkeypatch
+):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "API_BASE_URL", "https://api.test", raising=False)
+
+    res = await authed_client.get("/integrations/zapier/settings")
+    assert res.status_code == 200
+    data = res.json()
+    assert len(data["inbound_webhooks"]) == 1
+
+    created = await authed_client.post(
+        "/integrations/zapier/webhooks",
+        json={"label": "Secondary Intake"},
+    )
+    assert created.status_code == 200
+    created_data = created.json()
+    assert created_data["webhook_secret"]
+    assert created_data["webhook_url"].startswith("https://api.test/webhooks/zapier/")
+
+    res2 = await authed_client.get("/integrations/zapier/settings")
+    assert res2.status_code == 200
+    data2 = res2.json()
+    assert len(data2["inbound_webhooks"]) == 2
+
+    webhook_id = created_data["webhook_id"]
+    secret = created_data["webhook_secret"]
+    payload = {
+        "lead_id": "lead_multi_1",
+        "form_id": f"zapier-{webhook_id}",
+        "field_data": [
+            {"name": "full_name", "values": ["Zapier Multi"]},
+            {"name": "email", "values": ["multi@example.com"]},
+        ],
+    }
+    inbound_res = await client.post(
+        f"/webhooks/zapier/{webhook_id}",
+        json=payload,
+        headers={"X-Webhook-Token": secret},
+    )
+    assert inbound_res.status_code == 200
 
 
 @pytest.mark.asyncio
@@ -384,6 +430,62 @@ async def test_zapier_webhook_stores_raw_payload_and_creates_form(client, db, te
         .first()
     )
     assert task is not None
+
+
+@pytest.mark.asyncio
+async def test_zapier_webhook_handles_dict_field_data(client, db, test_org):
+    from app.db.models import MetaForm, MetaFormVersion, MetaLead
+    from app.services import zapier_settings_service
+
+    settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    secret = zapier_settings_service.decrypt_webhook_secret(settings.webhook_secret_encrypted)
+
+    payload = {
+        "lead_id": "lead_dict_1",
+        "form_id": "zap_form_dict",
+        "form_name": "Zapier Dict Intake",
+        "field_data": {
+            "Full Name": "Dict User",
+            "Email": "dict@example.com",
+            "Phone Number": "(555) 123-4567",
+            "State": "CA",
+            "Created Time": "2026-01-20T12:00:00Z",
+        },
+    }
+
+    res = await client.post(
+        f"/webhooks/zapier/{settings.webhook_id}",
+        json=payload,
+        headers={"X-Webhook-Token": secret},
+    )
+    assert res.status_code == 200
+
+    lead = (
+        db.query(MetaLead)
+        .filter(
+            MetaLead.organization_id == test_org.id,
+            MetaLead.meta_lead_id == "lead_dict_1",
+        )
+        .first()
+    )
+    assert lead is not None
+    assert lead.field_data_raw.get("full_name") == "Dict User"
+    assert lead.field_data_raw.get("email") == "dict@example.com"
+
+    form = (
+        db.query(MetaForm)
+        .filter(
+            MetaForm.organization_id == test_org.id,
+            MetaForm.form_external_id == "zap_form_dict",
+        )
+        .first()
+    )
+    assert form is not None
+
+    version = db.get(MetaFormVersion, form.current_version_id)
+    assert version is not None
+    schema_keys = {item.get("key") for item in version.field_schema}
+    assert {"full_name", "email", "phone_number", "state", "created_time"}.issubset(schema_keys)
 
 
 @pytest.mark.asyncio
