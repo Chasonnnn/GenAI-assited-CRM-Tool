@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useRef, useState } from "react"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -104,34 +105,72 @@ function formatChange(change: ChangeIndicator): { text: string; color: string; i
 function Sparkline({ data }: { data: number[] }) {
     if (!data || data.length < 2) return null
 
+    const containerRef = useRef<HTMLDivElement | null>(null)
+    const [size, setSize] = useState<{ width: number; height: number } | null>(null)
+
     const chartData = data.map((value, index) => ({ index, value }))
     const maxValue = Math.max(...data)
     const minValue = Math.min(...data)
     const hasVariance = maxValue !== minValue
 
+    useEffect(() => {
+        const element = containerRef.current
+        if (!element) return
+
+        const updateSize = () => {
+            const rect = element.getBoundingClientRect()
+            const width = Math.round(rect.width)
+            const height = Math.round(rect.height)
+            if (width > 0 && height > 0) {
+                setSize((prev) =>
+                    prev && prev.width === width && prev.height === height ? prev : { width, height }
+                )
+            } else {
+                setSize(null)
+            }
+        }
+
+        updateSize()
+
+        if (typeof ResizeObserver === "undefined") {
+            if (typeof window.requestAnimationFrame === "function") {
+                const frame = window.requestAnimationFrame(updateSize)
+                return () => window.cancelAnimationFrame(frame)
+            }
+            updateSize()
+            return
+        }
+
+        const observer = new ResizeObserver(updateSize)
+        observer.observe(element)
+        return () => observer.disconnect()
+    }, [])
+
     return (
-        <div className="h-8 w-full">
-            <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-                <AreaChart data={chartData} margin={{ top: 2, right: 0, bottom: 2, left: 0 }}>
-                    <defs>
-                        <linearGradient id="sparklineGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.3} />
-                            <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.05} />
-                        </linearGradient>
-                    </defs>
-                    <Area
-                        type="monotone"
-                        dataKey="value"
-                        stroke="var(--primary)"
-                        strokeWidth={1.5}
-                        fill="url(#sparklineGradient)"
-                        isAnimationActive={false}
-                        dot={false}
-                        // If no variance, show a flat line in the middle
-                        baseValue={hasVariance ? "dataMin" : (minValue - 1)}
-                    />
-                </AreaChart>
-            </ResponsiveContainer>
+        <div ref={containerRef} className="h-8 w-full">
+            {size ? (
+                <ResponsiveContainer width={size.width} height={size.height} minWidth={1} minHeight={1}>
+                    <AreaChart data={chartData} margin={{ top: 2, right: 0, bottom: 2, left: 0 }}>
+                        <defs>
+                            <linearGradient id="sparklineGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.3} />
+                                <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.05} />
+                            </linearGradient>
+                        </defs>
+                        <Area
+                            type="monotone"
+                            dataKey="value"
+                            stroke="var(--primary)"
+                            strokeWidth={1.5}
+                            fill="url(#sparklineGradient)"
+                            isAnimationActive={false}
+                            dot={false}
+                            // If no variance, show a flat line in the middle
+                            baseValue={hasVariance ? "dataMin" : (minValue - 1)}
+                        />
+                    </AreaChart>
+                </ResponsiveContainer>
+            ) : null}
         </div>
     )
 }

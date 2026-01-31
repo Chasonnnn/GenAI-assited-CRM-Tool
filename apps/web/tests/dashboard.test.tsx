@@ -7,6 +7,32 @@ import DashboardPage from '../app/(app)/dashboard/page'
 
 const mockUseSearchParams = vi.fn()
 
+vi.mock("next/dynamic", () => ({
+    __esModule: true,
+    default: (loader: () => Promise<any>) => {
+        return function DynamicComponent(props: Record<string, unknown>) {
+            const React = require("react")
+            const [Component, setComponent] = React.useState<any>(null)
+
+            React.useEffect(() => {
+                let mounted = true
+                loader().then((mod) => {
+                    const Resolved = mod?.default ?? mod
+                    if (mounted) {
+                        setComponent(() => Resolved)
+                    }
+                })
+                return () => {
+                    mounted = false
+                }
+            }, [])
+
+            if (!Component) return null
+            return React.createElement(Component, props)
+        }
+    },
+}))
+
 vi.mock('next/navigation', () => ({
     useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
     useSearchParams: () => mockUseSearchParams(),

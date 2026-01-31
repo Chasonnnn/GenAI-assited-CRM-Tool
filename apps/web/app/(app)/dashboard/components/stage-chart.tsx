@@ -73,12 +73,9 @@ export function StageChart() {
         return lines
     }
 
-    // Handle bar click - navigate to surrogates filtered by stage
-    const handleBarClick = (data: { stage_id: string | null }) => {
-        if (!data.stage_id) return
-
+    const buildStageUrl = (stageId: string) => {
         const params = new URLSearchParams()
-        params.set("stage", data.stage_id)
+        params.set("stage", stageId)
 
         // Include current date filters
         if (filters.dateRange !== "all") {
@@ -94,7 +91,13 @@ export function StageChart() {
             params.set("owner_id", filters.assigneeId)
         }
 
-        router.push(`/surrogates?${params.toString()}`)
+        return `/surrogates?${params.toString()}`
+    }
+
+    // Handle bar click - navigate to surrogates filtered by stage
+    const handleBarClick = (data: { stage_id: string | null }) => {
+        if (!data.stage_id) return
+        router.push(buildStageUrl(data.stage_id))
     }
 
     return (
@@ -201,130 +204,145 @@ export function StageChart() {
                         )}
                     </div>
                 ) : (
-                    <ChartContainer
-                        config={{
-                            count: {
-                                label: "Surrogates",
-                                color: "var(--primary)",
-                            },
-                        }}
-                        className="h-[320px] w-full"
-                    >
-                        <BarChart
-                            data={chartData}
-                            layout="vertical"
-                            barSize={18}
-                            barCategoryGap={10}
-                            margin={{ left: 0, right: 24, top: 8, bottom: 8 }}
+                    <>
+                        <ChartContainer
+                            config={{
+                                count: {
+                                    label: "Surrogates",
+                                    color: "var(--primary)",
+                                },
+                            }}
+                            className="h-[320px] w-full"
                         >
-                            <CartesianGrid
-                                horizontal={false}
-                                vertical={true}
-                                strokeDasharray="3 3"
-                                stroke="var(--border)"
-                                strokeOpacity={0.15}
-                            />
-                            <XAxis
-                                type="number"
-                                tickLine={false}
-                                axisLine={false}
-                                tick={{ fontSize: 12 }}
-                                tickCount={4}
-                                tickFormatter={(value) =>
-                                    viewMode === "percent" ? `${value}%` : value.toString()
-                                }
-                            />
-                            <YAxis
-                                type="category"
-                                dataKey="status"
-                                tickLine={false}
-                                axisLine={false}
-                                width={140}
-                                tick={({ x, y, payload }: { x: string | number; y: string | number; payload: { value: string } }) => {
-                                    const lines = wrapStageLabel(payload.value)
-                                    return (
-                                        <g transform={`translate(${x},${y})`}>
-                                            <text
-                                                x={0}
-                                                y={0}
-                                                dy={4}
-                                                textAnchor="end"
-                                                fill="currentColor"
-                                                fontSize={12}
-                                                className="fill-muted-foreground"
-                                            >
-                                                {lines.map((line, index) => (
-                                                    <tspan key={`${line}-${index}`} x={0} dy={index === 0 ? 0 : 12}>
-                                                        {line}
-                                                    </tspan>
-                                                ))}
-                                            </text>
-                                        </g>
-                                    )
-                                }}
-                            />
-                            <Tooltip
-                                cursor={{ fill: "var(--muted)", opacity: 0.3 }}
-                                content={({ active, payload }) => {
-                                    if (!active || !payload?.length) return null
-                                    const data = payload[0].payload
-                                    return (
-                                        <div className="rounded-lg border bg-background p-2 shadow-md">
-                                            <p className="font-medium">
-                                                {data.status}
-                                                {data.groupedCount ? ` (${data.groupedCount} stages)` : ""}
-                                            </p>
-                                            <p className="text-sm text-muted-foreground">
-                                                {data.count.toLocaleString()} surrogates ({data.percent}%)
-                                            </p>
-                                            {data.groupedCount ? (
-                                                <p className="text-xs text-muted-foreground mt-1">
-                                                    Includes low-volume stages
-                                                </p>
-                                            ) : (
-                                                <p className="text-xs text-muted-foreground mt-1">
-                                                    Click to view
-                                                </p>
-                                            )}
-                                        </div>
-                                    )
-                                }}
-                            />
-                            <Bar
-                                dataKey={viewMode === "percent" ? "percent" : "count"}
-                                radius={[0, 4, 4, 0]}
-                                onClick={(data: { payload?: { stage_id: string | null } }) => {
-                                    if (data.payload?.stage_id) {
-                                        handleBarClick({ stage_id: data.payload.stage_id })
-                                    }
-                                }}
+                            <BarChart
+                                data={chartData}
+                                layout="vertical"
+                                barSize={18}
+                                barCategoryGap={10}
+                                margin={{ left: 0, right: 24, top: 8, bottom: 8 }}
                             >
-                                {viewMode === "count" && (
-                                    <LabelList
-                                        dataKey="count"
-                                        position="right"
-                                        formatter={(v) => String(v)}
-                                        className="fill-muted-foreground text-xs"
-                                    />
-                                )}
-                                {viewMode === "percent" && (
-                                    <LabelList
-                                        dataKey="percent"
-                                        position="right"
-                                        formatter={(v) => `${v}%`}
-                                        className="fill-muted-foreground text-xs"
-                                    />
-                                )}
-                                {chartData.map((entry, index) => (
-                                    <Cell
-                                        key={`cell-${index}`}
-                                        fill={entry.fill}
-                                        className={`hover:opacity-80 transition-opacity ${entry.stage_id ? "cursor-pointer" : "cursor-default"}`}
-                                    />
-                                ))}
-                            </Bar>
-                        </BarChart>
-                    </ChartContainer>
+                                <CartesianGrid
+                                    horizontal={false}
+                                    vertical={true}
+                                    strokeDasharray="3 3"
+                                    stroke="var(--border)"
+                                    strokeOpacity={0.15}
+                                />
+                                <XAxis
+                                    type="number"
+                                    tickLine={false}
+                                    axisLine={false}
+                                    tick={{ fontSize: 12 }}
+                                    tickCount={4}
+                                    tickFormatter={(value) =>
+                                        viewMode === "percent" ? `${value}%` : value.toString()
+                                    }
+                                />
+                                <YAxis
+                                    type="category"
+                                    dataKey="status"
+                                    tickLine={false}
+                                    axisLine={false}
+                                    width={140}
+                                    tick={({ x, y, payload }: { x: string | number; y: string | number; payload: { value: string } }) => {
+                                        const lines = wrapStageLabel(payload.value)
+                                        return (
+                                            <g transform={`translate(${x},${y})`}>
+                                                <text
+                                                    x={0}
+                                                    y={0}
+                                                    dy={4}
+                                                    textAnchor="end"
+                                                    fill="currentColor"
+                                                    fontSize={12}
+                                                    className="fill-muted-foreground"
+                                                >
+                                                    {lines.map((line, index) => (
+                                                        <tspan key={`${line}-${index}`} x={0} dy={index === 0 ? 0 : 12}>
+                                                            {line}
+                                                        </tspan>
+                                                    ))}
+                                                </text>
+                                            </g>
+                                        )
+                                    }}
+                                />
+                                <Tooltip
+                                    cursor={{ fill: "var(--muted)", opacity: 0.3 }}
+                                    content={({ active, payload }) => {
+                                        if (!active || !payload?.length) return null
+                                        const data = payload[0].payload
+                                        return (
+                                            <div className="rounded-lg border bg-background p-2 shadow-md">
+                                                <p className="font-medium">
+                                                    {data.status}
+                                                    {data.groupedCount ? ` (${data.groupedCount} stages)` : ""}
+                                                </p>
+                                                <p className="text-sm text-muted-foreground">
+                                                    {data.count.toLocaleString()} surrogates ({data.percent}%)
+                                                </p>
+                                                {data.groupedCount ? (
+                                                    <p className="text-xs text-muted-foreground mt-1">
+                                                        Includes low-volume stages
+                                                    </p>
+                                                ) : (
+                                                    <p className="text-xs text-muted-foreground mt-1">
+                                                        Click to view
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )
+                                    }}
+                                />
+                                <Bar
+                                    dataKey={viewMode === "percent" ? "percent" : "count"}
+                                    radius={[0, 4, 4, 0]}
+                                    onClick={(data: { payload?: { stage_id: string | null } }) => {
+                                        if (data.payload?.stage_id) {
+                                            handleBarClick({ stage_id: data.payload.stage_id })
+                                        }
+                                    }}
+                                >
+                                    {viewMode === "count" && (
+                                        <LabelList
+                                            dataKey="count"
+                                            position="right"
+                                            formatter={(v) => String(v)}
+                                            className="fill-muted-foreground text-xs"
+                                        />
+                                    )}
+                                    {viewMode === "percent" && (
+                                        <LabelList
+                                            dataKey="percent"
+                                            position="right"
+                                            formatter={(v) => `${v}%`}
+                                            className="fill-muted-foreground text-xs"
+                                        />
+                                    )}
+                                    {chartData.map((entry, index) => (
+                                        <Cell
+                                            key={`cell-${index}`}
+                                            fill={entry.fill}
+                                            className={`hover:opacity-80 transition-opacity ${entry.stage_id ? "cursor-pointer" : "cursor-default"}`}
+                                        />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ChartContainer>
+                        <div className="sr-only" aria-label="Pipeline stage links">
+                            <ul>
+                                {chartData
+                                    .filter((entry) => entry.stage_id)
+                                    .map((entry) => (
+                                        <li key={entry.stage_id}>
+                                            <Link href={buildStageUrl(entry.stage_id as string)}>
+                                                View {entry.status} surrogates
+                                            </Link>
+                                        </li>
+                                    ))}
+                            </ul>
+                        </div>
+                    </>
                 )}
             </CardContent>
         </Card>
