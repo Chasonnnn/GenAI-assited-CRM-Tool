@@ -7,8 +7,9 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-DEFAULT_JWT_SECRET = "change-this-in-production"
-DEFAULT_DEV_SECRET = "change-me"
+# Default secrets are placeholders for local/dev only; validated at runtime.
+DEFAULT_JWT_SECRET = "change-this-in-production"  # nosec B105
+DEFAULT_DEV_SECRET = "change-me"  # nosec B105
 DEFAULT_API_BASE_URL = "http://localhost:8000"
 DEFAULT_FRONTEND_URL = "http://localhost:3000"
 DEFAULT_CORS_ORIGINS = "http://localhost:3000"

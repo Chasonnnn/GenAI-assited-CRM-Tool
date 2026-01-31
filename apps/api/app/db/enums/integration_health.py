@@ -27,8 +27,8 @@ class ConfigStatus(str, Enum):
     """Configuration status of an integration."""
 
     CONFIGURED = "configured"
-    MISSING_TOKEN = "missing_token"
-    EXPIRED_TOKEN = "expired_token"
+    MISSING_TOKEN = "missing_token"  # nosec B105
+    EXPIRED_TOKEN = "expired_token"  # nosec B105
 
 
 class AlertType(str, Enum):
@@ -37,8 +37,8 @@ class AlertType(str, Enum):
     # Meta/Integration
     META_FETCH_FAILED = "meta_fetch_failed"
     META_CONVERT_FAILED = "meta_convert_failed"
-    META_TOKEN_EXPIRING = "meta_token_expiring"
-    META_TOKEN_EXPIRED = "meta_token_expired"
+    META_TOKEN_EXPIRING = "meta_token_expiring"  # nosec B105
+    META_TOKEN_EXPIRED = "meta_token_expired"  # nosec B105
     META_API_ERROR = "meta_api_error"
 
     # Worker/Jobs
@@ -50,7 +50,7 @@ class AlertType(str, Enum):
     INVITE_SEND_FAILED = "invite_send_failed"
 
     # OAuth/Integration
-    OAUTH_TOKEN_REFRESH_FAILED = "oauth_token_refresh_failed"
+    OAUTH_TOKEN_REFRESH_FAILED = "oauth_token_refresh_failed"  # nosec B105
     INTEGRATION_API_ERROR = "integration_api_error"
 
     # Webhooks

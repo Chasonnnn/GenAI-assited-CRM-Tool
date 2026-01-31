@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse
 from typing import Generator
 from uuid import UUID
+import logging
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ from app.core.security import decode_session_token
 from app.core.csrf import CSRF_HEADER, CSRF_COOKIE_NAME, validate_csrf
 from app.db.session import SessionLocal
 
+logger = logging.getLogger(__name__)
 
 # Cookie and header names
 COOKIE_NAME = "crm_session"
@@ -172,14 +174,15 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
     mfa_required = True
     token_hash = None
 
+    payload: dict = {}
     if token:
         try:
             payload = decode_session_token(token)
             mfa_verified = payload.get("mfa_verified", False)
             mfa_required = payload.get("mfa_required", True)
             token_hash = session_service.hash_token(token)
-        except Exception:
-            pass  # Let get_current_user handle the error
+        except Exception as exc:
+            logger.debug("session_token_decode_failed", exc_info=exc)
 
     user = get_current_user(request, db)
 

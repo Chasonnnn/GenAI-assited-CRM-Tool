@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from pathlib import Path
 from typing import Iterable
 
@@ -18,6 +19,7 @@ from app.core.config import settings
 ALEMBIC_VERSION_TABLE = "alembic_version"
 MIGRATION_LOCK_ID = 9823417
 
+logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class MigrationStatus:
@@ -104,8 +106,8 @@ def _upgrade_to_head(engine: Engine) -> None:
                 _release_advisory_lock(connection)
                 if connection.in_transaction():
                     connection.commit()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to release advisory lock", exc_info=exc)
 
 
 def _acquire_advisory_lock(connection: Connection) -> None:

@@ -174,8 +174,8 @@ class ConnectionManager:
         for ws in connections:
             try:
                 await ws.close(code=4001, reason="Session revoked")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("ws_close_failed", exc_info=exc)
 
         async with self._lock:
             for ws in connections:
@@ -299,8 +299,8 @@ async def _listen_channel(channel: str, handler) -> None:
             if pubsub is not None:
                 try:
                     await pubsub.close()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("redis_pubsub_close_failed", exc_info=exc)
 
 
 # Singleton instance

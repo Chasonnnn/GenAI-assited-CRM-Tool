@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 import logging
 import os
-import random
+import secrets
 from typing import Any
 
 from app.core.config import settings
@@ -34,7 +34,7 @@ def _should_sample() -> bool:
         return True
     if rate <= 0:
         return False
-    return random.random() < rate
+    return (secrets.randbelow(10_000) / 10_000) < rate
 
 
 def _build_user_context(request: Any | None, request_id: str | None = None) -> str | None:
