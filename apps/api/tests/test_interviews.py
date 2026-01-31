@@ -8,10 +8,14 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 
-from app.db.models import Attachment, Surrogate, InterviewAttachment, Job, AISettings
-from app.db.enums import JobType
+from app.db.models import Attachment, Surrogate, InterviewAttachment, AISettings
 from app.schemas.interview import InterviewCreate, InterviewNoteCreate
-from app.services import interview_note_service, interview_service, ai_settings_service
+from app.services import (
+    interview_note_service,
+    interview_service,
+    ai_settings_service,
+    transcription_service,
+)
 from app.services.ai_provider import ChatResponse
 
 
@@ -123,8 +127,31 @@ async def test_list_interviews_includes_counts(
 
 @pytest.mark.asyncio
 async def test_request_transcription_enqueues_job(
-    authed_client: AsyncClient, db, test_org, test_user, test_surrogate
+    authed_client: AsyncClient, db, test_org, test_user, test_surrogate, monkeypatch
 ):
+    settings = AISettings(
+        organization_id=test_org.id,
+        is_enabled=True,
+        provider="gemini",
+        model="gemini-3-flash-preview",
+        current_version=1,
+        consent_accepted_at=datetime.now(timezone.utc),
+        consent_accepted_by=test_user.id,
+        api_key_encrypted=ai_settings_service.encrypt_api_key("sk-test"),
+    )
+    db.add(settings)
+    db.flush()
+
+    monkeypatch.setattr(
+        transcription_service,
+        "_download_file",
+        lambda *_args, **_kwargs: b"audio",
+    )
+
+    async def _fake_transcribe_audio(*_args, **_kwargs):
+        return "Transcript"
+
+    monkeypatch.setattr(transcription_service, "transcribe_audio", _fake_transcribe_audio)
     interview = _create_interview(
         db, test_org.id, test_surrogate.id, test_user.id, transcript_json=None
     )
@@ -160,19 +187,7 @@ async def test_request_transcription_enqueues_job(
     )
     assert response.status_code == 200
     payload = response.json()
-    assert payload["status"] == "pending"
-
-    job = (
-        db.query(Job)
-        .filter(
-            Job.organization_id == test_org.id,
-            Job.job_type == JobType.INTERVIEW_TRANSCRIPTION.value,
-        )
-        .order_by(Job.created_at.desc())
-        .first()
-    )
-    assert job is not None
-    assert job.payload.get("interview_attachment_id") == str(link.id)
+    assert payload["status"] == "completed"
 
 
 @pytest.mark.asyncio

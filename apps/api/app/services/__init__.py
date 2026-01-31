@@ -36,6 +36,7 @@ from app.services import meta_lead_service
 from app.services import status_change_request_service
 from app.services import intended_parent_status_service
 from app.services import form_submission_service
+from app.services import clamav_signature_service
 from app.services import surrogate_events
 from app.services import wif_oidc_service
 
@@ -71,6 +72,7 @@ __all__ = [
     "status_change_request_service",
     "intended_parent_status_service",
     "form_submission_service",
+    "clamav_signature_service",
     "surrogate_events",
     "wif_oidc_service",
 ]

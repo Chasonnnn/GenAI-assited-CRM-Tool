@@ -320,8 +320,8 @@ async def request_transcription(
         )
 
     # Require a clean attachment (if virus scanning is enabled)
-    if getattr(attachment, "quarantined", False):
-        raise TranscriptionError("Attachment is quarantined pending virus scan")
+    if attachment.scan_status in ("infected", "error"):
+        raise TranscriptionError("Attachment failed virus scan")
 
     # Get AI settings
     ai_settings = get_ai_settings(db, interview.organization_id)

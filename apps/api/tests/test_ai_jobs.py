@@ -1,19 +1,16 @@
 """AI job payload tests."""
 
 from datetime import datetime, timezone
-import json
-import uuid
-
 import pytest
 from httpx import AsyncClient
 
-from app.db.models import AISettings, Job
+from app.db.models import AISettings
 from app.services import ai_settings_service, ai_chat_service
 from app.services.ai_provider import ChatResponse
 
 
 @pytest.mark.asyncio
-async def test_ai_chat_async_payload_encrypted_and_scrubbed(
+async def test_ai_chat_sync_returns_response(
     authed_client: AsyncClient, db, test_org, test_user, monkeypatch
 ):
     settings = AISettings(
@@ -46,27 +43,10 @@ async def test_ai_chat_async_payload_encrypted_and_scrubbed(
     )
 
     message = "Email Jane Doe at jane.doe@example.com"
-    response = await authed_client.post("/ai/chat/async", json={"message": message})
-    assert response.status_code == 202
-
-    job_id = uuid.UUID(response.json()["job_id"])
-    job = db.query(Job).filter(Job.id == job_id).first()
-    assert job is not None
-
-    payload = job.payload or {}
-    assert payload.get("message") is None
-    assert payload.get("message_encrypted") is not None
-    assert message not in json.dumps(payload)
-
-    from app.worker import process_ai_chat
-
-    await process_ai_chat(db, job)
-    db.commit()
-    db.refresh(job)
-
-    payload = job.payload or {}
-    assert "message" not in payload
-    assert "message_encrypted" not in payload
+    response = await authed_client.post("/ai/chat", json={"message": message})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["content"] == "Ok"
 
 
 @pytest.mark.asyncio

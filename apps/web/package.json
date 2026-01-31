@@ -68,7 +68,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^25.1.0",
-    "@types/react": "19.2.9",
+    "@types/react": "19.2.10",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "^5.1.2",
     "eslint": "^9.39.2",
@@ -85,7 +85,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@types/react": "19.2.9",
+      "@types/react": "19.2.10",
       "@types/react-dom": "19.2.3",
       "d3-color": ">=3.1.0"
     },

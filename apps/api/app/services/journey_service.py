@@ -312,8 +312,8 @@ def update_milestone_featured_image(
     )
     if not attachment or attachment.surrogate_id != surrogate.id:
         raise ValueError("Attachment not found")
-    if attachment.quarantined:
-        raise ValueError("Attachment is quarantined pending virus scan")
+    if attachment.scan_status in ("infected", "error"):
+        raise ValueError("Attachment failed virus scan")
     if not attachment.content_type or not attachment.content_type.startswith("image/"):
         raise ValueError("Attachment must be an image")
 

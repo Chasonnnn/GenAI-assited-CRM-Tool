@@ -1244,6 +1244,9 @@ export default function FormBuilderPage() {
         ? "rounded-[32px] border border-stone-200 bg-white shadow-sm p-6"
         : ""
     const canvasScaleClass = isMobilePreview ? "origin-top scale-[0.96]" : ""
+    const canvasTypographyClass = isMobilePreview
+        ? "text-[0.95rem] [&_input]:text-sm [&_textarea]:text-sm [&_label]:text-xs [&_p]:text-xs"
+        : ""
     const autoSaveLabel = useMemo(() => {
         if (!hasHydrated) return null
         if (isSaving || autoSaveStatus === "saving") return "Saving..."
@@ -1439,8 +1442,9 @@ export default function FormBuilderPage() {
                     <div
                         onDragOver={handleCanvasDragOver}
                         onDrop={handleDrop}
-                        className={`mx-auto min-h-[500px] ${canvasWidthClass} space-y-4 ${currentPage.fields.length === 0 ? "flex items-center justify-center" : ""
-                            } ${canvasFrameClass} ${canvasScaleClass}`}
+                        className={`mx-auto min-h-[500px] ${canvasWidthClass} space-y-4 ${
+                            currentPage.fields.length === 0 ? "flex items-center justify-center" : ""
+                        } ${canvasFrameClass} ${canvasScaleClass} ${canvasTypographyClass}`}
                     >
                         {currentPage.fields.length === 0 ? (
                             <div
