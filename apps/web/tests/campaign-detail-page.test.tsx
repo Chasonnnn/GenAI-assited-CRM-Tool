@@ -14,6 +14,7 @@ vi.mock("next/link", () => ({
 vi.mock("next/navigation", () => ({
     useParams: () => ({ id: "camp1" }),
     useRouter: () => ({ push: mockPush }),
+    useSearchParams: () => new URLSearchParams(),
 }))
 
 vi.mock("@/lib/hooks/use-campaigns", () => ({
@@ -58,15 +59,23 @@ vi.mock("@/lib/hooks/use-campaigns", () => ({
             },
         ],
     }),
+    useCampaignPreview: () => ({
+        data: { total_count: 0, sample_recipients: [] },
+        isLoading: false,
+        refetch: vi.fn(),
+    }),
     useRunRecipients: (campaignId: string, runId: string, params?: { status?: string; limit?: number }) =>
         mockUseRunRecipients(campaignId, runId, params),
     useDeleteCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useDuplicateCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useCancelCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useUpdateCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useRetryFailedCampaignRun: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 vi.mock("@/lib/hooks/use-email-templates", () => ({
     useEmailTemplate: () => ({ data: { subject: "Hello", body: "Body" } }),
+    useEmailTemplates: () => ({ data: [] }),
 }))
 
 describe("CampaignDetailPage", () => {

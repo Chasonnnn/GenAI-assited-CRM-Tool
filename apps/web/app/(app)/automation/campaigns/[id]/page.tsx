@@ -338,9 +338,8 @@ export default function CampaignDetailPage() {
     const stageLabelsForFilter = campaign.recipient_type === "intended_parent"
         ? INTENDED_PARENT_STAGE_OPTIONS.filter(stage => rawStageFilters.includes(stage.id)).map(stage => stage.label)
         : pipelineStages.filter(stage => rawStageFilters.includes(stage.id)).map(stage => stage.label)
-    const stateLabelsForFilter = Array.isArray(filterCriteria.states)
-        ? US_STATES.filter(state => filterCriteria.states.includes(state.value)).map(state => state.label)
-        : []
+    const stateFilters = Array.isArray(filterCriteria.states) ? filterCriteria.states : []
+    const stateLabelsForFilter = US_STATES.filter(state => stateFilters.includes(state.value)).map(state => state.label)
     const createdAfter = filterCriteria.created_after ? new Date(filterCriteria.created_after) : null
     const createdBefore = filterCriteria.created_before ? new Date(filterCriteria.created_before) : null
 
