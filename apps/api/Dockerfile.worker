@@ -35,6 +35,7 @@ FROM python:3.11.14-slim-bookworm
 WORKDIR /app
 
 # Install runtime dependencies only
+RUN groupadd -r clamav && useradd -r -g clamav -s /usr/sbin/nologin clamav
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
