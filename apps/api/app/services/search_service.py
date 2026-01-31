@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import OwnerType, Role
 from app.db.models import Attachment, Surrogate, EntityNote, IntendedParent, PipelineStage
+from app.utils.normalization import normalize_identifier, normalize_search_text
 
 
 logger = logging.getLogger(__name__)
@@ -380,6 +381,52 @@ def _search_surrogates(
                 )
         except SQLAlchemyError:
             pass
+
+    if len(results) < limit:
+        normalized_text = normalize_search_text(query)
+        normalized_identifier = normalize_identifier(query)
+        fallback_filters = []
+        if normalized_text:
+            fallback_filters.append(
+                surrogate_table.c.full_name_normalized.ilike(f"%{normalized_text}%")
+            )
+        if normalized_identifier:
+            fallback_filters.append(
+                surrogate_table.c.surrogate_number_normalized.ilike(f"%{normalized_identifier}%")
+            )
+        if fallback_filters:
+            fallback_stmt = (
+                select(
+                    surrogate_table.c.id,
+                    surrogate_table.c.full_name,
+                    surrogate_table.c.surrogate_number,
+                    literal(0.5).label("rank"),
+                )
+                .select_from(base_from)
+                .where(
+                    surrogate_table.c.organization_id == org_id,
+                    or_(*fallback_filters),
+                    surrogate_access_filter,
+                )
+                .order_by(surrogate_table.c.created_at.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+            rows = db.execute(fallback_stmt).fetchall()
+            for row in rows:
+                if str(row.id) in seen_ids:
+                    continue
+                results.append(
+                    SearchResult(
+                        entity_type="surrogate",
+                        entity_id=str(row.id),
+                        title=row.full_name or f"Surrogate {row.surrogate_number}",
+                        snippet=row.surrogate_number or "",
+                        rank=float(row.rank),
+                        surrogate_id=str(row.id),
+                        surrogate_name=row.full_name,
+                    )
+                )
 
     return results
 
