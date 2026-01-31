@@ -434,12 +434,7 @@ async def get_ai_mapping_suggestions(
     PII is masked before sending to AI.
     """
     from app.services.import_ai_mapper_service import ai_suggest_mappings, is_ai_available
-    from app.services.import_detection_service import (
-        ColumnSuggestion,
-        ConfidenceLevel,
-        AVAILABLE_SURROGATE_FIELDS,
-    )
-    from app.services.ai_prompt_registry import get_prompt
+    from app.services.import_detection_service import ColumnSuggestion, ConfidenceLevel
 
     if not is_ai_available(db, session.org_id):
         raise HTTPException(
@@ -506,7 +501,12 @@ async def get_ai_mapping_suggestions_stream(
     )
     from app.services.ai_settings_service import get_ai_provider_for_org
     from app.services.ai_provider import ChatMessage
-    from app.services.import_detection_service import ColumnSuggestion, ConfidenceLevel
+    from app.services.ai_prompt_registry import get_prompt
+    from app.services.import_detection_service import (
+        AVAILABLE_SURROGATE_FIELDS,
+        ColumnSuggestion,
+        ConfidenceLevel,
+    )
 
     if not is_ai_available(db, session.org_id):
         raise HTTPException(

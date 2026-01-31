@@ -256,9 +256,9 @@ async def parse_schedule_stream(
     # Compute timezone and reference date
     org = None
     if settings:
-        from app.db.models import Organization
+        from app.services import org_service
 
-        org = db.query(Organization).filter(Organization.id == session.org_id).first()
+        org = org_service.get_org_by_id(db, session.org_id)
 
     timezone = body.user_timezone or (org.timezone if org else "UTC")
     warnings: list[str] = []

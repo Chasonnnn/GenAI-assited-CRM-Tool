@@ -140,7 +140,7 @@ async def generate_email_template_stream(
         GeneratedEmailTemplate,
         _validate_template,
     )
-    from app.services.ai_provider import ChatMessage, ChatResponse
+    from app.services.ai_provider import ChatMessage
 
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
     if not settings or not settings.is_enabled:
@@ -462,7 +462,7 @@ async def summarize_surrogate_stream(
 ) -> StreamingResponse:
     """Stream a surrogate summary via SSE."""
     from app.services import ai_settings_service, note_service, surrogate_service, task_service
-    from app.services.ai_provider import ChatMessage
+    from app.services.ai_provider import ChatMessage, ChatResponse
     from app.services.ai_usage_service import log_usage
     from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_data
 
@@ -657,7 +657,7 @@ async def draft_email(
     Requires: use_ai_assistant permission
     """
     from app.services import ai_settings_service, surrogate_service, user_service
-    from app.services.ai_provider import ChatMessage, ChatResponse
+    from app.services.ai_provider import ChatMessage
     from app.services.ai_usage_service import log_usage
     from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_data
 
@@ -780,7 +780,7 @@ async def draft_email_stream(
 ) -> StreamingResponse:
     """Stream an AI-drafted email via SSE."""
     from app.services import ai_settings_service, surrogate_service, user_service
-    from app.services.ai_provider import ChatMessage
+    from app.services.ai_provider import ChatMessage, ChatResponse
     from app.services.ai_usage_service import log_usage
     from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_data
 
@@ -936,7 +936,7 @@ async def analyze_dashboard(
 ) -> AnalyzeDashboardResponse:
     """Analyze dashboard data and provide AI-powered insights."""
     from app.services import ai_settings_service, surrogate_service, task_service
-    from app.services.ai_provider import ChatMessage, ChatResponse
+    from app.services.ai_provider import ChatMessage
     from app.services.ai_usage_service import log_usage
 
     # Check AI is enabled
@@ -1060,7 +1060,7 @@ async def analyze_dashboard_stream(
 ) -> StreamingResponse:
     """Stream dashboard analysis via SSE."""
     from app.services import ai_settings_service, surrogate_service, task_service
-    from app.services.ai_provider import ChatMessage
+    from app.services.ai_provider import ChatMessage, ChatResponse
     from app.services.ai_usage_service import log_usage
 
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
