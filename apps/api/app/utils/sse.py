@@ -12,6 +12,7 @@ def format_sse(event_type: str, data: dict[str, Any]) -> str:
 
 
 STREAM_HEADERS = {
-    "Cache-Control": "no-cache",
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
     "X-Accel-Buffering": "no",
 }
