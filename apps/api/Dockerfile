@@ -9,6 +9,8 @@ FROM ghcr.io/astral-sh/uv:0.9.24 AS uv
 FROM python:3.11.14-slim-bookworm AS builder
 
 WORKDIR /app
+ARG CACHE_BUST=0
+RUN echo "cache_bust=${CACHE_BUST}" > /dev/null
 
 # Install uv
 COPY --from=uv /uv /usr/local/bin/uv
@@ -34,6 +36,8 @@ RUN uv sync --frozen --no-install-project
 FROM python:3.11.14-slim-bookworm
 
 WORKDIR /app
+ARG CACHE_BUST=0
+RUN echo "cache_bust=${CACHE_BUST}" > /dev/null
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \

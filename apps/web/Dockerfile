@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+ARG CACHE_BUST=0
+RUN echo "cache_bust=${CACHE_BUST}" > /dev/null
 
 RUN corepack enable && corepack prepare pnpm@9.12.1 --activate
 

@@ -1,10 +1,44 @@
 steps:
   - name: gcr.io/cloud-builders/docker
-    args: ["build", "-t", "$_IMAGE_API", "apps/api"]
+    entrypoint: sh
+    args: ["-c", "docker pull $_IMAGE_API || true"]
+  - name: gcr.io/cloud-builders/docker
+    env: ["DOCKER_BUILDKIT=1"]
+    args:
+      [
+        "build",
+        "--build-arg",
+        "BUILDKIT_INLINE_CACHE=1",
+        "--build-arg",
+        "CACHE_BUST=$_CACHE_BUST",
+        "--cache-from",
+        "$_IMAGE_API",
+        "-t",
+        "$_IMAGE_API",
+        "apps/api",
+      ]
   - name: gcr.io/cloud-builders/docker
     args: ["push", "$_IMAGE_API"]
   - name: gcr.io/cloud-builders/docker
-    args: ["build", "-f", "apps/api/Dockerfile.worker", "-t", "$_IMAGE_WORKER", "apps/api"]
+    entrypoint: sh
+    args: ["-c", "docker pull $_IMAGE_WORKER || true"]
+  - name: gcr.io/cloud-builders/docker
+    env: ["DOCKER_BUILDKIT=1"]
+    args:
+      [
+        "build",
+        "--build-arg",
+        "BUILDKIT_INLINE_CACHE=1",
+        "--build-arg",
+        "CACHE_BUST=$_CACHE_BUST",
+        "--cache-from",
+        "$_IMAGE_WORKER",
+        "-f",
+        "apps/api/Dockerfile.worker",
+        "-t",
+        "$_IMAGE_WORKER",
+        "apps/api",
+      ]
   - name: gcr.io/cloud-builders/docker
     args: ["push", "$_IMAGE_WORKER"]
   - name: gcr.io/cloud-builders/gcloud
@@ -28,6 +62,7 @@ substitutions:
   _API_SERVICE: "crm-api"
   _WORKER_SERVICE: "crm-worker"
   _MIGRATE_JOB: "crm-migrate"
+  _CACHE_BUST: "0"
   _IMAGE_API: "us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/api:latest"
   _IMAGE_WORKER: "us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/worker:latest"
   _CLAMAV_UPDATE_JOB: "crm-clamav-update"

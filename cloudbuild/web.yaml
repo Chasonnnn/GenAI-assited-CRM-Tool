@@ -1,7 +1,17 @@
 steps:
   - name: gcr.io/cloud-builders/docker
+    entrypoint: sh
+    args: ["-c", "docker pull $_IMAGE_WEB || true"]
+  - name: gcr.io/cloud-builders/docker
+    env: ["DOCKER_BUILDKIT=1"]
     args:
       - "build"
+      - "--build-arg"
+      - "BUILDKIT_INLINE_CACHE=1"
+      - "--build-arg"
+      - "CACHE_BUST=$_CACHE_BUST"
+      - "--cache-from"
+      - "$_IMAGE_WEB"
       - "-f"
       - "apps/web/Dockerfile"
       - "-t"
@@ -21,5 +31,6 @@ options:
 substitutions:
   _REGION: "us-central1"
   _WEB_SERVICE: "crm-web"
+  _CACHE_BUST: "0"
   _IMAGE_WEB: "us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/web:latest"
   _API_BASE_URL: "https://api.surrogacyforce.com"
