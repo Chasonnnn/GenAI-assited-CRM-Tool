@@ -215,7 +215,7 @@ export default function SurrogatesPage() {
     // Sync state changes back to URL
     const updateUrlParams = useCallback((
         stage: string,
-        source: SurrogateSource | "all",
+        source: SourceFilter,
         queue: string,
         search: string,
         currentPage: number,
@@ -288,7 +288,7 @@ export default function SurrogatesPage() {
         })
     }, [sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange])
 
-    const handleSourceChange = useCallback((source: SurrogateSource | "all") => {
+    const handleSourceChange = useCallback((source: SourceFilter) => {
         startFilterTransition(() => {
             setSourceFilter(source)
             setPage(1)
