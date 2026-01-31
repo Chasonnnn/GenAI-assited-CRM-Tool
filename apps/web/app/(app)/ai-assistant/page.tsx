@@ -7,8 +7,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SendIcon, SparklesIcon, FileTextIcon, UserIcon, CalendarIcon, ClockIcon, BotIcon, Loader2Icon, AlertCircleIcon, CheckIcon, XIcon } from "lucide-react"
-import { useState, useRef, useEffect } from "react"
-import { useSendMessage, useAISettings, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
+import { useState, useRef, useEffect, useMemo } from "react"
+import { useSendMessage, useAISettings, useApproveAction, useRejectAction, useConversation } from "@/lib/hooks/use-ai"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 
@@ -70,6 +70,14 @@ export default function AIAssistantPage() {
     const sendMessage = useSendMessage()
     const approveAction = useApproveAction()
     const rejectAction = useRejectAction()
+    const conversationQuery = useConversation("surrogate", selectedSurrogateId, {
+        enabled: Boolean(selectedSurrogateId),
+    })
+    const {
+        data: conversation,
+        isLoading: conversationLoading,
+        isFetching: conversationFetching,
+    } = conversationQuery
 
     const quickActions = [
         { icon: FileTextIcon, label: "Summarize this surrogate", color: "text-blue-500" },
@@ -86,6 +94,50 @@ export default function AIAssistantPage() {
     ]
     const surrogatesErrorMessage = surrogatesErrorData instanceof Error ? surrogatesErrorData.message : ""
     const aiSettingsErrorMessage = aiSettingsErrorData instanceof Error ? aiSettingsErrorData.message : ""
+    const conversationMessages = useMemo(() => {
+        if (!conversation?.messages?.length) {
+            return []
+        }
+        return conversation.messages.map((msg) => ({
+            id: msg.id,
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.created_at
+                ? new Date(msg.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+                : new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+            proposed_actions: msg.proposed_actions,
+        }))
+    }, [conversation])
+
+    const buildWelcomeMessage = () => ({
+        id: "welcome",
+        role: "assistant" as const,
+        content: "Hello! I'm your AI assistant. Select a surrogate above to start chatting about it, or use the quick actions to get started.",
+        timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+    })
+
+    useEffect(() => {
+        if (!selectedSurrogateId) {
+            setMessages([buildWelcomeMessage()])
+            return
+        }
+        if (sendMessage.isPending || conversationFetching) {
+            return
+        }
+        if (conversationMessages.length > 0) {
+            setMessages(conversationMessages)
+            return
+        }
+        if (!conversationLoading) {
+            setMessages([buildWelcomeMessage()])
+        }
+    }, [
+        selectedSurrogateId,
+        conversationMessages,
+        conversationLoading,
+        conversationFetching,
+        sendMessage.isPending,
+    ])
 
     // Scroll to bottom when messages change
     useEffect(() => {

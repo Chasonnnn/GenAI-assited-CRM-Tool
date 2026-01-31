@@ -80,7 +80,11 @@ export function useAcceptConsent() {
 // Chat Hooks
 // ============================================================================
 
-export function useConversation(entityType?: string | null, entityId?: string | null) {
+export function useConversation(
+    entityType?: string | null,
+    entityId?: string | null,
+    options?: { enabled?: boolean }
+) {
     // Determine if this is global mode
     const isGlobal = !entityType || !entityId || entityType === 'global';
 
@@ -91,6 +95,7 @@ export function useConversation(entityType?: string | null, entityId?: string | 
         queryFn: () => isGlobal
             ? aiApi.getGlobalConversation()
             : aiApi.getConversation(entityType!, entityId!),
+        enabled: options?.enabled ?? true,
         staleTime: 30 * 1000, // 30 seconds
     });
 }

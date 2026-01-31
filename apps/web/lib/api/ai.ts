@@ -81,11 +81,7 @@ export interface AIMessage {
 }
 
 export interface AIConversation {
-    id: string;
-    entity_type: string;
-    entity_id: string;
-    created_at: string;
-    updated_at: string;
+    conversation_id?: string;
     messages: AIMessage[];
 }
 

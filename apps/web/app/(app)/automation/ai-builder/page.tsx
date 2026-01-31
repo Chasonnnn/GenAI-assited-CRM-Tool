@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import DOMPurify from "dompurify"
 import {
     WandIcon,
     ZapIcon,
@@ -130,6 +131,11 @@ export default function AIWorkflowBuilderPage() {
     const [templateExplanation, setTemplateExplanation] = useState<string | null>(null)
     const [templateErrors, setTemplateErrors] = useState<string[]>([])
     const [templateWarnings, setTemplateWarnings] = useState<string[]>([])
+
+    const sanitizedTemplateBody = useMemo(
+        () => DOMPurify.sanitize(templateBody),
+        [templateBody]
+    )
 
     const createEmailTemplate = useCreateEmailTemplate()
 
@@ -686,7 +692,7 @@ export default function AIWorkflowBuilderPage() {
                                     <p className="text-sm font-medium text-muted-foreground">Preview</p>
                                     <div
                                         className="prose prose-sm max-w-none"
-                                        dangerouslySetInnerHTML={{ __html: templateBody }}
+                                        dangerouslySetInnerHTML={{ __html: sanitizedTemplateBody }}
                                     />
                                 </div>
                                 <div className="bg-muted/50 rounded-lg p-4 space-y-2">

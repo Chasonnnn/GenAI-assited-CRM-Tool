@@ -88,7 +88,7 @@ def _build_google_contents(
             contents.append(
                 types.Content(
                     role=role,
-                    parts=[types.Part.from_text(msg.content)],
+                    parts=[types.Part.from_text(text=msg.content)],
                 )
             )
     return contents, system_instruction
@@ -225,7 +225,7 @@ class GeminiProvider(GoogleGenAIProvider):
         try:
             await self._client.aio.models.generate_content(
                 model=self.default_model,
-                contents=[types.Content(role="user", parts=[types.Part.from_text("ping")])],
+                contents=[types.Content(role="user", parts=[types.Part.from_text(text="ping")])],
                 config=types.GenerateContentConfig(temperature=0, max_output_tokens=1),
             )
             return True
@@ -403,7 +403,7 @@ class VertexAPIKeyProvider(GoogleGenAIProvider):
         try:
             await self._client.aio.models.generate_content(
                 model=self.default_model,
-                contents=[types.Content(role="user", parts=[types.Part.from_text("ping")])],
+                contents=[types.Content(role="user", parts=[types.Part.from_text(text="ping")])],
                 config=types.GenerateContentConfig(temperature=0, max_output_tokens=1),
             )
             return True
