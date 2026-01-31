@@ -4,10 +4,10 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, field_serializer
 
 from app.db.enums import SurrogateSource, OwnerType
-from app.utils.normalization import normalize_phone, normalize_state
+from app.utils.normalization import normalize_phone, normalize_state, format_race_label
 
 
 class SurrogateCreate(BaseModel):
@@ -424,6 +424,10 @@ class SurrogateRead(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    @field_serializer("race")
+    def serialize_race(self, value: str | None) -> str | None:
+        return format_race_label(value)
+
 
 class SurrogateListItem(BaseModel):
     """Compact surrogatefor table views."""
@@ -452,6 +456,10 @@ class SurrogateListItem(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("race")
+    def serialize_race(self, value: str | None) -> str | None:
+        return format_race_label(value)
 
 
 class SurrogateListResponse(BaseModel):

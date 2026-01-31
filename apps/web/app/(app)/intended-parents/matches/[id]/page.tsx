@@ -53,6 +53,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { ScheduleParserDialog } from "@/components/ai/ScheduleParserDialog"
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { parseDateInput } from "@/lib/utils/date"
+import { formatRace } from "@/lib/formatters"
 
 const STATUS_LABELS: Record<string, string> = {
     proposed: "Proposed",
@@ -664,7 +665,7 @@ export default function MatchDetailPage() {
                                             <div>
                                                 <p className="text-xs text-muted-foreground mb-1">Demographics</p>
                                                 <div className="grid grid-cols-3 gap-1 text-xs">
-                                                    <div><span className="text-muted-foreground">Race:</span> {surrogateData.race || "—"}</div>
+                                                    <div><span className="text-muted-foreground">Race:</span> {formatRace(surrogateData.race) || "—"}</div>
                                                     <div><span className="text-muted-foreground">Ht:</span> {surrogateData.height_ft ? `${surrogateData.height_ft}ft` : "—"}</div>
                                                     <div><span className="text-muted-foreground">Wt:</span> {surrogateData.weight_lb ? `${surrogateData.weight_lb}lb` : "—"}</div>
                                                 </div>

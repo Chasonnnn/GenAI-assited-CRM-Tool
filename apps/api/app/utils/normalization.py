@@ -138,6 +138,36 @@ VALID_STATE_CODES = {
     "MP",
 }
 
+RACE_LABEL_OVERRIDES = {
+    "hispanic_or_latino": "Hispanic or Latino",
+    "not_hispanic_or_latino": "Not Hispanic or Latino",
+}
+
+LOWERCASE_TITLE_WORDS = {"or", "and", "of", "the", "a", "an", "in", "on", "to", "for"}
+
+
+def format_race_label(race: Optional[str]) -> Optional[str]:
+    """Normalize race labels for display without mutating stored values."""
+    if not race:
+        return None
+    trimmed = race.strip()
+    if not trimmed:
+        return None
+
+    normalized_key = re.sub(r"[\s-]+", "_", trimmed.lower())
+    override = RACE_LABEL_OVERRIDES.get(normalized_key)
+    if override:
+        return override
+
+    normalized = re.sub(r"[_-]+", " ", trimmed.lower())
+    words = []
+    for index, word in enumerate(normalized.split()):
+        if index > 0 and word in LOWERCASE_TITLE_WORDS:
+            words.append(word)
+        elif word:
+            words.append(f"{word[0].upper()}{word[1:]}")
+    return " ".join(words)
+
 
 def normalize_state(state: Optional[str]) -> Optional[str]:
     """

@@ -17,6 +17,7 @@ import { useTasks } from "@/lib/hooks/use-tasks"
 import { ClipboardCheckIcon, CopyIcon, InfoIcon, CheckIcon, UserIcon, XIcon } from "lucide-react"
 import { computeBmi, formatDate } from "@/components/surrogates/detail/surrogate-detail-utils"
 import { useSurrogateDetailContext } from "@/components/surrogates/detail/SurrogateDetailContext"
+import { formatRace } from "@/lib/formatters"
 
 export function SurrogateOverviewTab() {
     const params = useParams<{ id: string }>()
@@ -175,7 +176,7 @@ export function SurrogateOverviewTab() {
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">Race:</span>
-                            <span className="text-sm">{surrogateData.race || "-"}</span>
+                            <span className="text-sm">{formatRace(surrogateData.race) || "-"}</span>
                         </div>
                         {(surrogateData.height_ft ||
                             surrogateData.weight_lb ||

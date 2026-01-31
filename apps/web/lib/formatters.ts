@@ -58,3 +58,32 @@ export function formatDateTime(
   if (!date) return fallback
   return `${dateFormatter.format(date)} at ${timeFormatter.format(date)}`
 }
+
+const RACE_LABEL_OVERRIDES: Record<string, string> = {
+  hispanic_or_latino: "Hispanic or Latino",
+  not_hispanic_or_latino: "Not Hispanic or Latino",
+}
+
+const LOWERCASE_WORDS = new Set(["or", "and", "of", "the", "a", "an", "in", "on", "to", "for"])
+
+function toTitleCase(value: string): string {
+  return value
+    .split(" ")
+    .map((word, index) => {
+      if (!word) return ""
+      if (index > 0 && LOWERCASE_WORDS.has(word)) return word
+      return `${word.charAt(0).toUpperCase()}${word.slice(1)}`
+    })
+    .join(" ")
+}
+
+export function formatRace(value: string | null | undefined): string {
+  if (!value) return ""
+  const trimmed = value.trim()
+  if (!trimmed) return ""
+  const normalizedKey = trimmed.toLowerCase().replace(/[\s-]+/g, "_")
+  const override = RACE_LABEL_OVERRIDES[normalizedKey]
+  if (override) return override
+  const normalized = trimmed.replace(/[_-]+/g, " ").toLowerCase()
+  return toTitleCase(normalized)
+}

@@ -25,6 +25,7 @@ import { useAuth } from "@/lib/auth-context"
 import type { SurrogateSource } from "@/lib/types/surrogate"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { cn } from "@/lib/utils"
+import { formatRace } from "@/lib/formatters"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { toast } from "sonner"
 
@@ -820,7 +821,7 @@ export default function SurrogatesPage() {
                                                     {surrogateItem.bmi ?? "—"}
                                                 </TableCell>
                                                 <TableCell className={mutedCellClass}>
-                                                    {surrogateItem.race || "—"}
+                                                    {formatRace(surrogateItem.race) || "—"}
                                                 </TableCell>
                                                 <TableCell className={mutedCellClass}>
                                                     {surrogateItem.state || "—"}
