@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.48.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.47.0...surrogacy-crm-platform-v0.48.0) (2026-01-31)
+
+
+### Features
+
+* **ai:** improve chat history loading and add HTML sanitization to previews ([9c0e0ba](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9c0e0ba5e1540bdcde9615d95cff4fcb6b2e6fd4))
+* **compliance:** add pagination to legal holds and improve management UI ([728641f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/728641f2953e5ae1a2192ec23af82d66d7825770))
+* **security:** add download-only mode for ClamAV signatures and improve update reliability ([c070a29](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c070a2981b2e324f1e7f16b3994fb5e7b5e49ef7))
+* **settings:** use qrcode.react for TOTP and add sanitization to signature previews ([6d8e0d5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6d8e0d53ced35caf87f3f16fa445fdd71e6bef4d))
+
+
+### Bug Fixes
+
+* more fixes ([19e4eb7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/19e4eb7a1651c2a4cf21266597a3477c90222944))
+* updated dependencies version ([0422947](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0422947edd53e7e3ade06f326bd8292ef4d3d3a3))
+
 ## [0.47.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.46.0...surrogacy-crm-platform-v0.47.0) (2026-01-31)
 
 
