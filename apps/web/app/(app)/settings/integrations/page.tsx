@@ -34,6 +34,7 @@ import { useUserIntegrations, useConnectZoom, useConnectGmail, useConnectGoogleC
 import { useAISettings, useUpdateAISettings, useTestAPIKey, useAIConsent, useAcceptConsent } from "@/lib/hooks/use-ai"
 import { useResendSettings, useUpdateResendSettings, useTestResendKey, useRotateWebhook, useEligibleSenders } from "@/lib/hooks/use-resend"
 import { useZapierSettings, useRotateZapierSecret, useZapierTestLead, useUpdateZapierOutboundSettings, useZapierOutboundTest } from "@/lib/hooks/use-zapier"
+import { useMetaForms } from "@/lib/hooks/use-meta-forms"
 import { formatRelativeTime } from "@/lib/formatters"
 import { CopyIcon, SendIcon, RotateCwIcon, ActivityIcon } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -1110,6 +1111,7 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
 
 function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
     const { data: settings, isLoading } = useZapierSettings()
+    const { data: metaForms = [], isLoading: metaFormsLoading } = useMetaForms()
     const rotateSecret = useRotateZapierSecret()
     const updateOutbound = useUpdateZapierOutboundSettings()
     const [webhookSecret, setWebhookSecret] = useState<string | null>(null)
@@ -1210,6 +1212,13 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
     }
     const showHeading = variant === "page"
     const containerClass = showHeading ? "border-t pt-6" : "space-y-4"
+    const zapierForms = metaForms.filter(
+        (form) => form.page_id === "zapier" || form.form_external_id?.startsWith("zapier-")
+    )
+    const mappingHref =
+        zapierForms.length === 1
+            ? `/settings/integrations/meta/forms/${zapierForms[0].id}`
+            : "/settings/integrations/meta/forms"
 
     if (isLoading) {
         return (
@@ -1233,6 +1242,20 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                         Use this webhook to push leads from Zapier into Surrogacy Force.
                     </p>
                 </>
+            )}
+
+            {!metaFormsLoading && zapierForms.length > 0 && (
+                <Alert>
+                    <AlertTitle>Zapier form detected</AlertTitle>
+                    <AlertDescription>
+                        We detected {zapierForms.length} Zapier form
+                        {zapierForms.length === 1 ? "" : "s"}. Map fields so inbound Zapier leads can
+                        convert automatically.{" "}
+                        <Link href={mappingHref} className="text-primary underline">
+                            Manage mapping
+                        </Link>
+                    </AlertDescription>
+                </Alert>
             )}
 
             <Card>
@@ -1930,7 +1953,7 @@ export default function IntegrationsPage() {
                 </Dialog>
 
                 <Dialog open={zapierDialogOpen} onOpenChange={setZapierDialogOpen}>
-                    <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto">
+                    <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
                         <DialogHeader>
                             <div className="flex items-start justify-between gap-4">
                                 <div className="space-y-1">
