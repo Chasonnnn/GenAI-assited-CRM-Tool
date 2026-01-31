@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.53.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.53.1...surrogacy-crm-platform-v0.53.2) (2026-01-31)
+
+
+### Bug Fixes
+
+* **api:** implement heartbeat mechanism for AI chat streaming ([ef97203](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ef97203e20bcb0f5076044d1d27d5580543e6ef6))
+* **web:** improve error handling and debug tracking in stream client ([9bfe8bb](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9bfe8bb4f080cb6d73e4d3c5c36a0f99f7c1ceec))
+
 ## [0.53.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.53.0...surrogacy-crm-platform-v0.53.1) (2026-01-31)
 
 
