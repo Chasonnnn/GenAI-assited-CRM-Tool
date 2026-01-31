@@ -36,7 +36,7 @@ from app.core.policies import POLICIES
 from app.db.enums import Role, SurrogateSource
 from app.schemas.auth import UserSession
 from app.services import import_service
-from app.utils.sse import format_sse, STREAM_HEADERS
+from app.utils.sse import format_sse, sse_preamble, STREAM_HEADERS
 
 
 router = APIRouter(
@@ -530,6 +530,7 @@ async def get_ai_mapping_suggestions_stream(
     provider = get_ai_provider_for_org(db, session.org_id, user_id=session.user_id)
     if not provider:
         async def _missing_events() -> AsyncIterator[str]:
+            yield sse_preamble()
             yield format_sse("start", {"status": "thinking"})
             response = AIMapResponse(suggestions=[])
             yield format_sse("done", response.model_dump())
@@ -554,6 +555,7 @@ async def get_ai_mapping_suggestions_stream(
     ]
 
     async def event_generator() -> AsyncIterator[str]:
+        yield sse_preamble()
         yield format_sse("start", {"status": "thinking"})
         content = ""
         try:

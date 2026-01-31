@@ -37,7 +37,7 @@ from app.services.ai_email_template_service import (
     EmailTemplateGenerationRequest,
     EmailTemplateGenerationResponse,
 )
-from app.utils.sse import format_sse, STREAM_HEADERS
+from app.utils.sse import format_sse, sse_preamble, STREAM_HEADERS
 
 router = APIRouter()
 
@@ -145,6 +145,7 @@ async def generate_email_template_stream(
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
     if not settings or not settings.is_enabled:
         async def _disabled_events() -> AsyncIterator[str]:
+            yield sse_preamble()
             yield format_sse("start", {"status": "thinking"})
             response = EmailTemplateGenerationResponse(
                 success=False,
@@ -160,6 +161,7 @@ async def generate_email_template_stream(
 
     if ai_settings_service.is_consent_required(settings):
         async def _consent_events() -> AsyncIterator[str]:
+            yield sse_preamble()
             yield format_sse("start", {"status": "thinking"})
             response = EmailTemplateGenerationResponse(
                 success=False,
@@ -184,6 +186,7 @@ async def generate_email_template_stream(
         )
 
         async def _missing_events() -> AsyncIterator[str]:
+            yield sse_preamble()
             yield format_sse("start", {"status": "thinking"})
             response = EmailTemplateGenerationResponse(success=False, explanation=message)
             yield format_sse("done", response.model_dump())
@@ -207,6 +210,7 @@ async def generate_email_template_stream(
     ]
 
     async def event_generator() -> AsyncIterator[str]:
+        yield sse_preamble()
         yield format_sse("start", {"status": "thinking"})
         content = ""
         try:
@@ -551,6 +555,7 @@ Pending Tasks:
     ]
 
     async def event_generator() -> AsyncIterator[str]:
+        yield sse_preamble()
         yield format_sse("start", {"status": "thinking"})
         content = ""
         prompt_tokens = 0
@@ -852,6 +857,7 @@ async def draft_email_stream(
     ]
 
     async def event_generator() -> AsyncIterator[str]:
+        yield sse_preamble()
         yield format_sse("start", {"status": "thinking"})
         content = ""
         prompt_tokens = 0
@@ -1113,6 +1119,7 @@ async def analyze_dashboard_stream(
     )
     if not provider:
         async def _fallback_events() -> AsyncIterator[str]:
+            yield sse_preamble()
             yield format_sse("start", {"status": "thinking"})
             response = AnalyzeDashboardResponse(
                 insights=[f"You have {total_surrogates} active surrogates"],
@@ -1143,6 +1150,7 @@ async def analyze_dashboard_stream(
     ]
 
     async def event_generator() -> AsyncIterator[str]:
+        yield sse_preamble()
         yield format_sse("start", {"status": "thinking"})
         content = ""
         prompt_tokens = 0

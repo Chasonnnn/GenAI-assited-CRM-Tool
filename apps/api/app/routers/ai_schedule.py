@@ -22,7 +22,7 @@ from app.schemas.auth import UserSession
 from app.services.ai_prompt_registry import get_prompt
 from app.services.ai_response_validation import parse_json_array
 from app.services.ai_provider import ChatMessage
-from app.utils.sse import format_sse, STREAM_HEADERS
+from app.utils.sse import format_sse, sse_preamble, STREAM_HEADERS
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -273,6 +273,7 @@ async def parse_schedule_stream(
     # AI settings check
     if not settings or not settings.is_enabled:
         async def _disabled_events() -> AsyncIterator[str]:
+            yield sse_preamble()
             yield format_sse("start", {"status": "thinking"})
             response = ParseScheduleResponse(
                 proposed_tasks=[],
@@ -297,6 +298,7 @@ async def parse_schedule_stream(
         )
 
         async def _missing_events() -> AsyncIterator[str]:
+            yield sse_preamble()
             yield format_sse("start", {"status": "thinking"})
             response = ParseScheduleResponse(
                 proposed_tasks=[],
@@ -327,6 +329,7 @@ async def parse_schedule_stream(
     ]
 
     async def event_generator() -> AsyncIterator[str]:
+        yield sse_preamble()
         yield format_sse("start", {"status": "thinking"})
         content = ""
 

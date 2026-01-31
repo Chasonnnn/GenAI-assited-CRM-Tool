@@ -15,7 +15,7 @@ from app.core.rate_limit import limiter
 from app.core.surrogate_access import check_surrogate_access
 from app.db.enums import Role
 from app.schemas.auth import UserSession
-from app.utils.sse import format_sse, STREAM_HEADERS
+from app.utils.sse import format_sse, sse_preamble, STREAM_HEADERS
 
 router = APIRouter()
 
@@ -169,6 +169,7 @@ async def chat_stream(
     entity_type, entity_id, user_integrations = _prepare_chat_request(body, db, session)
 
     async def event_generator() -> AsyncIterator[str]:
+        yield sse_preamble()
         async for event in ai_chat_service.stream_chat_async(
             db=db,
             organization_id=session.org_id,

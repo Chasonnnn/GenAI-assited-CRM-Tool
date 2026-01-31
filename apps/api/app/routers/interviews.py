@@ -29,7 +29,7 @@ from app.core.deps import (
 from app.core.permissions import PermissionKey as P
 from app.db.enums import Role
 from app.schemas.auth import UserSession
-from app.utils.sse import format_sse, STREAM_HEADERS
+from app.utils.sse import format_sse, sse_preamble, STREAM_HEADERS
 from app.schemas.interview import (
     InterviewAttachmentRead,
     InterviewCreate,
@@ -783,6 +783,7 @@ async def summarize_interview_stream(
     ]
 
     async def event_generator() -> AsyncIterator[str]:
+        yield sse_preamble()
         yield format_sse("start", {"status": "thinking"})
         content = ""
         prompt_tokens = 0
@@ -977,6 +978,7 @@ Notes:
     ]
 
     async def event_generator() -> AsyncIterator[str]:
+        yield sse_preamble()
         yield format_sse("start", {"status": "thinking"})
         content = ""
         prompt_tokens = 0

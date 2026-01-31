@@ -18,7 +18,7 @@ from app.schemas.auth import UserSession
 from app.services.ai_provider import ChatMessage
 from app.services.ai_response_validation import parse_json_object, validate_model
 from app.services.ai_prompt_registry import get_prompt
-from app.utils.sse import format_sse, STREAM_HEADERS
+from app.utils.sse import format_sse, sse_preamble, STREAM_HEADERS
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -142,6 +142,7 @@ async def generate_workflow_stream(
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
     if not settings or not settings.is_enabled:
         async def _disabled_events() -> AsyncIterator[str]:
+            yield sse_preamble()
             yield format_sse("start", {"status": "thinking"})
             response = GenerateWorkflowResponse(
                 success=False,
@@ -157,6 +158,7 @@ async def generate_workflow_stream(
 
     if ai_settings_service.is_consent_required(settings):
         async def _consent_events() -> AsyncIterator[str]:
+            yield sse_preamble()
             yield format_sse("start", {"status": "thinking"})
             response = GenerateWorkflowResponse(
                 success=False,
@@ -181,6 +183,7 @@ async def generate_workflow_stream(
         )
 
         async def _missing_events() -> AsyncIterator[str]:
+            yield sse_preamble()
             yield format_sse("start", {"status": "thinking"})
             response = GenerateWorkflowResponse(
                 success=False,
@@ -217,6 +220,7 @@ async def generate_workflow_stream(
     ]
 
     async def event_generator() -> AsyncIterator[str]:
+        yield sse_preamble()
         yield format_sse("start", {"status": "thinking"})
         content = ""
         try:
