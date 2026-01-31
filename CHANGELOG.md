@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.54.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.53.3...surrogacy-crm-platform-v0.54.0) (2026-01-31)
+
+
+### Features
+
+* **api:** add backend support for repeatable tables and conditional field rendering ([4a9c4e9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4a9c4e9fd6b5f3491b2faac562e11c1da645cd90))
+* **forms:** add repeatable tables, conditional logic, and Jotform templates ([f66bd99](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f66bd99fa389b5dc3bf7bdab6725fcda20885f3f))
+* **integrations:** support multiple Zapier inbound webhooks ([1477b3d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1477b3db4a4767a3c82db21e806dffd4aecdb31d))
+* **web:** implement repeatable table fields and conditional visibility in intake forms ([ff5dc9f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ff5dc9f25de65d8b54479e1d2d07559feb61eafd))
+
+
+### Bug Fixes
+
+* **forms:** map conditional logic and table columns in form builder ([e81ab65](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e81ab657bf4237a77c678af0cb605f5d67a3c535))
+* **web/api:** reliability improvements for dashboard and imports ([9969c5a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9969c5a436869369697be38c4e40d67a15cb0b9c))
+
+
+### Maintenance
+
+* **ai:** cleanup AI streaming and remove debug overlay ([c9a2f5a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c9a2f5ad0c8a7af42e78be6953ffb2d7a6dd763b))
+* **infra:** security cleanup and infrastructure refinements ([003b727](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/003b72777721e56c9267f6dd550456790f41cc82))
+
 ## [0.53.3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.53.2...surrogacy-crm-platform-v0.53.3) (2026-01-31)
 
 
