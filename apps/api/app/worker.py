@@ -11,7 +11,7 @@ For production, run this as a separate process (e.g., systemd service, Docker co
 import asyncio
 import logging
 import os
-import random
+import secrets
 import sys
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
@@ -303,7 +303,7 @@ def _rate_limit_backoff_seconds(attempts: int) -> int:
     # Exponential backoff with jitter, capped at 1 hour
     base = 60
     delay = min(3600, base * (2 ** max(attempts - 1, 0)))
-    jitter = random.randint(0, 30)
+    jitter = secrets.randbelow(31)
     return delay + jitter
 
 

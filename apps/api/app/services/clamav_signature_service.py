@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 import os
-import subprocess
+import shutil
+import subprocess  # nosec B404
 import tarfile
 import tempfile
 from datetime import datetime, timezone
@@ -77,7 +78,10 @@ def _safe_extract(tar: tarfile.TarFile, path: str) -> None:
 
 
 def _run_freshclam() -> None:
-    subprocess.run(["freshclam", "--quiet"], check=True, timeout=180)
+    freshclam = shutil.which("freshclam")
+    if not freshclam:
+        raise RuntimeError("freshclam not found in PATH")
+    subprocess.run([freshclam, "--quiet"], check=True, timeout=180)  # nosec B603
 
 
 def _download_archive(bucket: str, key: str, sig_dir: str) -> bool:

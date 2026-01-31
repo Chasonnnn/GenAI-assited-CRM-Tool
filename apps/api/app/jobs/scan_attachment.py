@@ -13,7 +13,7 @@ Usage:
 import logging
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404
 import tempfile
 from uuid import UUID
 
@@ -71,7 +71,7 @@ def _run_clamav_scan(file_path: str) -> tuple[str, str]:
             logger.warning("ClamAV not installed, skipping scan")
             return "scanner_not_available", "scanner_not_available"
 
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603
             [scanner, "--no-summary", file_path],
             capture_output=True,
             text=True,
@@ -203,8 +203,13 @@ def scan_attachment_job(attachment_id: UUID) -> bool:
         try:
             attachment_service.mark_attachment_scanned(db, attachment_id, "error")
             db.commit()
-        except Exception:
-            pass
+        except Exception as mark_error:
+            logger.warning(
+                "Failed to mark attachment %s as scan error: %s",
+                attachment_id,
+                mark_error,
+                exc_info=mark_error,
+            )
 
         return False
 
@@ -213,8 +218,13 @@ def scan_attachment_job(attachment_id: UUID) -> bool:
         if temp_file and attachment_service._get_storage_backend() == "s3":
             try:
                 os.unlink(temp_file)
-            except Exception:
-                pass
+            except Exception as cleanup_error:
+                logger.debug(
+                    "Failed to clean up temp file %s: %s",
+                    temp_file,
+                    cleanup_error,
+                    exc_info=cleanup_error,
+                )
         db.close()
 
 
@@ -312,16 +322,26 @@ def scan_form_submission_file_job(file_id: UUID) -> bool:
 
             form_submission_service.mark_submission_file_scanned(db, file_id, "error")
             db.commit()
-        except Exception:
-            pass
+        except Exception as mark_error:
+            logger.warning(
+                "Failed to mark form submission file %s as scan error: %s",
+                file_id,
+                mark_error,
+                exc_info=mark_error,
+            )
         return False
 
     finally:
         if temp_file and attachment_service._get_storage_backend() == "s3":
             try:
                 os.unlink(temp_file)
-            except Exception:
-                pass
+            except Exception as cleanup_error:
+                logger.debug(
+                    "Failed to clean up temp file %s: %s",
+                    temp_file,
+                    cleanup_error,
+                    exc_info=cleanup_error,
+                )
         db.close()
 
 
