@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef, useCallback } from "react"
+import { useEffect, useState, useRef, useCallback, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import DOMPurify from "dompurify"
 import {
   CameraIcon,
   MonitorIcon,
@@ -731,6 +732,10 @@ function SignatureBrandingSection() {
   const [saved, setSaved] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewHtml, setPreviewHtml] = useState<string | null>(null)
+  const sanitizedPreviewHtml = useMemo(
+    () => (previewHtml ? DOMPurify.sanitize(previewHtml) : null),
+    [previewHtml]
+  )
 
   useEffect(() => {
     if (orgSig) {
@@ -1016,12 +1021,12 @@ function SignatureBrandingSection() {
           </Button>
         </div>
 
-        {previewHtml && (
+        {sanitizedPreviewHtml && (
           <div className="rounded-lg border border-border p-6 bg-white">
             <p className="text-xs text-muted-foreground mb-3 pb-3 border-b">
               Preview with sample employee data:
             </p>
-            <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
+            <div dangerouslySetInnerHTML={{ __html: sanitizedPreviewHtml }} />
           </div>
         )}
       </div>

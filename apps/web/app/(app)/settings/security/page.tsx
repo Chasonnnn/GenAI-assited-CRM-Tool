@@ -40,6 +40,7 @@ import {
     AlertTriangleIcon,
     RefreshCwIcon,
 } from "lucide-react"
+import { QRCodeSVG } from "qrcode.react"
 import {
     useMFAStatus,
     useSetupTOTP,
@@ -53,19 +54,9 @@ import {
 // =============================================================================
 
 function QRCodeDisplay({ data }: { data: string }) {
-    // Use a simple QR code image service for display
-    // In production, you'd use a library like qrcode.react
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data)}`
-
     return (
         <div className="flex justify-center p-4 bg-white rounded-lg">
-            <img
-                src={qrUrl}
-                alt="TOTP QR Code"
-                width={200}
-                height={200}
-                className="rounded"
-            />
+            <QRCodeSVG value={data} size={200} includeMargin className="rounded" />
         </div>
     )
 }
