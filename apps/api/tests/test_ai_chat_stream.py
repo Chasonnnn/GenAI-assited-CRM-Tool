@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 import pytest
@@ -21,6 +22,7 @@ def _create_ai_settings(db, org_id, user_id) -> AISettings:
     )
     db.add(settings)
     db.flush()
+    db.commit()
     return settings
 
 
@@ -29,6 +31,12 @@ async def test_chat_stream_returns_events(
     authed_client: AsyncClient, db, test_org, test_user, monkeypatch
 ):
     _create_ai_settings(db, test_org.id, test_user.id)
+
+    @contextmanager
+    def _stream_db():
+        yield db
+
+    monkeypatch.setattr("app.routers.ai_chat.get_db_for_stream", _stream_db)
 
     class StubProvider:
         async def stream_chat(self, messages, **kwargs):  # noqa: ARG002

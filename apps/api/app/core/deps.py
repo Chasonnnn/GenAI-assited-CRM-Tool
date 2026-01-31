@@ -1,5 +1,6 @@
 """FastAPI dependencies for authentication, authorization, and database access."""
 
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 from typing import Generator
@@ -98,6 +99,16 @@ def get_db() -> Generator[Session, None, None]:
 
     Yields a database session and ensures it's closed after the request.
     """
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@contextmanager
+def get_db_for_stream() -> Generator[Session, None, None]:
+    """Database session for streaming endpoints."""
     db = SessionLocal()
     try:
         yield db

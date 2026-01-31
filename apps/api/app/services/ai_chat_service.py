@@ -1011,7 +1011,16 @@ async def stream_chat_async(
 
     preparation.conversation.updated_at = datetime.now(timezone.utc)
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        logger.exception("Failed to commit AI chat stream")
+        db.rollback()
+        yield {
+            "type": "error",
+            "data": {"message": "Failed to save conversation. Please try again."},
+        }
+        return
 
     yield {
         "type": "done",

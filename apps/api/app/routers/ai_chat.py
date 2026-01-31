@@ -1,5 +1,6 @@
 """AI chat routes."""
 
+import logging
 import uuid
 from collections.abc import AsyncIterator
 from typing import Any
@@ -9,7 +10,13 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_ai_enabled, require_csrf_header, require_permission
+from app.core.deps import (
+    get_db,
+    get_db_for_stream,
+    require_ai_enabled,
+    require_csrf_header,
+    require_permission,
+)
 from app.core.permissions import PermissionKey as P
 from app.core.rate_limit import limiter
 from app.core.surrogate_access import check_surrogate_access
@@ -18,6 +25,7 @@ from app.schemas.auth import UserSession
 from app.utils.sse import format_sse, sse_preamble, STREAM_HEADERS
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class ChatRequest(BaseModel):
@@ -168,17 +176,26 @@ async def chat_stream(
 
     entity_type, entity_id, user_integrations = _prepare_chat_request(body, db, session)
 
+    org_id = session.org_id
+    user_id = session.user_id
+    message = body.message
+
     async def event_generator() -> AsyncIterator[str]:
         yield sse_preamble()
-        async for event in ai_chat_service.stream_chat_async(
-            db=db,
-            organization_id=session.org_id,
-            user_id=session.user_id,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            message=body.message,
-            user_integrations=user_integrations,
-        ):
-            yield format_sse(event["type"], event["data"])
+        with get_db_for_stream() as stream_db:
+            try:
+                async for event in ai_chat_service.stream_chat_async(
+                    db=stream_db,
+                    organization_id=org_id,
+                    user_id=user_id,
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    message=message,
+                    user_integrations=user_integrations,
+                ):
+                    yield format_sse(event["type"], event["data"])
+            except Exception as exc:
+                logger.exception("AI chat stream failed", exc_info=exc)
+                yield format_sse("error", {"message": "Streaming error. Please try again."})
 
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=STREAM_HEADERS)
