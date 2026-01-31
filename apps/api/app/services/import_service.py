@@ -328,6 +328,20 @@ def _normalize_validation_mode(value: str | None) -> str:
     return VALIDATION_MODE_SKIP
 
 
+def _format_validation_errors(exc: ValidationError) -> list[str]:
+    messages: list[str] = []
+    for err in exc.errors():
+        loc = err.get("loc") or []
+        msg = err.get("msg") or "Invalid value"
+        if loc:
+            path = ".".join(str(part) for part in loc if part is not None)
+            if path:
+                messages.append(f"{path}: {msg}")
+                continue
+        messages.append(msg)
+    return messages
+
+
 def _validate_row_with_mode(
     row_data: dict[str, Any],
     default_source: SurrogateSource | str | None,
@@ -473,7 +487,7 @@ def execute_import(
             result.errors.append(
                 {
                     "row": row_num,
-                    "errors": [err["msg"] for err in e.errors()],
+                    "errors": _format_validation_errors(e),
                 }
             )
             continue
@@ -1199,7 +1213,7 @@ def execute_import_with_mappings(
             result.errors.append(
                 {
                     "row": row_num,
-                    "errors": [err["msg"] for err in e.errors()],
+                    "errors": _format_validation_errors(e),
                 }
             )
         except Exception as e:

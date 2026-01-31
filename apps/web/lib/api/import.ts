@@ -167,8 +167,14 @@ export async function rejectImport(importId: string, reason: string): Promise<Im
     return api.post<ImportApprovalResponse>(`/surrogates/import/${importId}/reject`, { reason })
 }
 
-export async function retryImport(importId: string): Promise<ImportActionResponse> {
-    return api.post<ImportActionResponse>(`/surrogates/import/${importId}/retry`)
+export async function retryImport(
+    importId: string,
+    options?: { validation_mode?: ValidationMode }
+): Promise<ImportActionResponse> {
+    return api.post<ImportActionResponse>(
+        `/surrogates/import/${importId}/retry`,
+        options && options.validation_mode ? options : undefined
+    )
 }
 
 export async function runImportInline(importId: string): Promise<ImportActionResponse> {

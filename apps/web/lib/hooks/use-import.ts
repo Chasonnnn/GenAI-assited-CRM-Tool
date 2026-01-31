@@ -130,7 +130,11 @@ export function useRetryImport() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: (importId: string) => retryImport(importId),
+        mutationFn: (params: { importId: string; validation_mode?: 'skip_invalid_rows' | 'drop_invalid_fields' }) =>
+            retryImport(
+                params.importId,
+                params.validation_mode ? { validation_mode: params.validation_mode } : undefined
+            ),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: importKeys.lists() })
             queryClient.invalidateQueries({ queryKey: importKeys.pending() })

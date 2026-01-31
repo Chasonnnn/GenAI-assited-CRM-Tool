@@ -5,6 +5,7 @@ import { CSVUpload } from "@/components/import/CSVUpload"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -23,12 +24,14 @@ import {
 } from "@/components/ui/dropdown-menu"
 import {
     Dialog,
+    DialogClose,
     DialogContent,
     DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import {
     Table,
     TableBody,
@@ -58,7 +61,7 @@ import {
     useRunImportInline,
     type ImportActionResponse,
 } from "@/lib/hooks/use-import"
-import type { ImportHistoryItem } from "@/lib/api/import"
+import type { ImportHistoryItem, ValidationMode } from "@/lib/api/import"
 import { formatDistanceToNow } from "date-fns"
 import { toast } from "sonner"
 
@@ -70,6 +73,7 @@ export default function CSVImportPage() {
     const runInlineMutation = useRunImportInline()
     const [deleteTarget, setDeleteTarget] = useState<ImportHistoryItem | null>(null)
     const [errorTarget, setErrorTarget] = useState<ImportHistoryItem | null>(null)
+    const [retryValidationMode, setRetryValidationMode] = useState<ValidationMode>("drop_invalid_fields")
     const {
         data: importDetails,
         isLoading: isImportDetailsLoading,
@@ -104,10 +108,15 @@ export default function CSVImportPage() {
 
     const canDelete = (imp: ImportHistoryItem) => imp.status !== "running"
 
-    const handleRetry = async (imp: ImportHistoryItem) => {
+    const handleRetry = async (imp: ImportHistoryItem, mode?: ValidationMode) => {
         try {
-            const response: ImportActionResponse = await retryMutation.mutateAsync(imp.id)
+            const response: ImportActionResponse = await retryMutation.mutateAsync(
+                mode ? { importId: imp.id, validation_mode: mode } : { importId: imp.id }
+            )
             toast.success(response.message || "Import queued for processing")
+            if (mode) {
+                setErrorTarget(null)
+            }
         } catch (err: unknown) {
             toast.error(err instanceof Error ? err.message : "Failed to retry import")
         }
@@ -152,6 +161,7 @@ export default function CSVImportPage() {
         importDetails?.error_count ??
         errorTarget?.error_count ??
         normalizedErrors.length
+    const canRetryTarget = errorTarget ? canRetry(errorTarget) : false
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -346,6 +356,62 @@ export default function CSVImportPage() {
                         </DialogDescription>
                     </DialogHeader>
 
+                    {canRetryTarget && (
+                        <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                            <div className="text-sm font-medium">Retry with safer handling</div>
+                            <p className="text-xs text-muted-foreground">
+                                Choose how to handle invalid values (phone, state, numeric fields) and re-run the import
+                                without re-uploading the CSV.
+                            </p>
+                            <RadioGroup
+                                value={retryValidationMode}
+                                onValueChange={(value) => setRetryValidationMode(value as ValidationMode)}
+                                className="space-y-3"
+                            >
+                                <div className="flex items-start space-x-3 rounded-md border border-border p-3 bg-background">
+                                    <RadioGroupItem value="drop_invalid_fields" id="retry-drop-fields" />
+                                    <div className="space-y-1">
+                                        <Label htmlFor="retry-drop-fields" className="font-medium">
+                                            Import anyway (drop invalid fields)
+                                        </Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            Keeps rows and clears invalid values; records warnings instead of row errors.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start space-x-3 rounded-md border border-border p-3 bg-background">
+                                    <RadioGroupItem value="skip_invalid_rows" id="retry-skip-rows" />
+                                    <div className="space-y-1">
+                                        <Label htmlFor="retry-skip-rows" className="font-medium">
+                                            Skip invalid rows
+                                        </Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            Skips any row with validation issues and logs errors.
+                                        </p>
+                                    </div>
+                                </div>
+                            </RadioGroup>
+                            <div className="flex justify-end">
+                                <Button
+                                    onClick={() => {
+                                        if (!errorTarget) return
+                                        handleRetry(errorTarget, retryValidationMode)
+                                    }}
+                                    disabled={retryMutation.isPending}
+                                >
+                                    {retryMutation.isPending ? (
+                                        <>
+                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                            Retrying...
+                                        </>
+                                    ) : (
+                                        retryValidationMode === "drop_invalid_fields" ? "Import anyway" : "Retry import"
+                                    )}
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
                     {isImportDetailsLoading ? (
                         <div className="flex items-center justify-center py-10">
                             <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
@@ -389,7 +455,9 @@ export default function CSVImportPage() {
                         </div>
                     )}
 
-                    <DialogFooter showCloseButton />
+                    <DialogFooter>
+                        <DialogClose render={<Button variant="outline">Ignore for now</Button>} />
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

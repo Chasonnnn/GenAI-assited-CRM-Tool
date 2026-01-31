@@ -57,6 +57,8 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
 vi.mock('@/components/ui/dialog', () => ({
     Dialog: ({ open, children }: { open?: boolean; children?: ReactNode }) =>
         open ? <div>{children}</div> : null,
+    DialogClose: ({ children, render }: { children?: ReactNode; render?: ReactNode }) =>
+        render ? <>{render}</> : <>{children}</>,
     DialogContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
     DialogHeader: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
     DialogTitle: ({ children }: { children?: ReactNode }) => <div>{children}</div>,

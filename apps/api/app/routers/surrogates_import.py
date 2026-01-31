@@ -494,6 +494,12 @@ class ImportSubmitRequest(BaseModel):
     validation_mode: Literal["skip_invalid_rows", "drop_invalid_fields"] = "skip_invalid_rows"
 
 
+class ImportRetryRequest(BaseModel):
+    """Optional overrides when retrying an import."""
+
+    validation_mode: Literal["skip_invalid_rows", "drop_invalid_fields"] | None = None
+
+
 @router.post(
     "/{import_id:uuid}/submit",
     response_model=ImportSubmitResponse,
@@ -641,6 +647,7 @@ def approve_import(
 )
 def retry_import(
     import_id: UUID,
+    data: ImportRetryRequest | None = None,
     session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
     db: Session = Depends(get_db),
 ):
@@ -648,6 +655,12 @@ def retry_import(
     import_record = import_service.get_import(db, session.org_id, import_id)
     if not import_record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Import not found")
+
+    if data and data.validation_mode:
+        import_record.validation_mode = import_service._normalize_validation_mode(
+            data.validation_mode
+        )
+        db.commit()
 
     try:
         job, already_queued = import_service.queue_import_job(
