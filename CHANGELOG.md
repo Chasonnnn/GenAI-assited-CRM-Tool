@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.49.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.48.0...surrogacy-crm-platform-v0.49.0) (2026-01-31)
+
+
+### Features
+
+* **ai:** normalize model defaults and improve Gemini provider support ([396fee1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/396fee1088a5e2603e8444115414a711c69740a1))
+* **campaigns:** add stop functionality and edit support for scheduled campaigns ([1ae812a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1ae812a705b3b34a0ec4a2c6e2a271cfd8789caf))
+* implement consistent race data normalization and display ([b918ec1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b918ec1af9646988084e77b20caf3e65bcf1078e))
+
+
+### Maintenance
+
+* migrate worker from Cloud Run Job to Service with auto-scaling ([13256f5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/13256f5e29b7b75060fa3d8482ea1d5ff98809d0))
+
 ## [0.48.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.47.0...surrogacy-crm-platform-v0.48.0) (2026-01-31)
 
 
