@@ -512,8 +512,8 @@ def _delete_old_avatar(avatar_url: str):
 
         s3 = storage_client.get_s3_client()
         s3.delete_object(Bucket=bucket, Key=key)
-    except Exception:
-        pass  # Best effort
+    except Exception as exc:
+        logger.debug("Failed to delete old avatar %s: %s", avatar_url, exc, exc_info=exc)
 
 
 class AvatarResponse(BaseModel):
@@ -912,8 +912,10 @@ def _delete_old_signature_photo(photo_url: str):
 
         s3 = storage_client.get_s3_client()
         s3.delete_object(Bucket=bucket, Key=key)
-    except Exception:
-        pass  # Best effort
+    except Exception as exc:
+        logger.debug(
+            "Failed to delete old signature photo %s: %s", photo_url, exc, exc_info=exc
+        )
 
 
 @router.post(

@@ -1,6 +1,7 @@
 """Settings endpoints for organization and user preferences."""
 
 import io
+import logging
 import mimetypes
 import os
 import re
@@ -31,6 +32,7 @@ from app.services import (
 )
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -546,8 +548,8 @@ def _delete_logo_from_storage(logo_url: str) -> None:
                 local_path = os.path.join(_get_local_logo_path(), storage_key)
                 if os.path.exists(local_path):
                     os.remove(local_path)
-    except Exception:
-        pass  # Best effort delete
+    except Exception as exc:
+        logger.debug("Failed to delete logo %s: %s", logo_url, exc, exc_info=exc)
 
 
 @router.get("/organization/signature/logo/local/{storage_key:path}")
