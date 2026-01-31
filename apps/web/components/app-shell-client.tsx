@@ -8,6 +8,7 @@ import { AIContextProvider } from "@/lib/context/ai-context"
 import { AIChatDrawer } from "@/components/ai/AIChatDrawer"
 import { AIFloatingButton } from "@/components/ai/AIFloatingButton"
 import { OfflineBanner } from "@/components/offline-banner"
+import { SessionExpiredDialog } from "@/components/session-expired-dialog"
 
 // Dynamic import with SSR disabled to prevent hydration mismatch from Base UI's ID generation
 const AppSidebar = dynamic(
@@ -92,6 +93,7 @@ export default function AppShellClient({
   return (
     <>
       <OfflineBanner />
+      <SessionExpiredDialog />
       {content}
     </>
   )
