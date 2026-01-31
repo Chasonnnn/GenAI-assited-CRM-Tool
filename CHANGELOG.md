@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.53.3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.53.2...surrogacy-crm-platform-v0.53.3) (2026-01-31)
+
+
+### Bug Fixes
+
+* **web:** abort AI streaming on entity context change in AIChatPanel ([72b9038](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/72b9038885ea5cad6e9717dba6ff685949a6ab15))
+* **web:** explicitly handle null/undefined in entity context tracking for AIChatPanel ([9ed2c64](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9ed2c64e40e6a2685987b9074571cc798d018b45))
+
 ## [0.53.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.53.1...surrogacy-crm-platform-v0.53.2) (2026-01-31)
 
 
