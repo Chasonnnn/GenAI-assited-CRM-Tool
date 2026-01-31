@@ -1,11 +1,16 @@
 "use client"
 
-import { useState } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -27,6 +32,14 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
+import {
     ArrowLeftIcon,
     UsersIcon,
     SendIcon,
@@ -39,19 +52,27 @@ import {
     ChevronUpIcon,
     MailIcon,
     RefreshCcwIcon,
+    PencilIcon,
 } from "lucide-react"
 import { format } from "date-fns"
 import { toast } from "sonner"
 import {
     useCampaign,
     useCampaignRuns,
+    useCampaignPreview,
     useRunRecipients,
     useDeleteCampaign,
     useDuplicateCampaign,
+    useCancelCampaign,
+    useUpdateCampaign,
     useRetryFailedCampaignRun,
 } from "@/lib/hooks/use-campaigns"
 import { NotFoundState } from "@/components/not-found-state"
-import { useEmailTemplate } from "@/lib/hooks/use-email-templates"
+import { useEmailTemplate, useEmailTemplates } from "@/lib/hooks/use-email-templates"
+import { useQuery } from "@tanstack/react-query"
+import { getDefaultPipeline } from "@/lib/api/pipelines"
+import { RecipientPreviewCard } from "@/components/recipient-preview-card"
+import { US_STATES } from "@/lib/constants/us-states"
 
 // Status styles
 const statusStyles: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; className?: string }> = {
@@ -80,6 +101,23 @@ const statusLabels: Record<string, string> = {
     skipped: "Skipped",
 }
 
+const toLocalDateTimeInput = (date: Date) => {
+    const pad = (value: number) => String(value).padStart(2, "0")
+    const year = date.getFullYear()
+    const month = pad(date.getMonth() + 1)
+    const day = pad(date.getDate())
+    const hours = pad(date.getHours())
+    const minutes = pad(date.getMinutes())
+    return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+const INTENDED_PARENT_STAGE_OPTIONS = [
+    { id: "new", label: "New", color: "#3B82F6" },
+    { id: "ready_to_match", label: "Ready to Match", color: "#F59E0B" },
+    { id: "matched", label: "Matched", color: "#10B981" },
+    { id: "delivered", label: "Delivered", color: "#14B8A6" },
+] as const
+
 export default function CampaignDetailPage() {
     const params = useParams()
     const router = useRouter()
@@ -90,16 +128,28 @@ export default function CampaignDetailPage() {
             : Array.isArray(rawCampaignId)
               ? rawCampaignId[0] ?? ""
               : ""
+    const searchParams = useSearchParams()
 
     const [showDeleteDialog, setShowDeleteDialog] = useState(false)
     const [showRetryDialog, setShowRetryDialog] = useState(false)
+    const [showCancelDialog, setShowCancelDialog] = useState(false)
     const [recipientFilter, setRecipientFilter] = useState("all")
     const [showTemplatePreview, setShowTemplatePreview] = useState(true)
+    const [showEditDialog, setShowEditDialog] = useState(false)
+    const [editName, setEditName] = useState("")
+    const [editDescription, setEditDescription] = useState("")
+    const [editTemplateId, setEditTemplateId] = useState("")
+    const [editRecipientType, setEditRecipientType] = useState<"case" | "intended_parent">("case")
+    const [editStages, setEditStages] = useState<string[]>([])
+    const [editStates, setEditStates] = useState<string[]>([])
+    const [editScheduledAt, setEditScheduledAt] = useState("")
+    const minScheduleDate = toLocalDateTimeInput(new Date())
 
     // API hooks
     const { data: campaign, isLoading } = useCampaign(campaignId)
     const { data: runs } = useCampaignRuns(campaignId)
     const latestRun = runs?.[0]
+    const { data: preview, isLoading: previewLoading, refetch: refetchPreview } = useCampaignPreview(campaignId)
     const recipientQuery = {
         limit: 50,
         ...(recipientFilter === "all" ? {} : { status: recipientFilter }),
@@ -110,10 +160,65 @@ export default function CampaignDetailPage() {
         recipientQuery
     )
     const { data: template } = useEmailTemplate(campaign?.email_template_id ?? null)
+    const { data: templates } = useEmailTemplates()
 
     const deleteCampaign = useDeleteCampaign()
     const duplicateCampaign = useDuplicateCampaign()
+    const cancelCampaign = useCancelCampaign()
+    const updateCampaign = useUpdateCampaign()
     const retryFailed = useRetryFailedCampaignRun()
+
+    const { data: pipeline } = useQuery({
+        queryKey: ["defaultPipeline"],
+        queryFn: getDefaultPipeline,
+    })
+    const pipelineStages = pipeline?.stages || []
+    const editStageOptions =
+        editRecipientType === "intended_parent"
+            ? INTENDED_PARENT_STAGE_OPTIONS
+            : pipelineStages.filter(stage => stage.is_active)
+    const canEdit = campaign?.status === "draft" || campaign?.status === "scheduled"
+    const shouldAutoOpenEdit = searchParams.get("edit") === "1"
+
+    useEffect(() => {
+        if (shouldAutoOpenEdit && canEdit) {
+            setShowEditDialog(true)
+        }
+    }, [shouldAutoOpenEdit, canEdit])
+
+    useEffect(() => {
+        if (!campaign || !showEditDialog) return
+        const criteria = campaign.filter_criteria || {}
+        const stageIds = Array.isArray(criteria.stage_ids) ? criteria.stage_ids : []
+        const stageSlugs = Array.isArray(criteria.stage_slugs) ? criteria.stage_slugs : []
+        const states = Array.isArray(criteria.states) ? criteria.states : []
+        const recipientType =
+            campaign.recipient_type === "intended_parent" ? "intended_parent" : "case"
+
+        setEditName(campaign.name)
+        setEditDescription(campaign.description ?? "")
+        setEditTemplateId(campaign.email_template_id)
+        setEditRecipientType(recipientType)
+        setEditStages(recipientType === "intended_parent" ? stageSlugs : stageIds)
+        setEditStates(states)
+        setEditScheduledAt(
+            campaign.scheduled_at ? toLocalDateTimeInput(new Date(campaign.scheduled_at)) : ""
+        )
+    }, [campaign, showEditDialog])
+
+    const buildEditFilterCriteria = () => {
+        const stageFilters =
+            editStages.length > 0
+                ? editRecipientType === "intended_parent"
+                    ? { stage_slugs: editStages }
+                    : { stage_ids: editStages }
+                : {}
+
+        return {
+            ...stageFilters,
+            ...(editStates.length > 0 ? { states: editStates } : {}),
+        }
+    }
 
     const handleDelete = async () => {
         try {
@@ -136,6 +241,46 @@ export default function CampaignDetailPage() {
         }
     }
 
+    const handleEditSave = async () => {
+        if (!campaign) return
+        if (!editName || !editTemplateId) {
+            toast.error("Please fill in required fields")
+            return
+        }
+
+        let scheduledAt: string | undefined
+        if (editScheduledAt) {
+            const parsedDate = new Date(editScheduledAt)
+            if (Number.isNaN(parsedDate.getTime())) {
+                toast.error("Scheduled date is invalid")
+                return
+            }
+            if (parsedDate <= new Date()) {
+                toast.error("Scheduled date must be in the future")
+                return
+            }
+            scheduledAt = parsedDate.toISOString()
+        }
+
+        try {
+            await updateCampaign.mutateAsync({
+                id: campaign.id,
+                data: {
+                    name: editName,
+                    description: editDescription,
+                    email_template_id: editTemplateId,
+                    recipient_type: editRecipientType,
+                    filter_criteria: buildEditFilterCriteria(),
+                    ...(scheduledAt ? { scheduled_at: scheduledAt } : {}),
+                },
+            })
+            toast.success("Campaign updated")
+            setShowEditDialog(false)
+        } catch {
+            toast.error("Failed to update campaign")
+        }
+    }
+
     const handleRetryFailed = async () => {
         if (!latestRun) {
             return
@@ -150,6 +295,16 @@ export default function CampaignDetailPage() {
             toast.error("Failed to retry failed recipients")
         }
         setShowRetryDialog(false)
+    }
+
+    const handleCancel = async () => {
+        try {
+            await cancelCampaign.mutateAsync(campaignId)
+            toast.success("Campaign stopped")
+        } catch {
+            toast.error("Failed to stop campaign")
+        }
+        setShowCancelDialog(false)
     }
 
     if (isLoading) {
@@ -176,6 +331,18 @@ export default function CampaignDetailPage() {
     const clickedCount = campaign.clicked_count || 0
     const openPercent = campaign.sent_count > 0 ? Math.round((openedCount / campaign.sent_count) * 100) : 0
     const clickPercent = campaign.sent_count > 0 ? Math.round((clickedCount / campaign.sent_count) * 100) : 0
+    const filterCriteria = campaign.filter_criteria || {}
+    const rawStageFilters = campaign.recipient_type === "intended_parent"
+        ? (Array.isArray(filterCriteria.stage_slugs) ? filterCriteria.stage_slugs : [])
+        : (Array.isArray(filterCriteria.stage_ids) ? filterCriteria.stage_ids : [])
+    const stageLabelsForFilter = campaign.recipient_type === "intended_parent"
+        ? INTENDED_PARENT_STAGE_OPTIONS.filter(stage => rawStageFilters.includes(stage.id)).map(stage => stage.label)
+        : pipelineStages.filter(stage => rawStageFilters.includes(stage.id)).map(stage => stage.label)
+    const stateLabelsForFilter = Array.isArray(filterCriteria.states)
+        ? US_STATES.filter(state => filterCriteria.states.includes(state.value)).map(state => state.label)
+        : []
+    const createdAfter = filterCriteria.created_after ? new Date(filterCriteria.created_after) : null
+    const createdBefore = filterCriteria.created_before ? new Date(filterCriteria.created_before) : null
 
     return (
         <div className="flex min-h-screen flex-col bg-background">
@@ -204,6 +371,23 @@ export default function CampaignDetailPage() {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            onClick={() => setShowEditDialog(true)}
+                            disabled={!canEdit}
+                        >
+                            <PencilIcon className="size-4" />
+                            Edit
+                        </Button>
+                        {(campaign.status === "scheduled" || campaign.status === "sending") && (
+                            <Button
+                                variant="destructive"
+                                onClick={() => setShowCancelDialog(true)}
+                                disabled={cancelCampaign.isPending}
+                            >
+                                Stop
+                            </Button>
+                        )}
                         <Button variant="outline" onClick={handleDuplicate}>
                             <CopyIcon className="size-4" />
                             Duplicate
@@ -278,6 +462,92 @@ export default function CampaignDetailPage() {
                         </CardContent>
                     </Card>
                 </div>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Recipient Filters</CardTitle>
+                        <CardDescription>Filters applied when recipients are selected for sending.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div className="space-y-1">
+                                <p className="text-xs text-muted-foreground">Recipient Type</p>
+                                <p className="font-medium">
+                                    {campaign.recipient_type === "case" ? "Surrogates" : "Intended Parents"}
+                                </p>
+                            </div>
+                            <div className="space-y-1">
+                                <p className="text-xs text-muted-foreground">
+                                    {campaign.recipient_type === "intended_parent" ? "Statuses" : "Stages"}
+                                </p>
+                                {stageLabelsForFilter.length > 0 ? (
+                                    <div className="flex flex-wrap gap-2">
+                                        {stageLabelsForFilter.map((label) => (
+                                            <Badge key={label} variant="secondary" className="text-xs">
+                                                {label}
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">All</p>
+                                )}
+                            </div>
+                            <div className="space-y-1">
+                                <p className="text-xs text-muted-foreground">States</p>
+                                {stateLabelsForFilter.length > 0 ? (
+                                    <div className="flex flex-wrap gap-2">
+                                        {stateLabelsForFilter.map((label) => (
+                                            <Badge key={label} variant="secondary" className="text-xs">
+                                                {label}
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">All</p>
+                                )}
+                            </div>
+                            <div className="space-y-1">
+                                <p className="text-xs text-muted-foreground">Created Range</p>
+                                {(createdAfter || createdBefore) ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        {createdAfter ? format(createdAfter, "MMM d, yyyy") : "Anytime"}{" "}
+                                        →{" "}
+                                        {createdBefore ? format(createdBefore, "MMM d, yyyy") : "Now"}
+                                    </p>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">Anytime</p>
+                                )}
+                            </div>
+                        </div>
+                        {(filterCriteria.source || filterCriteria.is_priority) && (
+                            <div className="flex flex-wrap gap-2">
+                                {filterCriteria.source && (
+                                    <Badge variant="outline" className="text-xs">
+                                        Source: {filterCriteria.source}
+                                    </Badge>
+                                )}
+                                {filterCriteria.is_priority && (
+                                    <Badge variant="outline" className="text-xs">
+                                        Priority only
+                                    </Badge>
+                                )}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                <RecipientPreviewCard
+                    totalCount={preview?.total_count || 0}
+                    sampleRecipients={
+                        preview?.sample_recipients?.map((recipient) => ({
+                            email: recipient.email,
+                            name: recipient.name,
+                        })) || []
+                    }
+                    isLoading={previewLoading}
+                    onRefresh={() => refetchPreview()}
+                    maxVisible={3}
+                />
 
                 <Collapsible open={showTemplatePreview} onOpenChange={setShowTemplatePreview}>
                     <Card>
@@ -413,6 +683,163 @@ export default function CampaignDetailPage() {
             </div>
 
             {/* Delete Confirmation */}
+            <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Edit Campaign</DialogTitle>
+                        <DialogDescription>Update details and recipient filters.</DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="edit-name">Campaign Name *</Label>
+                            <Input
+                                id="edit-name"
+                                value={editName}
+                                onChange={(event) => setEditName(event.target.value)}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="edit-description">Description</Label>
+                            <Textarea
+                                id="edit-description"
+                                value={editDescription}
+                                onChange={(event) => setEditDescription(event.target.value)}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Template *</Label>
+                            <Select value={editTemplateId} onValueChange={(value) => value && setEditTemplateId(value)}>
+                                <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Choose a template">
+                                        {(value: string | null) => {
+                                            if (!value) return "Choose a template"
+                                            const selected = templates?.find(t => t.id === value)
+                                            return selected?.name ?? "Choose a template"
+                                        }}
+                                    </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent className="min-w-[300px]">
+                                    {templates?.map((templateOption) => (
+                                        <SelectItem key={templateOption.id} value={templateOption.id}>
+                                            {templateOption.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Recipient Type</Label>
+                            <Select
+                                value={editRecipientType}
+                                onValueChange={(value) => {
+                                    if (value === "case" || value === "intended_parent") {
+                                        setEditRecipientType(value)
+                                        setEditStages([])
+                                    }
+                                }}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select type">
+                                        {(value: string | null) => {
+                                            if (value === "case") return "Surrogates"
+                                            if (value === "intended_parent") return "Intended Parents"
+                                            return "Select type"
+                                        }}
+                                    </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="case">Surrogates</SelectItem>
+                                    <SelectItem value="intended_parent">Intended Parents</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>{editRecipientType === "intended_parent" ? "Filter by Status" : "Filter by Stage"}</Label>
+                            <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                                {editStageOptions.map((stage) => (
+                                    <div key={stage.id} className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id={`edit-stage-${stage.id}`}
+                                            checked={editStages.includes(stage.id)}
+                                            onCheckedChange={(checked) => {
+                                                if (checked) {
+                                                    setEditStages([...editStages, stage.id])
+                                                } else {
+                                                    setEditStages(editStages.filter((s) => s !== stage.id))
+                                                }
+                                            }}
+                                        />
+                                        <Label htmlFor={`edit-stage-${stage.id}`} className="text-sm">
+                                            <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: stage.color }} />
+                                            {stage.label}
+                                        </Label>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Filter by State (optional)</Label>
+                            <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
+                                {US_STATES.map((state) => (
+                                    <div key={state.value} className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id={`edit-state-${state.value}`}
+                                            checked={editStates.includes(state.value)}
+                                            onCheckedChange={(checked) => {
+                                                if (checked) {
+                                                    setEditStates([...editStates, state.value])
+                                                } else {
+                                                    setEditStates(editStates.filter((s) => s !== state.value))
+                                                }
+                                            }}
+                                        />
+                                        <Label htmlFor={`edit-state-${state.value}`} className="text-sm cursor-pointer">
+                                            {state.label}
+                                        </Label>
+                                    </div>
+                                ))}
+                            </div>
+                            {editStates.length > 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                    {editStates.length} state{editStates.length !== 1 ? "s" : ""} selected
+                                </p>
+                            )}
+                        </div>
+                        {(campaign?.status === "draft" || campaign?.status === "scheduled") && (
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-scheduled-at">Scheduled send time (optional)</Label>
+                                <Input
+                                    id="edit-scheduled-at"
+                                    type="datetime-local"
+                                    min={minScheduleDate}
+                                    value={editScheduledAt}
+                                    onChange={(event) => setEditScheduledAt(event.target.value)}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    {campaign?.status === "scheduled"
+                                        ? "Updating this will reschedule the pending send."
+                                        : "Leave blank to send manually later."}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleEditSave} disabled={updateCampaign.isPending}>
+                            {updateCampaign.isPending ? (
+                                <Loader2Icon className="size-4 animate-spin" />
+                            ) : (
+                                "Save changes"
+                            )}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
@@ -425,6 +852,23 @@ export default function CampaignDetailPage() {
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                             Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Stop Campaign</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will stop any scheduled or in-progress sends. Emails already queued may still deliver.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleCancel} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            Stop
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

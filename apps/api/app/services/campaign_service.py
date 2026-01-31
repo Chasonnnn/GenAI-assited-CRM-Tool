@@ -184,13 +184,18 @@ def create_campaign(db: Session, org_id: UUID, user_id: UUID, data: CampaignCrea
 def update_campaign(
     db: Session, org_id: UUID, campaign_id: UUID, data: CampaignUpdate
 ) -> Campaign | None:
-    """Update a campaign (only drafts can be updated)."""
+    """Update a campaign (drafts or scheduled only)."""
     campaign = (
         db.query(Campaign)
         .filter(
             Campaign.id == campaign_id,
             Campaign.organization_id == org_id,
-            Campaign.status == CampaignStatus.DRAFT.value,
+            Campaign.status.in_(
+                [
+                    CampaignStatus.DRAFT.value,
+                    CampaignStatus.SCHEDULED.value,
+                ]
+            ),
         )
         .first()
     )
@@ -222,6 +227,30 @@ def update_campaign(
     if data.scheduled_at is not None:
         _ensure_future_datetime(data.scheduled_at, "scheduled_at")
         campaign.scheduled_at = data.scheduled_at
+        if campaign.status == CampaignStatus.SCHEDULED.value:
+            latest_run = (
+                db.query(CampaignRun)
+                .filter(
+                    CampaignRun.organization_id == org_id,
+                    CampaignRun.campaign_id == campaign.id,
+                )
+                .order_by(CampaignRun.started_at.desc())
+                .first()
+            )
+            if latest_run:
+                pending_job = (
+                    db.query(Job)
+                    .filter(
+                        Job.organization_id == org_id,
+                        Job.job_type == JobType.CAMPAIGN_SEND.value,
+                        Job.status == JobStatus.PENDING.value,
+                        Job.payload["run_id"].astext == str(latest_run.id),
+                    )
+                    .order_by(Job.run_at.desc())
+                    .first()
+                )
+                if pending_job:
+                    pending_job.run_at = campaign.scheduled_at
 
     db.flush()
     return campaign
@@ -458,7 +487,8 @@ def enqueue_campaign_send(
         db.flush()
 
         # Update campaign status
-        campaign.status = CampaignStatus.SCHEDULED.value
+        campaign.status = CampaignStatus.SENDING.value
+        campaign.scheduled_at = None
 
         # Create job for async processing
         job = Job(
@@ -603,7 +633,12 @@ def cancel_campaign(db: Session, org_id: UUID, campaign_id: UUID) -> bool:
         .filter(
             Campaign.id == campaign_id,
             Campaign.organization_id == org_id,
-            Campaign.status == CampaignStatus.SCHEDULED.value,
+            Campaign.status.in_(
+                [
+                    CampaignStatus.SCHEDULED.value,
+                    CampaignStatus.SENDING.value,
+                ]
+            ),
         )
         .first()
     )
@@ -612,6 +647,38 @@ def cancel_campaign(db: Session, org_id: UUID, campaign_id: UUID) -> bool:
         return False
 
     campaign.status = CampaignStatus.CANCELLED.value
+    campaign.scheduled_at = None
+
+    now = datetime.now(timezone.utc)
+    latest_run = (
+        db.query(CampaignRun)
+        .filter(
+            CampaignRun.organization_id == org_id,
+            CampaignRun.campaign_id == campaign_id,
+        )
+        .order_by(CampaignRun.started_at.desc())
+        .first()
+    )
+    if latest_run and latest_run.status != "completed":
+        latest_run.status = "failed"
+        latest_run.error_message = "cancelled"
+        latest_run.completed_at = now
+
+    pending_jobs = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == org_id,
+            Job.job_type == JobType.CAMPAIGN_SEND.value,
+            Job.status == JobStatus.PENDING.value,
+            Job.payload["campaign_id"].astext == str(campaign_id),
+        )
+        .all()
+    )
+    for job in pending_jobs:
+        job.status = JobStatus.FAILED.value
+        job.last_error = "cancelled"
+        job.completed_at = now
+
     return True
 
 
@@ -867,6 +934,48 @@ def execute_campaign_run(
     recipients_buffer = []
     recipient_iter = recipient_query.execution_options(stream_results=True).yield_per(batch_size)
 
+    def _finalize_cancelled():
+        status_rows = (
+            db.query(CampaignRecipient.status, func.count(CampaignRecipient.id))
+            .filter(CampaignRecipient.run_id == run_id)
+            .group_by(CampaignRecipient.status)
+            .all()
+        )
+        status_counts = {status: count for status, count in status_rows}
+
+        run.sent_count = status_counts.get(CampaignRecipientStatus.SENT.value, 0) + status_counts.get(
+            CampaignRecipientStatus.DELIVERED.value, 0
+        )
+        run.delivered_count = status_counts.get(CampaignRecipientStatus.DELIVERED.value, 0)
+        run.failed_count = status_counts.get(CampaignRecipientStatus.FAILED.value, 0)
+        run.skipped_count = status_counts.get(CampaignRecipientStatus.SKIPPED.value, 0)
+        run.completed_at = datetime.now(timezone.utc)
+        run.status = "failed"
+        run.error_message = "cancelled"
+
+        campaign.sent_count = run.sent_count
+        campaign.delivered_count = run.delivered_count
+        campaign.failed_count = run.failed_count
+        campaign.skipped_count = run.skipped_count
+        campaign.total_recipients = run.total_count
+        campaign.status = CampaignStatus.CANCELLED.value
+        db.commit()
+
+        return {
+            "sent_count": run.sent_count,
+            "delivered_count": run.delivered_count,
+            "failed_count": run.failed_count,
+            "skipped_count": run.skipped_count,
+            "total_count": run.total_count,
+        }
+
+    def _is_cancelled() -> bool:
+        db.refresh(campaign)
+        return campaign.status == CampaignStatus.CANCELLED.value
+
+    if _is_cancelled():
+        return _finalize_cancelled()
+
     def _process_batch(batch):
         entity_ids = [recipient.id for recipient in batch]
         existing_by_entity = _load_existing_recipients(
@@ -980,10 +1089,16 @@ def execute_campaign_run(
     for recipient in recipient_iter:
         recipients_buffer.append(recipient)
         if len(recipients_buffer) >= batch_size:
+            if _is_cancelled():
+                return _finalize_cancelled()
             _process_batch(recipients_buffer)
             recipients_buffer = []
+            if _is_cancelled():
+                return _finalize_cancelled()
 
     if recipients_buffer:
+        if _is_cancelled():
+            return _finalize_cancelled()
         _process_batch(recipients_buffer)
 
     # Update run and campaign status

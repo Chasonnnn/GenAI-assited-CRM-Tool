@@ -54,6 +54,7 @@ import {
     ArrowLeftIcon,
     CalendarIcon,
     EyeIcon,
+    PencilIcon,
 } from "lucide-react"
 import { format } from "date-fns"
 import { toast } from "sonner"
@@ -63,6 +64,7 @@ import {
     useCreateCampaign,
     useDeleteCampaign,
     useDuplicateCampaign,
+    useCancelCampaign,
     useSendCampaign,
     usePreviewFilters,
 } from "@/lib/hooks/use-campaigns"
@@ -133,6 +135,7 @@ export default function CampaignsPage() {
     const [scheduleFor, setScheduleFor] = useState<"now" | "later">("now")
     const [scheduledDate, setScheduledDate] = useState("")
     const [deleteDialogId, setDeleteDialogId] = useState<string | null>(null)
+    const [cancelDialogId, setCancelDialogId] = useState<string | null>(null)
     const minScheduleDate = toLocalDateTimeInput(new Date())
 
     // API hooks
@@ -141,6 +144,7 @@ export default function CampaignsPage() {
     const createCampaign = useCreateCampaign()
     const deleteCampaign = useDeleteCampaign()
     const duplicateCampaign = useDuplicateCampaign()
+    const cancelCampaign = useCancelCampaign()
     const sendCampaign = useSendCampaign()
     const previewFilters = usePreviewFilters()
 
@@ -260,6 +264,19 @@ export default function CampaignsPage() {
             toast.success("Campaign duplicated")
         } catch {
             toast.error("Failed to duplicate campaign")
+        }
+    }
+
+    const handleCancelCampaign = async () => {
+        if (!cancelDialogId) return
+
+        try {
+            await cancelCampaign.mutateAsync(cancelDialogId)
+            toast.success("Campaign stopped")
+        } catch {
+            toast.error("Failed to stop campaign")
+        } finally {
+            setCancelDialogId(null)
         }
     }
 
@@ -410,16 +427,33 @@ export default function CampaignsPage() {
                                                                     </span>
                                                                 </DropdownMenuTrigger>
                                                                 <DropdownMenuContent align="end">
+                                                                <DropdownMenuItem
+                                                                    onClick={() => router.push(`/automation/campaigns/${campaign.id}`)}
+                                                                >
+                                                                    <EyeIcon className="mr-2 size-4" />
+                                                                    View Details
+                                                                </DropdownMenuItem>
+                                                                {(campaign.status === "draft" || campaign.status === "scheduled") && (
                                                                     <DropdownMenuItem
-                                                                        onClick={() => router.push(`/automation/campaigns/${campaign.id}`)}
+                                                                        onClick={() => router.push(`/automation/campaigns/${campaign.id}?edit=1`)}
                                                                     >
-                                                                        <EyeIcon className="mr-2 size-4" />
-                                                                        View Details
+                                                                        <PencilIcon className="mr-2 size-4" />
+                                                                        Edit
                                                                     </DropdownMenuItem>
+                                                                )}
                                                                     <DropdownMenuItem onClick={() => handleDuplicateCampaign(campaign.id)}>
                                                                         <CopyIcon className="mr-2 size-4" />
                                                                         Duplicate
                                                                     </DropdownMenuItem>
+                                                                    {(campaign.status === "scheduled" || campaign.status === "sending") && (
+                                                                        <DropdownMenuItem
+                                                                            onClick={() => setCancelDialogId(campaign.id)}
+                                                                            className="text-destructive"
+                                                                        >
+                                                                            <TrashIcon className="mr-2 size-4" />
+                                                                            Stop
+                                                                        </DropdownMenuItem>
+                                                                    )}
                                                                     {campaign.status === "draft" && (
                                                                         <DropdownMenuItem
                                                                             onClick={() => setDeleteDialogId(campaign.id)}
@@ -865,6 +899,27 @@ export default function CampaignsPage() {
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
                             Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Stop Confirmation Dialog */}
+            <AlertDialog open={!!cancelDialogId} onOpenChange={(open) => !open && setCancelDialogId(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Stop Campaign</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will stop any scheduled or in-progress sends. Emails already queued may still deliver.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleCancelCampaign}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            Stop
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

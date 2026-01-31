@@ -96,14 +96,14 @@ def update_campaign(
     session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
     _csrf=Depends(require_csrf_header),
 ):
-    """Update a draft campaign."""
+    """Update a draft or scheduled campaign."""
     campaign = campaign_service.update_campaign(
         db, org_id=session.org_id, campaign_id=campaign_id, data=data
     )
     if not campaign:
         raise HTTPException(
             status_code=400,
-            detail="Campaign not found or cannot be updated (only drafts can be edited)",
+            detail="Campaign not found or cannot be updated (only drafts or scheduled can be edited)",
         )
 
     db.commit()
@@ -222,10 +222,13 @@ def cancel_campaign(
     session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
     _csrf=Depends(require_csrf_header),
 ):
-    """Cancel a scheduled campaign."""
+    """Cancel a scheduled or in-progress campaign."""
     cancelled = campaign_service.cancel_campaign(db, session.org_id, campaign_id)
     if not cancelled:
-        raise HTTPException(status_code=400, detail="Campaign not found or cannot be cancelled")
+        raise HTTPException(
+            status_code=400,
+            detail="Campaign not found or cannot be cancelled (only scheduled or sending campaigns can be stopped)",
+        )
     db.commit()
     return {"message": "Campaign cancelled"}
 
