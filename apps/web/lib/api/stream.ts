@@ -128,19 +128,26 @@ export async function streamSSE<T>(
     options?: { signal?: AbortSignal }
 ): Promise<T> {
     const debug = createStreamDebug(path);
-    const response = await fetch(`${API_BASE}${path}`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-            ...getCsrfHeaders(),
-            'Content-Type': 'application/json',
-            'Accept': 'text/event-stream',
-        },
-        body: JSON.stringify(body),
-        ...(options?.signal ? { signal: options.signal } : {}),
-    });
+    let response: Response;
+    try {
+        response = await fetch(`${API_BASE}${path}`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                ...getCsrfHeaders(),
+                'Content-Type': 'application/json',
+                'Accept': 'text/event-stream',
+            },
+            body: JSON.stringify(body),
+            ...(options?.signal ? { signal: options.signal } : {}),
+        });
+    } catch (error) {
+        debug?.onError();
+        throw error;
+    }
 
     if (!response.ok) {
+        debug?.onError();
         let message = response.statusText;
         try {
             const err = await response.json();
