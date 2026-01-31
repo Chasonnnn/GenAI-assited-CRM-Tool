@@ -4,6 +4,7 @@ locals {
   api_url = "https://api.${var.domain}"
 
   api_image = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}/api:latest"
+  worker_image = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}/worker:latest"
   web_image = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}/web:latest"
 
   monitoring_webhook_enabled = var.monitoring_webhook_token != ""
@@ -43,6 +44,9 @@ locals {
     EXPORT_S3_BUCKET             = var.export_s3_bucket
     EXPORT_S3_REGION             = var.export_s3_region
     ATTACHMENT_SCAN_ENABLED      = tostring(var.attachment_scan_enabled)
+    CLAMAV_SIGNATURES_BUCKET     = var.clamav_signatures_bucket
+    CLAMAV_SIGNATURES_PREFIX     = var.clamav_signatures_prefix
+    CLAMAV_SIGNATURES_MAX_AGE_HOURS = tostring(var.clamav_signatures_max_age_hours)
     ALLOWED_EMAIL_DOMAINS        = var.allowed_email_domains
     GCP_MONITORING_ENABLED       = tostring(var.gcp_monitoring_enabled)
     GCP_PROJECT_ID               = var.project_id

@@ -94,6 +94,30 @@ variable "worker_job_name" {
   default     = "crm-worker"
 }
 
+variable "clamav_update_job_name" {
+  description = "Name of the Cloud Run ClamAV signature update job."
+  type        = string
+  default     = "crm-clamav-update"
+}
+
+variable "clamav_update_enabled" {
+  description = "Whether to enable the ClamAV signature update job and schedule."
+  type        = bool
+  default     = true
+}
+
+variable "clamav_update_cron" {
+  description = "Cron schedule for ClamAV signature updates."
+  type        = string
+  default     = "0 3 * * *"
+}
+
+variable "clamav_update_timezone" {
+  description = "Timezone for the ClamAV update cron schedule."
+  type        = string
+  default     = "UTC"
+}
+
 variable "migrate_job_name" {
   description = "Name of the Cloud Run database migration job."
   type        = string
@@ -307,6 +331,24 @@ variable "attachment_scan_enabled" {
   description = "Enable malware scanning for file attachments."
   type        = bool
   default     = true
+}
+
+variable "clamav_signatures_bucket" {
+  description = "Bucket for ClamAV signature cache (defaults to S3_BUCKET when empty)."
+  type        = string
+  default     = ""
+}
+
+variable "clamav_signatures_prefix" {
+  description = "Prefix for ClamAV signature cache objects."
+  type        = string
+  default     = "clamav"
+}
+
+variable "clamav_signatures_max_age_hours" {
+  description = "Max age for ClamAV signatures before refreshing."
+  type        = number
+  default     = 72
 }
 
 variable "allowed_email_domains" {

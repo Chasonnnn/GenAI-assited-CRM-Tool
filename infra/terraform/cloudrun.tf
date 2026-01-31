@@ -194,7 +194,7 @@ resource "google_cloud_run_v2_job" "worker" {
       service_account = google_service_account.worker.email
 
       containers {
-        image   = local.api_image
+        image   = local.worker_image
         command = ["python", "-m", "app.worker"]
         volume_mounts {
           name       = "cloudsql"
