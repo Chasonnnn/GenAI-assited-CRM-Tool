@@ -24,6 +24,7 @@ def sse_preamble(padding_bytes: int = 8192) -> str:
 
 
 STREAM_HEADERS = {
+    "Content-Type": "text/event-stream; charset=utf-8",
     "Cache-Control": "no-cache, no-transform",
     "Content-Encoding": "identity",
     "Connection": "keep-alive",

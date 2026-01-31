@@ -369,7 +369,7 @@ app.add_middleware(
     allow_credentials=True,  # Required for cookies
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", CSRF_HEADER, "X-Dev-Secret"],
-    expose_headers=["X-Request-ID", "Content-Disposition"],
+    expose_headers=["X-Request-ID", "Content-Disposition", "Content-Type"],
 )
 
 
