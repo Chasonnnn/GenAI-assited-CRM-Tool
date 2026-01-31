@@ -6,9 +6,9 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { SendIcon, SparklesIcon, FileTextIcon, UserIcon, CalendarIcon, ClockIcon, BotIcon, Loader2Icon, AlertCircleIcon, CheckIcon, XIcon } from "lucide-react"
-import { useState, useRef, useEffect, useMemo } from "react"
-import { useSendMessage, useAISettings, useApproveAction, useRejectAction, useConversation } from "@/lib/hooks/use-ai"
+import { SendIcon, SparklesIcon, FileTextIcon, UserIcon, CalendarIcon, ClockIcon, BotIcon, Loader2Icon, AlertCircleIcon, CheckIcon, XIcon, StopCircleIcon } from "lucide-react"
+import { useState, useRef, useEffect, useMemo, useCallback } from "react"
+import { useStreamChatMessage, useAISettings, useApproveAction, useRejectAction, useConversation } from "@/lib/hooks/use-ai"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 
@@ -24,6 +24,7 @@ interface Message {
     content: string
     timestamp: string
     proposed_actions?: ProposedAction[]
+    status?: "thinking" | "streaming" | "done" | "error"
 }
 
 interface ProposedAction {
@@ -49,15 +50,20 @@ function useSurrogates() {
 export default function AIAssistantPage() {
     const [selectedSurrogateId, setSelectedSurrogateId] = useState<string>("")
     const [message, setMessage] = useState("")
+    const [isStreaming, setIsStreaming] = useState(false)
     const [messages, setMessages] = useState<Message[]>([
         {
             id: "welcome",
             role: "assistant",
             content: "Hello! I'm your AI assistant. Select a surrogate above to start chatting about it, or use the quick actions to get started.",
             timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+            status: "done",
         },
     ])
     const messagesEndRef = useRef<HTMLDivElement>(null)
+    const streamingMessageIdRef = useRef<string | null>(null)
+    const streamAbortRef = useRef<AbortController | null>(null)
+    const stopRequestedRef = useRef(false)
 
     const surrogatesQuery = useSurrogates()
     const { data: surrogates, isLoading: surrogatesLoading, isError: surrogatesError, error: surrogatesErrorData } = surrogatesQuery
@@ -67,7 +73,7 @@ export default function AIAssistantPage() {
         isError: aiSettingsError,
         error: aiSettingsErrorData,
     } = aiSettingsQuery
-    const sendMessage = useSendMessage()
+    const streamMessage = useStreamChatMessage()
     const approveAction = useApproveAction()
     const rejectAction = useRejectAction()
     const conversationQuery = useConversation("surrogate", selectedSurrogateId, {
@@ -106,6 +112,7 @@ export default function AIAssistantPage() {
                 ? new Date(msg.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
                 : new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
             ...(msg.proposed_actions ? { proposed_actions: msg.proposed_actions } : {}),
+            status: "done" as const,
         }))
     }, [conversation])
 
@@ -114,21 +121,36 @@ export default function AIAssistantPage() {
         role: "assistant" as const,
         content: "Hello! I'm your AI assistant. Select a surrogate above to start chatting about it, or use the quick actions to get started.",
         timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+        status: "done" as const,
     })
 
+    const previousSurrogateIdRef = useRef<string | null>(null)
+
     useEffect(() => {
-        if (!selectedSurrogateId) {
-            setMessages([buildWelcomeMessage()])
+        const selectionChanged = previousSurrogateIdRef.current !== selectedSurrogateId
+        const isWelcomeOnly = messages.length === 1 && messages[0]?.id === "welcome"
+        if (selectionChanged) {
+            previousSurrogateIdRef.current = selectedSurrogateId
+            if (!isWelcomeOnly) {
+                setMessages([buildWelcomeMessage()])
+            }
             return
         }
-        if (sendMessage.isPending || conversationFetching) {
+        if (!selectedSurrogateId) {
+            if (!isWelcomeOnly) {
+                setMessages([buildWelcomeMessage()])
+            }
+            return
+        }
+        if (isStreaming || conversationFetching) {
             return
         }
         if (conversationMessages.length > 0) {
             setMessages(conversationMessages)
             return
         }
-        if (!conversationLoading) {
+        const hasLocalMessages = messages.some((msg) => msg.id !== "welcome")
+        if (!conversationLoading && !hasLocalMessages && !isWelcomeOnly) {
             setMessages([buildWelcomeMessage()])
         }
     }, [
@@ -136,7 +158,8 @@ export default function AIAssistantPage() {
         conversationMessages,
         conversationLoading,
         conversationFetching,
-        sendMessage.isPending,
+        isStreaming,
+        messages,
     ])
 
     // Scroll to bottom when messages change
@@ -144,45 +167,138 @@ export default function AIAssistantPage() {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages])
 
-    const handleSend = async () => {
-        if (!message.trim() || !selectedSurrogateId) return
+    useEffect(() => {
+        return () => {
+            streamAbortRef.current?.abort()
+        }
+    }, [])
 
+    useEffect(() => {
+        if (!isStreaming) return
+        streamAbortRef.current?.abort()
+        setIsStreaming(false)
+        streamingMessageIdRef.current = null
+        stopRequestedRef.current = false
+    }, [selectedSurrogateId, isStreaming])
+
+    const updateMessageById = useCallback((id: string, updater: (msg: Message) => Message) => {
+        setMessages((prev) => prev.map((msg) => (msg.id === id ? updater(msg) : msg)))
+    }, [])
+
+    const setAssistantError = useCallback((assistantId: string, errorText: string) => {
+        updateMessageById(assistantId, (msg) => ({
+            ...msg,
+            content: errorText,
+            status: "error",
+        }))
+    }, [updateMessageById])
+
+    const handleSend = async () => {
+        const trimmedMessage = message.trim()
+        if (!trimmedMessage || !selectedSurrogateId || !isAIEnabled || isStreaming) return
+
+        const timestamp = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
         const userMessage: Message = {
             id: `user-${Date.now()}`,
             role: "user",
-            content: message,
-            timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+            content: trimmedMessage,
+            timestamp,
+            status: "done",
+        }
+        const assistantId = `assistant-${Date.now()}`
+        const assistantMessage: Message = {
+            id: assistantId,
+            role: "assistant",
+            content: "",
+            timestamp,
+            status: "thinking",
         }
 
-        setMessages(prev => [...prev, userMessage])
+        setMessages((prev) => [...prev, userMessage, assistantMessage])
         setMessage("")
 
+        streamAbortRef.current?.abort()
+        stopRequestedRef.current = false
+        const controller = new AbortController()
+        streamAbortRef.current = controller
+        streamingMessageIdRef.current = assistantId
+        setIsStreaming(true)
+
         try {
-            const response = await sendMessage.mutateAsync({
-                entity_type: 'surrogate',
-                entity_id: selectedSurrogateId,
-                message: message,
-            })
+            await streamMessage(
+                {
+                    entity_type: 'surrogate',
+                    entity_id: selectedSurrogateId,
+                    message: trimmedMessage,
+                },
+                (event) => {
+                    if (event.type === 'start') {
+                        updateMessageById(assistantId, (msg) => ({
+                            ...msg,
+                            status: "thinking",
+                        }))
+                        return
+                    }
 
-            const aiMessage: Message = {
-                id: `ai-${Date.now()}`,
-                role: "assistant",
-                content: response.content,
-                timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-                ...(response.proposed_actions ? { proposed_actions: response.proposed_actions } : {}),
-            }
+                    if (event.type === 'delta') {
+                        const delta = event.data.text || ''
+                        if (!delta) return
+                        updateMessageById(assistantId, (msg) => ({
+                            ...msg,
+                            content: msg.content + delta,
+                            status: "streaming",
+                        }))
+                        return
+                    }
 
-            setMessages(prev => [...prev, aiMessage])
+                    if (event.type === 'done') {
+                        updateMessageById(assistantId, (msg) => ({
+                            ...msg,
+                            content: event.data.content,
+                            proposed_actions: event.data.proposed_actions,
+                            status: "done",
+                            timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+                        }))
+                        return
+                    }
+
+                    if (event.type === 'error') {
+                        setAssistantError(
+                            assistantId,
+                            `Sorry, I encountered an error: ${event.data.message || 'Unknown error'}. Please try again.`
+                        )
+                    }
+                },
+                controller.signal
+            )
         } catch (error) {
-            const errorMessage: Message = {
-                id: `error-${Date.now()}`,
-                role: "assistant",
-                content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
-                timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+            if (error instanceof DOMException && error.name === 'AbortError') {
+                if (stopRequestedRef.current) {
+                    updateMessageById(assistantId, (msg) => ({
+                        ...msg,
+                        content: msg.content || "Stopped.",
+                        status: "done",
+                    }))
+                }
+                stopRequestedRef.current = false
+                return
             }
-            setMessages(prev => [...prev, errorMessage])
+            setAssistantError(
+                assistantId,
+                `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`
+            )
+        } finally {
+            setIsStreaming(false)
+            streamingMessageIdRef.current = null
         }
     }
+
+    const handleStop = useCallback(() => {
+        if (!isStreaming) return
+        stopRequestedRef.current = true
+        streamAbortRef.current?.abort()
+        setIsStreaming(false)
+    }, [isStreaming])
 
     const handleApprove = async (approvalId: string | null) => {
         if (!approvalId) return
@@ -226,7 +342,7 @@ export default function AIAssistantPage() {
     const modelName = aiSettings?.model || aiSettings?.provider?.toUpperCase() || 'AI'
 
     return (
-        <div className="flex h-[calc(100vh-4rem)] flex-col">
+        <div className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden">
             {/* Header */}
             <div className="flex shrink-0 items-center gap-3 border-b p-4">
                 <div className="flex-1">
@@ -286,7 +402,7 @@ export default function AIAssistantPage() {
             )}
 
             {/* Main Content */}
-            <div className="grid min-h-0 flex-1 gap-4 p-4 lg:grid-cols-[280px_1fr]">
+            <div className="grid min-h-0 flex-1 gap-4 overflow-hidden p-4 lg:grid-cols-[280px_1fr]">
                 {/* Left Sidebar - scrollable */}
                 <div className="hidden lg:block lg:overflow-y-auto">
                     <div className="space-y-4 pr-2">
@@ -375,7 +491,7 @@ export default function AIAssistantPage() {
                 </div>
 
                 {/* Right Chat Window */}
-                <Card className="flex min-h-0 flex-col">
+                <Card className="flex h-full min-h-0 flex-col overflow-hidden">
                     <CardHeader className="shrink-0 border-b py-3">
                         <div className="flex items-center gap-3">
                             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10">
@@ -412,7 +528,14 @@ export default function AIAssistantPage() {
                                                 className={`rounded-lg px-3 py-2 ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
                                                     }`}
                                             >
-                                                <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                                                {msg.role === "assistant" && msg.status === "thinking" && !msg.content ? (
+                                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                        <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                                                        Thinking...
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                                                )}
                                             </div>
                                             <p className="px-1 text-[10px] text-muted-foreground">{msg.timestamp}</p>
                                         </div>
@@ -475,25 +598,13 @@ export default function AIAssistantPage() {
                                 </div>
                             ))}
 
-                            {/* Loading indicator */}
-                            {sendMessage.isPending && (
-                                <div className="flex gap-2 justify-start">
-                                    <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
-                                        <BotIcon className="h-3.5 w-3.5 text-primary" />
-                                    </div>
-                                    <div className="rounded-lg px-3 py-2 bg-muted">
-                                        <Loader2Icon className="h-4 w-4 animate-spin" />
-                                    </div>
-                                </div>
-                            )}
-
                             {/* Scroll anchor */}
                             <div ref={messagesEndRef} />
                         </div>
                     </ScrollArea>
 
                     {/* Input Area */}
-                    <CardContent className="shrink-0 border-t p-3">
+                    <CardContent className="shrink-0 border-t bg-background p-3">
                         <div className="flex gap-2">
                             <Input
                                 placeholder={selectedSurrogateId ? "Type your message..." : "Select a surrogate to start chatting"}
@@ -506,19 +617,27 @@ export default function AIAssistantPage() {
                                     }
                                 }}
                                 className="flex-1 text-sm"
-                                disabled={!selectedSurrogateId || !isAIEnabled || sendMessage.isPending}
+                                disabled={!selectedSurrogateId || !isAIEnabled || isStreaming}
                             />
-                            <Button
-                                onClick={handleSend}
-                                size="icon"
-                                disabled={!message.trim() || !selectedSurrogateId || !isAIEnabled || sendMessage.isPending}
-                            >
-                                {sendMessage.isPending ? (
-                                    <Loader2Icon className="h-4 w-4 animate-spin" />
-                                ) : (
+                            {isStreaming ? (
+                                <Button
+                                    onClick={handleStop}
+                                    size="icon"
+                                    variant="outline"
+                                    aria-label="Stop generating"
+                                >
+                                    <StopCircleIcon className="h-4 w-4" />
+                                </Button>
+                            ) : (
+                                <Button
+                                    onClick={handleSend}
+                                    size="icon"
+                                    disabled={!message.trim() || !selectedSurrogateId || !isAIEnabled}
+                                    aria-label="Send message"
+                                >
                                     <SendIcon className="h-4 w-4" />
-                                )}
-                            </Button>
+                                </Button>
+                            )}
                         </div>
                         <p className="mt-1.5 text-[10px] text-muted-foreground">
                             {!selectedSurrogateId ? "Select a surrogate above to start" : "Press Enter to send"}

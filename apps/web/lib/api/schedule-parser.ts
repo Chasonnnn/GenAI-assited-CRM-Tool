@@ -3,6 +3,7 @@
  */
 
 import api from './index'
+import { streamSSE, type StreamEvent } from './stream'
 
 // Types
 export interface ProposedTask {
@@ -57,7 +58,15 @@ export interface BulkTaskCreateResponse {
 
 // API functions
 export async function parseSchedule(data: ParseScheduleRequest): Promise<ParseScheduleResponse> {
-    return api.post<ParseScheduleResponse>('/ai/parse-schedule', data)
+    return streamParseSchedule(data)
+}
+
+export async function streamParseSchedule(
+    data: ParseScheduleRequest,
+    onEvent?: (event: StreamEvent<ParseScheduleResponse>) => void,
+    options?: { signal?: AbortSignal }
+): Promise<ParseScheduleResponse> {
+    return streamSSE<ParseScheduleResponse>('/ai/parse-schedule/stream', data, onEvent, options)
 }
 
 export async function createBulkTasks(data: BulkTaskCreateRequest): Promise<BulkTaskCreateResponse> {

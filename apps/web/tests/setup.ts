@@ -87,6 +87,32 @@ class MockIntersectionObserver {
 // @ts-expect-error - test environment polyfill
 globalThis.IntersectionObserver = globalThis.IntersectionObserver ?? MockIntersectionObserver
 
+class MockWebSocket {
+    static OPEN = 1
+    static CLOSED = 3
+    static CONNECTING = 0
+    static CLOSING = 2
+    readyState = MockWebSocket.OPEN
+    onopen: ((event: Event) => void) | null = null
+    onmessage: ((event: MessageEvent) => void) | null = null
+    onclose: ((event: CloseEvent) => void) | null = null
+    onerror: ((event: Event) => void) | null = null
+
+    constructor() {
+        Promise.resolve().then(() => this.onopen?.(new Event('open')))
+    }
+
+    send() {}
+
+    close() {
+        this.readyState = MockWebSocket.CLOSED
+        this.onclose?.(new CloseEvent('close'))
+    }
+}
+
+// Avoid real socket handles keeping the test process alive.
+vi.stubGlobal('WebSocket', MockWebSocket)
+
 // Clipboard is used in Surrogate Detail page.
 Object.defineProperty(navigator, 'clipboard', {
     value: navigator.clipboard ?? {

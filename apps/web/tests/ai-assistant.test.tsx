@@ -29,16 +29,17 @@ vi.mock('@/components/ui/select', () => ({
 const mockUseQuery = vi.fn()
 vi.mock('@tanstack/react-query', () => ({
     useQuery: (opts: unknown) => mockUseQuery(opts),
+    useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }))
 
-const mockSendMessage = vi.fn()
+const mockStreamMessage = vi.fn()
 const mockApproveAction = vi.fn()
 const mockRejectAction = vi.fn()
 const mockUseConversation = vi.fn()
 
 vi.mock('@/lib/hooks/use-ai', () => ({
     useAISettings: () => ({ data: { is_enabled: true } }),
-    useSendMessage: () => ({ mutateAsync: mockSendMessage, isPending: false }),
+    useStreamChatMessage: () => mockStreamMessage,
     useApproveAction: () => ({ mutateAsync: mockApproveAction, isPending: false }),
     useRejectAction: () => ({ mutateAsync: mockRejectAction, isPending: false }),
     useConversation: () => mockUseConversation(),
@@ -58,21 +59,29 @@ describe('AIAssistantPage', () => {
             isFetching: false,
         })
 
-        mockSendMessage.mockResolvedValue({
-            content: 'Here is a quick summary.',
-            proposed_actions: [
-                {
-                    approval_id: 'a1',
-                    action_type: 'add_note',
-                    action_data: { content: 'Add note' },
-                    status: 'pending',
+        mockStreamMessage.mockImplementation(async (_request, onEvent) => {
+            onEvent({ type: 'start', data: { status: 'thinking' } })
+            onEvent({ type: 'delta', data: { text: 'Here is a quick ' } })
+            onEvent({ type: 'delta', data: { text: 'summary.' } })
+            onEvent({
+                type: 'done',
+                data: {
+                    content: 'Here is a quick summary.',
+                    proposed_actions: [
+                        {
+                            approval_id: 'a1',
+                            action_type: 'add_note',
+                            action_data: { content: 'Add note' },
+                            status: 'pending',
+                        },
+                    ],
+                    tokens_used: { prompt: 1, completion: 1, total: 2 },
                 },
-            ],
-            tokens_used: { prompt: 1, completion: 1, total: 2 },
+            })
         })
 
         mockApproveAction.mockResolvedValue({ success: true })
-        mockSendMessage.mockClear()
+        mockStreamMessage.mockClear()
         mockApproveAction.mockClear()
         mockRejectAction.mockClear()
     })
@@ -86,11 +95,15 @@ describe('AIAssistantPage', () => {
         fireEvent.change(input, { target: { value: 'Summarize this surrogate' } })
         fireEvent.keyDown(input, { key: 'Enter', shiftKey: false })
 
-        expect(mockSendMessage).toHaveBeenCalledWith({
-            entity_type: 'surrogate',
-            entity_id: 's1',
-            message: 'Summarize this surrogate',
-        })
+        expect(mockStreamMessage).toHaveBeenCalledWith(
+            {
+                entity_type: 'surrogate',
+                entity_id: 's1',
+                message: 'Summarize this surrogate',
+            },
+            expect.any(Function),
+            expect.anything()
+        )
 
         expect(await screen.findByText('Here is a quick summary.')).toBeInTheDocument()
 

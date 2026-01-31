@@ -3,6 +3,7 @@
  */
 
 import api from './index';
+import { streamSSE, type StreamEvent } from './stream';
 import type { JsonObject } from '../types/json';
 
 // ============================================================================
@@ -378,12 +379,38 @@ export interface AllInterviewsSummaryResponse {
  * Generate AI summary of a single interview.
  */
 export function summarizeInterview(interviewId: string): Promise<InterviewSummaryResponse> {
-    return api.post<InterviewSummaryResponse>(`/interviews/${interviewId}/ai/summarize`);
+    return streamSummarizeInterview(interviewId);
 }
 
 /**
  * Generate AI summary of all interviews for a surrogate.
  */
 export function summarizeAllInterviews(surrogateId: string): Promise<AllInterviewsSummaryResponse> {
-    return api.post<AllInterviewsSummaryResponse>(`/surrogates/${surrogateId}/interviews/ai/summarize-all`);
+    return streamSummarizeAllInterviews(surrogateId);
+}
+
+export function streamSummarizeInterview(
+    interviewId: string,
+    onEvent?: (event: StreamEvent<InterviewSummaryResponse>) => void,
+    options?: { signal?: AbortSignal }
+): Promise<InterviewSummaryResponse> {
+    return streamSSE<InterviewSummaryResponse>(
+        `/interviews/${interviewId}/ai/summarize/stream`,
+        {},
+        onEvent,
+        options
+    );
+}
+
+export function streamSummarizeAllInterviews(
+    surrogateId: string,
+    onEvent?: (event: StreamEvent<AllInterviewsSummaryResponse>) => void,
+    options?: { signal?: AbortSignal }
+): Promise<AllInterviewsSummaryResponse> {
+    return streamSSE<AllInterviewsSummaryResponse>(
+        `/surrogates/${surrogateId}/interviews/ai/summarize-all/stream`,
+        {},
+        onEvent,
+        options
+    );
 }

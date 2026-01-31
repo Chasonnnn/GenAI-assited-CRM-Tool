@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -19,8 +19,9 @@ import {
     StickyNoteIcon,
     ArrowRightIcon,
     CalendarPlusIcon,
+    StopCircleIcon,
 } from "lucide-react"
-import { useConversation, useSendMessage, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
+import { useConversation, useStreamChatMessage, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
 import type { ProposedAction } from "@/lib/api/ai"
 import { ScheduleParserDialog } from "@/components/ai/ScheduleParserDialog"
 
@@ -30,6 +31,15 @@ interface AIChatPanelProps {
     entityName?: string | null
     canApproveActions?: boolean
     onClose?: () => void
+}
+
+interface PanelMessage {
+    id: string
+    role: "user" | "assistant"
+    content: string
+    proposed_actions?: ProposedAction[]
+    action_approvals?: Array<{ action_index: number; status: string }>
+    status?: "thinking" | "streaming" | "done" | "error"
 }
 
 // Action type icons
@@ -56,38 +66,167 @@ export function AIChatPanel({
     onClose,
 }: AIChatPanelProps) {
     const [message, setMessage] = useState("")
+    const [messages, setMessages] = useState<PanelMessage[]>([])
+    const [isStreaming, setIsStreaming] = useState(false)
     const [scheduleParserOpen, setScheduleParserOpen] = useState(false)
-    const scrollContainerRef = useRef<HTMLDivElement>(null)
+    const messagesEndRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLInputElement>(null)
+    const streamAbortRef = useRef<AbortController | null>(null)
+    const streamingMessageIdRef = useRef<string | null>(null)
+    const stopRequestedRef = useRef(false)
 
     // Hooks
     const { data: conversation, isLoading: loadingConversation } = useConversation(entityType, entityId)
-    const sendMessage = useSendMessage()
+    const streamMessage = useStreamChatMessage()
     const approveAction = useApproveAction()
     const rejectAction = useRejectAction()
 
+    useEffect(() => {
+        if (isStreaming) return
+        if (!conversation?.messages) {
+            setMessages([])
+            return
+        }
+        setMessages(
+            conversation.messages.map((msg) => ({
+                ...msg,
+                status: "done" as const,
+            }))
+        )
+    }, [conversation?.messages, isStreaming])
+
     // Scroll to bottom on new messages
     useEffect(() => {
-        if (scrollContainerRef.current) {
-            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
-        }
-    }, [conversation?.messages])
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto" })
+    }, [messages])
 
     // Focus input on mount
     useEffect(() => {
         inputRef.current?.focus()
     }, [])
 
-    const handleSend = () => {
-        if (!message.trim() || sendMessage.isPending) return
+    useEffect(() => {
+        return () => {
+            streamAbortRef.current?.abort()
+        }
+    }, [])
 
-        sendMessage.mutate({
-            message: message.trim(),
-            ...(entityType ? { entity_type: entityType } : {}),
-            ...(entityId ? { entity_id: entityId } : {}),
-        })
+    useEffect(() => {
+        if (!isStreaming) return
+        streamAbortRef.current?.abort()
+        setIsStreaming(false)
+        streamingMessageIdRef.current = null
+        stopRequestedRef.current = false
+    }, [entityId, entityType, isStreaming])
+
+    const updateMessageById = useCallback((id: string, updater: (msg: PanelMessage) => PanelMessage) => {
+        setMessages((prev) => prev.map((msg) => (msg.id === id ? updater(msg) : msg)))
+    }, [])
+
+    const setAssistantError = useCallback((assistantId: string, errorText: string) => {
+        updateMessageById(assistantId, (msg) => ({
+            ...msg,
+            content: errorText,
+            status: "error",
+        }))
+    }, [updateMessageById])
+
+    const handleSend = async () => {
+        const trimmedMessage = message.trim()
+        if (!trimmedMessage || isStreaming) return
+
+        const userMessage: PanelMessage = {
+            id: `user-${Date.now()}`,
+            role: "user",
+            content: trimmedMessage,
+            status: "done",
+        }
+        const assistantId = `assistant-${Date.now()}`
+        const assistantMessage: PanelMessage = {
+            id: assistantId,
+            role: "assistant",
+            content: "",
+            status: "thinking",
+        }
+
+        setMessages((prev) => [...prev, userMessage, assistantMessage])
         setMessage("")
+
+        streamAbortRef.current?.abort()
+        stopRequestedRef.current = false
+        const controller = new AbortController()
+        streamAbortRef.current = controller
+        streamingMessageIdRef.current = assistantId
+        setIsStreaming(true)
+
+        try {
+            await streamMessage(
+                {
+                    message: trimmedMessage,
+                    ...(entityType ? { entity_type: entityType } : {}),
+                    ...(entityId ? { entity_id: entityId } : {}),
+                },
+                (event) => {
+                    if (event.type === 'start') {
+                        updateMessageById(assistantId, (msg) => ({ ...msg, status: "thinking" }))
+                        return
+                    }
+                    if (event.type === 'delta') {
+                        const delta = event.data.text || ''
+                        if (!delta) return
+                        updateMessageById(assistantId, (msg) => ({
+                            ...msg,
+                            content: msg.content + delta,
+                            status: "streaming",
+                        }))
+                        return
+                    }
+                    if (event.type === 'done') {
+                        updateMessageById(assistantId, (msg) => ({
+                            ...msg,
+                            content: event.data.content,
+                            proposed_actions: event.data.proposed_actions,
+                            status: "done",
+                        }))
+                        return
+                    }
+                    if (event.type === 'error') {
+                        setAssistantError(
+                            assistantId,
+                            `Sorry, I encountered an error: ${event.data.message || 'Unknown error'}. Please try again.`
+                        )
+                    }
+                },
+                controller.signal
+            )
+        } catch (error) {
+            if (error instanceof DOMException && error.name === 'AbortError') {
+                if (stopRequestedRef.current) {
+                    updateMessageById(assistantId, (msg) => ({
+                        ...msg,
+                        content: msg.content || "Stopped.",
+                        status: "done",
+                    }))
+                }
+                stopRequestedRef.current = false
+                return
+            }
+            setAssistantError(
+                assistantId,
+                `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`
+            )
+        } finally {
+            setIsStreaming(false)
+            streamingMessageIdRef.current = null
+        }
     }
+
+    const handleStop = useCallback(() => {
+        if (!isStreaming) return
+        stopRequestedRef.current = true
+        streamAbortRef.current?.abort()
+        setIsStreaming(false)
+    }, [isStreaming])
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
@@ -106,10 +245,8 @@ export function AIChatPanel({
         rejectAction.mutate(approvalId)
     }
 
-    const messages = conversation?.messages || []
-
     return (
-        <div className="flex h-full flex-col bg-background">
+        <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
             {/* Header */}
             <div className="flex items-center justify-between border-b px-4 py-3">
                 <div className="flex items-center gap-2">
@@ -136,8 +273,8 @@ export function AIChatPanel({
             </div>
 
             {/* Messages */}
-            <ScrollArea className="flex-1">
-                <div ref={scrollContainerRef} className="p-4">
+            <ScrollArea className="flex-1 min-h-0">
+                <div className="p-4">
                     {loadingConversation ? (
                         <div className="flex items-center justify-center py-8">
                             <Loader2Icon className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -169,7 +306,14 @@ export function AIChatPanel({
                                                 : "mr-8 bg-muted"
                                         )}
                                     >
-                                        <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
+                                        {msg.role === "assistant" && msg.status === "thinking" && !msg.content ? (
+                                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                                                Thinking...
+                                            </div>
+                                        ) : (
+                                            <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
+                                        )}
                                     </div>
 
                                     {/* Action cards */}
@@ -199,14 +343,7 @@ export function AIChatPanel({
                                     )}
                                 </div>
                             ))}
-
-                            {/* Typing indicator */}
-                            {sendMessage.isPending && (
-                                <div className="mr-8 flex items-center gap-2 rounded-lg bg-muted px-4 py-2">
-                                    <Loader2Icon className="h-4 w-4 animate-spin" />
-                                    <span className="text-sm text-muted-foreground">Thinking...</span>
-                                </div>
-                            )}
+                            <div ref={messagesEndRef} />
                         </div>
                     )}
                 </div>
@@ -217,26 +354,26 @@ export function AIChatPanel({
                 <div className="flex flex-wrap gap-2">
                     <QuickActionButton
                         onClick={() => setMessage("Summarize this surrogate")}
-                        disabled={sendMessage.isPending}
+                        disabled={isStreaming}
                     >
                         Summarize
                     </QuickActionButton>
                     <QuickActionButton
                         onClick={() => setMessage("What should I do next?")}
-                        disabled={sendMessage.isPending}
+                        disabled={isStreaming}
                     >
                         Next Steps
                     </QuickActionButton>
                     <QuickActionButton
                         onClick={() => setMessage("Draft a follow-up email")}
-                        disabled={sendMessage.isPending}
+                        disabled={isStreaming}
                     >
                         Draft Email
                     </QuickActionButton>
                     {entityType === "surrogate" && entityId && (
                         <QuickActionButton
                             onClick={() => setScheduleParserOpen(true)}
-                            disabled={sendMessage.isPending}
+                            disabled={isStreaming}
                         >
                             <CalendarPlusIcon className="mr-1 h-3 w-3" />
                             Parse Schedule
@@ -254,20 +391,28 @@ export function AIChatPanel({
                         onChange={(e) => setMessage(e.target.value)}
                         onKeyDown={handleKeyDown}
                         placeholder="Ask anything..."
-                        disabled={sendMessage.isPending}
+                        disabled={isStreaming}
                         className="flex-1"
                     />
-                    <Button
-                        onClick={handleSend}
-                        disabled={!message.trim() || sendMessage.isPending}
-                        size="icon"
-                    >
-                        {sendMessage.isPending ? (
-                            <Loader2Icon className="h-4 w-4 animate-spin" />
-                        ) : (
+                    {isStreaming ? (
+                        <Button
+                            onClick={handleStop}
+                            size="icon"
+                            variant="outline"
+                            aria-label="Stop generating"
+                        >
+                            <StopCircleIcon className="h-4 w-4" />
+                        </Button>
+                    ) : (
+                        <Button
+                            onClick={handleSend}
+                            disabled={!message.trim()}
+                            size="icon"
+                            aria-label="Send message"
+                        >
                             <SendIcon className="h-4 w-4" />
-                        )}
-                    </Button>
+                        </Button>
+                    )}
                 </div>
             </div>
 

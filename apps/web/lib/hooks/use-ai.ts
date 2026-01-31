@@ -3,6 +3,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 import * as aiApi from '../api/ai';
 import type { AISettingsUpdate, ChatRequest } from '../api/ai';
 
@@ -119,6 +120,39 @@ export function useSendMessage() {
             }
         },
     });
+}
+
+export function useStreamChatMessage() {
+    const queryClient = useQueryClient();
+
+    return useCallback(
+        async (
+            request: ChatRequest,
+            onEvent: (event: aiApi.ChatStreamEvent) => void,
+            signal?: AbortSignal
+        ) => {
+            const response = await aiApi.streamChatMessage(
+                request,
+                onEvent,
+                signal ? { signal } : undefined
+            );
+
+            const isGlobal =
+                !request.entity_type || !request.entity_id || request.entity_type === 'global';
+            if (isGlobal) {
+                queryClient.invalidateQueries({
+                    queryKey: [...aiKeys.all, 'conversation', 'global'],
+                });
+            } else {
+                queryClient.invalidateQueries({
+                    queryKey: aiKeys.conversation(request.entity_type!, request.entity_id!),
+                });
+            }
+
+            return response;
+        },
+        [queryClient]
+    );
 }
 
 // ============================================================================

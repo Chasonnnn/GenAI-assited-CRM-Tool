@@ -3,6 +3,7 @@
  */
 
 import { api } from '../api';
+import { streamSSE, type StreamEvent } from './stream';
 import type { JsonObject } from '../types/json';
 
 // Types
@@ -103,6 +104,8 @@ export interface ChatResponse {
     assistant_message_id?: string;
 }
 
+export type ChatStreamEvent = StreamEvent<ChatResponse>;
+
 export interface ActionApprovalResult {
     success: boolean;
     action_type: string;
@@ -149,6 +152,19 @@ export async function acceptConsent(): Promise<ConsentAcceptResponse> {
 
 export async function sendChatMessage(request: ChatRequest): Promise<ChatResponse> {
     return api.post<ChatResponse>('/ai/chat', request);
+}
+
+export async function streamChatMessage(
+    request: ChatRequest,
+    onEvent: (event: ChatStreamEvent) => void,
+    options?: { signal?: AbortSignal }
+): Promise<ChatResponse> {
+    return streamSSE<ChatResponse>(
+        '/ai/chat/stream',
+        request,
+        (event) => onEvent(event as ChatStreamEvent),
+        options
+    );
 }
 
 export async function getConversation(entityType: string, entityId: string): Promise<AIConversation> {
@@ -221,15 +237,43 @@ export interface AnalyzeDashboardResponse {
 }
 
 export async function summarizeSurrogate(surrogateId: string): Promise<SummarizeSurrogateResponse> {
-    return api.post<SummarizeSurrogateResponse>('/ai/summarize-surrogate', { surrogate_id: surrogateId });
+    return streamSummarizeSurrogate(surrogateId);
 }
 
 export async function draftEmail(request: DraftEmailRequest): Promise<DraftEmailResponse> {
-    return api.post<DraftEmailResponse>('/ai/draft-email', request);
+    return streamDraftEmail(request);
 }
 
 export async function analyzeDashboard(): Promise<AnalyzeDashboardResponse> {
-    return api.post<AnalyzeDashboardResponse>('/ai/analyze-dashboard');
+    return streamAnalyzeDashboard();
+}
+
+export async function streamSummarizeSurrogate(
+    surrogateId: string,
+    onEvent?: (event: StreamEvent<SummarizeSurrogateResponse>) => void,
+    options?: { signal?: AbortSignal }
+): Promise<SummarizeSurrogateResponse> {
+    return streamSSE<SummarizeSurrogateResponse>(
+        '/ai/summarize-surrogate/stream',
+        { surrogate_id: surrogateId },
+        onEvent,
+        options
+    );
+}
+
+export async function streamDraftEmail(
+    request: DraftEmailRequest,
+    onEvent?: (event: StreamEvent<DraftEmailResponse>) => void,
+    options?: { signal?: AbortSignal }
+): Promise<DraftEmailResponse> {
+    return streamSSE<DraftEmailResponse>('/ai/draft-email/stream', request, onEvent, options);
+}
+
+export async function streamAnalyzeDashboard(
+    onEvent?: (event: StreamEvent<AnalyzeDashboardResponse>) => void,
+    options?: { signal?: AbortSignal }
+): Promise<AnalyzeDashboardResponse> {
+    return streamSSE<AnalyzeDashboardResponse>('/ai/analyze-dashboard/stream', {}, onEvent, options);
 }
 
 // ============================================================================
@@ -303,7 +347,7 @@ export async function generateWorkflow(
     description: string,
     scope: 'personal' | 'org' = 'personal'
 ): Promise<GenerateWorkflowResponse> {
-    return api.post<GenerateWorkflowResponse>('/ai/workflows/generate', { description, scope });
+    return streamGenerateWorkflow(description, scope);
 }
 
 export async function validateWorkflow(
@@ -340,5 +384,32 @@ export interface GenerateEmailTemplateResponse {
 }
 
 export async function generateEmailTemplate(description: string): Promise<GenerateEmailTemplateResponse> {
-    return api.post<GenerateEmailTemplateResponse>('/ai/email-templates/generate', { description });
+    return streamGenerateEmailTemplate(description);
+}
+
+export async function streamGenerateWorkflow(
+    description: string,
+    scope: 'personal' | 'org' = 'personal',
+    onEvent?: (event: StreamEvent<GenerateWorkflowResponse>) => void,
+    options?: { signal?: AbortSignal }
+): Promise<GenerateWorkflowResponse> {
+    return streamSSE<GenerateWorkflowResponse>(
+        '/ai/workflows/generate/stream',
+        { description, scope },
+        onEvent,
+        options
+    );
+}
+
+export async function streamGenerateEmailTemplate(
+    description: string,
+    onEvent?: (event: StreamEvent<GenerateEmailTemplateResponse>) => void,
+    options?: { signal?: AbortSignal }
+): Promise<GenerateEmailTemplateResponse> {
+    return streamSSE<GenerateEmailTemplateResponse>(
+        '/ai/email-templates/generate/stream',
+        { description },
+        onEvent,
+        options
+    );
 }
