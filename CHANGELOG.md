@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.53.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.52.0...surrogacy-crm-platform-v0.53.0) (2026-01-31)
+
+
+### Features
+
+* **api:** improve SSE streaming reliability with preambles ([00b7ac6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/00b7ac6cacf89e7ae74b0c945500f6d4530a7bab))
+
+
+### Bug Fixes
+
+* add clamav user in worker image ([719ecad](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/719ecadd90c73599b55f8f6d950ef933804299c0))
+
 ## [0.52.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.51.0...surrogacy-crm-platform-v0.52.0) (2026-01-31)
 
 
