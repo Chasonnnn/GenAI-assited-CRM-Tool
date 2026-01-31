@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.52.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.51.0...surrogacy-crm-platform-v0.52.0) (2026-01-31)
+
+
+### Features
+
+* **web:** add intelligent mapping alerts for detected Zapier forms ([62f5995](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/62f599540301943e7a4bb43e50b58b32a5a3aa9f))
+
+
+### Bug Fixes
+
+* **api:** ensure stable form identifier in Zapier webhooks for consistent lead mapping ([139efb7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/139efb77612329cc709c4f5096787658c5435fee))
+* Fixed the typecheck errors ([c2306f5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c2306f55f780f7dd31e64fd94f8111f2826a6155))
+
 ## [0.51.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.50.0...surrogacy-crm-platform-v0.51.0) (2026-01-31)
 
 
