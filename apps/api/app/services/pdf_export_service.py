@@ -166,7 +166,9 @@ def _generate_submission_html(
             label = html.escape(field.get("label") or field_key)
             is_hidden = field_key in hidden_fields
 
-            if field.get("type") == "file":
+            field_type = field.get("type")
+
+            if field_type == "file":
                 value_display = (
                     '<span class="masked">********</span>'
                     if is_hidden
@@ -176,7 +178,10 @@ def _generate_submission_html(
                 value_display = '<span class="masked">********</span>'
             else:
                 raw_value = answers.get(field_key)
-                value_display = _format_value(raw_value)
+                if field_type == "repeatable_table":
+                    value_display = _format_repeatable_table(raw_value, field)
+                else:
+                    value_display = _format_value(raw_value)
 
             fields_html += f"""
             <div class="field-row">
@@ -258,6 +263,22 @@ def _generate_submission_html(
         }}
         .field-row:last-child {{
             border-bottom: none;
+        }}
+        .repeatable-table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9.5pt;
+        }}
+        .repeatable-table th,
+        .repeatable-table td {{
+            border: 1px solid #e2e8f0;
+            padding: 4px 6px;
+            text-align: left;
+            vertical-align: top;
+        }}
+        .repeatable-table th {{
+            background: #f8fafc;
+            font-weight: 600;
         }}
         .field-label {{
             font-weight: 500;
@@ -601,6 +622,54 @@ def _format_value(value: Any) -> str:
         return html.escape(", ".join(str(v) for v in value))
 
     return html.escape(str(value))
+
+
+def _format_table_cell(value: Any) -> str:
+    if value is None or value == "":
+        return "—"
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    return html.escape(str(value))
+
+
+def _format_repeatable_table(value: Any, field: dict[str, Any]) -> str:
+    if not isinstance(value, list) or not value:
+        return '<span style="color: #94a3b8;">—</span>'
+
+    rows = [row for row in value if isinstance(row, dict)]
+    if not rows:
+        return '<span style="color: #94a3b8;">—</span>'
+
+    columns = field.get("columns") or []
+    if columns:
+        column_defs = [
+            (column.get("key") or "", column.get("label") or column.get("key") or "")
+            for column in columns
+            if column.get("key")
+        ]
+    else:
+        column_defs = [(key, key) for key in rows[0].keys()]
+
+    if not column_defs:
+        return '<span style="color: #94a3b8;">—</span>'
+
+    header_html = "".join(f"<th>{html.escape(label)}</th>" for _, label in column_defs)
+
+    body_rows = ""
+    for row in rows:
+        cells = "".join(f"<td>{_format_table_cell(row.get(key))}</td>" for key, _ in column_defs)
+        body_rows += f"<tr>{cells}</tr>"
+
+    return f"""
+    <table class="repeatable-table">
+        <thead>
+            <tr>{header_html}</tr>
+        </thead>
+        <tbody>
+            {body_rows}
+        </tbody>
+    </table>
+    """
 
 
 def _format_file_size(size_bytes: int) -> str:

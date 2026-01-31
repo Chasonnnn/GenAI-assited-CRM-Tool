@@ -562,6 +562,8 @@ def test_submission_validates_repeatable_table_rows(db, test_org, test_user, def
         files=[],
     )
     assert submission.id is not None
+
+
 def test_submission_requires_required_file_fields(db, test_org, test_user, default_stage):
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     form = _create_published_form_with_files(db, test_org.id, test_user.id)

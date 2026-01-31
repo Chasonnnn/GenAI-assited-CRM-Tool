@@ -745,13 +745,9 @@ def _validate_field_value(field: FormField, value: Any) -> None:
         validation = field.validation
         if validation:
             if validation.min_value is not None and numeric_value < validation.min_value:
-                raise ValueError(
-                    f"Field '{field.label}' must be at least {validation.min_value}"
-                )
+                raise ValueError(f"Field '{field.label}' must be at least {validation.min_value}")
             if validation.max_value is not None and numeric_value > validation.max_value:
-                raise ValueError(
-                    f"Field '{field.label}' must be at most {validation.max_value}"
-                )
+                raise ValueError(f"Field '{field.label}' must be at most {validation.max_value}")
         return
 
     if field_type == "date":
@@ -885,8 +881,12 @@ def _evaluate_condition(condition: FormFieldCondition, value: Any) -> bool:
         return not (value is None or value == "" or value == [])
 
     if operator == "equals":
+        if expected is not None and isinstance(expected, str) and value is not None:
+            return str(value) == expected
         return value == expected
     if operator == "not_equals":
+        if expected is not None and isinstance(expected, str) and value is not None:
+            return str(value) != expected
         return value != expected
     if operator == "contains":
         if isinstance(value, list):
@@ -1029,7 +1029,9 @@ def _get_submission_mappings(db: Session, submission: FormSubmission) -> list[di
     return _snapshot_mappings(db, submission.form_id)
 
 
-def _get_file_fields(schema: FormSchema, answers: dict[str, Any] | None = None) -> dict[str, FormField]:
+def _get_file_fields(
+    schema: FormSchema, answers: dict[str, Any] | None = None
+) -> dict[str, FormField]:
     fields: dict[str, FormField] = {}
     field_map = flatten_fields(schema)
     for page in schema.pages:
