@@ -73,6 +73,10 @@ export function AIChatPanel({
     const streamAbortRef = useRef<AbortController | null>(null)
     const streamingMessageIdRef = useRef<string | null>(null)
     const stopRequestedRef = useRef(false)
+    const prevContextRef = useRef<{ entityId?: string | null; entityType?: "surrogate" | "task" | null }>({
+        entityId,
+        entityType,
+    })
 
     // Hooks
     const { data: conversation, isLoading: loadingConversation } = useConversation(entityType, entityId)
@@ -113,7 +117,10 @@ export function AIChatPanel({
     }, [])
 
     useEffect(() => {
-        if (!isStreaming) return
+        const prev = prevContextRef.current
+        const contextChanged = prev.entityId !== entityId || prev.entityType !== entityType
+        prevContextRef.current = { entityId, entityType }
+        if (!contextChanged || !isStreaming) return
         streamAbortRef.current?.abort()
         setIsStreaming(false)
         streamingMessageIdRef.current = null
