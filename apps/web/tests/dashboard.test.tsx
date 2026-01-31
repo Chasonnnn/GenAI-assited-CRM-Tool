@@ -1,4 +1,5 @@
 import type { PropsWithChildren } from "react"
+import * as React from "react"
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ApiError } from '@/lib/api'
@@ -7,17 +8,26 @@ import DashboardPage from '../app/(app)/dashboard/page'
 
 const mockUseSearchParams = vi.fn()
 
+type DynamicComponent = React.ComponentType<Record<string, unknown>>
+type DynamicModule = DynamicComponent | { default: DynamicComponent }
+
+const resolveDynamicModule = (mod: DynamicModule): DynamicComponent => {
+    if (typeof mod === "function") {
+        return mod
+    }
+    return mod.default
+}
+
 vi.mock("next/dynamic", () => ({
     __esModule: true,
-    default: (loader: () => Promise<any>) => {
-        return function DynamicComponent(props: Record<string, unknown>) {
-            const React = require("react")
-            const [Component, setComponent] = React.useState<any>(null)
+    default: (loader: () => Promise<DynamicModule>) => {
+        return function DynamicComponentWrapper(props: Record<string, unknown>) {
+            const [Component, setComponent] = React.useState<DynamicComponent | null>(null)
 
             React.useEffect(() => {
                 let mounted = true
                 loader().then((mod) => {
-                    const Resolved = mod?.default ?? mod
+                    const Resolved = resolveDynamicModule(mod)
                     if (mounted) {
                         setComponent(() => Resolved)
                     }
@@ -28,7 +38,7 @@ vi.mock("next/dynamic", () => ({
             }, [])
 
             if (!Component) return null
-            return React.createElement(Component, props)
+            return <Component {...props} />
         }
     },
 }))

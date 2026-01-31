@@ -73,7 +73,8 @@ export async function listAuditLogs(filters: AuditLogFilters = {}): Promise<Audi
     if (filters.end_date) params.set('end_date', filters.end_date)
 
     const query = params.toString()
-    return api.get<AuditLogListResponse>(`/audit${query ? `?${query}` : ''}`)
+    const path = query ? `/audit/?${query}` : '/audit/'
+    return api.get<AuditLogListResponse>(path)
 }
 
 export async function listEventTypes(): Promise<string[]> {

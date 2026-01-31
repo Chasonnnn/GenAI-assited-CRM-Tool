@@ -170,7 +170,11 @@ async def test_preview_maps_heard_about_question_to_source(authed_client: AsyncC
     assert response.status_code == 200, response.text
     data = response.json()
     suggestion = next(
-        (s for s in data["column_suggestions"] if s.get("csv_column") == "How did you hear about us?"),
+        (
+            s
+            for s in data["column_suggestions"]
+            if s.get("csv_column") == "How did you hear about us?"
+        ),
         None,
     )
     assert suggestion is not None

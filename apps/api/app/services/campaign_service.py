@@ -943,9 +943,9 @@ def execute_campaign_run(
         )
         status_counts = {status: count for status, count in status_rows}
 
-        run.sent_count = status_counts.get(CampaignRecipientStatus.SENT.value, 0) + status_counts.get(
-            CampaignRecipientStatus.DELIVERED.value, 0
-        )
+        run.sent_count = status_counts.get(
+            CampaignRecipientStatus.SENT.value, 0
+        ) + status_counts.get(CampaignRecipientStatus.DELIVERED.value, 0)
         run.delivered_count = status_counts.get(CampaignRecipientStatus.DELIVERED.value, 0)
         run.failed_count = status_counts.get(CampaignRecipientStatus.FAILED.value, 0)
         run.skipped_count = status_counts.get(CampaignRecipientStatus.SKIPPED.value, 0)

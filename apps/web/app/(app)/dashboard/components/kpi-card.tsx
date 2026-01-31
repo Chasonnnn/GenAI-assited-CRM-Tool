@@ -103,17 +103,12 @@ function formatChange(change: ChangeIndicator): { text: string; color: string; i
 // =============================================================================
 
 function Sparkline({ data }: { data: number[] }) {
-    if (!data || data.length < 2) return null
-
     const containerRef = useRef<HTMLDivElement | null>(null)
     const [size, setSize] = useState<{ width: number; height: number } | null>(null)
-
-    const chartData = data.map((value, index) => ({ index, value }))
-    const maxValue = Math.max(...data)
-    const minValue = Math.min(...data)
-    const hasVariance = maxValue !== minValue
+    const hasData = data.length >= 2
 
     useEffect(() => {
+        if (!hasData) return
         const element = containerRef.current
         if (!element) return
 
@@ -144,7 +139,14 @@ function Sparkline({ data }: { data: number[] }) {
         const observer = new ResizeObserver(updateSize)
         observer.observe(element)
         return () => observer.disconnect()
-    }, [])
+    }, [hasData])
+
+    if (!hasData) return null
+
+    const chartData = data.map((value, index) => ({ index, value }))
+    const maxValue = Math.max(...data)
+    const minValue = Math.min(...data)
+    const hasVariance = maxValue !== minValue
 
     return (
         <div ref={containerRef} className="h-8 w-full">

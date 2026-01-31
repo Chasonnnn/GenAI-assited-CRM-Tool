@@ -119,6 +119,20 @@ type FormField = {
     surrogateFieldMapping: string
     options?: string[]
     validation?: FormFieldValidation | null
+    showIf?: {
+        fieldKey: string
+        operator: "equals" | "not_equals" | "contains" | "not_contains" | "is_empty" | "is_not_empty"
+        value?: string
+    } | null
+    columns?: {
+        id: string
+        label: string
+        type: "text" | "number" | "date" | "select"
+        required: boolean
+        options?: string[]
+    }[]
+    minRows?: number | null
+    maxRows?: number | null
 }
 
 type FormPage = {
@@ -278,6 +292,10 @@ const buildDraftField = ({
     surrogateFieldMapping = "",
     options,
     validation,
+    showIf,
+    columns,
+    minRows,
+    maxRows,
 }: {
     id?: string
     label: string
@@ -287,6 +305,10 @@ const buildDraftField = ({
     surrogateFieldMapping?: string
     options?: string[]
     validation?: FormFieldValidation | null
+    showIf?: FormField["showIf"] | null
+    columns?: FormField["columns"]
+    minRows?: number | null
+    maxRows?: number | null
 }): FormField => ({
     id: id ?? buildFieldId(),
     type,
@@ -296,6 +318,10 @@ const buildDraftField = ({
     surrogateFieldMapping,
     ...(options ? { options } : {}),
     ...(validation ? { validation } : {}),
+    ...(showIf ? { showIf } : {}),
+    ...(columns ? { columns } : {}),
+    ...(minRows !== undefined ? { minRows } : {}),
+    ...(maxRows !== undefined ? { maxRows } : {}),
 })
 
 const translateLabel = (label: string) => TRANSLATION_MAP[label] || label

@@ -873,12 +873,16 @@ async def test_import_skips_duplicate_email_on_unique_violation(
 
     def _fake_create_surrogate(*, data, **kwargs):
         if data.email == "duplicate@example.com":
-            orig = SimpleNamespace(diag=SimpleNamespace(constraint_name="uq_surrogate_email_hash_active"))
+            orig = SimpleNamespace(
+                diag=SimpleNamespace(constraint_name="uq_surrogate_email_hash_active")
+            )
             raise IntegrityError("insert", {}, orig)
         created.append(data.email)
         return real_create(data=data, **kwargs)
 
-    monkeypatch.setattr(import_service.surrogate_service, "create_surrogate", _fake_create_surrogate)
+    monkeypatch.setattr(
+        import_service.surrogate_service, "create_surrogate", _fake_create_surrogate
+    )
 
     import_service.run_import_execution(
         db=db,
