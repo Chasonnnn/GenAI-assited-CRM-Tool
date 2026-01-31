@@ -628,12 +628,14 @@ def get_or_create_booking_link(
 def regenerate_booking_link(
     db: Session,
     user_id: UUID,
+    org_id: UUID,
 ) -> BookingLink | None:
     """Regenerate a booking link with a new slug."""
     link = (
         db.query(BookingLink)
         .filter(
             BookingLink.user_id == user_id,
+            BookingLink.organization_id == org_id,
         )
         .first()
     )

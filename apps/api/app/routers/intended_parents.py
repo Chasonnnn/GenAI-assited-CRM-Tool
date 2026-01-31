@@ -385,16 +385,17 @@ def get_status_history(
     history = ip_service.get_ip_status_history(db, ip_id)
 
     # Resolve user names
+    user_ids = {
+        user_id
+        for entry in history
+        for user_id in (entry.changed_by_user_id, entry.approved_by_user_id)
+        if user_id
+    }
+    display_names = user_service.get_display_names_by_ids(db, user_ids)
     result = []
     for h in history:
-        changed_by_name = None
-        if h.changed_by_user_id:
-            user = user_service.get_user_by_id(db, h.changed_by_user_id)
-            changed_by_name = user.display_name if user else None
-        approved_by_name = None
-        if h.approved_by_user_id:
-            user = user_service.get_user_by_id(db, h.approved_by_user_id)
-            approved_by_name = user.display_name if user else None
+        changed_by_name = display_names.get(h.changed_by_user_id)
+        approved_by_name = display_names.get(h.approved_by_user_id)
 
         result.append(
             IntendedParentStatusHistoryItem(

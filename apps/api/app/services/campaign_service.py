@@ -360,6 +360,17 @@ def preview_recipients(
     )
     suppressed = {row[0].lower() for row in suppression_rows if row[0]}
 
+    stage_labels: dict[UUID, str] = {}
+    if recipient_type == "case":
+        stage_ids = {entity.stage_id for entity in entities if entity.stage_id}
+        if stage_ids:
+            stage_rows = (
+                db.query(PipelineStage.id, PipelineStage.label)
+                .filter(PipelineStage.id.in_(stage_ids))
+                .all()
+            )
+            stage_labels = {stage_id: label for stage_id, label in stage_rows}
+
     recipients = []
     for entity in entities:
         email = entity.email.lower() if entity.email else ""
@@ -367,14 +378,13 @@ def preview_recipients(
             continue  # Skip suppressed
 
         if recipient_type == "case":
-            stage = db.query(PipelineStage).filter(PipelineStage.id == entity.stage_id).first()
             recipients.append(
                 RecipientPreview(
                     entity_type="case",
                     entity_id=entity.id,
                     email=entity.email,
                     name=entity.full_name,
-                    stage=stage.label if stage else None,
+                    stage=stage_labels.get(entity.stage_id),
                 )
             )
         else:

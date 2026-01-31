@@ -376,6 +376,7 @@ def regenerate_booking_link(
     link = appointment_service.regenerate_booking_link(
         db=db,
         user_id=session.user_id,
+        org_id=session.org_id,
     )
     if not link:
         raise HTTPException(status_code=404, detail="Booking link not found")
