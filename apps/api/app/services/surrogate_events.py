@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import logging
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.db.enums import JobType, OwnerType, SurrogateSource
 from app.db.models import MetaLead, PipelineStage, Surrogate
 
+logger = logging.getLogger(__name__)
 
 def _get_org_user(db: Session, org_id: UUID, user_id: UUID | None):
     if not user_id:
@@ -72,7 +74,7 @@ def handle_status_changed(
             if pool_queue:
                 notification_facade.notify_surrogate_ready_for_claim(db=db, surrogate=surrogate)
         except Exception:
-            pass  # Best-effort: don't block status change
+            logger.debug("surrogate_ready_for_claim_notify_failed", exc_info=True)
 
     _maybe_send_capi_event(db, surrogate, old_slug or "", new_stage.slug)
     _maybe_send_zapier_stage_event(

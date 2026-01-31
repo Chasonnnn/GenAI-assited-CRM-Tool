@@ -18,7 +18,7 @@ import csv
 import io
 import re
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from difflib import SequenceMatcher
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -553,12 +553,18 @@ def infer_data_type(samples: list[str]) -> dict[str, object]:
         return {"type": "boolean", "confidence": 0.9, "transformation": "boolean_flexible"}
 
     # Check for numbers
-    try:
-        num_matches = sum(1 for s in samples if s.strip() and Decimal(s.strip()))
-        if num_matches >= len(samples) * 0.8:
-            return {"type": "number", "confidence": 0.85, "transformation": None}
-    except Exception:
-        pass
+    num_matches = 0
+    for sample in samples:
+        cleaned = sample.strip()
+        if not cleaned:
+            continue
+        try:
+            Decimal(cleaned)
+        except (InvalidOperation, ValueError):
+            continue
+        num_matches += 1
+    if num_matches >= len(samples) * 0.8:
+        return {"type": "number", "confidence": 0.85, "transformation": None}
 
     return {"type": "text", "confidence": 0.5, "transformation": None}
 

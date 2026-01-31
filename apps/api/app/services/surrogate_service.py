@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from uuid import UUID
+import logging
 
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
@@ -18,6 +19,8 @@ from app.db.enums import (
 from app.db.models import Surrogate, SurrogateStatusHistory, User
 from app.schemas.surrogate import SurrogateCreate, SurrogateUpdate
 from app.services.surrogate_status_service import StatusChangeResult
+
+logger = logging.getLogger(__name__)
 from app.utils.normalization import (
     extract_email_domain,
     extract_phone_last4,
@@ -244,8 +247,8 @@ def create_surrogate(
             db.rollback()
             try:
                 db.expunge(surrogate)
-            except Exception:
-                pass
+            except Exception as expunge_exc:
+                logger.debug("surrogate_expunge_failed", exc_info=expunge_exc)
             if _is_surrogate_number_conflict(exc) and attempt < 2:
                 continue
             raise
@@ -922,7 +925,7 @@ def list_surrogates(
             from_date = datetime.fromisoformat(created_from.replace("Z", "+00:00"))
             query = query.filter(Surrogate.created_at >= from_date)
         except (ValueError, AttributeError):
-            pass  # Ignore invalid date format
+            logger.debug("surrogate_filter_invalid_created_at")
 
     if created_to:
         try:
@@ -945,13 +948,13 @@ def list_surrogates(
         if "@" in q:
             try:
                 filters.append(Surrogate.email_hash == hash_email(q))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("surrogate_search_email_hash_failed", exc_info=exc)
         try:
             normalized_phone = normalize_phone(q)
             filters.append(Surrogate.phone_hash == hash_phone(normalized_phone))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("surrogate_search_phone_hash_failed", exc_info=exc)
         if filters:
             query = query.filter(or_(*filters))
 

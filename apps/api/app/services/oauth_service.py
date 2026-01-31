@@ -176,7 +176,7 @@ async def get_access_token_async(
 # ============================================================================
 
 GMAIL_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-GMAIL_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GMAIL_TOKEN_URL = "https://oauth2.googleapis.com/token"  # nosec B105
 GMAIL_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
@@ -307,7 +307,7 @@ async def refresh_gcp_token(refresh_token: str) -> JsonObject | None:
 # ============================================================================
 
 ZOOM_AUTH_URL = "https://zoom.us/oauth/authorize"
-ZOOM_TOKEN_URL = "https://zoom.us/oauth/token"
+ZOOM_TOKEN_URL = "https://zoom.us/oauth/token"  # nosec B105
 ZOOM_USER_URL = "https://api.zoom.us/v2/users/me"
 
 

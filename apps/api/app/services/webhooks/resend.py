@@ -61,10 +61,12 @@ def _verify_svix_signature(
         # Standard b64decode silently corrupts urlsafe chars instead of raising.
         for decoder in (base64.urlsafe_b64decode, base64.b64decode):
             try:
-                secret_bytes = decoder(_pad_b64(secret))
-                break
+                decoded = decoder(_pad_b64(secret))
             except Exception:
-                continue
+                decoded = None
+            if decoded:
+                secret_bytes = decoded
+                break
         if secret_bytes is None:
             secret_bytes = secret.encode("utf-8")
     else:

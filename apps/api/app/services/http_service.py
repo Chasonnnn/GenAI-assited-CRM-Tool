@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import random
+import secrets
 from typing import Awaitable, Callable
 
 import httpx
@@ -12,6 +12,12 @@ import httpx
 logger = logging.getLogger(__name__)
 
 DEFAULT_RETRY_STATUSES = {429, 500, 502, 503, 504}
+
+
+def _jitter(delay: float) -> float:
+    if delay <= 0:
+        return 0.0
+    return (secrets.randbelow(1_000_000) / 1_000_000) * (delay / 2)
 
 
 async def request_with_retries(
@@ -33,7 +39,7 @@ async def request_with_retries(
                 raise
             delay = min(max_delay, base_delay * (2**attempt))
             if delay:
-                delay = delay + random.uniform(0, delay / 2)
+                delay = delay + _jitter(delay)
             logger.warning("HTTP request failed, retrying", exc_info=exc)
             if delay:
                 await asyncio.sleep(delay)
@@ -42,7 +48,7 @@ async def request_with_retries(
         if response.status_code in statuses and attempt < max_attempts - 1:
             delay = min(max_delay, base_delay * (2**attempt))
             if delay:
-                delay = delay + random.uniform(0, delay / 2)
+                delay = delay + _jitter(delay)
             logger.warning("HTTP request returned %s, retrying", response.status_code)
             if delay:
                 await asyncio.sleep(delay)

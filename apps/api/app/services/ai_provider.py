@@ -247,7 +247,7 @@ class VertexWIFConfig:
 class VertexWIFCredentials(Credentials):
     """Google Auth credentials using Workload Identity Federation tokens."""
 
-    STS_TOKEN_URL = "https://sts.googleapis.com/v1/token"
+    STS_URL = "https://sts.googleapis.com/v1/token"
     IAM_CREDENTIALS_URL = (
         "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/"
         "{service_account}:generateAccessToken"
@@ -287,13 +287,13 @@ class VertexWIFCredentials(Credentials):
         )
 
         sts_response = requests.post(
-            self.STS_TOKEN_URL,
+            self.STS_URL,
             data={
                 "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
                 "audience": audience,
-                "requested_token_type": "urn:ietf:params:oauth:token-type:access_token",
+                "requested_token_type": "urn:ietf:params:oauth:token-type:access_token",  # nosec
                 "scope": "https://www.googleapis.com/auth/cloud-platform",
-                "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
+                "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",  # nosec
                 "subject_token": subject_token,
             },
             timeout=20,

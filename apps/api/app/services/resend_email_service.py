@@ -170,8 +170,8 @@ async def send_campaign_email(
                 mid = data.get("id")
                 if isinstance(mid, str) and mid:
                     message_id = mid
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("resend_409_response_parse_failed", exc_info=exc)
 
         # Already sent, mark as success
         recipient.status = "sent"
@@ -188,8 +188,8 @@ async def send_campaign_email(
         data = response.json()
         if isinstance(data, dict):
             error_detail = data.get("message") or data.get("error")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("resend_error_response_parse_failed", exc_info=exc)
 
     error_msg = f"Resend API error: {response.status_code}"
     if error_detail:
@@ -292,8 +292,8 @@ async def send_email_direct(
                 mid = data.get("id")
                 if isinstance(mid, str) and mid:
                     message_id = mid
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("resend_direct_409_parse_failed", exc_info=exc)
         return True, None, message_id
 
     # Error
@@ -302,8 +302,8 @@ async def send_email_direct(
         data = response.json()
         if isinstance(data, dict):
             error_detail = data.get("message") or data.get("error")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("resend_direct_error_parse_failed", exc_info=exc)
 
     error_msg = f"Resend API error: {response.status_code}"
     if error_detail:

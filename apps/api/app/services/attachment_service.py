@@ -1,6 +1,7 @@
 """Attachment service for file uploads with security features."""
 
 import hashlib
+import logging
 import os
 import tempfile
 import uuid
@@ -17,6 +18,7 @@ from app.db.enums import AuditEventType, JobType
 from app.db.models import Attachment
 from app.services import storage_client
 from app.services import audit_service, job_service
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -208,8 +210,8 @@ def _cleanup_storage_keys(session: Session, delete_files: bool) -> None:
     for key in keys:
         try:
             delete_file(key)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to delete storage key %s: %s", key, exc, exc_info=exc)
 
 
 def _after_commit_cleanup(session: Session) -> None:

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import TypedDict
 from uuid import UUID
+import logging
 
 from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
@@ -20,6 +21,7 @@ from app.utils.normalization import (
     normalize_search_text,
 )
 
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # CRUD Operations
@@ -117,13 +119,13 @@ def list_intended_parents(
         if "@" in q:
             try:
                 filters.append(IntendedParent.email_hash == hash_email(q))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("ip_search_email_hash_failed", exc_info=exc)
         try:
             normalized_phone = normalize_phone(q)
             filters.append(IntendedParent.phone_hash == hash_phone(normalized_phone))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("ip_search_phone_hash_failed", exc_info=exc)
         if filters:
             query = query.filter(or_(*filters))
 
@@ -137,7 +139,7 @@ def list_intended_parents(
             after_date = datetime.fromisoformat(created_after.replace("Z", "+00:00"))
             query = query.filter(IntendedParent.created_at >= after_date)
         except (ValueError, AttributeError):
-            pass
+            logger.debug("ip_filter_invalid_created_after")
     if created_before:
         try:
             before_date = datetime.fromisoformat(created_before.replace("Z", "+00:00"))

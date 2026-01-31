@@ -1482,7 +1482,7 @@ def get_appointment_by_token(
 ) -> Appointment | None:
     """Get appointment by self-service token scoped to org."""
     now = datetime.now(timezone.utc)
-    if token_type == "reschedule":
+    if token_type == "reschedule":  # nosec B105
         appt = (
             db.query(Appointment)
             .filter(
@@ -1495,7 +1495,7 @@ def get_appointment_by_token(
             return None
         if appt.reschedule_token_expires_at and appt.reschedule_token_expires_at <= now:
             return None
-    elif token_type == "cancel":
+    elif token_type == "cancel":  # nosec B105
         appt = (
             db.query(Appointment)
             .filter(
