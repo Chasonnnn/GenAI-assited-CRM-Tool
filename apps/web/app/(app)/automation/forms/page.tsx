@@ -29,8 +29,10 @@ import {
     Loader2Icon,
     ArrowLeftIcon,
 } from "lucide-react"
-import { useForms, useCreateForm } from "@/lib/hooks/use-forms"
+import { useForms, useCreateForm, useSetFormMappings } from "@/lib/hooks/use-forms"
 import { parseDateInput } from "@/lib/utils/date"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { FORM_TEMPLATES, type FormTemplate } from "@/lib/forms/templates"
 
 function formatRelativeTime(dateString: string): string {
     const date = parseDateInput(dateString)
@@ -50,10 +52,13 @@ export default function FormsListPage() {
     const router = useRouter()
     const { data: forms, isLoading } = useForms()
     const createFormMutation = useCreateForm()
+    const setMappingsMutation = useSetFormMappings()
 
     const [showCreateModal, setShowCreateModal] = useState(false)
     const [formName, setFormName] = useState("")
     const [formDescription, setFormDescription] = useState("")
+    const [activeTab, setActiveTab] = useState<"forms" | "templates">("forms")
+    const [applyingTemplateId, setApplyingTemplateId] = useState<string | null>(null)
 
     const handleCreate = async () => {
         if (!formName.trim()) return
@@ -69,6 +74,25 @@ export default function FormsListPage() {
             router.push(`/automation/forms/${newForm.id}`)
         } catch {
             // Error handling is done by React Query
+        }
+    }
+
+    const handleUseTemplate = async (template: FormTemplate) => {
+        if (createFormMutation.isPending) return
+        setApplyingTemplateId(template.id)
+        try {
+            const newForm = await createFormMutation.mutateAsync(template.payload)
+            if (template.mappings && template.mappings.length > 0) {
+                await setMappingsMutation.mutateAsync({
+                    formId: newForm.id,
+                    mappings: template.mappings,
+                })
+            }
+            router.push(`/automation/forms/${newForm.id}`)
+        } catch {
+            // Error handling is done by React Query
+        } finally {
+            setApplyingTemplateId(null)
         }
     }
 
@@ -125,97 +149,174 @@ export default function FormsListPage() {
                         Forms can be sent via secure links and submissions can be reviewed and approved.
                     </p>
 
-                    {/* Form List */}
-                    {isLoading ? (
-                        <div className="flex items-center justify-center py-12">
-                            <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                    <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "forms" | "templates")}>
+                        <div className="flex items-center justify-between">
+                            <TabsList>
+                                <TabsTrigger value="forms">Forms</TabsTrigger>
+                                <TabsTrigger value="templates">Form Templates</TabsTrigger>
+                            </TabsList>
                         </div>
-                    ) : !forms?.length ? (
-                        <Card>
-                            <CardContent className="flex flex-col items-center justify-center py-12">
-                                <FileTextIcon className="size-12 text-muted-foreground/50" />
-                                <h3 className="mt-4 text-lg font-medium">No forms yet</h3>
-                                <p className="mt-1 text-sm text-muted-foreground">
-                                    Create your first form to start collecting applications
-                                </p>
-                                <Button className="mt-4" onClick={() => setShowCreateModal(true)}>
-                                    <PlusIcon className="mr-2 size-4" />
-                                    Create Form
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    ) : (
-                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                            {[...forms]
-                                .sort((a, b) => {
-                                    // Published first, then draft, then archived
-                                    const order = { published: 0, draft: 1, archived: 2 } as const
-                                    const isOrderKey = (value: string): value is keyof typeof order =>
-                                        Object.prototype.hasOwnProperty.call(order, value)
-                                    const aOrder = isOrderKey(a.status) ? order[a.status] : 3
-                                    const bOrder = isOrderKey(b.status) ? order[b.status] : 3
-                                    if (aOrder !== bOrder) return aOrder - bOrder
-                                    // Then by updated_at descending
-                                    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-                                })
-                                .map((form) => (
-                                    <Card
-                                        key={form.id}
-                                        className="cursor-pointer hover:bg-accent/50 transition-colors"
-                                        onClick={() => router.push(`/automation/forms/${form.id}`)}
-                                    >
-                                        <CardHeader className="pb-3">
-                                            <div className="flex items-start justify-between">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-teal-500/10 text-teal-500">
-                                                        <FileTextIcon className="size-5" />
+
+                        <TabsContent value="forms" className="space-y-6">
+                            {/* Form List */}
+                            {isLoading ? (
+                                <div className="flex items-center justify-center py-12">
+                                    <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : !forms?.length ? (
+                                <Card>
+                                    <CardContent className="flex flex-col items-center justify-center py-12">
+                                        <FileTextIcon className="size-12 text-muted-foreground/50" />
+                                        <h3 className="mt-4 text-lg font-medium">No forms yet</h3>
+                                        <p className="mt-1 text-sm text-muted-foreground">
+                                            Create your first form to start collecting applications
+                                        </p>
+                                        <Button className="mt-4" onClick={() => setShowCreateModal(true)}>
+                                            <PlusIcon className="mr-2 size-4" />
+                                            Create Form
+                                        </Button>
+                                    </CardContent>
+                                </Card>
+                            ) : (
+                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                    {[...forms]
+                                        .sort((a, b) => {
+                                            // Published first, then draft, then archived
+                                            const order = { published: 0, draft: 1, archived: 2 } as const
+                                            const isOrderKey = (value: string): value is keyof typeof order =>
+                                                Object.prototype.hasOwnProperty.call(order, value)
+                                            const aOrder = isOrderKey(a.status) ? order[a.status] : 3
+                                            const bOrder = isOrderKey(b.status) ? order[b.status] : 3
+                                            if (aOrder !== bOrder) return aOrder - bOrder
+                                            // Then by updated_at descending
+                                            return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+                                        })
+                                        .map((form) => (
+                                            <Card
+                                                key={form.id}
+                                                className="cursor-pointer hover:bg-accent/50 transition-colors"
+                                                onClick={() => router.push(`/automation/forms/${form.id}`)}
+                                            >
+                                                <CardHeader className="pb-3">
+                                                    <div className="flex items-start justify-between">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-teal-500/10 text-teal-500">
+                                                                <FileTextIcon className="size-5" />
+                                                            </div>
+                                                            <div>
+                                                                <CardTitle className="text-base">{form.name}</CardTitle>
+                                                                <Badge
+                                                                    variant={statusVariant(form.status)}
+                                                                    className={`mt-1 text-xs ${form.status === "published" ? "bg-green-500 hover:bg-green-500/80" : ""}`}
+                                                                >
+                                                                    {statusLabel(form.status)}
+                                                                </Badge>
+                                                            </div>
+                                                        </div>
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger
+                                                                render={
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="icon"
+                                                                        className="h-8 w-8"
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                    >
+                                                                        <MoreVerticalIcon className="size-4" />
+                                                                    </Button>
+                                                                }
+                                                            />
+                                                            <DropdownMenuContent align="end">
+                                                                <DropdownMenuItem
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        router.push(`/automation/forms/${form.id}`)
+                                                                    }}
+                                                                >
+                                                                    <EditIcon className="mr-2 size-4" />
+                                                                    Edit
+                                                                </DropdownMenuItem>
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
                                                     </div>
-                                                    <div>
-                                                        <CardTitle className="text-base">{form.name}</CardTitle>
-                                                        <Badge
-                                                            variant={statusVariant(form.status)}
-                                                            className={`mt-1 text-xs ${form.status === "published" ? "bg-green-500 hover:bg-green-500/80" : ""}`}
+                                                </CardHeader>
+                                                <CardContent className="pt-0">
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Updated {formatRelativeTime(form.updated_at)}
+                                                    </p>
+                                                </CardContent>
+                                            </Card>
+                                        ))}
+                                </div>
+                            )}
+                        </TabsContent>
+
+                        <TabsContent value="templates" className="space-y-6">
+                            <Card>
+                                <CardContent className="py-6 text-sm text-muted-foreground">
+                                    Platform templates are shared across your organization for consistent intake flows.
+                                    Apply a template to create a new form that you can customize and send.
+                                </CardContent>
+                            </Card>
+
+                            {!FORM_TEMPLATES.length ? (
+                                <Card>
+                                    <CardContent className="flex flex-col items-center justify-center py-12">
+                                        <FileTextIcon className="size-12 text-muted-foreground/50" />
+                                        <h3 className="mt-4 text-lg font-medium">No templates yet</h3>
+                                        <p className="mt-1 text-sm text-muted-foreground">
+                                            Platform templates will appear here once available
+                                        </p>
+                                    </CardContent>
+                                </Card>
+                            ) : (
+                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                    {FORM_TEMPLATES.map((template) => {
+                                        const isApplying = applyingTemplateId === template.id
+                                        return (
+                                            <Card key={template.id}>
+                                                <CardHeader className="pb-3">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-teal-500/10 text-teal-500">
+                                                                <FileTextIcon className="size-5" />
+                                                            </div>
+                                                            <div>
+                                                                <CardTitle className="text-base">{template.name}</CardTitle>
+                                                                {template.badge && (
+                                                                    <Badge variant="outline" className="mt-1 text-xs">
+                                                                        {template.badge}
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <Button
+                                                            size="sm"
+                                                            onClick={() => handleUseTemplate(template)}
+                                                            disabled={createFormMutation.isPending || isApplying}
                                                         >
-                                                            {statusLabel(form.status)}
-                                                        </Badge>
+                                                            {isApplying && (
+                                                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                                            )}
+                                                            Use Template
+                                                        </Button>
                                                     </div>
-                                                </div>
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger
-                                                        render={
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-8 w-8"
-                                                                onClick={(e) => e.stopPropagation()}
-                                                            >
-                                                                <MoreVerticalIcon className="size-4" />
-                                                            </Button>
-                                                        }
-                                                    />
-                                                    <DropdownMenuContent align="end">
-                                                        <DropdownMenuItem
-                                                            onClick={(e) => {
-                                                                e.stopPropagation()
-                                                                router.push(`/automation/forms/${form.id}`)
-                                                            }}
-                                                        >
-                                                            <EditIcon className="mr-2 size-4" />
-                                                            Edit
-                                                        </DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </div>
-                                        </CardHeader>
-                                        <CardContent className="pt-0">
-                                            <p className="text-xs text-muted-foreground">
-                                                Updated {formatRelativeTime(form.updated_at)}
-                                            </p>
-                                        </CardContent>
-                                    </Card>
-                                ))}
-                        </div>
-                    )}
+                                                </CardHeader>
+                                                <CardContent className="pt-0">
+                                                    <p className="text-sm text-muted-foreground">
+                                                        {template.description}
+                                                    </p>
+                                                    <p className="mt-2 text-xs text-muted-foreground">
+                                                        {template.sections} sections • {template.questions} questions
+                                                    </p>
+                                                </CardContent>
+                                            </Card>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                        </TabsContent>
+                    </Tabs>
                 </div>
             </div>
 

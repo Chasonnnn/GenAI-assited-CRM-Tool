@@ -1,57 +1,50 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
-import FormBuilderPage from '../app/(app)/automation/forms/[id]/page'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import FormsListPage from '../app/(app)/automation/forms/page'
+import { FORM_TEMPLATES } from '@/lib/forms/templates'
 
 const mockPush = vi.fn()
-const mockUseForm = vi.fn()
-const mockUseFormMappings = vi.fn()
+const mockCreateForm = vi.fn()
+const mockSetFormMappings = vi.fn()
 
 vi.mock('next/navigation', () => ({
     useRouter: () => ({ push: mockPush }),
-    useParams: () => ({ id: 'new' }),
 }))
 
 vi.mock('@/lib/hooks/use-forms', () => ({
-    useForm: (id: string | null) => mockUseForm(id),
-    useFormMappings: (id: string | null) => mockUseFormMappings(id),
-    useCreateForm: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useUpdateForm: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    usePublishForm: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useSetFormMappings: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useUploadFormLogo: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useForms: () => ({ data: [], isLoading: false }),
+    useCreateForm: () => ({ mutateAsync: mockCreateForm, isPending: false }),
+    useSetFormMappings: () => ({ mutateAsync: mockSetFormMappings, isPending: false }),
 }))
 
-vi.mock('@/lib/auth-context', () => ({
-    useAuth: () => ({ user: { org_id: 'org-1' } }),
-}))
-
-vi.mock('@/lib/hooks/use-signature', () => ({
-    useOrgSignature: () => ({ data: null }),
-}))
-
-vi.mock('sonner', () => ({
-    toast: {
-        success: vi.fn(),
-        error: vi.fn(),
-    },
-}))
-
-describe('FormBuilderPage templates', () => {
+describe('FormsListPage templates', () => {
     beforeEach(() => {
-        mockUseForm.mockReturnValue({ data: null, isLoading: false })
-        mockUseFormMappings.mockReturnValue({ data: [], isLoading: false })
+        mockCreateForm.mockReset()
+        mockSetFormMappings.mockReset()
         mockPush.mockReset()
     })
 
-    it('applies the Jotform surrogate intake template', () => {
-        render(<FormBuilderPage />)
+    it('creates a new form from the platform template', async () => {
+        mockCreateForm.mockResolvedValue({ id: 'form-123' })
+        mockSetFormMappings.mockResolvedValue([])
 
-        fireEvent.click(
-            screen.getByRole('button', { name: /use jotform surrogate intake template/i }),
-        )
+        render(<FormsListPage />)
 
-        expect(screen.getByText('Surrogate Information')).toBeInTheDocument()
-        expect(screen.getByText('Decisions')).toBeInTheDocument()
-        expect(screen.getByLabelText('Form Name')).toHaveValue('Surrogate Application Form (Official)')
+        fireEvent.click(screen.getByRole('tab', { name: /form templates/i }))
+        fireEvent.click(screen.getByRole('button', { name: /use template/i }))
+
+        await waitFor(() => expect(mockCreateForm).toHaveBeenCalled())
+        expect(mockCreateForm).toHaveBeenCalledWith(FORM_TEMPLATES[0].payload)
+
+        if (FORM_TEMPLATES[0].mappings?.length) {
+            await waitFor(() =>
+                expect(mockSetFormMappings).toHaveBeenCalledWith({
+                    formId: 'form-123',
+                    mappings: FORM_TEMPLATES[0].mappings,
+                }),
+            )
+        }
+
+        await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/automation/forms/form-123'))
     })
 })
