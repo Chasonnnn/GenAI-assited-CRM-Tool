@@ -21,6 +21,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 # Set test environment variables BEFORE any app imports
 os.environ.setdefault("TESTING", "1")  # Enable test mode (in-memory rate limiter)
 os.environ.setdefault("ENV", "test")
+os.environ.setdefault("JWT_SECRET", "test-jwt-secret-0123456789abcdef")
 _test_fernet_key = os.environ.get("FERNET_KEY") or Fernet.generate_key().decode()
 os.environ.setdefault("FERNET_KEY", _test_fernet_key)
 os.environ.setdefault("META_ENCRYPTION_KEY", _test_fernet_key)
