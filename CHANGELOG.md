@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.55.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.54.0...surrogacy-crm-platform-v0.55.0) (2026-02-01)
+
+
+### Features
+
+* **meta:** implement Meta form deletion ([84b69e2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/84b69e27618411f9feda59e825d09c0a5b32cf03))
+* **web/ai:** enable global chat and ephemeral history in AI Assistant ([d8fc620](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d8fc62035415c6f6e2351867b2ac97aaef415593))
+* **zapier:** enhance inbound webhook management and field extraction ([e21f192](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e21f192f1b92d38647bfd95b12fc4eabef20df42))
+
+
+### Bug Fixes
+
+* **api/tests:** ensure JWT_SECRET is set in test environment to satisfy production safeguards ([8c81a38](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8c81a389c64985cfc5c740195ebe9feebdc9dc3f))
+* **web/ai:** refine chat history persistence and state initialization ([7a6a537](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7a6a5378d8652cdfbd9c80c8df71d44971440909))
+* **web/forms:** improve field property synchronization in form builder ([fdf3850](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fdf3850c0d491c9296cdbe1c01b72d629fb261e8))
+* **web/integrations:** stabilize AlertDialog rendering and webhook selection ([48c3c10](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/48c3c1093e22201705f94961508746d164507688))
+* **web:** accessibility and test refinements ([7224035](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7224035bab3b8955cb5d8a3d5c9af21323e68cbe))
+
+
+### Maintenance
+
+* **api:** refine app versioning and RELEASE_PLEASE support ([40b8eaa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/40b8eaab6c7d4e35c9528dc9d84bb59ee1d4d7af))
+* **api:** update fallback app version to 0.54.0 ([cba13cf](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cba13cf8114c92aa4e42490a3c89d330bde872d3))
+
 ## [0.54.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.53.3...surrogacy-crm-platform-v0.54.0) (2026-01-31)
 
 
