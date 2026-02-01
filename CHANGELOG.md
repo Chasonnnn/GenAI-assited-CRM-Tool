@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.60.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.59.1...surrogacy-crm-platform-v0.60.0) (2026-02-01)
+
+
+### Features
+
+* **email:** release premium organization invite design (v2) ([3f6d667](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3f6d667c96266b741ce292b2675543e3c9313236))
+* **ops:** implement invite resending for platform admins ([2aea8fb](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2aea8fbb594653ececf1ec0a437f6e0c65174d80))
+
+
+### Bug Fixes
+
+* **auth:** auto-accept pending invites for existing users during login ([f3c56dc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f3c56dcf43d163c8edf1be6665da1688ff85690a))
+
 ## [0.59.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.59.0...surrogacy-crm-platform-v0.59.1) (2026-02-01)
 
 
