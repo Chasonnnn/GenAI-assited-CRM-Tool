@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.56.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.55.0...surrogacy-crm-platform-v0.56.0) (2026-02-01)
+
+
+### Features
+
+* **email:** update organization invite template with premium design ([95c17eb](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/95c17ebe2c781b7a743faae083f344bdc58079ea))
+* **forms:** implement platform-level form templates ([b83d3af](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b83d3afe15251859619ddc2d4305ebaf7674d003))
+* **import:** enhance column detection for C-section and Meta leads ([5de7eed](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5de7eedbfe9f5d94913b0ecc019ae9e245927386))
+* **integrations:** modernize Meta and Zapier settings with metrics ([9338218](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/93382181d67f246cf5068ef6f22ae3e5f3adc7ce))
+* **surrogates:** refine application intake UI for single-form orgs ([8dfd757](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8dfd7575bb8eb4ee0aa347e3f5b0c8a20d183d3f))
+
 ## [0.55.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.54.0...surrogacy-crm-platform-v0.55.0) (2026-02-01)
 
 
