@@ -1,26 +1,36 @@
-import { describe, it, expect, vi } from "vitest"
-
-const dynamicState = vi.hoisted(() => ({
-    calls: [] as Array<{ options?: { ssr?: boolean } }>,
-}))
-
-vi.mock("next/dynamic", () => ({
-    __esModule: true,
-    default: (_loader: unknown, options: { ssr?: boolean } = {}) => {
-        dynamicState.calls.push({ options })
-        return () => null
-    },
-}))
-
-vi.mock("@/components/rich-text-editor", () => ({
-    RichTextEditor: () => null,
-}))
-
-import "../components/ops/agencies/AgencyTemplatesTab"
+import { describe, it, expect } from "vitest"
+import { render, screen } from "@testing-library/react"
+import { AgencyTemplatesTab } from "../components/ops/agencies/AgencyTemplatesTab"
 
 describe("AgencyTemplatesTab", () => {
-    it("lazy loads the rich text editor", () => {
-        expect(dynamicState.calls.length).toBeGreaterThan(0)
-        expect(dynamicState.calls.some((call) => call.options?.ssr === false)).toBe(true)
+    it("renders the invite email HTML editor", () => {
+        render(
+            <AgencyTemplatesTab
+                orgName="Test Org"
+                portalBaseUrl="https://app.example.com"
+                platformEmailStatus={null}
+                platformEmailLoading={false}
+                inviteTemplate={null}
+                inviteTemplateLoading={false}
+                templateFromEmail=""
+                templateSubject="Invitation to join {{org_name}}"
+                templateBody="<p>Hello</p>"
+                templateActive={true}
+                templateVersion={1}
+                onTemplateFromEmailChange={() => {}}
+                onTemplateSubjectChange={() => {}}
+                onTemplateBodyChange={() => {}}
+                onTemplateActiveChange={() => {}}
+                onSaveTemplate={() => {}}
+                inviteTemplateSaving={false}
+                testEmail=""
+                onTestEmailChange={() => {}}
+                onSendTestEmail={() => {}}
+                testSending={false}
+            />
+        )
+
+        expect(screen.getByLabelText("Email Body (HTML)")).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: /use apple-style layout/i })).toBeInTheDocument()
     })
 })
