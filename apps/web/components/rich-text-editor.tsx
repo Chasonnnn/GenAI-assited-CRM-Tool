@@ -3,6 +3,8 @@
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
+import TextAlign from '@tiptap/extension-text-align'
+import Underline from '@tiptap/extension-underline'
 import { Button } from '@/components/ui/button'
 import { Toggle } from '@/components/ui/toggle'
 import {
@@ -12,6 +14,9 @@ import {
     ListIcon,
     ListOrderedIcon,
     LinkIcon,
+    AlignLeftIcon,
+    AlignCenterIcon,
+    AlignRightIcon,
     Undo2Icon,
     Redo2Icon,
 } from 'lucide-react'
@@ -60,8 +65,12 @@ export function RichTextEditor({
                     },
                 },
             }),
+            Underline,
             Placeholder.configure({
                 placeholder,
+            }),
+            TextAlign.configure({
+                types: ['paragraph'],
             }),
         ],
         content,
@@ -177,6 +186,31 @@ export function RichTextEditor({
                     aria-label="Add Link"
                 >
                     <LinkIcon className="size-4" />
+                </Toggle>
+                <div className="w-px h-4 bg-border mx-1" />
+                <Toggle
+                    size="sm"
+                    pressed={editor.isActive({ textAlign: 'left' })}
+                    onPressedChange={() => editor.chain().focus().setTextAlign('left').run()}
+                    aria-label="Align Left"
+                >
+                    <AlignLeftIcon className="size-4" />
+                </Toggle>
+                <Toggle
+                    size="sm"
+                    pressed={editor.isActive({ textAlign: 'center' })}
+                    onPressedChange={() => editor.chain().focus().setTextAlign('center').run()}
+                    aria-label="Align Center"
+                >
+                    <AlignCenterIcon className="size-4" />
+                </Toggle>
+                <Toggle
+                    size="sm"
+                    pressed={editor.isActive({ textAlign: 'right' })}
+                    onPressedChange={() => editor.chain().focus().setTextAlign('right').run()}
+                    aria-label="Align Right"
+                >
+                    <AlignRightIcon className="size-4" />
                 </Toggle>
                 <div className="w-px h-4 bg-border mx-1" />
                 <Button
