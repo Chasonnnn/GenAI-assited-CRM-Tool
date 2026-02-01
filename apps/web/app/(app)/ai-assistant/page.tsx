@@ -79,10 +79,16 @@ function normalizeMessagesForSession(messages: Message[]) {
     return messages
         .filter((msg) => msg.id !== "welcome")
         .slice(-SESSION_MESSAGE_LIMIT)
-        .map((msg) => ({
-            ...msg,
-            status: msg.status === "thinking" || msg.status === "streaming" ? "done" : msg.status,
-        }))
+        .map((msg) => {
+            const normalizedStatus =
+                msg.status === "thinking" || msg.status === "streaming"
+                    ? "done"
+                    : msg.status ?? "done"
+            return {
+                ...msg,
+                status: normalizedStatus,
+            }
+        })
 }
 
 function safeParseHistory(raw: string | null): ChatSession[] {
@@ -92,15 +98,59 @@ function safeParseHistory(raw: string | null): ChatSession[] {
         if (!Array.isArray(parsed)) return []
         return parsed
             .filter((entry) => entry && typeof entry === "object")
-            .map((entry) => ({
-                id: typeof entry.id === "string" ? entry.id : `session-${Date.now()}`,
-                label: typeof entry.label === "string" ? entry.label : "Chat",
-                preview: typeof entry.preview === "string" ? entry.preview : "",
-                updatedAt: typeof entry.updatedAt === "string" ? entry.updatedAt : new Date().toISOString(),
-                entityType: entry.entityType === "surrogate" ? "surrogate" : "global",
-                entityId: typeof entry.entityId === "string" ? entry.entityId : null,
-                messages: Array.isArray(entry.messages) ? entry.messages : [],
-            }))
+            .map((entry) => {
+                const id = typeof entry.id === "string" ? entry.id : `session-${Date.now()}`
+                const label = typeof entry.label === "string" ? entry.label : "Chat"
+                const preview = typeof entry.preview === "string" ? entry.preview : ""
+                const updatedAt =
+                    typeof entry.updatedAt === "string" ? entry.updatedAt : new Date().toISOString()
+                const entityType: "surrogate" | "global" =
+                    entry.entityType === "surrogate" ? "surrogate" : "global"
+                const entityId = typeof entry.entityId === "string" ? entry.entityId : null
+                const rawMessages = Array.isArray(entry.messages)
+                    ? (entry.messages as unknown[])
+                    : []
+                const messages: Message[] = rawMessages
+                    .filter((msg): msg is Record<string, unknown> => !!msg && typeof msg === "object")
+                    .map((msg) => {
+                              const rawStatus = msg.status
+                              const status =
+                                  rawStatus === "thinking" ||
+                                  rawStatus === "streaming" ||
+                                  rawStatus === "done" ||
+                                  rawStatus === "error"
+                                      ? rawStatus
+                                      : undefined
+                              const rawRole = msg.role
+                              const rawTimestamp = msg.timestamp
+                              const rawContent = msg.content
+                              const rawActions = msg.proposed_actions
+                              const proposed_actions = Array.isArray(rawActions) ? rawActions as ProposedAction[] : undefined
+                              return {
+                                  id: typeof msg.id === "string" ? msg.id : `msg-${Date.now()}`,
+                                  role: rawRole === "assistant" ? "assistant" : "user",
+                                  content: typeof rawContent === "string" ? rawContent : "",
+                                  timestamp:
+                                      typeof rawTimestamp === "string"
+                                          ? rawTimestamp
+                                          : new Date().toLocaleTimeString("en-US", {
+                                                hour: "numeric",
+                                                minute: "2-digit",
+                                            }),
+                                  ...(proposed_actions ? { proposed_actions } : {}),
+                                  ...(status ? { status } : {}),
+                              }
+                          })
+                return {
+                    id,
+                    label,
+                    preview,
+                    updatedAt,
+                    entityType,
+                    entityId,
+                    messages,
+                }
+            })
             .slice(0, MAX_CHAT_HISTORY)
     } catch {
         return []
@@ -279,8 +329,8 @@ export default function AIAssistantPage() {
         if (!historyLoadedRef.current) {
             const storedHistory = safeParseHistory(sessionStorage.getItem(CHAT_HISTORY_KEY))
             setChatHistory(storedHistory)
-            if (storedHistory.length > 0) {
-                const mostRecent = storedHistory[0]
+            const [mostRecent] = storedHistory
+            if (mostRecent) {
                 setActiveSessionId(mostRecent.id)
                 if (mostRecent.entityType === "surrogate" && mostRecent.entityId) {
                     setSelectedSurrogateId(mostRecent.entityId)
@@ -644,7 +694,7 @@ export default function AIAssistantPage() {
         }
     }
 
-    const handleSurrogateChange = useCallback((value?: string) => {
+    const handleSurrogateChange = useCallback((value?: string | null) => {
         const nextId = value ?? ""
         setSelectedSurrogateId(nextId)
         if (!nextId) {
