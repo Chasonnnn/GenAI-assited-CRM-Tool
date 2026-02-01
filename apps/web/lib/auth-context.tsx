@@ -61,14 +61,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     useEffect(() => {
-        const isOpsRoute =
-            typeof window !== 'undefined' &&
-            (window.location.pathname.startsWith('/ops') ||
-                window.location.hostname.startsWith('ops.'));
-        if (isOpsRoute) {
+        if (typeof window === 'undefined') {
+            fetchUser();
+            return;
+        }
+
+        const pathname = window.location.pathname || '';
+        const hostname = window.location.hostname || '';
+        const isOpsRoute = pathname.startsWith('/ops') || hostname.startsWith('ops.');
+        const isMfaRoute = pathname.startsWith('/mfa') || pathname.startsWith('/auth/duo/callback');
+
+        if (isOpsRoute && !isMfaRoute) {
             setIsLoading(false);
             return;
         }
+
         fetchUser();
     }, []);
 
