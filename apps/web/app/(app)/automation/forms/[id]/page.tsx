@@ -339,6 +339,14 @@ type FormDraft = {
     allowedMimeTypesText?: string
 }
 
+type TemplateDefinition = {
+    id: string
+    name: string
+    description: string
+    badge?: string
+    build: () => FormDraft
+}
+
 const buildFieldId = () => {
     if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
         return crypto.randomUUID()
@@ -1249,6 +1257,16 @@ const buildJotformTemplate = (): FormDraft => {
     })
 }
 
+const PLATFORM_TEMPLATES: TemplateDefinition[] = [
+    {
+        id: "jotform-surrogate-intake",
+        name: "Jotform Surrogate Intake",
+        description: "130 questions • Includes uploads and signature",
+        badge: "Platform",
+        build: buildJotformTemplate,
+    },
+]
+
 // Page component
 export default function FormBuilderPage() {
     const params = useParams<{ id: string }>()
@@ -1319,14 +1337,32 @@ export default function FormBuilderPage() {
     const [showDeletePageDialog, setShowDeletePageDialog] = useState(false)
     const [pageToDelete, setPageToDelete] = useState<number | null>(null)
 
-    const jotformTemplate = useMemo(() => buildJotformTemplate(), [])
-    const jotformTemplateSummary = useMemo(() => {
-        const questionCount = jotformTemplate.pages.reduce((sum, page) => sum + page.fields.length, 0)
-        return {
-            sections: jotformTemplate.pages.length,
-            questions: questionCount,
+    const templateSummaries = useMemo(
+        () =>
+            PLATFORM_TEMPLATES.map((template) => {
+                const draft = template.build()
+                const questionCount = draft.pages.reduce(
+                    (sum, page) => sum + page.fields.length,
+                    0,
+                )
+                return {
+                    ...template,
+                    sections: draft.pages.length,
+                    questions: questionCount,
+                }
+            }),
+        [],
+    )
+
+    const [rightSidebarTab, setRightSidebarTab] = useState<"field" | "templates">("templates")
+
+    useEffect(() => {
+        if (selectedField) {
+            setRightSidebarTab("field")
+        } else {
+            setRightSidebarTab("templates")
         }
-    }, [jotformTemplate])
+    }, [selectedField])
 
     useEffect(() => {
         setHasHydrated(false)
@@ -2011,10 +2047,15 @@ export default function FormBuilderPage() {
         applyDraft(formDraft)
     }
 
-    const handleUseJotformTemplate = () => {
-        const template = buildJotformTemplate()
-        setFormDraft(template)
-        applyDraft(template)
+    const handleUseTemplate = (templateId: string) => {
+        const template = PLATFORM_TEMPLATES.find((entry) => entry.id === templateId)
+        if (!template) {
+            toast.error("Template not found")
+            return
+        }
+        const draft = template.build()
+        setFormDraft(draft)
+        applyDraft(draft)
     }
 
     // Publish handler
@@ -2410,10 +2451,37 @@ export default function FormBuilderPage() {
 
                 {/* Right Sidebar - Settings */}
                 <div className="w-[280px] overflow-y-auto border-l border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900">
-                    {selectedFieldData ? (
-                        <div className="space-y-6">
-                            <div>
-                                <h3 className="mb-4 text-sm font-semibold">Field Settings</h3>
+                    <div className="mb-4 grid grid-cols-2 gap-2 rounded-lg border border-stone-200 bg-stone-50 p-1 text-xs font-medium dark:border-stone-800 dark:bg-stone-950">
+                        <button
+                            type="button"
+                            disabled={!selectedFieldData}
+                            onClick={() => setRightSidebarTab("field")}
+                            className={`rounded-md px-2 py-1 transition ${
+                                rightSidebarTab === "field"
+                                    ? "bg-white text-stone-900 shadow-sm dark:bg-stone-900 dark:text-stone-100"
+                                    : "text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
+                            } ${!selectedFieldData ? "cursor-not-allowed opacity-50" : ""}`}
+                        >
+                            Field Settings
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setRightSidebarTab("templates")}
+                            className={`rounded-md px-2 py-1 transition ${
+                                rightSidebarTab === "templates"
+                                    ? "bg-white text-stone-900 shadow-sm dark:bg-stone-900 dark:text-stone-100"
+                                    : "text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
+                            }`}
+                        >
+                            Form Templates
+                        </button>
+                    </div>
+
+                    {rightSidebarTab === "field" ? (
+                        selectedFieldData ? (
+                            <div className="space-y-6">
+                                <div>
+                                    <h3 className="mb-4 text-sm font-semibold">Field Settings</h3>
 
                                 {/* Label */}
                                 <div className="space-y-2">
@@ -2850,36 +2918,57 @@ export default function FormBuilderPage() {
                                 </Select>
                             </div>
                         </div>
+                        ) : (
+                            <div className="rounded-lg border border-stone-200 bg-stone-50 p-4 dark:border-stone-800 dark:bg-stone-900">
+                                <p className="text-xs text-stone-600 dark:text-stone-400">
+                                    Select a field from the canvas to edit its settings
+                                </p>
+                            </div>
+                        )
                     ) : (
                         <div className="space-y-6">
                             <div className="rounded-lg border border-stone-200 bg-stone-50 p-4 dark:border-stone-800 dark:bg-stone-900">
                                 <div className="flex items-center justify-between">
                                     <h3 className="text-sm font-semibold">Template Library</h3>
-                                    <Badge variant="outline">Starter</Badge>
+                                    <Badge variant="outline">Platform</Badge>
                                 </div>
                                 <p className="mt-2 text-xs text-stone-500 dark:text-stone-400">
-                                    Start from a proven intake template modeled after the Jotform surrogate application.
+                                    Platform templates are shared across your organization for consistent intake flows.
                                 </p>
-                                <div className="mt-3 rounded-md border border-stone-200 bg-white p-3 text-sm dark:border-stone-800 dark:bg-stone-950">
-                                    <div className="flex items-center justify-between">
-                                        <p className="font-semibold">Jotform Surrogate Intake</p>
-                                        <Badge variant="secondary" className="text-[11px]">
-                                            {jotformTemplateSummary.sections} sections
-                                        </Badge>
-                                    </div>
-                                    <p className="mt-1 text-xs text-stone-500">
-                                        {jotformTemplateSummary.questions} questions • Includes uploads and signature
-                                    </p>
-                                    <Button
-                                        size="sm"
-                                        className="mt-3 w-full"
-                                        onClick={handleUseJotformTemplate}
-                                    >
-                                        Use Jotform Surrogate Intake Template
-                                    </Button>
-                                    <p className="mt-2 text-[11px] text-stone-500">
-                                        Applying a template will replace current fields.
-                                    </p>
+                                <div className="mt-3 space-y-3">
+                                    {templateSummaries.map((template) => (
+                                        <div
+                                            key={template.id}
+                                            className="rounded-md border border-stone-200 bg-white p-3 text-sm dark:border-stone-800 dark:bg-stone-950"
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <p className="font-semibold">{template.name}</p>
+                                                <Badge variant="secondary" className="text-[11px]">
+                                                    {template.sections} sections
+                                                </Badge>
+                                            </div>
+                                            <p className="mt-1 text-xs text-stone-500">
+                                                {template.questions} questions • {template.description}
+                                            </p>
+                                            <div className="mt-3 flex items-center gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    className="flex-1"
+                                                    onClick={() => handleUseTemplate(template.id)}
+                                                >
+                                                    Use Template
+                                                </Button>
+                                                {template.badge && (
+                                                    <Badge variant="outline" className="text-[10px]">
+                                                        {template.badge}
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                            <p className="mt-2 text-[11px] text-stone-500">
+                                                Applying a template will replace current fields.
+                                            </p>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
 
@@ -2943,45 +3032,35 @@ export default function FormBuilderPage() {
                                                 ))}
                                             </div>
                                         </div>
-
                                         <div>
                                             <p className="text-[11px] font-semibold uppercase text-stone-500 dark:text-stone-400">
                                                 Conditional Logic
                                             </p>
                                             <div className="mt-2 space-y-1">
                                                 {formDraft.conditionalLogic.length > 0 ? (
-                                                    formDraft.conditionalLogic.map((item) => (
-                                                        <p key={item}>• {item}</p>
-                                                    ))
+                                                    formDraft.conditionalLogic.map((item) => <p key={item}>{item}</p>)
                                                 ) : (
                                                     <p>No conditional logic suggestions yet.</p>
                                                 )}
                                             </div>
                                         </div>
-
                                         <div>
                                             <p className="text-[11px] font-semibold uppercase text-stone-500 dark:text-stone-400">
-                                                Reading-Level Hints
+                                                Reading Level
                                             </p>
                                             <div className="mt-2 space-y-1">
-                                                {formDraft.readingLevelHints.map((hint) => (
-                                                    <p key={hint}>• {hint}</p>
+                                                {formDraft.readingLevelHints.map((item) => (
+                                                    <p key={item}>{item}</p>
                                                 ))}
                                             </div>
                                         </div>
-
                                         <div>
                                             <p className="text-[11px] font-semibold uppercase text-stone-500 dark:text-stone-400">
-                                                Compliance Text
+                                                Translation Draft
                                             </p>
-                                            <Textarea value={formDraft.privacyNotice} readOnly rows={3} />
-                                        </div>
-
-                                        <div>
-                                            <p className="text-[11px] font-semibold uppercase text-stone-500 dark:text-stone-400">
-                                                Auto-Translation Draft
-                                            </p>
-                                            <Textarea value={formDraft.translationDraft} readOnly rows={4} />
+                                            <pre className="whitespace-pre-wrap rounded-md bg-white p-2 text-[11px] text-stone-600 dark:bg-stone-950 dark:text-stone-300">
+                                                {formDraft.translationDraft}
+                                            </pre>
                                         </div>
                                     </div>
                                 )}
@@ -2993,7 +3072,11 @@ export default function FormBuilderPage() {
                                 {/* Form Name */}
                                 <div className="space-y-2">
                                     <Label htmlFor="form-name">Form Name</Label>
-                                    <Input id="form-name" value={formName} onChange={(e) => setFormName(e.target.value)} />
+                                    <Input
+                                        id="form-name"
+                                        value={formName}
+                                        onChange={(e) => setFormName(e.target.value)}
+                                    />
                                 </div>
 
                                 {/* Form Description */}
@@ -3070,7 +3153,7 @@ export default function FormBuilderPage() {
                                                 variant="ghost"
                                                 size="sm"
                                                 onClick={() => handleLogoUrlChange("")}
-                                                >
+                                            >
                                                 Remove
                                             </Button>
                                         )}
@@ -3146,12 +3229,6 @@ export default function FormBuilderPage() {
                                         </p>
                                     </div>
                                 </div>
-                            </div>
-
-                            <div className="rounded-lg border border-stone-200 bg-stone-50 p-4 dark:border-stone-800 dark:bg-stone-900">
-                                <p className="text-xs text-stone-600 dark:text-stone-400">
-                                    Select a field from the canvas to edit its settings
-                                </p>
                             </div>
                         </div>
                     )}
