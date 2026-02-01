@@ -22,7 +22,7 @@ DEFAULT_DUO_REDIRECT_URI = "http://localhost:3000/auth/duo/callback"
 DEFAULT_META_OAUTH_REDIRECT_URI = "http://localhost:8000/integrations/meta/callback"
 RELEASE_PLEASE_MANIFEST_NAME = ".release-please-manifest.json"
 RELEASE_PLEASE_VERSION_NAME = ".release-please-version.json"
-FALLBACK_APP_VERSION = "0.20.0"
+FALLBACK_APP_VERSION = "0.54.0"
 
 
 def _read_release_please_manifest_version(path: Path) -> str | None:
