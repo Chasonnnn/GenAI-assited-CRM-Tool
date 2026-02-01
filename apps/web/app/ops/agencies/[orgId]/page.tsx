@@ -295,8 +295,12 @@ export default function AgencyDetailPage() {
         if (!org) return;
         setPurgeSubmitting(true);
         try {
-            await purgeOrganization(org.id);
-            toast.success('Organization deleted permanently');
+            const result = await purgeOrganization(org.id);
+            if (result.deleted) {
+                toast.success('Organization deleted permanently');
+            } else {
+                toast.success('Deletion scheduled; org removed from ops list');
+            }
             router.push('/ops/agencies');
         } catch (error) {
             console.error('Failed to purge organization:', error);

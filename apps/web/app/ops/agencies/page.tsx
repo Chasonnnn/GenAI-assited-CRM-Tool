@@ -54,7 +54,7 @@ export default function AgenciesPage() {
                     ...(search ? { search } : {}),
                     ...(statusFilter ? { status: statusFilter } : {}),
                 });
-                setAgencies(data.items);
+                setAgencies(data.items.filter((item) => !item.deleted_at));
                 setTotal(data.total);
             } catch (error) {
                 console.error('Failed to fetch agencies:', error);
