@@ -3,13 +3,12 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import LoginPage from '../app/login/page'
 
 describe('LoginPage', () => {
-    it('renders and can reveal other sign-in form', () => {
+    it('renders the login screen', () => {
         render(<LoginPage />)
 
         expect(screen.getByText('Welcome Back')).toBeInTheDocument()
-
-        fireEvent.click(screen.getByText('Other sign-in methods'))
-        expect(screen.getByLabelText('Email (optional)')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /sign in with google/i })).toBeInTheDocument()
+        expect(screen.queryByText('Other sign-in methods')).not.toBeInTheDocument()
     })
 
     it('shows loading state for Google sign-in button', () => {

@@ -1,19 +1,13 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ChevronDown, ChevronUp, ShieldCheck } from "lucide-react"
+import { ShieldCheck } from "lucide-react"
 import { getAuthApiBase } from "@/lib/auth-utils"
 
 export default function LoginPage() {
-  const [username, setUsername] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [showOtherOptions, setShowOtherOptions] = useState(false)
 
   const apiBase = getAuthApiBase()
 
@@ -36,24 +30,6 @@ export default function LoginPage() {
     try {
       const returnTo = getReturnTo()
       const url = buildGoogleLoginUrl()
-      try {
-        sessionStorage.setItem("auth_return_to", returnTo)
-      } catch {
-        // Ignore storage errors (private browsing, etc.)
-      }
-      window.location.assign(url)
-    } catch {
-      // Ignore navigation errors in non-browser runtimes.
-    }
-  }
-
-  const handleUsernameLogin = (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    const hint = username.trim()
-    try {
-      const returnTo = getReturnTo()
-      const url = buildGoogleLoginUrl(hint || undefined)
       try {
         sessionStorage.setItem("auth_return_to", returnTo)
       } catch {
@@ -118,61 +94,6 @@ export default function LoginPage() {
             <ShieldCheck className="w-5 h-5 mr-2" />
             {isLoading ? "Signing In..." : "Sign in with Google"}
           </Button>
-
-          <div className="relative py-2">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-gray-300/50" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="px-3 bg-transparent text-gray-500 font-medium tracking-wider">
-                Or use other sign-in options
-              </span>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <Button
-              variant="outline"
-              onClick={() => setShowOtherOptions(!showOtherOptions)}
-              className="w-full flex items-center justify-between px-4 py-3 border-gray-200 bg-gray-50/50 hover:bg-gray-100/50 text-gray-700 font-medium transition-all duration-200"
-            >
-              <span>Other sign-in methods</span>
-              {showOtherOptions ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
-            </Button>
-
-            {showOtherOptions && (
-              <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                <form onSubmit={handleUsernameLogin} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="username" className="text-sm font-medium text-gray-700">
-                      Email (optional)
-                    </Label>
-                    <Input
-                      id="username"
-                      type="email"
-                      placeholder="Enter your email (optional)"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      className="border-gray-200 bg-white placeholder:text-gray-400 text-gray-900 py-3 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all duration-200"
-                    />
-                  </div>
-
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    className="w-full border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold py-5 transition-all duration-300 rounded-lg"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? "Authenticating..." : "Continue with Google"}
-                  </Button>
-                </form>
-
-                <p className="text-xs text-center text-gray-400">
-                  You will be redirected to Google, then prompted for Duo verification
-                </p>
-              </div>
-            )}
-          </div>
 
           <div className="pt-4 space-y-3 border-t border-gray-100">
             <div className="text-center">
