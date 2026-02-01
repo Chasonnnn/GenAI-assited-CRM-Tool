@@ -10,6 +10,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react"
 import { useStreamChatMessage, useAISettings, useApproveAction, useRejectAction, useConversation } from "@/lib/hooks/use-ai"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "@/lib/api"
+import { useAuth } from "@/lib/auth-context"
 
 interface SurrogateOption {
     id: string
@@ -33,6 +34,23 @@ interface ProposedAction {
     status: string
 }
 
+interface ChatSession {
+    id: string
+    label: string
+    preview: string
+    updatedAt: string
+    entityType: "surrogate" | "global"
+    entityId: string | null
+    messages: Message[]
+}
+
+const CHAT_HISTORY_KEY = "ai-assistant-chat-history-v1"
+const CHAT_HISTORY_USER_KEY = "ai-assistant-chat-history-user-v1"
+const MAX_CHAT_HISTORY = 10
+const SESSION_MESSAGE_LIMIT = 50
+const SESSION_TITLE_MAX = 40
+const SESSION_PREVIEW_LIMIT = 80
+const GLOBAL_CONTEXT_VALUE = "__global__"
 
 // Fetch recent surrogates for the selector
 function useSurrogates() {
@@ -46,15 +64,61 @@ function useSurrogates() {
     });
 }
 
+function truncateText(text: string, max: number) {
+    if (text.length <= max) return text
+    return `${text.slice(0, max)}...`
+}
+
+function formatHistoryTime(value: string) {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return ""
+    return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+}
+
+function normalizeMessagesForSession(messages: Message[]) {
+    return messages
+        .filter((msg) => msg.id !== "welcome")
+        .slice(-SESSION_MESSAGE_LIMIT)
+        .map((msg) => ({
+            ...msg,
+            status: msg.status === "thinking" || msg.status === "streaming" ? "done" : msg.status,
+        }))
+}
+
+function safeParseHistory(raw: string | null): ChatSession[] {
+    if (!raw) return []
+    try {
+        const parsed = JSON.parse(raw)
+        if (!Array.isArray(parsed)) return []
+        return parsed
+            .filter((entry) => entry && typeof entry === "object")
+            .map((entry) => ({
+                id: typeof entry.id === "string" ? entry.id : `session-${Date.now()}`,
+                label: typeof entry.label === "string" ? entry.label : "Chat",
+                preview: typeof entry.preview === "string" ? entry.preview : "",
+                updatedAt: typeof entry.updatedAt === "string" ? entry.updatedAt : new Date().toISOString(),
+                entityType: entry.entityType === "surrogate" ? "surrogate" : "global",
+                entityId: typeof entry.entityId === "string" ? entry.entityId : null,
+                messages: Array.isArray(entry.messages) ? entry.messages : [],
+            }))
+            .slice(0, MAX_CHAT_HISTORY)
+    } catch {
+        return []
+    }
+}
+
 export default function AIAssistantPage() {
+    const { user } = useAuth()
     const [selectedSurrogateId, setSelectedSurrogateId] = useState<string>("")
     const [message, setMessage] = useState("")
     const [isStreaming, setIsStreaming] = useState(false)
+    const [chatHistory, setChatHistory] = useState<ChatSession[]>([])
+    const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
     const [messages, setMessages] = useState<Message[]>([
         {
             id: "welcome",
             role: "assistant",
-            content: "Hello! I'm your AI assistant. Select a surrogate above to start chatting about it, or use the quick actions to get started.",
+            content: "Hello! I'm your AI assistant. Ask me anything, or select a surrogate to add context.",
             timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
             status: "done",
         },
@@ -75,12 +139,13 @@ export default function AIAssistantPage() {
     const streamMessage = useStreamChatMessage()
     const approveAction = useApproveAction()
     const rejectAction = useRejectAction()
-    const conversationQuery = useConversation("surrogate", selectedSurrogateId, {
-        enabled: Boolean(selectedSurrogateId),
-    })
+    const conversationQuery = useConversation(
+        selectedSurrogateId ? "surrogate" : null,
+        selectedSurrogateId || null,
+        { enabled: true }
+    )
     const {
         data: conversation,
-        isLoading: conversationLoading,
         isFetching: conversationFetching,
     } = conversationQuery
 
@@ -115,50 +180,144 @@ export default function AIAssistantPage() {
         }))
     }, [conversation])
 
-    const buildWelcomeMessage = () => ({
+    const buildWelcomeMessage = useCallback(() => ({
         id: "welcome",
         role: "assistant" as const,
-        content: "Hello! I'm your AI assistant. Select a surrogate above to start chatting about it, or use the quick actions to get started.",
+        content: "Hello! I'm your AI assistant. Ask me anything, or select a surrogate to add context.",
         timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
         status: "done" as const,
-    })
+    }), [])
 
-    const previousSurrogateIdRef = useRef<string | null>(null)
+    const persistHistory = useCallback((next: ChatSession[]) => {
+        if (typeof window === "undefined") return
+        sessionStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(next))
+    }, [])
+
+    const updateHistory = useCallback(
+        (updater: (prev: ChatSession[]) => ChatSession[]) => {
+            setChatHistory((prev) => {
+                const next = updater(prev)
+                persistHistory(next)
+                return next
+            })
+        },
+        [persistHistory]
+    )
+
+    const buildSessionLabel = useCallback((entityType: "surrogate" | "global", entityId: string | null) => {
+        if (entityType === "surrogate" && entityId) {
+            const surrogate = surrogates?.find((item) => item.id === entityId)
+            if (surrogate) {
+                return truncateText(
+                    `#${surrogate.surrogate_number} \u2022 ${surrogate.full_name}`,
+                    SESSION_TITLE_MAX
+                )
+            }
+            return "Surrogate Chat"
+        }
+        return "Global Chat"
+    }, [surrogates])
+
+    const derivePreview = useCallback((sessionMessages: Message[]) => {
+        const lastUserMessage = [...sessionMessages].reverse().find((msg) => msg.role === "user" && msg.content)
+        if (!lastUserMessage) return ""
+        return truncateText(lastUserMessage.content, SESSION_PREVIEW_LIMIT)
+    }, [])
+
+    const upsertSession = useCallback(
+        (session: ChatSession) => {
+            updateHistory((prev) => {
+                const filtered = prev.filter((item) => item.id !== session.id)
+                const next = [session, ...filtered].slice(0, MAX_CHAT_HISTORY)
+                return next
+            })
+        },
+        [updateHistory]
+    )
+
+    const updateSessionMessages = useCallback(
+        (sessionId: string, sessionMessages: Message[], context: { entityType: "surrogate" | "global"; entityId: string | null }) => {
+            const normalized = normalizeMessagesForSession(sessionMessages)
+            const session: ChatSession = {
+                id: sessionId,
+                label: buildSessionLabel(context.entityType, context.entityId),
+                preview: derivePreview(sessionMessages),
+                updatedAt: new Date().toISOString(),
+                entityType: context.entityType,
+                entityId: context.entityId,
+                messages: normalized,
+            }
+            upsertSession(session)
+        },
+        [buildSessionLabel, derivePreview, upsertSession]
+    )
+
+    const clearChatHistory = useCallback(() => {
+        setChatHistory([])
+        setActiveSessionId(null)
+        setMessages([buildWelcomeMessage()])
+        if (typeof window !== "undefined") {
+            sessionStorage.removeItem(CHAT_HISTORY_KEY)
+            sessionStorage.removeItem(CHAT_HISTORY_USER_KEY)
+        }
+    }, [buildWelcomeMessage])
+
+    const historyLoadedRef = useRef(false)
 
     useEffect(() => {
-        const selectionChanged = previousSurrogateIdRef.current !== selectedSurrogateId
-        const isWelcomeOnly = messages.length === 1 && messages[0]?.id === "welcome"
-        if (selectionChanged) {
-            previousSurrogateIdRef.current = selectedSurrogateId
-            if (!isWelcomeOnly) {
-                setMessages([buildWelcomeMessage()])
+        if (typeof window === "undefined") return
+        if (!user?.user_id) {
+            historyLoadedRef.current = false
+            clearChatHistory()
+            return
+        }
+        const storedUserId = sessionStorage.getItem(CHAT_HISTORY_USER_KEY)
+        if (storedUserId && storedUserId !== user.user_id) {
+            clearChatHistory()
+            historyLoadedRef.current = false
+        }
+        if (!historyLoadedRef.current) {
+            const storedHistory = safeParseHistory(sessionStorage.getItem(CHAT_HISTORY_KEY))
+            setChatHistory(storedHistory)
+            if (storedHistory.length > 0) {
+                const mostRecent = storedHistory[0]
+                setActiveSessionId(mostRecent.id)
+                if (mostRecent.entityType === "surrogate" && mostRecent.entityId) {
+                    setSelectedSurrogateId(mostRecent.entityId)
+                } else {
+                    setSelectedSurrogateId("")
+                }
             }
+            historyLoadedRef.current = true
+        }
+        sessionStorage.setItem(CHAT_HISTORY_USER_KEY, user.user_id)
+    }, [user?.user_id, clearChatHistory])
+
+    const currentSession = useMemo(
+        () => chatHistory.find((session) => session.id === activeSessionId) || null,
+        [chatHistory, activeSessionId]
+    )
+
+    useEffect(() => {
+        if (isStreaming) return
+        if (currentSession) {
+            const sessionMessages = currentSession.messages.length
+                ? currentSession.messages
+                : [buildWelcomeMessage()]
+            setMessages(sessionMessages)
             return
         }
-        if (!selectedSurrogateId) {
-            if (!isWelcomeOnly) {
-                setMessages([buildWelcomeMessage()])
-            }
-            return
-        }
-        if (isStreaming || conversationFetching) {
-            return
-        }
-        if (conversationMessages.length > 0) {
+        if (!conversationFetching && conversationMessages.length > 0) {
             setMessages(conversationMessages)
             return
         }
-        const hasLocalMessages = messages.some((msg) => msg.id !== "welcome")
-        if (!conversationLoading && !hasLocalMessages && !isWelcomeOnly) {
-            setMessages([buildWelcomeMessage()])
-        }
+        setMessages([buildWelcomeMessage()])
     }, [
-        selectedSurrogateId,
+        currentSession,
         conversationMessages,
-        conversationLoading,
         conversationFetching,
         isStreaming,
-        messages,
+        buildWelcomeMessage,
     ])
 
     // Scroll to bottom when messages change
@@ -182,21 +341,127 @@ export default function AIAssistantPage() {
         stopRequestedRef.current = false
     }, [selectedSurrogateId, isStreaming])
 
+    const ensureSessionId = useCallback(
+        (context: { entityType: "surrogate" | "global"; entityId: string | null }) => {
+            const active = activeSessionId
+                ? chatHistory.find((session) => session.id === activeSessionId)
+                : null
+            if (active && active.entityType === context.entityType && active.entityId === context.entityId) {
+                return active.id
+            }
+            const existing = chatHistory.find(
+                (session) => session.entityType === context.entityType && session.entityId === context.entityId
+            )
+            if (existing) {
+                setActiveSessionId(existing.id)
+                return existing.id
+            }
+
+            const sessionId = `session-${Date.now()}`
+            upsertSession({
+                id: sessionId,
+                label: buildSessionLabel(context.entityType, context.entityId),
+                preview: "",
+                updatedAt: new Date().toISOString(),
+                entityType: context.entityType,
+                entityId: context.entityId,
+                messages: [],
+            })
+            setActiveSessionId(sessionId)
+            return sessionId
+        },
+        [activeSessionId, chatHistory, buildSessionLabel, upsertSession]
+    )
+
     const updateMessageById = useCallback((id: string, updater: (msg: Message) => Message) => {
         setMessages((prev) => prev.map((msg) => (msg.id === id ? updater(msg) : msg)))
     }, [])
 
-    const setAssistantError = useCallback((assistantId: string, errorText: string) => {
-        updateMessageById(assistantId, (msg) => ({
-            ...msg,
-            content: errorText,
-            status: "error",
-        }))
-    }, [updateMessageById])
+    const updateMessageAndSession = useCallback(
+        (
+            id: string,
+            updater: (msg: Message) => Message,
+            sessionId: string,
+            context: { entityType: "surrogate" | "global"; entityId: string | null }
+        ) => {
+            setMessages((prev) => {
+                const next = prev.map((msg) => (msg.id === id ? updater(msg) : msg))
+                updateSessionMessages(sessionId, next, context)
+                return next
+            })
+        },
+        [updateSessionMessages]
+    )
+
+    const handleSelectSession = useCallback(
+        (session: ChatSession) => {
+            setActiveSessionId(session.id)
+            if (session.entityType === "surrogate" && session.entityId) {
+                setSelectedSurrogateId(session.entityId)
+            } else {
+                setSelectedSurrogateId("")
+            }
+            const sessionMessages = session.messages.length ? session.messages : [buildWelcomeMessage()]
+            setMessages(sessionMessages)
+        },
+        [buildWelcomeMessage]
+    )
+
+    const handleNewChat = useCallback(() => {
+        const context = selectedSurrogateId
+            ? { entityType: "surrogate" as const, entityId: selectedSurrogateId }
+            : { entityType: "global" as const, entityId: null }
+        const sessionId = `session-${Date.now()}`
+        upsertSession({
+            id: sessionId,
+            label: buildSessionLabel(context.entityType, context.entityId),
+            preview: "",
+            updatedAt: new Date().toISOString(),
+            entityType: context.entityType,
+            entityId: context.entityId,
+            messages: [],
+        })
+        setActiveSessionId(sessionId)
+        setMessages([buildWelcomeMessage()])
+    }, [selectedSurrogateId, buildSessionLabel, upsertSession, buildWelcomeMessage])
+
+    const setAssistantError = useCallback(
+        (
+            assistantId: string,
+            errorText: string,
+            sessionId?: string,
+            context?: { entityType: "surrogate" | "global"; entityId: string | null }
+        ) => {
+            if (sessionId && context) {
+                updateMessageAndSession(
+                    assistantId,
+                    (msg) => ({
+                        ...msg,
+                        content: errorText,
+                        status: "error",
+                    }),
+                    sessionId,
+                    context
+                )
+                return
+            }
+            updateMessageById(assistantId, (msg) => ({
+                ...msg,
+                content: errorText,
+                status: "error",
+            }))
+        },
+        [updateMessageAndSession, updateMessageById]
+    )
 
     const handleSend = async () => {
         const trimmedMessage = message.trim()
-        if (!trimmedMessage || !selectedSurrogateId || !isAIEnabled || isStreaming) return
+        if (!trimmedMessage || !isAIEnabled || isStreaming) return
+
+        const context = selectedSurrogateId
+            ? { entityType: "surrogate" as const, entityId: selectedSurrogateId }
+            : { entityType: "global" as const, entityId: null }
+        const sessionId = ensureSessionId(context)
 
         const timestamp = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
         const userMessage: Message = {
@@ -215,7 +480,11 @@ export default function AIAssistantPage() {
             status: "thinking",
         }
 
-        setMessages((prev) => [...prev, userMessage, assistantMessage])
+        setMessages((prev) => {
+            const next = [...prev, userMessage, assistantMessage]
+            updateSessionMessages(sessionId, next, context)
+            return next
+        })
         setMessage("")
 
         streamAbortRef.current?.abort()
@@ -227,11 +496,15 @@ export default function AIAssistantPage() {
 
         try {
             await streamMessage(
-                {
-                    entity_type: 'surrogate',
-                    entity_id: selectedSurrogateId,
-                    message: trimmedMessage,
-                },
+                context.entityType === "surrogate" && context.entityId
+                    ? {
+                        entity_type: "surrogate",
+                        entity_id: context.entityId,
+                        message: trimmedMessage,
+                    }
+                    : {
+                        message: trimmedMessage,
+                    },
                 (event) => {
                     if (event.type === 'start') {
                         updateMessageById(assistantId, (msg) => ({
@@ -253,20 +526,27 @@ export default function AIAssistantPage() {
                     }
 
                     if (event.type === 'done') {
-                        updateMessageById(assistantId, (msg) => ({
-                            ...msg,
-                            content: event.data.content,
-                            proposed_actions: event.data.proposed_actions,
-                            status: "done",
-                            timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-                        }))
+                        updateMessageAndSession(
+                            assistantId,
+                            (msg) => ({
+                                ...msg,
+                                content: event.data.content,
+                                proposed_actions: event.data.proposed_actions,
+                                status: "done",
+                                timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+                            }),
+                            sessionId,
+                            context
+                        )
                         return
                     }
 
                     if (event.type === 'error') {
                         setAssistantError(
                             assistantId,
-                            `Sorry, I encountered an error: ${event.data.message || 'Unknown error'}. Please try again.`
+                            `Sorry, I encountered an error: ${event.data.message || 'Unknown error'}. Please try again.`,
+                            sessionId,
+                            context
                         )
                     }
                 },
@@ -275,18 +555,25 @@ export default function AIAssistantPage() {
         } catch (error) {
             if (error instanceof DOMException && error.name === 'AbortError') {
                 if (stopRequestedRef.current) {
-                    updateMessageById(assistantId, (msg) => ({
-                        ...msg,
-                        content: msg.content || "Stopped.",
-                        status: "done",
-                    }))
+                    updateMessageAndSession(
+                        assistantId,
+                        (msg) => ({
+                            ...msg,
+                            content: msg.content || "Stopped.",
+                            status: "done",
+                        }),
+                        sessionId,
+                        context
+                    )
                 }
                 stopRequestedRef.current = false
                 return
             }
             setAssistantError(
                 assistantId,
-                `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`
+                `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
+                sessionId,
+                context
             )
         } finally {
             setIsStreaming(false)
@@ -301,20 +588,35 @@ export default function AIAssistantPage() {
         setIsStreaming(false)
     }, [isStreaming])
 
+    const syncSessionFromMessages = useCallback(
+        (nextMessages: Message[]) => {
+            if (!activeSessionId) return
+            const context = selectedSurrogateId
+                ? { entityType: "surrogate" as const, entityId: selectedSurrogateId }
+                : { entityType: "global" as const, entityId: null }
+            updateSessionMessages(activeSessionId, nextMessages, context)
+        },
+        [activeSessionId, selectedSurrogateId, updateSessionMessages]
+    )
+
     const handleApprove = async (approvalId: string | null) => {
         if (!approvalId) return
         try {
             await approveAction.mutateAsync(approvalId)
             // Update the action status in messages
-            setMessages(prev => prev.map(msg => {
-                if (!msg.proposed_actions) return msg
-                return {
-                    ...msg,
-                    proposed_actions: msg.proposed_actions.map(action =>
-                        action.approval_id === approvalId ? { ...action, status: 'approved' } : action
-                    ),
-                }
-            }))
+            setMessages(prev => {
+                const next = prev.map(msg => {
+                    if (!msg.proposed_actions) return msg
+                    return {
+                        ...msg,
+                        proposed_actions: msg.proposed_actions.map(action =>
+                            action.approval_id === approvalId ? { ...action, status: 'approved' } : action
+                        ),
+                    }
+                })
+                syncSessionFromMessages(next)
+                return next
+            })
         } catch (error) {
             console.error('Failed to approve action:', error)
         }
@@ -324,19 +626,49 @@ export default function AIAssistantPage() {
         if (!approvalId) return
         try {
             await rejectAction.mutateAsync(approvalId)
-            setMessages(prev => prev.map(msg => {
-                if (!msg.proposed_actions) return msg
-                return {
-                    ...msg,
-                    proposed_actions: msg.proposed_actions.map(action =>
-                        action.approval_id === approvalId ? { ...action, status: 'rejected' } : action
-                    ),
-                }
-            }))
+            setMessages(prev => {
+                const next = prev.map(msg => {
+                    if (!msg.proposed_actions) return msg
+                    return {
+                        ...msg,
+                        proposed_actions: msg.proposed_actions.map(action =>
+                            action.approval_id === approvalId ? { ...action, status: 'rejected' } : action
+                        ),
+                    }
+                })
+                syncSessionFromMessages(next)
+                return next
+            })
         } catch (error) {
             console.error('Failed to reject action:', error)
         }
     }
+
+    const handleSurrogateChange = useCallback((value?: string) => {
+        const nextId = value ?? ""
+        setSelectedSurrogateId(nextId)
+        if (!nextId) {
+            const globalSession = chatHistory.find((session) => session.entityType === "global")
+            if (globalSession) {
+                setActiveSessionId(globalSession.id)
+                setMessages(globalSession.messages.length ? globalSession.messages : [buildWelcomeMessage()])
+                return
+            }
+            setActiveSessionId(null)
+            setMessages([buildWelcomeMessage()])
+            return
+        }
+        const session = chatHistory.find(
+            (item) => item.entityType === "surrogate" && item.entityId === nextId
+        )
+        if (session) {
+            setActiveSessionId(session.id)
+            setMessages(session.messages.length ? session.messages : [buildWelcomeMessage()])
+            return
+        }
+        setActiveSessionId(null)
+        setMessages([buildWelcomeMessage()])
+    }, [chatHistory, buildWelcomeMessage])
 
     const selectedSurrogate = surrogates?.find(surrogate => surrogate.id === selectedSurrogateId)
     const isAIEnabled = aiSettings?.is_enabled
@@ -351,11 +683,15 @@ export default function AIAssistantPage() {
                     <p className="text-xs text-muted-foreground">Get help with your surrogates, tasks, and workflows</p>
                 </div>
                 {/* Surrogate Selector */}
-                <Select value={selectedSurrogateId} onValueChange={(v) => setSelectedSurrogateId(v ?? "")}>
+                <Select
+                    value={selectedSurrogateId || GLOBAL_CONTEXT_VALUE}
+                    onValueChange={(v) => handleSurrogateChange(v === GLOBAL_CONTEXT_VALUE ? "" : v)}
+                >
                     <SelectTrigger className="w-64">
-                        <SelectValue placeholder={surrogatesLoading ? "Loading surrogates..." : "Select a surrogate"} />
+                        <SelectValue placeholder={surrogatesLoading ? "Loading surrogates..." : "Global mode"} />
                     </SelectTrigger>
                     <SelectContent>
+                        <SelectItem value={GLOBAL_CONTEXT_VALUE}>Global mode</SelectItem>
                         {surrogates?.map(surrogate => (
                             <SelectItem key={surrogate.id} value={surrogate.id}>
                                 #{surrogate.surrogate_number} - {surrogate.full_name}
@@ -419,7 +755,7 @@ export default function AIAssistantPage() {
                                         size="sm"
                                         className="w-full justify-start gap-2 bg-transparent text-sm"
                                         onClick={() => setMessage(action.label)}
-                                        disabled={!selectedSurrogateId}
+                                        disabled={!selectedSurrogateId || !isAIEnabled || isStreaming}
                                     >
                                         <action.icon className={`h-3.5 w-3.5 ${action.color}`} />
                                         {action.label}
@@ -437,7 +773,7 @@ export default function AIAssistantPage() {
                                     <button
                                         key={index}
                                         onClick={() => setMessage(suggestion)}
-                                        disabled={!selectedSurrogateId}
+                                        disabled={!selectedSurrogateId || !isAIEnabled || isStreaming}
                                         className="flex w-full items-start gap-2 rounded-md py-1 text-left hover:bg-muted/50 transition-colors disabled:opacity-50"
                                     >
                                         <SparklesIcon className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-teal-500" />
@@ -461,25 +797,46 @@ export default function AIAssistantPage() {
 
                         {/* Chat History */}
                         <Card className="gap-2 py-3 px-3">
-                            <div className="text-sm font-medium">Chat History</div>
+                            <div className="flex items-center justify-between">
+                                <div className="text-sm font-medium">Chat History</div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs"
+                                    onClick={handleNewChat}
+                                    disabled={!isAIEnabled || isStreaming}
+                                >
+                                    New Chat
+                                </Button>
+                            </div>
                             <div className="text-xs text-muted-foreground">Recent conversations</div>
                             <div className="space-y-1 mt-1">
-                                {messages.length > 1 ? (
+                                {chatHistory.length > 0 ? (
                                     <div className="space-y-1">
-                                        {messages
-                                            .filter(m => m.role === 'user')
-                                            .slice(-5)
-                                            .reverse()
-                                            .map((msg, idx) => (
-                                                <div
-                                                    key={msg.id || idx}
-                                                    className="text-xs p-2 rounded-md bg-muted/50 truncate"
-                                                    title={msg.content}
-                                                >
-                                                    {msg.content.slice(0, 40)}{msg.content.length > 40 ? '...' : ''}
+                                        {chatHistory.map((session) => (
+                                            <button
+                                                key={session.id}
+                                                data-testid="chat-history-item"
+                                                onClick={() => handleSelectSession(session)}
+                                                disabled={isStreaming}
+                                                className={`w-full rounded-md border px-2 py-1.5 text-left transition-colors ${session.id === activeSessionId
+                                                    ? "border-primary/30 bg-primary/5"
+                                                    : "border-transparent bg-muted/40 hover:bg-muted/60"
+                                                    }`}
+                                            >
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <span className="text-xs font-medium text-foreground">
+                                                        {session.label}
+                                                    </span>
+                                                    <span className="text-[10px] text-muted-foreground">
+                                                        {formatHistoryTime(session.updatedAt)}
+                                                    </span>
                                                 </div>
-                                            ))
-                                        }
+                                                <div className="text-[10px] text-muted-foreground truncate">
+                                                    {session.preview || "New chat"}
+                                                </div>
+                                            </button>
+                                        ))}
                                     </div>
                                 ) : (
                                     <p className="text-xs text-muted-foreground italic">
@@ -606,7 +963,7 @@ export default function AIAssistantPage() {
                     <CardContent className="shrink-0 border-t bg-background p-3">
                         <div className="flex gap-2">
                             <Input
-                                placeholder={selectedSurrogateId ? "Type your message..." : "Select a surrogate to start chatting"}
+                                placeholder="Ask anything..."
                                 value={message}
                                 onChange={(e) => setMessage(e.target.value)}
                                 onKeyDown={(e) => {
@@ -616,7 +973,7 @@ export default function AIAssistantPage() {
                                     }
                                 }}
                                 className="flex-1 text-sm"
-                                disabled={!selectedSurrogateId || !isAIEnabled || isStreaming}
+                                disabled={!isAIEnabled || isStreaming}
                             />
                             {isStreaming ? (
                                 <Button
@@ -631,7 +988,7 @@ export default function AIAssistantPage() {
                                 <Button
                                     onClick={handleSend}
                                     size="icon"
-                                    disabled={!message.trim() || !selectedSurrogateId || !isAIEnabled}
+                                    disabled={!message.trim() || !isAIEnabled}
                                     aria-label="Send message"
                                 >
                                     <SendIcon className="h-4 w-4" />
@@ -639,7 +996,9 @@ export default function AIAssistantPage() {
                             )}
                         </div>
                         <p className="mt-1.5 text-[10px] text-muted-foreground">
-                            {!selectedSurrogateId ? "Select a surrogate above to start" : "Press Enter to send"}
+                            {selectedSurrogateId
+                                ? "Press Enter to send"
+                                : "Global mode \u2014 select a surrogate to add context"}
                         </p>
                     </CardContent>
                 </Card>
