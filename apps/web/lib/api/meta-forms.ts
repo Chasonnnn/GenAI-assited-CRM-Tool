@@ -63,3 +63,7 @@ export async function updateMetaFormMapping(
 ): Promise<{ success: boolean; message?: string }> {
     return api.put(`/integrations/meta/forms/${formId}/mapping`, payload)
 }
+
+export async function deleteMetaForm(formId: string): Promise<void> {
+    return api.delete(`/integrations/meta/forms/${formId}`)
+}

@@ -6,6 +6,17 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import {
     Table,
     TableBody,
     TableCell,
@@ -13,9 +24,10 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { useMetaForms, useSyncMetaForms } from "@/lib/hooks/use-meta-forms"
+import { useDeleteMetaForm, useMetaForms, useSyncMetaForms } from "@/lib/hooks/use-meta-forms"
 import { formatRelativeTime } from "@/lib/formatters"
-import { AlertTriangleIcon, CheckCircleIcon, Loader2Icon, RefreshCwIcon } from "lucide-react"
+import { AlertTriangleIcon, CheckCircleIcon, Loader2Icon, RefreshCwIcon, TrashIcon } from "lucide-react"
+import { toast } from "sonner"
 
 const statusBadge = (status: string) => {
     if (status === "mapped") {
@@ -45,8 +57,18 @@ const statusBadge = (status: string) => {
 export default function MetaFormsPage() {
     const { data: forms = [], isLoading } = useMetaForms()
     const syncMutation = useSyncMetaForms()
+    const deleteForm = useDeleteMetaForm()
 
     const needsMapping = forms.filter((form) => form.mapping_status !== "mapped")
+
+    const handleDelete = async (formId: string) => {
+        try {
+            await deleteForm.mutateAsync(formId)
+            toast.success("Form deleted")
+        } catch {
+            toast.error("Failed to delete form")
+        }
+    }
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -141,13 +163,43 @@ export default function MetaFormsPage() {
                                                     : "—"}
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    render={<Link href={`/settings/integrations/meta/forms/${form.id}`} />}
-                                                >
-                                                    Manage mapping
-                                                </Button>
+                                                <div className="flex justify-end gap-2">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        render={<Link href={`/settings/integrations/meta/forms/${form.id}`} />}
+                                                    >
+                                                        Manage mapping
+                                                    </Button>
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                className="text-destructive hover:text-destructive"
+                                                                disabled={deleteForm.isPending}
+                                                            >
+                                                                <TrashIcon className="mr-2 size-4" aria-hidden="true" />
+                                                                Delete
+                                                            </Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>Delete form mapping?</AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                    This removes the form and its mapping rules. Incoming leads for this form
+                                                                    will pause until you re‑sync or paste fields again.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                <AlertDialogAction onClick={() => handleDelete(form.id)} disabled={deleteForm.isPending}>
+                                                                    {deleteForm.isPending ? "Deleting…" : "Delete form"}
+                                                                </AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))}

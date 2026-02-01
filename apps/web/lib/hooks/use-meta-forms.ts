@@ -4,6 +4,7 @@ import {
     listMetaForms,
     syncMetaForms,
     updateMetaFormMapping,
+    deleteMetaForm,
     type MetaFormMappingUpdate,
 } from '@/lib/api/meta-forms'
 
@@ -44,6 +45,16 @@ export function useUpdateMetaFormMapping(formId: string) {
         mutationFn: (payload: MetaFormMappingUpdate) => updateMetaFormMapping(formId, payload),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: metaFormsKeys.mapping(formId) })
+            queryClient.invalidateQueries({ queryKey: metaFormsKeys.list() })
+        },
+    })
+}
+
+export function useDeleteMetaForm() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (formId: string) => deleteMetaForm(formId),
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: metaFormsKeys.list() })
         },
     })

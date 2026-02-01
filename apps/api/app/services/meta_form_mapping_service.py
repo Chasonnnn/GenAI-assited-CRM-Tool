@@ -34,6 +34,15 @@ def get_form(db: Session, org_id: UUID, form_id: UUID) -> MetaForm | None:
     )
 
 
+def delete_form(db: Session, org_id: UUID, form_id: UUID) -> bool:
+    form = get_form(db, org_id, form_id)
+    if not form:
+        return False
+    db.delete(form)
+    db.commit()
+    return True
+
+
 def get_form_by_external_id(
     db: Session,
     org_id: UUID,

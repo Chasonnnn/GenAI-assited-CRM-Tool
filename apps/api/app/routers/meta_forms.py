@@ -217,3 +217,15 @@ def update_meta_form_mapping(
         mapping_version_id=form.mapping_version_id,
         message="Mapping saved and reprocessing queued.",
     )
+
+
+@router.delete("/{form_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_meta_form(
+    form_id: UUID,
+    _csrf: None = Depends(require_csrf_header),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    deleted = meta_form_mapping_service.delete_form(db, session.org_id, form_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
