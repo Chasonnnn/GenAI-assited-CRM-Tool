@@ -9,6 +9,7 @@ Provides:
 """
 
 import json
+from urllib.parse import urlparse
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -78,6 +79,18 @@ def _build_duo_state_payload(
 
 def _parse_duo_state_payload(cookie_value: str) -> dict:
     return json.loads(cookie_value)
+
+
+def _is_ops_origin(request: Request) -> bool:
+    origin = request.headers.get("origin") or request.headers.get("referer") or ""
+    if not origin:
+        return False
+    try:
+        host = (urlparse(origin).hostname or "").lower()
+    except Exception:
+        return False
+    ops_host = f"ops.{settings.PLATFORM_BASE_DOMAIN}" if settings.PLATFORM_BASE_DOMAIN else ""
+    return bool(ops_host and host == ops_host)
 
 
 # =============================================================================
@@ -397,16 +410,21 @@ def complete_mfa_challenge(
 
     # Get membership for new token
     membership = membership_service.get_membership_by_user_id(db, user.id)
-
-    if not membership:
-        raise HTTPException(status_code=403, detail="No organization membership")
+    if membership:
+        org_id = membership.organization_id
+        role_value = membership.role
+    else:
+        if not (user.is_platform_admin and _is_ops_origin(request)):
+            raise HTTPException(status_code=403, detail="No organization membership")
+        org_id = session.org_id
+        role_value = session.role.value
 
     # Issue new session with mfa_verified=True
 
     new_token = create_session_token(
         user.id,
-        membership.organization_id,
-        membership.role,
+        org_id,
+        role_value,
         user.token_version,
         mfa_verified=True,  # Now verified!
         mfa_required=True,
@@ -422,7 +440,7 @@ def complete_mfa_challenge(
     session_service.create_session(
         db=db,
         user_id=user.id,
-        org_id=membership.organization_id,
+        org_id=org_id,
         token=new_token,
         request=request,
     )
@@ -678,13 +696,19 @@ def verify_duo_callback(
 
     # Issue new session with mfa_verified=True
     membership = membership_service.get_membership_by_user_id(db, user.id)
-    if not membership:
-        raise HTTPException(status_code=403, detail="No organization membership")
+    if membership:
+        org_id = membership.organization_id
+        role_value = membership.role
+    else:
+        if not (user.is_platform_admin and _is_ops_origin(request)):
+            raise HTTPException(status_code=403, detail="No organization membership")
+        org_id = session.org_id
+        role_value = session.role.value
 
     new_token = create_session_token(
         user.id,
-        membership.organization_id,
-        membership.role,
+        org_id,
+        role_value,
         user.token_version,
         mfa_verified=True,
         mfa_required=True,
@@ -700,7 +724,7 @@ def verify_duo_callback(
     session_service.create_session(
         db=db,
         user_id=user.id,
-        org_id=membership.organization_id,
+        org_id=org_id,
         token=new_token,
         request=request,
     )

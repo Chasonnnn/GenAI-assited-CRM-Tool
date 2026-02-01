@@ -58,6 +58,18 @@ def _get_origin_host(request: Request) -> str:
         return ""
 
 
+def _allow_ops_mfa_fallback(request: Request, origin_host: str, is_platform_admin: bool) -> bool:
+    """Allow ops MFA requests to bypass org membership checks for platform admins."""
+    if not is_platform_admin:
+        return False
+    if not request.url.path.startswith("/mfa"):
+        return False
+    ops_host = f"ops.{settings.PLATFORM_BASE_DOMAIN}" if settings.PLATFORM_BASE_DOMAIN else ""
+    if not ops_host:
+        return False
+    return origin_host == ops_host
+
+
 def _validate_request_host(request: Request, org_slug: str) -> None:
     """
     Validate that the request host matches the organization's subdomain.
@@ -285,18 +297,54 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
         request.state.user_session = session
         return session
 
+    origin_host = _get_origin_host(request)
     membership = db.query(Membership).filter(Membership.user_id == user.id).first()
 
-    if not membership:
-        raise HTTPException(status_code=403, detail="No organization membership")
-    if not membership.is_active:
+    def _build_session_from_payload() -> UserSession:
+        org_id_value = payload.get("org_id")
+        role_value = payload.get("role")
+        if not org_id_value or not role_value or not Role.has_value(role_value):
+            raise HTTPException(status_code=403, detail="No organization membership")
+        try:
+            org_id_uuid = UUID(str(org_id_value))
+        except Exception as exc:
+            raise HTTPException(status_code=403, detail="No organization membership") from exc
+
+        return UserSession(
+            user_id=user.id,
+            org_id=org_id_uuid,
+            role=Role(role_value),
+            email=user.email,
+            display_name=user.display_name,
+            mfa_verified=mfa_verified,
+            mfa_required=mfa_required,
+            token_hash=token_hash,
+        )
+
+    if not membership or not membership.is_active:
+        if _allow_ops_mfa_fallback(request, origin_host, user.is_platform_admin):
+            session = _build_session_from_payload()
+            if session.mfa_required and not session.mfa_verified:
+                if not _is_mfa_bypass_allowed(request):
+                    raise HTTPException(status_code=403, detail="MFA verification required")
+            request.state.user_session = session
+            return session
+        if not membership:
+            raise HTTPException(status_code=403, detail="No organization membership")
         raise HTTPException(status_code=403, detail="Membership inactive")
+
     org = db.query(Organization).filter(Organization.id == membership.organization_id).first()
     if not org or org.deleted_at:
+        if _allow_ops_mfa_fallback(request, origin_host, user.is_platform_admin):
+            session = _build_session_from_payload()
+            if session.mfa_required and not session.mfa_verified:
+                if not _is_mfa_bypass_allowed(request):
+                    raise HTTPException(status_code=403, detail="MFA verification required")
+            request.state.user_session = session
+            return session
         raise HTTPException(status_code=403, detail="Organization is scheduled for deletion")
 
     # Validate request host matches org's subdomain (cross-tenant protection)
-    origin_host = _get_origin_host(request)
     if not (user.is_platform_admin and origin_host == f"ops.{settings.PLATFORM_BASE_DOMAIN}"):
         _validate_request_host(request, org.slug)
 
