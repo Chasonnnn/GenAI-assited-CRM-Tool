@@ -353,6 +353,8 @@ def build_mapping_preview(
         if idx < len(keys):
             suggestion.csv_column = keys[idx]
             if keys[idx] in system_keys:
+                if keys[idx] == "meta_platform" and suggestion.suggested_field == "source":
+                    continue
                 suggestion.default_action = "metadata"
 
     # AI availability (for optional AI mapping)

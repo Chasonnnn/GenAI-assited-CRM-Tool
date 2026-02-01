@@ -49,6 +49,31 @@ def test_keyword_match_not_overridden_by_fuzzy():
     assert "similar" not in suggestions[0].reason.lower()
 
 
+def test_c_sections_question_maps_to_count():
+    from app.services import import_detection_service as detection
+
+    suggestions = detection.analyze_columns(
+        ["How Many C Sections Have You Had"],
+        [["2"]],
+        allowed_fields=detection.AVAILABLE_IMPORT_FIELDS,
+    )
+
+    assert suggestions[0].suggested_field == "num_csections"
+
+
+def test_platform_column_maps_to_meta_source():
+    from app.services import import_detection_service as detection
+
+    suggestions = detection.analyze_columns(
+        ["Platform"],
+        [["facebook"]],
+        allowed_fields=detection.AVAILABLE_IMPORT_FIELDS,
+    )
+
+    assert suggestions[0].suggested_field == "source"
+    assert suggestions[0].transformation == "source_meta_platform"
+
+
 @pytest.mark.asyncio
 async def test_template_auto_apply_overrides_detection(
     authed_client: AsyncClient,

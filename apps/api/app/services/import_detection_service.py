@@ -147,6 +147,12 @@ EXACT_COLUMN_MAPPING: dict[str, str] = {
     "num_csections": "num_csections",
     "c_sections": "num_csections",
     "csections": "num_csections",
+    "c_section_count": "num_csections",
+    "c_sections_count": "num_csections",
+    "how_many_c_sections": "num_csections",
+    "how_many_csections": "num_csections",
+    "how_many_c_sections_have_you_had": "num_csections",
+    "how_many_csections_have_you_had": "num_csections",
     # Source
     "source": "source",
     "lead_source": "source",
@@ -178,7 +184,15 @@ KEYWORD_PATTERNS: dict[str, list[str]] = {
         "how many.*kids",
         "how many.*children",
     ],
-    "num_csections": ["c-section", "csection", "cesarean"],
+    "num_csections": [
+        "c-section",
+        "c-sections",
+        "csection",
+        "c sections",
+        "c section",
+        "c_sections",
+        "cesarean",
+    ],
     "is_non_smoker": [
         "smoke",
         "nicotine",
@@ -325,7 +339,7 @@ CANONICAL_NAMES: dict[str, list[str]] = {
     "is_non_smoker": ["non smoker", "nonsmoker", "smoking status"],
     "has_surrogate_experience": ["surrogate experience", "prior surrogacy"],
     "num_deliveries": ["number deliveries", "delivery count", "birth count"],
-    "num_csections": ["number csections", "cesarean count"],
+    "num_csections": ["number csections", "c sections", "c section count", "cesarean count"],
 }
 
 
