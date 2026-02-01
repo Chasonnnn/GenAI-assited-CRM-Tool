@@ -6,7 +6,7 @@ import Link from "@/components/app-link";
 import { getPlatformMe, getPlatformStats, type PlatformUser } from '@/lib/api/platform';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, Building2, Bell, LogOut, Loader2 } from 'lucide-react';
+import { ShieldCheck, Building2, Bell, LogOut, Loader2, LayoutTemplate } from 'lucide-react';
 import api, { ApiError } from '@/lib/api';
 
 function NavLink({
@@ -140,6 +140,12 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
                                             {openAlertCount}
                                         </Badge>
                                     )}
+                                </span>
+                            </NavLink>
+                            <NavLink href="/ops/templates">
+                                <span className="flex items-center gap-1.5">
+                                    <LayoutTemplate className="size-4" />
+                                    Templates
                                 </span>
                             </NavLink>
                         </nav>
