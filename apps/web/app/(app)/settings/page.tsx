@@ -723,7 +723,7 @@ function SignatureBrandingSection() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [template, setTemplate] = useState("")
-  const [primaryColor, setPrimaryColor] = useState("#14b8a6")
+  const [primaryColor, setPrimaryColor] = useState("#E444A4")
   const [companyName, setCompanyName] = useState("")
   const [address, setAddress] = useState("")
   const [phone, setPhone] = useState("")
@@ -740,7 +740,7 @@ function SignatureBrandingSection() {
   useEffect(() => {
     if (orgSig) {
       setTemplate(orgSig.signature_template || "classic")
-      setPrimaryColor(orgSig.signature_primary_color || "#14b8a6")
+      setPrimaryColor(orgSig.signature_primary_color || "#E444A4")
       setCompanyName(orgSig.signature_company_name || "")
       setAddress(orgSig.signature_address || "")
       setPhone(orgSig.signature_phone || "")
@@ -907,7 +907,7 @@ function SignatureBrandingSection() {
             value={primaryColor}
             onChange={(e) => setPrimaryColor(e.target.value)}
             className="w-28 font-mono text-sm"
-            placeholder="#14b8a6"
+            placeholder="#E444A4"
             name="primaryColorHex"
             autoComplete="off"
             aria-label="Primary color hex"
