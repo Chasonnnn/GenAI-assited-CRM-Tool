@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.59.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.59.0...surrogacy-crm-platform-v0.59.1) (2026-02-01)
+
+
+### Bug Fixes
+
+* **web:** allow MFA route initialization on platform ops subdomain ([6ec8544](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6ec854413f7dd08678acbaac0c53e2d7d14db8cc))
+
 ## [0.59.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.58.0...surrogacy-crm-platform-v0.59.0) (2026-02-01)
 
 
