@@ -1,5 +1,6 @@
 """Development-only endpoints for testing and seeding."""
 
+import re
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
@@ -107,6 +108,35 @@ def login_as(
         "email": user.email,
         "role": membership.role,
         "org_id": str(membership.organization_id),
+    }
+
+
+@router.get("/cors", dependencies=[Depends(_verify_dev_secret)])
+def get_cors_config():
+    """
+    Return computed CORS settings (dev-only).
+
+    Useful for verifying PLATFORM_BASE_DOMAIN and origin allowlists.
+    """
+    tenant_origin_regex = None
+    if settings.PLATFORM_BASE_DOMAIN:
+        scheme = "https?" if settings.is_dev else "https"
+        tenant_origin_regex = (
+            rf"^{scheme}://([a-z0-9-]+\.)?{re.escape(settings.PLATFORM_BASE_DOMAIN)}$"
+        )
+
+    cors_origins = set(settings.cors_origins_list)
+    for origin in (settings.FRONTEND_URL, settings.OPS_FRONTEND_URL):
+        if origin:
+            cors_origins.add(origin)
+
+    return {
+        "env": settings.ENV,
+        "platform_base_domain": settings.PLATFORM_BASE_DOMAIN,
+        "frontend_url": settings.FRONTEND_URL,
+        "ops_frontend_url": settings.OPS_FRONTEND_URL,
+        "allow_origins": sorted(cors_origins),
+        "allow_origin_regex": tenant_origin_regex,
     }
 
 

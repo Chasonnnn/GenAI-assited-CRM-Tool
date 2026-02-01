@@ -3,6 +3,7 @@
  */
 
 import { getCsrfHeaders } from '@/lib/csrf';
+import { getApiBase } from '@/lib/api-base';
 
 export type StreamEvent<T> =
     | { type: 'start'; data: { status: string } }
@@ -10,7 +11,7 @@ export type StreamEvent<T> =
     | { type: 'done'; data: T }
     | { type: 'error'; data: { message: string } };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+const API_BASE = getApiBase();
 
 export async function streamSSE<T>(
     path: string,

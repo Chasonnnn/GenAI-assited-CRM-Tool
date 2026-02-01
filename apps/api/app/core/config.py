@@ -78,7 +78,7 @@ class Settings(BaseSettings):
 
     # Proxy/Load Balancer Settings
     # Set to True when running behind nginx/Cloudflare to trust X-Forwarded-For
-    TRUST_PROXY_HEADERS: bool = False
+    TRUST_PROXY_HEADERS: bool = True
 
     # Database
     DATABASE_URL: str

@@ -4,9 +4,10 @@
  */
 
 import { getCsrfHeaders } from '@/lib/csrf';
+import { getApiBase } from '@/lib/api-base';
 import { toast } from 'sonner';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+const API_BASE = getApiBase();
 const MAX_RETRIES = 2;
 const BASE_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 8000;

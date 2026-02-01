@@ -362,9 +362,15 @@ if settings.PLATFORM_BASE_DOMAIN:
     scheme = "https?" if settings.is_dev else "https"
     tenant_origin_regex = rf"^{scheme}://([a-z0-9-]+\.)?{re.escape(settings.PLATFORM_BASE_DOMAIN)}$"
 
+cors_origins = set(settings.cors_origins_list)
+for origin in (settings.FRONTEND_URL, settings.OPS_FRONTEND_URL):
+    if origin:
+        cors_origins.add(origin)
+allow_origins = sorted(cors_origins)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
+    allow_origins=allow_origins,
     allow_origin_regex=tenant_origin_regex,
     allow_credentials=True,  # Required for cookies
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],

@@ -289,10 +289,15 @@ async def _listen_channel(channel: str, handler) -> None:
                 await handler(message)
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as exc:
             logger.warning(
                 "redis_pubsub_failed",
-                extra={"event": "redis_pubsub_failed", "channel": channel},
+                extra={
+                    "event": "redis_pubsub_failed",
+                    "channel": channel,
+                    "error": str(exc),
+                },
+                exc_info=exc,
             )
             await asyncio.sleep(2)
         finally:
