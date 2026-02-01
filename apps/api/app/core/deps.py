@@ -58,6 +58,16 @@ def _get_origin_host(request: Request) -> str:
         return ""
 
 
+def _is_oauth_callback_request(request: Request) -> bool:
+    """Allow OAuth callbacks from third-party providers on the API host."""
+    path = request.url.path or ""
+    if not (path.startswith("/integrations/") and path.endswith("/callback")):
+        return False
+    host = request.headers.get("host", "").split(":")[0].lower()
+    api_host = f"api.{settings.PLATFORM_BASE_DOMAIN}" if settings.PLATFORM_BASE_DOMAIN else ""
+    return bool(api_host) and host == api_host
+
+
 def _allow_ops_mfa_fallback(request: Request, origin_host: str, is_platform_admin: bool) -> bool:
     """Allow ops MFA requests to bypass org membership checks for platform admins."""
     if not is_platform_admin:
@@ -100,6 +110,8 @@ def _validate_request_host(request: Request, org_slug: str) -> None:
     api_host = f"api.{settings.PLATFORM_BASE_DOMAIN}" if settings.PLATFORM_BASE_DOMAIN else ""
     origin_host = _get_origin_host(request)
     if host == api_host and origin_host == expected_host:
+        return
+    if _is_oauth_callback_request(request):
         return
 
     raise HTTPException(status_code=403, detail="Session invalid for this domain")
