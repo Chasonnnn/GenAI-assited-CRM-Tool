@@ -12,6 +12,7 @@ from uuid import UUID
 
 from fastapi import Request
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.core.config import settings
@@ -467,6 +468,23 @@ def create_organization(
     if existing:
         raise ValueError(f"Slug '{validated_slug}' is already taken.")
 
+    normalized_admin_email = admin_email.lower().strip()
+
+    # Ensure the admin email doesn't already have a pending invite
+    pending_invite = (
+        db.query(OrgInvite)
+        .filter(
+            OrgInvite.email == normalized_admin_email,
+            OrgInvite.accepted_at.is_(None),
+            OrgInvite.revoked_at.is_(None),
+        )
+        .first()
+    )
+    if pending_invite:
+        raise ValueError(
+            "Admin email already has a pending invite. Revoke it or use another email."
+        )
+
     # Create org
     org = Organization(name=name, slug=validated_slug, timezone=timezone_str)
     db.add(org)
@@ -484,7 +502,7 @@ def create_organization(
     # Create invite for first admin
     invite = OrgInvite(
         organization_id=org.id,
-        email=admin_email.lower().strip(),
+        email=normalized_admin_email,
         role=Role.ADMIN.value,
         invited_by_user_id=actor_id,
         expires_at=datetime.now(timezone.utc) + timedelta(days=7),
@@ -501,7 +519,16 @@ def create_organization(
         request=request,
     )
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        error_text = str(exc.orig) if exc.orig else str(exc)
+        if "uq_pending_invite_email" in error_text:
+            raise ValueError(
+                "Admin email already has a pending invite. Revoke it or use another email."
+            ) from exc
+        raise
 
     # Send invite email (best-effort)
     try:
@@ -956,6 +983,8 @@ def list_invites(db: Session, org_id: UUID) -> list[dict]:
         .all()
     )
 
+    from app.services import invite_service
+
     invite_log_keys = {f"invite:{invite.id}:v{invite.resend_count}" for invite in invites}
     email_logs: dict[str, EmailLog] = {}
     if invite_log_keys:
@@ -988,6 +1017,14 @@ def list_invites(db: Session, org_id: UUID) -> list[dict]:
         if inv.invited_by:
             invited_by_name = inv.invited_by.display_name
 
+        can_resend, error = invite_service.can_resend(inv)
+        cooldown_seconds = None
+        if inv.last_resent_at and not can_resend and "Wait" in (error or ""):
+            cooldown_end = inv.last_resent_at + timedelta(
+                minutes=invite_service.INVITE_RESEND_COOLDOWN_MINUTES
+            )
+            cooldown_seconds = max(0, int((cooldown_end - now).total_seconds()))
+
         log_key = f"invite:{inv.id}:v{inv.resend_count}"
         email_log = email_logs.get(log_key)
 
@@ -1000,6 +1037,9 @@ def list_invites(db: Session, org_id: UUID) -> list[dict]:
                 "invited_by_name": invited_by_name,
                 "expires_at": inv.expires_at.isoformat() if inv.expires_at else None,
                 "created_at": inv.created_at.isoformat(),
+                "resend_count": inv.resend_count,
+                "can_resend": can_resend,
+                "resend_cooldown_seconds": cooldown_seconds,
                 "open_count": email_log.open_count if email_log else 0,
                 "opened_at": (
                     email_log.opened_at.isoformat() if email_log and email_log.opened_at else None
@@ -1105,6 +1145,9 @@ def create_invite(
         "invited_by_name": None,  # Would need to fetch actor's name
         "expires_at": invite.expires_at.isoformat() if invite.expires_at else None,
         "created_at": invite.created_at.isoformat(),
+        "resend_count": invite.resend_count,
+        "can_resend": True,
+        "resend_cooldown_seconds": None,
     }
 
 
@@ -1146,6 +1189,80 @@ def revoke_invite(
     )
 
     db.commit()
+
+
+def resend_invite(
+    db: Session,
+    org_id: UUID,
+    invite_id: UUID,
+    actor_id: UUID,
+    request: Request | None = None,
+) -> dict:
+    """Resend an invite email for an organization."""
+    invite = (
+        db.query(OrgInvite)
+        .filter(
+            OrgInvite.id == invite_id,
+            OrgInvite.organization_id == org_id,
+        )
+        .first()
+    )
+    if not invite:
+        raise ValueError("Invite not found")
+
+    from app.services import invite_service
+
+    invite_service.resend_invite(db, invite)
+
+    log_admin_action(
+        db=db,
+        actor_id=actor_id,
+        action="invite.resend",
+        target_org_id=org_id,
+        metadata={"email_domain": invite.email.split("@")[1]},
+        request=request,
+    )
+
+    db.commit()
+
+    try:
+        import asyncio
+        from app.services import invite_email_service
+
+        email_result = asyncio.run(invite_email_service.send_invite_email(db, invite))
+        if not email_result.get("success"):
+            logger.warning("Invite resend email failed: %s", email_result.get("error"))
+    except Exception as exc:
+        logger.warning("Invite resend email error: %s", exc)
+
+    can_resend, error = invite_service.can_resend(invite)
+    cooldown_seconds = None
+    if invite.last_resent_at and not can_resend and "Wait" in (error or ""):
+        cooldown_end = invite.last_resent_at + timedelta(
+            minutes=invite_service.INVITE_RESEND_COOLDOWN_MINUTES
+        )
+        cooldown_seconds = max(0, int((cooldown_end - datetime.now(timezone.utc)).total_seconds()))
+
+    status = "pending"
+    if invite.revoked_at:
+        status = "revoked"
+    elif invite.accepted_at:
+        status = "accepted"
+    elif invite.expires_at and invite.expires_at < datetime.now(timezone.utc):
+        status = "expired"
+
+    return {
+        "id": str(invite.id),
+        "email": invite.email,
+        "role": invite.role,
+        "status": status,
+        "invited_by_name": invite.invited_by.display_name if invite.invited_by else None,
+        "expires_at": invite.expires_at.isoformat() if invite.expires_at else None,
+        "created_at": invite.created_at.isoformat(),
+        "resend_count": invite.resend_count,
+        "can_resend": can_resend,
+        "resend_cooldown_seconds": cooldown_seconds,
+    }
 
 
 # =============================================================================

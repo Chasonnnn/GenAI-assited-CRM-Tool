@@ -82,6 +82,9 @@ export interface OrgInvite {
     invited_by_name?: string;
     expires_at?: string;
     created_at: string;
+    resend_count?: number;
+    can_resend?: boolean;
+    resend_cooldown_seconds?: number | null;
     open_count?: number;
     opened_at?: string | null;
     click_count?: number;
@@ -283,6 +286,13 @@ export function createInvite(
  */
 export function revokeInvite(orgId: string, inviteId: string): Promise<void> {
     return api.post(`/platform/orgs/${orgId}/invites/${inviteId}/revoke`);
+}
+
+/**
+ * Resend invite.
+ */
+export function resendInvite(orgId: string, inviteId: string): Promise<OrgInvite> {
+    return api.post<OrgInvite>(`/platform/orgs/${orgId}/invites/${inviteId}/resend`);
 }
 
 /**

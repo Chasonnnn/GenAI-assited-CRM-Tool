@@ -688,6 +688,29 @@ def revoke_invite(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post(
+    "/orgs/{org_id}/invites/{invite_id}/resend", dependencies=[Depends(require_csrf_header)]
+)
+def resend_invite(
+    org_id: UUID,
+    invite_id: UUID,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Resend an invite."""
+    try:
+        return platform_service.resend_invite(
+            db=db,
+            org_id=org_id,
+            invite_id=invite_id,
+            actor_id=session.user_id,
+            request=request,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 # =============================================================================
 # System Email Templates (Org-Scoped, Managed by Ops)
 # =============================================================================

@@ -40,7 +40,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Ban, Mail, Plus } from "lucide-react"
+import { Ban, Loader2, Mail, Plus, RotateCw } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import type { OrgInvite, PlatformEmailStatus } from "@/lib/api/platform"
 import {
@@ -55,6 +55,7 @@ type AgencyInvitesTabProps = {
     invites: OrgInvite[]
     inviteOpen: boolean
     inviteSubmitting: boolean
+    inviteResending: string | null
     inviteForm: { email: string; role: InviteRole }
     inviteError: string | null
     platformEmailStatus: PlatformEmailStatus | null
@@ -63,6 +64,7 @@ type AgencyInvitesTabProps = {
     onInviteEmailChange: (value: string) => void
     onInviteRoleChange: (value: InviteRole) => void
     onCreateInvite: () => void
+    onResendInvite: (inviteId: string) => void
     onRevokeInvite: (inviteId: string) => void
     onGoToTemplates: () => void
 }
@@ -72,6 +74,7 @@ export function AgencyInvitesTab({
     invites,
     inviteOpen,
     inviteSubmitting,
+    inviteResending,
     inviteForm,
     inviteError,
     platformEmailStatus,
@@ -80,9 +83,17 @@ export function AgencyInvitesTab({
     onInviteEmailChange,
     onInviteRoleChange,
     onCreateInvite,
+    onResendInvite,
     onRevokeInvite,
     onGoToTemplates,
 }: AgencyInvitesTabProps) {
+    const formatCooldown = (seconds: number) => {
+        if (seconds <= 0) return "Resend available soon";
+        if (seconds < 60) return `Resend in ${seconds}s`;
+        const minutes = Math.ceil(seconds / 60);
+        return `Resend in ${minutes}m`;
+    };
+
     return (
         <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -262,35 +273,59 @@ export function AgencyInvitesTab({
                                     </TableCell>
                                     <TableCell>
                                         {invite.status === "pending" && (
-                                            <AlertDialog>
-                                                <AlertDialogTrigger
-                                                    className={buttonVariants({
-                                                        variant: "ghost",
-                                                        size: "sm",
-                                                        className: "text-destructive",
-                                                    })}
+                                            <div className="flex items-center gap-1">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => onResendInvite(invite.id)}
+                                                    disabled={
+                                                        inviteResending === invite.id ||
+                                                        invite.can_resend === false
+                                                    }
+                                                    title={
+                                                        invite.can_resend === false
+                                                            ? invite.resend_cooldown_seconds
+                                                                ? formatCooldown(invite.resend_cooldown_seconds)
+                                                                : "Resend unavailable"
+                                                            : "Resend invite"
+                                                    }
                                                 >
-                                                    <Ban className="size-4" />
-                                                </AlertDialogTrigger>
-                                                <AlertDialogContent>
-                                                    <AlertDialogHeader>
-                                                        <AlertDialogTitle>Revoke Invite?</AlertDialogTitle>
-                                                        <AlertDialogDescription>
-                                                            The invite to <strong>{invite.email}</strong>{" "}
-                                                            will be invalidated.
-                                                        </AlertDialogDescription>
-                                                    </AlertDialogHeader>
-                                                    <AlertDialogFooter>
-                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                        <AlertDialogAction
-                                                            onClick={() => onRevokeInvite(invite.id)}
-                                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                                        >
-                                                            Revoke
-                                                        </AlertDialogAction>
-                                                    </AlertDialogFooter>
-                                                </AlertDialogContent>
-                                            </AlertDialog>
+                                                    {inviteResending === invite.id ? (
+                                                        <Loader2 className="size-4 animate-spin" />
+                                                    ) : (
+                                                        <RotateCw className="size-4" />
+                                                    )}
+                                                </Button>
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger
+                                                        className={buttonVariants({
+                                                            variant: "ghost",
+                                                            size: "sm",
+                                                            className: "text-destructive",
+                                                        })}
+                                                    >
+                                                        <Ban className="size-4" />
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>Revoke Invite?</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                The invite to <strong>{invite.email}</strong>{" "}
+                                                                will be invalidated.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                            <AlertDialogAction
+                                                                onClick={() => onRevokeInvite(invite.id)}
+                                                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                            >
+                                                                Revoke
+                                                            </AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </div>
                                         )}
                                     </TableCell>
                                 </TableRow>

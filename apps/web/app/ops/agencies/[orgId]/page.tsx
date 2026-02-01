@@ -22,6 +22,7 @@ import {
     resetMemberMfa,
     createInvite,
     revokeInvite,
+    resendInvite,
     deleteOrganization,
     restoreOrganization,
     purgeOrganization,
@@ -104,6 +105,7 @@ export default function AgencyDetailPage() {
         role: INVITE_ROLE_OPTIONS[0],
     });
     const [inviteError, setInviteError] = useState<string | null>(null);
+    const [inviteResending, setInviteResending] = useState<string | null>(null);
     const [notesDraft, setNotesDraft] = useState('');
     const [notesSaving, setNotesSaving] = useState(false);
     const subscriptionNotes = subscription?.notes ?? '';
@@ -387,6 +389,21 @@ export default function AgencyDetailPage() {
         }
     };
 
+    const handleResendInvite = async (inviteId: string) => {
+        setInviteResending(inviteId);
+        try {
+            await resendInvite(orgId, inviteId);
+            const refreshed = await listInvites(orgId);
+            setInvites(refreshed);
+            toast.success('Invite resent');
+        } catch (error) {
+            console.error('Failed to resend invite:', error);
+            toast.error(resolveErrorMessage(error, 'Failed to resend invite'));
+        } finally {
+            setInviteResending(null);
+        }
+    };
+
     const handleCreateInvite = async () => {
         setInviteError(null);
         if (!inviteForm.email.trim()) {
@@ -591,6 +608,7 @@ export default function AgencyDetailPage() {
                             invites={invites}
                             inviteOpen={inviteOpen}
                             inviteSubmitting={inviteSubmitting}
+                            inviteResending={inviteResending}
                             inviteForm={inviteForm}
                             inviteError={inviteError}
                             platformEmailStatus={platformEmailStatus}
@@ -603,6 +621,7 @@ export default function AgencyDetailPage() {
                                 setInviteForm((prev) => ({ ...prev, role }))
                             }
                             onCreateInvite={handleCreateInvite}
+                            onResendInvite={handleResendInvite}
                             onRevokeInvite={handleRevokeInvite}
                             onGoToTemplates={handleGoToTemplates}
                         />
