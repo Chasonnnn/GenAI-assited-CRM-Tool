@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.58.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.57.0...surrogacy-crm-platform-v0.58.0) (2026-02-01)
+
+
+### Features
+
+* **api/web:** add platform template management API and hooks ([d1c214d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d1c214d3082d0adbd57c25dd4a78a5107229dca9))
+* **api/web:** integrate template library for organizations ([c36221a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c36221a2419a779e1c80528a395cd763f0c33b38))
+* **api:** enhance attachment storage and validation ([68749d8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/68749d8d41699d74e7e808b66226173e989728d6))
+* **api:** implement platform template studio database schema ([64d933a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/64d933ad9089e880c6ce55d5cac9b4a62b12afc2))
+* **web/ops:** implement platform template studio UI ([be9e8f0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/be9e8f0fc30918ee64f64aec0852a91030a8ea90))
+
+
+### Bug Fixes
+
+* **web/ops:** refine organization management and deletion flows ([80a4092](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/80a40924a3bbf6863a4715a596c1eef5baf05658))
+
+
+### Maintenance
+
+* **api/web:** core infrastructure and CORS refinements ([01aed2d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/01aed2d261e7c519292924d429ffb9ff6e8104f0))
+
 ## [0.57.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.56.0...surrogacy-crm-platform-v0.57.0) (2026-02-01)
 
 
