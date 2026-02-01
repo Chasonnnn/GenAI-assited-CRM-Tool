@@ -110,6 +110,7 @@ async def send_invite_email(
     expires_block = f"<p>This invitation expires {expires_at}.</p>" if expires_at else ""
     variables = {
         "org_name": org_name,
+        "org_slug": org.slug,
         "inviter_text": inviter_text,
         "role_title": invite.role.title(),
         "invite_url": invite_url,

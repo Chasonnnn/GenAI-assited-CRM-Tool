@@ -1,12 +1,17 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import { render, screen } from "@testing-library/react"
 import { AgencyTemplatesTab } from "../components/ops/agencies/AgencyTemplatesTab"
+
+vi.mock("@/components/rich-text-editor", () => ({
+    RichTextEditor: () => <div data-testid="rich-text-editor" />,
+}))
 
 describe("AgencyTemplatesTab", () => {
     it("renders the invite email HTML editor", () => {
         render(
             <AgencyTemplatesTab
                 orgName="Test Org"
+                orgSlug="test-org"
                 portalBaseUrl="https://app.example.com"
                 platformEmailStatus={null}
                 platformEmailLoading={false}
@@ -30,7 +35,7 @@ describe("AgencyTemplatesTab", () => {
             />
         )
 
-        expect(screen.getByLabelText("Email Body (HTML)")).toBeInTheDocument()
+        expect(screen.getByText("Email Body")).toBeInTheDocument()
         expect(screen.getByRole("button", { name: /use apple-style layout/i })).toBeInTheDocument()
     })
 })

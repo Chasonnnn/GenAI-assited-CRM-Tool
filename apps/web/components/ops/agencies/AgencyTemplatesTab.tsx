@@ -1,6 +1,7 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState, useEffect } from "react"
+import dynamic from "next/dynamic"
 import DOMPurify from "dompurify"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -9,9 +10,22 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Code, Loader2 } from "lucide-react"
 import type { PlatformEmailStatus, SystemEmailTemplate } from "@/lib/api/platform"
 import { format } from "date-fns"
+
+const RichTextEditor = dynamic(
+    () => import("@/components/rich-text-editor").then((mod) => mod.RichTextEditor),
+    {
+        ssr: false,
+        loading: () => (
+            <div className="rounded-md border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+                Loading editor...
+            </div>
+        ),
+    }
+)
 
 const APPLE_INVITE_SUBJECT = "Invitation to join {{org_name}} as {{role_title}}"
 const APPLE_INVITE_BODY = `<div style="background-color: #f5f5f7; padding: 40px 12px; margin: 0;">
@@ -103,8 +117,11 @@ const APPLE_INVITE_BODY = `<div style="background-color: #f5f5f7; padding: 40px 
   </table>
 </div>`
 
+type EditorMode = "visual" | "html"
+
 type AgencyTemplatesTabProps = {
     orgName: string
+    orgSlug: string
     portalBaseUrl: string | null
     platformEmailStatus: PlatformEmailStatus | null
     platformEmailLoading: boolean
@@ -129,6 +146,7 @@ type AgencyTemplatesTabProps = {
 
 export function AgencyTemplatesTab({
     orgName,
+    orgSlug,
     portalBaseUrl,
     platformEmailStatus,
     platformEmailLoading,
@@ -150,21 +168,39 @@ export function AgencyTemplatesTab({
     onSendTestEmail,
     testSending,
 }: AgencyTemplatesTabProps) {
+    const [editorMode, setEditorMode] = useState<EditorMode>("visual")
+    const [editorModeTouched, setEditorModeTouched] = useState(false)
+
     const applyAppleTemplate = () => {
         onTemplateSubjectChange(APPLE_INVITE_SUBJECT)
         onTemplateBodyChange(APPLE_INVITE_BODY)
     }
 
+    const hasComplexHtml = useMemo(
+        () => /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(templateBody),
+        [templateBody]
+    )
+
+    useEffect(() => {
+        if (editorModeTouched) return
+        if (templateBody && hasComplexHtml) {
+            setEditorMode("html")
+        }
+    }, [templateBody, editorModeTouched, hasComplexHtml])
+
     const previewSubject = useMemo(
         () =>
-            templateSubject.replace(/\{\{org_name\}\}/g, orgName || "Organization"),
-        [templateSubject, orgName]
+            templateSubject
+                .replace(/\{\{org_name\}\}/g, orgName || "Organization")
+                .replace(/\{\{org_slug\}\}/g, orgSlug || "org"),
+        [templateSubject, orgName, orgSlug]
     )
 
     const previewBody = useMemo(() => {
         const baseUrl = portalBaseUrl || "https://app.example.com"
         const rawHtml = templateBody
             .replace(/\{\{org_name\}\}/g, orgName || "Organization")
+            .replace(/\{\{org_slug\}\}/g, orgSlug || "org")
             .replace(/\{\{inviter_text\}\}/g, " by Platform Admin")
             .replace(/\{\{role_title\}\}/g, "Admin")
             .replace(/\{\{invite_url\}\}/g, `${baseUrl}/invite/EXAMPLE`)
@@ -215,7 +251,7 @@ export function AgencyTemplatesTab({
                 "title",
             ],
         })
-    }, [templateBody, orgName, portalBaseUrl])
+    }, [templateBody, orgName, orgSlug, portalBaseUrl])
 
     return (
         <div className="grid gap-6 lg:grid-cols-2">
@@ -294,22 +330,64 @@ export function AgencyTemplatesTab({
 
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <Label htmlFor="invite-template-body">Email Body (HTML)</Label>
-                                    <Badge variant="outline" className="text-xs">
-                                        <Code className="size-3 mr-1" />
-                                        Variables
-                                    </Badge>
+                                    {editorMode === "html" ? (
+                                        <Label htmlFor="invite-template-body">Email Body</Label>
+                                    ) : (
+                                        <span className="text-sm font-medium leading-none">
+                                            Email Body
+                                        </span>
+                                    )}
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <ToggleGroup
+                                            multiple={false}
+                                            value={editorMode ? [editorMode] : []}
+                                            onValueChange={(value) => {
+                                                const next = value[0] as EditorMode | undefined
+                                                if (!next) return
+                                                setEditorMode(next)
+                                                setEditorModeTouched(true)
+                                            }}
+                                        >
+                                            <ToggleGroupItem value="visual" className="h-8">
+                                                Visual
+                                            </ToggleGroupItem>
+                                            <ToggleGroupItem value="html" className="h-8">
+                                                HTML
+                                            </ToggleGroupItem>
+                                        </ToggleGroup>
+                                        <Badge variant="outline" className="text-xs">
+                                            <Code className="size-3 mr-1" />
+                                            Variables
+                                        </Badge>
+                                    </div>
                                 </div>
-                                <Textarea
-                                    id="invite-template-body"
-                                    value={templateBody}
-                                    onChange={(event) => onTemplateBodyChange(event.target.value)}
-                                    placeholder="Paste or edit the HTML for the invite email..."
-                                    className="min-h-[220px] font-mono text-xs leading-relaxed"
-                                />
+                                {editorMode === "visual" ? (
+                                    <RichTextEditor
+                                        content={templateBody}
+                                        onChange={(html) => onTemplateBodyChange(html)}
+                                        placeholder="Write your invite email content..."
+                                        minHeight="220px"
+                                        maxHeight="420px"
+                                    />
+                                ) : (
+                                    <Textarea
+                                        id="invite-template-body"
+                                        value={templateBody}
+                                        onChange={(event) => onTemplateBodyChange(event.target.value)}
+                                        placeholder="Paste or edit the HTML for the invite email..."
+                                        className="min-h-[220px] font-mono text-xs leading-relaxed"
+                                    />
+                                )}
+                                {editorMode === "visual" && hasComplexHtml && (
+                                    <p className="text-xs text-amber-600">
+                                        This template contains advanced HTML. Switch to HTML mode to preserve layout.
+                                    </p>
+                                )}
                                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                                     <span>
-                                        Available variables: <span className="font-mono">{"{{invite_url}}"}</span>,{" "}
+                                        Available variables: <span className="font-mono">{"{{org_name}}"}</span>,{" "}
+                                        <span className="font-mono">{"{{org_slug}}"}</span>,{" "}
+                                        <span className="font-mono">{"{{invite_url}}"}</span>,{" "}
                                         <span className="font-mono">{"{{role_title}}"}</span>,{" "}
                                         <span className="font-mono">{"{{inviter_text}}"}</span>,{" "}
                                         <span className="font-mono">{"{{expires_block}}"}</span>

@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
     DropdownMenu,
@@ -368,6 +370,8 @@ const TEMPLATE_VARIABLES = [
     { name: "unsubscribe_url", description: "Unsubscribe link" },
 ]
 
+type EditorMode = "visual" | "html"
+
 // =============================================================================
 // Template Card Component
 // =============================================================================
@@ -502,6 +506,8 @@ export default function EmailTemplatesPage() {
     const [templateName, setTemplateName] = useState("")
     const [templateSubject, setTemplateSubject] = useState("")
     const [templateBody, setTemplateBody] = useState("")
+    const [templateBodyMode, setTemplateBodyMode] = useState<EditorMode>("visual")
+    const [templateBodyModeTouched, setTemplateBodyModeTouched] = useState(false)
     const [templateScope, setTemplateScope] = useState<EmailTemplateScope>("personal")
     const [showPreview, setShowPreview] = useState(false)
     const [previewHtml, setPreviewHtml] = useState("")
@@ -531,6 +537,11 @@ export default function EmailTemplatesPage() {
 
     // Track if form has unsaved changes
     const [hasChanges, setHasChanges] = useState(false)
+
+    const hasComplexHtml = React.useMemo(
+        () => /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(templateBody),
+        [templateBody]
+    )
 
     // API hooks for templates
     const { data: personalTemplates, isLoading: loadingPersonal } = useEmailTemplates({
@@ -655,21 +666,30 @@ export default function EmailTemplatesPage() {
             setTemplateSubject(template.subject)
             setTemplateBody("")
             setTemplateScope(template.scope)
+            setTemplateBodyMode("visual")
+            setTemplateBodyModeTouched(false)
         } else {
             setEditingTemplate(null)
             setTemplateName("")
             setTemplateSubject("")
             setTemplateBody("")
             setTemplateScope(scope)
+            setTemplateBodyMode("visual")
+            setTemplateBodyModeTouched(false)
         }
         setIsModalOpen(true)
     }
 
     useEffect(() => {
-        if (fullTemplate && editingTemplate && !templateBody && fullTemplate.body) {
+        if (!fullTemplate || !editingTemplate || !fullTemplate.body) return
+        if (!templateBody) {
             setTemplateBody(fullTemplate.body)
         }
-    }, [fullTemplate, editingTemplate, templateBody])
+        if (!templateBodyModeTouched) {
+            const complex = /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(fullTemplate.body)
+            setTemplateBodyMode(complex ? "html" : "visual")
+        }
+    }, [fullTemplate, editingTemplate, templateBody, templateBodyModeTouched])
 
     const handleSave = () => {
         if (!templateName.trim() || !templateSubject.trim() || !templateBody.trim()) return
@@ -1400,36 +1420,70 @@ export default function EmailTemplatesPage() {
 
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
-                                <Label htmlFor="body">Email Body (HTML)</Label>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger>
-                                        <span className="inline-flex items-center justify-center gap-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 px-3 text-sm cursor-pointer">
-                                            <CodeIcon className="size-4" />
-                                            Insert Variable
-                                        </span>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="w-56">
-                                        {TEMPLATE_VARIABLES.map((v) => (
-                                            <DropdownMenuItem
-                                                key={v.name}
-                                                onClick={() => insertVariable(v.name)}
-                                            >
-                                                <span className="font-mono text-xs">{`{{${v.name}}}`}</span>
-                                                <span className="ml-2 text-muted-foreground text-xs">
-                                                    {v.description}
-                                                </span>
-                                            </DropdownMenuItem>
-                                        ))}
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
+                                <Label htmlFor="body">Email Body</Label>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <ToggleGroup
+                                        multiple={false}
+                                        value={templateBodyMode ? [templateBodyMode] : []}
+                                        onValueChange={(value) => {
+                                            const next = value[0] as EditorMode | undefined
+                                            if (!next) return
+                                            setTemplateBodyMode(next)
+                                            setTemplateBodyModeTouched(true)
+                                        }}
+                                    >
+                                        <ToggleGroupItem value="visual" className="h-8">
+                                            Visual
+                                        </ToggleGroupItem>
+                                        <ToggleGroupItem value="html" className="h-8">
+                                            HTML
+                                        </ToggleGroupItem>
+                                    </ToggleGroup>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger>
+                                            <span className="inline-flex items-center justify-center gap-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 px-3 text-sm cursor-pointer">
+                                                <CodeIcon className="size-4" />
+                                                Insert Variable
+                                            </span>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="w-56">
+                                            {TEMPLATE_VARIABLES.map((v) => (
+                                                <DropdownMenuItem
+                                                    key={v.name}
+                                                    onClick={() => insertVariable(v.name)}
+                                                >
+                                                    <span className="font-mono text-xs">{`{{${v.name}}}`}</span>
+                                                    <span className="ml-2 text-muted-foreground text-xs">
+                                                        {v.description}
+                                                    </span>
+                                                </DropdownMenuItem>
+                                            ))}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
                             </div>
-                            <RichTextEditor
-                                content={templateBody}
-                                onChange={(html) => setTemplateBody(html)}
-                                placeholder="Write your email content here... Use the toolbar to format text."
-                                minHeight="200px"
-                                maxHeight="350px"
-                            />
+                            {templateBodyMode === "visual" ? (
+                                <RichTextEditor
+                                    content={templateBody}
+                                    onChange={(html) => setTemplateBody(html)}
+                                    placeholder="Write your email content here... Use the toolbar to format text."
+                                    minHeight="200px"
+                                    maxHeight="350px"
+                                />
+                            ) : (
+                                <Textarea
+                                    id="body"
+                                    value={templateBody}
+                                    onChange={(event) => setTemplateBody(event.target.value)}
+                                    placeholder="Paste or edit the HTML for this template..."
+                                    className="min-h-[220px] font-mono text-xs leading-relaxed"
+                                />
+                            )}
+                            {templateBodyMode === "visual" && hasComplexHtml && (
+                                <p className="text-xs text-amber-600">
+                                    This template contains advanced HTML. Switch to HTML mode to preserve layout.
+                                </p>
+                            )}
                             <p className="text-xs text-muted-foreground">
                                 Use the Insert Variable button above to add dynamic placeholders like {"{{full_name}}"}
                             </p>
