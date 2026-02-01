@@ -174,7 +174,35 @@ def resolve_user_and_create_session(
             return None, "account_disabled"
 
         if not membership:
-            return None, "no_membership"
+            invite = get_valid_invite(db, google_user.email)
+            if invite:
+                try:
+                    from app.services import invite_service, membership_service
+
+                    invite_service.accept_invite(db, invite.id, user.id)
+                    membership = (
+                        db.query(Membership)
+                        .filter(
+                            Membership.user_id == user.id,
+                            Membership.is_active.is_(True),
+                        )
+                        .first()
+                    )
+                    if membership:
+                        membership_service.ensure_surrogate_pool_membership(
+                            db=db,
+                            org_id=membership.organization_id,
+                            user_id=user.id,
+                            role=membership.role,
+                        )
+                except (PermissionError, ValueError) as exc:
+                    logger.warning("Failed to accept invite for existing user: %s", exc)
+                    _log_login_failed(
+                        invite.organization_id if invite else None, "invite_invalid"
+                    )
+                    return None, "no_membership"
+            if not membership:
+                return None, "no_membership"
 
         # Track last login time
         user.last_login_at = datetime.now(timezone.utc)
