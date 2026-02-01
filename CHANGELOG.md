@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.61.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.60.1...surrogacy-crm-platform-v0.61.0) (2026-02-01)
+
+
+### Features
+
+* **email:** implement hybrid template editor and expand branding variables ([4bc22bc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4bc22bc197f06ed8bd276e55f7accd4b222f4111))
+* **web:** enhance rich text editor with alignment and underline support ([d06fdef](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d06fdef2f10853a3a14feca7c3b3899a8d13368f))
+
+
+### Bug Fixes
+
+* **api:** allow OAuth callback host validation on API domain ([c2f6970](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c2f6970c9266e27f6720cde50ee3515efc169e03))
+* seed workflow templates with ids ([ba9ac1d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ba9ac1d60bba091391811e88e1861d3780990390))
+* **web/ops:** stabilize organization context and template studio loading ([ef8943c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ef8943c4fa82b9d744c98f2dbd9df65e46d81fed))
+
 ## [0.60.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.60.0...surrogacy-crm-platform-v0.60.1) (2026-02-01)
 
 
