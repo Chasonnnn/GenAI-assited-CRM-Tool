@@ -37,6 +37,7 @@ def get_valid_invite(db: Session, email: str) -> OrgInvite | None:
 
     Valid means:
     - accepted_at IS NULL (not already used)
+    - revoked_at IS NULL (not revoked)
     - expires_at IS NULL OR expires_at > now()
     """
     return (
@@ -44,8 +45,10 @@ def get_valid_invite(db: Session, email: str) -> OrgInvite | None:
         .filter(
             func.lower(OrgInvite.email) == email.lower(),
             OrgInvite.accepted_at.is_(None),
+            OrgInvite.revoked_at.is_(None),
             or_(OrgInvite.expires_at.is_(None), OrgInvite.expires_at > func.now()),
         )
+        .order_by(OrgInvite.created_at.desc())
         .first()
     )
 
@@ -57,9 +60,11 @@ def get_expired_invite(db: Session, email: str) -> OrgInvite | None:
         .filter(
             func.lower(OrgInvite.email) == email.lower(),
             OrgInvite.accepted_at.is_(None),
+            OrgInvite.revoked_at.is_(None),
             OrgInvite.expires_at.isnot(None),
             OrgInvite.expires_at <= func.now(),
         )
+        .order_by(OrgInvite.created_at.desc())
         .first()
     )
 
