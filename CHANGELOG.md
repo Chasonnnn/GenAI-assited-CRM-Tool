@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.59.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.58.0...surrogacy-crm-platform-v0.59.0) (2026-02-01)
+
+
+### Features
+
+* **api:** implement mfa fallback for platform admins on ops portal ([de68e65](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/de68e659db9d2c7a18838cfe14380e6d69e3a37c))
+
 ## [0.58.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.57.0...surrogacy-crm-platform-v0.58.0) (2026-02-01)
 
 
