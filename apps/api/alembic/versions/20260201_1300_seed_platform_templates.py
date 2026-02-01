@@ -108,11 +108,11 @@ def _insert_workflow_template(conn: sa.Connection, payload: dict) -> None:
         sa.text(
             """
             INSERT INTO workflow_templates
-            (name, description, icon, category, trigger_type, trigger_config, conditions, condition_logic, actions,
+            (id, name, description, icon, category, trigger_type, trigger_config, conditions, condition_logic, actions,
              draft_config, is_global, organization_id, status, published_version, is_published_globally, usage_count)
             VALUES
-            (:name, :description, :icon, :category, :trigger_type, :trigger_config::jsonb, :conditions::jsonb,
-             :condition_logic, :actions::jsonb, :draft_config::jsonb, true, NULL, 'draft', 0, false, 0)
+            (gen_random_uuid(), :name, :description, :icon, :category, :trigger_type, CAST(:trigger_config AS jsonb), CAST(:conditions AS jsonb),
+             :condition_logic, CAST(:actions AS jsonb), CAST(:draft_config AS jsonb), true, NULL, 'draft', 0, false, 0)
             """
         ),
         payload,
