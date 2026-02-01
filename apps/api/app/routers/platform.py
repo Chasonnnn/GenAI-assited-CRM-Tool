@@ -22,6 +22,24 @@ from app.core.csrf import set_csrf_cookie, CSRF_COOKIE_NAME, get_csrf_cookie
 from app.core.config import settings
 from app.services import platform_service, session_service
 from app.db.enums import Role
+from app.schemas.platform_templates import (
+    PlatformEmailTemplateCreate,
+    PlatformEmailTemplateUpdate,
+    PlatformEmailTemplateRead,
+    PlatformEmailTemplateListItem,
+    PlatformFormTemplateCreate,
+    PlatformFormTemplateUpdate,
+    PlatformFormTemplateRead,
+    PlatformFormTemplateListItem,
+    PlatformWorkflowTemplateCreate,
+    PlatformWorkflowTemplateUpdate,
+    PlatformWorkflowTemplateRead,
+    PlatformWorkflowTemplateListItem,
+    TemplatePublishRequest,
+    PlatformEmailTemplateDraft,
+    PlatformFormTemplateDraft,
+    PlatformWorkflowTemplateDraft,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -950,3 +968,614 @@ def resolve_alert(
     if not result:
         raise HTTPException(status_code=404, detail="Alert not found")
     return result
+
+
+# =============================================================================
+# Platform Template Studio (Email / Forms / Workflows)
+# =============================================================================
+
+
+def _email_draft_from_model(template) -> PlatformEmailTemplateDraft:
+    return PlatformEmailTemplateDraft(
+        name=template.name,
+        subject=template.subject,
+        body=template.body,
+        from_email=template.from_email,
+        category=template.category,
+    )
+
+
+def _email_published_from_model(template) -> PlatformEmailTemplateDraft | None:
+    if not template.published_version:
+        return None
+    if not template.published_subject or not template.published_body:
+        return None
+    return PlatformEmailTemplateDraft(
+        name=template.published_name or template.name,
+        subject=template.published_subject,
+        body=template.published_body,
+        from_email=template.published_from_email,
+        category=template.published_category,
+    )
+
+
+def _email_read(template, db: Session) -> PlatformEmailTemplateRead:
+    from app.services import platform_template_service
+
+    target_org_ids = platform_template_service.get_platform_email_template_target_org_ids(
+        db, template.id
+    )
+    return PlatformEmailTemplateRead(
+        id=template.id,
+        status=template.status,
+        current_version=template.current_version,
+        published_version=template.published_version,
+        is_published_globally=template.is_published_globally,
+        target_org_ids=target_org_ids,
+        published_at=template.published_at,
+        draft=_email_draft_from_model(template),
+        published=_email_published_from_model(template),
+        created_at=template.created_at,
+        updated_at=template.updated_at,
+    )
+
+
+def _email_list_item(template) -> PlatformEmailTemplateListItem:
+    return PlatformEmailTemplateListItem(
+        id=template.id,
+        status=template.status,
+        current_version=template.current_version,
+        published_version=template.published_version,
+        is_published_globally=template.is_published_globally,
+        draft=_email_draft_from_model(template),
+        published_at=template.published_at,
+        updated_at=template.updated_at,
+    )
+
+
+def _form_draft_from_model(template) -> PlatformFormTemplateDraft:
+    return PlatformFormTemplateDraft(
+        name=template.name,
+        description=template.description,
+        form_schema=template.schema_json,
+        settings_json=template.settings_json,
+    )
+
+
+def _form_published_from_model(template) -> PlatformFormTemplateDraft | None:
+    if not template.published_version:
+        return None
+    return PlatformFormTemplateDraft(
+        name=template.published_name or template.name,
+        description=template.published_description,
+        form_schema=template.published_schema_json,
+        settings_json=template.published_settings_json,
+    )
+
+
+def _form_read(template, db: Session) -> PlatformFormTemplateRead:
+    from app.services import platform_template_service
+
+    target_org_ids = platform_template_service.get_platform_form_template_target_org_ids(
+        db, template.id
+    )
+    return PlatformFormTemplateRead(
+        id=template.id,
+        status=template.status,
+        current_version=template.current_version,
+        published_version=template.published_version,
+        is_published_globally=template.is_published_globally,
+        target_org_ids=target_org_ids,
+        published_at=template.published_at,
+        draft=_form_draft_from_model(template),
+        published=_form_published_from_model(template),
+        created_at=template.created_at,
+        updated_at=template.updated_at,
+    )
+
+
+def _form_list_item(template) -> PlatformFormTemplateListItem:
+    return PlatformFormTemplateListItem(
+        id=template.id,
+        status=template.status,
+        current_version=template.current_version,
+        published_version=template.published_version,
+        is_published_globally=template.is_published_globally,
+        draft=_form_draft_from_model(template),
+        published_at=template.published_at,
+        updated_at=template.updated_at,
+    )
+
+
+def _workflow_payload_from_model(template) -> dict:
+    return {
+        "name": template.name,
+        "description": template.description,
+        "icon": template.icon,
+        "category": template.category,
+        "trigger_type": template.trigger_type,
+        "trigger_config": template.trigger_config or {},
+        "conditions": template.conditions or [],
+        "condition_logic": template.condition_logic,
+        "actions": template.actions or [],
+    }
+
+
+def _workflow_draft_from_model(template) -> PlatformWorkflowTemplateDraft:
+    payload = template.draft_config or _workflow_payload_from_model(template)
+    return PlatformWorkflowTemplateDraft(**payload)
+
+
+def _workflow_published_from_model(template) -> PlatformWorkflowTemplateDraft | None:
+    if not template.published_version:
+        return None
+    payload = _workflow_payload_from_model(template)
+    return PlatformWorkflowTemplateDraft(**payload)
+
+
+def _workflow_read(template, db: Session) -> PlatformWorkflowTemplateRead:
+    from app.services import platform_template_service
+
+    target_org_ids = platform_template_service.get_platform_workflow_template_target_org_ids(
+        db, template.id
+    )
+    return PlatformWorkflowTemplateRead(
+        id=template.id,
+        status=template.status,
+        published_version=template.published_version,
+        is_published_globally=template.is_published_globally,
+        target_org_ids=target_org_ids,
+        published_at=template.published_at,
+        draft=_workflow_draft_from_model(template),
+        published=_workflow_published_from_model(template),
+        created_at=template.created_at,
+        updated_at=template.updated_at,
+    )
+
+
+def _workflow_list_item(template) -> PlatformWorkflowTemplateListItem:
+    return PlatformWorkflowTemplateListItem(
+        id=template.id,
+        status=template.status,
+        published_version=template.published_version,
+        is_published_globally=template.is_published_globally,
+        draft=_workflow_draft_from_model(template),
+        published_at=template.published_at,
+        updated_at=template.updated_at,
+    )
+
+
+@router.get("/templates/email", response_model=list[PlatformEmailTemplateListItem])
+def list_platform_email_templates(
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> list[PlatformEmailTemplateListItem]:
+    from app.services import platform_template_service
+
+    templates = platform_template_service.list_platform_email_templates(db)
+    return [_email_list_item(template) for template in templates]
+
+
+@router.post(
+    "/templates/email",
+    response_model=PlatformEmailTemplateRead,
+    status_code=201,
+    dependencies=[Depends(require_csrf_header)],
+)
+def create_platform_email_template(
+    body: PlatformEmailTemplateCreate,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> PlatformEmailTemplateRead:
+    from app.services import platform_template_service
+
+    template = platform_template_service.create_platform_email_template(
+        db,
+        name=body.name,
+        subject=body.subject,
+        body=body.body,
+        from_email=body.from_email,
+        category=body.category,
+    )
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="platform_template.email.create",
+        metadata={"template_id": str(template.id)},
+        request=request,
+    )
+    db.commit()
+    return _email_read(template, db)
+
+
+@router.get("/templates/email/{template_id}", response_model=PlatformEmailTemplateRead)
+def get_platform_email_template(
+    template_id: UUID,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> PlatformEmailTemplateRead:
+    from app.services import platform_template_service
+
+    template = platform_template_service.get_platform_email_template(db, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return _email_read(template, db)
+
+
+@router.patch(
+    "/templates/email/{template_id}",
+    response_model=PlatformEmailTemplateRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def update_platform_email_template(
+    template_id: UUID,
+    body: PlatformEmailTemplateUpdate,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> PlatformEmailTemplateRead:
+    from app.services import platform_template_service
+
+    template = platform_template_service.get_platform_email_template(db, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    try:
+        template = platform_template_service.update_platform_email_template(
+            db,
+            template,
+            name=body.name,
+            subject=body.subject,
+            body=body.body,
+            from_email=body.from_email
+            if "from_email" in body.model_fields_set
+            else platform_template_service._UNSET,
+            category=body.category
+            if "category" in body.model_fields_set
+            else platform_template_service._UNSET,
+            expected_version=body.expected_version,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="platform_template.email.update",
+        metadata={"template_id": str(template.id)},
+        request=request,
+    )
+    db.commit()
+    return _email_read(template, db)
+
+
+@router.post(
+    "/templates/email/{template_id}/publish",
+    response_model=PlatformEmailTemplateRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def publish_platform_email_template(
+    template_id: UUID,
+    body: TemplatePublishRequest,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> PlatformEmailTemplateRead:
+    from app.services import platform_template_service
+
+    template = platform_template_service.get_platform_email_template(db, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    try:
+        template = platform_template_service.publish_platform_email_template(
+            db,
+            template,
+            publish_all=body.publish_all,
+            org_ids=body.org_ids,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="platform_template.email.publish",
+        metadata={
+            "template_id": str(template.id),
+            "publish_all": body.publish_all,
+            "org_ids": [str(org_id) for org_id in body.org_ids or []],
+        },
+        request=request,
+    )
+    db.commit()
+    return _email_read(template, db)
+
+
+@router.get("/templates/forms", response_model=list[PlatformFormTemplateListItem])
+def list_platform_form_templates(
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> list[PlatformFormTemplateListItem]:
+    from app.services import platform_template_service
+
+    templates = platform_template_service.list_platform_form_templates(db)
+    return [_form_list_item(template) for template in templates]
+
+
+@router.post(
+    "/templates/forms",
+    response_model=PlatformFormTemplateRead,
+    status_code=201,
+    dependencies=[Depends(require_csrf_header)],
+)
+def create_platform_form_template(
+    body: PlatformFormTemplateCreate,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> PlatformFormTemplateRead:
+    from app.services import platform_template_service
+
+    template = platform_template_service.create_platform_form_template(
+        db,
+        name=body.name,
+        description=body.description,
+        schema_json=body.form_schema.model_dump() if body.form_schema else None,
+        settings_json=body.settings_json,
+    )
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="platform_template.form.create",
+        metadata={"template_id": str(template.id)},
+        request=request,
+    )
+    db.commit()
+    return _form_read(template, db)
+
+
+@router.get("/templates/forms/{template_id}", response_model=PlatformFormTemplateRead)
+def get_platform_form_template(
+    template_id: UUID,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> PlatformFormTemplateRead:
+    from app.services import platform_template_service
+
+    template = platform_template_service.get_platform_form_template(db, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return _form_read(template, db)
+
+
+@router.patch(
+    "/templates/forms/{template_id}",
+    response_model=PlatformFormTemplateRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def update_platform_form_template(
+    template_id: UUID,
+    body: PlatformFormTemplateUpdate,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> PlatformFormTemplateRead:
+    from app.services import platform_template_service
+
+    template = platform_template_service.get_platform_form_template(db, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    try:
+        template = platform_template_service.update_platform_form_template(
+            db,
+            template,
+            name=body.name,
+            description=body.description,
+            schema_json=(
+                body.form_schema.model_dump()
+                if "form_schema" in body.model_fields_set
+                else platform_template_service._UNSET
+            ),
+            settings_json=(
+                body.settings_json
+                if "settings_json" in body.model_fields_set
+                else platform_template_service._UNSET
+            ),
+            expected_version=body.expected_version,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="platform_template.form.update",
+        metadata={"template_id": str(template.id)},
+        request=request,
+    )
+    db.commit()
+    return _form_read(template, db)
+
+
+@router.post(
+    "/templates/forms/{template_id}/publish",
+    response_model=PlatformFormTemplateRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def publish_platform_form_template(
+    template_id: UUID,
+    body: TemplatePublishRequest,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> PlatformFormTemplateRead:
+    from app.services import platform_template_service
+
+    template = platform_template_service.get_platform_form_template(db, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    try:
+        template = platform_template_service.publish_platform_form_template(
+            db,
+            template,
+            publish_all=body.publish_all,
+            org_ids=body.org_ids,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="platform_template.form.publish",
+        metadata={
+            "template_id": str(template.id),
+            "publish_all": body.publish_all,
+            "org_ids": [str(org_id) for org_id in body.org_ids or []],
+        },
+        request=request,
+    )
+    db.commit()
+    return _form_read(template, db)
+
+
+@router.get("/templates/workflows", response_model=list[PlatformWorkflowTemplateListItem])
+def list_platform_workflow_templates(
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> list[PlatformWorkflowTemplateListItem]:
+    from app.services import platform_template_service
+
+    templates = platform_template_service.list_platform_workflow_templates(db)
+    return [_workflow_list_item(template) for template in templates]
+
+
+@router.post(
+    "/templates/workflows",
+    response_model=PlatformWorkflowTemplateRead,
+    status_code=201,
+    dependencies=[Depends(require_csrf_header)],
+)
+def create_platform_workflow_template(
+    body: PlatformWorkflowTemplateCreate,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> PlatformWorkflowTemplateRead:
+    from app.services import platform_template_service
+
+    payload = body.model_dump()
+    template = platform_template_service.create_platform_workflow_template(
+        db,
+        user_id=session.user_id,
+        payload=payload,
+    )
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="platform_template.workflow.create",
+        metadata={"template_id": str(template.id)},
+        request=request,
+    )
+    db.commit()
+    return _workflow_read(template, db)
+
+
+@router.get("/templates/workflows/{template_id}", response_model=PlatformWorkflowTemplateRead)
+def get_platform_workflow_template(
+    template_id: UUID,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> PlatformWorkflowTemplateRead:
+    from app.services import platform_template_service
+
+    template = platform_template_service.get_platform_workflow_template(db, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return _workflow_read(template, db)
+
+
+@router.patch(
+    "/templates/workflows/{template_id}",
+    response_model=PlatformWorkflowTemplateRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def update_platform_workflow_template(
+    template_id: UUID,
+    body: PlatformWorkflowTemplateUpdate,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> PlatformWorkflowTemplateRead:
+    from app.services import platform_template_service
+
+    template = platform_template_service.get_platform_workflow_template(db, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    payload = {
+        k: v for k, v in body.model_dump().items() if v is not None and k != "expected_version"
+    }
+    try:
+        template = platform_template_service.update_platform_workflow_template(
+            db,
+            template,
+            payload=payload,
+            expected_version=body.expected_version,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="platform_template.workflow.update",
+        metadata={"template_id": str(template.id)},
+        request=request,
+    )
+    db.commit()
+    return _workflow_read(template, db)
+
+
+@router.post(
+    "/templates/workflows/{template_id}/publish",
+    response_model=PlatformWorkflowTemplateRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def publish_platform_workflow_template(
+    template_id: UUID,
+    body: TemplatePublishRequest,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> PlatformWorkflowTemplateRead:
+    from app.services import platform_template_service
+
+    template = platform_template_service.get_platform_workflow_template(db, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    try:
+        template = platform_template_service.publish_platform_workflow_template(
+            db,
+            template,
+            publish_all=body.publish_all,
+            org_ids=body.org_ids,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="platform_template.workflow.publish",
+        metadata={
+            "template_id": str(template.id),
+            "publish_all": body.publish_all,
+            "org_ids": [str(org_id) for org_id in body.org_ids or []],
+        },
+        request=request,
+    )
+    db.commit()
+    return _workflow_read(template, db)

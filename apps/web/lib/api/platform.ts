@@ -3,6 +3,9 @@
  */
 
 import api from '@/lib/api';
+import type { FormSchema } from '@/lib/api/forms';
+import type { ActionConfig, Condition } from '@/lib/api/workflows';
+import type { JsonObject } from '@/lib/types/json';
 
 // Platform user info (from /platform/me)
 export interface PlatformUser {
@@ -299,7 +302,9 @@ export function restoreOrganization(orgId: string): Promise<OrganizationDetail> 
 /**
  * Permanently delete an organization immediately.
  */
-export function purgeOrganization(orgId: string): Promise<{ org_id: string; deleted: boolean }> {
+export function purgeOrganization(
+    orgId: string
+): Promise<{ org_id: string; deleted: boolean; scheduled?: boolean; deleted_at?: string | null; purge_at?: string | null }> {
     return api.post(`/platform/orgs/${orgId}/purge`);
 }
 
@@ -397,4 +402,212 @@ export function acknowledgeAlert(alertId: string): Promise<{ id: string; status:
  */
 export function resolveAlert(alertId: string): Promise<{ id: string; status: string; resolved_at?: string }> {
     return api.post(`/platform/alerts/${alertId}/resolve`);
+}
+
+// =============================================================================
+// Platform Template Studio
+// =============================================================================
+
+export type TemplateStatus = 'draft' | 'published' | 'archived'
+
+export interface PlatformEmailTemplateDraft {
+    name: string
+    subject: string
+    body: string
+    from_email?: string | null
+    category?: string | null
+}
+
+export interface PlatformEmailTemplateListItem {
+    id: string
+    status: TemplateStatus
+    current_version: number
+    published_version: number
+    is_published_globally: boolean
+    draft: PlatformEmailTemplateDraft
+    published_at?: string | null
+    updated_at: string
+}
+
+export interface PlatformEmailTemplate extends PlatformEmailTemplateListItem {
+    target_org_ids?: string[]
+    published?: PlatformEmailTemplateDraft | null
+    created_at: string
+}
+
+export type PlatformEmailTemplateCreate = PlatformEmailTemplateDraft
+
+export interface PlatformEmailTemplateUpdate {
+    name?: string
+    subject?: string
+    body?: string
+    from_email?: string | null
+    category?: string | null
+    expected_version?: number | null
+}
+
+export interface PlatformFormTemplateDraft {
+    name: string
+    description?: string | null
+    schema_json?: FormSchema | null
+    settings_json?: Record<string, unknown> | null
+}
+
+export interface PlatformFormTemplateListItem {
+    id: string
+    status: TemplateStatus
+    current_version: number
+    published_version: number
+    is_published_globally: boolean
+    draft: PlatformFormTemplateDraft
+    published_at?: string | null
+    updated_at: string
+}
+
+export interface PlatformFormTemplate extends PlatformFormTemplateListItem {
+    target_org_ids?: string[]
+    published?: PlatformFormTemplateDraft | null
+    created_at: string
+}
+
+export type PlatformFormTemplateCreate = PlatformFormTemplateDraft
+
+export interface PlatformFormTemplateUpdate {
+    name?: string
+    description?: string | null
+    schema_json?: FormSchema | null
+    settings_json?: Record<string, unknown> | null
+    expected_version?: number | null
+}
+
+export interface PlatformWorkflowTemplateDraft {
+    name: string
+    description?: string | null
+    icon?: string
+    category?: string
+    trigger_type: string
+    trigger_config?: JsonObject
+    conditions?: Condition[]
+    condition_logic?: string
+    actions?: ActionConfig[]
+}
+
+export interface PlatformWorkflowTemplateListItem {
+    id: string
+    status: TemplateStatus
+    published_version: number
+    is_published_globally: boolean
+    draft: PlatformWorkflowTemplateDraft
+    published_at?: string | null
+    updated_at: string
+}
+
+export interface PlatformWorkflowTemplate extends PlatformWorkflowTemplateListItem {
+    target_org_ids?: string[]
+    published?: PlatformWorkflowTemplateDraft | null
+    created_at: string
+}
+
+export type PlatformWorkflowTemplateCreate = PlatformWorkflowTemplateDraft
+
+export interface PlatformWorkflowTemplateUpdate {
+    name?: string
+    description?: string | null
+    icon?: string
+    category?: string
+    trigger_type?: string
+    trigger_config?: JsonObject
+    conditions?: Condition[]
+    condition_logic?: string
+    actions?: ActionConfig[]
+    expected_version?: number | null
+}
+
+export interface TemplatePublishRequest {
+    publish_all: boolean
+    org_ids?: string[] | null
+}
+
+export function listPlatformEmailTemplates(): Promise<PlatformEmailTemplateListItem[]> {
+    return api.get<PlatformEmailTemplateListItem[]>('/platform/templates/email')
+}
+
+export function getPlatformEmailTemplate(id: string): Promise<PlatformEmailTemplate> {
+    return api.get<PlatformEmailTemplate>(`/platform/templates/email/${id}`)
+}
+
+export function createPlatformEmailTemplate(
+    payload: PlatformEmailTemplateCreate
+): Promise<PlatformEmailTemplate> {
+    return api.post<PlatformEmailTemplate>('/platform/templates/email', payload)
+}
+
+export function updatePlatformEmailTemplate(
+    id: string,
+    payload: PlatformEmailTemplateUpdate
+): Promise<PlatformEmailTemplate> {
+    return api.patch<PlatformEmailTemplate>(`/platform/templates/email/${id}`, payload)
+}
+
+export function publishPlatformEmailTemplate(
+    id: string,
+    payload: TemplatePublishRequest
+): Promise<PlatformEmailTemplate> {
+    return api.post<PlatformEmailTemplate>(`/platform/templates/email/${id}/publish`, payload)
+}
+
+export function listPlatformFormTemplates(): Promise<PlatformFormTemplateListItem[]> {
+    return api.get<PlatformFormTemplateListItem[]>('/platform/templates/forms')
+}
+
+export function getPlatformFormTemplate(id: string): Promise<PlatformFormTemplate> {
+    return api.get<PlatformFormTemplate>(`/platform/templates/forms/${id}`)
+}
+
+export function createPlatformFormTemplate(
+    payload: PlatformFormTemplateCreate
+): Promise<PlatformFormTemplate> {
+    return api.post<PlatformFormTemplate>('/platform/templates/forms', payload)
+}
+
+export function updatePlatformFormTemplate(
+    id: string,
+    payload: PlatformFormTemplateUpdate
+): Promise<PlatformFormTemplate> {
+    return api.patch<PlatformFormTemplate>(`/platform/templates/forms/${id}`, payload)
+}
+
+export function publishPlatformFormTemplate(
+    id: string,
+    payload: TemplatePublishRequest
+): Promise<PlatformFormTemplate> {
+    return api.post<PlatformFormTemplate>(`/platform/templates/forms/${id}/publish`, payload)
+}
+
+export function listPlatformWorkflowTemplates(): Promise<PlatformWorkflowTemplateListItem[]> {
+    return api.get<PlatformWorkflowTemplateListItem[]>('/platform/templates/workflows')
+}
+
+export function getPlatformWorkflowTemplate(id: string): Promise<PlatformWorkflowTemplate> {
+    return api.get<PlatformWorkflowTemplate>(`/platform/templates/workflows/${id}`)
+}
+
+export function createPlatformWorkflowTemplate(
+    payload: PlatformWorkflowTemplateCreate
+): Promise<PlatformWorkflowTemplate> {
+    return api.post<PlatformWorkflowTemplate>('/platform/templates/workflows', payload)
+}
+
+export function updatePlatformWorkflowTemplate(
+    id: string,
+    payload: PlatformWorkflowTemplateUpdate
+): Promise<PlatformWorkflowTemplate> {
+    return api.patch<PlatformWorkflowTemplate>(`/platform/templates/workflows/${id}`, payload)
+}
+
+export function publishPlatformWorkflowTemplate(
+    id: string,
+    payload: TemplatePublishRequest
+): Promise<PlatformWorkflowTemplate> {
+    return api.post<PlatformWorkflowTemplate>(`/platform/templates/workflows/${id}/publish`, payload)
 }

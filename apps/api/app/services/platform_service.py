@@ -410,9 +410,21 @@ def force_delete_organization(
         request=request,
     )
 
-    db.delete(org)
-    db.commit()
-    return {"org_id": str(org_id), "deleted": True}
+    try:
+        db.delete(org)
+        db.commit()
+        return {"org_id": str(org_id), "deleted": True}
+    except Exception:
+        db.rollback()
+        # Fall back to scheduled deletion if hard delete fails.
+        scheduled = request_organization_deletion(db, org_id, actor_id, request=request)
+        return {
+            "org_id": str(org_id),
+            "deleted": False,
+            "scheduled": True,
+            "deleted_at": scheduled.get("deleted_at"),
+            "purge_at": scheduled.get("purge_at"),
+        }
 
 
 def purge_organization(db: Session, org_id: UUID) -> bool:
