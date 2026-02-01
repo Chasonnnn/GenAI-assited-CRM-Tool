@@ -70,6 +70,12 @@ from app.db.models.meta import (
     MetaPageMapping,
 )
 from app.db.models.notifications import Notification, UserNotificationSettings
+from app.db.models.platform_templates import (
+    PlatformEmailTemplate,
+    PlatformEmailTemplateTarget,
+    PlatformFormTemplate,
+    PlatformFormTemplateTarget,
+)
 from app.db.models.pipelines import EntityVersion, Pipeline, PipelineStage
 from app.db.models.queues import Queue, QueueMember
 from app.db.models.status_changes import StatusChangeRequest
@@ -99,6 +105,7 @@ from app.db.models.workflows import (
     WorkflowExecution,
     WorkflowResumeJob,
     WorkflowTemplate,
+    WorkflowTemplateTarget,
 )
 
 __all__ = [
@@ -173,6 +180,10 @@ __all__ = [
     "OrganizationSubscription",
     "Pipeline",
     "PipelineStage",
+    "PlatformEmailTemplate",
+    "PlatformEmailTemplateTarget",
+    "PlatformFormTemplate",
+    "PlatformFormTemplateTarget",
     "Queue",
     "QueueMember",
     "RequestMetricsRollup",
@@ -202,6 +213,7 @@ __all__ = [
     "WorkflowExecution",
     "WorkflowResumeJob",
     "WorkflowTemplate",
+    "WorkflowTemplateTarget",
     "ZoomMeeting",
     "ZoomWebhookEvent",
 ]

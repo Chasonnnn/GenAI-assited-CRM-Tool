@@ -15,6 +15,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    TIMESTAMP,
     UniqueConstraint,
     text,
 )
@@ -344,6 +345,9 @@ class WorkflowTemplate(Base):
     condition_logic: Mapped[str] = mapped_column(String(10), default="AND")
     actions: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
 
+    # Draft config for ops (kept separate from published fields)
+    draft_config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
     # Scope
     is_global: Mapped[bool] = mapped_column(
         Boolean, server_default=text("FALSE"), nullable=False
@@ -353,6 +357,18 @@ class WorkflowTemplate(Base):
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=True,  # Null for global templates
     )
+
+    # Publish controls (platform templates only)
+    status: Mapped[str] = mapped_column(
+        String(20), server_default=text("'published'"), nullable=False
+    )
+    published_version: Mapped[int] = mapped_column(
+        Integer, server_default=text("1"), nullable=False
+    )
+    is_published_globally: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("FALSE"), nullable=False
+    )
+    published_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     # Usage tracking
     usage_count: Mapped[int] = mapped_column(default=0)
@@ -367,6 +383,27 @@ class WorkflowTemplate(Base):
     # Relationships
     organization: Mapped["Organization | None"] = relationship()
     created_by: Mapped["User | None"] = relationship()
+
+
+class WorkflowTemplateTarget(Base):
+    """Target orgs for global workflow templates when not published globally."""
+
+    __tablename__ = "workflow_template_targets"
+    __table_args__ = (Index("idx_workflow_template_targets_org", "organization_id"),)
+
+    template_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workflow_templates.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=text("now()"))
+
+    template: Mapped["WorkflowTemplate"] = relationship()
 
 
 # =============================================================================
