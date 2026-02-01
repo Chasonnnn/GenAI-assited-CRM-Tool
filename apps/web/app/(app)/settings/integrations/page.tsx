@@ -1189,7 +1189,10 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
         }
         const ids = inbound.map((webhook) => webhook.webhook_id)
         if (!fieldPasteWebhookId || !ids.includes(fieldPasteWebhookId)) {
-            setFieldPasteWebhookId(ids[0])
+            const [firstId] = ids
+            if (firstId) {
+                setFieldPasteWebhookId(firstId)
+            }
         }
     }, [settings?.inbound_webhooks, fieldPasteWebhookId])
 
@@ -1557,16 +1560,19 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                                 </Button>
 
                                                 <AlertDialog>
-                                                    <AlertDialogTrigger asChild>
-                                                        <Button
-                                                            variant="ghost"
-                                                            className="text-destructive hover:text-destructive"
-                                                            disabled={!canDelete || deletingWebhookId === webhook.webhook_id}
-                                                        >
-                                                            <TrashIcon className="mr-2 size-4" aria-hidden="true" />
-                                                            Delete Webhook
-                                                        </Button>
-                                                    </AlertDialogTrigger>
+                                                    <AlertDialogTrigger
+                                                        disabled={!canDelete || deletingWebhookId === webhook.webhook_id}
+                                                        render={
+                                                            <Button
+                                                                variant="ghost"
+                                                                className="text-destructive hover:text-destructive"
+                                                                disabled={!canDelete || deletingWebhookId === webhook.webhook_id}
+                                                            >
+                                                                <TrashIcon className="mr-2 size-4" aria-hidden="true" />
+                                                                Delete Webhook
+                                                            </Button>
+                                                        }
+                                                    />
                                                     <AlertDialogContent>
                                                         <AlertDialogHeader>
                                                             <AlertDialogTitle>Delete webhook?</AlertDialogTitle>
@@ -1634,7 +1640,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                         {settings?.inbound_webhooks?.length ? (
                             <div className="space-y-2">
                                 <Label>Webhook</Label>
-                                <Select value={fieldPasteWebhookId} onValueChange={setFieldPasteWebhookId}>
+                                <Select value={fieldPasteWebhookId} onValueChange={(value) => setFieldPasteWebhookId(value ?? "")}>
                                     <SelectTrigger className="w-full md:w-72" aria-label="Select webhook">
                                         <SelectValue placeholder="Select webhook" />
                                     </SelectTrigger>

@@ -172,17 +172,20 @@ export default function MetaFormsPage() {
                                                         Manage mapping
                                                     </Button>
                                                     <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <Button
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                className="text-destructive hover:text-destructive"
-                                                                disabled={deleteForm.isPending}
-                                                            >
-                                                                <TrashIcon className="mr-2 size-4" aria-hidden="true" />
-                                                                Delete
-                                                            </Button>
-                                                        </AlertDialogTrigger>
+                                                        <AlertDialogTrigger
+                                                            disabled={deleteForm.isPending}
+                                                            render={
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    className="text-destructive hover:text-destructive"
+                                                                    disabled={deleteForm.isPending}
+                                                                >
+                                                                    <TrashIcon className="mr-2 size-4" aria-hidden="true" />
+                                                                    Delete
+                                                                </Button>
+                                                            }
+                                                        />
                                                         <AlertDialogContent>
                                                             <AlertDialogHeader>
                                                                 <AlertDialogTitle>Delete form mapping?</AlertDialogTitle>
