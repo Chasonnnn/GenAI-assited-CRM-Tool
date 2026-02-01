@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.57.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.56.0...surrogacy-crm-platform-v0.57.0) (2026-02-01)
+
+
+### Features
+
+* **platform:** implement immediate organization deletion and ops route auth optimization ([da064f5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/da064f59fb6d254caa83940571ca8c5f2839bafd))
+
 ## [0.56.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.55.0...surrogacy-crm-platform-v0.56.0) (2026-02-01)
 
 
