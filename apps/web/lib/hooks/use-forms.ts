@@ -16,6 +16,12 @@ import {
     approveSubmission,
     rejectSubmission,
     uploadFormLogo,
+    listFormTemplates,
+    getFormTemplate,
+    createFormFromTemplate,
+    type FormTemplateLibraryItem,
+    type FormTemplateLibraryDetail,
+    type FormTemplateUseRequest,
     type FormCreatePayload,
     type FormUpdatePayload,
     type FormFieldMappingItem,
@@ -31,6 +37,8 @@ export const formKeys = {
     mappings: (formId: string) => [...formKeys.detail(formId), 'mappings'] as const,
     surrogateSubmission: (formId: string, surrogateId: string) =>
         [...formKeys.detail(formId), 'surrogate-submission', surrogateId] as const,
+    templates: () => [...formKeys.all, 'templates'] as const,
+    templateDetail: (id: string) => [...formKeys.templates(), id] as const,
 }
 
 export function useForms() {
@@ -210,6 +218,38 @@ export function useUploadSubmissionFile() {
             queryClient.invalidateQueries({
                 queryKey: formKeys.surrogateSubmission(formId, surrogateId),
             })
+        },
+    })
+}
+
+// ============================================================================
+// Platform Form Template Library Hooks
+// ============================================================================
+
+export function useFormTemplates() {
+    return useQuery<FormTemplateLibraryItem[]>({
+        queryKey: formKeys.templates(),
+        queryFn: () => listFormTemplates(),
+    })
+}
+
+export function useFormTemplateLibraryItem(templateId: string | null) {
+    return useQuery<FormTemplateLibraryDetail>({
+        queryKey: formKeys.templateDetail(templateId || ''),
+        queryFn: () => getFormTemplate(templateId!),
+        enabled: !!templateId,
+    })
+}
+
+export function useUseFormTemplate() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({ templateId, payload }: { templateId: string; payload: FormTemplateUseRequest }) =>
+            createFormFromTemplate(templateId, payload),
+        onSuccess: (form) => {
+            queryClient.invalidateQueries({ queryKey: formKeys.lists() })
+            queryClient.setQueryData(formKeys.detail(form.id), form)
         },
     })
 }

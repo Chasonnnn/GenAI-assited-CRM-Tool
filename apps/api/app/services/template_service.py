@@ -1,12 +1,13 @@
 """Template service for workflow template marketplace."""
 
 from uuid import UUID
+from datetime import datetime, timezone
 
-from sqlalchemy import or_
+from sqlalchemy import or_, and_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.models import WorkflowTemplate, AutomationWorkflow
+from app.db.models import WorkflowTemplate, WorkflowTemplateTarget, AutomationWorkflow
 
 
 def list_templates(
@@ -19,10 +20,25 @@ def list_templates(
 
     Returns templates visible to the organization.
     """
+    target_exists = (
+        db.query(WorkflowTemplateTarget)
+        .filter(
+            WorkflowTemplateTarget.template_id == WorkflowTemplate.id,
+            WorkflowTemplateTarget.organization_id == org_id,
+        )
+        .exists()
+    )
     query = db.query(WorkflowTemplate).filter(
         or_(
-            WorkflowTemplate.is_global.is_(True),
             WorkflowTemplate.organization_id == org_id,
+            and_(
+                WorkflowTemplate.is_global.is_(True),
+                WorkflowTemplate.published_version > 0,
+                or_(
+                    WorkflowTemplate.is_published_globally.is_(True),
+                    target_exists,
+                ),
+            ),
         )
     )
 
@@ -42,13 +58,28 @@ def get_template(
     org_id: UUID,
 ) -> WorkflowTemplate | None:
     """Get a template by ID if accessible to the org."""
+    target_exists = (
+        db.query(WorkflowTemplateTarget)
+        .filter(
+            WorkflowTemplateTarget.template_id == WorkflowTemplate.id,
+            WorkflowTemplateTarget.organization_id == org_id,
+        )
+        .exists()
+    )
     return (
         db.query(WorkflowTemplate)
         .filter(
             WorkflowTemplate.id == template_id,
             or_(
-                WorkflowTemplate.is_global.is_(True),
                 WorkflowTemplate.organization_id == org_id,
+                and_(
+                    WorkflowTemplate.is_global.is_(True),
+                    WorkflowTemplate.published_version > 0,
+                    or_(
+                        WorkflowTemplate.is_published_globally.is_(True),
+                        target_exists,
+                    ),
+                ),
             ),
         )
         .first()
@@ -358,6 +389,10 @@ def seed_global_templates(db: Session) -> int:
             is_global=True,
             organization_id=None,
             created_by_user_id=None,
+            status="published",
+            published_version=1,
+            is_published_globally=True,
+            published_at=datetime.now(timezone.utc),
             **data,
         )
         db.add(template)

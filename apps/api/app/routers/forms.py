@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, File, Form, UploadFile
 from fastapi.responses import Response
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.surrogate_access import check_surrogate_access
@@ -33,6 +34,10 @@ from app.schemas.forms import (
     FormLogoRead,
     FormSubmissionAnswersUpdate,
     FormSubmissionAnswersUpdateResponse,
+)
+from app.schemas.platform_templates import (
+    FormTemplateLibraryItem,
+    FormTemplateLibraryDetail,
 )
 from app.services import (
     audit_service,
@@ -132,6 +137,119 @@ def list_forms(
 ):
     forms = form_service.list_forms(db, session.org_id)
     return [_form_summary(form) for form in forms]
+
+
+# =============================================================================
+# Platform Form Template Library
+# =============================================================================
+
+
+class FormTemplateUseRequest(BaseModel):
+    name: str
+    description: str | None = None
+
+
+@router.get(
+    "/templates",
+    response_model=list[FormTemplateLibraryItem],
+    dependencies=[Depends(require_permission(POLICIES["forms"].default))],
+)
+def list_form_templates(
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """List published platform form templates visible to this org."""
+    from app.services import platform_template_service
+
+    templates = platform_template_service.list_published_form_templates_for_org(db, session.org_id)
+    return [
+        FormTemplateLibraryItem(
+            id=t.id,
+            name=t.published_name or t.name,
+            description=t.published_description,
+            published_at=t.published_at,
+            updated_at=t.updated_at,
+        )
+        for t in templates
+    ]
+
+
+@router.get(
+    "/templates/{template_id}",
+    response_model=FormTemplateLibraryDetail,
+    dependencies=[Depends(require_permission(POLICIES["forms"].default))],
+)
+def get_form_template(
+    template_id: UUID,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    from app.services import platform_template_service
+
+    template = platform_template_service.get_published_form_template_for_org(
+        db, template_id, session.org_id
+    )
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return FormTemplateLibraryDetail(
+        id=template.id,
+        name=template.published_name or template.name,
+        description=template.published_description,
+        schema_json=template.published_schema_json,
+        settings_json=template.published_settings_json,
+        published_at=template.published_at,
+        updated_at=template.updated_at,
+    )
+
+
+@router.post(
+    "/templates/{template_id}/use",
+    response_model=FormRead,
+    dependencies=[
+        Depends(require_permission(POLICIES["forms"].default)),
+        Depends(require_csrf_header),
+    ],
+)
+def use_form_template(
+    template_id: UUID,
+    body: FormTemplateUseRequest,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """Create a draft form from a platform template."""
+    from app.services import platform_template_service
+
+    template = platform_template_service.get_published_form_template_for_org(
+        db, template_id, session.org_id
+    )
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    schema = template.published_schema_json
+    settings = template.published_settings_json or {}
+    if schema is None:
+        raise HTTPException(status_code=400, detail="Template schema is missing")
+
+    form = form_service.create_form(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        name=body.name,
+        description=body.description or template.published_description,
+        schema=schema,
+        max_file_size_bytes=settings.get("max_file_size_bytes"),
+        max_file_count=settings.get("max_file_count"),
+        allowed_mime_types=settings.get("allowed_mime_types"),
+    )
+
+    mappings = settings.get("mappings")
+    if isinstance(mappings, list) and mappings:
+        try:
+            form_service.set_field_mappings(db=db, form=form, mappings=mappings)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    return _form_read(form)
 
 
 @router.post(

@@ -29,10 +29,9 @@ import {
     Loader2Icon,
     ArrowLeftIcon,
 } from "lucide-react"
-import { useForms, useCreateForm, useSetFormMappings } from "@/lib/hooks/use-forms"
+import { useForms, useCreateForm, useFormTemplates, useUseFormTemplate } from "@/lib/hooks/use-forms"
 import { parseDateInput } from "@/lib/utils/date"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { FORM_TEMPLATES, type FormTemplate } from "@/lib/forms/templates"
 
 function formatRelativeTime(dateString: string): string {
     const date = parseDateInput(dateString)
@@ -52,7 +51,8 @@ export default function FormsListPage() {
     const router = useRouter()
     const { data: forms, isLoading } = useForms()
     const createFormMutation = useCreateForm()
-    const setMappingsMutation = useSetFormMappings()
+    const { data: templates, isLoading: templatesLoading } = useFormTemplates()
+    const useTemplateMutation = useUseFormTemplate()
 
     const [showCreateModal, setShowCreateModal] = useState(false)
     const [formName, setFormName] = useState("")
@@ -77,17 +77,14 @@ export default function FormsListPage() {
         }
     }
 
-    const handleUseTemplate = async (template: FormTemplate) => {
-        if (createFormMutation.isPending) return
-        setApplyingTemplateId(template.id)
+    const handleUseTemplate = async (templateId: string, templateName: string) => {
+        if (useTemplateMutation.isPending) return
+        setApplyingTemplateId(templateId)
         try {
-            const newForm = await createFormMutation.mutateAsync(template.payload)
-            if (template.mappings && template.mappings.length > 0) {
-                await setMappingsMutation.mutateAsync({
-                    formId: newForm.id,
-                    mappings: template.mappings,
-                })
-            }
+            const newForm = await useTemplateMutation.mutateAsync({
+                templateId,
+                payload: { name: templateName },
+            })
             router.push(`/automation/forms/${newForm.id}`)
         } catch {
             // Error handling is done by React Query
@@ -259,7 +256,11 @@ export default function FormsListPage() {
                                 </CardContent>
                             </Card>
 
-                            {!FORM_TEMPLATES.length ? (
+                            {templatesLoading ? (
+                                <div className="flex items-center justify-center py-12">
+                                    <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : !templates?.length ? (
                                 <Card>
                                     <CardContent className="flex flex-col items-center justify-center py-12">
                                         <FileTextIcon className="size-12 text-muted-foreground/50" />
@@ -271,7 +272,7 @@ export default function FormsListPage() {
                                 </Card>
                             ) : (
                                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                    {FORM_TEMPLATES.map((template) => {
+                                    {templates.map((template) => {
                                         const isApplying = applyingTemplateId === template.id
                                         return (
                                             <Card key={template.id}>
@@ -283,17 +284,17 @@ export default function FormsListPage() {
                                                             </div>
                                                             <div>
                                                                 <CardTitle className="text-base">{template.name}</CardTitle>
-                                                                {template.badge && (
+                                                                {template.published_at && (
                                                                     <Badge variant="outline" className="mt-1 text-xs">
-                                                                        {template.badge}
+                                                                        Published
                                                                     </Badge>
                                                                 )}
                                                             </div>
                                                         </div>
                                                         <Button
                                                             size="sm"
-                                                            onClick={() => handleUseTemplate(template)}
-                                                            disabled={createFormMutation.isPending || isApplying}
+                                                            onClick={() => handleUseTemplate(template.id, template.name)}
+                                                            disabled={useTemplateMutation.isPending || isApplying}
                                                         >
                                                             {isApplying && (
                                                                 <Loader2Icon className="mr-2 size-4 animate-spin" />
@@ -304,10 +305,10 @@ export default function FormsListPage() {
                                                 </CardHeader>
                                                 <CardContent className="pt-0">
                                                     <p className="text-sm text-muted-foreground">
-                                                        {template.description}
+                                                        {template.description || "No description provided."}
                                                     </p>
                                                     <p className="mt-2 text-xs text-muted-foreground">
-                                                        {template.sections} sections • {template.questions} questions
+                                                        Updated {formatRelativeTime(template.updated_at)}
                                                     </p>
                                                 </CardContent>
                                             </Card>

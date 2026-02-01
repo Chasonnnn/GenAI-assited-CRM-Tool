@@ -27,11 +27,14 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/hooks/use-email-templates", () => ({
     useEmailTemplates: () => ({ data: [], isLoading: false }),
     useEmailTemplate: () => ({ data: null, isLoading: false }),
+    useEmailTemplateLibrary: () => ({ data: [], isLoading: false }),
+    useEmailTemplateLibraryItem: () => ({ data: null, isLoading: false }),
     useCreateEmailTemplate: () => ({ mutate: vi.fn(), isPending: false }),
     useUpdateEmailTemplate: () => ({ mutate: vi.fn(), isPending: false }),
     useDeleteEmailTemplate: () => ({ mutate: vi.fn(), isPending: false }),
     useCopyTemplateToPersonal: () => ({ mutate: vi.fn(), isPending: false }),
     useShareTemplateWithOrg: () => ({ mutate: vi.fn(), isPending: false }),
+    useCopyTemplateFromLibrary: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
 vi.mock("@/lib/hooks/use-signature", () => ({

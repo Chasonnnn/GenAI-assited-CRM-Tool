@@ -18,6 +18,11 @@ import {
     EmailTemplateCopyRequest,
     EmailTemplateShareRequest,
     ListTemplatesParams,
+    listTemplateLibrary,
+    getTemplateLibraryItem,
+    copyTemplateFromLibrary,
+    EmailTemplateLibraryItem,
+    EmailTemplateLibraryDetail,
 } from '@/lib/api/email-templates'
 
 // Query keys
@@ -27,6 +32,8 @@ export const emailTemplateKeys = {
     list: (params: ListTemplatesParams) => [...emailTemplateKeys.lists(), params] as const,
     details: () => [...emailTemplateKeys.all, 'detail'] as const,
     detail: (id: string) => [...emailTemplateKeys.details(), id] as const,
+    library: () => [...emailTemplateKeys.all, 'library'] as const,
+    libraryDetail: (id: string) => [...emailTemplateKeys.library(), id] as const,
 }
 
 // Hooks
@@ -135,6 +142,37 @@ export function useShareTemplateWithOrg() {
     return useMutation({
         mutationFn: ({ id, data }: { id: string; data: EmailTemplateShareRequest }) =>
             shareTemplateWithOrg(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
+        },
+    })
+}
+
+// ============================================================================
+// Platform Template Library Hooks
+// ============================================================================
+
+export function useEmailTemplateLibrary() {
+    return useQuery<EmailTemplateLibraryItem[]>({
+        queryKey: emailTemplateKeys.library(),
+        queryFn: () => listTemplateLibrary(),
+    })
+}
+
+export function useEmailTemplateLibraryItem(id: string | null) {
+    return useQuery<EmailTemplateLibraryDetail>({
+        queryKey: emailTemplateKeys.libraryDetail(id || ''),
+        queryFn: () => getTemplateLibraryItem(id!),
+        enabled: !!id,
+    })
+}
+
+export function useCopyTemplateFromLibrary() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: EmailTemplateCopyRequest }) =>
+            copyTemplateFromLibrary(id, data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
         },

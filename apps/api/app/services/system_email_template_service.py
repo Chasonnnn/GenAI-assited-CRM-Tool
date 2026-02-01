@@ -52,62 +52,68 @@ _LEGACY_ORG_INVITE_BODY = """
 """.strip()
 
 _ORG_INVITE_BODY = """
-<div style="background-color: #f5f5f7; padding: 24px; margin: 0;">
+<div style="background-color: #f5f5f7; padding: 32px 16px; margin: 0;">
+  <span style="display:none; visibility:hidden; opacity:0; color:transparent; height:0; width:0;">
+    You're invited to join {{org_name}}. This link may expire soon.
+  </span>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f7;">
     <tr>
       <td align="center">
         <table role="presentation" width="600" cellpadding="0" cellspacing="0"
                style="width: 100%; max-width: 600px; background-color: #ffffff;
-                      border: 1px solid #e5e7eb; border-radius: 16px;">
+                      border: 1px solid #e5e7eb; border-radius: 20px;
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;">
           <tr>
-            <td style="padding: 32px 32px 8px 32px;">
-              <div style="font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase;
+            <td style="padding: 32px 40px 10px 40px;">
+              <div style="font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase;
                           font-weight: 600; color: #6b7280;">
                 Surrogacy Force
               </div>
             </td>
           </tr>
           <tr>
-            <td style="padding: 0 32px 12px 32px;">
+            <td style="padding: 0 40px 12px 40px;">
               <h1 style="margin: 0; font-size: 24px; line-height: 1.3; color: #111827;">
-                You’re invited to join {{org_name}}
+                You're invited to join {{org_name}}
               </h1>
             </td>
           </tr>
           <tr>
-            <td style="padding: 0 32px 18px 32px;">
+            <td style="padding: 0 40px 20px 40px;">
               <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #374151;">
-                You’ve been invited{{inviter_text}} to join <strong>{{org_name}}</strong> as a
+                You've been invited{{inviter_text}} to join <strong>{{org_name}}</strong> as a
                 <strong>{{role_title}}</strong>.
               </p>
             </td>
           </tr>
           <tr>
-            <td style="padding: 0 32px 24px 32px;">
+            <td style="padding: 0 40px 28px 40px;">
               <a href="{{invite_url}}" target="_blank"
                  style="display: inline-block; background-color: #111827; color: #ffffff;
                         text-decoration: none; font-weight: 600; font-size: 15px;
-                        padding: 12px 22px; border-radius: 10px;">
+                        padding: 14px 26px; border-radius: 12px;">
                 Accept Invitation
               </a>
             </td>
           </tr>
           <tr>
-            <td style="padding: 0 32px 8px 32px;">
-              <p style="margin: 0 0 10px 0; font-size: 14px; color: #6b7280;">
-                What happens next
-              </p>
-              <ul style="margin: 0; padding-left: 18px; color: #374151; font-size: 14px; line-height: 1.6;">
-                <li>Set up your account in minutes</li>
-                <li>Review your workspace access</li>
-                <li>Start collaborating with your team</li>
-              </ul>
+            <td style="padding: 0 40px 16px 40px;">
+              <div style="border-radius: 14px; background-color: #f9fafb; padding: 16px;">
+                <p style="margin: 0 0 10px 0; font-size: 14px; color: #6b7280;">
+                  What happens next
+                </p>
+                <ul style="margin: 0; padding-left: 18px; color: #374151; font-size: 14px; line-height: 1.6;">
+                  <li>Set up your account in minutes</li>
+                  <li>Review your workspace access</li>
+                  <li>Start collaborating with your team</li>
+                </ul>
+              </div>
             </td>
           </tr>
           <tr>
-            <td style="padding: 16px 32px 0 32px;">
+            <td style="padding: 4px 40px 0 40px;">
               <p style="margin: 0; font-size: 13px; color: #6b7280;">
-                If the button doesn’t work, paste this link into your browser:
+                If the button doesn't work, paste this link into your browser:
               </p>
               <p style="margin: 6px 0 0 0; font-size: 13px;">
                 <a href="{{invite_url}}" target="_blank" style="color: #2563eb; text-decoration: none;">
@@ -117,11 +123,11 @@ _ORG_INVITE_BODY = """
             </td>
           </tr>
           <tr>
-            <td style="padding: 20px 32px 28px 32px;">
+            <td style="padding: 22px 40px 30px 40px;">
               <div style="padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280;">
                 {{expires_block}}
                 <p style="margin: 8px 0 0 0; color: #9ca3af;">
-                  If you didn’t expect this invitation, you can safely ignore this email.
+                  If you didn't expect this invitation, you can safely ignore this email.
                 </p>
               </div>
             </td>

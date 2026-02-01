@@ -48,6 +48,7 @@ import {
     ShareIcon,
     UserIcon,
     BuildingIcon,
+    LayoutTemplateIcon,
     LockIcon,
     SparklesIcon,
 } from "lucide-react"
@@ -60,6 +61,9 @@ import {
     useDeleteEmailTemplate,
     useCopyTemplateToPersonal,
     useShareTemplateWithOrg,
+    useEmailTemplateLibrary,
+    useEmailTemplateLibraryItem,
+    useCopyTemplateFromLibrary,
 } from "@/lib/hooks/use-email-templates"
 import {
     useUserSignature,
@@ -71,7 +75,7 @@ import {
 } from "@/lib/hooks/use-signature"
 import { getSignaturePreview } from "@/lib/api/signature"
 import { RichTextEditor } from "@/components/rich-text-editor"
-import type { EmailTemplateListItem, EmailTemplateScope } from "@/lib/api/email-templates"
+import type { EmailTemplateListItem, EmailTemplateScope, EmailTemplateLibraryItem } from "@/lib/api/email-templates"
 import { toast } from "sonner"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
@@ -509,6 +513,12 @@ export default function EmailTemplatesPage() {
     const [copyShareTarget, setCopyShareTarget] = useState<EmailTemplateListItem | null>(null)
     const [copyShareName, setCopyShareName] = useState("")
 
+    // Platform library copy/preview state
+    const [libraryCopyOpen, setLibraryCopyOpen] = useState(false)
+    const [libraryCopyTarget, setLibraryCopyTarget] = useState<EmailTemplateLibraryItem | null>(null)
+    const [libraryCopyName, setLibraryCopyName] = useState("")
+    const [libraryPreviewId, setLibraryPreviewId] = useState<string | null>(null)
+
     // Signature override state
     const [signatureName, setSignatureName] = useState("")
     const [signatureTitle, setSignatureTitle] = useState("")
@@ -532,12 +542,14 @@ export default function EmailTemplatesPage() {
         activeOnly: false,
         scope: "org",
     })
+    const { data: libraryTemplates, isLoading: loadingLibrary } = useEmailTemplateLibrary()
 
     const createTemplate = useCreateEmailTemplate()
     const updateTemplate = useUpdateEmailTemplate()
     const deleteTemplate = useDeleteEmailTemplate()
     const copyToPersonal = useCopyTemplateToPersonal()
     const shareWithOrg = useShareTemplateWithOrg()
+    const copyFromLibrary = useCopyTemplateFromLibrary()
 
     // Signature hooks
     const { data: signatureData, refetch: refetchSignature } = useUserSignature()
@@ -547,6 +559,13 @@ export default function EmailTemplatesPage() {
 
     // Get full template details when editing
     const { data: fullTemplate } = useEmailTemplate(editingTemplate?.id || null)
+    const { data: libraryTemplateDetail } = useEmailTemplateLibraryItem(libraryPreviewId)
+
+    useEffect(() => {
+        if (!showPreview) {
+            setLibraryPreviewId(null)
+        }
+    }, [showPreview])
 
     const sanitizeHtml = useCallback((html: string) => {
         return DOMPurify.sanitize(html, {
@@ -722,36 +741,71 @@ export default function EmailTemplatesPage() {
         )
     }
 
+    const buildPreviewHtml = useCallback(
+        (rawHtml: string) => {
+            let html = rawHtml
+                .replace(/\{\{full_name\}\}/g, "John Smith")
+                .replace(/\{\{email\}\}/g, "john@example.com")
+                .replace(/\{\{phone\}\}/g, "(555) 123-4567")
+                .replace(/\{\{surrogate_number\}\}/g, "S10001")
+                .replace(/\{\{status_label\}\}/g, "Qualified")
+                .replace(/\{\{owner_name\}\}/g, "Sara Manager")
+                .replace(/\{\{org_name\}\}/g, signatureData?.org_signature_company_name || "ABC Surrogacy")
+                .replace(/\{\{appointment_date\}\}/g, "January 15, 2025")
+                .replace(/\{\{appointment_time\}\}/g, "2:00 PM PST")
+                .replace(/\{\{appointment_location\}\}/g, "Virtual Appointment")
+
+            const hasHtmlTags = /<[a-z][\s\S]*>/i.test(html)
+            if (!hasHtmlTags) {
+                const lines = html.split(/\n/)
+                html = lines
+                    .map((line) => {
+                        if (!line.trim()) {
+                            return `<p style="margin: 0 0 1em 0;">&nbsp;</p>`
+                        }
+                        return `<p style="margin: 0 0 1em 0;">${line}</p>`
+                    })
+                    .join("")
+            } else {
+                html = normalizeTemplateHtml(html)
+            }
+
+            return sanitizeHtml(html)
+        },
+        [normalizeTemplateHtml, sanitizeHtml, signatureData?.org_signature_company_name]
+    )
+
+    useEffect(() => {
+        if (!libraryPreviewId || !libraryTemplateDetail) return
+        setPreviewHtml(buildPreviewHtml(libraryTemplateDetail.body))
+    }, [libraryPreviewId, libraryTemplateDetail, buildPreviewHtml])
+
     const handlePreview = () => {
-        let html = templateBody
-            .replace(/\{\{full_name\}\}/g, "John Smith")
-            .replace(/\{\{email\}\}/g, "john@example.com")
-            .replace(/\{\{phone\}\}/g, "(555) 123-4567")
-            .replace(/\{\{surrogate_number\}\}/g, "S10001")
-            .replace(/\{\{status_label\}\}/g, "Qualified")
-            .replace(/\{\{owner_name\}\}/g, "Sara Manager")
-            .replace(/\{\{org_name\}\}/g, signatureData?.org_signature_company_name || "ABC Surrogacy")
-            .replace(/\{\{appointment_date\}\}/g, "January 15, 2025")
-            .replace(/\{\{appointment_time\}\}/g, "2:00 PM PST")
-            .replace(/\{\{appointment_location\}\}/g, "Virtual Appointment")
-
-        const hasHtmlTags = /<[a-z][\s\S]*>/i.test(html)
-        if (!hasHtmlTags) {
-            const lines = html.split(/\n/)
-            html = lines
-                .map((line) => {
-                    if (!line.trim()) {
-                        return `<p style="margin: 0 0 1em 0;">&nbsp;</p>`
-                    }
-                    return `<p style="margin: 0 0 1em 0;">${line}</p>`
-                })
-                .join("")
-        } else {
-            html = normalizeTemplateHtml(html)
-        }
-
-        setPreviewHtml(sanitizeHtml(html))
+        setPreviewHtml(buildPreviewHtml(templateBody))
         setShowPreview(true)
+    }
+
+    const handleLibraryPreview = (templateId: string) => {
+        setLibraryPreviewId(templateId)
+        setShowPreview(true)
+    }
+
+    const handleLibraryCopy = () => {
+        if (!libraryCopyTarget || !libraryCopyName.trim()) return
+        copyFromLibrary.mutate(
+            { id: libraryCopyTarget.id, data: { name: libraryCopyName.trim() } },
+            {
+                onSuccess: () => {
+                    toast.success("Template copied to org templates")
+                    setLibraryCopyOpen(false)
+                    setLibraryCopyTarget(null)
+                    setLibraryCopyName("")
+                },
+                onError: (error: Error) => {
+                    toast.error(error.message || "Failed to copy template")
+                },
+            }
+        )
     }
 
     const insertVariable = (varName: string) => {
@@ -871,6 +925,10 @@ export default function EmailTemplatesPage() {
                                 <BuildingIcon className="size-4" />
                                 Email Templates
                             </TabsTrigger>
+                            <TabsTrigger value="platform" className="gap-2">
+                                <LayoutTemplateIcon className="size-4" />
+                                Platform Templates
+                            </TabsTrigger>
                             <TabsTrigger value="signature">My Signature</TabsTrigger>
                         </TabsList>
 
@@ -969,6 +1027,65 @@ export default function EmailTemplatesPage() {
                                         onCopy={() => handleOpenCopyDialog(template)}
                                         onShare={() => {}}
                                     />
+                                ))}
+                            </div>
+                        )}
+                    </TabsContent>
+
+                    {/* Platform Templates Tab */}
+                    <TabsContent value="platform" className="space-y-4">
+                        {loadingLibrary ? (
+                            <div className="flex items-center justify-center py-12">
+                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : !libraryTemplates?.length ? (
+                            <Card>
+                                <CardContent className="flex flex-col items-center justify-center py-12">
+                                    <LayoutTemplateIcon className="size-12 text-muted-foreground mb-4" />
+                                    <p className="text-muted-foreground">No platform templates available</p>
+                                </CardContent>
+                            </Card>
+                        ) : (
+                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                {libraryTemplates.map((template) => (
+                                    <Card key={template.id}>
+                                        <CardHeader className="pb-2">
+                                            <div className="flex items-start justify-between">
+                                                <div className="space-y-1">
+                                                    <CardTitle className="text-base">{template.name}</CardTitle>
+                                                    <CardDescription className="line-clamp-2">
+                                                        {template.subject}
+                                                    </CardDescription>
+                                                </div>
+                                                {template.category && (
+                                                    <Badge variant="outline" className="capitalize">
+                                                        {template.category}
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                        </CardHeader>
+                                        <CardContent className="flex items-center justify-between">
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => handleLibraryPreview(template.id)}
+                                            >
+                                                <EyeIcon className="mr-2 size-4" />
+                                                Preview
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                onClick={() => {
+                                                    setLibraryCopyTarget(template)
+                                                    setLibraryCopyName(template.name)
+                                                    setLibraryCopyOpen(true)
+                                                }}
+                                            >
+                                                <CopyIcon className="mr-2 size-4" />
+                                                Copy to Org
+                                            </Button>
+                                        </CardContent>
+                                    </Card>
                                 ))}
                             </div>
                         )}
@@ -1369,6 +1486,40 @@ export default function EmailTemplatesPage() {
                                 <Loader2Icon className="mr-2 size-4 animate-spin" />
                             )}
                             <CopyIcon className="mr-2 size-4" />
+                            Copy Template
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Platform Library Copy Dialog */}
+            <Dialog open={libraryCopyOpen} onOpenChange={setLibraryCopyOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Copy to Org Templates</DialogTitle>
+                        <DialogDescription>
+                            Create an organization template from this platform template.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="library-copy-name">Template Name</Label>
+                            <Input
+                                id="library-copy-name"
+                                placeholder="Org Template Name"
+                                value={libraryCopyName}
+                                onChange={(e) => setLibraryCopyName(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setLibraryCopyOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleLibraryCopy} disabled={copyFromLibrary.isPending}>
+                            {copyFromLibrary.isPending && (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            )}
                             Copy Template
                         </Button>
                     </DialogFooter>

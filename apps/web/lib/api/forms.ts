@@ -187,6 +187,24 @@ export interface FormLogoRead {
     created_at: string
 }
 
+export interface FormTemplateLibraryItem {
+    id: string
+    name: string
+    description?: string | null
+    published_at?: string | null
+    updated_at: string
+}
+
+export interface FormTemplateLibraryDetail extends FormTemplateLibraryItem {
+    schema_json?: FormSchema | null
+    settings_json?: Record<string, unknown> | null
+}
+
+export interface FormTemplateUseRequest {
+    name: string
+    description?: string | null
+}
+
 export interface SubmissionDownloadResponse {
     download_url: string
     filename: string
@@ -218,6 +236,25 @@ export function listFormMappings(formId: string): Promise<FormFieldMappingItem[]
 
 export function setFormMappings(formId: string, mappings: FormFieldMappingItem[]): Promise<FormFieldMappingItem[]> {
     return api.put<FormFieldMappingItem[]>(`/forms/${formId}/mappings`, { mappings })
+}
+
+// ============================================================================
+// Platform Form Template Library
+// ============================================================================
+
+export function listFormTemplates(): Promise<FormTemplateLibraryItem[]> {
+    return api.get<FormTemplateLibraryItem[]>(`/forms/templates`)
+}
+
+export function getFormTemplate(templateId: string): Promise<FormTemplateLibraryDetail> {
+    return api.get<FormTemplateLibraryDetail>(`/forms/templates/${templateId}`)
+}
+
+export function createFormFromTemplate(
+    templateId: string,
+    payload: FormTemplateUseRequest
+): Promise<FormRead> {
+    return api.post<FormRead>(`/forms/templates/${templateId}/use`, payload)
 }
 
 export function createFormToken(formId: string, surrogateId: string, expiresInDays?: number): Promise<FormTokenRead> {

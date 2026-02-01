@@ -56,6 +56,20 @@ export interface EmailTemplateShareRequest {
     name: string
 }
 
+export interface EmailTemplateLibraryItem {
+    id: string
+    name: string
+    subject: string
+    from_email: string | null
+    category: string | null
+    published_at: string | null
+    updated_at: string
+}
+
+export interface EmailTemplateLibraryDetail extends EmailTemplateLibraryItem {
+    body: string
+}
+
 export interface EmailTemplateUpdate {
     name?: string
     subject?: string
@@ -181,4 +195,23 @@ export async function shareTemplateWithOrg(
     data: EmailTemplateShareRequest
 ): Promise<EmailTemplate> {
     return api.post<EmailTemplate>(`/email-templates/${id}/share`, data)
+}
+
+// ============================================================================
+// Platform Template Library
+// ============================================================================
+
+export async function listTemplateLibrary(): Promise<EmailTemplateLibraryItem[]> {
+    return api.get<EmailTemplateLibraryItem[]>(`/email-templates/library`)
+}
+
+export async function getTemplateLibraryItem(id: string): Promise<EmailTemplateLibraryDetail> {
+    return api.get<EmailTemplateLibraryDetail>(`/email-templates/library/${id}`)
+}
+
+export async function copyTemplateFromLibrary(
+    id: string,
+    data: EmailTemplateCopyRequest
+): Promise<EmailTemplate> {
+    return api.post<EmailTemplate>(`/email-templates/library/${id}/copy`, data)
 }

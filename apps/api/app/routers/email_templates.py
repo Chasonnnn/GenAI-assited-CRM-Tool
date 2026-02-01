@@ -26,6 +26,10 @@ from app.schemas.email import (
     EmailTemplateCopyRequest,
     EmailTemplateShareRequest,
 )
+from app.schemas.platform_templates import (
+    EmailTemplateLibraryItem,
+    EmailTemplateLibraryDetail,
+)
 from app.services import email_service, user_service
 
 router = APIRouter(
@@ -174,6 +178,59 @@ def create_template(
         scope=data.scope,
     )
     return _build_template_response(db, template)
+
+
+# =============================================================================
+# Platform Template Library (Read + Copy)
+# =============================================================================
+
+
+@router.get("/library", response_model=list[EmailTemplateLibraryItem])
+def list_platform_email_library(
+    db: Session = Depends(get_db),
+    session=Depends(get_current_session),
+):
+    """List published platform email templates visible to this org."""
+    from app.services import platform_template_service
+
+    templates = platform_template_service.list_published_email_templates_for_org(db, session.org_id)
+    return [
+        EmailTemplateLibraryItem(
+            id=t.id,
+            name=t.published_name or t.name,
+            subject=t.published_subject or t.subject,
+            from_email=t.published_from_email,
+            category=t.published_category,
+            published_at=t.published_at,
+            updated_at=t.updated_at,
+        )
+        for t in templates
+    ]
+
+
+@router.get("/library/{template_id}", response_model=EmailTemplateLibraryDetail)
+def get_platform_email_library_template(
+    template_id: UUID,
+    db: Session = Depends(get_db),
+    session=Depends(get_current_session),
+):
+    from app.services import platform_template_service
+
+    template = platform_template_service.get_published_email_template_for_org(
+        db, template_id, session.org_id
+    )
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return EmailTemplateLibraryDetail(
+        id=template.id,
+        name=template.published_name or template.name,
+        subject=template.published_subject or template.subject,
+        body=template.published_body or template.body,
+        from_email=template.published_from_email,
+        category=template.published_category,
+        published_at=template.published_at,
+        updated_at=template.updated_at,
+    )
 
 
 @router.get("/{template_id}", response_model=EmailTemplateRead)
@@ -486,3 +543,45 @@ def rollback_template(
         raise HTTPException(status_code=400, detail=error)
 
     return _build_template_response(db, updated)
+
+
+@router.post(
+    "/library/{template_id}/copy",
+    response_model=EmailTemplateRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def copy_platform_email_template(
+    template_id: UUID,
+    data: EmailTemplateCopyRequest,
+    db: Session = Depends(get_db),
+    session=Depends(get_current_session),
+):
+    """Copy a platform template into org templates."""
+    if not session.has_permission(POLICIES["email_templates"].actions["manage"]):
+        raise HTTPException(status_code=403, detail="Missing permission: manage_email_templates")
+
+    from app.services import platform_template_service
+
+    template = platform_template_service.get_published_email_template_for_org(
+        db, template_id, session.org_id
+    )
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    try:
+        created = email_service.create_template(
+            db=db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            name=data.name,
+            subject=template.published_subject or template.subject,
+            body=template.published_body or template.body,
+            from_email=template.published_from_email,
+            is_active=True,
+            scope="org",
+            comment=f"Copied from platform template {template.id}",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return _build_template_response(db, created)
