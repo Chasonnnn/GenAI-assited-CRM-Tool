@@ -135,8 +135,10 @@ describe('AIAssistantPage', () => {
         const call = mockStreamMessage.mock.calls[0]?.[0]
         expect(call).toEqual({ message: 'Hello there' })
 
-        expect(await screen.findByText(/Global mode/i)).toBeInTheDocument()
-        expect(screen.getByText('Hello there')).toBeInTheDocument()
+        expect(
+            await screen.findByText(/Global mode.*select a surrogate to add context/i),
+        ).toBeInTheDocument()
+        expect(screen.getByText('Hello there', { selector: 'p' })).toBeInTheDocument()
     })
 
     it('limits chat history to the 10 most recent sessions', async () => {

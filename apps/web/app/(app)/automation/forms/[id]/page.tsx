@@ -2955,6 +2955,7 @@ export default function FormBuilderPage() {
                                                     size="sm"
                                                     className="flex-1"
                                                     onClick={() => handleUseTemplate(template.id)}
+                                                    aria-label={`Use ${template.name} template`}
                                                 >
                                                     Use Template
                                                 </Button>
