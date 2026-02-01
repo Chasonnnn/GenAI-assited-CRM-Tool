@@ -11,6 +11,7 @@
       ],
       "extra-files": [
         "apps/api/app/core/config.py",
+        "apps/api/.release-please-version.json",
         "README.md"
       ],
       "bump-minor-pre-major": true,

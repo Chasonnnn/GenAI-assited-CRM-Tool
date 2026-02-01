@@ -21,6 +21,7 @@ DEFAULT_GCP_REDIRECT_URI = "http://localhost:8000/integrations/gcp/callback"
 DEFAULT_DUO_REDIRECT_URI = "http://localhost:3000/auth/duo/callback"
 DEFAULT_META_OAUTH_REDIRECT_URI = "http://localhost:8000/integrations/meta/callback"
 RELEASE_PLEASE_MANIFEST_NAME = ".release-please-manifest.json"
+RELEASE_PLEASE_VERSION_NAME = ".release-please-version.json"
 FALLBACK_APP_VERSION = "0.20.0"
 
 
@@ -32,6 +33,8 @@ def _read_release_please_manifest_version(path: Path) -> str | None:
     if not isinstance(data, dict):
         return None
     version = data.get(".")
+    if not (isinstance(version, str) and version.strip()):
+        version = data.get("version")
     if isinstance(version, str) and version.strip():
         return version.strip()
     return None
@@ -47,6 +50,9 @@ def _load_release_please_version() -> str | None:
 
     for parent in Path(__file__).resolve().parents:
         candidate = parent / RELEASE_PLEASE_MANIFEST_NAME
+        if candidate.is_file():
+            return _read_release_please_manifest_version(candidate)
+        candidate = parent / RELEASE_PLEASE_VERSION_NAME
         if candidate.is_file():
             return _read_release_please_manifest_version(candidate)
     return None
