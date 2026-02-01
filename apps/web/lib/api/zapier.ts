@@ -88,6 +88,22 @@ export interface ZapierOutboundTestResponse {
     event_id: string;
 }
 
+export interface ZapierFieldPasteRequest {
+    paste: string;
+    webhook_id?: string;
+    form_id?: string;
+    form_name?: string;
+}
+
+export interface ZapierFieldPasteResponse {
+    form_id: string;
+    form_name?: string | null;
+    meta_form_id: string;
+    field_count: number;
+    field_keys: string[];
+    mapping_url: string;
+}
+
 export async function getZapierSettings(): Promise<ZapierSettings> {
     return api.get<ZapierSettings>('/integrations/zapier/settings');
 }
@@ -115,6 +131,10 @@ export async function updateZapierInboundWebhook(
     return api.patch<ZapierInboundWebhook>(`/integrations/zapier/webhooks/${webhookId}`, payload);
 }
 
+export async function deleteZapierInboundWebhook(webhookId: string): Promise<void> {
+    return api.delete<void>(`/integrations/zapier/webhooks/${webhookId}`);
+}
+
 export async function updateZapierOutboundSettings(
     payload: ZapierOutboundSettingsRequest,
 ): Promise<ZapierSettings> {
@@ -131,4 +151,10 @@ export async function sendZapierOutboundTest(
     payload: ZapierOutboundTestRequest,
 ): Promise<ZapierOutboundTestResponse> {
     return api.post<ZapierOutboundTestResponse>('/integrations/zapier/test-outbound', payload);
+}
+
+export async function parseZapierFieldPaste(
+    payload: ZapierFieldPasteRequest,
+): Promise<ZapierFieldPasteResponse> {
+    return api.post<ZapierFieldPasteResponse>('/integrations/zapier/field-paste', payload);
 }

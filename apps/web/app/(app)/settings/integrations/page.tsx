@@ -11,6 +11,18 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Textarea } from "@/components/ui/textarea"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import {
     CheckCircleIcon,
     AlertTriangleIcon,
@@ -28,6 +40,7 @@ import {
     UnlinkIcon,
     SparklesIcon,
     CheckIcon,
+    TrashIcon,
 } from "lucide-react"
 import { useIntegrationHealth } from "@/lib/hooks/use-ops"
 import { useAuth } from "@/lib/auth-context"
@@ -42,12 +55,15 @@ import {
     useCreateZapierInboundWebhook,
     useRotateZapierInboundWebhook,
     useUpdateZapierInboundWebhook,
+    useZapierFieldPaste,
+    useDeleteZapierInboundWebhook,
 } from "@/lib/hooks/use-zapier"
 import { useMetaForms } from "@/lib/hooks/use-meta-forms"
 import { formatRelativeTime } from "@/lib/formatters"
 import { CopyIcon, SendIcon, RotateCwIcon, ActivityIcon, PlusIcon } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { toast } from "sonner"
+import type { ZapierFieldPasteResponse } from "@/lib/api/zapier"
 
 const statusConfig = {
     healthy: { icon: CheckCircleIcon, color: "text-green-600", badge: "default" as const, label: "Healthy" },
@@ -1124,11 +1140,17 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
     const createInboundWebhook = useCreateZapierInboundWebhook()
     const rotateInboundWebhook = useRotateZapierInboundWebhook()
     const updateInboundWebhook = useUpdateZapierInboundWebhook()
+    const parseFieldPaste = useZapierFieldPaste()
+    const deleteInboundWebhook = useDeleteZapierInboundWebhook()
     const updateOutbound = useUpdateZapierOutboundSettings()
     const [webhookSecrets, setWebhookSecrets] = useState<Record<string, string>>({})
     const [labelDrafts, setLabelDrafts] = useState<Record<string, string>>({})
     const [rotatingWebhookId, setRotatingWebhookId] = useState<string | null>(null)
+    const [deletingWebhookId, setDeletingWebhookId] = useState<string | null>(null)
     const [testFormId, setTestFormId] = useState('')
+    const [fieldPaste, setFieldPaste] = useState('')
+    const [fieldPasteWebhookId, setFieldPasteWebhookId] = useState('')
+    const [fieldPasteResult, setFieldPasteResult] = useState<ZapierFieldPasteResponse | null>(null)
     const sendTestLead = useZapierTestLead()
     const sendOutboundTest = useZapierOutboundTest()
     const [outboundUrl, setOutboundUrl] = useState('')
@@ -1156,6 +1178,20 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
             return next
         })
     }, [settings?.inbound_webhooks])
+
+    useEffect(() => {
+        const inbound = settings?.inbound_webhooks ?? []
+        if (!inbound.length) {
+            if (fieldPasteWebhookId) {
+                setFieldPasteWebhookId('')
+            }
+            return
+        }
+        const ids = inbound.map((webhook) => webhook.webhook_id)
+        if (!fieldPasteWebhookId || !ids.includes(fieldPasteWebhookId)) {
+            setFieldPasteWebhookId(ids[0])
+        }
+    }, [settings?.inbound_webhooks, fieldPasteWebhookId])
 
     useEffect(() => {
         if (!settings) return
@@ -1197,6 +1233,29 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
             toast.error("Failed to rotate webhook secret")
         } finally {
             setRotatingWebhookId(null)
+        }
+    }
+
+    const handleDeleteInbound = async (webhookId: string) => {
+        try {
+            setDeletingWebhookId(webhookId)
+            await deleteInboundWebhook.mutateAsync({ webhookId })
+            setWebhookSecrets((prev) => {
+                const next = { ...prev }
+                delete next[webhookId]
+                return next
+            })
+            setLabelDrafts((prev) => {
+                const next = { ...prev }
+                delete next[webhookId]
+                return next
+            })
+            toast.success("Webhook deleted")
+        } catch (error) {
+            const message = error instanceof Error ? error.message : null
+            toast.error(message || "Failed to delete webhook")
+        } finally {
+            setDeletingWebhookId(null)
         }
     }
 
@@ -1244,6 +1303,33 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
         } catch {
             toast.error("Failed to send test lead")
         }
+    }
+
+    const handleFieldPaste = async () => {
+        const paste = fieldPaste.trim()
+        if (!paste) {
+            toast.error("Paste the Zapier field list first.")
+            return
+        }
+        try {
+            const payload: { paste: string; webhook_id?: string } = { paste }
+            if (fieldPasteWebhookId) {
+                payload.webhook_id = fieldPasteWebhookId
+            }
+            const result = await parseFieldPaste.mutateAsync(payload)
+            setFieldPasteResult(result)
+            if (result.form_id) {
+                setTestFormId(result.form_id)
+            }
+            toast.success(`Detected ${result.field_count} fields`)
+        } catch {
+            toast.error("Unable to parse fields. Check the pasted data and try again.")
+        }
+    }
+
+    const handleFieldPasteClear = () => {
+        setFieldPaste('')
+        setFieldPasteResult(null)
     }
 
     const handleSaveOutbound = async () => {
@@ -1379,6 +1465,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                 {settings.inbound_webhooks.map((webhook) => {
                                     const secret = webhookSecrets[webhook.webhook_id]
                                     const labelValue = labelDrafts[webhook.webhook_id] ?? ""
+                                    const canDelete = settings.inbound_webhooks.length > 1
                                     return (
                                     <div key={webhook.webhook_id} className="space-y-3 rounded-md border p-4">
                                         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -1446,27 +1533,66 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                         </div>
 
                                         <div className="space-y-3">
-                                            <Button
-                                                variant="outline"
-                                                onClick={() => handleRotateInbound(webhook.webhook_id)}
-                                                disabled={
-                                                    rotateInboundWebhook.isPending &&
-                                                    rotatingWebhookId === webhook.webhook_id
-                                                }
-                                            >
-                                                {rotateInboundWebhook.isPending &&
-                                                rotatingWebhookId === webhook.webhook_id ? (
-                                                    <>
-                                                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                                        Rotating…
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <RotateCwIcon className="mr-2 size-4" aria-hidden="true" />
-                                                        Rotate Webhook Secret
-                                                    </>
-                                                )}
-                                            </Button>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <Button
+                                                    variant="outline"
+                                                    onClick={() => handleRotateInbound(webhook.webhook_id)}
+                                                    disabled={
+                                                        rotateInboundWebhook.isPending &&
+                                                        rotatingWebhookId === webhook.webhook_id
+                                                    }
+                                                >
+                                                    {rotateInboundWebhook.isPending &&
+                                                    rotatingWebhookId === webhook.webhook_id ? (
+                                                        <>
+                                                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                                            Rotating…
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <RotateCwIcon className="mr-2 size-4" aria-hidden="true" />
+                                                            Rotate Webhook Secret
+                                                        </>
+                                                    )}
+                                                </Button>
+
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button
+                                                            variant="ghost"
+                                                            className="text-destructive hover:text-destructive"
+                                                            disabled={!canDelete || deletingWebhookId === webhook.webhook_id}
+                                                        >
+                                                            <TrashIcon className="mr-2 size-4" aria-hidden="true" />
+                                                            Delete Webhook
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>Delete webhook?</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                This will disable the incoming URL immediately. Any Zapier
+                                                                flows using it will fail until updated.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                            <AlertDialogAction
+                                                                onClick={() => handleDeleteInbound(webhook.webhook_id)}
+                                                                disabled={!canDelete || deletingWebhookId === webhook.webhook_id}
+                                                            >
+                                                                {deletingWebhookId === webhook.webhook_id ? "Deleting…" : "Delete"}
+                                                            </AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </div>
+
+                                            {!canDelete ? (
+                                                <p className="text-xs text-muted-foreground">
+                                                    Keep at least one inbound webhook active.
+                                                </p>
+                                            ) : null}
 
                                             {secret ? (
                                                 <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-100">
@@ -1494,6 +1620,80 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                 })}
                             </div>
                         )}
+                    </div>
+
+                    <div className="space-y-4 border-t pt-4">
+                        <div className="space-y-2">
+                            <Label>Paste Zapier Field List</Label>
+                            <p className="text-xs text-muted-foreground">
+                                Paste the field list from Zapier (either the token lines or the sample field/value list).
+                                We’ll extract keys, build a form schema, and open the mapping suggestions.
+                            </p>
+                        </div>
+
+                        {settings?.inbound_webhooks?.length ? (
+                            <div className="space-y-2">
+                                <Label>Webhook</Label>
+                                <Select value={fieldPasteWebhookId} onValueChange={setFieldPasteWebhookId}>
+                                    <SelectTrigger className="w-full md:w-72" aria-label="Select webhook">
+                                        <SelectValue placeholder="Select webhook" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {settings.inbound_webhooks.map((webhook) => (
+                                            <SelectItem key={webhook.webhook_id} value={webhook.webhook_id}>
+                                                {webhook.label || `Webhook ${webhook.webhook_id.slice(0, 8)}`}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-xs text-muted-foreground">
+                                    Pick the webhook this form belongs to if you have more than one.
+                                </p>
+                            </div>
+                        ) : null}
+
+                        <Textarea
+                            value={fieldPaste}
+                            onChange={(event) => setFieldPaste(event.target.value)}
+                            placeholder={'Paste lines like {{=gives["312067957"]["full_name"]}} or "Full Name: Jane Doe"'}
+                            rows={6}
+                            name="zapier-field-paste"
+                        />
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                                variant="outline"
+                                onClick={handleFieldPaste}
+                                disabled={parseFieldPaste.isPending}
+                            >
+                                {parseFieldPaste.isPending ? (
+                                    <>
+                                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                        Extracting…
+                                    </>
+                                ) : (
+                                    <>
+                                        <SparklesIcon className="mr-2 size-4" aria-hidden="true" />
+                                        Extract Fields
+                                    </>
+                                )}
+                            </Button>
+                            <Button variant="ghost" onClick={handleFieldPasteClear}>
+                                Clear
+                            </Button>
+                        </div>
+
+                        {fieldPasteResult ? (
+                            <Alert>
+                                <AlertTitle>Fields detected</AlertTitle>
+                                <AlertDescription>
+                                    Found {fieldPasteResult.field_count} fields for{" "}
+                                    {fieldPasteResult.form_name || fieldPasteResult.form_id}.{" "}
+                                    <Link href={fieldPasteResult.mapping_url} className="text-primary underline">
+                                        Open mapping
+                                    </Link>
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
                     </div>
 
                     <div className="space-y-3 border-t pt-4">

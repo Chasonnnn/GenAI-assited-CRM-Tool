@@ -103,6 +103,22 @@ class ZapierOutboundTestResponse(BaseModel):
     event_id: str
 
 
+class ZapierFieldPasteRequest(BaseModel):
+    paste: str
+    webhook_id: str | None = None
+    form_id: str | None = None
+    form_name: str | None = None
+
+
+class ZapierFieldPasteResponse(BaseModel):
+    form_id: str
+    form_name: str | None
+    meta_form_id: str
+    field_count: int
+    field_keys: list[str]
+    mapping_url: str
+
+
 @router.get("/settings", response_model=ZapierSettingsResponse)
 def get_settings(
     db: Session = Depends(get_db),
@@ -202,6 +218,21 @@ def update_inbound_webhook(
     )
 
 
+@router.delete("/webhooks/{webhook_id}", status_code=204)
+def delete_inbound_webhook(
+    webhook_id: str,
+    _csrf: None = Depends(require_csrf_header),
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
+):
+    try:
+        zapier_settings_service.delete_inbound_webhook(db, session.org_id, webhook_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/settings/outbound", response_model=ZapierSettingsResponse)
 def update_outbound_settings(
     data: ZapierOutboundSettingsUpdate,
@@ -251,6 +282,72 @@ def send_test_lead(
         test_mode=True,
     )
     return ZapierTestLeadResponse(**result)
+
+
+@router.post("/field-paste", response_model=ZapierFieldPasteResponse)
+def parse_field_paste(
+    data: ZapierFieldPasteRequest,
+    _csrf: None = Depends(require_csrf_header),
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
+):
+    paste = data.paste.strip()
+    if not paste:
+        raise HTTPException(status_code=400, detail="Paste field list is required.")
+
+    parsed = zapier_webhook_service.parse_zapier_field_paste(paste)
+    field_keys = parsed.get("field_keys") or []
+    if not field_keys:
+        raise HTTPException(
+            status_code=400,
+            detail="No field keys detected. Paste the Zapier field list or sample data.",
+        )
+
+    inbound = None
+    if data.webhook_id:
+        inbound = zapier_settings_service.get_inbound_webhook_by_id(db, data.webhook_id)
+        if not inbound or inbound.organization_id != session.org_id:
+            raise HTTPException(status_code=404, detail="Inbound webhook not found.")
+
+    form_id = data.form_id or parsed.get("form_id")
+    if not form_id and inbound:
+        form_id = f"zapier-{inbound.webhook_id}"
+
+    if not form_id:
+        raise HTTPException(
+            status_code=400,
+            detail="form_id or webhook_id is required to create the mapping.",
+        )
+
+    form_name = data.form_name or parsed.get("form_name")
+    if not form_name:
+        if inbound and inbound.label:
+            form_name = inbound.label
+        else:
+            form_name = f"Zapier Lead Intake ({form_id})"
+
+    form = meta_form_mapping_service.upsert_form_from_payload(
+        db,
+        session.org_id,
+        form_external_id=str(form_id),
+        form_name=form_name,
+        field_keys=field_keys,
+        page_id="zapier",
+    )
+    if not form:
+        raise HTTPException(status_code=500, detail="Unable to save form mapping.")
+
+    db.commit()
+    db.refresh(form)
+
+    return ZapierFieldPasteResponse(
+        form_id=form.form_external_id,
+        form_name=form.form_name,
+        meta_form_id=str(form.id),
+        field_count=len(field_keys),
+        field_keys=field_keys,
+        mapping_url=f"/settings/integrations/meta/forms/{form.id}",
+    )
 
 
 @router.post("/test-outbound", response_model=ZapierOutboundTestResponse)

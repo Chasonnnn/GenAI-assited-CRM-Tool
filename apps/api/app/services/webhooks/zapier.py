@@ -6,6 +6,7 @@ import hmac
 import logging
 import re
 import uuid
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
 
@@ -24,6 +25,28 @@ MAX_PAYLOAD_BYTES = 5 * 1024 * 1024
 
 _FIELD_DATA_KEYS = ("field_data", "fieldData")
 _FIELDS_KEYS = ("fields", "fieldDataRaw", "field_data_raw")
+
+_LEAD_HINT_KEYS = {
+    "form_id",
+    "form_name",
+    "lead_id",
+    "leadgen_id",
+    "full_name",
+    "email",
+    "phone",
+    "phone_number",
+    "state",
+    "created_time",
+    "submitted_at",
+    "date_of_birth",
+    "dob",
+}
+
+_NON_LEAD_KEYS = {
+    "id",
+    "threadid",
+    "labelids",
+}
 
 _META_ID_KEYS = {
     "lead_id": ("lead_id", "leadgen_id", "meta_lead_id"),
@@ -44,6 +67,20 @@ _META_NAME_KEYS = {
 }
 
 _META_FIELD_KEYS = set(_META_ID_KEYS.keys()) | set(_META_NAME_KEYS.keys())
+_FIELD_LIST_TOKEN_RE = re.compile(r"\[\s*(['\"])(.*?)\1\s*\]")
+_LABEL_VALUE_RE = re.compile(r"^\s*(?:\d+\.\s*)?(?P<label>[^:]+?)\s*:\s*(?P<value>.+)\s*$")
+_META_FIELD_LABELS = {
+    "form_id",
+    "formid",
+    "form_name",
+    "formname",
+    "platform",
+    "created_time",
+    "submitted_at",
+    "submission_time",
+    "lead_id",
+    "leadgen_id",
+}
 
 
 def _normalize_field_key(value: Any) -> str:
@@ -158,12 +195,7 @@ def _form_to_payload(form_data: Any) -> dict[str, Any]:
 
 
 def _unwrap_payload(value: Any) -> Any:
-    if isinstance(value, dict):
-        if isinstance(value.get("data"), dict):
-            return value["data"]
-        if isinstance(value.get("lead"), dict):
-            return value["lead"]
-    return value
+    return _select_payload_candidate(value)
 
 
 def _normalize_payload(value: Any) -> dict[str, Any]:
@@ -171,6 +203,143 @@ def _normalize_payload(value: Any) -> dict[str, Any]:
     if isinstance(unwrapped, dict):
         return unwrapped
     return {"payload": unwrapped}
+
+
+def parse_zapier_field_paste(paste: str) -> dict[str, Any]:
+    field_keys: list[str] = []
+    seen: set[str] = set()
+    token0_counts: Counter[str] = Counter()
+    form_id: str | None = None
+    form_name: str | None = None
+
+    for raw_line in paste.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        tokens = [match.group(2).strip() for match in _FIELD_LIST_TOKEN_RE.finditer(line)]
+        if tokens:
+            if len(tokens) >= 2 and tokens[0]:
+                token0_counts[tokens[0]] += 1
+            field_key = tokens[-1].strip()
+            if not field_key:
+                continue
+            normalized = _normalize_field_key(field_key)
+            if normalized in _META_FIELD_LABELS:
+                continue
+            if field_key not in seen:
+                seen.add(field_key)
+                field_keys.append(field_key)
+            continue
+
+        label_match = _LABEL_VALUE_RE.match(line)
+        if not label_match:
+            continue
+        label = label_match.group("label").strip()
+        value = label_match.group("value").strip()
+        if not label:
+            continue
+        normalized_label = _normalize_field_key(label)
+        if normalized_label in {"form_id", "formid"} and value:
+            form_id = form_id or value
+            continue
+        if normalized_label in {"form_name", "formname"} and value:
+            form_name = form_name or value
+            continue
+        if normalized_label in _META_FIELD_LABELS:
+            continue
+        if label not in seen:
+            seen.add(label)
+            field_keys.append(label)
+
+    if not form_id and token0_counts:
+        candidate, count = token0_counts.most_common(1)[0]
+        normalized_candidate = _normalize_field_key(candidate)
+        if normalized_candidate not in _META_FIELD_LABELS and (count >= 2 or candidate.isdigit()):
+            form_id = candidate
+
+    return {
+        "form_id": form_id,
+        "form_name": form_name,
+        "field_keys": field_keys,
+    }
+
+
+def _looks_like_kv_list(items: list[dict[str, Any]]) -> bool:
+    if not items:
+        return False
+    matches = 0
+    for item in items:
+        lowered = {str(k).lower() for k in item.keys()}
+        if ("key" in lowered or "name" in lowered) and ("value" in lowered or "values" in lowered):
+            matches += 1
+    return matches >= max(1, len(items) // 2)
+
+
+def _coerce_kv_list(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, list):
+        return None
+    items = [item for item in value if isinstance(item, dict)]
+    if len(items) != len(value) or not _looks_like_kv_list(items):
+        return None
+    converted: dict[str, Any] = {}
+    for item in items:
+        lowered = {str(k).lower(): k for k in item.keys()}
+        name_key = (
+            lowered.get("key")
+            or lowered.get("name")
+            or lowered.get("field")
+            or lowered.get("label")
+        )
+        if not name_key:
+            continue
+        raw_name = item.get(name_key)
+        value_key = lowered.get("values") or lowered.get("value")
+        raw_value = item.get(value_key) if value_key else None
+        if raw_value is None and len(item) == 1:
+            raw_value = next(iter(item.values()))
+        if raw_name:
+            converted[str(raw_name)] = raw_value
+    return converted or None
+
+
+def _score_payload(candidate: dict[str, Any]) -> float:
+    normalized_keys = {_normalize_field_key(k) for k in candidate.keys() if k}
+    if not normalized_keys:
+        return -1.0
+    score = 0.0
+    if normalized_keys.issubset(_NON_LEAD_KEYS):
+        score -= 5.0
+    for key in normalized_keys:
+        if key in _LEAD_HINT_KEYS:
+            score += 2.0
+    score += min(len(normalized_keys), 50) * 0.05
+    return score
+
+
+def _select_payload_candidate(value: Any) -> Any:
+    candidates: list[dict[str, Any]] = []
+
+    if isinstance(value, dict):
+        candidates.append(value)
+        for key in ("payload", "body", "request", "bundle", "lead", "data", "input"):
+            nested = value.get(key)
+            if isinstance(nested, dict):
+                candidates.append(nested)
+            else:
+                converted = _coerce_kv_list(nested)
+                if converted:
+                    candidates.append(converted)
+    else:
+        converted = _coerce_kv_list(value)
+        if converted:
+            candidates.append(converted)
+
+    if not candidates:
+        return value
+
+    best = max(candidates, key=_score_payload)
+    return best
 
 
 def _get_any(
@@ -504,6 +673,11 @@ class ZapierWebhookHandler:
             payload = payload["data"]
         elif isinstance(payload, dict) and isinstance(payload.get("lead"), list):
             payload = payload["lead"]
+
+        if isinstance(payload, list):
+            kv_payload = _coerce_kv_list(payload)
+            if kv_payload:
+                payload = kv_payload
 
         payload = _ensure_form_identifier(payload, webhook_id)
 

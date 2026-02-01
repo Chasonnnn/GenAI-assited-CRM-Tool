@@ -55,6 +55,17 @@ export function useUpdateZapierInboundWebhook() {
     });
 }
 
+export function useDeleteZapierInboundWebhook() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ webhookId }: { webhookId: string }) =>
+            zapierApi.deleteZapierInboundWebhook(webhookId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: zapierKeys.settings() });
+        },
+    });
+}
+
 export function useUpdateZapierOutboundSettings() {
     const queryClient = useQueryClient();
     return useMutation({
@@ -74,5 +85,15 @@ export function useZapierTestLead() {
 export function useZapierOutboundTest() {
     return useMutation({
         mutationFn: zapierApi.sendZapierOutboundTest,
+    });
+}
+
+export function useZapierFieldPaste() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: zapierApi.parseZapierFieldPaste,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: zapierKeys.settings() });
+        },
     });
 }

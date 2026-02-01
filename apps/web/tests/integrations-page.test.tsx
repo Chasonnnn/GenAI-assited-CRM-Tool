@@ -17,6 +17,8 @@ const mockZapierInboundUpdate = vi.fn()
 const mockZapierTestLead = vi.fn()
 const mockZapierOutboundUpdate = vi.fn()
 const mockZapierOutboundTest = vi.fn()
+const mockZapierFieldPaste = vi.fn()
+const mockZapierInboundDelete = vi.fn()
 const mockUpdateAISettings = vi.fn()
 const mockTestAIKey = vi.fn()
 const mockAcceptConsent = vi.fn()
@@ -136,6 +138,8 @@ vi.mock('@/lib/hooks/use-zapier', () => ({
     useZapierTestLead: () => ({ mutateAsync: mockZapierTestLead, isPending: false }),
     useUpdateZapierOutboundSettings: () => ({ mutateAsync: mockZapierOutboundUpdate, isPending: false }),
     useZapierOutboundTest: () => ({ mutateAsync: mockZapierOutboundTest, isPending: false }),
+    useZapierFieldPaste: () => ({ mutateAsync: mockZapierFieldPaste, isPending: false }),
+    useDeleteZapierInboundWebhook: () => ({ mutateAsync: mockZapierInboundDelete, isPending: false }),
 }))
 
 describe('IntegrationsPage', () => {
@@ -168,6 +172,8 @@ describe('IntegrationsPage', () => {
         mockZapierInboundCreate.mockReset()
         mockZapierInboundRotate.mockReset()
         mockZapierInboundUpdate.mockReset()
+        mockZapierFieldPaste.mockReset()
+        mockZapierInboundDelete.mockReset()
     })
 
     it('renders integration health and can refresh', () => {

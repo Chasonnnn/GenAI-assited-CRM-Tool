@@ -160,6 +160,33 @@ def create_inbound_webhook(
     return inbound, secret
 
 
+def delete_inbound_webhook(db: Session, organization_id: uuid.UUID, webhook_id: str) -> None:
+    inbound = get_inbound_webhook_by_id(db, webhook_id)
+    if not inbound or inbound.organization_id != organization_id:
+        raise LookupError("Webhook not found.")
+
+    count = (
+        db.query(ZapierInboundWebhook)
+        .filter(ZapierInboundWebhook.organization_id == organization_id)
+        .count()
+    )
+    if count <= 1:
+        raise ValueError("At least one inbound webhook is required.")
+
+    db.delete(inbound)
+    db.commit()
+
+    settings_row = get_settings(db, organization_id)
+    if settings_row and settings_row.webhook_id == webhook_id:
+        primary = get_primary_inbound_webhook(db, organization_id)
+        if primary:
+            settings_row.webhook_id = primary.webhook_id
+            settings_row.webhook_secret_encrypted = primary.webhook_secret_encrypted
+            settings_row.is_active = primary.is_active
+            settings_row.updated_at = _now_utc()
+            db.commit()
+
+
 def rotate_inbound_webhook_secret(
     db: Session,
     organization_id: uuid.UUID,

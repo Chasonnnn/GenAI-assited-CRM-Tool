@@ -122,6 +122,41 @@ async def test_zapier_settings_endpoint_returns_webhook_url(
 
 
 @pytest.mark.asyncio
+async def test_zapier_field_paste_creates_form(authed_client, db, test_org):
+    from app.services import meta_form_mapping_service, zapier_settings_service
+
+    zapier_settings_service.get_or_create_settings(db, test_org.id)
+    inbound = zapier_settings_service.get_primary_inbound_webhook(db, test_org.id)
+    assert inbound is not None
+
+    paste = "\n".join(
+        [
+            '{{=gives["312067957"]["form_id"]}}',
+            '{{=gives["312067957"]["form_name"]}}',
+            '{{=gives["312067957"]["full_name"]}}',
+            '{{=gives["312067957"]["email"]}}',
+            '{{=gives["312067957"]["how_many_deliveries_have_you_had?"]}}',
+        ]
+    )
+
+    res = await authed_client.post(
+        "/integrations/zapier/field-paste",
+        json={"paste": paste, "webhook_id": inbound.webhook_id},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["form_id"] == "312067957"
+    assert body["field_count"] >= 3
+
+    form = meta_form_mapping_service.get_form_by_external_id(db, test_org.id, "312067957")
+    assert form is not None
+    version = meta_form_mapping_service.get_form_version(db, form)
+    keys = {item.get("key") for item in (version.field_schema or [])}
+    assert "full_name" in keys
+    assert "email" in keys
+
+
+@pytest.mark.asyncio
 async def test_zapier_allows_multiple_inbound_webhooks(
     authed_client, client, db, test_org, monkeypatch
 ):
@@ -164,6 +199,38 @@ async def test_zapier_allows_multiple_inbound_webhooks(
         headers={"X-Webhook-Token": secret},
     )
     assert inbound_res.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_zapier_delete_inbound_webhook(authed_client, db, test_org):
+    from app.services import zapier_settings_service
+
+    zapier_settings_service.get_or_create_settings(db, test_org.id)
+    created, _ = zapier_settings_service.create_inbound_webhook(db, test_org.id, label="To Delete")
+
+    res = await authed_client.delete(f"/integrations/zapier/webhooks/{created.webhook_id}")
+    assert res.status_code == 204
+
+    remaining = zapier_settings_service.list_inbound_webhooks(db, test_org.id)
+    assert len(remaining) == 1
+    assert remaining[0].webhook_id != created.webhook_id
+
+
+@pytest.mark.asyncio
+async def test_zapier_cannot_delete_last_webhook(authed_client, db, test_org):
+    from app.services import zapier_settings_service
+
+    settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    inbound = zapier_settings_service.get_primary_inbound_webhook(db, test_org.id)
+    assert inbound is not None
+
+    res = await authed_client.delete(f"/integrations/zapier/webhooks/{inbound.webhook_id}")
+    assert res.status_code == 400
+    assert res.json()["detail"] == "At least one inbound webhook is required."
+
+    remaining = zapier_settings_service.list_inbound_webhooks(db, test_org.id)
+    assert len(remaining) == 1
+    assert remaining[0].webhook_id == inbound.webhook_id
 
 
 @pytest.mark.asyncio
@@ -267,6 +334,39 @@ async def test_zapier_webhook_accepts_form_encoded_payload(client, db, test_org)
     )
     assert surrogate is not None
     assert surrogate.full_name == "Form Lead"
+
+
+def test_zapier_prefers_nested_payload_fields(db, test_org):
+    from app.services import meta_form_mapping_service
+    from app.services.webhooks import zapier as zapier_webhook
+
+    payload = {
+        "data": {"id": "msg_1", "threadId": "thread_1", "labelIds": ["INBOX"]},
+        "payload": {
+            "form_id": "form_nested",
+            "form_name": "Nested Form",
+            "full_name": "Nested Lead",
+            "email": "nested@example.com",
+            "phone_number": "(555) 222-3333",
+        },
+    }
+
+    normalized = zapier_webhook._normalize_payload(payload)
+    assert normalized.get("form_id") == "form_nested"
+
+    zapier_webhook.process_zapier_payload(
+        db,
+        test_org.id,
+        normalized,
+        raw_payload=payload,
+    )
+
+    form = meta_form_mapping_service.get_form_by_external_id(db, test_org.id, "form_nested")
+    assert form is not None
+    version = meta_form_mapping_service.get_form_version(db, form)
+    keys = {item.get("key") for item in (version.field_schema or [])}
+    assert "full_name" in keys
+    assert "email" in keys
 
 
 @pytest.mark.asyncio
