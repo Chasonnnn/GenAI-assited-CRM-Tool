@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Loader2Icon, ArrowLeftIcon, EyeIcon, CodeIcon } from "lucide-react"
@@ -50,6 +52,8 @@ const TEMPLATE_VARIABLES = [
     { name: "unsubscribe_url", description: "Unsubscribe link" },
 ]
 
+type EditorMode = "visual" | "html"
+
 export default function PlatformEmailTemplatePage() {
     const router = useRouter()
     const params = useParams()
@@ -67,6 +71,8 @@ export default function PlatformEmailTemplatePage() {
     const [fromEmail, setFromEmail] = useState("")
     const [category, setCategory] = useState("")
     const [body, setBody] = useState("")
+    const [editorMode, setEditorMode] = useState<EditorMode>("visual")
+    const [editorModeTouched, setEditorModeTouched] = useState(false)
     const [isPublished, setIsPublished] = useState(false)
     const [showPublishDialog, setShowPublishDialog] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
@@ -90,6 +96,18 @@ export default function PlatformEmailTemplatePage() {
         setBody(draft.body ?? "")
         setIsPublished((templateData.published_version ?? 0) > 0)
     }, [templateData, isNew])
+
+    const hasComplexHtml = useMemo(
+        () => /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(body),
+        [body]
+    )
+
+    useEffect(() => {
+        if (editorModeTouched) return
+        if (body && hasComplexHtml) {
+            setEditorMode("html")
+        }
+    }, [body, editorModeTouched, hasComplexHtml])
 
     const previewHtml = useMemo(() => {
         return DOMPurify.sanitize(body || "", {
@@ -324,34 +342,67 @@ export default function PlatformEmailTemplatePage() {
                             </div>
                         </div>
                         <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <Label>Email Body (HTML) *</Label>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger>
-                                        <span className="inline-flex items-center justify-center gap-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 px-3 text-sm cursor-pointer">
-                                            <CodeIcon className="size-4" />
-                                            Insert Variable
-                                        </span>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="w-56">
-                                        {TEMPLATE_VARIABLES.map((v) => (
-                                            <DropdownMenuItem key={v.name} onClick={() => insertVariable(v.name)}>
-                                                <span className="font-mono text-xs">{`{{${v.name}}}`}</span>
-                                                <span className="ml-2 text-muted-foreground text-xs">
-                                                    {v.description}
-                                                </span>
-                                            </DropdownMenuItem>
-                                        ))}
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <Label>Email Body *</Label>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <ToggleGroup
+                                        multiple={false}
+                                        value={editorMode ? [editorMode] : []}
+                                        onValueChange={(value) => {
+                                            const next = value[0] as EditorMode | undefined
+                                            if (!next) return
+                                            setEditorMode(next)
+                                            setEditorModeTouched(true)
+                                        }}
+                                    >
+                                        <ToggleGroupItem value="visual" className="h-8">
+                                            Visual
+                                        </ToggleGroupItem>
+                                        <ToggleGroupItem value="html" className="h-8">
+                                            HTML
+                                        </ToggleGroupItem>
+                                    </ToggleGroup>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger>
+                                            <span className="inline-flex items-center justify-center gap-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 px-3 text-sm cursor-pointer">
+                                                <CodeIcon className="size-4" />
+                                                Insert Variable
+                                            </span>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="w-56">
+                                            {TEMPLATE_VARIABLES.map((v) => (
+                                                <DropdownMenuItem key={v.name} onClick={() => insertVariable(v.name)}>
+                                                    <span className="font-mono text-xs">{`{{${v.name}}}`}</span>
+                                                    <span className="ml-2 text-muted-foreground text-xs">
+                                                        {v.description}
+                                                    </span>
+                                                </DropdownMenuItem>
+                                            ))}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
                             </div>
-                            <RichTextEditor
-                                content={body}
-                                onChange={(html) => setBody(html)}
-                                placeholder="Write your email content here..."
-                                minHeight="220px"
-                                maxHeight="420px"
-                            />
+                            {editorMode === "visual" ? (
+                                <RichTextEditor
+                                    content={body}
+                                    onChange={(html) => setBody(html)}
+                                    placeholder="Write your email content here..."
+                                    minHeight="220px"
+                                    maxHeight="420px"
+                                />
+                            ) : (
+                                <Textarea
+                                    value={body}
+                                    onChange={(event) => setBody(event.target.value)}
+                                    placeholder="Paste or edit the HTML for this template..."
+                                    className="min-h-[240px] font-mono text-xs leading-relaxed"
+                                />
+                            )}
+                            {editorMode === "visual" && hasComplexHtml && (
+                                <p className="text-xs text-amber-600">
+                                    This template contains advanced HTML. Switch to HTML mode to preserve layout.
+                                </p>
+                            )}
                             <p className="text-xs text-muted-foreground">
                                 Use double braces for variables, e.g. <span className="font-mono">{"{{first_name}}"}</span>.
                             </p>

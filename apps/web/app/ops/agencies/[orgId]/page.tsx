@@ -657,6 +657,7 @@ export default function AgencyDetailPage() {
                     <TabsContent value="templates" className="mt-0">
                         <AgencyTemplatesTab
                             orgName={org.name}
+                            orgSlug={org.slug}
                             portalBaseUrl={org.portal_base_url}
                             platformEmailStatus={platformEmailStatus}
                             platformEmailLoading={platformEmailLoading}
