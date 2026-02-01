@@ -59,6 +59,25 @@ import {
     useDeleteZapierInboundWebhook,
 } from "@/lib/hooks/use-zapier"
 import { useMetaForms } from "@/lib/hooks/use-meta-forms"
+import {
+    useMetaConnections,
+    useMetaConnectUrl,
+    useDisconnectMetaConnection,
+} from "@/lib/hooks/use-meta-oauth"
+import { useAdminMetaAdAccounts, useUpdateMetaAdAccount, useDeleteMetaAdAccount } from "@/lib/hooks/use-admin-meta"
+import type { MetaAdAccount, MetaAdAccountUpdate } from "@/lib/api/admin-meta"
+import { getConnectionHealthStatus, parseMetaError, type MetaOAuthConnection } from "@/lib/api/meta-oauth"
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Checkbox } from "@/components/ui/checkbox"
+import { PencilIcon } from "lucide-react"
 import { formatRelativeTime } from "@/lib/formatters"
 import { CopyIcon, SendIcon, RotateCwIcon, ActivityIcon, PlusIcon } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -1892,12 +1911,446 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
     )
 }
 
+// Connection health badge component for Meta dialog
+function ConnectionHealthBadge({ connection }: { connection: MetaOAuthConnection }) {
+    const status = getConnectionHealthStatus(connection)
+
+    if (status === "healthy") {
+        return (
+            <Badge variant="default" className="gap-1 bg-green-500/10 text-green-600 border-green-500/20">
+                <CheckCircleIcon className="size-3" aria-hidden="true" />
+                Healthy
+            </Badge>
+        )
+    }
+
+    if (status === "needs_reauth") {
+        return (
+            <Tooltip>
+                <TooltipTrigger>
+                    <Badge variant="destructive" className="gap-1">
+                        <AlertTriangleIcon className="size-3" aria-hidden="true" />
+                        Needs Reauth
+                    </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                    Token expired or revoked. Click Connect with Facebook to fix.
+                </TooltipContent>
+            </Tooltip>
+        )
+    }
+
+    if (status === "rate_limited") {
+        return (
+            <Tooltip>
+                <TooltipTrigger>
+                    <Badge variant="secondary" className="gap-1 bg-yellow-500/10 text-yellow-600 border-yellow-500/20">
+                        <AlertTriangleIcon className="size-3" aria-hidden="true" />
+                        Rate Limited
+                    </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                    Temporarily rate limited. Will retry automatically.
+                </TooltipContent>
+            </Tooltip>
+        )
+    }
+
+    if (status === "permission_error") {
+        return (
+            <Tooltip>
+                <TooltipTrigger>
+                    <Badge variant="destructive" className="gap-1">
+                        <AlertTriangleIcon className="size-3" aria-hidden="true" />
+                        Permission Error
+                    </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                    Check Lead Access Manager in Meta Business Settings.
+                </TooltipContent>
+            </Tooltip>
+        )
+    }
+
+    return (
+        <Tooltip>
+            <TooltipTrigger>
+                <Badge variant="secondary" className="gap-1 bg-yellow-500/10 text-yellow-600 border-yellow-500/20">
+                    <AlertTriangleIcon className="size-3" aria-hidden="true" />
+                    Error
+                </Badge>
+            </TooltipTrigger>
+            <TooltipContent>{parseMetaError(connection.last_error)}</TooltipContent>
+        </Tooltip>
+    )
+}
+
+function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
+    const { data: connections = [], isLoading: connectionsLoading } = useMetaConnections()
+    const connectUrlMutation = useMetaConnectUrl()
+    const disconnectMutation = useDisconnectMetaConnection()
+
+    const { data: adAccounts = [], isLoading: adAccountsLoading } = useAdminMetaAdAccounts()
+    const updateAccountMutation = useUpdateMetaAdAccount()
+    const deleteAccountMutation = useDeleteMetaAdAccount()
+
+    const [editAccount, setEditAccount] = useState<MetaAdAccount | null>(null)
+    const [disconnectConnectionId, setDisconnectConnectionId] = useState<string | null>(null)
+    const [accountFormError, setAccountFormError] = useState("")
+    const [adAccountName, setAdAccountName] = useState("")
+    const [pixelId, setPixelId] = useState("")
+    const [capiEnabled, setCapiEnabled] = useState(false)
+    const [accountActive, setAccountActive] = useState(true)
+
+    const handleConnectWithFacebook = async () => {
+        try {
+            const result = await connectUrlMutation.mutateAsync()
+            window.location.href = result.auth_url
+        } catch {
+            // Error handled by mutation
+        }
+    }
+
+    const handleDisconnect = async (connectionId: string) => {
+        try {
+            await disconnectMutation.mutateAsync(connectionId)
+            setDisconnectConnectionId(null)
+        } catch {
+            // Error handled by mutation
+        }
+    }
+
+    const openEditAccount = (account: MetaAdAccount) => {
+        setEditAccount(account)
+        setAdAccountName(account.ad_account_name || "")
+        setPixelId(account.pixel_id || "")
+        setCapiEnabled(account.capi_enabled)
+        setAccountActive(account.is_active)
+        setAccountFormError("")
+    }
+
+    const handleUpdateAdAccount = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!editAccount) return
+        setAccountFormError("")
+
+        const payload: MetaAdAccountUpdate = {
+            capi_enabled: capiEnabled,
+            is_active: accountActive,
+        }
+        if (adAccountName.trim() !== (editAccount.ad_account_name || "")) {
+            payload.ad_account_name = adAccountName.trim()
+        }
+        if (pixelId.trim() !== (editAccount.pixel_id || "")) {
+            payload.pixel_id = pixelId.trim()
+        }
+
+        try {
+            await updateAccountMutation.mutateAsync({
+                accountId: editAccount.id,
+                data: payload,
+            })
+            setEditAccount(null)
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : "Failed to update ad account"
+            setAccountFormError(message)
+        }
+    }
+
+    const handleDeleteAdAccount = async (accountId: string) => {
+        try {
+            await deleteAccountMutation.mutateAsync(accountId)
+        } catch (error) {
+            console.error("Failed to delete ad account:", error)
+        }
+    }
+
+    const showHeading = variant === "page"
+    const containerClass = showHeading ? "border-t pt-6" : "space-y-6"
+
+    const isLoading = connectionsLoading || adAccountsLoading
+
+    if (isLoading) {
+        return (
+            <div className={containerClass}>
+                {showHeading && (
+                    <h2 className="mb-4 text-lg font-semibold">Meta Integration</h2>
+                )}
+                <div className="flex items-center justify-center py-8">
+                    <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+                </div>
+            </div>
+        )
+    }
+
+    return (
+        <div className={containerClass}>
+            {showHeading && (
+                <>
+                    <h2 className="mb-4 text-lg font-semibold">Meta Integration</h2>
+                    <p className="mb-4 text-sm text-muted-foreground">
+                        Connect Meta accounts to sync lead forms and conversions.
+                    </p>
+                </>
+            )}
+
+            {/* Connections Card */}
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                    <div>
+                        <CardTitle className="text-base">Connections</CardTitle>
+                        <CardDescription className="text-xs">
+                            Connect Meta accounts and manage assets for lead ads.
+                        </CardDescription>
+                    </div>
+                    <Button size="sm" onClick={handleConnectWithFacebook} disabled={connectUrlMutation.isPending}>
+                        {connectUrlMutation.isPending ? (
+                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                        ) : (
+                            <FacebookIcon className="mr-2 size-4" aria-hidden="true" />
+                        )}
+                        Connect with Facebook
+                    </Button>
+                </CardHeader>
+                <CardContent>
+                    {connections.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No connections yet. Connect with Facebook to get started.</p>
+                    ) : (
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Account</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Last validated</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {connections.map((connection) => (
+                                    <TableRow key={connection.id}>
+                                        <TableCell>
+                                            <div className="font-medium">
+                                                {connection.meta_user_name || "Meta user"}
+                                            </div>
+                                            <div className="text-xs text-muted-foreground">
+                                                {connection.meta_user_id}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <ConnectionHealthBadge connection={connection} />
+                                        </TableCell>
+                                        <TableCell className="text-sm text-muted-foreground">
+                                            {connection.last_validated_at
+                                                ? formatRelativeTime(connection.last_validated_at, "—")
+                                                : "—"}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setDisconnectConnectionId(connection.id)}
+                                                aria-label="Disconnect connection"
+                                            >
+                                                <UnlinkIcon className="size-4" aria-hidden="true" />
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Ad Accounts Card */}
+            <Card>
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Ad Accounts</CardTitle>
+                    <CardDescription className="text-xs">Configure CAPI settings and sync visibility.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {adAccounts.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No ad accounts connected yet.</p>
+                    ) : (
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Ad Account</TableHead>
+                                    <TableHead>Name</TableHead>
+                                    <TableHead>CAPI</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {adAccounts.map((account) => (
+                                    <TableRow key={account.id}>
+                                        <TableCell className="font-mono text-xs">
+                                            {account.ad_account_external_id}
+                                        </TableCell>
+                                        <TableCell>{account.ad_account_name || "—"}</TableCell>
+                                        <TableCell>
+                                            <Badge variant={account.capi_enabled ? "default" : "secondary"}>
+                                                {account.capi_enabled ? "Enabled" : "Disabled"}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant={account.is_active ? "default" : "secondary"} className="gap-1">
+                                                {account.is_active ? (
+                                                    <CheckCircleIcon className="size-3" aria-hidden="true" />
+                                                ) : (
+                                                    <AlertTriangleIcon className="size-3" aria-hidden="true" />
+                                                )}
+                                                {account.is_active ? "Active" : "Inactive"}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => openEditAccount(account)}
+                                                aria-label="Edit ad account"
+                                            >
+                                                <PencilIcon className="size-4" aria-hidden="true" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => handleDeleteAdAccount(account.id)}
+                                                disabled={deleteAccountMutation.isPending}
+                                                aria-label="Delete ad account"
+                                            >
+                                                <TrashIcon className="size-4" aria-hidden="true" />
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Link to full page */}
+            <div className="flex justify-end">
+                <Button render={<Link href="/settings/integrations/meta/forms" />} variant="outline" size="sm">
+                    Manage lead forms
+                </Button>
+            </div>
+
+            {/* Edit Ad Account Dialog */}
+            <Dialog open={!!editAccount} onOpenChange={(open) => !open && setEditAccount(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit Ad Account</DialogTitle>
+                        <DialogDescription>Update CAPI and account settings.</DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleUpdateAdAccount}>
+                        <div className="space-y-4 py-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="adAccountName">Ad account name</Label>
+                                <Input
+                                    id="adAccountName"
+                                    value={adAccountName}
+                                    onChange={(e) => setAdAccountName(e.target.value)}
+                                    name="ad-account-name"
+                                    autoComplete="off"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="pixelId">Pixel ID</Label>
+                                <Input
+                                    id="pixelId"
+                                    value={pixelId}
+                                    onChange={(e) => setPixelId(e.target.value)}
+                                    name="pixel-id"
+                                    autoComplete="off"
+                                />
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <Label htmlFor="capiEnabled">Enable CAPI</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Send lead status updates to Meta.
+                                    </p>
+                                </div>
+                                <Checkbox
+                                    checked={capiEnabled}
+                                    onCheckedChange={(checked) => setCapiEnabled(!!checked)}
+                                    id="capiEnabled"
+                                />
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <Label htmlFor="accountActive">Active</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Disable to pause sync and CAPI for this account.
+                                    </p>
+                                </div>
+                                <Checkbox
+                                    checked={accountActive}
+                                    onCheckedChange={(checked) => setAccountActive(!!checked)}
+                                    id="accountActive"
+                                />
+                            </div>
+                            {accountFormError && (
+                                <p className="text-sm text-destructive">{accountFormError}</p>
+                            )}
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <Button variant="outline" onClick={() => setEditAccount(null)} type="button">
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={updateAccountMutation.isPending}>
+                                {updateAccountMutation.isPending ? (
+                                    <>
+                                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                        Saving…
+                                    </>
+                                ) : (
+                                    "Save changes"
+                                )}
+                            </Button>
+                        </div>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Disconnect Confirmation Dialog */}
+            <AlertDialog open={!!disconnectConnectionId} onOpenChange={(open) => !open && setDisconnectConnectionId(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Disconnect Meta account?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will unlink all ad accounts and pages connected through this Facebook account.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => disconnectConnectionId && handleDisconnect(disconnectConnectionId)}
+                        >
+                            Disconnect
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </div>
+    )
+}
+
 export default function IntegrationsPage() {
     const { data: healthData, isLoading, refetch, isFetching } = useIntegrationHealth()
     const { data: userIntegrations } = useUserIntegrations()
     const { data: aiSettings, isLoading: aiSettingsLoading } = useAISettings()
     const { data: resendSettings, isLoading: resendSettingsLoading } = useResendSettings()
     const { data: zapierSettings, isLoading: zapierSettingsLoading } = useZapierSettings()
+    const { data: metaFormsData } = useMetaForms()
+    const { data: metaConnectionsData } = useMetaConnections()
+    const { data: metaAdAccountsData } = useAdminMetaAdAccounts()
+    const metaForms = metaFormsData ?? []
+    const metaConnections = metaConnectionsData ?? []
+    const metaAdAccounts = metaAdAccountsData ?? []
     const connectZoom = useConnectZoom()
     const connectGmail = useConnectGmail()
     const connectGoogleCalendar = useConnectGoogleCalendar()
@@ -1905,6 +2358,7 @@ export default function IntegrationsPage() {
     const [aiDialogOpen, setAiDialogOpen] = useState(false)
     const [emailDialogOpen, setEmailDialogOpen] = useState(false)
     const [zapierDialogOpen, setZapierDialogOpen] = useState(false)
+    const [metaDialogOpen, setMetaDialogOpen] = useState(false)
 
     const zoomIntegration = userIntegrations?.find(i => i.integration_type === 'zoom')
     const gmailIntegration = userIntegrations?.find(i => i.integration_type === 'gmail')
@@ -1946,9 +2400,21 @@ export default function IntegrationsPage() {
     const zapierDetail = zapierConfigured
         ? (zapierSettings?.outbound_enabled ? `${inboundSummary} + outbound enabled` : inboundSummary)
         : "Configure webhook secret"
+    // Meta Lead Ads status
+    const metaConnectionsCount = metaConnections.length
+    const metaFormsCount = metaForms.length
+    const metaMappedFormsCount = metaForms.filter(f => f.mapping_status === "mapped").length
+    const metaConfigured = metaConnectionsCount > 0
+    const metaStatusLabel = metaConfigured ? "Connected" : "Not configured"
+    const metaStatusVariant = metaConfigured ? "default" : "secondary"
+    const metaStatusIcon = metaConfigured ? CheckCircleIcon : AlertTriangleIcon
+    const metaDetail = metaConfigured
+        ? `${metaFormsCount} form${metaFormsCount === 1 ? "" : "s"} · ${metaConnectionsCount} connection${metaConnectionsCount === 1 ? "" : "s"}`
+        : "Connect Facebook to get started"
     const AiStatusIcon = aiStatusIcon
     const EmailStatusIcon = emailStatusIcon
     const ZapierStatusIcon = zapierStatusIcon
+    const MetaStatusIcon = metaStatusIcon
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -2124,30 +2590,6 @@ export default function IntegrationsPage() {
                             </CardContent>
                         </Card>
 
-                        {/* Meta Leads Admin */}
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex size-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900">
-                                        <FacebookIcon className="size-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
-                                    </div>
-                                    <div>
-                                        <CardTitle className="text-base">Meta Leads Admin</CardTitle>
-                                        <CardDescription className="text-xs">Manage Facebook/Instagram page tokens</CardDescription>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                <Button
-                                    render={<Link href="/settings/integrations/meta" />}
-                                    variant="outline"
-                                    className="w-full"
-                                >
-                                    <KeyIcon className="mr-2 size-4" aria-hidden="true" />
-                                    Manage Page Tokens
-                                </Button>
-                            </CardContent>
-                        </Card>
                     </div>
                 </div>
 
@@ -2274,11 +2716,44 @@ export default function IntegrationsPage() {
                                 )}
                             </CardContent>
                         </Card>
+
+                        {/* Meta Lead Ads */}
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex size-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900">
+                                        <FacebookIcon className="size-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-base">Meta Lead Ads</CardTitle>
+                                        <CardDescription className="text-xs">Facebook/Instagram lead capture + CAPI</CardDescription>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-3">
+                                    <Badge variant={metaStatusVariant} className="w-fit flex items-center gap-1">
+                                        <MetaStatusIcon className="size-3" aria-hidden="true" />
+                                        {metaStatusLabel}
+                                    </Badge>
+                                    <p className="text-xs text-muted-foreground">
+                                        {metaDetail}
+                                    </p>
+                                    <Button
+                                        variant="outline"
+                                        className="w-full"
+                                        onClick={() => setMetaDialogOpen(true)}
+                                    >
+                                        Configure Meta
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
                     </div>
                 </div>
 
                 <Dialog open={aiDialogOpen} onOpenChange={setAiDialogOpen}>
-                    <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+                    <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden">
                         <DialogHeader>
                             <div className="flex items-start justify-between gap-4">
                                 <div className="space-y-1">
@@ -2298,7 +2773,7 @@ export default function IntegrationsPage() {
                 </Dialog>
 
                 <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
-                    <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+                    <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden">
                         <DialogHeader>
                             <div className="flex items-start justify-between gap-4">
                                 <div className="space-y-1">
@@ -2318,7 +2793,7 @@ export default function IntegrationsPage() {
                 </Dialog>
 
                 <Dialog open={zapierDialogOpen} onOpenChange={setZapierDialogOpen}>
-                    <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+                    <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden">
                         <DialogHeader>
                             <div className="flex items-start justify-between gap-4">
                                 <div className="space-y-1">
@@ -2334,6 +2809,26 @@ export default function IntegrationsPage() {
                             </div>
                         </DialogHeader>
                         {zapierDialogOpen ? <ZapierWebhookSection variant="dialog" /> : null}
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog open={metaDialogOpen} onOpenChange={setMetaDialogOpen}>
+                    <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden">
+                        <DialogHeader>
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="space-y-1">
+                                    <DialogTitle>Meta Lead Ads Configuration</DialogTitle>
+                                    <DialogDescription>
+                                        Connect Meta accounts, manage ad accounts, and configure CAPI settings.
+                                    </DialogDescription>
+                                </div>
+                                <Badge variant={metaStatusVariant} className="mt-1 flex items-center gap-1">
+                                    <MetaStatusIcon className="size-3" aria-hidden="true" />
+                                    {metaStatusLabel}
+                                </Badge>
+                            </div>
+                        </DialogHeader>
+                        {metaDialogOpen ? <MetaConfigurationSection variant="dialog" /> : null}
                     </DialogContent>
                 </Dialog>
 
@@ -2369,6 +2864,18 @@ export default function IntegrationsPage() {
                             const Icon = typeConfig.icon
                             const StatusIcon = status.icon
 
+                            // Compute integration-specific metrics
+                            let metricsLabel: string | null = null
+                            if (integration.integration_type === "meta_leads") {
+                                metricsLabel = `${metaFormsCount} form${metaFormsCount === 1 ? "" : "s"} synced · ${metaMappedFormsCount} mapped`
+                            } else if (integration.integration_type === "meta_capi") {
+                                const capiEnabledCount = metaAdAccounts.filter(a => a.capi_enabled).length
+                                metricsLabel = `${capiEnabledCount} ad account${capiEnabledCount === 1 ? "" : "s"} with CAPI enabled`
+                            } else if (integration.integration_type === "zapier") {
+                                const outboundStatus = zapierSettings?.outbound_enabled ? "enabled" : "disabled"
+                                metricsLabel = `${inboundWebhooks.length} inbound webhook${inboundWebhooks.length === 1 ? "" : "s"} · Outbound ${outboundStatus}`
+                            }
+
                             return (
                                 <Card key={integration.id} className="relative overflow-hidden">
                                     {/* Status indicator bar */}
@@ -2403,6 +2910,14 @@ export default function IntegrationsPage() {
                                     </CardHeader>
 
                                     <CardContent className="space-y-3">
+                                        {/* Integration-specific metrics */}
+                                        {metricsLabel && (
+                                            <div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                                                <ActivityIcon className="size-3.5 shrink-0" aria-hidden="true" />
+                                                {metricsLabel}
+                                            </div>
+                                        )}
+
                                         {/* Config Status */}
                                         <div className="flex items-center justify-between text-sm">
                                             <span className="text-muted-foreground">Configuration</span>

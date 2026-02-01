@@ -180,7 +180,7 @@ describe('IntegrationsPage', () => {
         render(<IntegrationsPage />)
 
         expect(screen.getByText('Integrations')).toBeInTheDocument()
-        expect(screen.getByText('Meta Lead Ads')).toBeInTheDocument()
+        expect(screen.getAllByText('Meta Lead Ads').length).toBeGreaterThan(0)
         expect(screen.getByText('AI Assistant')).toBeInTheDocument()
         expect(screen.getByText('Email Delivery')).toBeInTheDocument()
         expect(screen.getByText('Zapier')).toBeInTheDocument()

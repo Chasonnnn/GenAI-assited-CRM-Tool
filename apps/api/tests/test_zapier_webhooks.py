@@ -220,7 +220,7 @@ async def test_zapier_delete_inbound_webhook(authed_client, db, test_org):
 async def test_zapier_cannot_delete_last_webhook(authed_client, db, test_org):
     from app.services import zapier_settings_service
 
-    settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    zapier_settings_service.get_or_create_settings(db, test_org.id)
     inbound = zapier_settings_service.get_primary_inbound_webhook(db, test_org.id)
     assert inbound is not None
 

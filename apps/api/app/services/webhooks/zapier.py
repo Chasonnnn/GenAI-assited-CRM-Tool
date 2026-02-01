@@ -225,11 +225,16 @@ def parse_zapier_field_paste(paste: str) -> dict[str, Any]:
             if not field_key:
                 continue
             normalized = _normalize_field_key(field_key)
-            if normalized in _META_FIELD_LABELS:
+            if normalized in {"form_id", "formid"} and tokens[0]:
+                form_id = form_id or tokens[0]
                 continue
-            if field_key not in seen:
-                seen.add(field_key)
-                field_keys.append(field_key)
+            if normalized in {"form_name", "formname"}:
+                continue
+            if not normalized or normalized in _META_FIELD_LABELS:
+                continue
+            if normalized not in seen:
+                seen.add(normalized)
+                field_keys.append(normalized)
             continue
 
         label_match = _LABEL_VALUE_RE.match(line)
@@ -246,11 +251,11 @@ def parse_zapier_field_paste(paste: str) -> dict[str, Any]:
         if normalized_label in {"form_name", "formname"} and value:
             form_name = form_name or value
             continue
-        if normalized_label in _META_FIELD_LABELS:
+        if normalized_label in _META_FIELD_LABELS or not normalized_label:
             continue
-        if label not in seen:
-            seen.add(label)
-            field_keys.append(label)
+        if normalized_label not in seen:
+            seen.add(normalized_label)
+            field_keys.append(normalized_label)
 
     if not form_id and token0_counts:
         candidate, count = token0_counts.most_common(1)[0]
