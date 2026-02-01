@@ -153,6 +153,8 @@ def create_interview(
         )
         db.commit()
         return interview_service.to_interview_read(db, interview)
+    except attachment_service.AttachmentStorageError as e:
+        raise HTTPException(status_code=500, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

@@ -22,19 +22,39 @@ from app.services import audit_service, job_service
 logger = logging.getLogger(__name__)
 
 
+class AttachmentStorageError(RuntimeError):
+    """Raised when attachment storage fails."""
+
+
 # =============================================================================
 # Configuration
 # =============================================================================
 
-ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "doc", "docx", "xls", "xlsx"}
+ALLOWED_EXTENSIONS = {
+    "pdf",
+    "png",
+    "jpg",
+    "jpeg",
+    "doc",
+    "docx",
+    "xls",
+    "xlsx",
+    "csv",
+    "mp4",
+    "mov",
+}
 ALLOWED_MIME_TYPES = {
     "application/pdf",
     "image/png",
     "image/jpeg",
+    "text/csv",
+    "application/csv",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/vnd.ms-excel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "video/mp4",
+    "video/quicktime",
 }
 MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
 SIGNED_URL_EXPIRY_SECONDS = 300  # 5 minutes
@@ -284,7 +304,11 @@ def upload_attachment(
     storage_key = f"{org_id}/{entity_id}/{attachment_id}.{ext}"
 
     # Store file
-    store_file(storage_key, processed_file)
+    try:
+        store_file(storage_key, processed_file)
+    except Exception as exc:  # noqa: BLE001 - surface a clean error to callers
+        logger.exception("Failed to store attachment for key %s", storage_key)
+        raise AttachmentStorageError("Failed to store attachment. Please try again.") from exc
     register_storage_cleanup_on_rollback(db, storage_key)
 
     # Create record

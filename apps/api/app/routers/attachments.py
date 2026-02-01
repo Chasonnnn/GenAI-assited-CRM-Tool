@@ -134,6 +134,8 @@ async def upload_attachment(
             else None,
             created_at=attachment.created_at.isoformat(),
         )
+    except attachment_service.AttachmentStorageError as e:
+        raise HTTPException(status_code=500, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -297,6 +299,8 @@ async def upload_ip_attachment(
             else None,
             created_at=attachment.created_at.isoformat(),
         )
+    except attachment_service.AttachmentStorageError as e:
+        raise HTTPException(status_code=500, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
