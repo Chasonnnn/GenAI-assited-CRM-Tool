@@ -635,6 +635,11 @@ export function SurrogateApplicationTab({
     // Empty state - no submission
     if (!submission) {
         const availableForms = publishedForms
+        const hasMultipleForms = availableForms.length > 1
+        const hasSingleForm = availableForms.length === 1
+        const selectedForm =
+            availableForms.find((form) => form.id === effectiveFormId) ??
+            (hasSingleForm ? availableForms[0] ?? null : null)
         return (
             <Card>
                 <CardContent className="flex flex-col items-center justify-center py-16 text-center">
@@ -643,7 +648,7 @@ export function SurrogateApplicationTab({
                     <p className="text-sm text-muted-foreground mb-6 max-w-md">
                         This candidate has not yet submitted their application form. Send them a secure form link to get started.
                     </p>
-                    {availableForms.length > 1 && (
+                    {hasMultipleForms && (
                         <div className="mb-4 w-full max-w-xs">
                             <Label className="mb-2 block text-xs font-medium text-muted-foreground">
                                 Select form
@@ -660,6 +665,20 @@ export function SurrogateApplicationTab({
                                     </NativeSelectOption>
                                 ))}
                             </NativeSelect>
+                            {!effectiveFormId && (
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                    Select a published form to send.
+                                </p>
+                            )}
+                        </div>
+                    )}
+                    {hasSingleForm && selectedForm && (
+                        <div className="mb-4 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+                            <span className="text-muted-foreground">Form selected:</span>
+                            <span className="font-medium text-foreground">{selectedForm.name}</span>
+                            <Badge variant="secondary" className="text-xs">
+                                Published
+                            </Badge>
                         </div>
                     )}
                     {availableForms.length === 0 && (
@@ -690,6 +709,11 @@ export function SurrogateApplicationTab({
                                 </DialogDescription>
                             </DialogHeader>
                             <div className="space-y-4">
+                                {selectedForm && (
+                                    <div className="text-sm text-muted-foreground">
+                                        Form: <span className="font-medium text-foreground">{selectedForm.name}</span>
+                                    </div>
+                                )}
                                 <div className="rounded-lg border p-4 bg-muted/50">
                                     <p className="text-sm font-mono break-all">
                                         {formLink || `${baseUrl || ""}/apply/[token]`}
