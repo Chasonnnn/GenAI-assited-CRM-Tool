@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from "@/components/app-link";
 import {
     getOrganization,
@@ -24,6 +24,7 @@ import {
     revokeInvite,
     deleteOrganization,
     restoreOrganization,
+    purgeOrganization,
     type SystemEmailTemplate,
     type OrganizationDetail,
     type OrganizationSubscription,
@@ -82,6 +83,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 export default function AgencyDetailPage() {
     const params = useParams();
     const orgId = params.orgId as string;
+    const router = useRouter();
 
     const [org, setOrg] = useState<OrganizationDetail | null>(null);
     const [subscription, setSubscription] = useState<OrganizationSubscription | null>(null);
@@ -119,6 +121,7 @@ export default function AgencyDetailPage() {
     const [testSending, setTestSending] = useState(false);
     const [deleteSubmitting, setDeleteSubmitting] = useState(false);
     const [restoreSubmitting, setRestoreSubmitting] = useState(false);
+    const [purgeSubmitting, setPurgeSubmitting] = useState(false);
 
     useEffect(() => {
         async function fetchData() {
@@ -285,6 +288,21 @@ export default function AgencyDetailPage() {
             toast.error(resolveErrorMessage(error, 'Failed to restore organization'));
         } finally {
             setRestoreSubmitting(false);
+        }
+    };
+
+    const handlePurgeOrganization = async () => {
+        if (!org) return;
+        setPurgeSubmitting(true);
+        try {
+            await purgeOrganization(org.id);
+            toast.success('Organization deleted permanently');
+            router.push('/ops/agencies');
+        } catch (error) {
+            console.error('Failed to purge organization:', error);
+            toast.error(resolveErrorMessage(error, 'Failed to delete organization'));
+        } finally {
+            setPurgeSubmitting(false);
         }
     };
 
@@ -546,6 +564,8 @@ export default function AgencyDetailPage() {
                             deleteSubmitting={deleteSubmitting}
                             onRestoreOrganization={handleRestoreOrganization}
                             onDeleteOrganization={handleDeleteOrganization}
+                            purgeSubmitting={purgeSubmitting}
+                            onPurgeOrganization={handlePurgeOrganization}
                         />
                     </TabsContent>
 

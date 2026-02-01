@@ -377,6 +377,44 @@ def restore_organization_deletion(
     return get_organization_detail(db, org.id) or {}
 
 
+def force_delete_organization(
+    db: Session,
+    org_id: UUID,
+    actor_id: UUID,
+    request: Request | None = None,
+) -> dict:
+    """Immediately hard delete an organization (bypass grace period)."""
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise ValueError("Organization not found")
+
+    now = datetime.now(timezone.utc)
+    if not org.deleted_at:
+        org.deleted_at = now
+        org.purge_at = now
+        org.deleted_by_user_id = actor_id
+        org.updated_at = now
+
+    member_ids = db.query(Membership.user_id).filter(Membership.organization_id == org.id).all()
+    for (user_id,) in member_ids:
+        if user_id == actor_id:
+            continue
+        session_service.revoke_all_user_sessions(db, user_id, org.id)
+
+    log_admin_action(
+        db=db,
+        actor_id=actor_id,
+        action="org.delete_immediate",
+        target_org_id=org.id,
+        metadata={},
+        request=request,
+    )
+
+    db.delete(org)
+    db.commit()
+    return {"org_id": str(org_id), "deleted": True}
+
+
 def purge_organization(db: Session, org_id: UUID) -> bool:
     """Hard delete an organization if the grace period has elapsed."""
     org = db.query(Organization).filter(Organization.id == org_id).first()

@@ -67,3 +67,18 @@ def test_purge_organization_hard_deletes(db, test_org):
 
     assert platform_service.purge_organization(db, test_org.id) is True
     assert db.query(Organization).filter(Organization.id == test_org.id).first() is None
+
+
+@pytest.mark.asyncio
+async def test_platform_force_delete_org_immediate(authed_client, db, test_user, test_org):
+    from app.db.models import Organization
+
+    test_user.is_platform_admin = True
+    db.commit()
+
+    res = await authed_client.post(f"/platform/orgs/{test_org.id}/purge")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["org_id"] == str(test_org.id)
+    assert data["deleted"] is True
+    assert db.query(Organization).filter(Organization.id == test_org.id).first() is None

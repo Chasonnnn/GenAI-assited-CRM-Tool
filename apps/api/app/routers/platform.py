@@ -464,6 +464,25 @@ def restore_organization(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/orgs/{org_id}/purge", dependencies=[Depends(require_csrf_header)])
+def purge_organization(
+    org_id: UUID,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Immediately hard delete an organization (no grace period)."""
+    try:
+        return platform_service.force_delete_organization(
+            db=db,
+            org_id=org_id,
+            actor_id=session.user_id,
+            request=request,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 # =============================================================================
 # Subscription Management
 # =============================================================================

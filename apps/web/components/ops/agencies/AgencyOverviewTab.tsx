@@ -58,8 +58,10 @@ type AgencyOverviewTabProps = {
     purgeDate: Date | null
     restoreSubmitting: boolean
     deleteSubmitting: boolean
+    purgeSubmitting: boolean
     onRestoreOrganization: () => void
     onDeleteOrganization: () => void
+    onPurgeOrganization: () => void
 }
 
 export function AgencyOverviewTab({
@@ -68,10 +70,13 @@ export function AgencyOverviewTab({
     purgeDate,
     restoreSubmitting,
     deleteSubmitting,
+    purgeSubmitting,
     onRestoreOrganization,
     onDeleteOrganization,
+    onPurgeOrganization,
 }: AgencyOverviewTabProps) {
     const [deleteOpen, setDeleteOpen] = useState(false)
+    const [purgeOpen, setPurgeOpen] = useState(false)
 
     return (
         <div className="grid gap-6 md:grid-cols-2">
@@ -165,6 +170,39 @@ export function AgencyOverviewTab({
                             </AlertDialogContent>
                         </AlertDialog>
                     )}
+
+                    <AlertDialog open={purgeOpen} onOpenChange={setPurgeOpen}>
+                        <AlertDialogTrigger
+                            className={buttonVariants({ variant: "outline" })}
+                        >
+                            Delete Immediately
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Permanently delete {org.name} now?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    This is irreversible and removes all organization data right away.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                    onClick={onPurgeOrganization}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    disabled={purgeSubmitting}
+                                >
+                                    {purgeSubmitting ? (
+                                        <span className="inline-flex items-center gap-2">
+                                            <Loader2 className="size-4 animate-spin" />
+                                            Deleting
+                                        </span>
+                                    ) : (
+                                        "Delete now"
+                                    )}
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
                 </CardContent>
             </Card>
         </div>

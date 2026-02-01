@@ -61,6 +61,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     useEffect(() => {
+        const isOpsRoute =
+            typeof window !== 'undefined' &&
+            (window.location.pathname.startsWith('/ops') ||
+                window.location.hostname.startsWith('ops.'));
+        if (isOpsRoute) {
+            setIsLoading(false);
+            return;
+        }
         fetchUser();
     }, []);
 

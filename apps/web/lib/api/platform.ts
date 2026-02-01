@@ -297,6 +297,13 @@ export function restoreOrganization(orgId: string): Promise<OrganizationDetail> 
 }
 
 /**
+ * Permanently delete an organization immediately.
+ */
+export function purgeOrganization(orgId: string): Promise<{ org_id: string; deleted: boolean }> {
+    return api.post(`/platform/orgs/${orgId}/purge`);
+}
+
+/**
  * Get org-scoped system email template by system_key.
  */
 export function getOrgSystemEmailTemplate(
