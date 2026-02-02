@@ -13,8 +13,9 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { cn } from "@/lib/utils"
 import {
     useNotifications,
     useUnreadCount,
@@ -85,18 +86,19 @@ export function NotificationBell() {
 
     return (
         <DropdownMenu>
-            <DropdownMenuTrigger>
-                <span className="relative inline-flex items-center justify-center rounded-md text-sm font-medium h-9 w-9 hover:bg-accent hover:text-accent-foreground cursor-pointer">
-                    <Bell className="h-5 w-5" />
-                    {unreadCount > 0 && (
-                        <Badge
-                            variant="destructive"
-                            className="absolute -top-1 -right-1 h-5 min-w-5 px-1 flex items-center justify-center text-xs"
-                        >
-                            {unreadCount > 99 ? "99+" : unreadCount}
-                        </Badge>
-                    )}
-                </span>
+            <DropdownMenuTrigger
+                aria-label="Notifications"
+                className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "relative")}
+            >
+                <Bell className="h-5 w-5" />
+                {unreadCount > 0 && (
+                    <Badge
+                        variant="destructive"
+                        className="absolute -top-1 -right-1 h-5 min-w-5 px-1 flex items-center justify-center text-xs"
+                    >
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                    </Badge>
+                )}
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-80">
                 <div className="flex items-center justify-between px-3 py-2.5 text-xs text-muted-foreground">
