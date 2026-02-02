@@ -175,8 +175,8 @@ async def test_jotform_form_template_list_includes_schema(authed_client, db, tes
 
     template = PlatformFormTemplate(
         id=uuid.uuid4(),
-        name="Jotform Surrogate Intake",
-        description="Template based on the Jotform surrogate intake form.",
+        name="Surrogate Application Form Template",
+        description="Template based on the Jotform Surrogate Application Form.",
         schema_json={
             "pages": [
                 {
@@ -203,7 +203,11 @@ async def test_jotform_form_template_list_includes_schema(authed_client, db, tes
     templates = list_resp.json()
 
     template = next(
-        (item for item in templates if item["draft"]["name"] == "Jotform Surrogate Intake"),
+        (
+            item
+            for item in templates
+            if item["draft"]["name"] == "Surrogate Application Form Template"
+        ),
         None,
     )
     assert template is not None

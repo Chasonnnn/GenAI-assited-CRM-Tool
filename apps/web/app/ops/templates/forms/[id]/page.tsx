@@ -288,6 +288,8 @@ export default function FormBuilderPage() {
     const publishTemplateMutation = usePublishPlatformFormTemplate()
     const lastSavedFingerprintRef = useRef<string>("")
     const currentVersionRef = useRef<number | null>(null)
+    const templateIdRef = useRef<string | null>(isNewForm ? null : id)
+    const saveQueueRef = useRef<Promise<void>>(Promise.resolve())
     const hydratedFormRef = useRef<string | null>(null)
     const [hasHydrated, setHasHydrated] = useState(false)
 
@@ -339,11 +341,12 @@ export default function FormBuilderPage() {
         setLastSavedAt(null)
         hydratedFormRef.current = null
         currentVersionRef.current = null
+        templateIdRef.current = isNewForm ? null : id
         setIsMobilePreview(false)
         setMaxFileSizeMb(10)
         setMaxFileCount(10)
         setAllowedMimeTypesText("")
-    }, [formId])
+    }, [formId, id, isNewForm])
 
     useEffect(() => {
         if (isNewForm) {
@@ -848,12 +851,14 @@ export default function FormBuilderPage() {
             const payload = payloadOverride ?? draftPayload
 
             let savedTemplate: PlatformFormTemplate
-            if (isNewForm) {
+            const templateId = templateIdRef.current
+            if (!templateId) {
                 savedTemplate = await createTemplateMutation.mutateAsync(payload)
+                templateIdRef.current = savedTemplate.id
                 router.replace(`/ops/templates/forms/${savedTemplate.id}`)
             } else {
                 savedTemplate = await updateTemplateMutation.mutateAsync({
-                    id,
+                    id: templateId,
                     payload: {
                         ...payload,
                         expected_version: currentVersionRef.current ?? templateData?.current_version ?? null,
@@ -870,12 +875,20 @@ export default function FormBuilderPage() {
         [
             createTemplateMutation,
             draftPayload,
-            id,
-            isNewForm,
             router,
             templateData?.current_version,
             updateTemplateMutation,
         ],
+    )
+
+    const queueSave = useCallback(
+        async (payloadOverride?: typeof draftPayload): Promise<PlatformFormTemplate> => {
+            const run = () => persistTemplate(payloadOverride)
+            const chained = saveQueueRef.current.then(run, run)
+            saveQueueRef.current = chained.then(() => {}, () => {})
+            return chained
+        },
+        [persistTemplate],
     )
 
     const handleSave = async () => {
@@ -885,7 +898,7 @@ export default function FormBuilderPage() {
         }
         setIsSaving(true)
         try {
-            const savedTemplate = await persistTemplate(draftPayload)
+            const savedTemplate = await queueSave(draftPayload)
             markSaved(draftFingerprint, savedTemplate)
             toast.success("Template saved")
         } catch {
@@ -905,14 +918,11 @@ export default function FormBuilderPage() {
         if (!formName.trim()) return
         if (debouncedFingerprint === lastSavedFingerprintRef.current) return
         if (isSaving || isPublishing) return
-        if (createTemplateMutation.isPending || updateTemplateMutation.isPending) {
-            return
-        }
 
         let cancelled = false
         setAutoSaveStatus("saving")
 
-        persistTemplate(debouncedPayload)
+        queueSave(debouncedPayload)
             .then((savedForm) => {
                 if (cancelled) return
                 markSaved(debouncedFingerprint, savedForm)
@@ -932,9 +942,7 @@ export default function FormBuilderPage() {
         debouncedPayload,
         isSaving,
         isPublishing,
-        createTemplateMutation.isPending,
-        updateTemplateMutation.isPending,
-        persistTemplate,
+        queueSave,
         markSaved,
     ])
 
@@ -993,7 +1001,7 @@ export default function FormBuilderPage() {
     const confirmPublish = async (publishAll: boolean, orgIds: string[]) => {
         setIsPublishing(true)
         try {
-            const savedTemplate = await persistTemplate(draftPayload)
+            const savedTemplate = await queueSave(draftPayload)
             markSaved(draftFingerprint, savedTemplate)
             await publishTemplateMutation.mutateAsync({
                 id: savedTemplate.id,

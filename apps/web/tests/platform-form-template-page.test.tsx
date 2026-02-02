@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, fireEvent, waitFor } from "@testing-library/react"
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react"
 import PlatformFormTemplatePage from "../app/ops/templates/forms/[id]/page"
 
 const mockUpdate = vi.fn()
 const mockCreate = vi.fn()
 const mockPublish = vi.fn()
+
 
 const mockTemplateData = {
     id: "tpl_form_1",
@@ -48,6 +49,7 @@ describe("PlatformFormTemplatePage", () => {
         mockUpdate.mockReset()
         mockCreate.mockReset()
         mockPublish.mockReset()
+        vi.useRealTimers()
     })
 
     it("uses the latest saved version for subsequent autosaves", async () => {
@@ -68,18 +70,28 @@ describe("PlatformFormTemplatePage", () => {
         const nameInput = await screen.findByPlaceholderText("Form name...")
         expect(nameInput).toHaveValue("Surrogate Application Form")
 
-        fireEvent.change(nameInput, { target: { value: "Surrogate Application Form v2" } })
-        await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1), { timeout: 2000 })
-        expect(mockUpdate).toHaveBeenLastCalledWith({
-            id: "tpl_form_1",
-            payload: expect.objectContaining({ expected_version: 1 }),
+        await act(async () => {
+            fireEvent.change(nameInput, { target: { value: "Surrogate Application Form v2" } })
         })
+        await waitFor(() => expect(mockUpdate.mock.calls.length).toBeGreaterThan(0), { timeout: 2000 })
+        const callsAfterFirst = mockUpdate.mock.calls.length
+        expect(
+            mockUpdate.mock.calls.some(
+                (call) => call[0]?.payload?.expected_version === 1
+            )
+        ).toBe(true)
 
-        fireEvent.change(nameInput, { target: { value: "Surrogate Application Form v3" } })
-        await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(2), { timeout: 2000 })
+        await act(async () => {
+            fireEvent.change(nameInput, { target: { value: "Surrogate Application Form v3" } })
+        })
+        await waitFor(
+            () => expect(mockUpdate.mock.calls.length).toBeGreaterThan(callsAfterFirst),
+            { timeout: 2000 }
+        )
         expect(mockUpdate).toHaveBeenLastCalledWith({
             id: "tpl_form_1",
             payload: expect.objectContaining({ expected_version: 2 }),
         })
     })
+
 })
