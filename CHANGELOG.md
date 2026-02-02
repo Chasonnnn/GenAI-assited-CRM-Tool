@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.66.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.65.0...surrogacy-crm-platform-v0.66.0) (2026-02-02)
+
+
+### Features
+
+* Add Content Security Policy & Security Headers ([ffd8986](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ffd89869b437f9df18f2ca367b5444f2daa93087))
+* **ops:** enhance platform template management and form application flow ([cc3bcc6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cc3bcc653cd39b499fd5210522c0fc44ac00ccf3))
+* **platform:** implement platform branding logo upload and management ([d610aff](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d610affea0463ef069de6520888bff0b7637d428))
+* **templates:** add jotform-based surrogate intake platform form template ([736b0d8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/736b0d81f4ae740db1942d19fe0bdb55f983f625))
+* **ui:** improve notification bell accessibility and styling ([3390613](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/33906135d8e57b88968c89a200fe5755b87d4538))
+
+
+### Bug Fixes
+
+* replace favicon ([6ba04c1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6ba04c1365fbc6f3f09c253bbcd9690be74167f8))
+
 ## [0.65.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.64.0...surrogacy-crm-platform-v0.65.0) (2026-02-02)
 
 
