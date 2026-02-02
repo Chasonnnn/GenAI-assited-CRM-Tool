@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -62,6 +61,12 @@ function formatDate(value: string | null): string {
     return formatLocalDate(parseDateInput(value))
 }
 
+function shortenStepLabel(label: string): string {
+    const words = label.replace(/&/g, " ").split(/\s+/).filter(Boolean)
+    if (words.length <= 2) return label
+    return `${words[0]} ${words[1]}`
+}
+
 // Progress Stepper Component
 function ProgressStepper({
     currentStep,
@@ -70,59 +75,68 @@ function ProgressStepper({
     currentStep: number
     steps: Step[]
 }) {
+    const totalSteps = steps.length
+    const currentLabel = steps[currentStep - 1]?.label ?? ""
+    const progress =
+        totalSteps <= 1 ? 0 : ((currentStep - 1) / (totalSteps - 1)) * 100
+    const maxVisible = 5
+    let start = Math.max(0, currentStep - 1 - Math.floor(maxVisible / 2))
+    let end = start + maxVisible - 1
+    if (end > totalSteps - 1) {
+        end = totalSteps - 1
+        start = Math.max(0, end - maxVisible + 1)
+    }
+    const visibleSteps = steps.slice(start, end + 1)
+
     return (
         <>
             {/* Desktop Stepper */}
-            <div className="hidden md:flex items-center justify-center gap-4 rounded-2xl border border-stone-200 bg-white px-4 py-3 shadow-sm">
-                {steps.map((step, index) => {
-                    const isCompleted = currentStep > step.id
-                    const isCurrent = currentStep === step.id
-                    const isLast = index === steps.length - 1
-
-                    return (
-                        <React.Fragment key={step.id}>
-                            <div className="flex items-center gap-2">
-                                <div
-                                    className={cn(
-                                        "flex size-9 items-center justify-center rounded-full text-sm font-semibold transition-all",
-                                        isCompleted && "bg-primary text-white",
-                                        isCurrent && "bg-primary text-white ring-4 ring-primary/20",
-                                        !isCompleted && !isCurrent && "border border-stone-200 bg-stone-100 text-stone-500"
-                                    )}
-                                >
-                                    {isCompleted ? <CheckIcon className="size-5" /> : step.id}
-                                </div>
-                                <span
-                                    className={cn(
-                                        "text-sm font-medium",
-                                        isCurrent && "text-primary",
-                                        !isCurrent && "text-stone-500"
-                                    )}
-                                >
-                                    {step.label}
-                                </span>
-                            </div>
-                            {!isLast && (
-                                <div
-                                    className={cn(
-                                        "h-0.5 w-10 transition-all",
-                                        isCompleted ? "bg-primary" : "bg-stone-200"
-                                    )}
-                                />
+            <div className="hidden md:flex flex-col items-center gap-4 rounded-2xl border border-stone-200/70 bg-stone-50/80 px-6 py-5">
+                <div className="text-[11px] uppercase tracking-[0.3em] text-stone-400">
+                    Step {currentStep} of {totalSteps}
+                </div>
+                <div className="text-base font-medium text-stone-900">{currentLabel}</div>
+                <div className="w-full max-w-xl">
+                    <div className="h-1.5 w-full rounded-full bg-stone-200">
+                        <div
+                            className="h-full rounded-full bg-primary transition-all"
+                            style={{ width: `${progress}%` }}
+                        />
+                    </div>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-stone-400">
+                    {start > 0 && <span className="px-1">…</span>}
+                    {visibleSteps.map((step) => (
+                        <span
+                            key={step.id}
+                            className={cn(
+                                "transition-colors",
+                                step.id === currentStep
+                                    ? "text-primary font-semibold"
+                                    : "text-stone-400"
                             )}
-                        </React.Fragment>
-                    )
-                })}
+                        >
+                            {step.shortLabel}
+                        </span>
+                    ))}
+                    {end < totalSteps - 1 && <span className="px-1">…</span>}
+                </div>
             </div>
 
             {/* Mobile Stepper */}
-            <div className="md:hidden flex items-center justify-between rounded-xl border border-stone-200 bg-white px-3 py-2">
-                <span className="text-sm font-medium text-stone-600">
-                    Step {currentStep} of {steps.length}
-                </span>
-                <span className="text-sm font-semibold text-primary">
-                    {steps[currentStep - 1]?.label}
-                </span>
+            <div className="md:hidden rounded-xl border border-stone-200 bg-white px-4 py-3 text-center">
+                <div className="text-xs uppercase tracking-[0.25em] text-stone-400">
+                    Step {currentStep} of {totalSteps}
+                </div>
+                <div className="mt-1 text-sm font-semibold text-stone-900">
+                    {steps[currentStep - 1]?.shortLabel}
+                </div>
+                <div className="mt-3 h-1 w-full rounded-full bg-stone-200">
+                    <div
+                        className="h-full rounded-full bg-primary transition-all"
+                        style={{ width: `${progress}%` }}
+                    />
+                </div>
             </div>
         </>
     )
@@ -426,11 +440,14 @@ export default function PublicApplicationForm() {
     const privacyNotice = formConfig?.form_schema.privacy_notice
     const showLogo = Boolean(resolvedLogoUrl) && !logoError
     const steps: Step[] = [
-        ...pages.map((page, index) => ({
-            id: index + 1,
-            label: page.title || `Step ${index + 1}`,
-            shortLabel: page.title || `Step ${index + 1}`,
-        })),
+        ...pages.map((page, index) => {
+            const label = page.title || `Step ${index + 1}`
+            return {
+                id: index + 1,
+                label,
+                shortLabel: shortenStepLabel(label),
+            }
+        }),
         { id: pages.length + 1, label: "Review & Submit", shortLabel: "Review" },
     ]
 
@@ -1081,13 +1098,13 @@ export default function PublicApplicationForm() {
     }
 
     return (
-        <div className="min-h-screen bg-stone-50 pb-16">
-            <div className="h-1 w-full bg-primary/80" />
+        <div className="min-h-screen bg-gradient-to-b from-stone-50 via-stone-50 to-stone-100/70 pb-28">
+            <div className="h-0.5 w-full bg-primary/80" />
             {/* Header */}
             <header className="py-8 md:py-10">
                 <div className="max-w-3xl mx-auto px-4">
-                    <div className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm md:p-8">
-                        <div className="flex flex-col gap-5 md:flex-row md:items-center">
+                    <div className="rounded-3xl border border-stone-200/70 bg-white/95 p-8 shadow-[0_2px_12px_rgba(15,23,42,0.06)] md:p-10">
+                        <div className="flex flex-col items-center gap-4 text-center">
                             {showLogo ? (
                                 <div className="flex size-16 items-center justify-center">
                                     <img
@@ -1098,28 +1115,28 @@ export default function PublicApplicationForm() {
                                     />
                                 </div>
                             ) : (
-                                <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10">
-                                    <span className="text-primary text-xl font-semibold">
+                                <div className="flex size-16 items-center justify-center rounded-2xl bg-primary/10">
+                                    <span className="text-primary text-2xl font-semibold">
                                         {publicTitle.charAt(0).toUpperCase()}
                                     </span>
                                 </div>
                             )}
-                            <div className="flex-1 space-y-2">
-                                <h1 className="text-2xl font-semibold text-stone-900 md:text-3xl">
+                            <div className="space-y-3">
+                                <h1 className="text-3xl font-semibold tracking-tight text-stone-900 md:text-4xl">
                                     {publicTitle}
                                 </h1>
-                                <p className="text-stone-500">
+                                <p className="mx-auto max-w-2xl text-base text-stone-500 md:text-lg">
                                     {formConfig?.description ||
                                         "Thank you for your interest in our program"}
                                 </p>
                                 {isPreview && (
-                                    <div className="pt-1">
-                                        <Badge variant="secondary">Preview Mode</Badge>
+                                    <div className="pt-2 text-[11px] uppercase tracking-[0.3em] text-stone-400">
+                                        Preview Mode
                                     </div>
                                 )}
                             </div>
                         </div>
-                        <div className="mt-6">
+                        <div className="mt-8">
                             <ProgressStepper currentStep={currentStep} steps={steps} />
                         </div>
                     </div>
@@ -1279,42 +1296,46 @@ export default function PublicApplicationForm() {
                 )}
             </div>
             {/* Navigation Buttons */}
-            <div className="max-w-3xl mx-auto px-4 mt-6">
-                <div className="flex items-center justify-between">
-                    <Button
-                        variant="ghost"
-                        onClick={handleBack}
-                        disabled={currentStep === 1}
-                        className="h-12 px-6"
-                    >
-                        <ChevronLeftIcon className="size-4 mr-2" />
-                        Back
-                    </Button>
+            <div className="sticky bottom-0 z-20 mt-10">
+                <div className="bg-gradient-to-b from-transparent via-stone-50/90 to-stone-50 pb-6 pt-4">
+                    <div className="max-w-3xl mx-auto px-4">
+                        <div className="flex items-center justify-center gap-3 rounded-2xl border border-stone-200/80 bg-white/95 px-4 py-3 shadow-[0_6px_18px_rgba(15,23,42,0.06)] backdrop-blur">
+                            <Button
+                                variant="ghost"
+                                onClick={handleBack}
+                                disabled={currentStep === 1}
+                                className="h-11 px-5 text-stone-600"
+                            >
+                                <ChevronLeftIcon className="size-4 mr-2" />
+                                Back
+                            </Button>
 
-                    {currentStep < steps.length ? (
-                        <Button
-                            onClick={handleNext}
-                            className="h-12 px-8 bg-primary hover:bg-primary/90"
-                        >
-                            Continue
-                            <ChevronRightIcon className="size-4 ml-2" />
-                        </Button>
-                    ) : (
-                        <Button
-                            onClick={handleSubmit}
-                            disabled={isSubmitting || !agreed}
-                            className="h-12 px-8 bg-primary hover:bg-primary/90"
-                        >
-                            {isSubmitting ? (
-                                <>
-                                    <Loader2Icon className="size-4 mr-2 animate-spin" />
-                                    Submitting...
-                                </>
+                            {currentStep < steps.length ? (
+                                <Button
+                                    onClick={handleNext}
+                                    className="h-11 px-7 bg-primary hover:bg-primary/90"
+                                >
+                                    Continue
+                                    <ChevronRightIcon className="size-4 ml-2" />
+                                </Button>
                             ) : (
-                                "Submit Application"
+                                <Button
+                                    onClick={handleSubmit}
+                                    disabled={isSubmitting || !agreed}
+                                    className="h-11 px-7 bg-primary hover:bg-primary/90"
+                                >
+                                    {isSubmitting ? (
+                                        <>
+                                            <Loader2Icon className="size-4 mr-2 animate-spin" />
+                                            Submitting...
+                                        </>
+                                    ) : (
+                                        "Submit Application"
+                                    )}
+                                </Button>
                             )}
-                        </Button>
-                    )}
+                        </div>
+                    </div>
                 </div>
             </div>
 

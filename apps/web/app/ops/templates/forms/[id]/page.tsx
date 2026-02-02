@@ -287,6 +287,7 @@ export default function FormBuilderPage() {
     const updateTemplateMutation = useUpdatePlatformFormTemplate()
     const publishTemplateMutation = usePublishPlatformFormTemplate()
     const lastSavedFingerprintRef = useRef<string>("")
+    const currentVersionRef = useRef<number | null>(null)
     const hydratedFormRef = useRef<string | null>(null)
     const [hasHydrated, setHasHydrated] = useState(false)
 
@@ -337,6 +338,7 @@ export default function FormBuilderPage() {
         setAutoSaveStatus("idle")
         setLastSavedAt(null)
         hydratedFormRef.current = null
+        currentVersionRef.current = null
         setIsMobilePreview(false)
         setMaxFileSizeMb(10)
         setMaxFileCount(10)
@@ -384,6 +386,14 @@ export default function FormBuilderPage() {
         setSelectedField(null)
         setHasHydrated(true)
     }, [templateData, hasHydrated, isNewForm])
+
+    useEffect(() => {
+        const nextVersion = templateData?.current_version
+        if (typeof nextVersion !== "number") return
+        if (currentVersionRef.current === null || nextVersion > currentVersionRef.current) {
+            currentVersionRef.current = nextVersion
+        }
+    }, [templateData?.current_version])
 
     const fallbackPage: FormPage = { id: 1, name: "Page 1", fields: [] }
     const currentPage = pages.find((p) => p.id === activePage) ?? pages[0] ?? fallbackPage
@@ -846,12 +856,15 @@ export default function FormBuilderPage() {
                     id,
                     payload: {
                         ...payload,
-                        expected_version: templateData?.current_version ?? null,
+                        expected_version: currentVersionRef.current ?? templateData?.current_version ?? null,
                     },
                 })
             }
 
             setIsPublished((savedTemplate.published_version ?? 0) > 0)
+            if (typeof savedTemplate.current_version === "number") {
+                currentVersionRef.current = savedTemplate.current_version
+            }
             return savedTemplate
         },
         [
