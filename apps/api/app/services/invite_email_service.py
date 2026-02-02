@@ -1,7 +1,6 @@
 """Invite email service.
 
-Preferred path: send via platform/system sender (Resend) if configured.
-Fallback: send via the inviting user's Gmail integration when platform sender is not configured.
+Invites are always sent via the platform/system sender (Resend).
 """
 
 import logging
@@ -9,11 +8,12 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.models import OrgInvite, User
+from app.db.models import OrgInvite
 from app.services import (
-    email_sender,
     email_service,
     org_service,
+    platform_branding_service,
+    platform_email_service,
     system_email_template_service,
 )
 
@@ -27,18 +27,24 @@ def _build_invite_url(invite_id: UUID, base_url: str) -> str:
 
 def _build_invite_text(
     org_name: str,
-    inviter_name: str | None,
     role: str,
     invite_url: str,
     expires_at: str | None,
+    inviter_name: str | None,
 ) -> str:
     """Build plain text email body for invite."""
-    inviter_text = f" by {inviter_name}" if inviter_name else ""
     expiry_text = f"\nThis invitation expires {expires_at}.\n" if expires_at else ""
+    inviter_line = (
+        f"You've been invited by {inviter_name} to join"
+        if inviter_name
+        else "You've been invited to join"
+    )
 
-    return f"""You're invited to join {org_name}
+    return f"""You're invited to join
+{org_name}
 
-You've been invited{inviter_text} to join {org_name} as a {role.title()}.
+{inviter_line}
+as a {role.title()}.
 
 Accept your invitation here:
 {invite_url}
@@ -54,7 +60,7 @@ async def send_invite_email(
     """
     Send invitation email to invitee.
 
-    Uses the inviting user's Gmail account to send the email.
+    Uses the platform/system sender (Resend).
 
     Returns:
         {"success": True, "message_id": "..."} or {"success": False, "error": "..."}
@@ -65,12 +71,6 @@ async def send_invite_email(
         return {"success": False, "error": "Organization not found"}
     org_name = org_service.get_org_display_name(org)
     base_url = org_service.get_org_portal_base_url(org)
-
-    # Get inviter name
-    inviter_name = None
-    if invite.invited_by_user_id:
-        inviter = db.query(User).filter(User.id == invite.invited_by_user_id).first()
-        inviter_name = inviter.display_name if inviter else None
 
     # Format expiry
     expires_at = None
@@ -85,21 +85,24 @@ async def send_invite_email(
 
     # Build URLs and content
     invite_url = _build_invite_url(invite.id, base_url)
-    text_body = _build_invite_text(org_name, inviter_name, invite.role, invite_url, expires_at)
+    inviter_name = None
+    if invite.invited_by_user_id:
+        from app.db.models import User
+
+        inviter = db.query(User).filter(User.id == invite.invited_by_user_id).first()
+        if inviter and inviter.display_name:
+            inviter_name = inviter.display_name
+
+    text_body = _build_invite_text(org_name, invite.role, invite_url, expires_at, inviter_name)
     idempotency_key = f"invite:{invite.id}:v{invite.resend_count}"
 
-    # Prefer the org-scoped system template (editable in ops). Fallback to built-in HTML.
-    template = system_email_template_service.get_system_template(
-        db,
-        org_id=invite.organization_id,
-        system_key=system_email_template_service.ORG_INVITE_SYSTEM_KEY,
+    if not platform_email_service.platform_sender_configured():
+        return {"success": False, "error": "Platform email sender is not configured"}
+
+    # Prefer the platform-level system template (global).
+    template = system_email_template_service.ensure_system_template(
+        db, system_key=system_email_template_service.ORG_INVITE_SYSTEM_KEY
     )
-    if not template:
-        template = system_email_template_service.ensure_system_template(
-            db,
-            org_id=invite.organization_id,
-            system_key=system_email_template_service.ORG_INVITE_SYSTEM_KEY,
-        )
 
     # Always allow the system template to define the sender, even if the body is
     # disabled (in that case we fall back to the built-in HTML, but still need a
@@ -108,8 +111,13 @@ async def send_invite_email(
 
     inviter_text = f" by {inviter_name}" if inviter_name else ""
     expires_block = f"<p>This invitation expires {expires_at}.</p>" if expires_at else ""
-    from app.services import media_service
-    org_logo_url = media_service.get_signed_media_url(org.signature_logo_url) if org else None
+    branding = platform_branding_service.get_branding(db)
+    platform_logo_url = (branding.logo_url or "").strip()
+    platform_logo_block = (
+        f'<img src="{platform_logo_url}" alt="Platform logo" style="max-width: 180px; height: auto; display: block; margin: 0 auto 6px auto;" />'
+        if platform_logo_url
+        else ""
+    )
 
     variables = {
         "org_name": org_name,
@@ -118,38 +126,42 @@ async def send_invite_email(
         "role_title": invite.role.title(),
         "invite_url": invite_url,
         "expires_block": expires_block,
-        "org_logo_url": org_logo_url or "",
+        "platform_logo_url": platform_logo_url,
+        "platform_logo_block": platform_logo_block,
     }
 
     if template and template.is_active:
         subject_template = template.subject
         body_template = template.body
-        template_id = template.id
     else:
         defaults = system_email_template_service.get_system_template_defaults(
             system_email_template_service.ORG_INVITE_SYSTEM_KEY
         )
         subject_template = defaults["subject"]
         body_template = defaults["body"]
-        template_id = None
-        # template_from_email already set from the system template (if any)
 
     subject, html_body = email_service.render_template(
         subject_template,
         body_template,
         variables,
-        safe_html_vars={"expires_block"},
+        safe_html_vars={"expires_block", "platform_logo_block"},
     )
 
-    sender_selection = email_sender.select_sender(
-        prefer_platform=True,
-        sender_user_id=invite.invited_by_user_id,
-    )
-    if sender_selection.error:
-        logger.warning("No inviter for invite %s, cannot send email", invite.id)
-        return {"success": False, "error": sender_selection.error}
+    if inviter_name:
+        if "You've been invited to join" in html_body:
+            html_body = html_body.replace(
+                "You've been invited to join",
+                f"You've been invited by {inviter_name} to join",
+                1,
+            )
+        elif "You&#x27;ve been invited to join" in html_body:
+            html_body = html_body.replace(
+                "You&#x27;ve been invited to join",
+                f"You&#x27;ve been invited by {inviter_name} to join",
+                1,
+            )
 
-    result = await sender_selection.sender.send_email_logged(
+    result = await platform_email_service.send_email_logged(
         db=db,
         org_id=invite.organization_id,
         to_email=invite.email,
@@ -157,11 +169,11 @@ async def send_invite_email(
         from_email=template_from_email,
         html=html_body,
         text=text_body,
-        template_id=template_id,
+        template_id=None,
         surrogate_id=None,
         idempotency_key=idempotency_key,
     )
-    integration_key = sender_selection.integration_key
+    integration_key = "resend_platform"
 
     if result.get("success"):
         from app.services import audit_service

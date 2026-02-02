@@ -62,10 +62,13 @@ def test_create_invite_rejects_invalid_role(db, test_org, test_user):
 
 
 @pytest.mark.asyncio
-async def test_send_invite_email_uses_display_name(db, test_org, test_user, monkeypatch):
-    """Invite emails should use display_name (User has no full_name)."""
+async def test_send_invite_email_includes_inviter_name(db, test_org, test_user, monkeypatch):
+    """Invite emails should include the inviter display name when available."""
+    from app.core.config import settings
     from app.db.models import OrgInvite
-    from app.services import invite_email_service, gmail_service
+    from app.services import invite_email_service, platform_email_service
+
+    monkeypatch.setattr(settings, "PLATFORM_RESEND_API_KEY", "test-resend-key")
 
     invite = OrgInvite(
         id=uuid4(),
@@ -80,53 +83,41 @@ async def test_send_invite_email_uses_display_name(db, test_org, test_user, monk
 
     captured = {}
 
-    async def fake_send_email_logged(
-        db,
-        org_id,
-        user_id,
-        to,
-        subject,
-        body,
-        html,
-        template_id,
-        surrogate_id,
-        idempotency_key,
-    ):
-        captured["body"] = body
-        return {"success": True}
+    async def fake_send_email_logged(**kwargs):
+        captured.update(kwargs)
+        return {"success": True, "message_id": "msg_123"}
 
-    monkeypatch.setattr(gmail_service, "send_email_logged", fake_send_email_logged)
+    monkeypatch.setattr(platform_email_service, "send_email_logged", fake_send_email_logged)
 
     result = await invite_email_service.send_invite_email(db, invite)
 
     assert result["success"] is True
-    assert test_user.display_name in captured["body"]
+    text_body = captured.get("text") or ""
+    html_body = captured.get("html") or ""
+    assert "You've been invited" in text_body
+    assert test_user.display_name in text_body
+    assert test_user.display_name in html_body
 
 
 @pytest.mark.asyncio
 async def test_send_invite_email_uses_platform_sender_when_configured(db, test_org, monkeypatch):
     """Platform sender should be able to send invites without inviter Gmail."""
     from app.core.config import settings
-    from app.db.models import EmailTemplate, OrgInvite
-    from app.services import invite_email_service, platform_email_service
+    from app.db.models import OrgInvite
+    from app.services import (
+        invite_email_service,
+        platform_email_service,
+        system_email_template_service,
+    )
 
     monkeypatch.setattr(settings, "PLATFORM_RESEND_API_KEY", "test-resend-key")
 
-    # Sender is configured per template (no global From required).
-    tpl = EmailTemplate(
-        id=uuid4(),
-        organization_id=test_org.id,
-        name="Organization Invite",
-        subject="You're invited to join {{org_name}}",
-        body='<p>Invite: <a href="{{invite_url}}">Accept</a></p>',
-        is_active=False,  # Use built-in body, but keep From for platform sender
-        is_system_template=True,
-        system_key="org_invite",
-        category="system",
-        from_email="Invites <invites@surrogacyforce.com>",
-        current_version=1,
+    # Sender is configured per system template (no global From required).
+    tpl = system_email_template_service.ensure_system_template(
+        db, system_key=system_email_template_service.ORG_INVITE_SYSTEM_KEY
     )
-    db.add(tpl)
+    tpl.from_email = "Invites <invites@surrogacyforce.com>"
+    tpl.is_active = False
     db.flush()
 
     invite = OrgInvite(
@@ -146,6 +137,7 @@ async def test_send_invite_email_uses_platform_sender_when_configured(db, test_o
         captured.update(kwargs)
         return {"success": True, "message_id": "msg_123"}
 
+    monkeypatch.setattr(platform_email_service, "platform_sender_configured", lambda: True)
     monkeypatch.setattr(platform_email_service, "send_email_logged", fake_send_email_logged)
 
     result = await invite_email_service.send_invite_email(db, invite)
@@ -160,26 +152,21 @@ async def test_send_invite_email_uses_template_from_email_when_platform_sender(
 ):
     """If the org invite system template sets from_email, platform sender should use it."""
     from app.core.config import settings
-    from app.db.models import EmailTemplate, OrgInvite
-    from app.services import invite_email_service, platform_email_service
+    from app.db.models import OrgInvite
+    from app.services import (
+        invite_email_service,
+        platform_email_service,
+        system_email_template_service,
+    )
 
     monkeypatch.setattr(settings, "PLATFORM_RESEND_API_KEY", "test-resend-key")
 
     template_from = "Invites <invites@surrogacyforce.com>"
-    tpl = EmailTemplate(
-        id=uuid4(),
-        organization_id=test_org.id,
-        name="Organization Invite",
-        subject="You're invited to join {{org_name}}",
-        body='<p>Invite: <a href="{{invite_url}}">Accept</a></p>',
-        is_active=True,
-        is_system_template=True,
-        system_key="org_invite",
-        category="system",
-        from_email=template_from,
-        current_version=1,
+    tpl = system_email_template_service.ensure_system_template(
+        db, system_key=system_email_template_service.ORG_INVITE_SYSTEM_KEY
     )
-    db.add(tpl)
+    tpl.from_email = template_from
+    tpl.is_active = True
     db.flush()
 
     invite = OrgInvite(
@@ -199,6 +186,7 @@ async def test_send_invite_email_uses_template_from_email_when_platform_sender(
         captured.update(kwargs)
         return {"success": True, "message_id": "msg_123"}
 
+    monkeypatch.setattr(platform_email_service, "platform_sender_configured", lambda: True)
     monkeypatch.setattr(platform_email_service, "send_email_logged", fake_send_email_logged)
 
     result = await invite_email_service.send_invite_email(db, invite)

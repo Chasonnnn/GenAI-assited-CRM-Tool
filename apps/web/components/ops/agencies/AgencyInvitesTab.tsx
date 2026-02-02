@@ -43,6 +43,7 @@ import {
 import { Ban, Loader2, Mail, Plus, RotateCw } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import type { OrgInvite, PlatformEmailStatus } from "@/lib/api/platform"
+import Link from "@/components/app-link"
 import {
     INVITE_ROLE_LABELS,
     INVITE_ROLE_OPTIONS,
@@ -66,7 +67,6 @@ type AgencyInvitesTabProps = {
     onCreateInvite: () => void
     onResendInvite: (inviteId: string) => void
     onRevokeInvite: (inviteId: string) => void
-    onGoToTemplates: () => void
 }
 
 export function AgencyInvitesTab({
@@ -85,7 +85,6 @@ export function AgencyInvitesTab({
     onCreateInvite,
     onResendInvite,
     onRevokeInvite,
-    onGoToTemplates,
 }: AgencyInvitesTabProps) {
     const formatCooldown = (seconds: number) => {
         if (seconds <= 0) return "Resend available soon";
@@ -108,13 +107,6 @@ export function AgencyInvitesTab({
                             <DialogTitle>Invite user</DialogTitle>
                             <DialogDescription>
                                 Send an invitation to join {orgName}.
-                                <button
-                                    type="button"
-                                    className="ml-2 text-xs text-teal-600 hover:underline"
-                                    onClick={onGoToTemplates}
-                                >
-                                    Edit invite template
-                                </button>
                             </DialogDescription>
                         </DialogHeader>
                         <div className="space-y-4">
@@ -171,8 +163,14 @@ export function AgencyInvitesTab({
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-600 dark:border-stone-800 dark:bg-stone-900 dark:text-stone-300">
                     <div className="flex flex-col gap-1">
                         <span>
-                            Invites use the <span className="font-mono">org_invite</span> template.
+                            Invites use the platform <span className="font-mono">org_invite</span> system template.
                         </span>
+                        <Link
+                            href="/ops/templates?tab=system"
+                            className={buttonVariants({ variant: "outline", size: "sm" })}
+                        >
+                            Open system templates
+                        </Link>
                         {platformEmailLoading ? (
                             <span className="text-xs text-muted-foreground">
                                 Loading sender status...
@@ -187,9 +185,6 @@ export function AgencyInvitesTab({
                             </span>
                         )}
                     </div>
-                    <Button variant="outline" size="sm" onClick={onGoToTemplates}>
-                        Manage template
-                    </Button>
                 </div>
                 {invites.length === 0 ? (
                     <p className="text-center py-8 text-muted-foreground">No invites yet</p>

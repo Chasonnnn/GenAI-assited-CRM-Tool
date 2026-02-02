@@ -108,16 +108,14 @@ async def create_invite(
     session: UserSession = Depends(require_permission(POLICIES["team"].default)),
 ):
     """Create a new invitation (Admin+ only)."""
-    # Ensure we can send invites either via inviter Gmail or platform/system sender
-    from app.services import oauth_service, platform_email_service
+    # Ensure platform/system sender is configured for invites
+    from app.services import platform_email_service
     from app.services.google_oauth import validate_email_domain
 
-    gmail_integration = oauth_service.get_user_integration(db, session.user_id, "gmail")
-    platform_sender_configured = platform_email_service.platform_sender_configured()
-    if not gmail_integration and not platform_sender_configured:
+    if not platform_email_service.platform_sender_configured():
         raise HTTPException(
             status_code=400,
-            detail="Connect Gmail in Settings → Integrations or configure platform email to send invites",
+            detail="Platform email sender is not configured. Configure Resend in Ops.",
         )
 
     # Validate invitee email is from allowed domain

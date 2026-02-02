@@ -10,9 +10,6 @@ import {
     listInvites,
     getAdminActionLogs,
     getPlatformEmailStatus,
-    getOrgSystemEmailTemplate,
-    updateOrgSystemEmailTemplate,
-    sendTestOrgSystemEmailTemplate,
     listAlerts,
     acknowledgeAlert,
     resolveAlert,
@@ -26,7 +23,6 @@ import {
     deleteOrganization,
     restoreOrganization,
     purgeOrganization,
-    type SystemEmailTemplate,
     type OrganizationDetail,
     type OrganizationSubscription,
     type OrgMember,
@@ -43,7 +39,6 @@ import { AgencyUsersTab } from '@/components/ops/agencies/AgencyUsersTab';
 import { AgencyInvitesTab } from '@/components/ops/agencies/AgencyInvitesTab';
 import { AgencySubscriptionTab } from '@/components/ops/agencies/AgencySubscriptionTab';
 import { AgencyAlertsTab } from '@/components/ops/agencies/AgencyAlertsTab';
-import { AgencyTemplatesTab } from '@/components/ops/agencies/AgencyTemplatesTab';
 import { AgencyAuditTab } from '@/components/ops/agencies/AgencyAuditTab';
 import {
     INVITE_ROLE_OPTIONS,
@@ -111,16 +106,6 @@ export default function AgencyDetailPage() {
     const subscriptionNotes = subscription?.notes ?? '';
     const [platformEmailStatus, setPlatformEmailStatus] = useState<PlatformEmailStatus | null>(null);
     const [platformEmailLoading, setPlatformEmailLoading] = useState(false);
-    const [inviteTemplate, setInviteTemplate] = useState<SystemEmailTemplate | null>(null);
-    const [inviteTemplateLoading, setInviteTemplateLoading] = useState(false);
-    const [inviteTemplateSaving, setInviteTemplateSaving] = useState(false);
-    const [templateSubject, setTemplateSubject] = useState('');
-    const [templateFromEmail, setTemplateFromEmail] = useState('');
-    const [templateBody, setTemplateBody] = useState('');
-    const [templateActive, setTemplateActive] = useState(true);
-    const [templateVersion, setTemplateVersion] = useState<number | null>(null);
-    const [testEmail, setTestEmail] = useState('');
-    const [testSending, setTestSending] = useState(false);
     const [deleteSubmitting, setDeleteSubmitting] = useState(false);
     const [restoreSubmitting, setRestoreSubmitting] = useState(false);
     const [purgeSubmitting, setPurgeSubmitting] = useState(false);
@@ -181,7 +166,7 @@ export default function AgencyDetailPage() {
     }, [orgAlerts]);
 
     useEffect(() => {
-        if (activeTab !== 'templates' && activeTab !== 'invites') return;
+        if (activeTab !== 'invites') return;
 
         async function fetchEmailStatus() {
             setPlatformEmailLoading(true);
@@ -197,71 +182,7 @@ export default function AgencyDetailPage() {
         }
 
         fetchEmailStatus();
-        if (activeTab === 'templates') {
-            async function fetchInviteTemplate() {
-                setInviteTemplateLoading(true);
-                try {
-                    const tpl = await getOrgSystemEmailTemplate(orgId, 'org_invite');
-                    setInviteTemplate(tpl);
-                    setTemplateSubject(tpl.subject);
-                    setTemplateFromEmail(tpl.from_email || '');
-                    setTemplateBody(tpl.body);
-                    setTemplateActive(tpl.is_active);
-                    setTemplateVersion(tpl.current_version);
-                } catch (error) {
-                    console.error('Failed to fetch invite template:', error);
-                    toast.error('Failed to load invite email template');
-                } finally {
-                    setInviteTemplateLoading(false);
-                }
-            }
-
-            fetchInviteTemplate();
-        }
-    }, [activeTab, orgId]);
-
-    const handleSaveInviteTemplate = async () => {
-        setInviteTemplateSaving(true);
-        try {
-            const payload: Parameters<typeof updateOrgSystemEmailTemplate>[2] = {
-                subject: templateSubject,
-                from_email: templateFromEmail.trim() ? templateFromEmail.trim() : null,
-                body: templateBody,
-                is_active: templateActive,
-            };
-            if (templateVersion !== null) {
-                payload.expected_version = templateVersion;
-            }
-
-            const updated = await updateOrgSystemEmailTemplate(orgId, 'org_invite', payload);
-            setInviteTemplate(updated);
-            setTemplateSubject(updated.subject);
-            setTemplateFromEmail(updated.from_email || '');
-            setTemplateBody(updated.body);
-            setTemplateActive(updated.is_active);
-            setTemplateVersion(updated.current_version);
-            toast.success('Invite email template updated');
-        } catch (error) {
-            console.error('Failed to update invite template:', error);
-            toast.error(resolveErrorMessage(error, 'Failed to update invite email template'));
-        } finally {
-            setInviteTemplateSaving(false);
-        }
-    };
-
-    const handleSendTestInviteEmail = async () => {
-        if (!testEmail) return;
-        setTestSending(true);
-        try {
-            await sendTestOrgSystemEmailTemplate(orgId, 'org_invite', { to_email: testEmail });
-            toast.success('Test email sent');
-        } catch (error) {
-            console.error('Failed to send test email:', error);
-            toast.error(resolveErrorMessage(error, 'Failed to send test email'));
-        } finally {
-            setTestSending(false);
-        }
-    };
+    }, [activeTab]);
 
     const handleDeleteOrganization = async () => {
         if (!org) return;
@@ -312,10 +233,6 @@ export default function AgencyDetailPage() {
         }
     };
 
-    const handleGoToTemplates = () => {
-        setInviteOpen(false);
-        setActiveTab('templates');
-    };
 
     const handleExtendSubscription = async () => {
         try {
@@ -556,20 +473,19 @@ export default function AgencyDetailPage() {
                                 {org.member_count}
                             </Badge>
                         </TabsTrigger>
-                        <TabsTrigger value="invites">Invites</TabsTrigger>
-                        <TabsTrigger value="subscription">Subscription</TabsTrigger>
-                        <TabsTrigger value="alerts">
-                            Alerts
-                            {openAlertCount > 0 && (
-                                <Badge variant="destructive" className="ml-1.5">
-                                    {openAlertCount}
-                                </Badge>
-                            )}
-                        </TabsTrigger>
-                        <TabsTrigger value="templates">Templates</TabsTrigger>
-                        <TabsTrigger value="audit">Audit Log</TabsTrigger>
-                    </TabsList>
-                </Tabs>
+                    <TabsTrigger value="invites">Invites</TabsTrigger>
+                    <TabsTrigger value="subscription">Subscription</TabsTrigger>
+                    <TabsTrigger value="alerts">
+                        Alerts
+                        {openAlertCount > 0 && (
+                            <Badge variant="destructive" className="ml-1.5">
+                                {openAlertCount}
+                            </Badge>
+                        )}
+                    </TabsTrigger>
+                    <TabsTrigger value="audit">Audit Log</TabsTrigger>
+                </TabsList>
+            </Tabs>
             </div>
 
             {/* Tab Content */}
@@ -623,7 +539,6 @@ export default function AgencyDetailPage() {
                             onCreateInvite={handleCreateInvite}
                             onResendInvite={handleResendInvite}
                             onRevokeInvite={handleRevokeInvite}
-                            onGoToTemplates={handleGoToTemplates}
                         />
                     </TabsContent>
 
@@ -650,34 +565,6 @@ export default function AgencyDetailPage() {
                             onRefresh={fetchOrgAlerts}
                             onAcknowledge={handleAcknowledgeAlert}
                             onResolve={handleResolveAlert}
-                        />
-                    </TabsContent>
-
-                    {/* Templates Tab */}
-                    <TabsContent value="templates" className="mt-0">
-                        <AgencyTemplatesTab
-                            orgName={org.name}
-                            orgSlug={org.slug}
-                            portalBaseUrl={org.portal_base_url}
-                            platformEmailStatus={platformEmailStatus}
-                            platformEmailLoading={platformEmailLoading}
-                            inviteTemplate={inviteTemplate}
-                            inviteTemplateLoading={inviteTemplateLoading}
-                            templateFromEmail={templateFromEmail}
-                            templateSubject={templateSubject}
-                            templateBody={templateBody}
-                            templateActive={templateActive}
-                            templateVersion={templateVersion}
-                            onTemplateFromEmailChange={setTemplateFromEmail}
-                            onTemplateSubjectChange={setTemplateSubject}
-                            onTemplateBodyChange={setTemplateBody}
-                            onTemplateActiveChange={setTemplateActive}
-                            onSaveTemplate={handleSaveInviteTemplate}
-                            inviteTemplateSaving={inviteTemplateSaving}
-                            testEmail={testEmail}
-                            onTestEmailChange={setTestEmail}
-                            onSendTestEmail={handleSendTestInviteEmail}
-                            testSending={testSending}
                         />
                     </TabsContent>
 

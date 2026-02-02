@@ -38,6 +38,7 @@ async def test_platform_resend_invite_updates_state(
     from app.db.enums import Role
     from app.db.models import OrgInvite
     from app.services import invite_email_service
+    from app.services import platform_email_service
 
     test_user.is_platform_admin = True
     db.commit()
@@ -55,10 +56,9 @@ async def test_platform_resend_invite_updates_state(
         return {"success": True}
 
     monkeypatch.setattr(invite_email_service, "send_invite_email", fake_send_invite_email)
+    monkeypatch.setattr(platform_email_service, "platform_sender_configured", lambda: True)
 
-    response = await authed_client.post(
-        f"/platform/orgs/{test_org.id}/invites/{invite.id}/resend"
-    )
+    response = await authed_client.post(f"/platform/orgs/{test_org.id}/invites/{invite.id}/resend")
     assert response.status_code == 200
     payload = response.json()
     assert payload["id"] == str(invite.id)
