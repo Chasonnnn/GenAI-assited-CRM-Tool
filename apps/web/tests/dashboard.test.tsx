@@ -216,9 +216,8 @@ describe('DashboardPage', () => {
     it('shows contextual empty state when trend has no new surrogates', async () => {
         render(<DashboardPage />)
 
-        expect(await screen.findByText('No new surrogates in this period')).toBeInTheDocument()
+        expect(await screen.findByText('No new surrogates in the last 30 days')).toBeInTheDocument()
         expect(await screen.findByText('View surrogates')).toBeInTheDocument()
-        expect(await screen.findByText('Adjust date range')).toBeInTheDocument()
     })
 
     it('shows filter-empty state for pipeline distribution when range filters exclude all', async () => {

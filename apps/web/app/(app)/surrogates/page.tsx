@@ -206,7 +206,7 @@ export default function SurrogatesPage() {
         email: "",
         source: "manual" as SurrogateSource,
     })
-    const perPage = 20
+    const perPage = 30
     const { user } = useAuth()
     const createMutation = useCreateSurrogate()
     const [isFilterPending, startFilterTransition] = useTransition()

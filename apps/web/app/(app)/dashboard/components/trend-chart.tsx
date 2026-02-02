@@ -16,8 +16,8 @@ import {
 } from "lucide-react"
 import { useSurrogatesTrend } from "@/lib/hooks/use-analytics"
 import { useSurrogateStats } from "@/lib/hooks/use-surrogates"
-import { useDashboardFilters } from "../context/dashboard-filters"
-import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
+import { subDays, subWeeks, subMonths } from "date-fns"
+import { formatLocalDate, parseDateInput, startOfLocalDay } from "@/lib/utils/date"
 import { ApiError } from "@/lib/api"
 
 type TrendPeriod = "day" | "week" | "month"
@@ -27,26 +27,52 @@ const periodLabels: Record<TrendPeriod, string> = {
     week: "Weekly",
     month: "Monthly",
 }
+const trendWindowLabels: Record<TrendPeriod, string> = {
+    day: "30 days",
+    week: "30 weeks",
+    month: "30 months",
+}
+const MAX_TREND_POINTS = 30
 
 export function TrendChart() {
-    const { getDateParams, filters, setDateRange } = useDashboardFilters()
     const [period, setPeriod] = useState<TrendPeriod>("day")
 
-    const dateParams = getDateParams()
+    const dateParams = useMemo(() => {
+        const today = startOfLocalDay()
+        let fromDate = today
+        switch (period) {
+            case "week":
+                fromDate = subWeeks(today, MAX_TREND_POINTS - 1)
+                break
+            case "month":
+                fromDate = subMonths(today, MAX_TREND_POINTS - 1)
+                break
+            default:
+                fromDate = subDays(today, MAX_TREND_POINTS - 1)
+        }
+        return {
+            from_date: formatLocalDate(fromDate),
+            to_date: formatLocalDate(today),
+        }
+    }, [period])
+
     const trendParams = {
         period,
         ...dateParams,
-        ...(filters.assigneeId ? { owner_id: filters.assigneeId } : {}),
     }
     const { data, isLoading, isError, error, refetch } = useSurrogatesTrend(trendParams)
     const orgStatsQuery = useSurrogateStats()
     const isRestricted = error instanceof ApiError && error.status === 403
     const orgTotal = orgStatsQuery.data?.total
+    const trendData = useMemo(
+        () => (data?.length ? data.slice(-MAX_TREND_POINTS) : []),
+        [data],
+    )
 
     // Transform data for chart
     const chartData = useMemo(() => {
-        if (!data?.length) return []
-        const parsed = data.map((item) => {
+        if (!trendData.length) return []
+        const parsed = trendData.map((item) => {
             const dateObj = parseDateInput(item.date)
             const monthDay = dateObj.toLocaleDateString("en-US", {
                 month: "short",
@@ -69,33 +95,20 @@ export function TrendChart() {
                     : item.monthDay,
             surrogates: item.surrogates,
         }))
-    }, [data])
+    }, [trendData])
 
     // Calculate total for subtitle
     const totalCount = useMemo(() => {
-        if (!data?.length) return 0
-        return data.reduce((sum, item) => sum + item.count, 0)
-    }, [data])
+        if (!trendData.length) return 0
+        return trendData.reduce((sum, item) => sum + item.count, 0)
+    }, [trendData])
 
     const buildSurrogatesUrl = () => {
         const params = new URLSearchParams()
-        if (filters.dateRange !== "all") {
-            params.set("range", filters.dateRange)
-        }
-        if (filters.dateRange === "custom" && filters.customRange.from) {
-            params.set("from", formatLocalDate(filters.customRange.from))
-            if (filters.customRange.to) {
-                params.set("to", formatLocalDate(filters.customRange.to))
-            }
-        }
-        const query = params.toString()
-        return `/surrogates${query ? `?${query}` : ""}`
-    }
-
-    const handleAdjustRange = () => {
-        if (filters.dateRange !== "all") {
-            setDateRange("all")
-        }
+        params.set("range", "custom")
+        params.set("from", dateParams.from_date)
+        params.set("to", dateParams.to_date)
+        return `/surrogates?${params.toString()}`
     }
 
     return (
@@ -122,7 +135,7 @@ export function TrendChart() {
                     </ToggleGroup>
                 </div>
                 <CardDescription className="text-sm text-muted-foreground mb-4">
-                    {periodLabels[period]} new surrogates
+                    {periodLabels[period]} new surrogates (last {trendWindowLabels[period]})
                     {totalCount > 0 && ` (${totalCount} total)`}
                 </CardDescription>
             </CardHeader>
@@ -178,9 +191,11 @@ export function TrendChart() {
                             </>
                         ) : (
                             <>
-                                <h4 className="font-medium text-foreground">No new surrogates in this period</h4>
+                                <h4 className="font-medium text-foreground">
+                                    No new surrogates in the last {trendWindowLabels[period]}
+                                </h4>
                                 <p className="text-sm text-muted-foreground mt-1 mb-4">
-                                    Try a wider range or review existing surrogates.
+                                    Review existing surrogates or switch the trend view.
                                 </p>
                                 <div className="flex flex-wrap items-center justify-center gap-2">
                                     <Link
@@ -189,9 +204,6 @@ export function TrendChart() {
                                     >
                                         View surrogates
                                     </Link>
-                                    <Button variant="ghost" size="sm" onClick={handleAdjustRange}>
-                                        Adjust date range
-                                    </Button>
                                 </div>
                             </>
                         )}
