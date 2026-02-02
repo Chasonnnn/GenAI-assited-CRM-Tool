@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.65.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.64.0...surrogacy-crm-platform-v0.65.0) (2026-02-02)
+
+
+### Features
+
+* **api:** enhance admin import/export services for better data portability ([02afc3c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/02afc3cb8c20a2a6500adf89a83c1fcc937630d8))
+* **appointments:** refine meeting mode logic and hash-based idempotency ([a53cdb3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a53cdb39f19c3bd967648e0965a201d9dcb2a396))
+* support multiple meeting modes for appointment types and extend idempotency key length ([828104c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/828104c07a9bc1dcaceb1ac7bef56a0dc451513d))
+
 ## [0.64.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.63.0...surrogacy-crm-platform-v0.64.0) (2026-02-02)
 
 
