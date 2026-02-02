@@ -36,6 +36,12 @@ logger = logging.getLogger(__name__)
 ORG_DELETE_GRACE_DAYS = 30
 
 
+class MissingTargetsError(ValueError):
+    def __init__(self, detail: dict):
+        super().__init__("Missing targets")
+        self.detail = detail
+
+
 # =============================================================================
 # HMAC Helpers for PII-Safe Logging
 # =============================================================================
@@ -1064,7 +1070,10 @@ def create_invite(
 ) -> dict:
     """Create a new invite for an organization."""
     email = email.lower().strip()
-    from app.services import invite_service
+    from app.services import invite_service, platform_email_service
+
+    if not platform_email_service.platform_sender_configured():
+        raise ValueError("Platform email sender is not configured")
 
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
@@ -1199,6 +1208,10 @@ def resend_invite(
     request: Request | None = None,
 ) -> dict:
     """Resend an invite email for an organization."""
+    from app.services import platform_email_service
+
+    if not platform_email_service.platform_sender_configured():
+        raise ValueError("Platform email sender is not configured")
     invite = (
         db.query(OrgInvite)
         .filter(
@@ -1262,6 +1275,189 @@ def resend_invite(
         "resend_count": invite.resend_count,
         "can_resend": can_resend,
         "resend_cooldown_seconds": cooldown_seconds,
+    }
+
+
+async def send_system_email_campaign(
+    *,
+    db: Session,
+    system_key: str,
+    targets: list[dict],
+    actor_id: UUID,
+    actor_display_name: str | None,
+    request: Request | None = None,
+) -> dict:
+    """Send a system email template to selected org/users."""
+    from app.db.models import Membership, User
+    from app.services import (
+        audit_service,
+        email_service,
+        org_service,
+        platform_branding_service,
+        platform_email_service,
+        system_email_template_service,
+        unsubscribe_service,
+    )
+
+    if not platform_email_service.platform_sender_configured():
+        raise ValueError("Platform email sender is not configured")
+
+    template = system_email_template_service.ensure_system_template(db, system_key=system_key)
+    if not template.is_active:
+        raise ValueError("System template is inactive")
+
+    resolved_from = (template.from_email or "").strip() or (
+        settings.PLATFORM_EMAIL_FROM or ""
+    ).strip()
+    if not resolved_from:
+        raise ValueError(
+            "Template From address is not configured (set from_email in Ops before sending)"
+        )
+
+    branding = platform_branding_service.get_branding(db)
+    platform_logo_url = (branding.logo_url or "").strip()
+    platform_logo_block = (
+        f'<img src="{platform_logo_url}" alt="Platform logo" style="max-width: 180px; height: auto; display: block; margin: 0 auto 6px auto;" />'
+        if platform_logo_url
+        else ""
+    )
+    inviter_text = f" by {actor_display_name}" if actor_display_name else ""
+
+    missing_targets: list[dict] = []
+    recipients: list[tuple[UUID, User, Membership]] = []
+
+    for target in targets:
+        org_id = target["org_id"]
+        user_ids = target["user_ids"]
+
+        org = org_service.get_org_by_id(db, org_id, include_deleted=True)
+        if not org:
+            missing_targets.append(
+                {
+                    "org_id": str(org_id),
+                    "missing_user_ids": [str(uid) for uid in user_ids],
+                }
+            )
+            continue
+
+        rows = (
+            db.query(User, Membership)
+            .join(Membership, Membership.user_id == User.id)
+            .filter(
+                Membership.organization_id == org_id,
+                User.id.in_(user_ids),
+            )
+            .all()
+        )
+        found_ids = {row[0].id for row in rows}
+        missing_ids = [str(uid) for uid in user_ids if uid not in found_ids]
+        if missing_ids:
+            missing_targets.append({"org_id": str(org_id), "missing_user_ids": missing_ids})
+        recipients.extend([(org_id, user, membership) for user, membership in rows])
+
+    if missing_targets:
+        raise MissingTargetsError({"missing_targets": missing_targets})
+
+    sent = 0
+    suppressed = 0
+    failed = 0
+    failures: list[dict] = []
+
+    for org_id, user, membership in recipients:
+        if not user.is_active or not membership.is_active:
+            suppressed += 1
+            continue
+
+        org = org_service.get_org_by_id(db, org_id, include_deleted=True)
+        if not org:
+            failed += 1
+            failures.append(
+                {
+                    "org_id": str(org_id),
+                    "user_id": str(user.id),
+                    "email": audit_service.hash_email(user.email),
+                    "error": "organization_not_found",
+                }
+            )
+            continue
+
+        org_name = org_service.get_org_display_name(org)
+        full_name = user.display_name or ""
+        first_name = full_name.split()[0] if full_name else ""
+        unsubscribe_url = unsubscribe_service.build_unsubscribe_url(org_id=org_id, email=user.email)
+
+        variables = {
+            "org_name": org_name,
+            "org_slug": org.slug,
+            "first_name": first_name,
+            "full_name": full_name,
+            "email": user.email,
+            "role_title": membership.role.title(),
+            "inviter_text": inviter_text,
+            "platform_logo_url": platform_logo_url,
+            "platform_logo_block": platform_logo_block,
+            "unsubscribe_url": unsubscribe_url,
+        }
+
+        rendered_subject, rendered_body = email_service.render_template(
+            template.subject,
+            template.body,
+            variables,
+            safe_html_vars={"platform_logo_block"},
+        )
+
+        result = await platform_email_service.send_email_logged(
+            db=db,
+            org_id=org_id,
+            to_email=user.email,
+            subject=rendered_subject,
+            from_email=resolved_from,
+            html=rendered_body,
+            text=None,
+            template_id=None,
+            surrogate_id=None,
+            idempotency_key=f"platform-campaign:{system_key}:{org_id}:{user.id}",
+        )
+
+        if result.get("success"):
+            sent += 1
+        else:
+            error = str(result.get("error") or "")
+            if "suppressed" in error.lower():
+                suppressed += 1
+            else:
+                failed += 1
+                failures.append(
+                    {
+                        "org_id": str(org_id),
+                        "user_id": str(user.id),
+                        "email": audit_service.hash_email(user.email),
+                        "error": error,
+                    }
+                )
+
+    log_admin_action(
+        db=db,
+        actor_id=actor_id,
+        action="email_template.system.campaign_send",
+        target_org_id=None,
+        metadata={
+            "system_key": system_key,
+            "sent": sent,
+            "suppressed": suppressed,
+            "failed": failed,
+            "recipients": len(recipients),
+        },
+        request=request,
+    )
+    db.commit()
+
+    return {
+        "sent": sent,
+        "suppressed": suppressed,
+        "failed": failed,
+        "recipients": len(recipients),
+        "failures": failures[:50],
     }
 
 

@@ -57,6 +57,47 @@ class PlatformEmailTemplate(Base):
     )
 
 
+class PlatformSystemEmailTemplate(Base):
+    """Platform-managed system email templates (global)."""
+
+    __tablename__ = "platform_system_email_templates"
+
+    system_key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    subject: Mapped[str] = mapped_column(String(200), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    from_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
+    current_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=text("now()"),
+        onupdate=text("now()"),
+        nullable=False,
+    )
+
+
+class PlatformBranding(Base):
+    """Platform branding (logo, etc.) for system/platform emails."""
+
+    __tablename__ = "platform_branding"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, server_default=text("1"))
+    logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        server_default=text("now()"),
+        onupdate=text("now()"),
+        nullable=False,
+    )
+
+
 class PlatformEmailTemplateTarget(Base):
     """Target orgs for platform email templates when not published globally."""
 

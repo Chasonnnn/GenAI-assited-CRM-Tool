@@ -71,10 +71,12 @@ from app.db.models.meta import (
 )
 from app.db.models.notifications import Notification, UserNotificationSettings
 from app.db.models.platform_templates import (
+    PlatformBranding,
     PlatformEmailTemplate,
     PlatformEmailTemplateTarget,
     PlatformFormTemplate,
     PlatformFormTemplateTarget,
+    PlatformSystemEmailTemplate,
 )
 from app.db.models.pipelines import EntityVersion, Pipeline, PipelineStage
 from app.db.models.queues import Queue, QueueMember
@@ -184,6 +186,8 @@ __all__ = [
     "PlatformEmailTemplateTarget",
     "PlatformFormTemplate",
     "PlatformFormTemplateTarget",
+    "PlatformSystemEmailTemplate",
+    "PlatformBranding",
     "Queue",
     "QueueMember",
     "RequestMetricsRollup",

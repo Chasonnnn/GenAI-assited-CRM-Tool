@@ -156,12 +156,21 @@ class PlatformEmailStatusResponse(BaseModel):
 
 class SystemEmailTemplateRead(BaseModel):
     system_key: str
+    name: str
     subject: str
     from_email: str | None = None
     body: str
     is_active: bool
     current_version: int
     updated_at: str | None
+
+
+class PlatformEmailBrandingRead(BaseModel):
+    logo_url: str | None = None
+
+
+class PlatformEmailBrandingUpdate(BaseModel):
+    logo_url: str | None = None
 
 
 class UpdateSystemEmailTemplateRequest(BaseModel):
@@ -174,6 +183,32 @@ class UpdateSystemEmailTemplateRequest(BaseModel):
 
 class SendTestSystemEmailRequest(BaseModel):
     to_email: EmailStr
+    org_id: UUID | None = None
+
+
+class SystemEmailCampaignTarget(BaseModel):
+    org_id: UUID
+    user_ids: list[UUID]
+
+    @field_validator("user_ids")
+    @classmethod
+    def validate_user_ids(cls, v: list[UUID]) -> list[UUID]:
+        if not v:
+            raise ValueError("user_ids must include at least one user")
+        return v
+
+
+class SystemEmailCampaignRequest(BaseModel):
+    targets: list[SystemEmailCampaignTarget]
+
+    @field_validator("targets")
+    @classmethod
+    def validate_targets(
+        cls, v: list[SystemEmailCampaignTarget]
+    ) -> list[SystemEmailCampaignTarget]:
+        if not v:
+            raise ValueError("targets must include at least one organization")
+        return v
 
 
 # =============================================================================
@@ -712,8 +747,306 @@ def resend_invite(
 
 
 # =============================================================================
-# System Email Templates (Org-Scoped, Managed by Ops)
+# Platform Email Branding
 # =============================================================================
+
+
+@router.get("/email/branding", response_model=PlatformEmailBrandingRead)
+def get_platform_email_branding(
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> PlatformEmailBrandingRead:
+    from app.services import platform_branding_service
+
+    branding = platform_branding_service.get_branding(db)
+    return PlatformEmailBrandingRead(logo_url=branding.logo_url)
+
+
+@router.put("/email/branding", dependencies=[Depends(require_csrf_header)])
+def update_platform_email_branding(
+    body: PlatformEmailBrandingUpdate,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> PlatformEmailBrandingRead:
+    from app.services import platform_branding_service
+
+    branding = platform_branding_service.update_branding(db, logo_url=body.logo_url)
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="email_platform_branding.update",
+        target_org_id=None,
+        metadata={"logo_url_set": bool(body.logo_url)},
+        request=request,
+    )
+    db.commit()
+
+    return PlatformEmailBrandingRead(logo_url=branding.logo_url)
+
+
+# =============================================================================
+# System Email Templates (Platform-Scoped, Managed by Ops)
+# =============================================================================
+
+
+@router.get("/email/system-templates", response_model=list[SystemEmailTemplateRead])
+def list_platform_system_email_templates(
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> list[SystemEmailTemplateRead]:
+    from app.services import system_email_template_service
+
+    def _to_read(template) -> SystemEmailTemplateRead:
+        return SystemEmailTemplateRead(
+            system_key=template.system_key,
+            name=template.name,
+            subject=template.subject,
+            from_email=template.from_email,
+            body=template.body,
+            is_active=template.is_active,
+            current_version=template.current_version,
+            updated_at=template.updated_at.isoformat() if template.updated_at else None,
+        )
+
+    templates = []
+    for system_key in system_email_template_service.DEFAULT_SYSTEM_TEMPLATES.keys():
+        template = system_email_template_service.ensure_system_template(db, system_key=system_key)
+        templates.append(_to_read(template))
+    return templates
+
+
+@router.get(
+    "/email/system-templates/{system_key}",
+    response_model=SystemEmailTemplateRead,
+)
+def get_platform_system_email_template(
+    system_key: str,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> SystemEmailTemplateRead:
+    """Get (and ensure) the platform system email template by system_key."""
+    from app.services import system_email_template_service
+
+    template = system_email_template_service.ensure_system_template(db, system_key=system_key)
+    db.commit()
+    db.refresh(template)
+
+    return SystemEmailTemplateRead(
+        system_key=template.system_key or system_key,
+        name=template.name,
+        subject=template.subject,
+        from_email=template.from_email,
+        body=template.body,
+        is_active=template.is_active,
+        current_version=template.current_version,
+        updated_at=template.updated_at.isoformat() if template.updated_at else None,
+    )
+
+
+@router.put(
+    "/email/system-templates/{system_key}",
+    dependencies=[Depends(require_csrf_header)],
+    response_model=SystemEmailTemplateRead,
+)
+def update_platform_system_email_template(
+    system_key: str,
+    body: UpdateSystemEmailTemplateRequest,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> SystemEmailTemplateRead:
+    """Update the platform system email template by system_key."""
+    from app.services import system_email_template_service
+
+    template = system_email_template_service.ensure_system_template(db, system_key=system_key)
+
+    try:
+        if body.expected_version is not None and template.current_version != body.expected_version:
+            raise ValueError("Template version mismatch")
+        template.subject = body.subject
+        template.body = body.body
+        template.is_active = body.is_active
+        if "from_email" in body.model_fields_set:
+            template.from_email = body.from_email
+        template.current_version += 1
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="email_template.system.update",
+        target_org_id=None,
+        metadata={"system_key": system_key},
+        request=request,
+    )
+    db.commit()
+
+    return SystemEmailTemplateRead(
+        system_key=template.system_key or system_key,
+        name=template.name,
+        subject=template.subject,
+        from_email=template.from_email,
+        body=template.body,
+        is_active=template.is_active,
+        current_version=template.current_version,
+        updated_at=template.updated_at.isoformat() if template.updated_at else None,
+    )
+
+
+@router.post(
+    "/email/system-templates/{system_key}/test",
+    dependencies=[Depends(require_csrf_header)],
+)
+async def send_test_platform_system_email_template(
+    system_key: str,
+    body: SendTestSystemEmailRequest,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Send a test email using the platform system template + platform sender."""
+    if body.org_id is None:
+        raise HTTPException(status_code=400, detail="org_id is required to render the test email")
+    return await _send_test_system_template(
+        db=db,
+        system_key=system_key,
+        to_email=str(body.to_email),
+        org_id=body.org_id,
+        request=request,
+        session=session,
+    )
+
+
+@router.post(
+    "/email/system-templates/{system_key}/campaign",
+    dependencies=[Depends(require_csrf_header)],
+)
+async def send_platform_system_email_campaign(
+    system_key: str,
+    body: SystemEmailCampaignRequest,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Send a system email template to selected org/users."""
+    try:
+        return await platform_service.send_system_email_campaign(
+            db=db,
+            system_key=system_key,
+            targets=[target.model_dump() for target in body.targets],
+            actor_id=session.user_id,
+            actor_display_name=session.display_name,
+            request=request,
+        )
+    except platform_service.MissingTargetsError as exc:
+        raise HTTPException(status_code=400, detail=exc.detail)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+async def _send_test_system_template(
+    *,
+    db: Session,
+    system_key: str,
+    to_email: str,
+    org_id: UUID,
+    request: Request,
+    session: PlatformUserSession,
+) -> dict:
+    from app.services import (
+        audit_service,
+        email_service,
+        org_service,
+        platform_branding_service,
+        platform_email_service,
+        system_email_template_service,
+    )
+
+    if not platform_email_service.platform_sender_configured():
+        raise HTTPException(status_code=400, detail="Platform email sender is not configured")
+
+    template = system_email_template_service.ensure_system_template(db, system_key=system_key)
+    resolved_from = (template.from_email or "").strip() or (
+        settings.PLATFORM_EMAIL_FROM or ""
+    ).strip()
+    if not resolved_from:
+        raise HTTPException(
+            status_code=400,
+            detail="Template From address is not configured (set from_email in Ops before sending test emails)",
+        )
+
+    org = org_service.get_org_by_id(db, org_id, include_deleted=True)
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    org_name = org_service.get_org_display_name(org)
+    org_slug = org.slug
+    base_url = org_service.get_org_portal_base_url(org)
+    invite_url = f"{base_url.rstrip('/')}/invite/EXAMPLE"
+    inviter_text = ""
+
+    branding = platform_branding_service.get_branding(db)
+    platform_logo_url = (branding.logo_url or "").strip()
+    platform_logo_block = (
+        f'<img src="{platform_logo_url}" alt="Platform logo" style="max-width: 180px; height: auto; display: block; margin: 0 auto 6px auto;" />'
+        if platform_logo_url
+        else ""
+    )
+
+    variables = {
+        "org_name": org_name,
+        "org_slug": org_slug,
+        "invite_url": invite_url,
+        "role_title": "Admin",
+        "inviter_text": inviter_text,
+        "expires_block": "<p>This is a test email. Expiration text would appear here.</p>",
+        "platform_logo_url": platform_logo_url,
+        "platform_logo_block": platform_logo_block,
+    }
+
+    rendered_subject, rendered_body = email_service.render_template(
+        template.subject,
+        template.body,
+        variables,
+        safe_html_vars={"expires_block", "platform_logo_block"},
+    )
+
+    result = await platform_email_service.send_email_logged(
+        db=db,
+        org_id=org_id,
+        to_email=str(to_email),
+        subject=rendered_subject,
+        from_email=resolved_from,
+        html=rendered_body,
+        text=(f"Test email for {org_name}\nInvite URL: {invite_url}\nRole: Admin\n"),
+        template_id=None,
+        surrogate_id=None,
+        idempotency_key=None,
+    )
+
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="email_template.system.test_send",
+        target_org_id=org_id,
+        metadata={
+            "system_key": system_key,
+            "email_hash": audit_service.hash_email(str(to_email)),
+        },
+        request=request,
+    )
+    db.commit()
+
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=str(result.get("error") or "Send failed"))
+
+    return {
+        "sent": True,
+        "message_id": result.get("message_id"),
+        "email_log_id": result.get("email_log_id"),
+    }
 
 
 @router.get(
@@ -726,17 +1059,16 @@ def get_org_system_email_template(
     session: PlatformUserSession = Depends(require_platform_admin),
     db: Session = Depends(get_db),
 ) -> SystemEmailTemplateRead:
-    """Get (and ensure) an org-scoped system email template by system_key."""
+    """Get (and ensure) the platform system email template by system_key."""
     from app.services import system_email_template_service
 
-    template = system_email_template_service.ensure_system_template(
-        db, org_id=org_id, system_key=system_key
-    )
+    template = system_email_template_service.ensure_system_template(db, system_key=system_key)
     db.commit()
     db.refresh(template)
 
     return SystemEmailTemplateRead(
         system_key=template.system_key or system_key,
+        name=template.name,
         subject=template.subject,
         from_email=template.from_email,
         body=template.body,
@@ -759,28 +1091,20 @@ def update_org_system_email_template(
     session: PlatformUserSession = Depends(require_platform_admin),
     db: Session = Depends(get_db),
 ) -> SystemEmailTemplateRead:
-    """Update an org-scoped system email template by system_key."""
-    from app.services import email_service, system_email_template_service
+    """Update the platform system email template by system_key."""
+    from app.services import system_email_template_service
 
-    template = system_email_template_service.ensure_system_template(
-        db, org_id=org_id, system_key=system_key
-    )
+    template = system_email_template_service.ensure_system_template(db, system_key=system_key)
 
     try:
-        kwargs: dict = {
-            "db": db,
-            "template": template,
-            "user_id": session.user_id,
-            "subject": body.subject,
-            "body": body.body,
-            "is_active": body.is_active,
-            "expected_version": body.expected_version,
-            "comment": f"Updated system template {system_key} via ops",
-        }
+        if body.expected_version is not None and template.current_version != body.expected_version:
+            raise ValueError("Template version mismatch")
+        template.subject = body.subject
+        template.body = body.body
+        template.is_active = body.is_active
         if "from_email" in body.model_fields_set:
-            kwargs["from_email"] = body.from_email
-
-        template = email_service.update_template(**kwargs)
+            template.from_email = body.from_email
+        template.current_version += 1
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -788,7 +1112,7 @@ def update_org_system_email_template(
         db=db,
         actor_id=session.user_id,
         action="email_template.system.update",
-        target_org_id=org_id,
+        target_org_id=None,
         metadata={"system_key": system_key},
         request=request,
     )
@@ -796,6 +1120,7 @@ def update_org_system_email_template(
 
     return SystemEmailTemplateRead(
         system_key=template.system_key or system_key,
+        name=template.name,
         subject=template.subject,
         from_email=template.from_email,
         body=template.body,
@@ -817,93 +1142,15 @@ async def send_test_org_system_email_template(
     session: PlatformUserSession = Depends(require_platform_admin),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Send a test email using the org-scoped system template + platform sender."""
-    from app.services import (
-        audit_service,
-        email_service,
-        org_service,
-        platform_email_service,
-        system_email_template_service,
-    )
-
-    if not platform_email_service.platform_sender_configured():
-        raise HTTPException(status_code=400, detail="Platform email sender is not configured")
-
-    org = org_service.get_org_by_id(db, org_id, include_deleted=True)
-    if not org:
-        raise HTTPException(status_code=404, detail="Organization not found")
-
-    template = system_email_template_service.ensure_system_template(
-        db, org_id=org_id, system_key=system_key
-    )
-    resolved_from = (template.from_email or "").strip() or (
-        settings.PLATFORM_EMAIL_FROM or ""
-    ).strip()
-    if not resolved_from:
-        raise HTTPException(
-            status_code=400,
-            detail="Template From address is not configured (set from_email in Ops before sending test emails)",
-        )
-
-    org_name = org_service.get_org_display_name(org)
-    base_url = org_service.get_org_portal_base_url(org)
-    invite_url = f"{base_url.rstrip('/')}/invite/test"
-    inviter_text = f" by {session.display_name}" if session.display_name else ""
-
-    variables = {
-        "org_name": org_name,
-        "invite_url": invite_url,
-        "role_title": "Admin",
-        "inviter_text": inviter_text,
-        "expires_block": "<p>This is a test email. Expiration text would appear here.</p>",
-    }
-
-    rendered_subject, rendered_body = email_service.render_template(
-        template.subject,
-        template.body,
-        variables,
-        safe_html_vars={"expires_block"},
-    )
-
-    result = await platform_email_service.send_email_logged(
+    """Send a test email using the platform system template + platform sender."""
+    return await _send_test_system_template(
         db=db,
-        org_id=org_id,
+        system_key=system_key,
         to_email=str(body.to_email),
-        subject=rendered_subject,
-        from_email=resolved_from,
-        html=rendered_body,
-        text=(
-            f"Test email for {org_name}\n"
-            f"Invite URL: {invite_url}\n"
-            f"Role: Admin\n"
-            f"Invited by: {session.display_name or ''}\n"
-        ),
-        template_id=template.id,
-        surrogate_id=None,
-        idempotency_key=None,
-    )
-
-    platform_service.log_admin_action(
-        db=db,
-        actor_id=session.user_id,
-        action="email_template.system.test_send",
-        target_org_id=org_id,
-        metadata={
-            "system_key": system_key,
-            "email_hash": audit_service.hash_email(str(body.to_email)),
-        },
+        org_id=org_id,
         request=request,
+        session=session,
     )
-    db.commit()
-
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=str(result.get("error") or "Send failed"))
-
-    return {
-        "sent": True,
-        "message_id": result.get("message_id"),
-        "email_log_id": result.get("email_log_id"),
-    }
 
 
 # =============================================================================
