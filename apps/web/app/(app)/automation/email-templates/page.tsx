@@ -833,6 +833,12 @@ export default function EmailTemplatesPage() {
         setTemplateBody(templateBody + `{{${varName}}}`)
     }
 
+    const insertOrgLogo = () => {
+        if (templateBody.includes("{{org_logo_url}}")) return
+        const logo = `<p><img src="{{org_logo_url}}" alt="{{org_name}} logo" style="max-width: 160px; height: auto; display: block;" /></p>\n`
+        setTemplateBody(`${logo}${templateBody}`)
+    }
+
     // Save all signature settings
     const handleSaveSignature = () => {
         updateSignatureMutation.mutate(
@@ -1461,6 +1467,9 @@ export default function EmailTemplatesPage() {
                                             ))}
                                         </DropdownMenuContent>
                                     </DropdownMenu>
+                                    <Button variant="outline" size="sm" onClick={insertOrgLogo}>
+                                        Insert Logo
+                                    </Button>
                                 </div>
                             </div>
                             {templateBodyMode === "visual" ? (
