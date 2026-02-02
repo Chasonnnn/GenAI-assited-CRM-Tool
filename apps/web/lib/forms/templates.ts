@@ -119,22 +119,19 @@ const buildJotformTemplate = (): FormTemplate => {
 
     const pages: FormSchema["pages"] = [
         {
-            title: "Surrogate Information",
+            title: "Personal Info",
             fields: [
-                field("full_name", "Full Name", "text", {
-                    required: true,
-                    mapping: "full_name",
-                    helpText: "First and last name.",
-                }),
+                field("first_name", "First Name", "text", { required: true }),
+                field("last_name", "Last Name", "text", { required: true }),
                 field("date_of_birth", "Date of Birth", "date", {
                     required: true,
                     mapping: "date_of_birth",
                 }),
-                field("height_ft", "Height (ft)", "number", {
+                field("height_ft", "Height", "number", {
                     helpText: "Feet (e.g., 5.5).",
                     mapping: "height_ft",
                 }),
-                field("weight_lb", "Weight (lb)", "number", {
+                field("weight_lb", "Weight", "number", {
                     helpText: "Pounds.",
                     mapping: "weight_lb",
                 }),
@@ -142,19 +139,18 @@ const buildJotformTemplate = (): FormTemplate => {
                     required: true,
                     mapping: "email",
                 }),
-                field("cell_phone", "Cell Phone", "phone", {
+                field("cell_phone", "Phone Number", "phone", {
                     required: true,
                     mapping: "phone",
                 }),
-                field("address_line_1", "Street Address", "text", { required: true }),
+                field("address_line_1", "Home Address", "text", { required: true }),
                 field("address_line_2", "Street Address Line 2", "text"),
                 field("city", "City", "text", { required: true }),
-                field("state", "State / Province", "text", {
+                field("state", "State", "text", {
                     required: true,
                     mapping: "state",
                 }),
-                field("postal_code", "Postal / Zip Code", "text", { required: true }),
-                field("country", "Country", "text"),
+                field("postal_code", "Zip Code", "text", { required: true }),
             ],
         },
         {
@@ -174,10 +170,10 @@ const buildJotformTemplate = (): FormTemplate => {
                 field("tattoos_past_year", "Have you received any tattoos in the past year?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
-                field("tattoo_last_date", "If yes, date of your last tattoo", "date", {
+                field("tattoo_last_date", "Please list date of your last tattoo", "date", {
                     showIf: { field_key: "tattoos_past_year", operator: "equals", value: "Yes" },
                 }),
-                field("religion_yes_no", "Do you have a religion?", "radio", {
+                field("religion_yes_no", "Do you have any religions?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
                 field("religion_detail", "If yes, please specify your religion", "text", {
@@ -211,7 +207,7 @@ const buildJotformTemplate = (): FormTemplate => {
                     optionList: YES_NO_OPTIONS,
                 }),
                 field("health_insurance_carrier", "Name of health insurance carrier?", "text"),
-                field("arrested", "Have you ever been arrested?", "radio", {
+                field("arrested", "Have you been arrested?", "radio", {
                     optionList: YES_NO_OPTIONS,
                 }),
                 field("arrested_explain", "If yes, please explain", "textarea", {
@@ -370,10 +366,18 @@ const buildJotformTemplate = (): FormTemplate => {
         {
             title: "Medical Info",
             fields: [
-                field("blood_type", "Blood type", "select", { optionList: BLOOD_TYPE_OPTIONS }),
-                field("rh_factor", "Rh factor", "select", { optionList: RH_FACTOR_OPTIONS }),
-                field("current_weight", "Weight (lb)", "number"),
-                field("current_height", "Height (ft)", "number"),
+                field("blood_type", "What is your blood type?", "select", {
+                    optionList: BLOOD_TYPE_OPTIONS,
+                }),
+                field("rh_factor", "What is your Rh factor?", "select", {
+                    optionList: RH_FACTOR_OPTIONS,
+                }),
+                field("current_weight", "Weight", "number", {
+                    helpText: "Pounds.",
+                }),
+                field("current_height", "Height", "number", {
+                    helpText: "Feet (e.g., 5.5).",
+                }),
                 field("drink_alcohol", "Do you drink alcohol?", "radio", { optionList: YES_NO_OPTIONS }),
                 field("drink_alcohol_explain", "If yes, please explain", "textarea", {
                     showIf: { field_key: "drink_alcohol", operator: "equals", value: "Yes" },
@@ -570,17 +574,26 @@ const buildJotformTemplate = (): FormTemplate => {
         {
             title: "Uploads & Signature",
             fields: [
-                field("upload_photos", "Upload at least 4 pics of you and your family", "file", {
+                field(
+                    "upload_photos",
+                    "Please Upload at least 4 pics of you and your family (at least 2 showing face clearly)",
+                    "file",
+                    {
+                        required: true,
+                        helpText: "Upload 4+ clear photos.",
+                    },
+                ),
+                field("file_upload_1", "File Upload", "file"),
+                field("file_upload_2", "File Upload", "file"),
+                field("file_upload_3", "File Upload", "file"),
+                field("file_upload_4", "File Upload", "file"),
+                field("file_upload_5", "File Upload", "file"),
+                field("file_upload_6", "File Upload", "file"),
+                field("file_upload_7", "File Upload", "file"),
+                field("signature_name", "Signature", "text", {
                     required: true,
-                    helpText: "Upload 4+ clear photos.",
+                    helpText: "Type your full legal name.",
                 }),
-                field("supporting_documents", "Supporting documents (optional)", "file", {
-                    helpText: "Upload any additional documents.",
-                }),
-                field("medical_records", "Medical records (optional)", "file", {
-                    helpText: "Upload recent medical records if available.",
-                }),
-                field("signature_name", "Signature (type full legal name)", "text", { required: true }),
             ],
         },
     ]
@@ -594,11 +607,11 @@ const buildJotformTemplate = (): FormTemplate => {
     return createTemplate({
         id: "jotform-surrogate-intake",
         name: "Jotform Surrogate Intake",
-        description: "Includes uploads and signature",
+        description: "Full intake questionnaire with uploads and signature",
         badge: "Platform",
         payload: {
-            name: "Surrogate Application Form (Official)",
-            description: "Template based on the Jotform surrogate intake sample.",
+            name: "Surrogate Intake Form",
+            description: "Template based on the Jotform surrogate intake form.",
             form_schema: schema,
             max_file_size_bytes: 15 * 1024 * 1024,
             max_file_count: 12,
