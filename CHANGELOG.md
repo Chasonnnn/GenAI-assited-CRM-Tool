@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.63.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.62.0...surrogacy-crm-platform-v0.63.0) (2026-02-02)
+
+
+### Features
+
+* support organization logos in email templates ([366afcd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/366afcdb1dbd8d3bafe39f50940f0425ec51e736))
+
 ## [0.62.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.61.0...surrogacy-crm-platform-v0.62.0) (2026-02-02)
 
 
