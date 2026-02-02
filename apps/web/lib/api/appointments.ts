@@ -229,10 +229,11 @@ export interface PublicAppointmentView {
     appointment_type_name: string | null;
     staff_name: string | null;
     client_name: string;
+    client_email?: string;
     scheduled_start: string;
     scheduled_end: string;
     duration_minutes: number;
-    meeting_mode: string;
+    meeting_mode: MeetingMode;
     meeting_location: string | null;
     dial_in_number: string | null;
     status: string;

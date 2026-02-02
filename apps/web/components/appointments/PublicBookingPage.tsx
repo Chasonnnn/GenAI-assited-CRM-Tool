@@ -47,7 +47,13 @@ import {
     useBookingPreviewPage,
     useBookingPreviewSlots,
 } from "@/lib/hooks/use-appointments"
-import type { AppointmentType, TimeSlot, BookingCreate, PublicAppointmentView } from "@/lib/api/appointments"
+import type {
+    AppointmentType,
+    TimeSlot,
+    BookingCreate,
+    PublicAppointmentView,
+    MeetingMode,
+} from "@/lib/api/appointments"
 import { format, addDays, startOfDay, parseISO, isSameDay } from "date-fns"
 import { toast } from "sonner"
 
@@ -93,29 +99,29 @@ const TIMEZONE_OPTIONS = [
 ]
 
 // Appointment format display
-const MEETING_MODES: Record<string, { icon: typeof VideoIcon; label: string }> = {
+const MEETING_MODES: Record<MeetingMode, { icon: typeof VideoIcon; label: string }> = {
     zoom: { icon: VideoIcon, label: "Zoom Video Call" },
     google_meet: { icon: VideoIcon, label: "Google Meet" },
     phone: { icon: PhoneIcon, label: "Phone Call" },
     in_person: { icon: MapPinIcon, label: "In-Person Appointment" },
 }
 
-function getMeetingModeLabel(mode?: string | null) {
+function getMeetingModeLabel(mode?: MeetingMode | null) {
     if (!mode) return "Appointment"
     return MEETING_MODES[mode]?.label || mode.replace(/_/g, " ")
 }
 
-function getMeetingModeIcon(mode?: string | null) {
-    return MEETING_MODES[mode || ""]?.icon || VideoIcon
+function getMeetingModeIcon(mode?: MeetingMode | null) {
+    return MEETING_MODES[mode ?? "zoom"]?.icon || VideoIcon
 }
 
-function getMeetingModeSummary(modes: string[]) {
+function getMeetingModeSummary(modes: MeetingMode[]) {
     if (modes.length === 0) return "Appointment"
     if (modes.length === 1) return getMeetingModeLabel(modes[0])
     return modes.map((mode) => getMeetingModeLabel(mode)).join(" + ")
 }
 
-function getMeetingModes(type: AppointmentType | null | undefined): string[] {
+function getMeetingModes(type: AppointmentType | null | undefined): MeetingMode[] {
     if (!type) return []
     if (type.meeting_modes && type.meeting_modes.length > 0) {
         return type.meeting_modes
@@ -151,12 +157,12 @@ function formatDateInZone(date: Date, timezone: string) {
 }
 
 function hashIdempotencyKey(input: string) {
-    let hash = 0xcbf29ce484222325n
+    let hash = 0x811c9dc5
     for (let i = 0; i < input.length; i += 1) {
-        hash ^= BigInt(input.charCodeAt(i))
-        hash = (hash * 0x100000001b3n) & 0xffffffffffffffffn
+        hash ^= input.charCodeAt(i)
+        hash = Math.imul(hash, 0x01000193)
     }
-    return hash.toString(16).padStart(16, "0")
+    return (hash >>> 0).toString(16).padStart(8, "0")
 }
 
 function buildIdempotencyKey(email: string, scheduledStart: string, appointmentTypeId: string) {
@@ -230,6 +236,7 @@ function AppointmentTypeSelector({
                             key={type.id}
                             variant="outline"
                             onClick={() => onSelect(type.id)}
+                            aria-label={type.name}
                             className={`flex items-center gap-4 p-4 h-auto rounded-xl text-left justify-start ${isSelected
                                 ? "border-primary bg-primary/5 ring-2 ring-primary/20"
                                 : "hover:border-primary/50 hover:bg-muted/50"
@@ -284,9 +291,9 @@ function MeetingModeSelector({
     meetingLocation,
     dialInNumber,
 }: {
-    meetingModes: string[]
-    selectedMode: string | null
-    onSelect: (mode: string) => void
+    meetingModes: MeetingMode[]
+    selectedMode: MeetingMode | null
+    onSelect: (mode: MeetingMode) => void
     meetingLocation: string | null
     dialInNumber: string | null
 }) {
@@ -522,7 +529,7 @@ function BookingForm({
     isSubmitting,
 }: {
     appointmentType: AppointmentType
-    meetingMode: string
+    meetingMode: MeetingMode
     selectedSlot: TimeSlot
     timezone: string
     onSubmit: (data: Omit<BookingCreate, "appointment_type_id" | "scheduled_start" | "client_timezone">) => void
@@ -684,7 +691,7 @@ function generateICSFile(
     startTime: string,
     timezone: string,
     staffName: string,
-    meetingMode: string,
+    meetingMode: MeetingMode,
     options?: {
         status?: string
         meetingLocation?: string | null
@@ -750,10 +757,10 @@ function ConfirmationView({
     timezone: string
     staffName: string
     confirmation: PublicAppointmentView | null
-    meetingMode: string
+    meetingMode: MeetingMode
 }) {
     const effectiveMeetingMode = confirmation?.meeting_mode || meetingMode
-    const modeMeta = MEETING_MODES[effectiveMeetingMode as keyof typeof MEETING_MODES]
+    const modeMeta = MEETING_MODES[effectiveMeetingMode]
     const ModeIcon = modeMeta?.icon || VideoIcon
     const isConfirmed = confirmation?.status === "confirmed"
     const meetingLocation = confirmation?.meeting_location ?? appointmentType.meeting_location
@@ -921,7 +928,7 @@ export function PublicBookingPage({
     const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null)
     const [selectedDate, setSelectedDate] = useState<Date | null>(null)
     const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
-    const [selectedMeetingMode, setSelectedMeetingMode] = useState<string | null>(null)
+    const [selectedMeetingMode, setSelectedMeetingMode] = useState<MeetingMode | null>(null)
     const [showForm, setShowForm] = useState(false)
     const [isConfirmed, setIsConfirmed] = useState(false)
     const [confirmation, setConfirmation] = useState<PublicAppointmentView | null>(null)
@@ -997,7 +1004,7 @@ export function PublicBookingPage({
             return
         }
         if (selectedTypeModes.length === 1) {
-            setSelectedMeetingMode(selectedTypeModes[0])
+            setSelectedMeetingMode(selectedTypeModes[0] ?? null)
         } else {
             setSelectedMeetingMode(null)
         }
@@ -1023,7 +1030,7 @@ export function PublicBookingPage({
     const handleSubmit = (formData: Omit<BookingCreate, "appointment_type_id" | "scheduled_start" | "client_timezone">) => {
         if (!selectedTypeId || !selectedSlot) return
         const effectiveMeetingMode =
-            selectedMeetingMode || (selectedTypeModes.length === 1 ? selectedTypeModes[0] : null)
+            selectedMeetingMode ?? (selectedTypeModes.length === 1 ? selectedTypeModes[0] : null)
         if (!effectiveMeetingMode) {
             toast.error("Select an appointment format to continue.")
             return
@@ -1090,7 +1097,10 @@ export function PublicBookingPage({
     // Confirmed state
     if (isConfirmed && selectedType && selectedSlot) {
         const confirmationMeetingMode =
-            confirmation?.meeting_mode || selectedMeetingMode || selectedTypeModes[0] || selectedType.meeting_mode
+            confirmation?.meeting_mode ??
+            selectedMeetingMode ??
+            selectedTypeModes[0] ??
+            selectedType.meeting_mode
         return (
             <div className="min-h-screen bg-background py-12">
                 <div className="max-w-lg mx-auto px-4">
@@ -1151,7 +1161,11 @@ export function PublicBookingPage({
                         {showForm && selectedType && selectedSlot ? (
                             <BookingForm
                                 appointmentType={selectedType}
-                                meetingMode={selectedMeetingMode || selectedTypeModes[0] || selectedType.meeting_mode}
+                                meetingMode={
+                                    selectedMeetingMode ??
+                                    selectedTypeModes[0] ??
+                                    selectedType.meeting_mode
+                                }
                                 selectedSlot={selectedSlot}
                                 timezone={timezone}
                                 onSubmit={handleSubmit}
@@ -1168,7 +1182,7 @@ export function PublicBookingPage({
                                         const nextType = pageData.appointment_types.find((type) => type.id === id)
                                         const nextModes = getMeetingModes(nextType)
                                         setSelectedTypeId(id)
-                                        setSelectedMeetingMode(nextModes.length === 1 ? nextModes[0] : null)
+                                        setSelectedMeetingMode(nextModes[0] ?? null)
                                         setSelectedDate(null)
                                         setSelectedSlot(null)
                                         setShowForm(false)

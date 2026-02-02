@@ -1081,7 +1081,9 @@ def create_booking(
     if not appt_type:
         raise ValueError("Appointment type not found")
 
-    allowed_meeting_modes = appt_type.meeting_modes or [appt_type.meeting_mode]
+    allowed_meeting_modes = list(appt_type.meeting_modes or [])
+    if appt_type.meeting_mode and appt_type.meeting_mode not in allowed_meeting_modes:
+        allowed_meeting_modes.append(appt_type.meeting_mode)
     selected_meeting_mode = meeting_mode or appt_type.meeting_mode
     if selected_meeting_mode not in allowed_meeting_modes:
         raise ValueError("Meeting mode not available for this appointment type")

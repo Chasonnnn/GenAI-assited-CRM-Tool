@@ -529,11 +529,20 @@ function AppointmentTypesCard() {
         const orderedModes = MEETING_MODE_OPTIONS.map((option) => option.value).filter((mode) =>
             formData.meeting_modes.includes(mode)
         )
+        if (orderedModes.length === 0) {
+            toast.error("Select at least one appointment format")
+            return
+        }
+        const primaryMode = orderedModes[0]
+        if (!primaryMode) {
+            toast.error("Select at least one appointment format")
+            return
+        }
 
         const payload = {
             ...formData,
             meeting_modes: orderedModes,
-            meeting_mode: orderedModes[0],
+            meeting_mode: primaryMode,
             meeting_location: formData.meeting_location.trim() || null,
             dial_in_number: formData.dial_in_number.trim() || null,
         }

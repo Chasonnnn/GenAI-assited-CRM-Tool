@@ -79,6 +79,7 @@ def _appointment_to_public_read(appt, db: Session) -> dict:
         "appointment_type_name": appt_type_name,
         "staff_name": staff_name,
         "client_name": appt.client_name,
+        "client_email": appt.client_email,
         "scheduled_start": appt.scheduled_start.isoformat(),
         "scheduled_end": appt.scheduled_end.isoformat(),
         "duration_minutes": appt.duration_minutes,
