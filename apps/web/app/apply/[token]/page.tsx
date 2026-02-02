@@ -766,7 +766,15 @@ export default function PublicApplicationForm() {
             )
         }
         if (typeof value === "boolean") {
-            return value ? <Badge className="bg-primary">Yes</Badge> : <Badge variant="secondary">No</Badge>
+            return value ? (
+                <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                    Yes
+                </span>
+            ) : (
+                <span className="inline-flex items-center rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-600">
+                    No
+                </span>
+            )
         }
         if (Array.isArray(value)) {
             return <span className="font-medium">{value.join(", ") || "—"}</span>
