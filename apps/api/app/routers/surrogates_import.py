@@ -46,6 +46,17 @@ router = APIRouter(
 )
 
 
+def _sanitize_deduplication_stats(stats: dict | None) -> dict | None:
+    if not stats:
+        return None
+    return {
+        "total": stats.get("total"),
+        "new_records": stats.get("new_records"),
+        "duplicate_emails_db": stats.get("duplicate_emails_db"),
+        "duplicate_emails_csv": stats.get("duplicate_emails_csv"),
+    }
+
+
 # =============================================================================
 # Schemas
 # =============================================================================
@@ -61,6 +72,7 @@ class ImportHistoryItem(BaseModel):
     imported_count: int | None
     skipped_count: int | None
     error_count: int | None
+    deduplication_stats: dict | None = None
     created_at: str
     completed_at: str | None
 
@@ -76,6 +88,7 @@ class ImportDetailResponse(BaseModel):
     skipped_count: int | None
     error_count: int | None
     errors: list[dict] | None
+    deduplication_stats: dict | None = None
     created_at: str
     completed_at: str | None
 
@@ -130,6 +143,7 @@ def list_imports(
             imported_count=imp.imported_count,
             skipped_count=imp.skipped_count,
             error_count=imp.error_count,
+            deduplication_stats=_sanitize_deduplication_stats(imp.deduplication_stats),
             created_at=imp.created_at.isoformat(),
             completed_at=imp.completed_at.isoformat() if imp.completed_at else None,
         )
@@ -225,6 +239,7 @@ def get_import_details(
         skipped_count=import_record.skipped_count,
         error_count=import_record.error_count,
         errors=import_record.errors,
+        deduplication_stats=_sanitize_deduplication_stats(import_record.deduplication_stats),
         created_at=import_record.created_at.isoformat(),
         completed_at=import_record.completed_at.isoformat() if import_record.completed_at else None,
     )

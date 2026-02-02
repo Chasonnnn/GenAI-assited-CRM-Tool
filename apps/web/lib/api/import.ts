@@ -70,6 +70,7 @@ export interface ImportHistoryItem {
     imported_count: number | null
     skipped_count: number | null
     error_count: number | null
+    deduplication_stats?: DeduplicationStats | null
     created_at: string
     completed_at: string | null
 }
@@ -104,9 +105,11 @@ export interface ImportActionResponse {
 }
 
 export interface DeduplicationStats {
-    total: number
-    new_records: number
-    duplicates: Array<{ email?: string; existing_id?: string }>
+    total?: number
+    new_records?: number
+    duplicate_emails_db?: number
+    duplicate_emails_csv?: number
+    duplicates?: Array<{ email?: string; existing_id?: string }>
 }
 
 export interface ImportApprovalItem {

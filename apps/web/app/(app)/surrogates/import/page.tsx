@@ -40,6 +40,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
     Loader2Icon,
     FileUpIcon,
@@ -51,6 +52,7 @@ import {
     RefreshCcwIcon,
     PlayIcon,
     AlertTriangleIcon,
+    InfoIcon,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import {
@@ -219,6 +221,9 @@ export default function CSVImportPage() {
                                         const showRunInline = canRunInline(imp)
                                         const showDelete = canDelete(imp)
                                         const showErrors = (imp.error_count ?? 0) > 0
+                                        const duplicateDb = imp.deduplication_stats?.duplicate_emails_db ?? 0
+                                        const duplicateCsv = imp.deduplication_stats?.duplicate_emails_csv ?? 0
+                                        const hasDedupBreakdown = duplicateDb + duplicateCsv > 0
                                         return (
                                             <TableRow key={imp.id}>
                                                 <TableCell className="font-medium">{imp.filename}</TableCell>
@@ -243,9 +248,39 @@ export default function CSVImportPage() {
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     {imp.skipped_count !== null ? (
-                                                        <span className="text-amber-600 dark:text-amber-400">
-                                                            {imp.skipped_count}
-                                                        </span>
+                                                        <div className="inline-flex items-center justify-end gap-1">
+                                                            <span className="text-amber-600 dark:text-amber-400">
+                                                                {imp.skipped_count}
+                                                            </span>
+                                                            {hasDedupBreakdown ? (
+                                                                <TooltipProvider>
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger>
+                                                                            <button
+                                                                                type="button"
+                                                                                className="inline-flex items-center justify-center text-muted-foreground hover:text-foreground"
+                                                                                aria-label="Skipped breakdown"
+                                                                            >
+                                                                                <InfoIcon className="size-3" />
+                                                                            </button>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent>
+                                                                            <div className="space-y-1">
+                                                                                <div className="font-medium">
+                                                                                    Skipped duplicates
+                                                                                </div>
+                                                                                <div className="text-xs">
+                                                                                    Existing in org: {duplicateDb}
+                                                                                </div>
+                                                                                <div className="text-xs">
+                                                                                    Duplicates in file: {duplicateCsv}
+                                                                                </div>
+                                                                            </div>
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
+                                                                </TooltipProvider>
+                                                            ) : null}
+                                                        </div>
                                                     ) : (
                                                         <span className="text-muted-foreground">—</span>
                                                     )}
