@@ -73,7 +73,7 @@ function ProgressStepper({
     return (
         <>
             {/* Desktop Stepper */}
-            <div className="hidden md:flex items-center justify-center gap-2 mb-8">
+            <div className="hidden md:flex items-center justify-center gap-4 rounded-2xl border border-stone-200 bg-white px-4 py-3 shadow-sm">
                 {steps.map((step, index) => {
                     const isCompleted = currentStep > step.id
                     const isCurrent = currentStep === step.id
@@ -84,10 +84,10 @@ function ProgressStepper({
                             <div className="flex items-center gap-2">
                                 <div
                                     className={cn(
-                                        "flex size-10 items-center justify-center rounded-full text-sm font-semibold transition-all",
+                                        "flex size-9 items-center justify-center rounded-full text-sm font-semibold transition-all",
                                         isCompleted && "bg-primary text-white",
                                         isCurrent && "bg-primary text-white ring-4 ring-primary/20",
-                                        !isCompleted && !isCurrent && "bg-stone-200 text-stone-500"
+                                        !isCompleted && !isCurrent && "border border-stone-200 bg-stone-100 text-stone-500"
                                     )}
                                 >
                                     {isCompleted ? <CheckIcon className="size-5" /> : step.id}
@@ -105,7 +105,7 @@ function ProgressStepper({
                             {!isLast && (
                                 <div
                                     className={cn(
-                                        "h-0.5 w-12 transition-all",
+                                        "h-0.5 w-10 transition-all",
                                         isCompleted ? "bg-primary" : "bg-stone-200"
                                     )}
                                 />
@@ -116,7 +116,7 @@ function ProgressStepper({
             </div>
 
             {/* Mobile Stepper */}
-            <div className="md:hidden flex items-center justify-between mb-6 px-1">
+            <div className="md:hidden flex items-center justify-between rounded-xl border border-stone-200 bg-white px-3 py-2">
                 <span className="text-sm font-medium text-stone-600">
                     Step {currentStep} of {steps.length}
                 </span>
@@ -145,12 +145,12 @@ function OptionCard({
             type="button"
             onClick={onClick}
             className={cn(
-                "w-full p-4 rounded-xl border-2 text-left transition-all",
-                "hover:border-primary hover:bg-primary/10/50",
-                "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
+                "w-full rounded-2xl border border-stone-200 bg-white p-4 text-left transition-all",
+                "hover:border-primary/60 hover:bg-primary/5",
+                "focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-2",
                 selected
                     ? "border-primary bg-primary/10"
-                    : "border-stone-200 bg-white"
+                    : "border-stone-200"
             )}
         >
             <div className="flex items-center gap-3">
@@ -254,11 +254,11 @@ function FileUploadZone({
                 }}
                 onDragLeave={() => setIsDragging(false)}
                 className={cn(
-                    "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-8 cursor-pointer transition-all",
-                    "hover:border-primary hover:bg-primary/10/50",
+                    "flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed p-6 cursor-pointer transition-all",
+                    "hover:border-primary/60 hover:bg-primary/5",
                     isDragging
                         ? "border-primary bg-primary/10"
-                        : "border-stone-300 bg-stone-50"
+                        : "border-stone-300 bg-white"
                 )}
             >
                 <UploadIcon className="size-10 text-stone-400" />
@@ -292,7 +292,7 @@ function FileUploadZone({
                     {files.map((file, index) => (
                         <div
                             key={`${file.name}-${index}`}
-                            className="flex items-center justify-between rounded-lg border border-stone-200 bg-white p-3"
+                            className="flex items-center justify-between rounded-xl border border-stone-200 bg-stone-50 p-3"
                         >
                             <div className="flex items-center gap-3">
                                 <FileTextIcon className="size-5 text-stone-400" />
@@ -763,7 +763,7 @@ export default function PublicApplicationForm() {
 
         if (field.type === "textarea") {
             return (
-                <div key={field.key} className="space-y-2">
+                <div key={field.key} className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50 p-4">
                     <Label htmlFor={field.key} className="text-sm font-medium">
                         {field.label} {requiredMark}
                     </Label>
@@ -772,7 +772,7 @@ export default function PublicApplicationForm() {
                         value={typeof value === "string" ? value : ""}
                         onChange={(e) => updateField(field.key, e.target.value)}
                         placeholder={field.label}
-                        className="min-h-24 rounded-lg"
+                        className="min-h-24 rounded-xl border-stone-200 bg-white"
                     />
                     {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
                 </div>
@@ -783,7 +783,7 @@ export default function PublicApplicationForm() {
             const isOpen = datePickerOpen[field.key] || false
             const dateValue = typeof value === "string" ? parseDateInput(value) : undefined
             return (
-                <div key={field.key} className="space-y-2">
+                <div key={field.key} className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50 p-4">
                     <Label className="text-sm font-medium">
                         {field.label} {requiredMark}
                     </Label>
@@ -798,7 +798,7 @@ export default function PublicApplicationForm() {
                                 <Button
                                     variant="outline"
                                     className={cn(
-                                        "w-full h-12 justify-start text-left font-normal rounded-lg",
+                                        "w-full h-11 justify-start rounded-xl border-stone-200 bg-white text-left font-normal",
                                         !value && "text-stone-500",
                                     )}
                                 >
@@ -827,14 +827,14 @@ export default function PublicApplicationForm() {
         if (field.type === "select" || field.type === "radio") {
             const options = field.options || []
             return (
-                <div key={field.key} className="space-y-3">
+                <div key={field.key} className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
                     <Label className="text-sm font-medium">
                         {field.label} {requiredMark}
                     </Label>
                     {options.length === 0 ? (
                         <p className="text-sm text-stone-500">No options configured.</p>
                     ) : (
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
                             {options.map((option) => (
                                 <OptionCard
                                     key={option.value}
@@ -856,14 +856,14 @@ export default function PublicApplicationForm() {
                 ? value.filter((item): item is string => typeof item === "string")
                 : []
             return (
-                <div key={field.key} className="space-y-3">
+                <div key={field.key} className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
                     <Label className="text-sm font-medium">
                         {field.label} {requiredMark}
                     </Label>
                     {options.length === 0 ? (
                         <p className="text-sm text-stone-500">No options configured.</p>
                     ) : (
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
                             {options.map((option) => (
                                 <OptionCard
                                     key={option.value}
@@ -915,7 +915,7 @@ export default function PublicApplicationForm() {
             }
 
             return (
-                <div key={field.key} className="space-y-3">
+                <div key={field.key} className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
                     <div className="flex items-center justify-between">
                         <Label className="text-sm font-medium">
                             {field.label} {requiredMark}
@@ -942,7 +942,7 @@ export default function PublicApplicationForm() {
                                 rows.map((row, rowIndex) => (
                                     <div
                                         key={`${field.key}-row-${rowIndex}`}
-                                        className="rounded-xl border border-stone-200 p-3"
+                                        className="rounded-xl border border-stone-200 bg-white p-3"
                                     >
                                         <div className="grid gap-3 md:grid-cols-2">
                                             {columns.map((column) => (
@@ -975,6 +975,7 @@ export default function PublicApplicationForm() {
                                                             onChange={(e) =>
                                                                 updateRow(rowIndex, column.key, e.target.value)
                                                             }
+                                                            className="h-10 rounded-lg border-stone-200 bg-white"
                                                         />
                                                     )}
                                                 </div>
@@ -1011,7 +1012,7 @@ export default function PublicApplicationForm() {
                         : "text"
 
         return (
-            <div key={field.key} className="space-y-2">
+            <div key={field.key} className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50 p-4">
                 <Label htmlFor={field.key} className="text-sm font-medium">
                     {field.label} {requiredMark}
                 </Label>
@@ -1021,7 +1022,7 @@ export default function PublicApplicationForm() {
                     value={typeof value === "string" ? value : value ? String(value) : ""}
                     onChange={(e) => updateField(field.key, e.target.value)}
                     placeholder={field.label}
-                    className="h-12 rounded-lg"
+                    className="h-11 rounded-xl border-stone-200 bg-white"
                 />
                 {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
             </div>
@@ -1044,7 +1045,7 @@ export default function PublicApplicationForm() {
     if (formError) {
         return (
             <div className="min-h-screen flex items-center justify-center p-4">
-                <Card className="max-w-md w-full rounded-2xl shadow-lg">
+                <Card className="max-w-md w-full rounded-3xl border border-stone-200 bg-white shadow-sm">
                     <CardContent className="pt-8 pb-8 text-center">
                         <AlertTriangleIcon className="size-16 text-amber-500 mx-auto mb-4" />
                         <h1 className="text-xl font-semibold text-stone-900 mb-2">
@@ -1061,7 +1062,7 @@ export default function PublicApplicationForm() {
     if (isSubmitted) {
         return (
             <div className="min-h-screen flex items-center justify-center p-4">
-                <Card className="max-w-md w-full rounded-2xl shadow-lg">
+                <Card className="max-w-md w-full rounded-3xl border border-stone-200 bg-white shadow-sm">
                     <CardContent className="pt-12 pb-12 text-center">
                         <div className="flex size-20 items-center justify-center rounded-full bg-primary/20 mx-auto mb-6">
                             <CheckCircle2Icon className="size-10 text-primary" />
@@ -1080,57 +1081,62 @@ export default function PublicApplicationForm() {
     }
 
     return (
-        <div className="min-h-screen pb-12">
+        <div className="min-h-screen bg-stone-50 pb-16">
+            <div className="h-1 w-full bg-primary/80" />
             {/* Header */}
-            <header className="py-8 md:py-12">
-                <div className="max-w-2xl mx-auto px-4 text-center">
-                    {/* Logo placeholder */}
-                    {showLogo ? (
-                        <div className="mx-auto mb-6 flex size-20 items-center justify-center">
-                            <img
-                                src={resolvedLogoUrl}
-                                alt={`${publicTitle} logo`}
-                                className="size-20 rounded-2xl object-contain shadow-sm"
-                                onError={() => setLogoError(true)}
-                            />
+            <header className="py-8 md:py-10">
+                <div className="max-w-3xl mx-auto px-4">
+                    <div className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm md:p-8">
+                        <div className="flex flex-col gap-5 md:flex-row md:items-center">
+                            {showLogo ? (
+                                <div className="flex size-16 items-center justify-center">
+                                    <img
+                                        src={resolvedLogoUrl}
+                                        alt={`${publicTitle} logo`}
+                                        className="size-16 rounded-2xl object-contain shadow-sm"
+                                        onError={() => setLogoError(true)}
+                                    />
+                                </div>
+                            ) : (
+                                <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10">
+                                    <span className="text-primary text-xl font-semibold">
+                                        {publicTitle.charAt(0).toUpperCase()}
+                                    </span>
+                                </div>
+                            )}
+                            <div className="flex-1 space-y-2">
+                                <h1 className="text-2xl font-semibold text-stone-900 md:text-3xl">
+                                    {publicTitle}
+                                </h1>
+                                <p className="text-stone-500">
+                                    {formConfig?.description ||
+                                        "Thank you for your interest in our program"}
+                                </p>
+                                {isPreview && (
+                                    <div className="pt-1">
+                                        <Badge variant="secondary">Preview Mode</Badge>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    ) : (
-                        <div className="w-16 h-16 bg-primary rounded-2xl mx-auto mb-6 flex items-center justify-center">
-                            <span className="text-white text-2xl font-bold">
-                                {publicTitle.charAt(0).toUpperCase()}
-                            </span>
+                        <div className="mt-6">
+                            <ProgressStepper currentStep={currentStep} steps={steps} />
                         </div>
-                    )}
-                    <h1 className="text-2xl md:text-3xl font-semibold text-stone-900 mb-2">
-                        {publicTitle}
-                    </h1>
-                    <p className="text-stone-500">
-                        {formConfig?.description || "Thank you for your interest in our program"}
-                    </p>
-                    {isPreview && (
-                        <div className="mt-4 flex justify-center">
-                            <Badge variant="secondary">Preview Mode</Badge>
-                        </div>
-                    )}
+                    </div>
                 </div>
             </header>
 
-            {/* Progress Stepper */}
-            <div className="max-w-2xl mx-auto px-4">
-                <ProgressStepper currentStep={currentStep} steps={steps} />
-            </div>
-
             {/* Form Content */}
-            <div className="max-w-2xl mx-auto px-4">
+            <div className="max-w-3xl mx-auto px-4">
                 {!formConfig ? (
-                    <Card className="rounded-2xl shadow-lg border-0">
+                    <Card className="rounded-3xl border border-stone-200 bg-white shadow-sm">
                         <CardContent className="pt-8 pb-8 text-center">
                             <p className="text-stone-600">Form configuration is unavailable.</p>
                         </CardContent>
                     </Card>
                 ) : isReviewStep ? (
-                    <Card className="rounded-2xl shadow-lg border-0">
-                        <CardHeader className="pb-2">
+                    <Card className="rounded-3xl border border-stone-200 bg-white shadow-sm">
+                        <CardHeader className="pb-4 border-b border-stone-100">
                             <CardTitle className="text-xl">Review Your Application</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-6 pt-4">
@@ -1215,8 +1221,8 @@ export default function PublicApplicationForm() {
                         </CardContent>
                     </Card>
                 ) : currentPage ? (
-                    <Card className="rounded-2xl shadow-lg border-0">
-                        <CardHeader className="pb-2">
+                    <Card className="rounded-3xl border border-stone-200 bg-white shadow-sm">
+                        <CardHeader className="pb-4 border-b border-stone-100">
                             <CardTitle className="text-xl">
                                 {currentPage.title || `Step ${currentStep}`}
                             </CardTitle>
@@ -1244,7 +1250,7 @@ export default function PublicApplicationForm() {
                                         field.type === "file" && isFieldVisible(field, answers),
                                 )
                                 .map((field) => (
-                                    <div key={field.key} className="space-y-2">
+                                    <div key={field.key} className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50 p-4">
                                         <Label className="text-sm font-medium">
                                             {field.label} {field.required && <span className="text-red-500">*</span>}
                                         </Label>
@@ -1265,7 +1271,7 @@ export default function PublicApplicationForm() {
                         </CardContent>
                     </Card>
                 ) : (
-                    <Card className="rounded-2xl shadow-lg border-0">
+                    <Card className="rounded-3xl border border-stone-200 bg-white shadow-sm">
                         <CardContent className="pt-8 pb-8 text-center">
                             <p className="text-stone-600">This page is unavailable.</p>
                         </CardContent>
@@ -1273,45 +1279,47 @@ export default function PublicApplicationForm() {
                 )}
             </div>
             {/* Navigation Buttons */}
-            <div className="flex items-center justify-between mt-6">
-                <Button
-                    variant="ghost"
-                    onClick={handleBack}
-                    disabled={currentStep === 1}
-                    className="h-12 px-6"
-                >
-                    <ChevronLeftIcon className="size-4 mr-2" />
-                    Back
-                </Button>
+            <div className="max-w-3xl mx-auto px-4 mt-6">
+                <div className="flex items-center justify-between">
+                    <Button
+                        variant="ghost"
+                        onClick={handleBack}
+                        disabled={currentStep === 1}
+                        className="h-12 px-6"
+                    >
+                        <ChevronLeftIcon className="size-4 mr-2" />
+                        Back
+                    </Button>
 
-                {currentStep < steps.length ? (
-                    <Button
-                        onClick={handleNext}
-                        className="h-12 px-8 bg-primary hover:bg-primary/90"
-                    >
-                        Continue
-                        <ChevronRightIcon className="size-4 ml-2" />
-                    </Button>
-                ) : (
-                    <Button
-                        onClick={handleSubmit}
-                        disabled={isSubmitting || !agreed}
-                        className="h-12 px-8 bg-primary hover:bg-primary/90"
-                    >
-                        {isSubmitting ? (
-                            <>
-                                <Loader2Icon className="size-4 mr-2 animate-spin" />
-                                Submitting...
-                            </>
-                        ) : (
-                            "Submit Application"
-                        )}
-                    </Button>
-                )}
+                    {currentStep < steps.length ? (
+                        <Button
+                            onClick={handleNext}
+                            className="h-12 px-8 bg-primary hover:bg-primary/90"
+                        >
+                            Continue
+                            <ChevronRightIcon className="size-4 ml-2" />
+                        </Button>
+                    ) : (
+                        <Button
+                            onClick={handleSubmit}
+                            disabled={isSubmitting || !agreed}
+                            className="h-12 px-8 bg-primary hover:bg-primary/90"
+                        >
+                            {isSubmitting ? (
+                                <>
+                                    <Loader2Icon className="size-4 mr-2 animate-spin" />
+                                    Submitting...
+                                </>
+                            ) : (
+                                "Submit Application"
+                            )}
+                        </Button>
+                    )}
+                </div>
             </div>
 
             {/* Footer */}
-            <footer className="max-w-2xl mx-auto px-4 mt-12 text-center">
+            <footer className="max-w-3xl mx-auto px-4 mt-12 text-center">
                 <a
                     href="/privacy"
                     className="text-sm text-stone-500 hover:text-primary underline underline-offset-2"

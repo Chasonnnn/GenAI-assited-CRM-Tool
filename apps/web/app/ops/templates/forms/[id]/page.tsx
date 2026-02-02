@@ -1025,10 +1025,10 @@ export default function FormBuilderPage() {
     }
 
     const isDragging = Boolean(draggedField || draggedFieldId)
-    const canvasWidthClass = isMobilePreview ? "max-w-sm" : "max-w-3xl"
+    const canvasWidthClass = isMobilePreview ? "max-w-sm" : "max-w-4xl"
     const canvasFrameClass = isMobilePreview
         ? "rounded-[32px] border border-stone-200 bg-white shadow-sm p-6"
-        : ""
+        : "rounded-3xl border border-stone-200 bg-white shadow-sm p-8"
     const canvasScaleClass = isMobilePreview ? "origin-top scale-[0.96]" : ""
     const canvasTypographyClass = isMobilePreview
         ? "text-[0.95rem] [&_input]:text-sm [&_textarea]:text-sm [&_label]:text-xs [&_p]:text-xs"
@@ -1071,9 +1071,9 @@ export default function FormBuilderPage() {
     }
 
     return (
-        <div className="flex h-screen flex-col bg-stone-100 dark:bg-stone-950">
+        <div className="flex h-screen flex-col bg-stone-50 dark:bg-stone-950">
             {/* Top Bar */}
-            <div className="flex h-16 items-center justify-between border-b border-stone-200 bg-white px-6 dark:border-stone-800 dark:bg-stone-900">
+            <div className="flex h-16 items-center justify-between border-b border-stone-200 bg-white/90 px-6 shadow-sm backdrop-blur dark:border-stone-800 dark:bg-stone-900/90">
                 <div className="flex items-center gap-4">
                     <Button variant="ghost" size="icon" onClick={() => router.push("/ops/templates?tab=forms")}>
                         <ArrowLeftIcon className="size-5" />
@@ -1130,7 +1130,7 @@ export default function FormBuilderPage() {
             </div>
 
             {/* Page Tabs */}
-            <div className="flex items-center gap-2 border-b border-stone-200 bg-white px-6 py-2 dark:border-stone-800 dark:bg-stone-900">
+            <div className="flex items-center gap-2 border-b border-stone-200 bg-white/90 px-6 py-2 shadow-sm backdrop-blur dark:border-stone-800 dark:bg-stone-900/90">
                 {pages.map((page) => (
                     <button
                         key={page.id}
@@ -1165,7 +1165,7 @@ export default function FormBuilderPage() {
 
             <div className="flex flex-1 overflow-hidden">
                 {/* Left Sidebar - Field Buttons */}
-                <div className="w-[200px] overflow-y-auto border-r border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900">
+                <div className="w-[220px] overflow-y-auto border-r border-stone-200 bg-white/90 p-4 backdrop-blur dark:border-stone-800 dark:bg-stone-900/90">
                     <div className="space-y-6">
                         {/* Basic Fields */}
                         <div>
@@ -1226,7 +1226,7 @@ export default function FormBuilderPage() {
                 </div>
 
                 {/* Center Canvas */}
-                <div className="flex-1 overflow-y-auto p-8">
+                <div className="flex-1 overflow-y-auto bg-stone-50 p-8">
                     <div
                         onDragOver={handleCanvasDragOver}
                         onDrop={handleDrop}
@@ -1263,8 +1263,9 @@ export default function FormBuilderPage() {
                                                 onDragOver={(e) => handleFieldDragOver(e, field.id)}
                                                 onDrop={(e) => handleDropOnField(e, field.id)}
                                                 onDragEnd={handleDragEnd}
-                                                className={`cursor-pointer transition-all hover:shadow-md ${selectedField === field.id ? "ring-2 ring-teal-500" : ""
-                                                    }`}
+                                                className={`cursor-pointer rounded-2xl border border-stone-200 bg-white transition-all hover:border-teal-400 hover:shadow-sm ${
+                                                    selectedField === field.id ? "border-teal-300 ring-2 ring-teal-500" : ""
+                                                }`}
                                                 onClick={() => setSelectedField(field.id)}
                                             >
                                                 <CardContent className="flex items-start gap-4 p-6">

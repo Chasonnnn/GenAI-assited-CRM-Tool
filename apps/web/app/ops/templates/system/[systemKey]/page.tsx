@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
 import DOMPurify from "dompurify"
@@ -24,13 +24,14 @@ import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeftIcon, CodeIcon, EyeIcon, Loader2Icon, SendIcon, SaveIcon, SearchIcon, UsersIcon } from "lucide-react"
+import { ArrowLeftIcon, CodeIcon, EyeIcon, Loader2Icon, SaveIcon, SearchIcon, SendIcon, UploadIcon, UsersIcon } from "lucide-react"
 import { toast } from "sonner"
 import {
     usePlatformEmailBranding,
     usePlatformSystemEmailTemplate,
     useSendPlatformSystemEmailCampaign,
     useSendTestPlatformSystemEmailTemplate,
+    useUploadPlatformEmailBrandingLogo,
     useUpdatePlatformEmailBranding,
     useUpdatePlatformSystemEmailTemplate,
 } from "@/lib/hooks/use-platform-templates"
@@ -176,6 +177,7 @@ export default function PlatformSystemEmailTemplatePage() {
     const { data: branding } = usePlatformEmailBranding()
     const updateTemplate = useUpdatePlatformSystemEmailTemplate()
     const updateBranding = useUpdatePlatformEmailBranding()
+    const uploadBrandingLogo = useUploadPlatformEmailBrandingLogo()
     const sendTest = useSendTestPlatformSystemEmailTemplate()
     const sendCampaign = useSendPlatformSystemEmailCampaign()
 
@@ -201,6 +203,7 @@ export default function PlatformSystemEmailTemplatePage() {
     const [membersLoading, setMembersLoading] = useState<Record<string, boolean>>({})
     const [selectedUsersByOrg, setSelectedUsersByOrg] = useState<Record<string, string[]>>({})
     const [campaignSending, setCampaignSending] = useState(false)
+    const logoFileInputRef = useRef<HTMLInputElement | null>(null)
 
     const fromEmailError = useMemo(() => {
         const value = fromEmail.trim()
@@ -224,6 +227,15 @@ export default function PlatformSystemEmailTemplatePage() {
         if (!branding) return
         setLogoUrl(branding.logo_url ?? "")
     }, [branding])
+
+    const logoPreviewUrl = useMemo(() => {
+        if (!logoUrl) return ""
+        if (logoUrl.startsWith("/platform/email/branding/logo/local/")) {
+            const base = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "")
+            return base ? `${base}${logoUrl}` : logoUrl
+        }
+        return logoUrl
+    }, [logoUrl])
 
     useEffect(() => {
         if (!campaignOpen) return
@@ -354,8 +366,8 @@ export default function PlatformSystemEmailTemplatePage() {
     const previewHtml = useMemo(() => {
         const logoPlaceholder =
             "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='54'><rect width='100%' height='100%' rx='10' fill='%23e5e7eb'/><text x='50%' y='55%' text-anchor='middle' font-family='Arial' font-size='14' fill='%236b7280'>Logo</text></svg>"
-        const platformLogoUrl = logoUrl || logoPlaceholder
-        const platformLogoBlock = logoUrl
+        const platformLogoUrl = logoPreviewUrl || logoPlaceholder
+        const platformLogoBlock = logoPreviewUrl
             ? `<img src="${platformLogoUrl}" alt="Platform logo" style="max-width: 180px; height: auto; display: block; margin: 0 auto 6px auto;" />`
             : ""
         const rawHtml = body
@@ -418,7 +430,7 @@ export default function PlatformSystemEmailTemplatePage() {
                 "title",
             ],
         })
-    }, [body, logoUrl])
+    }, [body, logoPreviewUrl])
 
     const handleSave = async () => {
         if (!subject.trim()) {
@@ -475,6 +487,33 @@ export default function PlatformSystemEmailTemplatePage() {
             toast.error(error instanceof Error ? error.message : "Failed to update branding")
         } finally {
             setBrandingSaving(false)
+        }
+    }
+
+    const handleLogoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+
+        const allowedTypes = ["image/png", "image/jpeg"]
+        if (!allowedTypes.includes(file.type)) {
+            toast.error("Logo must be a PNG or JPEG file")
+            event.target.value = ""
+            return
+        }
+        if (file.size > 1024 * 1024) {
+            toast.error("Logo must be less than 1MB")
+            event.target.value = ""
+            return
+        }
+
+        try {
+            const result = await uploadBrandingLogo.mutateAsync(file)
+            setLogoUrl(result.logo_url ?? "")
+            toast.success("Logo uploaded")
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Failed to upload logo")
+        } finally {
+            event.target.value = ""
         }
     }
 
@@ -780,6 +819,43 @@ export default function PlatformSystemEmailTemplatePage() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-3">
+                            <div className="flex items-center gap-4">
+                                {logoPreviewUrl ? (
+                                    <img
+                                        src={logoPreviewUrl}
+                                        alt="Platform logo"
+                                        className="h-14 w-auto rounded border"
+                                    />
+                                ) : (
+                                    <div className="h-14 w-28 rounded border border-dashed flex items-center justify-center text-xs text-muted-foreground">
+                                        No logo
+                                    </div>
+                                )}
+                                <div>
+                                    <input
+                                        type="file"
+                                        ref={logoFileInputRef}
+                                        onChange={handleLogoUpload}
+                                        accept="image/png,image/jpeg"
+                                        className="hidden"
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => logoFileInputRef.current?.click()}
+                                        disabled={uploadBrandingLogo.isPending}
+                                    >
+                                        {uploadBrandingLogo.isPending ? (
+                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                        ) : (
+                                            <UploadIcon className="mr-2 size-4" />
+                                        )}
+                                        Upload Logo
+                                    </Button>
+                                    <p className="text-xs text-muted-foreground mt-1">Max 200x80px, PNG/JPG</p>
+                                </div>
+                            </div>
                             <div className="space-y-2">
                                 <Label htmlFor="platform-logo">Logo URL</Label>
                                 <Input

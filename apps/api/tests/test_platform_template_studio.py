@@ -167,6 +167,58 @@ async def test_platform_form_templates_publish_and_use(authed_client, db, test_u
 
 
 @pytest.mark.asyncio
+async def test_jotform_form_template_list_includes_schema(authed_client, db, test_user):
+    test_user.is_platform_admin = True
+    db.commit()
+
+    from app.db.models import PlatformFormTemplate
+
+    template = PlatformFormTemplate(
+        id=uuid.uuid4(),
+        name="Jotform Surrogate Intake",
+        description="Template based on the Jotform surrogate intake form.",
+        schema_json={
+            "pages": [
+                {
+                    "title": "Personal Info",
+                    "fields": [
+                        {"key": "first_name", "label": "First Name", "type": "text"},
+                        {"key": "last_name", "label": "Last Name", "type": "text"},
+                        {"key": "upload_photos", "label": "Upload photos", "type": "file"},
+                    ],
+                }
+            ]
+        },
+        settings_json={"max_file_count": 12},
+        status="draft",
+        current_version=1,
+        published_version=0,
+        is_published_globally=False,
+    )
+    db.add(template)
+    db.commit()
+
+    list_resp = await authed_client.get("/platform/templates/forms")
+    assert list_resp.status_code == 200
+    templates = list_resp.json()
+
+    template = next(
+        (item for item in templates if item["draft"]["name"] == "Jotform Surrogate Intake"),
+        None,
+    )
+    assert template is not None
+
+    schema = template["draft"].get("schema_json")
+    assert schema is not None
+    field_keys = {
+        field["key"] for page in schema.get("pages", []) for field in page.get("fields", [])
+    }
+    assert "first_name" in field_keys
+    assert "last_name" in field_keys
+    assert "upload_photos" in field_keys
+
+
+@pytest.mark.asyncio
 async def test_platform_workflow_templates_publish_targets(authed_client, db, test_user, test_org):
     test_user.is_platform_admin = True
     db.commit()
