@@ -53,6 +53,7 @@ export interface AppointmentType {
     buffer_before_minutes: number;
     buffer_after_minutes: number;
     meeting_mode: MeetingMode;
+    meeting_modes?: MeetingMode[];
     meeting_location: string | null;
     dial_in_number: string | null;
     auto_approve: boolean;
@@ -69,6 +70,7 @@ export interface AppointmentTypeCreate {
     buffer_before_minutes?: number;
     buffer_after_minutes?: number;
     meeting_mode?: MeetingMode;
+    meeting_modes?: MeetingMode[];
     meeting_location?: string | null;
     dial_in_number?: string | null;
     auto_approve?: boolean;
@@ -219,6 +221,7 @@ export interface BookingCreate {
     scheduled_start: string;
     client_notes?: string;
     idempotency_key?: string;
+    meeting_mode?: MeetingMode;
 }
 
 export interface PublicAppointmentView {

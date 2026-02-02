@@ -419,6 +419,123 @@ class TestTokens:
         assert appt is None
 
 
+class TestMeetingModeSelection:
+    """Tests for multi-format appointment types."""
+
+    def test_create_booking_uses_selected_meeting_mode(
+        self,
+        db,
+        test_org,
+        test_user,
+        availability_rules,
+    ):
+        """Selected meeting mode should be stored on the appointment."""
+        from app.db.models import AppointmentType
+        from app.db.enums import MeetingMode
+        from app.services.appointment_service import create_booking, get_available_slots, SlotQuery
+
+        appt_type = AppointmentType(
+            id=uuid4(),
+            organization_id=test_org.id,
+            user_id=test_user.id,
+            slug="multi-format",
+            name="Multi Format",
+            description="Multiple formats",
+            duration_minutes=30,
+            buffer_after_minutes=10,
+            meeting_mode=MeetingMode.ZOOM.value,
+            meeting_modes=[MeetingMode.ZOOM.value, MeetingMode.GOOGLE_MEET.value],
+            is_active=True,
+            reminder_hours_before=24,
+        )
+        db.add(appt_type)
+        db.flush()
+
+        target_date = _next_weekday(0)
+        query = SlotQuery(
+            user_id=test_user.id,
+            org_id=test_org.id,
+            appointment_type_id=appt_type.id,
+            date_start=target_date,
+            date_end=target_date,
+            client_timezone="America/New_York",
+        )
+        slots = get_available_slots(db, query)
+        if not slots:
+            pytest.skip("No available slots for testing")
+
+        appt = create_booking(
+            db=db,
+            org_id=test_org.id,
+            user_id=test_user.id,
+            appointment_type_id=appt_type.id,
+            client_name="Mode Test Client",
+            client_email="mode@example.com",
+            client_phone="555-111-2222",
+            client_timezone="America/New_York",
+            scheduled_start=slots[0].start,
+            meeting_mode=MeetingMode.GOOGLE_MEET.value,
+        )
+
+        assert appt.meeting_mode == MeetingMode.GOOGLE_MEET.value
+
+    def test_create_booking_rejects_unavailable_meeting_mode(
+        self,
+        db,
+        test_org,
+        test_user,
+        availability_rules,
+    ):
+        """Booking should reject meeting modes not enabled on the type."""
+        from app.db.models import AppointmentType
+        from app.db.enums import MeetingMode
+        from app.services.appointment_service import create_booking, get_available_slots, SlotQuery
+
+        appt_type = AppointmentType(
+            id=uuid4(),
+            organization_id=test_org.id,
+            user_id=test_user.id,
+            slug="zoom-only",
+            name="Zoom Only",
+            description="Zoom only",
+            duration_minutes=30,
+            buffer_after_minutes=10,
+            meeting_mode=MeetingMode.ZOOM.value,
+            meeting_modes=[MeetingMode.ZOOM.value],
+            is_active=True,
+            reminder_hours_before=24,
+        )
+        db.add(appt_type)
+        db.flush()
+
+        target_date = _next_weekday(0)
+        query = SlotQuery(
+            user_id=test_user.id,
+            org_id=test_org.id,
+            appointment_type_id=appt_type.id,
+            date_start=target_date,
+            date_end=target_date,
+            client_timezone="America/New_York",
+        )
+        slots = get_available_slots(db, query)
+        if not slots:
+            pytest.skip("No available slots for testing")
+
+        with pytest.raises(ValueError, match="Meeting mode not available"):
+            create_booking(
+                db=db,
+                org_id=test_org.id,
+                user_id=test_user.id,
+                appointment_type_id=appt_type.id,
+                client_name="Mode Test Client",
+                client_email="mode@example.com",
+                client_phone="555-111-2222",
+                client_timezone="America/New_York",
+                scheduled_start=slots[0].start,
+                meeting_mode=MeetingMode.GOOGLE_MEET.value,
+            )
+
+
 @pytest.mark.asyncio
 async def test_reschedule_slots_use_appointment_duration(
     client,
@@ -472,6 +589,50 @@ async def test_reschedule_slots_use_appointment_duration(
     end = datetime.fromisoformat(first_slot["end"])
     duration = int((end - start).total_seconds() // 60)
     assert duration == 60
+
+
+@pytest.mark.asyncio
+async def test_public_booking_accepts_long_idempotency_key(
+    client,
+    db,
+    test_org,
+    test_user,
+    appointment_type,
+    booking_link,
+    availability_rules,
+):
+    """Public booking should accept idempotency keys longer than 64 chars."""
+    from app.services.appointment_service import get_available_slots, SlotQuery
+
+    target_date = _next_weekday(0)
+    query = SlotQuery(
+        user_id=test_user.id,
+        org_id=test_org.id,
+        appointment_type_id=appointment_type.id,
+        date_start=target_date,
+        date_end=target_date,
+        client_timezone="America/New_York",
+    )
+    slots = get_available_slots(db, query)
+    if not slots:
+        pytest.skip("No available slots for testing")
+
+    long_key = f"{'x' * 96}"
+    payload = {
+        "appointment_type_id": str(appointment_type.id),
+        "client_name": "Long Key Client",
+        "client_email": "longkey@example.com",
+        "client_phone": "555-101-2020",
+        "client_timezone": "America/New_York",
+        "scheduled_start": slots[0].start.isoformat(),
+        "client_notes": "",
+        "idempotency_key": long_key,
+    }
+
+    response = await client.post(f"/book/{booking_link.public_slug}/book", json=payload)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["client_email"] == "longkey@example.com"
 
 
 # =============================================================================

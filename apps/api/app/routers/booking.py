@@ -54,6 +54,7 @@ def _type_to_read(appt_type) -> AppointmentTypeRead:
         buffer_before_minutes=appt_type.buffer_before_minutes,
         buffer_after_minutes=appt_type.buffer_after_minutes,
         meeting_mode=appt_type.meeting_mode,
+        meeting_modes=appt_type.meeting_modes or [appt_type.meeting_mode],
         meeting_location=appt_type.meeting_location,
         dial_in_number=appt_type.dial_in_number,
         auto_approve=appt_type.auto_approve,
@@ -250,6 +251,7 @@ def create_booking(
             scheduled_start=data.scheduled_start,
             client_notes=data.client_notes,
             idempotency_key=data.idempotency_key,
+            meeting_mode=data.meeting_mode,
         )
 
         # Send confirmation email to client

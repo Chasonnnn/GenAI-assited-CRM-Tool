@@ -100,6 +100,29 @@ const MEETING_MODES: Record<string, { icon: typeof VideoIcon; label: string }> =
     in_person: { icon: MapPinIcon, label: "In-Person Appointment" },
 }
 
+function getMeetingModeLabel(mode?: string | null) {
+    if (!mode) return "Appointment"
+    return MEETING_MODES[mode]?.label || mode.replace(/_/g, " ")
+}
+
+function getMeetingModeIcon(mode?: string | null) {
+    return MEETING_MODES[mode || ""]?.icon || VideoIcon
+}
+
+function getMeetingModeSummary(modes: string[]) {
+    if (modes.length === 0) return "Appointment"
+    if (modes.length === 1) return getMeetingModeLabel(modes[0])
+    return modes.map((mode) => getMeetingModeLabel(mode)).join(" + ")
+}
+
+function getMeetingModes(type: AppointmentType | null | undefined): string[] {
+    if (!type) return []
+    if (type.meeting_modes && type.meeting_modes.length > 0) {
+        return type.meeting_modes
+    }
+    return type.meeting_mode ? [type.meeting_mode] : []
+}
+
 function formatDateKey(date: Date, timezone: string) {
     return new Intl.DateTimeFormat("en-CA", {
         timeZone: timezone,
@@ -125,6 +148,21 @@ function formatDateInZone(date: Date, timezone: string) {
         day: "numeric",
         year: "numeric",
     }).format(date)
+}
+
+function hashIdempotencyKey(input: string) {
+    let hash = 0xcbf29ce484222325n
+    for (let i = 0; i < input.length; i += 1) {
+        hash ^= BigInt(input.charCodeAt(i))
+        hash = (hash * 0x100000001b3n) & 0xffffffffffffffffn
+    }
+    return hash.toString(16).padStart(16, "0")
+}
+
+function buildIdempotencyKey(email: string, scheduledStart: string, appointmentTypeId: string) {
+    const raw = `${email}-${scheduledStart}-${appointmentTypeId}`
+    if (raw.length <= 64) return raw
+    return `bk_${hashIdempotencyKey(raw)}`
 }
 
 // =============================================================================
@@ -181,8 +219,10 @@ function AppointmentTypeSelector({
             <Label className="text-base font-medium">Select Appointment Type</Label>
             <div className="grid gap-3">
                 {types.map((type) => {
-                    const mode = MEETING_MODES[type.meeting_mode]
-                    const ModeIcon = mode?.icon || VideoIcon
+                    const modes = getMeetingModes(type)
+                    const primaryMode = modes[0] || type.meeting_mode
+                    const ModeIcon = getMeetingModeIcon(primaryMode)
+                    const modeSummary = getMeetingModeSummary(modes)
                     const isSelected = selectedId === type.id
 
                     return (
@@ -201,23 +241,92 @@ function AppointmentTypeSelector({
                             <div className="flex-1">
                                 <h3 className="font-medium">{type.name}</h3>
                                 <p className="text-sm text-muted-foreground">
-                                    {type.duration_minutes} min • {mode?.label || type.meeting_mode}
+                                    {type.duration_minutes} min • {modes.length > 1 ? "Multiple formats" : modeSummary}
                                 </p>
+                                {modes.length > 1 && (
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Formats: {modeSummary}
+                                    </p>
+                                )}
                                 {type.description && (
                                     <p className="text-sm text-muted-foreground mt-1">{type.description}</p>
                                 )}
-                                {type.meeting_mode === "in_person" && type.meeting_location && (
+                                {modes.length === 1 && primaryMode === "in_person" && type.meeting_location && (
                                     <p className="text-sm text-muted-foreground mt-1">
                                         Location: {type.meeting_location}
                                     </p>
                                 )}
-                                {type.meeting_mode === "phone" && type.dial_in_number && (
+                                {modes.length === 1 && primaryMode === "phone" && type.dial_in_number && (
                                     <p className="text-sm text-muted-foreground mt-1">
                                         Dial-in: {type.dial_in_number}
                                     </p>
                                 )}
                                 {type.auto_approve && (
                                     <Badge variant="secondary" className="mt-2">Instant confirmation</Badge>
+                                )}
+                            </div>
+                        </Button>
+                    )
+                })}
+            </div>
+        </div>
+    )
+}
+
+// =============================================================================
+// Meeting Mode Selector
+// =============================================================================
+
+function MeetingModeSelector({
+    meetingModes,
+    selectedMode,
+    onSelect,
+    meetingLocation,
+    dialInNumber,
+}: {
+    meetingModes: string[]
+    selectedMode: string | null
+    onSelect: (mode: string) => void
+    meetingLocation: string | null
+    dialInNumber: string | null
+}) {
+    return (
+        <div className="space-y-3">
+            <Label className="text-base font-medium">Select Appointment Format</Label>
+            <div className="grid gap-3">
+                {meetingModes.map((mode) => {
+                    const modeLabel = getMeetingModeLabel(mode)
+                    const ModeIcon = getMeetingModeIcon(mode)
+                    const isSelected = selectedMode === mode
+                    return (
+                        <Button
+                            key={mode}
+                            variant="outline"
+                            onClick={() => onSelect(mode)}
+                            className={`flex items-center gap-4 p-4 h-auto rounded-xl text-left justify-start ${isSelected
+                                ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                                : "hover:border-primary/50 hover:bg-muted/50"
+                                }`}
+                        >
+                            <div className={`p-3 rounded-lg ${isSelected ? "bg-primary/20" : "bg-muted"}`}>
+                                <ModeIcon className={`size-5 ${isSelected ? "text-primary" : "text-muted-foreground"}`} />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="font-medium">{modeLabel}</h3>
+                                {mode === "in_person" && meetingLocation && (
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                        Location: {meetingLocation}
+                                    </p>
+                                )}
+                                {mode === "phone" && dialInNumber && (
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                        Dial-in: {dialInNumber}
+                                    </p>
+                                )}
+                                {(mode === "zoom" || mode === "google_meet") && (
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                        Video link will be included after confirmation.
+                                    </p>
                                 )}
                             </div>
                         </Button>
@@ -405,6 +514,7 @@ function TimeSlotSelector({
 
 function BookingForm({
     appointmentType,
+    meetingMode,
     selectedSlot,
     timezone,
     onSubmit,
@@ -412,6 +522,7 @@ function BookingForm({
     isSubmitting,
 }: {
     appointmentType: AppointmentType
+    meetingMode: string
     selectedSlot: TimeSlot
     timezone: string
     onSubmit: (data: Omit<BookingCreate, "appointment_type_id" | "scheduled_start" | "client_timezone">) => void
@@ -450,8 +561,10 @@ function BookingForm({
         }
     }
 
-    const mode = MEETING_MODES[appointmentType.meeting_mode]
+    const mode = MEETING_MODES[meetingMode]
     const ModeIcon = mode?.icon || VideoIcon
+    const isInPerson = meetingMode === "in_person"
+    const isPhone = meetingMode === "phone"
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -471,8 +584,20 @@ function BookingForm({
                             </p>
                             <p className="text-sm text-muted-foreground flex items-center gap-2">
                                 <ModeIcon className="size-4" />
-                                {mode?.label}
+                                {mode?.label || meetingMode}
                             </p>
+                            {isInPerson && appointmentType.meeting_location && (
+                                <p className="text-sm text-muted-foreground flex items-center gap-2">
+                                    <MapPinIcon className="size-4" />
+                                    {appointmentType.meeting_location}
+                                </p>
+                            )}
+                            {isPhone && appointmentType.dial_in_number && (
+                                <p className="text-sm text-muted-foreground flex items-center gap-2">
+                                    <PhoneIcon className="size-4" />
+                                    {appointmentType.dial_in_number}
+                                </p>
+                            )}
                         </div>
                         <Button variant="ghost" size="sm" onClick={onBack}>
                             Change
@@ -559,6 +684,7 @@ function generateICSFile(
     startTime: string,
     timezone: string,
     staffName: string,
+    meetingMode: string,
     options?: {
         status?: string
         meetingLocation?: string | null
@@ -574,9 +700,7 @@ function generateICSFile(
         return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
     }
 
-    const meetingModeLabel =
-        MEETING_MODES[appointmentType.meeting_mode as keyof typeof MEETING_MODES]?.label ||
-        appointmentType.meeting_mode
+    const meetingModeLabel = getMeetingModeLabel(meetingMode)
     const location = options?.meetingLocation || options?.dialInNumber || ""
     const status = options?.status === "confirmed" ? "confirmed" : "pending"
     const descriptionLines = [
@@ -619,22 +743,27 @@ function ConfirmationView({
     timezone,
     staffName,
     confirmation,
+    meetingMode,
 }: {
     appointmentType: AppointmentType
     selectedSlot: TimeSlot
     timezone: string
     staffName: string
     confirmation: PublicAppointmentView | null
+    meetingMode: string
 }) {
-    const meetingMode = MEETING_MODES[appointmentType.meeting_mode as keyof typeof MEETING_MODES]
-    const ModeIcon = meetingMode?.icon || VideoIcon
+    const effectiveMeetingMode = confirmation?.meeting_mode || meetingMode
+    const modeMeta = MEETING_MODES[effectiveMeetingMode as keyof typeof MEETING_MODES]
+    const ModeIcon = modeMeta?.icon || VideoIcon
     const isConfirmed = confirmation?.status === "confirmed"
     const meetingLocation = confirmation?.meeting_location ?? appointmentType.meeting_location
     const dialInNumber = confirmation?.dial_in_number ?? appointmentType.dial_in_number
     const joinUrl = confirmation?.zoom_join_url || confirmation?.google_meet_url || null
+    const showLocation = effectiveMeetingMode === "in_person" && meetingLocation
+    const showDialIn = effectiveMeetingMode === "phone" && dialInNumber
 
     const handleDownloadICS = () => {
-        const ics = generateICSFile(appointmentType, selectedSlot.start, timezone, staffName, {
+        const ics = generateICSFile(appointmentType, selectedSlot.start, timezone, staffName, effectiveMeetingMode, {
             ...(confirmation?.status ? { status: confirmation.status } : {}),
             meetingLocation,
             dialInNumber,
@@ -693,15 +822,15 @@ function ConfirmationView({
                     </div>
                     <div className="flex items-center gap-3">
                         <ModeIcon className="size-5 text-muted-foreground flex-shrink-0" />
-                        <p className="font-medium">{meetingMode?.label || appointmentType.meeting_mode}</p>
+                        <p className="font-medium">{getMeetingModeLabel(effectiveMeetingMode)}</p>
                     </div>
-                    {meetingLocation && (
+                    {showLocation && (
                         <div className="flex items-center gap-3">
                             <MapPinIcon className="size-5 text-muted-foreground flex-shrink-0" />
                             <p className="font-medium">{meetingLocation}</p>
                         </div>
                     )}
-                    {dialInNumber && (
+                    {showDialIn && (
                         <div className="flex items-center gap-3">
                             <PhoneIcon className="size-5 text-muted-foreground flex-shrink-0" />
                             <p className="font-medium">{dialInNumber}</p>
@@ -792,6 +921,7 @@ export function PublicBookingPage({
     const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null)
     const [selectedDate, setSelectedDate] = useState<Date | null>(null)
     const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
+    const [selectedMeetingMode, setSelectedMeetingMode] = useState<string | null>(null)
     const [showForm, setShowForm] = useState(false)
     const [isConfirmed, setIsConfirmed] = useState(false)
     const [confirmation, setConfirmation] = useState<PublicAppointmentView | null>(null)
@@ -857,6 +987,21 @@ export function PublicBookingPage({
 
     // Derived state
     const selectedType = pageData?.appointment_types.find((t) => t.id === selectedTypeId)
+    const selectedTypeModes = useMemo(() => getMeetingModes(selectedType), [selectedType])
+    const requiresMeetingModeSelection = selectedTypeModes.length > 1
+    const meetingModeReady = !requiresMeetingModeSelection || Boolean(selectedMeetingMode)
+
+    useEffect(() => {
+        if (!selectedType) {
+            setSelectedMeetingMode(null)
+            return
+        }
+        if (selectedTypeModes.length === 1) {
+            setSelectedMeetingMode(selectedTypeModes[0])
+        } else {
+            setSelectedMeetingMode(null)
+        }
+    }, [selectedType, selectedTypeModes])
 
     const availableDates = useMemo(() => {
         const dates = new Set<string>()
@@ -877,13 +1022,24 @@ export function PublicBookingPage({
     // Handlers
     const handleSubmit = (formData: Omit<BookingCreate, "appointment_type_id" | "scheduled_start" | "client_timezone">) => {
         if (!selectedTypeId || !selectedSlot) return
+        const effectiveMeetingMode =
+            selectedMeetingMode || (selectedTypeModes.length === 1 ? selectedTypeModes[0] : null)
+        if (!effectiveMeetingMode) {
+            toast.error("Select an appointment format to continue.")
+            return
+        }
 
         const data: BookingCreate = {
             ...formData,
             appointment_type_id: selectedTypeId,
             scheduled_start: selectedSlot.start,
             client_timezone: timezone,
-            idempotency_key: `${formData.client_email}-${selectedSlot.start}-${selectedTypeId}`,
+            idempotency_key: buildIdempotencyKey(
+                formData.client_email,
+                selectedSlot.start,
+                selectedTypeId
+            ),
+            meeting_mode: effectiveMeetingMode,
         }
 
         if (isPreview) {
@@ -933,6 +1089,8 @@ export function PublicBookingPage({
 
     // Confirmed state
     if (isConfirmed && selectedType && selectedSlot) {
+        const confirmationMeetingMode =
+            confirmation?.meeting_mode || selectedMeetingMode || selectedTypeModes[0] || selectedType.meeting_mode
         return (
             <div className="min-h-screen bg-background py-12">
                 <div className="max-w-lg mx-auto px-4">
@@ -944,6 +1102,7 @@ export function PublicBookingPage({
                                 timezone={timezone}
                                 staffName={pageData?.staff?.display_name || "Staff Member"}
                                 confirmation={confirmation}
+                                meetingMode={confirmationMeetingMode}
                             />
                         </CardContent>
                     </Card>
@@ -992,6 +1151,7 @@ export function PublicBookingPage({
                         {showForm && selectedType && selectedSlot ? (
                             <BookingForm
                                 appointmentType={selectedType}
+                                meetingMode={selectedMeetingMode || selectedTypeModes[0] || selectedType.meeting_mode}
                                 selectedSlot={selectedSlot}
                                 timezone={timezone}
                                 onSubmit={handleSubmit}
@@ -1005,14 +1165,29 @@ export function PublicBookingPage({
                                     types={pageData.appointment_types}
                                     selectedId={selectedTypeId}
                                     onSelect={(id) => {
+                                        const nextType = pageData.appointment_types.find((type) => type.id === id)
+                                        const nextModes = getMeetingModes(nextType)
                                         setSelectedTypeId(id)
+                                        setSelectedMeetingMode(nextModes.length === 1 ? nextModes[0] : null)
                                         setSelectedDate(null)
                                         setSelectedSlot(null)
+                                        setShowForm(false)
                                     }}
                                 />
 
+                                {/* Meeting Mode */}
+                                {selectedTypeId && requiresMeetingModeSelection && selectedType && (
+                                    <MeetingModeSelector
+                                        meetingModes={selectedTypeModes}
+                                        selectedMode={selectedMeetingMode}
+                                        onSelect={(mode) => setSelectedMeetingMode(mode)}
+                                        meetingLocation={selectedType.meeting_location}
+                                        dialInNumber={selectedType.dial_in_number}
+                                    />
+                                )}
+
                                 {/* Calendar */}
-                                {selectedTypeId && (
+                                {selectedTypeId && meetingModeReady && (
                                     <CalendarView
                                         selectedDate={selectedDate}
                                         onSelect={(date) => {
@@ -1025,7 +1200,7 @@ export function PublicBookingPage({
                                 )}
 
                                 {/* Time Slots */}
-                                {selectedDate && (
+                                {selectedDate && meetingModeReady && (
                                     <TimeSlotSelector
                                         slots={slotsForDate}
                                         selectedSlot={selectedSlot}
@@ -1036,7 +1211,7 @@ export function PublicBookingPage({
                                 )}
 
                                 {/* Continue Button */}
-                                {selectedSlot && (
+                                {selectedSlot && meetingModeReady && (
                                     <Button
                                         className="w-full"
                                         size="lg"

@@ -129,6 +129,7 @@ vi.mock("@/lib/hooks/use-appointments", () => ({
         mockUsePublicBookingPage(publicSlug, enabled),
     useAvailableSlots: (...args: unknown[]) => mockUseAvailableSlots(...args),
     useCreateBooking: () => ({
+        mutate: mockUseCreateBooking,
         mutateAsync: mockUseCreateBooking,
         isPending: false,
     }),
@@ -196,6 +197,7 @@ describe("Appointments Google Meet UI", () => {
                         buffer_before_minutes: 0,
                         buffer_after_minutes: 5,
                         meeting_mode: "google_meet",
+                        meeting_modes: ["google_meet"],
                         meeting_location: null,
                         dial_in_number: null,
                         auto_approve: false,
@@ -214,6 +216,53 @@ describe("Appointments Google Meet UI", () => {
 
         render(<PublicBookingPage publicSlug="preview" preview />)
         expect(screen.getByText(/Google Meet/i)).toBeInTheDocument()
+    })
+
+    it("requires a meeting format selection when multiple modes are available", () => {
+        mockUseBookingPreviewPage.mockReturnValue({
+            data: {
+                staff: {
+                    user_id: "u1",
+                    display_name: "Test User",
+                    avatar_url: null,
+                },
+                appointment_types: [
+                    {
+                        id: "type2",
+                        user_id: "u1",
+                        name: "Discovery Call",
+                        slug: "discovery-call",
+                        description: null,
+                        duration_minutes: 30,
+                        buffer_before_minutes: 0,
+                        buffer_after_minutes: 5,
+                        meeting_mode: "zoom",
+                        meeting_modes: ["zoom", "google_meet"],
+                        meeting_location: null,
+                        dial_in_number: null,
+                        auto_approve: false,
+                        reminder_hours_before: 24,
+                        is_active: true,
+                        created_at: "2024-01-01T00:00:00Z",
+                        updated_at: "2024-01-01T00:00:00Z",
+                    },
+                ],
+                org_name: "Demo Org",
+                org_timezone: "America/Los_Angeles",
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<PublicBookingPage publicSlug="preview" preview />)
+
+        fireEvent.click(screen.getByRole("button", { name: /Discovery Call/i }))
+
+        expect(screen.getByText(/Select Appointment Format/i)).toBeInTheDocument()
+        expect(screen.queryByText(/Select a Date/i)).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: /Google Meet/i }))
+        expect(screen.getByText(/Select a Date/i)).toBeInTheDocument()
     })
 
     it("shows Google Meet join link in appointment details", () => {
@@ -288,6 +337,94 @@ describe("Appointments Google Meet UI", () => {
         fireEvent.click(screen.getAllByText("Casey Client")[0])
 
         expect(screen.getByText(/Join Google Meet/i)).toBeInTheDocument()
+    })
+
+    it("keeps public booking idempotency keys within 64 characters", async () => {
+        const now = new Date()
+        const slotDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0))
+        const slotStart = slotDate.toISOString()
+        const slotEnd = new Date(slotDate.getTime() + 30 * 60 * 1000).toISOString()
+
+        mockUsePublicBookingPage.mockReturnValue({
+            data: {
+                staff: {
+                    user_id: "u1",
+                    display_name: "Test User",
+                    avatar_url: null,
+                },
+                appointment_types: [
+                    {
+                        id: "1b9d94fc-d501-4814-b486-2561d46d4cad",
+                        user_id: "u1",
+                        name: "Intro Call",
+                        slug: "intro-call",
+                        description: null,
+                        duration_minutes: 30,
+                        buffer_before_minutes: 0,
+                        buffer_after_minutes: 5,
+                        meeting_mode: "google_meet",
+                        meeting_location: null,
+                        dial_in_number: null,
+                        auto_approve: false,
+                        reminder_hours_before: 24,
+                        is_active: true,
+                        created_at: "2026-01-01T00:00:00Z",
+                        updated_at: "2026-01-01T00:00:00Z",
+                    },
+                ],
+                org_name: "Demo Org",
+                org_timezone: "America/Los_Angeles",
+            },
+            isLoading: false,
+            error: null,
+        })
+        mockUseAvailableSlots.mockReturnValue({
+            data: {
+                slots: [
+                    {
+                        start: slotStart,
+                        end: slotEnd,
+                    },
+                ],
+                appointment_type: null,
+            },
+            isLoading: false,
+        })
+
+        render(<PublicBookingPage publicSlug="MpJIj9PkxNTpLNSS" />)
+
+        fireEvent.click(screen.getByRole("button", { name: /Intro Call/i }))
+
+        const dayButton = screen
+            .getAllByRole("button")
+            .find((button) => {
+                const label = button.textContent?.trim() || ""
+                return /^\d+$/.test(label) && !button.hasAttribute("disabled")
+            })
+        expect(dayButton).toBeTruthy()
+        fireEvent.click(dayButton!)
+
+        const timeButton = await screen.findByRole("button", { name: /:00/ })
+        fireEvent.click(timeButton)
+
+        fireEvent.click(screen.getByRole("button", { name: /Continue/i }))
+
+        fireEvent.change(screen.getByLabelText(/Full Name/i), {
+            target: { value: "Chason Zhang" },
+        })
+        fireEvent.change(screen.getByLabelText(/Email/i), {
+            target: { value: "chason1127@gmail.com" },
+        })
+        fireEvent.change(screen.getByLabelText(/Phone Number/i), {
+            target: { value: "8052848667" },
+        })
+
+        fireEvent.click(screen.getByRole("button", { name: /Request Appointment/i }))
+
+        const payload = mockUseCreateBooking.mock.calls[0]?.[0]
+        expect(payload?.data?.idempotency_key).toBeTruthy()
+        expect(payload.data.idempotency_key.length).toBeLessThanOrEqual(64)
+
     })
 
     it("renders appointments list error state with retry", () => {

@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
     Dialog,
     DialogContent,
@@ -67,7 +68,7 @@ import {
     useSetAvailabilityRules,
 } from "@/lib/hooks/use-appointments"
 import { useUserIntegrations } from "@/lib/hooks/use-user-integrations"
-import type { AppointmentType } from "@/lib/api/appointments"
+import type { AppointmentType, MeetingMode } from "@/lib/api/appointments"
 
 // =============================================================================
 // Google Calendar Connection Warning Banner
@@ -136,12 +137,21 @@ const TIME_OPTIONS = Array.from({ length: 24 * 2 }, (_, i) => {
 })
 
 // Meeting mode icons
-const MEETING_MODE_ICONS: Record<string, typeof VideoIcon> = {
-    zoom: VideoIcon,
-    google_meet: VideoIcon,
-    phone: PhoneIcon,
-    in_person: MapPinIcon,
-}
+const MEETING_MODE_OPTIONS: Array<{
+    value: MeetingMode;
+    label: string;
+    icon: typeof VideoIcon;
+}> = [
+    { value: "zoom", label: "Zoom", icon: VideoIcon },
+    { value: "google_meet", label: "Google Meet", icon: VideoIcon },
+    { value: "phone", label: "Phone", icon: PhoneIcon },
+    { value: "in_person", label: "In-Person", icon: MapPinIcon },
+]
+
+const MEETING_MODE_LABELS = MEETING_MODE_OPTIONS.reduce<Record<string, string>>((acc, option) => {
+    acc[option.value] = option.label
+    return acc
+}, {})
 
 // =============================================================================
 // Booking Link Card
@@ -434,7 +444,7 @@ function AppointmentTypesCard() {
         description: "",
         duration_minutes: 30,
         buffer_after_minutes: 5,
-        meeting_mode: "zoom" as "zoom" | "google_meet" | "phone" | "in_person",
+        meeting_modes: ["zoom"] as MeetingMode[],
         meeting_location: "",
         dial_in_number: "",
         auto_approve: false,
@@ -448,7 +458,7 @@ function AppointmentTypesCard() {
             description: "",
             duration_minutes: 30,
             buffer_after_minutes: 5,
-            meeting_mode: "zoom",
+            meeting_modes: ["zoom"],
             meeting_location: "",
             dial_in_number: "",
             auto_approve: false,
@@ -459,12 +469,16 @@ function AppointmentTypesCard() {
 
     const openEdit = (type: AppointmentType) => {
         setEditingType(type)
+        const meetingModes =
+            type.meeting_modes && type.meeting_modes.length > 0
+                ? type.meeting_modes
+                : [type.meeting_mode]
         setFormData({
             name: type.name,
             description: type.description || "",
             duration_minutes: type.duration_minutes,
             buffer_after_minutes: type.buffer_after_minutes,
-            meeting_mode: type.meeting_mode,
+            meeting_modes: meetingModes as MeetingMode[],
             meeting_location: type.meeting_location || "",
             dial_in_number: type.dial_in_number || "",
             auto_approve: type.auto_approve ?? false,
@@ -478,22 +492,48 @@ function AppointmentTypesCard() {
         return fallback
     }
 
+    const toggleMeetingMode = (mode: MeetingMode, checked: boolean | "indeterminate") => {
+        const shouldSelect = checked === true
+        setFormData((prev) => {
+            const hasMode = prev.meeting_modes.includes(mode)
+            const nextModes = shouldSelect
+                ? hasMode
+                    ? prev.meeting_modes
+                    : [...prev.meeting_modes, mode]
+                : prev.meeting_modes.filter((m) => m !== mode)
+            if (nextModes.length === 0) {
+                return prev
+            }
+            return { ...prev, meeting_modes: nextModes }
+        })
+    }
+
     const handleSubmit = async () => {
         if (!formData.name.trim()) {
             toast.error("Appointment type name is required")
             return
         }
-        if (formData.meeting_mode === "in_person" && !formData.meeting_location.trim()) {
+        if (!formData.meeting_modes.length) {
+            toast.error("Select at least one appointment format")
+            return
+        }
+        if (formData.meeting_modes.includes("in_person") && !formData.meeting_location.trim()) {
             toast.error("Location is required for in-person appointments")
             return
         }
-        if (formData.meeting_mode === "phone" && !formData.dial_in_number.trim()) {
+        if (formData.meeting_modes.includes("phone") && !formData.dial_in_number.trim()) {
             toast.error("Dial-in number is required for phone appointments")
             return
         }
 
+        const orderedModes = MEETING_MODE_OPTIONS.map((option) => option.value).filter((mode) =>
+            formData.meeting_modes.includes(mode)
+        )
+
         const payload = {
             ...formData,
+            meeting_modes: orderedModes,
+            meeting_mode: orderedModes[0],
             meeting_location: formData.meeting_location.trim() || null,
             dial_in_number: formData.dial_in_number.trim() || null,
         }
@@ -623,50 +663,32 @@ function AppointmentTypesCard() {
                             </div>
                             <div className="space-y-2">
                                 <Label>Appointment Format</Label>
-                                <Select
-                                    value={formData.meeting_mode}
-                                    onValueChange={(v) =>
-                                        v && setFormData({ ...formData, meeting_mode: v as "zoom" | "google_meet" | "phone" | "in_person" })
-                                    }
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue>
-                                            {(value: string | null) => {
-                                                const labels: Record<string, string> = {
-                                                    zoom: "Zoom",
-                                                    google_meet: "Google Meet",
-                                                    phone: "Phone",
-                                                    in_person: "In-Person",
-                                                }
-                                                return labels[value ?? ""] ?? "Select format"
-                                            }}
-                                        </SelectValue>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="zoom">
-                                            <div className="flex items-center gap-2">
-                                                <VideoIcon className="size-4" /> Zoom
-                                            </div>
-                                        </SelectItem>
-                                        <SelectItem value="google_meet">
-                                            <div className="flex items-center gap-2">
-                                                <VideoIcon className="size-4" /> Google Meet
-                                            </div>
-                                        </SelectItem>
-                                        <SelectItem value="phone">
-                                            <div className="flex items-center gap-2">
-                                                <PhoneIcon className="size-4" /> Phone
-                                            </div>
-                                        </SelectItem>
-                                        <SelectItem value="in_person">
-                                            <div className="flex items-center gap-2">
-                                                <MapPinIcon className="size-4" /> In-Person
-                                            </div>
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
+                                <div className="grid gap-2">
+                                    {MEETING_MODE_OPTIONS.map((option) => {
+                                        const Icon = option.icon
+                                        const checked = formData.meeting_modes.includes(option.value)
+                                        return (
+                                            <label
+                                                key={option.value}
+                                                className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm"
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <Icon className="size-4 text-muted-foreground" />
+                                                    <span>{option.label}</span>
+                                                </div>
+                                                <Checkbox
+                                                    checked={checked}
+                                                    onCheckedChange={(value) => toggleMeetingMode(option.value, value)}
+                                                />
+                                            </label>
+                                        )
+                                    })}
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    Select one or more formats for clients to choose from.
+                                </p>
                             </div>
-                            {formData.meeting_mode === "in_person" && (
+                            {formData.meeting_modes.includes("in_person") && (
                                 <div className="space-y-2">
                                     <Label>Location</Label>
                                     <Input
@@ -676,7 +698,7 @@ function AppointmentTypesCard() {
                                     />
                                 </div>
                             )}
-                            {formData.meeting_mode === "phone" && (
+                            {formData.meeting_modes.includes("phone") && (
                                 <div className="space-y-2">
                                     <Label>Dial-in Number</Label>
                                     <Input
@@ -726,7 +748,15 @@ function AppointmentTypesCard() {
                 ) : (
                     <div className="space-y-3">
                         {types?.map((type) => {
-                            const ModeIcon = MEETING_MODE_ICONS[type.meeting_mode] || VideoIcon
+                            const meetingModes =
+                                type.meeting_modes && type.meeting_modes.length > 0
+                                    ? type.meeting_modes
+                                    : [type.meeting_mode]
+                            const primaryMode = meetingModes[0]
+                            const ModeIcon = MEETING_MODE_OPTIONS.find((option) => option.value === primaryMode)?.icon || VideoIcon
+                            const formatLabel = meetingModes
+                                .map((mode) => MEETING_MODE_LABELS[mode] || mode)
+                                .join(" / ")
                             return (
                                 <div
                                     key={type.id}
@@ -741,13 +771,14 @@ function AppointmentTypesCard() {
                                             <p className="text-sm text-muted-foreground">
                                                 {type.duration_minutes} min
                                                 {type.description && ` • ${type.description}`}
+                                                {formatLabel && ` • ${formatLabel}`}
                                             </p>
-                                            {type.meeting_mode === "in_person" && type.meeting_location && (
+                                            {meetingModes.includes("in_person") && type.meeting_location && (
                                                 <p className="text-xs text-muted-foreground mt-1">
                                                     Location: {type.meeting_location}
                                                 </p>
                                             )}
-                                            {type.meeting_mode === "phone" && type.dial_in_number && (
+                                            {meetingModes.includes("phone") && type.dial_in_number && (
                                                 <p className="text-xs text-muted-foreground mt-1">
                                                     Dial-in: {type.dial_in_number}
                                                 </p>

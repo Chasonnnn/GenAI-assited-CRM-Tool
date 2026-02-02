@@ -133,6 +133,34 @@ def _validate_time_range(start: time, end: time, label: str) -> None:
         raise ValueError(f"{label} end_time must be after start_time")
 
 
+def _normalize_meeting_modes(
+    meeting_modes: list[str] | None,
+    meeting_mode: str | None,
+    current_default: str | None = None,
+) -> tuple[list[str], str]:
+    """Normalize meeting modes list and default meeting mode."""
+    if meeting_modes is None or len(meeting_modes) == 0:
+        default_mode = meeting_mode or current_default or MeetingMode.ZOOM.value
+        return [default_mode], default_mode
+
+    normalized: list[str] = []
+    for mode in meeting_modes:
+        if mode not in normalized:
+            normalized.append(mode)
+
+    if not normalized:
+        raise ValueError("At least one meeting mode is required")
+
+    if meeting_mode and meeting_mode in normalized:
+        default_mode = meeting_mode
+    elif current_default and current_default in normalized:
+        default_mode = current_default
+    else:
+        default_mode = normalized[0]
+
+    return normalized, default_mode
+
+
 # =============================================================================
 # Appointment Types
 # =============================================================================
@@ -148,6 +176,7 @@ def create_appointment_type(
     buffer_before_minutes: int = 0,
     buffer_after_minutes: int = 5,
     meeting_mode: str = MeetingMode.ZOOM.value,
+    meeting_modes: list[str] | None = None,
     meeting_location: str | None = None,
     dial_in_number: str | None = None,
     auto_approve: bool = False,
@@ -166,6 +195,8 @@ def create_appointment_type(
         slug = f"{base_slug}-{counter}"
         counter += 1
 
+    normalized_modes, default_mode = _normalize_meeting_modes(meeting_modes, meeting_mode)
+
     appt_type = AppointmentType(
         organization_id=org_id,
         user_id=user_id,
@@ -175,7 +206,8 @@ def create_appointment_type(
         duration_minutes=duration_minutes,
         buffer_before_minutes=buffer_before_minutes,
         buffer_after_minutes=buffer_after_minutes,
-        meeting_mode=meeting_mode,
+        meeting_mode=default_mode,
+        meeting_modes=normalized_modes,
         meeting_location=meeting_location,
         dial_in_number=dial_in_number,
         auto_approve=auto_approve,
@@ -197,6 +229,7 @@ def update_appointment_type(
     buffer_before_minutes: int | None = None,
     buffer_after_minutes: int | None = None,
     meeting_mode: str | None = None,
+    meeting_modes: list[str] | None = None,
     meeting_location: str | None = None,
     dial_in_number: str | None = None,
     auto_approve: bool | None = None,
@@ -229,7 +262,18 @@ def update_appointment_type(
         appt_type.buffer_before_minutes = buffer_before_minutes
     if buffer_after_minutes is not None:
         appt_type.buffer_after_minutes = buffer_after_minutes
-    if meeting_mode is not None:
+    if meeting_modes is not None:
+        normalized_modes, default_mode = _normalize_meeting_modes(
+            meeting_modes,
+            meeting_mode,
+            current_default=appt_type.meeting_mode,
+        )
+        appt_type.meeting_modes = normalized_modes
+        appt_type.meeting_mode = default_mode
+    elif meeting_mode is not None:
+        current_modes = appt_type.meeting_modes or [appt_type.meeting_mode]
+        if meeting_mode not in current_modes:
+            raise ValueError("Meeting mode not available for this appointment type")
         appt_type.meeting_mode = meeting_mode
     if meeting_location is not None:
         appt_type.meeting_location = meeting_location
@@ -997,6 +1041,7 @@ def create_booking(
     scheduled_start: datetime,
     client_notes: str | None = None,
     idempotency_key: str | None = None,
+    meeting_mode: str | None = None,
 ) -> Appointment:
     """
     Create a new appointment booking (pending approval).
@@ -1036,6 +1081,11 @@ def create_booking(
     if not appt_type:
         raise ValueError("Appointment type not found")
 
+    allowed_meeting_modes = appt_type.meeting_modes or [appt_type.meeting_mode]
+    selected_meeting_mode = meeting_mode or appt_type.meeting_mode
+    if selected_meeting_mode not in allowed_meeting_modes:
+        raise ValueError("Meeting mode not available for this appointment type")
+
     _validate_timezone_name(client_timezone, "client timezone")
     scheduled_start = _normalize_scheduled_start(scheduled_start, client_timezone)
     scheduled_end = scheduled_start + timedelta(minutes=appt_type.duration_minutes)
@@ -1068,7 +1118,7 @@ def create_booking(
         duration_minutes=appt_type.duration_minutes,
         buffer_before_minutes=appt_type.buffer_before_minutes,
         buffer_after_minutes=appt_type.buffer_after_minutes,
-        meeting_mode=appt_type.meeting_mode,
+        meeting_mode=selected_meeting_mode,
         meeting_location=appt_type.meeting_location,
         dial_in_number=appt_type.dial_in_number,
         status=AppointmentStatus.PENDING.value,

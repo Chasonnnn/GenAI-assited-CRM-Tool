@@ -12,6 +12,9 @@ from pydantic import BaseModel, EmailStr, Field
 # =============================================================================
 
 
+MeetingModeLiteral = Literal["zoom", "google_meet", "phone", "in_person"]
+
+
 class AppointmentTypeCreate(BaseModel):
     """Schema for creating an appointment type."""
 
@@ -20,7 +23,8 @@ class AppointmentTypeCreate(BaseModel):
     duration_minutes: int = Field(30, ge=15, le=480)
     buffer_before_minutes: int = Field(0, ge=0, le=60)
     buffer_after_minutes: int = Field(5, ge=0, le=60)
-    meeting_mode: Literal["zoom", "google_meet", "phone", "in_person"] = "zoom"
+    meeting_mode: MeetingModeLiteral = "zoom"
+    meeting_modes: list[MeetingModeLiteral] | None = None
     meeting_location: str | None = Field(None, max_length=500)
     dial_in_number: str | None = Field(None, max_length=100)
     auto_approve: bool = False
@@ -35,7 +39,8 @@ class AppointmentTypeUpdate(BaseModel):
     duration_minutes: int | None = Field(None, ge=15, le=480)
     buffer_before_minutes: int | None = Field(None, ge=0, le=60)
     buffer_after_minutes: int | None = Field(None, ge=0, le=60)
-    meeting_mode: Literal["zoom", "google_meet", "phone", "in_person"] | None = None
+    meeting_mode: MeetingModeLiteral | None = None
+    meeting_modes: list[MeetingModeLiteral] | None = None
     meeting_location: str | None = Field(None, max_length=500)
     dial_in_number: str | None = Field(None, max_length=100)
     auto_approve: bool | None = None
@@ -55,6 +60,7 @@ class AppointmentTypeRead(BaseModel):
     buffer_before_minutes: int
     buffer_after_minutes: int
     meeting_mode: str
+    meeting_modes: list[str]
     meeting_location: str | None
     dial_in_number: str | None
     auto_approve: bool
@@ -153,7 +159,8 @@ class AppointmentCreate(BaseModel):
     client_timezone: str = Field(..., max_length=50)
     scheduled_start: datetime
     client_notes: str | None = Field(None, max_length=2000)
-    idempotency_key: str | None = Field(None, max_length=64)
+    idempotency_key: str | None = Field(None, max_length=255)
+    meeting_mode: MeetingModeLiteral | None = None
 
 
 class AppointmentReschedule(BaseModel):

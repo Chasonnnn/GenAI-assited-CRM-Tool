@@ -75,6 +75,9 @@ class AppointmentType(Base):
     meeting_mode: Mapped[str] = mapped_column(
         String(20), server_default=text(f"'{MeetingMode.ZOOM.value}'"), nullable=False
     )
+    meeting_modes: Mapped[list[str]] = mapped_column(
+        JSONB, server_default=text("'[\"zoom\"]'::jsonb"), nullable=False
+    )
     meeting_location: Mapped[str | None] = mapped_column(String(500), nullable=True)
     dial_in_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     auto_approve: Mapped[bool] = mapped_column(
@@ -361,7 +364,7 @@ class Appointment(Base):
     )
 
     # Idempotency (prevent duplicate bookings)
-    idempotency_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
