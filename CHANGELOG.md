@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.62.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.61.0...surrogacy-crm-platform-v0.62.0) (2026-02-02)
+
+
+### Features
+
+* **import:** expose deduplication breakdown in surrogate import history ([aab00e7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/aab00e757165e61fab9202306d4fde12215be1bf))
+
+
+### Bug Fixes
+
+* **web:** improve trend chart date labels and Zapier dialog layout ([eb9994a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/eb9994a16ee2d1e3a83abf3dbb1c53ba8e3718f8))
+
+
+### Maintenance
+
+* **docs:** formalize TDD and bug reproduction rules ([8e16f1a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8e16f1ace782b62ea319a2813f9a9196a12df9a4))
+
 ## [0.61.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.60.1...surrogacy-crm-platform-v0.61.0) (2026-02-01)
 
 
