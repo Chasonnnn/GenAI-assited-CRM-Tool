@@ -819,6 +819,7 @@ def list_surrogates(
     exclude_stage_types: list[str] | None = None,  # Permission-based stage filter
     sort_by: str | None = None,
     sort_order: str = "desc",
+    include_total: bool = True,
 ):
     """
     List surrogates with filters and pagination.
@@ -833,9 +834,10 @@ def list_surrogates(
         exclude_stage_types: Stage types to exclude (e.g. ['post_approval'] for users without permission)
         sort_by: Column to sort by (surrogate_number, full_name, state, race, source, created_at)
         sort_order: Sort direction ('asc' or 'desc')
+        include_total: Whether to include total count in response
 
     Returns:
-        (surrogates, total_count, next_cursor)
+        (surrogates, total_count or None, next_cursor)
     """
     import base64
     from app.db.enums import Role, OwnerType
@@ -993,8 +995,8 @@ def list_surrogates(
             )
         )
 
-    # Count total
-    total = base_query.count()
+    # Count total (optional)
+    total = base_query.count() if include_total else None
 
     # Paginate
     next_cursor = None

@@ -431,6 +431,14 @@ export default function SurrogatesPage() {
         ...(sortBy ? { sort_by: sortBy } : {}),
     })
 
+    const totalCount = data?.total ?? null
+    const totalPages = data?.pages ?? null
+    const hasTotal = totalCount !== null
+    const totalCountValue = totalCount ?? 0
+    const totalPagesValue = totalPages ?? 0
+    const pageStart = (page - 1) * perPage + 1
+    const pageEnd = data?.items?.length ? pageStart + data.items.length - 1 : 0
+
     const handleSort = (column: string) => {
         if (sortBy === column) {
             setSortOrder(sortOrder === "asc" ? "desc" : "asc")
@@ -535,7 +543,7 @@ export default function SurrogatesPage() {
                     <div>
                         <h1 className="text-xl font-semibold">Surrogates</h1>
                         <p className="text-sm text-muted-foreground">
-                            {data?.total ?? 0} total surrogates
+                            {hasTotal ? totalCount.toLocaleString() : "—"} total surrogates
                         </p>
                     </div>
                     <Button onClick={() => setIsCreateOpen(true)}>
@@ -937,10 +945,14 @@ export default function SurrogatesPage() {
                         </Table>
 
                         {/* Pagination */}
-                        {data.pages > 1 && (
+                        {totalPages && totalPages > 1 && (
                             <div className="flex items-center justify-between border-t border-border px-6 py-4">
                                 <div className="text-sm text-muted-foreground">
-                                    Showing {((page - 1) * perPage) + 1}-{Math.min(page * perPage, data.total)} of {data.total} surrogates
+                                    {hasTotal ? (
+                                        <>Showing {pageStart}-{Math.min(page * perPage, totalCountValue)} of {totalCountValue} surrogates</>
+                                    ) : (
+                                        <>Showing {pageStart}-{pageEnd} surrogates</>
+                                    )}
                                 </div>
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <Button
@@ -951,7 +963,7 @@ export default function SurrogatesPage() {
                                     >
                                         Previous
                                     </Button>
-                                    {[...Array(Math.min(5, data.pages))].map((_, i) => {
+                                    {[...Array(Math.min(5, totalPagesValue))].map((_, i) => {
                                         const pageNum = i + 1
                                         return (
                                             <Button
@@ -964,18 +976,18 @@ export default function SurrogatesPage() {
                                             </Button>
                                         )
                                     })}
-                                    {data.pages > 5 && <span className="text-muted-foreground">...</span>}
+                                    {totalPagesValue > 5 && <span className="text-muted-foreground">...</span>}
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        disabled={page >= data.pages}
-                                        onClick={() => handlePageChange(Math.min(data.pages, page + 1))}
+                                        disabled={page >= totalPagesValue}
+                                        onClick={() => handlePageChange(Math.min(totalPagesValue, page + 1))}
                                     >
                                         Next
                                     </Button>
                                     <PaginationJump
                                         page={page}
-                                        totalPages={data.pages}
+                                        totalPages={totalPagesValue}
                                         onPageChange={handlePageChange}
                                     />
                                 </div>

@@ -466,10 +466,10 @@ class SurrogateListResponse(BaseModel):
     """Paginated surrogatelist response."""
 
     items: list[SurrogateListItem]
-    total: int
+    total: int | None = None
     page: int
     per_page: int
-    pages: int
+    pages: int | None = None
     next_cursor: str | None = None
 
 

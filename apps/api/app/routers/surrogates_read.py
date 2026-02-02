@@ -77,6 +77,10 @@ def list_surrogates(
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
     cursor: str | None = Query(None, description="Cursor for keyset pagination"),
+    include_total: bool | None = Query(
+        None,
+        description="Include total count and page count in the response",
+    ),
     stage_id: UUID | None = None,
     source: SurrogateSource | None = None,
     owner_id: UUID | None = None,
@@ -102,6 +106,8 @@ def list_surrogates(
     ):
         exclude_stage_types.append("post_approval")
 
+    include_total = include_total if include_total is not None else cursor is None
+
     try:
         surrogates, total, next_cursor = surrogate_service.list_surrogates(
             db=db,
@@ -123,11 +129,12 @@ def list_surrogates(
             exclude_stage_types=exclude_stage_types if exclude_stage_types else None,
             sort_by=sort_by,
             sort_order=sort_order,
+            include_total=include_total,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    pages = (total + per_page - 1) // per_page if per_page > 0 else 0
+    pages = (total + per_page - 1) // per_page if total is not None and per_page > 0 else None
 
     q_type = None
     if q:

@@ -130,9 +130,9 @@ export interface SurrogateRead extends SurrogateListItem {
 // Paginated response
 export interface SurrogateListResponse {
     items: SurrogateListItem[];
-    total: number;
+    total: number | null;
     page: number;
     per_page: number;
-    pages: number;
+    pages: number | null;
     next_cursor?: string | null;
 }

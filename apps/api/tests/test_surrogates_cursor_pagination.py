@@ -55,3 +55,13 @@ async def test_surrogates_list_cursor_pagination(authed_client, db, test_org, te
     ids_page2 = [item["id"] for item in payload2["items"]]
     assert ids_page2 == [str(s1.id)]
     assert payload2.get("next_cursor") is None
+    assert payload2.get("total") is None
+    assert payload2.get("pages") is None
+
+    second_page_with_total = await authed_client.get(
+        f"/surrogates?per_page=2&cursor={cursor}&include_total=true"
+    )
+    assert second_page_with_total.status_code == 200
+    payload3 = second_page_with_total.json()
+    assert payload3.get("total") == 3
+    assert payload3.get("pages") == 2
