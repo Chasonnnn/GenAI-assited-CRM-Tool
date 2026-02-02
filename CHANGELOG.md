@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.67.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.66.0...surrogacy-crm-platform-v0.67.0) (2026-02-02)
+
+
+### Features
+
+* **api:** improve platform logo upload robustness with error handling ([bfd866b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bfd866bf7c38f3d0dc9f0dcb0a8703b7b799c3ac))
+* **web:** improve form builder versioning and apply page navigation UI ([e81e142](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e81e142c1fa78297dbdd061a4a9a761c4ec356df))
+
+
+### Maintenance
+
+* **web:** remove unused tiptap underline extension from editors ([3c707de](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3c707de47920475924aae2d8f6121d5c54b6e8b9))
+
 ## [0.66.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.65.0...surrogacy-crm-platform-v0.66.0) (2026-02-02)
 
 
