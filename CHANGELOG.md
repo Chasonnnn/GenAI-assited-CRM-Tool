@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.64.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.63.0...surrogacy-crm-platform-v0.64.0) (2026-02-02)
+
+
+### Features
+
+* **api:** add platform branding service for global assets ([3ce609b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3ce609be8f00aad85f79c8a7276e2b3c68bad515))
+* implement platform-wide system email templates ([226345a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/226345a0613e0a5dbe47f390e9ea4889d77fb669))
+* migrate organization invites to use platform system templates ([8953cf8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8953cf811df332a20a0ed5106ce55f7fadc9478a))
+* **ops:** add system email template management dashboard ([327411d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/327411d4846fb2d001270afd51354d0bc8158ba2))
+* **web:** add insert logo button to email template editor ([4960168](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4960168ba8292f9f5715f193f4ad031e4866f879))
+
+
+### Maintenance
+
+* minor ui enhancements and code formatting ([987ba62](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/987ba625186f276bfd14de4afe3056012803aa16))
+
 ## [0.63.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.62.0...surrogacy-crm-platform-v0.63.0) (2026-02-02)
 
 
