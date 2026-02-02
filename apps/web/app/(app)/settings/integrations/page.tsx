@@ -1526,11 +1526,16 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                         <div className="space-y-2">
                                             <Label>Webhook URL</Label>
                                             <div className="flex min-w-0 gap-2">
-                                                <Input
-                                                    value={webhook.webhook_url}
-                                                    readOnly
-                                                    className="flex-1 text-xs font-mono"
-                                                />
+                                                <div
+                                                    className="flex h-9 min-w-0 flex-1 items-center rounded-md border border-input bg-transparent px-3 py-1 text-xs font-mono shadow-xs dark:bg-input/30"
+                                                    role="textbox"
+                                                    aria-readonly="true"
+                                                    title={webhook.webhook_url}
+                                                >
+                                                    <span className="min-w-0 flex-1 truncate">
+                                                        {webhook.webhook_url}
+                                                    </span>
+                                                </div>
                                                 <Button
                                                     variant="outline"
                                                     size="icon"
