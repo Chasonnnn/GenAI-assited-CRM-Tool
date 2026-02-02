@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import SettingsPage from '../app/(app)/settings/page'
 
 const mockReplace = vi.fn()
@@ -179,22 +179,13 @@ describe('SettingsPage', () => {
         expect(screen.queryByText('developer')).not.toBeInTheDocument()
     })
 
-    it('shows org settings load error and disables save until retry succeeds', async () => {
-        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    it('shows organization branding section in email signature tab', async () => {
         mockSearchParams = new URLSearchParams('tab=email-signature')
-        mockGetOrgSettings.mockRejectedValueOnce(new Error('boom'))
         render(<SettingsPage />)
 
-        expect(await screen.findByText(/Unable to load organization settings/i)).toBeInTheDocument()
-
-        const saveButton = screen.getByRole('button', { name: /save changes/i })
-        expect(saveButton).toBeDisabled()
-
-        const retryButton = screen.getByRole('button', { name: /retry/i })
-        fireEvent.click(retryButton)
-
-        await waitFor(() => expect(mockGetOrgSettings).toHaveBeenCalledTimes(2))
-        consoleSpy.mockRestore()
+        expect(await screen.findByText('Organization Branding')).toBeInTheDocument()
+        expect(screen.queryByText('Organization Info')).not.toBeInTheDocument()
+        expect(screen.queryByText('Signature Branding')).not.toBeInTheDocument()
     })
 
     // Note: Pipeline version history test removed - pipelines moved to dedicated /settings/pipelines page

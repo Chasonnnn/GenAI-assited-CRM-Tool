@@ -382,7 +382,7 @@ function ActiveSessionsSection() {
 }
 
 // =============================================================================
-// Organization Section (Moved to Email Signature tab)
+// App Version
 // =============================================================================
 
 function AppVersion() {
@@ -391,195 +391,6 @@ function AppVersion() {
 
   return (
     <p className="text-xs text-muted-foreground">{versionLabel}</p>
-  )
-}
-
-function OrganizationSection() {
-  const { user, refetch } = useAuth()
-
-  const [orgName, setOrgName] = useState(user?.org_name || "")
-  const [orgAddress, setOrgAddress] = useState("")
-  const [orgPhone, setOrgPhone] = useState("")
-  const [orgEmail, setOrgEmail] = useState("")
-  const [portalBaseUrl, setPortalBaseUrl] = useState("")
-  const [orgSaving, setOrgSaving] = useState(false)
-  const [orgSaved, setOrgSaved] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
-
-  const isMountedRef = useRef(true)
-
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false
-    }
-  }, [])
-
-  const loadOrgSettings = useCallback(async () => {
-    if (!user?.org_id) return
-    setIsLoading(true)
-    setLoadError(null)
-    try {
-      const settings = await getOrgSettings()
-      if (!isMountedRef.current) return
-      setOrgName(settings.name || "")
-      setOrgAddress(settings.address || "")
-      setOrgPhone(settings.phone || "")
-      setOrgEmail(settings.email || "")
-      setPortalBaseUrl(settings.portal_base_url || "")
-    } catch (error) {
-      console.error("Failed to load organization settings:", error)
-      if (!isMountedRef.current) return
-      setLoadError("Unable to load organization settings. Please retry.")
-    } finally {
-      if (isMountedRef.current) setIsLoading(false)
-    }
-  }, [user?.org_id])
-
-  useEffect(() => {
-    if (user?.org_id) {
-      loadOrgSettings()
-    } else {
-      setIsLoading(false)
-    }
-  }, [user?.org_id, loadOrgSettings])
-
-  const handleSaveOrg = async () => {
-    setOrgSaving(true)
-    try {
-      const trimmedName = orgName.trim()
-      const trimmedAddress = orgAddress.trim()
-      const trimmedPhone = orgPhone.trim()
-      const trimmedEmail = orgEmail.trim()
-      await updateOrgSettings({
-        ...(trimmedName ? { name: trimmedName } : {}),
-        ...(trimmedAddress ? { address: trimmedAddress } : {}),
-        ...(trimmedPhone ? { phone: trimmedPhone } : {}),
-        ...(trimmedEmail ? { email: trimmedEmail } : {}),
-      })
-      setOrgSaved(true)
-      setTimeout(() => setOrgSaved(false), 2000)
-      refetch()
-    } catch (error) {
-      console.error("Failed to save organization:", error)
-    } finally {
-      setOrgSaving(false)
-    }
-  }
-
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <div className="animate-pulse motion-reduce:animate-none flex gap-4">
-          <div className="h-24 w-full bg-muted rounded" />
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="font-medium">Organization Info</h3>
-        <p className="text-sm text-muted-foreground">
-          Company details shown in email signatures
-        </p>
-      </div>
-
-      {loadError && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <span>{loadError}</span>
-            <Button variant="outline" onClick={loadOrgSettings}>
-              Retry
-            </Button>
-          </div>
-        </div>
-      )}
-
-      <fieldset disabled={!!loadError} className="grid gap-6 md:grid-cols-2">
-        <div className="space-y-2 md:col-span-2">
-          <Label htmlFor="orgName">Organization Name</Label>
-          <Input
-            id="orgName"
-            name="orgName"
-            autoComplete="organization"
-            value={orgName}
-            onChange={(e) => setOrgName(e.target.value)}
-          />
-        </div>
-
-        <div className="space-y-2 md:col-span-2">
-          <Label htmlFor="address">Address</Label>
-          <Textarea
-            id="address"
-            name="address"
-            autoComplete="street-address"
-            rows={3}
-            placeholder="123 Main St, City, State 12345"
-            value={orgAddress}
-            onChange={(e) => setOrgAddress(e.target.value)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="orgPhone">Phone</Label>
-          <Input
-            id="orgPhone"
-            name="orgPhone"
-            autoComplete="tel"
-            type="tel"
-            placeholder="(555) 123-4567"
-            value={orgPhone}
-            onChange={(e) => setOrgPhone(e.target.value)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="orgEmail">Email</Label>
-          <Input
-            id="orgEmail"
-            name="orgEmail"
-            autoComplete="email"
-            type="email"
-            placeholder="contact@company.com"
-            value={orgEmail}
-            onChange={(e) => setOrgEmail(e.target.value)}
-          />
-        </div>
-
-        {portalBaseUrl && (
-          <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="portalUrl">Portal URL</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id="portalUrl"
-                value={portalBaseUrl}
-                disabled
-                className="font-mono text-sm"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Your portal URL is derived from your organization slug. Contact platform support to change it.
-            </p>
-          </div>
-        )}
-      </fieldset>
-
-      <Button onClick={handleSaveOrg} disabled={orgSaving || isLoading || !!loadError}>
-        {orgSaving ? (
-          <>
-            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Saving…
-          </>
-        ) : orgSaved ? (
-          <>
-            <CheckIcon className="mr-2 size-4" aria-hidden="true" /> Saved!
-          </>
-        ) : (
-          "Save Changes"
-        )}
-      </Button>
-    </div>
   )
 }
 
@@ -721,11 +532,12 @@ function SocialLinksSection() {
 }
 
 // =============================================================================
-// Signature Branding Section
+// Organization Branding Section
 // =============================================================================
 
-function SignatureBrandingSection() {
-  const { data: orgSig, isLoading } = useOrgSignature()
+function OrganizationBrandingSection() {
+  const { user, refetch } = useAuth()
+  const { data: orgSig, isLoading: sigLoading } = useOrgSignature()
   const updateOrgSig = useUpdateOrgSignature()
   const uploadLogo = useUploadOrgLogo()
   const deleteLogo = useDeleteOrgLogo()
@@ -738,38 +550,115 @@ function SignatureBrandingSection() {
   const [phone, setPhone] = useState("")
   const [website, setWebsite] = useState("")
   const [disclaimer, setDisclaimer] = useState("")
+  const [orgEmail, setOrgEmail] = useState("")
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewHtml, setPreviewHtml] = useState<string | null>(null)
+  const [orgSettingsLoading, setOrgSettingsLoading] = useState(true)
+  const [orgSettingsError, setOrgSettingsError] = useState<string | null>(null)
+  const [orgDefaults, setOrgDefaults] = useState({ name: "", address: "", phone: "" })
+  const [initialized, setInitialized] = useState(false)
+
   const sanitizedPreviewHtml = useMemo(
     () => (previewHtml ? DOMPurify.sanitize(previewHtml) : null),
     [previewHtml]
   )
 
+  const isMountedRef = useRef(true)
+
   useEffect(() => {
-    if (orgSig) {
-      setTemplate(orgSig.signature_template || "classic")
-      setPrimaryColor(orgSig.signature_primary_color || "#E444A4")
-      setCompanyName(orgSig.signature_company_name || "")
-      setAddress(orgSig.signature_address || "")
-      setPhone(orgSig.signature_phone || "")
-      setWebsite(orgSig.signature_website || "")
-      setDisclaimer(orgSig.signature_disclaimer || "")
+    return () => {
+      isMountedRef.current = false
     }
-  }, [orgSig])
+  }, [])
+
+  const loadOrgSettings = useCallback(async () => {
+    if (!user?.org_id) return
+    setOrgSettingsLoading(true)
+    setOrgSettingsError(null)
+    try {
+      const settings = await getOrgSettings()
+      if (!isMountedRef.current) return
+      setOrgDefaults({
+        name: settings.name || "",
+        address: settings.address || "",
+        phone: settings.phone || "",
+      })
+      setOrgEmail(settings.email || "")
+    } catch (error) {
+      console.error("Failed to load organization settings:", error)
+      if (!isMountedRef.current) return
+      setOrgSettingsError("Unable to load organization settings. Please retry.")
+    } finally {
+      if (isMountedRef.current) setOrgSettingsLoading(false)
+    }
+  }, [user?.org_id])
+
+  useEffect(() => {
+    if (user?.org_id) {
+      loadOrgSettings()
+    } else {
+      setOrgSettingsLoading(false)
+    }
+  }, [user?.org_id, loadOrgSettings])
+
+  useEffect(() => {
+    if (initialized) return
+    if (sigLoading || orgSettingsLoading) return
+    setTemplate(orgSig?.signature_template || "classic")
+    setPrimaryColor(orgSig?.signature_primary_color || "#E444A4")
+    setCompanyName(orgSig?.signature_company_name || orgDefaults.name || user?.org_name || "")
+    setAddress(orgSig?.signature_address || orgDefaults.address || "")
+    setPhone(orgSig?.signature_phone || orgDefaults.phone || "")
+    setWebsite(orgSig?.signature_website || "")
+    setDisclaimer(orgSig?.signature_disclaimer || "")
+    setInitialized(true)
+  }, [initialized, sigLoading, orgSettingsLoading, orgSig, orgDefaults, user?.org_name])
 
   const handleSave = async () => {
-    await updateOrgSig.mutateAsync({
-      signature_template: template,
-      signature_primary_color: primaryColor,
-      signature_company_name: companyName || null,
-      signature_address: address || null,
-      signature_phone: phone || null,
-      signature_website: website || null,
-      signature_disclaimer: disclaimer || null,
-    })
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    setSaving(true)
+    try {
+      const trimmedCompanyName = companyName.trim()
+      const trimmedAddress = address.trim()
+      const trimmedPhone = phone.trim()
+      const trimmedWebsite = website.trim()
+      const trimmedDisclaimer = disclaimer.trim()
+      const trimmedEmail = orgEmail.trim()
+
+      const signaturePayload = {
+        signature_template: template,
+        signature_primary_color: primaryColor,
+        signature_company_name: trimmedCompanyName || null,
+        signature_address: trimmedAddress || null,
+        signature_phone: trimmedPhone || null,
+        signature_website: trimmedWebsite || null,
+        signature_disclaimer: trimmedDisclaimer || null,
+      }
+
+      if (orgSettingsError) {
+        await updateOrgSig.mutateAsync(signaturePayload)
+      } else {
+        await Promise.all([
+          updateOrgSig.mutateAsync(signaturePayload),
+          updateOrgSettings({
+            ...(trimmedCompanyName ? { name: trimmedCompanyName } : {}),
+            ...(trimmedAddress ? { address: trimmedAddress } : {}),
+            ...(trimmedPhone ? { phone: trimmedPhone } : {}),
+            ...(trimmedEmail ? { email: trimmedEmail } : {}),
+          }),
+        ])
+        refetch()
+      }
+
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (error) {
+      console.error("Failed to save organization branding:", error)
+      toast.error("Failed to save organization branding")
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -794,7 +683,7 @@ function SignatureBrandingSection() {
     }
   }
 
-  if (isLoading) {
+  if (sigLoading || orgSettingsLoading) {
     return (
       <div className="space-y-6">
         <div className="animate-pulse motion-reduce:animate-none flex gap-4">
@@ -817,10 +706,23 @@ function SignatureBrandingSection() {
       <div>
         <h3 className="font-medium flex items-center gap-2">
           <PaletteIcon className="size-4" aria-hidden="true" />
-          Signature Branding
+          Organization Branding
         </h3>
-        <p className="text-sm text-muted-foreground">Template and visual style for email signatures</p>
+        <p className="text-sm text-muted-foreground">
+          Organization-wide branding used in email signatures
+        </p>
       </div>
+
+      {orgSettingsError && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span>{orgSettingsError}</span>
+            <Button variant="outline" onClick={loadOrgSettings}>
+              Retry
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Template Selection */}
       <div className="space-y-3">
@@ -924,17 +826,17 @@ function SignatureBrandingSection() {
         </div>
       </div>
 
-      {/* Company Info for Signature */}
+      {/* Organization Info */}
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="sigCompanyName">Company Name (in signature)</Label>
+          <Label htmlFor="sigCompanyName">Organization Name</Label>
           <Input
             id="sigCompanyName"
             name="sigCompanyName"
             autoComplete="organization"
             value={companyName}
             onChange={(e) => setCompanyName(e.target.value)}
-            placeholder="Your Company"
+            placeholder="Your Organization"
           />
         </div>
         <div className="space-y-2">
@@ -949,7 +851,7 @@ function SignatureBrandingSection() {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="sigPhone">Phone (in signature)</Label>
+          <Label htmlFor="sigPhone">Phone</Label>
           <Input
             id="sigPhone"
             name="sigPhone"
@@ -959,8 +861,21 @@ function SignatureBrandingSection() {
             placeholder="(555) 123-4567"
           />
         </div>
+        <div className="space-y-2">
+          <Label htmlFor="sigEmail">Email</Label>
+          <Input
+            id="sigEmail"
+            name="sigEmail"
+            autoComplete="email"
+            type="email"
+            value={orgEmail}
+            onChange={(e) => setOrgEmail(e.target.value)}
+            placeholder="contact@company.com"
+            disabled={!!orgSettingsError}
+          />
+        </div>
         <div className="space-y-2 md:col-span-2">
-          <Label htmlFor="sigAddress">Address (in signature)</Label>
+          <Label htmlFor="sigAddress">Address</Label>
           <Textarea
             id="sigAddress"
             name="sigAddress"
@@ -1015,8 +930,8 @@ function SignatureBrandingSection() {
               </>
             )}
           </Button>
-          <Button onClick={handleSave} disabled={updateOrgSig.isPending}>
-            {updateOrgSig.isPending ? (
+          <Button onClick={handleSave} disabled={saving || sigLoading || orgSettingsLoading}>
+            {saving ? (
               <>
                 <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Saving…
               </>
@@ -1025,7 +940,7 @@ function SignatureBrandingSection() {
                 <CheckIcon className="mr-2 size-4" aria-hidden="true" /> Saved!
               </>
             ) : (
-              "Save Signature Branding"
+              "Save Organization Branding"
             )}
           </Button>
         </div>
@@ -1161,18 +1076,13 @@ export default function SettingsPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-10">
-                    {/* Organization Info */}
-                    <OrganizationSection />
+                    {/* Organization Branding (includes preview) */}
+                    <OrganizationBrandingSection />
 
                     <div className="border-t border-border" />
 
                     {/* Social Links */}
                     <SocialLinksSection />
-
-                    <div className="border-t border-border" />
-
-                    {/* Signature Branding (includes preview) */}
-                    <SignatureBrandingSection />
                   </CardContent>
                 </Card>
               </div>
