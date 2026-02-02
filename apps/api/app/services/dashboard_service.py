@@ -9,7 +9,7 @@ import threading
 import anyio
 
 from sqlalchemy import and_, or_, func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, load_only, noload
 
 from app.core.websocket import send_ws_to_org
 from app.db.enums import OwnerType, Role, TaskType
@@ -93,26 +93,21 @@ def get_upcoming_items(
 
     tasks = (
         task_query.filter(and_(*task_filters))
+        .options(
+            joinedload(Task.surrogate).load_only(
+                Surrogate.id, Surrogate.surrogate_number
+            ),
+            joinedload(Task.surrogate).noload(Surrogate.owner_user),
+            joinedload(Task.surrogate).noload(Surrogate.owner_queue),
+        )
         .order_by(Task.due_date, Task.due_time)
         .limit(50)
         .all()
     )
 
-    surrogate_ids = {t.surrogate_id for t in tasks if t.surrogate_id}
-    surrogates = (
-        {}
-        if not surrogate_ids
-        else {
-            s.id: s
-            for s in db.query(Surrogate)
-            .filter(Surrogate.organization_id == org_id, Surrogate.id.in_(surrogate_ids))
-            .all()
-        }
-    )
-
     task_items = []
     for task in tasks:
-        surrogate = surrogates.get(task.surrogate_id) if task.surrogate_id else None
+        surrogate = task.surrogate
         is_overdue = task.due_date < today if task.due_date else False
         task_items.append(
             {
@@ -151,26 +146,21 @@ def get_upcoming_items(
 
     meetings = (
         meeting_query.filter(and_(*meeting_filters))
+        .options(
+            joinedload(ZoomMeeting.surrogate).load_only(
+                Surrogate.id, Surrogate.surrogate_number
+            ),
+            joinedload(ZoomMeeting.surrogate).noload(Surrogate.owner_user),
+            joinedload(ZoomMeeting.surrogate).noload(Surrogate.owner_queue),
+        )
         .order_by(ZoomMeeting.start_time)
         .limit(20)
         .all()
     )
 
-    meeting_surrogate_ids = {m.surrogate_id for m in meetings if m.surrogate_id}
-    meeting_surrogates = (
-        {}
-        if not meeting_surrogate_ids
-        else {
-            s.id: s
-            for s in db.query(Surrogate)
-            .filter(Surrogate.organization_id == org_id, Surrogate.id.in_(meeting_surrogate_ids))
-            .all()
-        }
-    )
-
     meeting_items = []
     for meeting in meetings:
-        surrogate = meeting_surrogates.get(meeting.surrogate_id) if meeting.surrogate_id else None
+        surrogate = meeting.surrogate
         meeting_date = meeting.start_time.date() if meeting.start_time else today
         meeting_items.append(
             {
