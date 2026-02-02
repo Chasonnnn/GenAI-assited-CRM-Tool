@@ -1,4 +1,5 @@
 import AppShellClient from "@/components/app-shell-client"
+import { AuthProvider } from "@/lib/auth-context"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -8,5 +9,9 @@ export default function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <AppShellClient>{children}</AppShellClient>
+  return (
+    <AuthProvider>
+      <AppShellClient>{children}</AppShellClient>
+    </AuthProvider>
+  )
 }
