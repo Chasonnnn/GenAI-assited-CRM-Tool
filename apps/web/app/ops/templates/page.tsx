@@ -22,19 +22,22 @@ import {
     PlusIcon,
     Loader2Icon,
     ArrowRightIcon,
+    ShieldCheckIcon,
 } from "lucide-react"
 import {
     usePlatformEmailTemplates,
     usePlatformFormTemplates,
     usePlatformWorkflowTemplates,
+    usePlatformSystemEmailTemplates,
 } from "@/lib/hooks/use-platform-templates"
 import type {
     PlatformEmailTemplateListItem,
     PlatformFormTemplateListItem,
     PlatformWorkflowTemplateListItem,
+    SystemEmailTemplate,
 } from "@/lib/api/platform"
 
-const TABS = ["email", "forms", "workflows"] as const
+const TABS = ["email", "forms", "workflows", "system"] as const
 type TemplatesTab = (typeof TABS)[number]
 
 const STATUS_STYLES: Record<string, string> = {
@@ -92,6 +95,7 @@ export default function TemplatesPage() {
     const { data: emailTemplates = [], isLoading: emailLoading } = usePlatformEmailTemplates()
     const { data: formTemplates = [], isLoading: formLoading } = usePlatformFormTemplates()
     const { data: workflowTemplates = [], isLoading: workflowLoading } = usePlatformWorkflowTemplates()
+    const { data: systemTemplates = [], isLoading: systemLoading } = usePlatformSystemEmailTemplates()
 
     const handleTabChange = (next: string) => {
         const value = TABS.includes(next as TemplatesTab) ? (next as TemplatesTab) : "email"
@@ -102,6 +106,8 @@ export default function TemplatesPage() {
     const emailRows = useMemo(() => emailTemplates, [emailTemplates])
     const formRows = useMemo(() => formTemplates, [formTemplates])
     const workflowRows = useMemo(() => workflowTemplates, [workflowTemplates])
+    const systemRows = useMemo(() => systemTemplates, [systemTemplates])
+    const canCreate = activeTab !== "system"
 
     return (
         <div className="p-6 space-y-6">
@@ -111,13 +117,15 @@ export default function TemplatesPage() {
                         Templates Studio
                     </h1>
                     <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
-                        Design platform templates and publish them to org libraries. Org copies remain independent.
+                        Design shared templates and manage platform system emails. Published templates sync to org libraries.
                     </p>
                 </div>
-                <Button onClick={() => router.push(`/ops/templates/${activeTab}/new`)}>
-                    <PlusIcon className="mr-2 size-4" />
-                    New {activeTab === "email" ? "Email" : activeTab === "forms" ? "Form" : "Workflow"}
-                </Button>
+                {canCreate && (
+                    <Button onClick={() => router.push(`/ops/templates/${activeTab}/new`)}>
+                        <PlusIcon className="mr-2 size-4" />
+                        New {activeTab === "email" ? "Email" : activeTab === "forms" ? "Form" : "Workflow"}
+                    </Button>
+                )}
             </div>
 
             <Tabs value={activeTab} onValueChange={handleTabChange}>
@@ -133,6 +141,10 @@ export default function TemplatesPage() {
                     <TabsTrigger value="workflows" className="gap-2">
                         <WorkflowIcon className="size-4" />
                         Workflows
+                    </TabsTrigger>
+                    <TabsTrigger value="system" className="gap-2">
+                        <ShieldCheckIcon className="size-4" />
+                        System Emails
                     </TabsTrigger>
                 </TabsList>
 
@@ -334,6 +346,76 @@ export default function TemplatesPage() {
                                             </TableCell>
                                             <TableCell className="text-sm text-muted-foreground">
                                                 {formatDistanceToNow(new Date(template.updated_at), { addSuffix: true })}
+                                            </TableCell>
+                                            <TableCell>
+                                                <ArrowRightIcon className="size-4 text-muted-foreground" />
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
+                </TabsContent>
+
+                <TabsContent value="system" className="mt-6">
+                    {systemLoading ? (
+                        <div className="flex items-center justify-center py-16">
+                            <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : systemRows.length === 0 ? (
+                        <EmptyState
+                            title="No system templates found"
+                            description="System emails are managed at the platform level."
+                            ctaHref="/ops/templates"
+                            ctaLabel="Refresh"
+                        />
+                    ) : (
+                        <div className="border rounded-lg bg-white dark:bg-stone-900">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Template</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead>Updated</TableHead>
+                                        <TableHead className="w-12"></TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {systemRows.map((template: SystemEmailTemplate) => (
+                                        <TableRow
+                                            key={template.system_key}
+                                            className="cursor-pointer hover:bg-stone-50 dark:hover:bg-stone-800/50"
+                                            onClick={() =>
+                                                router.push(`/ops/templates/system/${template.system_key}`)
+                                            }
+                                        >
+                                            <TableCell>
+                                                <div className="font-medium text-stone-900 dark:text-stone-100">
+                                                    {template.name}
+                                                </div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    {template.system_key}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge
+                                                    variant="outline"
+                                                    className={
+                                                        template.is_active
+                                                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                                            : "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300"
+                                                    }
+                                                >
+                                                    {template.is_active ? "Active" : "Inactive"}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-sm text-muted-foreground">
+                                                {template.updated_at
+                                                    ? formatDistanceToNow(new Date(template.updated_at), {
+                                                          addSuffix: true,
+                                                      })
+                                                    : "—"}
                                             </TableCell>
                                             <TableCell>
                                                 <ArrowRightIcon className="size-4 text-muted-foreground" />

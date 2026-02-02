@@ -105,10 +105,13 @@ export default function PlatformEmailTemplatePage() {
 
     useEffect(() => {
         if (editorModeTouched) return
-        if (body && hasComplexHtml) {
+        if (body && hasComplexHtml && editorMode !== "html") {
             setEditorMode("html")
         }
-    }, [body, editorModeTouched, hasComplexHtml])
+    }, [body, editorModeTouched, hasComplexHtml, editorMode])
+
+    const effectiveEditorMode: EditorMode =
+        editorMode === "visual" && hasComplexHtml && !editorModeTouched ? "html" : editorMode
 
     const previewHtml = useMemo(() => {
         return DOMPurify.sanitize(body || "", {
@@ -161,6 +164,14 @@ export default function PlatformEmailTemplatePage() {
 
     const insertVariable = (nameToInsert: string) => {
         setBody((prev) => `${prev}{{${nameToInsert}}}`)
+    }
+
+    const insertOrgLogo = () => {
+        setBody((prev) => {
+            if (prev.includes("{{org_logo_url}}")) return prev
+            const logo = `<p><img src="{{org_logo_url}}" alt="{{org_name}} logo" style="max-width: 160px; height: auto; display: block;" /></p>\n`
+            return `${logo}${prev}`
+        })
     }
 
     const persistTemplate = useCallback(
@@ -348,7 +359,7 @@ export default function PlatformEmailTemplatePage() {
                                 <div className="flex flex-wrap items-center gap-2">
                                     <ToggleGroup
                                         multiple={false}
-                                        value={editorMode ? [editorMode] : []}
+                                        value={effectiveEditorMode ? [effectiveEditorMode] : []}
                                         onValueChange={(value) => {
                                             const next = value[0] as EditorMode | undefined
                                             if (!next) return
@@ -381,9 +392,12 @@ export default function PlatformEmailTemplatePage() {
                                             ))}
                                         </DropdownMenuContent>
                                     </DropdownMenu>
+                                    <Button type="button" variant="ghost" size="sm" onClick={insertOrgLogo}>
+                                        Insert Logo
+                                    </Button>
                                 </div>
                             </div>
-                            {editorMode === "visual" ? (
+                            {effectiveEditorMode === "visual" ? (
                                 <RichTextEditor
                                     content={body}
                                     onChange={(html) => setBody(html)}
@@ -400,7 +414,7 @@ export default function PlatformEmailTemplatePage() {
                                     className="min-h-[240px] font-mono text-xs leading-relaxed"
                                 />
                             )}
-                            {editorMode === "visual" && hasComplexHtml && (
+                            {effectiveEditorMode === "visual" && hasComplexHtml && (
                                 <p className="text-xs text-amber-600">
                                     This template contains advanced HTML. Switch to HTML mode to preserve layout.
                                 </p>

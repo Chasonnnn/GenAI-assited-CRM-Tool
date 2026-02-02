@@ -19,13 +19,22 @@ import {
     createPlatformWorkflowTemplate,
     updatePlatformWorkflowTemplate,
     publishPlatformWorkflowTemplate,
+    listPlatformSystemEmailTemplates,
+    getPlatformSystemEmailTemplate,
+    updatePlatformSystemEmailTemplate,
+    sendTestPlatformSystemEmailTemplate,
+    sendPlatformSystemEmailCampaign,
+    getPlatformEmailBranding,
+    updatePlatformEmailBranding,
     type PlatformEmailTemplateCreate,
     type PlatformEmailTemplateUpdate,
     type PlatformFormTemplateCreate,
     type PlatformFormTemplateUpdate,
     type PlatformWorkflowTemplateCreate,
     type PlatformWorkflowTemplateUpdate,
+    type PlatformSystemEmailCampaignRequest,
     type TemplatePublishRequest,
+    type PlatformEmailBranding,
 } from '@/lib/api/platform'
 
 export const platformTemplateKeys = {
@@ -36,6 +45,9 @@ export const platformTemplateKeys = {
     formDetail: (id: string) => [...platformTemplateKeys.forms(), id] as const,
     workflows: () => [...platformTemplateKeys.all, 'workflows'] as const,
     workflowDetail: (id: string) => [...platformTemplateKeys.workflows(), id] as const,
+    system: () => [...platformTemplateKeys.all, 'system'] as const,
+    systemDetail: (systemKey: string) => [...platformTemplateKeys.system(), systemKey] as const,
+    branding: () => [...platformTemplateKeys.all, 'branding'] as const,
 }
 
 export function usePlatformEmailTemplates() {
@@ -182,6 +194,69 @@ export function usePublishPlatformWorkflowTemplate() {
         onSuccess: (_data, { id }) => {
             queryClient.invalidateQueries({ queryKey: platformTemplateKeys.workflows() })
             queryClient.invalidateQueries({ queryKey: platformTemplateKeys.workflowDetail(id) })
+        },
+    })
+}
+
+export function usePlatformSystemEmailTemplates() {
+    return useQuery({
+        queryKey: platformTemplateKeys.system(),
+        queryFn: () => listPlatformSystemEmailTemplates(),
+    })
+}
+
+export function usePlatformSystemEmailTemplate(systemKey: string | null) {
+    return useQuery({
+        queryKey: platformTemplateKeys.systemDetail(systemKey || ''),
+        queryFn: () => getPlatformSystemEmailTemplate(systemKey!),
+        enabled: !!systemKey,
+    })
+}
+
+export function useUpdatePlatformSystemEmailTemplate() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ systemKey, payload }: { systemKey: string; payload: {
+            subject: string
+            from_email?: string | null
+            body: string
+            is_active: boolean
+            expected_version?: number
+        } }) => updatePlatformSystemEmailTemplate(systemKey, payload),
+        onSuccess: (_data, { systemKey }) => {
+            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.system() })
+            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.systemDetail(systemKey) })
+        },
+    })
+}
+
+export function useSendTestPlatformSystemEmailTemplate() {
+    return useMutation({
+        mutationFn: ({ systemKey, payload }: { systemKey: string; payload: { to_email: string; org_id: string } }) =>
+            sendTestPlatformSystemEmailTemplate(systemKey, payload),
+    })
+}
+
+export function useSendPlatformSystemEmailCampaign() {
+    return useMutation({
+        mutationFn: ({ systemKey, payload }: { systemKey: string; payload: PlatformSystemEmailCampaignRequest }) =>
+            sendPlatformSystemEmailCampaign(systemKey, payload),
+    })
+}
+
+export function usePlatformEmailBranding() {
+    return useQuery({
+        queryKey: platformTemplateKeys.branding(),
+        queryFn: () => getPlatformEmailBranding(),
+    })
+}
+
+export function useUpdatePlatformEmailBranding() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (payload: PlatformEmailBranding) => updatePlatformEmailBranding(payload),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.branding() })
         },
     })
 }

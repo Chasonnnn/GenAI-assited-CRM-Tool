@@ -116,15 +116,44 @@ export interface PlatformEmailStatus {
     provider: string;
 }
 
-// Org-scoped system email template
+// Platform system email template
 export interface SystemEmailTemplate {
     system_key: string;
+    name: string;
     subject: string;
     from_email: string | null;
     body: string;
     is_active: boolean;
     current_version: number;
     updated_at: string | null;
+}
+
+export interface PlatformEmailBranding {
+    logo_url: string | null;
+}
+
+export interface PlatformSystemEmailCampaignTarget {
+    org_id: string;
+    user_ids: string[];
+}
+
+export interface PlatformSystemEmailCampaignRequest {
+    targets: PlatformSystemEmailCampaignTarget[];
+}
+
+export interface PlatformSystemEmailCampaignFailure {
+    org_id: string;
+    user_id: string;
+    email?: string;
+    error: string;
+}
+
+export interface PlatformSystemEmailCampaignResponse {
+    sent: number;
+    suppressed: number;
+    failed: number;
+    recipients: number;
+    failures: PlatformSystemEmailCampaignFailure[];
 }
 
 // Platform alert (cross-org)
@@ -319,20 +348,38 @@ export function purgeOrganization(
 }
 
 /**
- * Get org-scoped system email template by system_key.
+ * Platform email branding (logo URL).
  */
-export function getOrgSystemEmailTemplate(
-    orgId: string,
-    systemKey: string
-): Promise<SystemEmailTemplate> {
-    return api.get<SystemEmailTemplate>(`/platform/orgs/${orgId}/email/system-templates/${systemKey}`);
+export function getPlatformEmailBranding(): Promise<PlatformEmailBranding> {
+    return api.get<PlatformEmailBranding>('/platform/email/branding');
+}
+
+export function updatePlatformEmailBranding(
+    data: PlatformEmailBranding
+): Promise<PlatformEmailBranding> {
+    return api.put<PlatformEmailBranding>('/platform/email/branding', data);
 }
 
 /**
- * Update org-scoped system email template by system_key.
+ * List platform system email templates.
  */
-export function updateOrgSystemEmailTemplate(
-    orgId: string,
+export function listPlatformSystemEmailTemplates(): Promise<SystemEmailTemplate[]> {
+    return api.get<SystemEmailTemplate[]>('/platform/email/system-templates');
+}
+
+/**
+ * Get platform system email template by system_key.
+ */
+export function getPlatformSystemEmailTemplate(
+    systemKey: string
+): Promise<SystemEmailTemplate> {
+    return api.get<SystemEmailTemplate>(`/platform/email/system-templates/${systemKey}`);
+}
+
+/**
+ * Update platform system email template by system_key.
+ */
+export function updatePlatformSystemEmailTemplate(
     systemKey: string,
     data: {
         subject: string;
@@ -343,23 +390,29 @@ export function updateOrgSystemEmailTemplate(
     }
 ): Promise<SystemEmailTemplate> {
     return api.put<SystemEmailTemplate>(
-        `/platform/orgs/${orgId}/email/system-templates/${systemKey}`,
+        `/platform/email/system-templates/${systemKey}`,
         data
     );
 }
 
 /**
- * Send a test email using an org-scoped system email template.
+ * Send a test email using a platform system email template.
  */
-export function sendTestOrgSystemEmailTemplate(
-    orgId: string,
+export function sendTestPlatformSystemEmailTemplate(
     systemKey: string,
-    data: { to_email: string }
+    data: { to_email: string; org_id: string }
 ): Promise<{ sent: boolean; message_id?: string; email_log_id?: string }> {
-    return api.post(
-        `/platform/orgs/${orgId}/email/system-templates/${systemKey}/test`,
-        data
-    );
+    return api.post(`/platform/email/system-templates/${systemKey}/test`, data);
+}
+
+/**
+ * Send a platform system email template to selected org users.
+ */
+export function sendPlatformSystemEmailCampaign(
+    systemKey: string,
+    data: PlatformSystemEmailCampaignRequest
+): Promise<PlatformSystemEmailCampaignResponse> {
+    return api.post(`/platform/email/system-templates/${systemKey}/campaign`, data);
 }
 
 /**
