@@ -4,7 +4,6 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import TextAlign from '@tiptap/extension-text-align'
-import Underline from '@tiptap/extension-underline'
 import Image from '@tiptap/extension-image'
 import { Button } from '@/components/ui/button'
 import { Toggle } from '@/components/ui/toggle'
@@ -69,7 +68,6 @@ export function RichTextEditor({
                     },
                 },
             }),
-            Underline,
             Placeholder.configure({
                 placeholder,
             }),

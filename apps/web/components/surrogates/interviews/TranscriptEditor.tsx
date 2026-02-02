@@ -16,7 +16,6 @@
 
 import { useEditor, EditorContent, Mark, mergeAttributes, type JSONContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Button } from '@/components/ui/button'
@@ -134,7 +133,6 @@ export function TranscriptEditor({
                     levels: [1, 2, 3],
                 },
             }),
-            Underline,
             Link.configure({
                 openOnClick: false,
                 HTMLAttributes: {
