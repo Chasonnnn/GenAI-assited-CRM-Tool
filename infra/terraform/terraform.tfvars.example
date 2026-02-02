@@ -25,7 +25,10 @@ enable_domain_mapping = true
 # Cloud Run scaling / perf
 # run_min_instances = 1
 # run_max_instances = 10
-# run_cpu = "1"
+# api_cpu = "1"
+# api_memory = "1Gi"
+# web_cpu = "1"
+# web_memory = "1Gi"
 # run_cpu_idle = true
 # worker_cpu = "1"
 # worker_memory = "1Gi"

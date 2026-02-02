@@ -29,8 +29,8 @@ resource "google_cloud_run_v2_service" "api" {
 
       resources {
         limits = {
-          cpu    = var.run_cpu
-          memory = var.run_memory
+          cpu    = var.api_cpu
+          memory = var.api_memory
         }
         cpu_idle = var.run_cpu_idle
       }
@@ -114,8 +114,8 @@ resource "google_cloud_run_v2_service" "web" {
 
       resources {
         limits = {
-          cpu    = var.run_cpu
-          memory = var.run_memory
+          cpu    = var.web_cpu
+          memory = var.web_memory
         }
         cpu_idle = var.run_cpu_idle
       }

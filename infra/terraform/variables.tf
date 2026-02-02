@@ -303,21 +303,37 @@ variable "storage_service_account_email" {
   default     = ""
 }
 
-variable "run_cpu" {
-  description = "CPU allocation for Cloud Run services."
+variable "api_cpu" {
+  description = "CPU allocation for the Cloud Run API service."
   type        = string
   default     = "1"
 
-  # Cloud Run CPU values are strings. We intentionally cap these services at
-  # 0.5–1 vCPU to control cost and latency jitter.
+  # Cloud Run CPU values are strings. Keep the cap low to control cost.
   validation {
-    condition     = contains(["0.5", "500m", "1", "1000m"], var.run_cpu)
-    error_message = "run_cpu must be 0.5 or 1 vCPU (\"0.5\"/\"500m\" or \"1\"/\"1000m\")."
+    condition     = contains(["0.5", "500m", "1", "1000m", "2", "2000m"], var.api_cpu)
+    error_message = "api_cpu must be 0.5, 1, or 2 vCPU (\"0.5\"/\"500m\", \"1\"/\"1000m\", or \"2\"/\"2000m\")."
   }
 }
 
-variable "run_memory" {
-  description = "Memory allocation for Cloud Run services."
+variable "web_cpu" {
+  description = "CPU allocation for the Cloud Run web service."
+  type        = string
+  default     = "1"
+
+  validation {
+    condition     = contains(["0.5", "500m", "1", "1000m", "2", "2000m"], var.web_cpu)
+    error_message = "web_cpu must be 0.5, 1, or 2 vCPU (\"0.5\"/\"500m\", \"1\"/\"1000m\", or \"2\"/\"2000m\")."
+  }
+}
+
+variable "api_memory" {
+  description = "Memory allocation for the Cloud Run API service."
+  type        = string
+  default     = "1Gi"
+}
+
+variable "web_memory" {
+  description = "Memory allocation for the Cloud Run web service."
   type        = string
   default     = "1Gi"
 }
