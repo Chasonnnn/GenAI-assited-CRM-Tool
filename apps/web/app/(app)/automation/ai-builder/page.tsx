@@ -85,6 +85,7 @@ const ALLOWED_TEMPLATE_VARIABLES = [
     "status_label",
     "owner_name",
     "org_name",
+    "org_logo_url",
     "appointment_date",
     "appointment_time",
     "appointment_location",

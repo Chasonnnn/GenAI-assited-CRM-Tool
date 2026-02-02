@@ -108,6 +108,9 @@ async def send_invite_email(
 
     inviter_text = f" by {inviter_name}" if inviter_name else ""
     expires_block = f"<p>This invitation expires {expires_at}.</p>" if expires_at else ""
+    from app.services import media_service
+    org_logo_url = media_service.get_signed_media_url(org.signature_logo_url) if org else None
+
     variables = {
         "org_name": org_name,
         "org_slug": org.slug,
@@ -115,6 +118,7 @@ async def send_invite_email(
         "role_title": invite.role.title(),
         "invite_url": invite_url,
         "expires_block": expires_block,
+        "org_logo_url": org_logo_url or "",
     }
 
     if template and template.is_active:

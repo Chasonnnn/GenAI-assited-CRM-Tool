@@ -283,6 +283,8 @@ def build_appointment_variables(
     old_start: datetime | None = None,
 ) -> dict[str, str]:
     """Build template variables for an appointment context."""
+    from app.services import media_service
+
     # Format dates in client's timezone (fall back to Pacific if invalid)
     client_tz_name = appointment.client_timezone or "America/Los_Angeles"
     try:
@@ -323,6 +325,10 @@ def build_appointment_variables(
         "staff_email": staff.email if staff else "",
         # Org info
         "org_name": org_service.get_org_display_name(org) if org else "",
+        "org_logo_url": (
+            media_service.get_signed_media_url(org.signature_logo_url) if org else ""
+        )
+        or "",
         # Links - use correct self-service paths (frontend routes)
         "reschedule_url": (
             f"{base_url}/book/self-service/{appointment.organization_id}/reschedule/{appointment.reschedule_token}"

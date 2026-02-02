@@ -364,6 +364,7 @@ const TEMPLATE_VARIABLES = [
     { name: "status_label", description: "Current status" },
     { name: "owner_name", description: "Surrogate owner name" },
     { name: "org_name", description: "Organization name" },
+    { name: "org_logo_url", description: "Organization logo URL (use as image src)" },
     { name: "appointment_date", description: "Appointment date" },
     { name: "appointment_time", description: "Appointment time" },
     { name: "appointment_location", description: "Appointment location" },
@@ -1469,6 +1470,7 @@ export default function EmailTemplatesPage() {
                                     placeholder="Write your email content here... Use the toolbar to format text."
                                     minHeight="200px"
                                     maxHeight="350px"
+                                    enableImages
                                 />
                             ) : (
                                 <Textarea

@@ -690,8 +690,10 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
     """Build flat template variables for a surrogate context."""
     from app.db.enums import OwnerType
     from app.db.models import Organization, Queue, User
+    from app.services import media_service
 
     org = db.query(Organization).filter(Organization.id == surrogate.organization_id).first()
+    org_logo_url = media_service.get_signed_media_url(org.signature_logo_url) if org else None
 
     owner_name = ""
     if surrogate.owner_type == OwnerType.USER.value and surrogate.owner_id:
@@ -722,6 +724,7 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
         "state": surrogate.state or "",
         "owner_name": owner_name,
         "org_name": org.name if org else "",
+        "org_logo_url": org_logo_url or "",
         "unsubscribe_url": unsubscribe_url,
     }
 
@@ -730,8 +733,10 @@ def build_intended_parent_template_variables(db: Session, intended_parent) -> di
     """Build flat template variables for an intended parent context."""
     from app.db.enums import OwnerType
     from app.db.models import Organization, Queue, User
+    from app.services import media_service
 
     org = db.query(Organization).filter(Organization.id == intended_parent.organization_id).first()
+    org_logo_url = media_service.get_signed_media_url(org.signature_logo_url) if org else None
 
     owner_name = ""
     if intended_parent.owner_type == OwnerType.USER.value and intended_parent.owner_id:
@@ -762,6 +767,7 @@ def build_intended_parent_template_variables(db: Session, intended_parent) -> di
         "state": intended_parent.state or "",
         "owner_name": owner_name,
         "org_name": org.name if org else "",
+        "org_logo_url": org_logo_url or "",
         "unsubscribe_url": unsubscribe_url,
     }
 
@@ -779,9 +785,11 @@ def build_appointment_template_variables(
     """
     from zoneinfo import ZoneInfo
     from app.db.models import Organization
+    from app.services import media_service
 
     # Get org for fallback timezone
     org = db.query(Organization).filter(Organization.id == appointment.organization_id).first()
+    org_logo_url = media_service.get_signed_media_url(org.signature_logo_url) if org else None
 
     # Use appointment's client_timezone, fall back to org timezone
     tz_name = getattr(appointment, "client_timezone", None) or (
@@ -813,6 +821,7 @@ def build_appointment_template_variables(
         "appointment_time": appointment_time,
         "appointment_location": location,
         "org_name": org.name if org else "",
+        "org_logo_url": org_logo_url or "",
     }
 
     # Merge in surrogate variables if provided

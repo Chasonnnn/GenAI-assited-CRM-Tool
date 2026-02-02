@@ -5,6 +5,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import TextAlign from '@tiptap/extension-text-align'
 import Underline from '@tiptap/extension-underline'
+import Image from '@tiptap/extension-image'
 import { Button } from '@/components/ui/button'
 import { Toggle } from '@/components/ui/toggle'
 import {
@@ -17,6 +18,7 @@ import {
     AlignLeftIcon,
     AlignCenterIcon,
     AlignRightIcon,
+    ImageIcon,
     Undo2Icon,
     Redo2Icon,
 } from 'lucide-react'
@@ -33,6 +35,7 @@ interface RichTextEditorProps {
     className?: string
     minHeight?: string
     maxHeight?: string
+    enableImages?: boolean
 }
 
 export function RichTextEditor({
@@ -45,6 +48,7 @@ export function RichTextEditor({
     className,
     minHeight = '80px',
     maxHeight = '300px',
+    enableImages = false,
 }: RichTextEditorProps) {
     const [mounted, setMounted] = useState(false)
 
@@ -72,6 +76,16 @@ export function RichTextEditor({
             TextAlign.configure({
                 types: ['paragraph'],
             }),
+            ...(enableImages
+                ? [
+                      Image.configure({
+                          allowBase64: false,
+                          HTMLAttributes: {
+                              style: 'max-width: 180px; height: auto; display: block;',
+                          },
+                      }),
+                  ]
+                : []),
         ],
         content,
         editorProps: {
@@ -112,6 +126,13 @@ export function RichTextEditor({
         }
 
         editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+    }, [editor])
+
+    const addImage = useCallback(() => {
+        if (!editor) return
+        const url = window.prompt('Enter image URL:')
+        if (!url) return
+        editor.chain().focus().setImage({ src: url.trim(), alt: 'Logo' }).run()
     }, [editor])
 
     if (!mounted || !editor) {
@@ -187,6 +208,16 @@ export function RichTextEditor({
                 >
                     <LinkIcon className="size-4" />
                 </Toggle>
+                {enableImages && (
+                    <Toggle
+                        size="sm"
+                        pressed={false}
+                        onPressedChange={addImage}
+                        aria-label="Insert Image"
+                    >
+                        <ImageIcon className="size-4" />
+                    </Toggle>
+                )}
                 <div className="w-px h-4 bg-border mx-1" />
                 <Toggle
                     size="sm"

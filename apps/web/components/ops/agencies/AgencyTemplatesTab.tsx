@@ -368,6 +368,7 @@ export function AgencyTemplatesTab({
                                         placeholder="Write your invite email content..."
                                         minHeight="220px"
                                         maxHeight="420px"
+                                        enableImages
                                     />
                                 ) : (
                                     <Textarea
@@ -387,6 +388,7 @@ export function AgencyTemplatesTab({
                                     <span>
                                         Available variables: <span className="font-mono">{"{{org_name}}"}</span>,{" "}
                                         <span className="font-mono">{"{{org_slug}}"}</span>,{" "}
+                                        <span className="font-mono">{"{{org_logo_url}}"}</span>,{" "}
                                         <span className="font-mono">{"{{invite_url}}"}</span>,{" "}
                                         <span className="font-mono">{"{{role_title}}"}</span>,{" "}
                                         <span className="font-mono">{"{{inviter_text}}"}</span>,{" "}
