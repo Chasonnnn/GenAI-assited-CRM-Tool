@@ -390,6 +390,34 @@ async def security_headers_middleware(request: Request, call_next):
     # Mitigate Spectre vulnerabilities
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+
+    # Content Security Policy
+    # In dev, allow unsafe-inline/eval for Swagger UI.
+    # In prod, enforce strict restrictions (no inline scripts, no frames).
+    if settings.is_dev:
+        csp = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https:; "
+            "font-src 'self' data:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'"
+        )
+    else:
+        csp = "default-src 'none'; frame-ancestors 'none'"
+    response.headers["Content-Security-Policy"] = csp
+
+    # Modern privacy and security headers
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=(), payment=()"
+
+    # HTTP Strict Transport Security (HSTS) - only in production
+    if settings.is_prod:
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=63072000; includeSubDomains; preload"
+        )
+
     # Avoid caching API responses unless explicitly set by a handler.
     if "Cache-Control" not in response.headers:
         response.headers["Cache-Control"] = "no-store"
