@@ -2793,22 +2793,26 @@ export default function IntegrationsPage() {
                 </Dialog>
 
                 <Dialog open={zapierDialogOpen} onOpenChange={setZapierDialogOpen}>
-                    <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden">
-                        <DialogHeader>
-                            <div className="flex items-start justify-between gap-4">
-                                <div className="space-y-1">
-                                    <DialogTitle>Zapier Configuration</DialogTitle>
-                                    <DialogDescription>
-                                        Manage inbound lead webhooks and outbound stage event delivery.
-                                    </DialogDescription>
+                    <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-hidden p-0">
+                        <div className="flex max-h-[85vh] flex-col">
+                            <DialogHeader className="px-6 pt-6 pb-4">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="space-y-1">
+                                        <DialogTitle>Zapier Configuration</DialogTitle>
+                                        <DialogDescription>
+                                            Manage inbound lead webhooks and outbound stage event delivery.
+                                        </DialogDescription>
+                                    </div>
+                                    <Badge variant={zapierStatusVariant} className="mt-1 flex items-center gap-1">
+                                        <ZapierStatusIcon className="size-3" aria-hidden="true" />
+                                        {zapierStatusLabel}
+                                    </Badge>
                                 </div>
-                                <Badge variant={zapierStatusVariant} className="mt-1 flex items-center gap-1">
-                                    <ZapierStatusIcon className="size-3" aria-hidden="true" />
-                                    {zapierStatusLabel}
-                                </Badge>
+                            </DialogHeader>
+                            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 pb-6">
+                                {zapierDialogOpen ? <ZapierWebhookSection variant="dialog" /> : null}
                             </div>
-                        </DialogHeader>
-                        {zapierDialogOpen ? <ZapierWebhookSection variant="dialog" /> : null}
+                        </div>
                     </DialogContent>
                 </Dialog>
 

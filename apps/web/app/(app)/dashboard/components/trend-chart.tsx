@@ -46,12 +46,28 @@ export function TrendChart() {
     // Transform data for chart
     const chartData = useMemo(() => {
         if (!data?.length) return []
-        return data.map((item) => ({
-            date: parseDateInput(item.date).toLocaleDateString("en-US", {
+        const parsed = data.map((item) => {
+            const dateObj = parseDateInput(item.date)
+            const monthDay = dateObj.toLocaleDateString("en-US", {
                 month: "short",
                 day: "numeric",
-            }),
-            surrogates: item.count,
+            })
+            return {
+                monthDay,
+                year: dateObj.getFullYear(),
+                surrogates: item.count,
+            }
+        })
+        const monthDayCounts = new Map<string, number>()
+        parsed.forEach((item) => {
+            monthDayCounts.set(item.monthDay, (monthDayCounts.get(item.monthDay) || 0) + 1)
+        })
+        return parsed.map((item) => ({
+            date:
+                (monthDayCounts.get(item.monthDay) || 0) > 1
+                    ? `${item.monthDay}, ${item.year}`
+                    : item.monthDay,
+            surrogates: item.surrogates,
         }))
     }, [data])
 
