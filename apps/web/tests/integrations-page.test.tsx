@@ -142,6 +142,10 @@ vi.mock('@/lib/hooks/use-zapier', () => ({
     useDeleteZapierInboundWebhook: () => ({ mutateAsync: mockZapierInboundDelete, isPending: false }),
 }))
 
+vi.mock('@/lib/hooks/use-meta-forms', () => ({
+    useMetaForms: () => ({ data: [], isLoading: false }),
+}))
+
 describe('IntegrationsPage', () => {
     beforeEach(() => {
         mockUseIntegrationHealth.mockReturnValue({
@@ -214,5 +218,15 @@ describe('IntegrationsPage', () => {
         expect(within(aiCard as HTMLElement).getByText('Enabled', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
         expect(within(emailCard as HTMLElement).getByText('Configured', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
         expect(within(zapierCard as HTMLElement).getByText('Active', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
+    })
+
+    it('stacks zapier dialog layout rows in the modal', () => {
+        render(<IntegrationsPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+
+        const dialog = screen.getByRole('dialog')
+        const inboundHeader = within(dialog).getByTestId('zapier-inbound-header')
+        expect(inboundHeader.className).not.toContain('md:flex-row')
     })
 })

@@ -202,9 +202,7 @@ def resolve_user_and_create_session(
                         )
                 except (PermissionError, ValueError) as exc:
                     logger.warning("Failed to accept invite for existing user: %s", exc)
-                    _log_login_failed(
-                        invite.organization_id if invite else None, "invite_invalid"
-                    )
+                    _log_login_failed(invite.organization_id if invite else None, "invite_invalid")
                     return None, "no_membership"
             if not membership:
                 return None, "no_membership"

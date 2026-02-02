@@ -172,6 +172,13 @@ describe('SettingsPage', () => {
         expect(screen.getByText('v0.16.0')).toBeDefined()
     })
 
+    it('shows a friendly role label instead of the raw role value', () => {
+        render(<SettingsPage />)
+
+        expect(screen.getByText('Developer')).toBeInTheDocument()
+        expect(screen.queryByText('developer')).not.toBeInTheDocument()
+    })
+
     it('shows org settings load error and disables save until retry succeeds', async () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
         mockSearchParams = new URLSearchParams('tab=email-signature')

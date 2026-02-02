@@ -325,9 +325,7 @@ def build_appointment_variables(
         "staff_email": staff.email if staff else "",
         # Org info
         "org_name": org_service.get_org_display_name(org) if org else "",
-        "org_logo_url": (
-            media_service.get_signed_media_url(org.signature_logo_url) if org else ""
-        )
+        "org_logo_url": (media_service.get_signed_media_url(org.signature_logo_url) if org else "")
         or "",
         # Links - use correct self-service paths (frontend routes)
         "reschedule_url": (

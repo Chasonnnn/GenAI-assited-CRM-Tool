@@ -1390,6 +1390,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
         }
     }
     const showHeading = variant === "page"
+    const isDialog = variant === "dialog"
     const containerClass = showHeading ? "border-t pt-6" : "space-y-4"
     const zapierForms = metaForms.filter(
         (form) => form.page_id === "zapier" || form.form_external_id?.startsWith("zapier-")
@@ -1454,7 +1455,10 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
 
                 <CardContent className="space-y-6">
                     <div className="space-y-4">
-                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div
+                            className={`flex flex-col gap-3 ${isDialog ? "" : "md:flex-row md:items-center md:justify-between"}`}
+                            data-testid="zapier-inbound-header"
+                        >
                             <div>
                                 <Label>Inbound Webhooks</Label>
                                 <p className="text-xs text-muted-foreground">
@@ -1490,7 +1494,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                     const canDelete = settings.inbound_webhooks.length > 1
                                     return (
                                     <div key={webhook.webhook_id} className="space-y-3 rounded-md border p-4">
-                                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                        <div className={`flex flex-col gap-3 ${isDialog ? "" : "md:flex-row md:items-start md:justify-between"}`}>
                                             <div className="flex-1 space-y-2">
                                                 <Label>Label</Label>
                                                 <Input
@@ -1665,7 +1669,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                             <div className="space-y-2">
                                 <Label>Webhook</Label>
                                 <Select value={fieldPasteWebhookId} onValueChange={(value) => setFieldPasteWebhookId(value ?? "")}>
-                                    <SelectTrigger className="w-full md:w-72" aria-label="Select webhook">
+                                    <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-72"} aria-label="Select webhook">
                                         <SelectValue placeholder="Select webhook" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1826,7 +1830,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                 {eventMapping.map((item, index) => (
                                     <div
                                         key={item.stage_slug}
-                                        className="flex flex-col gap-2 rounded-md border p-3 md:flex-row md:items-center"
+                                        className={`flex flex-col gap-2 rounded-md border p-3 ${isDialog ? "" : "md:flex-row md:items-center"}`}
                                     >
                                         <div className="w-32 text-sm font-medium">
                                             {item.stage_slug.replace(/_/g, " ")}
@@ -1863,7 +1867,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                             </div>
                         </div>
 
-                        <div className="flex flex-col gap-2 md:flex-row md:items-center">
+                        <div className={`flex flex-col gap-2 ${isDialog ? "" : "md:flex-row md:items-center"}`}>
                             <Button onClick={handleSaveOutbound} disabled={updateOutbound.isPending}>
                                 {updateOutbound.isPending ? (
                                     <>
@@ -1874,12 +1878,12 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                     "Save Outbound Settings"
                                 )}
                             </Button>
-                            <div className="flex flex-1 items-center gap-2">
+                            <div className={isDialog ? "flex flex-col gap-2" : "flex flex-1 items-center gap-2"}>
                                 <Select
                                     value={selectedOutboundStage}
                                     onValueChange={(value) => setSelectedOutboundStage(value ?? '')}
                                 >
-                                    <SelectTrigger className="w-full md:w-56" aria-label="Select stage">
+                                    <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-56"} aria-label="Select stage">
                                         <SelectValue placeholder="Select stage" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1894,6 +1898,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                     variant="outline"
                                     onClick={handleOutboundTest}
                                     disabled={sendOutboundTest.isPending || !outboundEnabled}
+                                    className={isDialog ? "w-full" : undefined}
                                 >
                                     {sendOutboundTest.isPending ? (
                                         <>

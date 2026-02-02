@@ -46,6 +46,13 @@ import type { SocialLink } from "@/lib/api/signature"
 import { toast } from "sonner"
 import { getOrgSignaturePreview } from "@/lib/api/signature"
 
+const ROLE_LABELS: Record<string, string> = {
+  intake_specialist: "Intake Specialist",
+  case_manager: "Case Manager",
+  admin: "Admin",
+  developer: "Developer",
+}
+
 // =============================================================================
 // Profile Section with Avatar Upload, Phone, Title
 // =============================================================================
@@ -230,7 +237,9 @@ function ProfileSection() {
         <div className="space-y-2">
           <Label>Role</Label>
           <div>
-            <Badge className="bg-primary/10 text-primary border-primary/20">{user?.role || "unknown"}</Badge>
+            <Badge className="bg-primary/10 text-primary border-primary/20">
+              {ROLE_LABELS[user?.role ?? ""] || "Unknown"}
+            </Badge>
           </div>
         </div>
       </div>

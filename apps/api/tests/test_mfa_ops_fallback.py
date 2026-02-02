@@ -65,9 +65,7 @@ async def test_mfa_status_allows_platform_admin_without_membership(db, test_org)
 
 
 @pytest.mark.asyncio
-async def test_mfa_complete_allows_platform_admin_without_membership(
-    db, test_org, monkeypatch
-):
+async def test_mfa_complete_allows_platform_admin_without_membership(db, test_org, monkeypatch):
     user = User(
         id=uuid.uuid4(),
         email="ops-admin-complete@test.com",
