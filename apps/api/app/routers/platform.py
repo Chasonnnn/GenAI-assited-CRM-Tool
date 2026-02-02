@@ -969,7 +969,11 @@ async def upload_platform_email_branding_logo(
         raise HTTPException(status_code=400, detail=f"Invalid image file: {str(exc)}")
 
     old_logo_url = branding.logo_url
-    new_logo_url = _upload_platform_logo_to_storage(final_bytes, extension)
+    try:
+        new_logo_url = _upload_platform_logo_to_storage(final_bytes, extension)
+    except Exception as exc:
+        logger.exception("Failed to upload platform email branding logo", exc_info=exc)
+        raise HTTPException(status_code=500, detail="Failed to upload logo")
     branding.logo_url = new_logo_url
     db.commit()
 
