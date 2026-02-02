@@ -249,6 +249,7 @@ class TestAdminImports:
                     "buffer_before_minutes": 10,
                     "buffer_after_minutes": 5,
                     "meeting_mode": "zoom",
+                    "meeting_modes": ["zoom", "google_meet"],
                     "reminder_hours_before": 12,
                     "is_active": True,
                     "created_at": "2025-01-05T00:00:00+00:00",
@@ -419,6 +420,7 @@ class TestAdminImports:
         assert appointment_type.user_id == test_user.id
         assert appointment_type.duration_minutes == 45
         assert appointment_type.meeting_mode == "zoom"
+        assert appointment_type.meeting_modes == ["zoom", "google_meet"]
 
         availability_rule = (
             db.query(AvailabilityRule).filter(AvailabilityRule.id == availability_rule_id).first()

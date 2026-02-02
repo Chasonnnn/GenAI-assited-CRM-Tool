@@ -242,6 +242,7 @@ class TestAdminExports:
             buffer_before_minutes=10,
             buffer_after_minutes=5,
             meeting_mode="zoom",
+            meeting_modes=["zoom", "google_meet"],
             reminder_hours_before=12,
             is_active=True,
             created_at=created_at,

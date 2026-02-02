@@ -542,6 +542,7 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "buffer_before_minutes": appointment_type.buffer_before_minutes,
             "buffer_after_minutes": appointment_type.buffer_after_minutes,
             "meeting_mode": appointment_type.meeting_mode,
+            "meeting_modes": appointment_type.meeting_modes or [appointment_type.meeting_mode],
             "meeting_location": appointment_type.meeting_location,
             "dial_in_number": appointment_type.dial_in_number,
             "auto_approve": appointment_type.auto_approve,

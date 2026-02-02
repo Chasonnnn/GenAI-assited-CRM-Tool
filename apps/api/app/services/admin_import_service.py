@@ -511,6 +511,12 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             buffer_before_minutes=appointment_type_data.get("buffer_before_minutes") or 0,
             buffer_after_minutes=appointment_type_data.get("buffer_after_minutes") or 0,
             meeting_mode=appointment_type_data.get("meeting_mode"),
+            meeting_modes=appointment_type_data.get("meeting_modes")
+            or (
+                [appointment_type_data.get("meeting_mode")]
+                if appointment_type_data.get("meeting_mode")
+                else None
+            ),
             meeting_location=appointment_type_data.get("meeting_location"),
             dial_in_number=appointment_type_data.get("dial_in_number"),
             auto_approve=appointment_type_data.get("auto_approve", False),
