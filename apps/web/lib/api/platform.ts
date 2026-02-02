@@ -360,6 +360,14 @@ export function updatePlatformEmailBranding(
     return api.put<PlatformEmailBranding>('/platform/email/branding', data);
 }
 
+export function uploadPlatformEmailBrandingLogo(
+    file: File
+): Promise<PlatformEmailBranding> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post<PlatformEmailBranding>('/platform/email/branding/logo', formData);
+}
+
 /**
  * List platform system email templates.
  */

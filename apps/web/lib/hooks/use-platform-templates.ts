@@ -26,6 +26,7 @@ import {
     sendPlatformSystemEmailCampaign,
     getPlatformEmailBranding,
     updatePlatformEmailBranding,
+    uploadPlatformEmailBrandingLogo,
     type PlatformEmailTemplateCreate,
     type PlatformEmailTemplateUpdate,
     type PlatformFormTemplateCreate,
@@ -255,6 +256,16 @@ export function useUpdatePlatformEmailBranding() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: (payload: PlatformEmailBranding) => updatePlatformEmailBranding(payload),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.branding() })
+        },
+    })
+}
+
+export function useUploadPlatformEmailBrandingLogo() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (file: File) => uploadPlatformEmailBrandingLogo(file),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: platformTemplateKeys.branding() })
         },

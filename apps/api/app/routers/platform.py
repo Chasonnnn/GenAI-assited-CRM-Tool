@@ -4,10 +4,25 @@ All endpoints require platform admin access via require_platform_admin dependenc
 Platform admins can manage organizations, users, and subscriptions across all tenants.
 """
 
+import io
 import logging
+import mimetypes
+import os
+import uuid as uuid_lib
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
+from PIL import Image
 from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy.orm import Session
 
@@ -20,7 +35,7 @@ from app.core.deps import (
 )
 from app.core.csrf import set_csrf_cookie, CSRF_COOKIE_NAME, get_csrf_cookie
 from app.core.config import settings
-from app.services import platform_service, session_service
+from app.services import platform_service, session_service, storage_client, storage_url_service
 from app.db.enums import Role
 from app.schemas.platform_templates import (
     PlatformEmailTemplateCreate,
@@ -750,6 +765,99 @@ def resend_invite(
 # Platform Email Branding
 # =============================================================================
 
+PLATFORM_LOGO_MAX_SIZE_BYTES = 50 * 1024  # 50KB
+PLATFORM_LOGO_UPLOAD_BYTES = 1 * 1024 * 1024  # 1MB
+PLATFORM_LOGO_MAX_WIDTH = 200
+PLATFORM_LOGO_MAX_HEIGHT = 80
+PLATFORM_LOGO_ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}
+PLATFORM_LOGO_LOCAL_PREFIX = "/platform/email/branding/logo/local/"
+
+
+def _platform_logo_prefix_api_base(path: str) -> str:
+    if not path.startswith("/"):
+        return path
+    base = (settings.API_BASE_URL or "").rstrip("/")
+    if not base:
+        return path
+    return f"{base}{path}"
+
+
+def _platform_logo_strip_api_base(url: str) -> str:
+    base = (settings.API_BASE_URL or "").rstrip("/")
+    if base and url.startswith(base):
+        return url[len(base) :]
+    return url
+
+
+def _platform_logo_build_local_url(storage_key: str) -> str:
+    return _platform_logo_prefix_api_base(f"{PLATFORM_LOGO_LOCAL_PREFIX}{storage_key}")
+
+
+def _platform_logo_extract_local_storage_key(logo_url: str) -> str | None:
+    path = _platform_logo_strip_api_base(logo_url)
+    if path.startswith(PLATFORM_LOGO_LOCAL_PREFIX):
+        return path.replace(PLATFORM_LOGO_LOCAL_PREFIX, "", 1)
+    return None
+
+
+def _get_platform_logo_storage_backend() -> str:
+    return getattr(settings, "STORAGE_BACKEND", "local")
+
+
+def _get_platform_logo_local_path() -> str:
+    import tempfile
+
+    path = getattr(settings, "LOCAL_STORAGE_PATH", None)
+    if not path:
+        path = os.path.join(tempfile.gettempdir(), "crm-logos")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _upload_platform_logo_to_storage(file_bytes: bytes, extension: str) -> str:
+    backend = _get_platform_logo_storage_backend()
+    filename = f"logos/platform/{uuid_lib.uuid4()}.{extension}"
+
+    if backend == "s3":
+        bucket = getattr(settings, "S3_BUCKET", "crm-attachments")
+        s3 = storage_client.get_s3_client()
+        s3.put_object(
+            Bucket=bucket,
+            Key=filename,
+            Body=file_bytes,
+            ContentType=f"image/{extension}",
+        )
+        return storage_url_service.build_public_url(bucket, filename)
+
+    local_path = os.path.join(_get_platform_logo_local_path(), filename)
+    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+    with open(local_path, "wb") as f:
+        f.write(file_bytes)
+    return _platform_logo_build_local_url(filename)
+
+
+def _delete_platform_logo_from_storage(logo_url: str) -> None:
+    if not logo_url:
+        return
+
+    backend = _get_platform_logo_storage_backend()
+    try:
+        if backend == "s3":
+            bucket = getattr(settings, "S3_BUCKET", "crm-attachments")
+            key = storage_url_service.extract_storage_key(logo_url, bucket)
+            if not key:
+                return
+            s3 = storage_client.get_s3_client()
+            s3.delete_object(Bucket=bucket, Key=key)
+        else:
+            storage_key = _platform_logo_extract_local_storage_key(logo_url)
+            if storage_key:
+                local_path = os.path.join(_get_platform_logo_local_path(), storage_key)
+                if os.path.exists(local_path):
+                    os.remove(local_path)
+    except Exception as exc:
+        logger.debug("Failed to delete platform logo %s: %s", logo_url, exc, exc_info=exc)
+
 
 @router.get("/email/branding", response_model=PlatformEmailBrandingRead)
 def get_platform_email_branding(
@@ -762,6 +870,125 @@ def get_platform_email_branding(
     return PlatformEmailBrandingRead(logo_url=branding.logo_url)
 
 
+@router.get("/email/branding/logo/local/{storage_key:path}")
+async def get_platform_logo_local(
+    storage_key: str,
+    db: Session = Depends(get_db),
+):
+    from fastapi.responses import FileResponse
+    from app.services import platform_branding_service
+
+    if "\\" in storage_key:
+        raise HTTPException(status_code=404, detail="Logo not found")
+
+    normalized = os.path.normpath(storage_key)
+    if not normalized.startswith("logos/platform/"):
+        raise HTTPException(status_code=404, detail="Logo not found")
+    if normalized.startswith("..") or normalized.startswith("/"):
+        raise HTTPException(status_code=404, detail="Logo not found")
+
+    branding = platform_branding_service.get_branding(db)
+    stored_url = branding.logo_url or ""
+    expected_url = f"{PLATFORM_LOGO_LOCAL_PREFIX}{normalized}"
+    if _platform_logo_strip_api_base(stored_url) != expected_url:
+        raise HTTPException(status_code=404, detail="Logo not found")
+
+    base_dir = _get_platform_logo_local_path()
+    file_path = os.path.abspath(os.path.join(base_dir, normalized))
+    base_abs = os.path.abspath(base_dir)
+    if os.path.commonpath([file_path, base_abs]) != base_abs:
+        raise HTTPException(status_code=404, detail="Logo not found")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Logo not found")
+
+    media_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
+    return FileResponse(file_path, media_type=media_type)
+
+
+@router.post(
+    "/email/branding/logo",
+    response_model=PlatformEmailBrandingRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+async def upload_platform_email_branding_logo(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> PlatformEmailBrandingRead:
+    from app.services import platform_branding_service
+
+    branding = platform_branding_service.get_branding(db)
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+
+    extension = file.filename.rsplit(".", 1)[-1].lower()
+    if extension not in PLATFORM_LOGO_ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed: {', '.join(PLATFORM_LOGO_ALLOWED_EXTENSIONS)}",
+        )
+
+    content = await file.read()
+    if len(content) > PLATFORM_LOGO_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="File too large (max 1MB)")
+
+    try:
+        img = Image.open(io.BytesIO(content))
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+            extension = "jpg"
+
+        if img.width > PLATFORM_LOGO_MAX_WIDTH or img.height > PLATFORM_LOGO_MAX_HEIGHT:
+            img.thumbnail(
+                (PLATFORM_LOGO_MAX_WIDTH, PLATFORM_LOGO_MAX_HEIGHT),
+                Image.Resampling.LANCZOS,
+            )
+
+        output = io.BytesIO()
+        if extension == "png":
+            img.save(output, format="PNG", optimize=True)
+        else:
+            quality = 85
+            while quality >= 30:
+                output.seek(0)
+                output.truncate()
+                img.save(output, format="JPEG", quality=quality, optimize=True)
+                if output.tell() <= PLATFORM_LOGO_MAX_SIZE_BYTES:
+                    break
+                quality -= 10
+
+        final_bytes = output.getvalue()
+        if len(final_bytes) > PLATFORM_LOGO_MAX_SIZE_BYTES:
+            raise HTTPException(status_code=400, detail="Image too complex to compress under 50KB")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid image file: {str(exc)}")
+
+    old_logo_url = branding.logo_url
+    new_logo_url = _upload_platform_logo_to_storage(final_bytes, extension)
+    branding.logo_url = new_logo_url
+    db.commit()
+
+    if old_logo_url:
+        background_tasks.add_task(_delete_platform_logo_from_storage, old_logo_url)
+
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="email_platform_branding.logo_upload",
+        target_org_id=None,
+        metadata={"logo_url_set": True},
+        request=request,
+    )
+    db.commit()
+
+    return PlatformEmailBrandingRead(logo_url=branding.logo_url)
+
+
 @router.put("/email/branding", dependencies=[Depends(require_csrf_header)])
 def update_platform_email_branding(
     body: PlatformEmailBrandingUpdate,
@@ -771,7 +998,12 @@ def update_platform_email_branding(
 ) -> PlatformEmailBrandingRead:
     from app.services import platform_branding_service
 
-    branding = platform_branding_service.update_branding(db, logo_url=body.logo_url)
+    logo_url = body.logo_url
+    if logo_url:
+        logo_url = logo_url.strip()
+        if logo_url.startswith(PLATFORM_LOGO_LOCAL_PREFIX):
+            logo_url = _platform_logo_prefix_api_base(logo_url)
+    branding = platform_branding_service.update_branding(db, logo_url=logo_url or None)
     platform_service.log_admin_action(
         db=db,
         actor_id=session.user_id,
