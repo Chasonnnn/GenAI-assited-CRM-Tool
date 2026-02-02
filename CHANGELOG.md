@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.68.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.67.0...surrogacy-crm-platform-v0.68.0) (2026-02-02)
+
+
+### Features
+
+* **templates:** add jotform application template and improve form builder versioning ([b3bf815](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b3bf8159e22133e2dd59c411b2807deabf723e6a))
+
+
+### Bug Fixes
+
+* **db:** reassign orphaned surrogates to unassigned queue ([5d190d4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5d190d443f9d2984a557d47dcfb69830af13136c))
+* **web:** improve dashboard trend chart stability and lookback windows ([4e6c297](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4e6c297f8bc353584b42c1437b0cd86a04f8efec))
+
 ## [0.67.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.66.0...surrogacy-crm-platform-v0.67.0) (2026-02-02)
 
 
