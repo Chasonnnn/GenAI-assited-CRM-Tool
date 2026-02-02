@@ -245,6 +245,8 @@ const sidebarOpen = useUIStore(s => s.sidebarOpen)
 ### TDD Rule
 Write or update tests FIRST. Start with a failing test that captures the change, then implement code until it passes. If behavior changes, update tests in the same PR.
 
+When I report a bug, don't start by trying to fix it. Instead, start by writing a test that reproduces the bug. Then, have subagents try to fix the bug and prove it with a passing test.
+
 ### Backend Tests
 ```python
 # tests/test_surrogates.py
