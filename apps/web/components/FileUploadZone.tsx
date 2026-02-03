@@ -226,6 +226,7 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                                     onClick={() => handleDownload(attachment.id)}
                                     disabled={attachment.quarantined || downloadMutation.isPending}
                                     title={attachment.quarantined ? "Pending virus scan" : "Download"}
+                                    aria-label={`Download ${attachment.filename}`}
                                 >
                                     <Download className="size-4" />
                                 </Button>
@@ -235,6 +236,7 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                                     onClick={() => handleDelete(attachment.id)}
                                     disabled={deleteMutation.isPending}
                                     className="text-destructive hover:text-destructive"
+                                    aria-label={`Delete ${attachment.filename}`}
                                 >
                                     <Trash2 className="size-4" />
                                 </Button>
