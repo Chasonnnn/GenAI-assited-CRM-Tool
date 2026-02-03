@@ -6,7 +6,7 @@ from uuid import UUID
 
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import (
@@ -16,7 +16,7 @@ from app.db.enums import (
     OwnerType,
     Role,
 )
-from app.db.models import Surrogate, SurrogateStatusHistory, User
+from app.db.models import PipelineStage, Queue, Surrogate, SurrogateStatusHistory, User
 from app.schemas.surrogate import SurrogateCreate, SurrogateUpdate
 from app.utils.normalization import (
     extract_email_domain,
@@ -861,9 +861,9 @@ def list_surrogates(
     query = (
         db.query(Surrogate)
         .options(
-            selectinload(Surrogate.stage),
-            selectinload(Surrogate.owner_user),
-            selectinload(Surrogate.owner_queue),
+            joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
+            joinedload(Surrogate.owner_user).load_only(User.display_name),
+            joinedload(Surrogate.owner_queue).load_only(Queue.name),
         )
         .filter(Surrogate.organization_id == org_id)
     )
@@ -1036,9 +1036,9 @@ def list_claim_queue(
     query = (
         db.query(Surrogate)
         .options(
-            selectinload(Surrogate.stage),
-            selectinload(Surrogate.owner_user),
-            selectinload(Surrogate.owner_queue),
+            joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
+            joinedload(Surrogate.owner_user).load_only(User.display_name),
+            joinedload(Surrogate.owner_queue).load_only(Queue.name),
         )
         .filter(
             Surrogate.organization_id == org_id,
