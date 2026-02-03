@@ -74,6 +74,22 @@ function getCookieOrg(request: NextRequest): OrgRecord | null {
     return { id, slug, name };
 }
 
+function addSecurityHeaders(response: NextResponse) {
+    const headers = response.headers;
+    headers.set('X-Frame-Options', 'DENY');
+    headers.set('X-Content-Type-Options', 'nosniff');
+    headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    headers.set(
+        'Permissions-Policy',
+        'camera=(), microphone=(), geolocation=(), browsing-topics=()'
+    );
+    headers.set(
+        'Strict-Transport-Security',
+        'max-age=31536000; includeSubDomains; preload'
+    );
+    return response;
+}
+
 function attachOrgHeaders(
     request: NextRequest,
     org: OrgRecord
@@ -138,23 +154,23 @@ export async function proxy(request: NextRequest) {
             hostname.endsWith('.localhost') ||
             hostname.endsWith('.test'))
     ) {
-        return NextResponse.next();
+        return addSecurityHeaders(NextResponse.next());
     }
 
     const opsHost = `ops.${PLATFORM_BASE_DOMAIN}`;
     if (hostname === opsHost) {
-        return NextResponse.next();
+        return addSecurityHeaders(NextResponse.next());
     }
 
     // Validate hostname format: {slug}.surrogacyforce.com
     if (!hostname.endsWith(`.${PLATFORM_BASE_DOMAIN}`)) {
         if (hostname === PLATFORM_BASE_DOMAIN) {
-            return NextResponse.next();
+            return addSecurityHeaders(NextResponse.next());
         }
         // Unknown domain - show org not found
         const url = request.nextUrl.clone();
         url.pathname = '/org-not-found';
-        return NextResponse.rewrite(url);
+        return addSecurityHeaders(NextResponse.rewrite(url));
     }
 
     const now = Date.now();
@@ -162,7 +178,7 @@ export async function proxy(request: NextRequest) {
     const cookieOrg = getCookieOrg(request);
     if (cookieOrg) {
         const { response } = attachOrgHeaders(request, cookieOrg);
-        return response;
+        return addSecurityHeaders(response);
     }
 
     const cachedEntry = getCachedEntry(hostname, now);
@@ -172,11 +188,11 @@ export async function proxy(request: NextRequest) {
             url.pathname = '/org-not-found';
             const response = NextResponse.rewrite(url);
             clearOrgCookies(response, secureCookies);
-            return response;
+            return addSecurityHeaders(response);
         }
 
         const { response } = attachOrgHeaders(request, cachedEntry.value);
-        return response;
+        return addSecurityHeaders(response);
     }
 
     try {
@@ -201,7 +217,7 @@ export async function proxy(request: NextRequest) {
             url.pathname = '/org-not-found';
             const response = NextResponse.rewrite(url);
             clearOrgCookies(response, secureCookies);
-            return response;
+            return addSecurityHeaders(response);
         }
 
         if (!res.ok) {
@@ -216,12 +232,12 @@ export async function proxy(request: NextRequest) {
                     url.pathname = '/org-not-found';
                     const response = NextResponse.rewrite(url);
                     clearOrgCookies(response, secureCookies);
-                    return response;
+                    return addSecurityHeaders(response);
                 }
                 const { response } = attachOrgHeaders(request, staleEntry.value);
-                return response;
+                return addSecurityHeaders(response);
             }
-            return NextResponse.next();
+            return addSecurityHeaders(NextResponse.next());
         }
 
         const org = (await res.json()) as OrgRecord;
@@ -230,7 +246,7 @@ export async function proxy(request: NextRequest) {
         // Pass org context via request headers for server components
         const { response } = attachOrgHeaders(request, org);
         setOrgCookies(response, org, secureCookies);
-        return response;
+        return addSecurityHeaders(response);
     } catch (error) {
         // Network error - let the request through to avoid blocking users
         console.error(
@@ -244,12 +260,12 @@ export async function proxy(request: NextRequest) {
                 url.pathname = '/org-not-found';
                 const response = NextResponse.rewrite(url);
                 clearOrgCookies(response, secureCookies);
-                return response;
+                return addSecurityHeaders(response);
             }
             const { response } = attachOrgHeaders(request, staleEntry.value);
-            return response;
+            return addSecurityHeaders(response);
         }
-        return NextResponse.next();
+        return addSecurityHeaders(NextResponse.next());
     }
 }
 

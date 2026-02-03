@@ -1,14 +1,17 @@
-import { describe, it, expect } from "vitest";
-import { middleware } from "../middleware";
+import { describe, it, expect, vi } from "vitest";
+import { proxy } from "../proxy";
 import { NextRequest } from "next/server";
 
-describe("Security Middleware", () => {
-  it("adds security headers to the response", () => {
+// Mock environment variables
+vi.stubEnv("PLATFORM_BASE_DOMAIN", "surrogacyforce.com");
+
+describe("Proxy Middleware", () => {
+  it("adds security headers to the response", async () => {
     // Create a mock request
     const request = new NextRequest(new URL("http://localhost:3000/"));
 
-    // Call the middleware
-    const response = middleware(request);
+    // Call the middleware (proxy)
+    const response = await proxy(request);
 
     // Assert headers are present
     expect(response.headers.get("X-Frame-Options")).toBe("DENY");
