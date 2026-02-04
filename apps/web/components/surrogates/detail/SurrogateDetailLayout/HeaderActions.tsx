@@ -202,10 +202,11 @@ export function HeaderActions() {
                 )}
 
             <DropdownMenu>
-                <DropdownMenuTrigger className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}>
-                    <span className="inline-flex items-center justify-center">
-                        <MoreVerticalIcon className="h-4 w-4" />
-                    </span>
+                <DropdownMenuTrigger
+                    className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}
+                    aria-label="More actions"
+                >
+                    <MoreVerticalIcon className="h-4 w-4" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => openDialog({ type: "edit_surrogate" })}>
