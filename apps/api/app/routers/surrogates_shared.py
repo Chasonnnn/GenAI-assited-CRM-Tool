@@ -11,11 +11,19 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
     """Convert Surrogate model to SurrogateRead schema with joined user names."""
     owner_name = None
     if surrogate.owner_type == OwnerType.USER.value:
-        user = user_service.get_user_by_id(db, surrogate.owner_id)
-        owner_name = user.display_name if user else None
+        # Optimization: use eager-loaded relationship if available
+        if surrogate.owner_user:
+            owner_name = surrogate.owner_user.display_name
+        else:
+            user = user_service.get_user_by_id(db, surrogate.owner_id)
+            owner_name = user.display_name if user else None
     elif surrogate.owner_type == OwnerType.QUEUE.value:
-        queue = queue_service.get_queue(db, surrogate.organization_id, surrogate.owner_id)
-        owner_name = queue.name if queue else None
+        # Optimization: use eager-loaded relationship if available
+        if surrogate.owner_queue:
+            owner_name = surrogate.owner_queue.name
+        else:
+            queue = queue_service.get_queue(db, surrogate.organization_id, surrogate.owner_id)
+            owner_name = queue.name if queue else None
 
     return SurrogateRead(
         id=surrogate.id,
