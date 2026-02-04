@@ -1,5 +1,6 @@
 """Form submission service for tokens, submissions, and review flows."""
 
+import mimetypes
 import re
 import secrets
 import uuid
@@ -41,6 +42,26 @@ from app.services import job_service
 DEFAULT_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 DEFAULT_MAX_FILE_COUNT = 10
 PER_FILE_FIELD_MAX_COUNT = 5
+
+# Extensions that are always blocked for security
+BLOCKED_EXTENSIONS = {
+    "exe",
+    "dll",
+    "com",
+    "bat",
+    "cmd",
+    "sh",
+    "vbs",
+    "js",
+    "jsp",
+    "php",
+    "pl",
+    "py",
+    "cgi",
+    "ps1",
+    "jar",
+    "msi",
+}
 
 SURROGATE_FIELD_TYPES: dict[str, str] = {
     "full_name": "str",
@@ -929,10 +950,27 @@ def _validate_file(form: Form, file: UploadFile) -> None:
         max_mb = max_size / (1024 * 1024)
         raise ValueError(f"File size exceeds {max_mb:.0f} MB limit")
 
+    # Check for blocked extensions
+    filename = file.filename or ""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext in BLOCKED_EXTENSIONS:
+        raise ValueError(f"File extension '.{ext}' not allowed")
+
     allowed = form.allowed_mime_types
     if allowed:
+        # Validate provided Content-Type matches allowed list
         if not _mime_allowed(file.content_type or "", allowed):
             raise ValueError(f"Content type '{file.content_type}' not allowed")
+
+        # Verify extension matches allowed types (prevent extension spoofing)
+        if not mimetypes.inited:
+            mimetypes.init()
+
+        guessed_type, _ = mimetypes.guess_type(filename)
+        if guessed_type:
+            # If we can guess the type from extension, it must be allowed
+            if not _mime_allowed(guessed_type, allowed):
+                raise ValueError(f"File extension '.{ext}' does not match allowed types")
 
 
 def _mime_allowed(content_type: str, allowed: list[str]) -> bool:
