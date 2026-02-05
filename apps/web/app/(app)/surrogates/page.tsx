@@ -904,10 +904,11 @@ export default function SurrogatesPage() {
                                                 </TableCell>
                                                 <TableCell>
                                                     <DropdownMenu>
-                                                        <DropdownMenuTrigger className="inline-flex items-center justify-center size-8 p-0 rounded-md hover:bg-accent hover:text-accent-foreground">
-                                                            <span className="inline-flex items-center justify-center">
-                                                                <MoreVerticalIcon className="size-4" />
-                                                            </span>
+                                                        <DropdownMenuTrigger
+                                                            className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "size-8")}
+                                                            aria-label={`Actions for ${surrogateItem.full_name}`}
+                                                        >
+                                                            <MoreVerticalIcon className="size-4" />
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end">
                                                             <DropdownMenuItem onClick={() => window.location.href = `/surrogates/${surrogateItem.id}`}>
