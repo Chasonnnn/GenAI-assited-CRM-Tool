@@ -56,6 +56,26 @@ ALLOWED_MIME_TYPES = {
     "video/mp4",
     "video/quicktime",
 }
+
+# Strict mapping of MIME types to allowed extensions to prevent spoofing
+MIME_TYPE_MAP = {
+    # Images
+    "image/png": {"png"},
+    "image/jpeg": {"jpg", "jpeg"},
+    # Documents
+    "application/pdf": {"pdf"},
+    "application/msword": {"doc"},
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {"docx"},
+    "application/vnd.ms-excel": {"xls"},
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {"xlsx"},
+    # Data
+    "text/csv": {"csv"},
+    "application/csv": {"csv"},
+    # Video
+    "video/mp4": {"mp4"},
+    "video/quicktime": {"mov"},
+}
+
 MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
 SIGNED_URL_EXPIRY_SECONDS = 300  # 5 minutes
 
@@ -122,6 +142,13 @@ def validate_file(
     # Check MIME type
     if content_type not in allowed_mimes:
         return False, f"Content type '{content_type}' not allowed"
+
+    # Ensure extension matches MIME type (prevent spoofing)
+    # Note: We use the global map, but if allowed_extensions/allowed_mime_types
+    # were customized, this check still ensures consistency within supported types.
+    valid_extensions = MIME_TYPE_MAP.get(content_type)
+    if valid_extensions and ext not in valid_extensions:
+        return False, f"File extension '.{ext}' does not match content type '{content_type}'"
 
     # Check size
     if file_size > MAX_FILE_SIZE_BYTES:
