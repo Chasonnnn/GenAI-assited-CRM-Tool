@@ -210,7 +210,9 @@ class CreateSystemEmailTemplateRequest(BaseModel):
         if key == "new":
             raise ValueError("system_key 'new' is reserved")
         if not re.match(r"^[a-z0-9_]+$", key):
-            raise ValueError("system_key must contain only lowercase letters, numbers, and underscores")
+            raise ValueError(
+                "system_key must contain only lowercase letters, numbers, and underscores"
+            )
         if len(key) < 2 or len(key) > 100:
             raise ValueError("system_key must be between 2 and 100 characters")
         return key
@@ -1181,9 +1183,7 @@ def list_platform_system_email_templates(
     db.commit()
 
     templates = (
-        db.query(PlatformSystemEmailTemplate)
-        .order_by(PlatformSystemEmailTemplate.name.asc())
-        .all()
+        db.query(PlatformSystemEmailTemplate).order_by(PlatformSystemEmailTemplate.name.asc()).all()
     )
     return [_to_read(template) for template in templates]
 

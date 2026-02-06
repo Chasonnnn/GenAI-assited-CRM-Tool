@@ -65,9 +65,7 @@ async def test_platform_system_template_variables_endpoint_allows_custom_key(
     test_user.is_platform_admin = True
     db.commit()
 
-    res = await authed_client.get(
-        "/platform/email/system-templates/custom_announcement/variables"
-    )
+    res = await authed_client.get("/platform/email/system-templates/custom_announcement/variables")
     assert res.status_code == 200
     variables = res.json()
 
