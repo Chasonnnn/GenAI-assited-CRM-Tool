@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     ForeignKey,
     Index,
     Integer,
@@ -68,6 +69,16 @@ class Campaign(Base):
     filter_criteria: Mapped[dict] = mapped_column(
         JSONB, default=dict, server_default="{}", nullable=False
     )  # {stage_id, state, created_after, tags, etc.}
+
+    # Suppression behavior
+    # Default: exclude opt-outs, bounces, complaints, etc.
+    # Optionally allow opt-outs (still excludes bounces/complaints).
+    include_unsubscribed: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default=text("false"),
+        nullable=False,
+    )
 
     # Scheduling
     scheduled_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)

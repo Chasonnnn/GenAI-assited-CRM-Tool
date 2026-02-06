@@ -24,28 +24,12 @@ async def send_email_async(email_log: EmailLog, db=None) -> str:
     For campaign emails: uses the org's configured provider (Resend/Gmail).
     For other emails: uses the global RESEND_API_KEY if available.
     """
-    # Global suppression check (best-effort)
-    if db:
-        try:
-            if email_service.is_email_suppressed(
-                db,
-                email_log.organization_id,
-                email_log.recipient_email,
-            ):
-                logger.info(
-                    "Email suppressed for email_log=%s recipient=%s",
-                    email_log.id,
-                    mask_email(email_log.recipient_email),
-                )
-                return "skipped"
-        except Exception as exc:
-            logger.warning("Suppression check failed: %s", exc)
-
     # Check if this is a campaign email and get the provider
     campaign_provider = None
     campaign_run = None
+    include_unsubscribed = False
     if db:
-        from app.db.models import CampaignRecipient, CampaignRun
+        from app.db.models import CampaignRecipient, CampaignRun, Campaign
 
         # Find linked campaign recipient
         campaign_recipient = (
@@ -57,8 +41,32 @@ async def send_email_async(email_log: EmailLog, db=None) -> str:
             campaign_run = (
                 db.query(CampaignRun).filter(CampaignRun.id == campaign_recipient.run_id).first()
             )
-            if campaign_run and campaign_run.email_provider:
+            if campaign_run:
                 campaign_provider = campaign_run.email_provider
+                campaign = (
+                    db.query(Campaign).filter(Campaign.id == campaign_run.campaign_id).first()
+                )
+                include_unsubscribed = bool(
+                    getattr(campaign, "include_unsubscribed", False) if campaign else False
+                )
+
+    # Global suppression check (best-effort)
+    if db:
+        try:
+            if email_service.is_email_suppressed(
+                db,
+                email_log.organization_id,
+                email_log.recipient_email,
+                ignore_opt_out=include_unsubscribed,
+            ):
+                logger.info(
+                    "Email suppressed for email_log=%s recipient=%s",
+                    email_log.id,
+                    mask_email(email_log.recipient_email),
+                )
+                return "skipped"
+        except Exception as exc:
+            logger.warning("Suppression check failed: %s", exc)
 
     # Use org-level provider for campaigns
     if campaign_provider and db:
@@ -71,11 +79,17 @@ async def send_email_async(email_log: EmailLog, db=None) -> str:
         return "sent"
 
     try:
-        from app.services import resend_email_service, unsubscribe_service
+        from app.services import resend_email_service, unsubscribe_service, org_service
 
-        unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
+        portal_base_url = None
+        if db:
+            org = org_service.get_org_by_id(db, email_log.organization_id)
+            portal_base_url = org_service.get_org_portal_base_url(org)
+
+        unsubscribe_url = unsubscribe_service.build_list_unsubscribe_url(
             org_id=email_log.organization_id,
             email=email_log.recipient_email,
+            base_url=portal_base_url,
         )
 
         success, error, message_id = await resend_email_service.send_email_direct(
@@ -113,7 +127,10 @@ async def send_email_async(email_log: EmailLog, db=None) -> str:
 
 async def _send_via_org_provider(db, email_log: EmailLog, provider: str, org_id) -> None:
     """Send email using org-level provider configuration."""
-    from app.services import resend_settings_service, gmail_service
+    from app.services import resend_settings_service, gmail_service, org_service
+
+    org = org_service.get_org_by_id(db, org_id)
+    portal_base_url = org_service.get_org_portal_base_url(org)
 
     if provider == "resend":
         settings = resend_settings_service.get_resend_settings(db, org_id)
@@ -125,9 +142,10 @@ async def _send_via_org_provider(db, email_log: EmailLog, provider: str, org_id)
         from app.services import resend_email_service
         from app.services import unsubscribe_service
 
-        unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
+        unsubscribe_url = unsubscribe_service.build_list_unsubscribe_url(
             org_id=org_id,
             email=email_log.recipient_email,
+            base_url=portal_base_url,
         )
 
         success, error, message_id = await resend_email_service.send_email_direct(
@@ -163,6 +181,7 @@ async def _send_via_org_provider(db, email_log: EmailLog, provider: str, org_id)
         headers = unsubscribe_service.build_list_unsubscribe_headers(
             org_id=org_id,
             email=email_log.recipient_email,
+            base_url=portal_base_url,
         )
 
         result = await gmail_service.send_email(
@@ -269,6 +288,11 @@ async def process_workflow_email(db, job) -> None:
         template.subject, cleaned_body_template, variables
     )
 
+    from app.services import org_service
+
+    org = org_service.get_org_by_id(db, job.organization_id)
+    portal_base_url = org_service.get_org_portal_base_url(org)
+
     body = email_composition_service.compose_template_email_html(
         db=db,
         org_id=job.organization_id,
@@ -278,6 +302,7 @@ async def process_workflow_email(db, job) -> None:
         sender_user_id=UUID(workflow_owner_id)
         if workflow_scope == "personal" and workflow_owner_id
         else None,
+        portal_base_url=portal_base_url,
     )
 
     # Create email log
@@ -321,11 +346,15 @@ async def process_workflow_email(db, job) -> None:
 
     # Send via resolved provider
     try:
-        from app.services import unsubscribe_service
+        from app.services import unsubscribe_service, org_service
+
+        org = org_service.get_org_by_id(db, job.organization_id)
+        portal_base_url = org_service.get_org_portal_base_url(org)
 
         headers = unsubscribe_service.build_list_unsubscribe_headers(
             org_id=job.organization_id,
             email=recipient_email,
+            base_url=portal_base_url,
         )
 
         if provider == "user_gmail":
@@ -364,9 +393,10 @@ async def process_workflow_email(db, job) -> None:
             from_email = template.from_email or config["from_email"]
 
             api_key = resend_settings_service.decrypt_api_key(config["api_key_encrypted"])
-            unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
+            unsubscribe_url = unsubscribe_service.build_list_unsubscribe_url(
                 org_id=job.organization_id,
                 email=recipient_email,
+                base_url=portal_base_url,
             )
             success, error, message_id = await resend_email_service.send_email_direct(
                 api_key=api_key,

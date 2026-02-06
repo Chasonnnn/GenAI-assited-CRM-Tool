@@ -153,6 +153,7 @@ def preview_filters(
         recipient_type=data.recipient_type,
         filter_criteria=filter_dict,
         limit=limit,
+        ignore_opt_out=bool(getattr(data, "include_unsubscribed", False)),
     )
 
 
@@ -174,6 +175,7 @@ def preview_recipients(
         recipient_type=campaign.recipient_type,
         filter_criteria=campaign.filter_criteria,
         limit=limit,
+        ignore_opt_out=bool(getattr(campaign, "include_unsubscribed", False)),
     )
 
 
@@ -401,6 +403,7 @@ def _campaign_to_response(db: Session, campaign) -> CampaignResponse:
         filter_criteria=campaign.filter_criteria,
         scheduled_at=campaign.scheduled_at,
         status=campaign.status,
+        include_unsubscribed=getattr(campaign, "include_unsubscribed", False),
         created_by_user_id=campaign.created_by_user_id,
         created_by_name=campaign.created_by.display_name if campaign.created_by else None,
         created_at=campaign.created_at,
