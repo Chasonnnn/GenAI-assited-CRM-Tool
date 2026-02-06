@@ -91,6 +91,7 @@ function FloatingActionBar({
                         <DropdownMenuTrigger
                             className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
                             disabled={isLoading}
+                            aria-label="Assign to user"
                         >
                             <span className="inline-flex items-center gap-1">
                                 <UserPlusIcon className="h-4 w-4" />
@@ -647,6 +648,7 @@ export default function SurrogatesPage() {
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="pl-9"
+                            aria-label="Search surrogates"
                         />
                     </div>
 
@@ -791,6 +793,7 @@ export default function SurrogatesPage() {
                                             <Checkbox
                                                 checked={data?.items && data.items.length > 0 && selectedSurrogates.size === data.items.length}
                                                 onCheckedChange={(checked) => handleSelectAll(!!checked)}
+                                                aria-label="Select all surrogates"
                                             />
                                         </TableHead>
                                         <SortableTableHead column="surrogate_number" label="Surrogate #" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} className="w-[100px]" />
@@ -827,6 +830,7 @@ export default function SurrogatesPage() {
                                                     <Checkbox
                                                         checked={selectedSurrogates.has(surrogateItem.id)}
                                                         onCheckedChange={(checked) => handleSelectSurrogate(surrogateItem.id, !!checked)}
+                                                        aria-label={`Select ${surrogateItem.full_name}`}
                                                     />
                                                 </TableCell>
                                                 <TableCell>

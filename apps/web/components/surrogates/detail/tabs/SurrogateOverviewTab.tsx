@@ -111,6 +111,7 @@ export function SurrogateOverviewTab() {
                                 size="icon"
                                 className="h-6 w-6"
                                 onClick={copyEmail}
+                                aria-label="Copy email"
                             >
                                 {copiedEmail ? (
                                     <CheckIcon className="h-3 w-3" />
