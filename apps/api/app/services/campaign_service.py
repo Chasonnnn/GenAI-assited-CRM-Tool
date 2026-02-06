@@ -1026,8 +1026,8 @@ def execute_campaign_run(
 
             from app.services import email_composition_service
 
-            cleaned_body_template = (
-                email_composition_service.strip_legacy_unsubscribe_placeholders(template.body)
+            cleaned_body_template = email_composition_service.strip_legacy_unsubscribe_placeholders(
+                template.body
             )
             subject, body = email_service.render_template(
                 template.subject, cleaned_body_template, variables
@@ -1293,8 +1293,8 @@ def retry_failed_campaign_run(
 
         from app.services import email_composition_service
 
-        cleaned_body_template = (
-            email_composition_service.strip_legacy_unsubscribe_placeholders(template.body)
+        cleaned_body_template = email_composition_service.strip_legacy_unsubscribe_placeholders(
+            template.body
         )
         subject, body = email_service.render_template(
             template.subject, cleaned_body_template, variables

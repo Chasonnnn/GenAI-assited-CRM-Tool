@@ -126,4 +126,3 @@ def compose_template_email_html(
 
     insertion = f"{signature_html}{footer_html}"
     return _insert_before_closing_tag(body, insertion)
-

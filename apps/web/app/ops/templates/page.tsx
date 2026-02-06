@@ -1,8 +1,8 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "@/components/app-link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -87,10 +87,19 @@ function EmptyState({
 
 export default function TemplatesPage() {
     const router = useRouter()
-    const searchParams = useSearchParams()
-    const tabParam = searchParams.get("tab")
-    const initialTab = TABS.includes(tabParam as TemplatesTab) ? (tabParam as TemplatesTab) : "email"
-    const [activeTab, setActiveTab] = useState<TemplatesTab>(initialTab)
+    const [activeTab, setActiveTab] = useState<TemplatesTab>("email")
+
+    useEffect(() => {
+        const readTabFromUrl = (): TemplatesTab => {
+            const tabParam = new URLSearchParams(window.location.search).get("tab")
+            return TABS.includes(tabParam as TemplatesTab) ? (tabParam as TemplatesTab) : "email"
+        }
+
+        setActiveTab(readTabFromUrl())
+        const handlePopState = () => setActiveTab(readTabFromUrl())
+        window.addEventListener("popstate", handlePopState)
+        return () => window.removeEventListener("popstate", handlePopState)
+    }, [])
 
     const { data: emailTemplates = [], isLoading: emailLoading } = usePlatformEmailTemplates()
     const { data: formTemplates = [], isLoading: formLoading } = usePlatformFormTemplates()

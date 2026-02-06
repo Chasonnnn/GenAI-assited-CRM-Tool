@@ -6,16 +6,6 @@ const mockUseAuth = vi.fn()
 const mockVerifyDuoCallback = vi.fn()
 const mockReplace = vi.fn()
 
-const mockSearchParams = {
-    get: vi.fn((key: string) => {
-        if (key === "duo_code") return "duo-code"
-        if (key === "code") return null
-        if (key === "state") return "state123"
-        if (key === "return_to") return null
-        return null
-    }),
-}
-
 let authState: { user: Record<string, unknown> | null; isLoading: boolean; refetch: () => void }
 
 vi.mock("@/lib/auth-context", () => ({
@@ -33,11 +23,24 @@ vi.mock("next/navigation", () => ({
         back: vi.fn(),
         prefetch: vi.fn(),
     }),
-    useSearchParams: () => mockSearchParams,
 }))
 
 describe("DuoCallbackPage", () => {
     beforeEach(() => {
+        try {
+            window.history.pushState({}, "", "/auth/duo/callback?duo_code=duo-code&state=state123")
+        } catch {
+            // Some test setups replace window.location with a plain object not linked to history.
+        }
+
+        try {
+            // @ts-expect-error - window.location may be a test stub.
+            window.location.search = "?duo_code=duo-code&state=state123"
+        } catch {
+            // Ignore if the environment uses a real Location object.
+        }
+        window.sessionStorage.clear()
+
         authState = {
             user: { role: "admin" },
             isLoading: false,
@@ -46,14 +49,6 @@ describe("DuoCallbackPage", () => {
         mockUseAuth.mockImplementation(() => authState)
         mockVerifyDuoCallback.mockReset()
         mockVerifyDuoCallback.mockResolvedValue({ success: true, message: "ok" })
-        mockSearchParams.get.mockClear()
-        mockSearchParams.get.mockImplementation((key: string) => {
-            if (key === "duo_code") return "duo-code"
-            if (key === "code") return null
-            if (key === "state") return "state123"
-            if (key === "return_to") return null
-            return null
-        })
         mockReplace.mockClear()
     })
 

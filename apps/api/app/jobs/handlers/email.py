@@ -275,7 +275,9 @@ async def process_workflow_email(db, job) -> None:
         recipient_email=recipient_email,
         rendered_body_html=body,
         scope="personal" if workflow_scope == "personal" else "org",
-        sender_user_id=UUID(workflow_owner_id) if workflow_scope == "personal" and workflow_owner_id else None,
+        sender_user_id=UUID(workflow_owner_id)
+        if workflow_scope == "personal" and workflow_owner_id
+        else None,
     )
 
     # Create email log

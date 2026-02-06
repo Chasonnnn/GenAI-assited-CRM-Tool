@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest"
+import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent } from "@testing-library/react"
 import TemplatesPage from "../app/ops/templates/page"
 
@@ -10,9 +10,6 @@ vi.mock("next/navigation", () => ({
         push: mockPush,
         replace: mockReplace,
     }),
-    useSearchParams: () => ({
-        get: (key: string) => (key === "tab" ? "system" : null),
-    }),
 }))
 
 vi.mock("@/lib/hooks/use-platform-templates", () => ({
@@ -23,13 +20,30 @@ vi.mock("@/lib/hooks/use-platform-templates", () => ({
 }))
 
 describe("Templates Studio (Ops)", () => {
-    it("shows a create button for system email templates", () => {
+    beforeEach(() => {
+        mockPush.mockClear()
+        mockReplace.mockClear()
+        try {
+            window.history.pushState({}, "", "/ops/templates?tab=system")
+        } catch {
+            // Some test setups replace window.location with a plain object not linked to history.
+            // In that case, pushState won't update window.location.search, so set it directly.
+        }
+
+        try {
+            // @ts-expect-error - window.location may be a test stub.
+            window.location.search = "?tab=system"
+        } catch {
+            // Ignore if the environment uses a real Location object.
+        }
+    })
+
+    it("shows a create button for system email templates", async () => {
         render(<TemplatesPage />)
 
-        const button = screen.getByRole("button", { name: /new system email/i })
+        const button = await screen.findByRole("button", { name: /new system email/i })
         fireEvent.click(button)
 
         expect(mockPush).toHaveBeenCalledWith("/ops/templates/system/new")
     })
 })
-
