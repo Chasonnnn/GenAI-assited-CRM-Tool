@@ -84,4 +84,3 @@ def validate_outbound_webhook_url(url: str) -> str:
 
     normalized = urlunsplit((scheme, parts.netloc, parts.path, parts.query, ""))
     return normalized
-

@@ -14,12 +14,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.services import ai_settings_service
+from app.services import template_variable_catalog
 from app.services.ai_prompt_registry import get_prompt
 from app.services.ai_response_validation import parse_json_object, validate_model
 
 logger = logging.getLogger(__name__)
-
-from app.services import template_variable_catalog
 
 VARIABLE_PATTERN = template_variable_catalog.VARIABLE_PATTERN
 

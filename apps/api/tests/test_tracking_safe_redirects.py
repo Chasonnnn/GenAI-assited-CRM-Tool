@@ -20,4 +20,3 @@ def test_wrap_links_in_email_skips_relative_links():
     result = tracking_service.wrap_links_in_email(html, token)
 
     assert result == html
-

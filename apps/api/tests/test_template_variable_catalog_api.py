@@ -56,4 +56,3 @@ async def test_platform_system_template_variables_endpoint_platform_admin(
     assert "org_name" in names
     assert "invite_url" in names
     assert "platform_logo_block" in names
-

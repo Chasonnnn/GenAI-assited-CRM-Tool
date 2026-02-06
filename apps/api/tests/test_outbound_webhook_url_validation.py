@@ -63,4 +63,3 @@ def test_validate_outbound_webhook_url_rejects_hostname_resolving_to_private_ip(
 
     with pytest.raises(ValueError):
         validate_outbound_webhook_url("https://evil.example/hook")
-

@@ -22,12 +22,13 @@ import {
     Redo2Icon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useCallback, useEffect, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react'
 
 interface RichTextEditorProps {
     content?: string
     placeholder?: string
     onChange?: (html: string) => void
+    onFocus?: () => void
     onSubmit?: (html: string) => void
     submitLabel?: string
     isSubmitting?: boolean
@@ -37,18 +38,27 @@ interface RichTextEditorProps {
     enableImages?: boolean
 }
 
-export function RichTextEditor({
-    content = '',
-    placeholder = 'Write something...',
-    onChange,
-    onSubmit,
-    submitLabel = 'Submit',
-    isSubmitting = false,
-    className,
-    minHeight = '80px',
-    maxHeight = '300px',
-    enableImages = false,
-}: RichTextEditorProps) {
+export type RichTextEditorHandle = {
+    insertText: (text: string) => void
+    insertHtml: (html: string) => void
+}
+
+export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(function RichTextEditor(
+    {
+        content = '',
+        placeholder = 'Write something...',
+        onChange,
+        onFocus,
+        onSubmit,
+        submitLabel = 'Submit',
+        isSubmitting = false,
+        className,
+        minHeight = '80px',
+        maxHeight = '300px',
+        enableImages = false,
+    }: RichTextEditorProps,
+    ref
+) {
     const [mounted, setMounted] = useState(false)
 
     useEffect(() => {
@@ -95,6 +105,21 @@ export function RichTextEditor({
             onChange?.(editor.getHTML())
         },
     })
+
+    useImperativeHandle(
+        ref,
+        () => ({
+            insertText: (text: string) => {
+                if (!editor) return
+                editor.chain().focus().insertContent(text).run()
+            },
+            insertHtml: (html: string) => {
+                if (!editor) return
+                editor.chain().focus().insertContent(html).run()
+            },
+        }),
+        [editor]
+    )
 
     // Sync content when it changes externally
     useEffect(() => {
@@ -274,9 +299,9 @@ export function RichTextEditor({
             </div>
 
             {/* Editor Content - with scroll support */}
-            <div className="overflow-y-auto" style={{ maxHeight }}>
+            <div className="overflow-y-auto" style={{ maxHeight }} onFocusCapture={() => onFocus?.()}>
                 <EditorContent editor={editor} />
             </div>
         </div>
     )
-}
+})

@@ -126,10 +126,9 @@ class TestResendWebhookHandler:
             db, test_org.id, test_org.id
         )
         webhook_secret_bytes = b"test_webhook_secret_for_resend"
-        webhook_secret = (
-            "whsec_"
-            + base64.urlsafe_b64encode(webhook_secret_bytes).decode("utf-8").rstrip("=")
-        )
+        webhook_secret = "whsec_" + base64.urlsafe_b64encode(webhook_secret_bytes).decode(
+            "utf-8"
+        ).rstrip("=")
         resend_settings_service.update_resend_settings(
             db,
             test_org.id,

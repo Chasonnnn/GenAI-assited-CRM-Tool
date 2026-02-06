@@ -528,10 +528,9 @@ def get_journey(
         if terminal_entries:
             terminal_entry = max(
                 terminal_entries,
-                key=lambda entry: entry.effective_at
-                or entry.recorded_at
-                or entry.changed_at
-                or datetime.min,
+                key=lambda entry: (
+                    entry.effective_at or entry.recorded_at or entry.changed_at or datetime.min
+                ),
             )
             entry_date = (
                 terminal_entry.effective_at

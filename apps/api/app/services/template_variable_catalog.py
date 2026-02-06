@@ -205,4 +205,3 @@ def list_platform_system_template_variables(system_key: str) -> list[TemplateVar
             value_type="url",
         ),
     ]
-
