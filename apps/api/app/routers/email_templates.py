@@ -509,6 +509,7 @@ def send_email(
             variables=data.variables,
             surrogate_id=data.surrogate_id,
             schedule_at=data.schedule_at,
+            sender_user_id=session.user_id,
         )
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
@@ -571,7 +572,14 @@ async def send_test_email(
                 status_code=403, detail="You can only send tests for your templates"
             )
 
-    variables_used = email_test_send_service.extract_variables(template.subject, template.body)
+    from app.services import email_composition_service
+
+    cleaned_body_template = email_composition_service.strip_legacy_unsubscribe_placeholders(
+        template.body
+    )
+    variables_used = email_test_send_service.extract_variables(
+        template.subject, cleaned_body_template
+    )
     base_vars = email_test_send_service.build_sample_variables(
         db=db,
         org_id=session.org_id,
@@ -585,8 +593,17 @@ async def send_test_email(
 
     rendered_subject, rendered_body = email_service.render_template(
         template.subject,
-        template.body,
+        cleaned_body_template,
         final_vars,
+    )
+
+    rendered_body = email_composition_service.compose_template_email_html(
+        db=db,
+        org_id=session.org_id,
+        recipient_email=str(body.to_email),
+        rendered_body_html=rendered_body,
+        scope="personal" if template.scope == "personal" else "org",
+        sender_user_id=session.user_id if template.scope == "personal" else None,
     )
 
     if template.scope == "personal":

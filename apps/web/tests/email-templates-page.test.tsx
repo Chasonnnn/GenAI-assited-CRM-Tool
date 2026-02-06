@@ -86,11 +86,11 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
 vi.mock("@/lib/hooks/use-signature", () => ({
     useUserSignature: () => ({ data: null, refetch: vi.fn() }),
     useUpdateUserSignature: () => ({ mutate: vi.fn(), isPending: false }),
-    useSignaturePreview: () => ({ data: { html: "" }, isLoading: false }),
+    useSignaturePreview: () => ({ data: { html: "<div>Personal Signature</div>" }, isLoading: false }),
     useUploadSignaturePhoto: () => ({ mutate: vi.fn(), isPending: false }),
     useDeleteSignaturePhoto: () => ({ mutate: vi.fn(), isPending: false }),
     useOrgSignature: () => ({ data: { signature_company_name: "Org", available_templates: [] }, isLoading: false }),
-    useOrgSignaturePreview: () => ({ data: { html: "" }, isLoading: false }),
+    useOrgSignaturePreview: () => ({ data: { html: "<div>Org Signature</div>" }, isLoading: false }),
 }))
 
 vi.mock("@/components/rich-text-editor", () => ({
@@ -155,5 +155,8 @@ describe("EmailTemplatesPage", () => {
         const bodyText = await screen.findByText("Hi there")
         const proseContainer = bodyText.closest(".prose")
         expect(proseContainer).toHaveClass("prose-stone")
+
+        expect(screen.getByText("Org Signature")).toBeInTheDocument()
+        expect(screen.getByText("Unsubscribe")).toBeInTheDocument()
     })
 })

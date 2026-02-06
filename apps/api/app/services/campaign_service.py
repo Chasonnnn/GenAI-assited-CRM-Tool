@@ -1024,8 +1024,21 @@ def execute_campaign_run(
             else:
                 variables = email_service.build_intended_parent_template_variables(db, recipient)
 
+            from app.services import email_composition_service
+
+            cleaned_body_template = (
+                email_composition_service.strip_legacy_unsubscribe_placeholders(template.body)
+            )
             subject, body = email_service.render_template(
-                template.subject, template.body, variables
+                template.subject, cleaned_body_template, variables
+            )
+
+            body = email_composition_service.compose_template_email_html(
+                db=db,
+                org_id=org_id,
+                recipient_email=email,
+                rendered_body_html=body,
+                scope="org",
             )
 
             # Create recipient record
@@ -1278,7 +1291,22 @@ def retry_failed_campaign_run(
         else:
             variables = email_service.build_intended_parent_template_variables(db, entity)
 
-        subject, body = email_service.render_template(template.subject, template.body, variables)
+        from app.services import email_composition_service
+
+        cleaned_body_template = (
+            email_composition_service.strip_legacy_unsubscribe_placeholders(template.body)
+        )
+        subject, body = email_service.render_template(
+            template.subject, cleaned_body_template, variables
+        )
+
+        body = email_composition_service.compose_template_email_html(
+            db=db,
+            org_id=org_id,
+            recipient_email=email,
+            rendered_body_html=body,
+            scope="org",
+        )
 
         if run.email_provider == "resend":
             tracked_body = body

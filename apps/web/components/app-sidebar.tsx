@@ -539,9 +539,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                 <main className="flex-1 min-w-0 overflow-hidden print:overflow-visible">{children}</main>
             </div>
 
-            <React.Suspense fallback={null}>
-                <SearchCommandDialog open={searchOpen} onOpenChange={setSearchOpen} />
-            </React.Suspense>
+            <SearchCommandDialog open={searchOpen} onOpenChange={setSearchOpen} />
         </div>
     )
 }

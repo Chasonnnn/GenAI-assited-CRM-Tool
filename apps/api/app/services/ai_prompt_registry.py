@@ -185,8 +185,9 @@ Respond with ONLY a valid JSON object (no markdown, no explanation) in this exac
         system="You are an email template generator. Always respond with ONLY valid JSON, no markdown or explanation.",
         user="""You are generating a reusable EMAIL TEMPLATE (HTML) for a surrogacy agency using Surrogacy Force.
 
-The template will be saved and reused. Do NOT include an organization signature block in the body.
-Always include the {{unsubscribe_url}} variable in the body HTML.
+The template will be saved and reused.
+Do NOT include an organization signature block in the body.
+Do NOT include an unsubscribe link in the body. The platform appends compliance footers automatically.
 
 ## Allowed Variables
 {allowed_variables}
@@ -206,8 +207,8 @@ Respond with ONLY a valid JSON object (no markdown, no explanation) in this exac
 ## Rules
 1. Use HTML only (no markdown)
 2. Use ONLY the allowed variables
-3. Always include {{unsubscribe_url}} in the body HTML
-4. Do NOT include org signature content
+3. Do NOT include org signature content
+4. Do NOT include unsubscribe content
 """,
     ),
     "schedule_parse": PromptTemplate(

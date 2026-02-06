@@ -608,6 +608,8 @@ export default function EmailTemplatesPage() {
     const updateSignatureMutation = useUpdateUserSignature()
     const uploadPhotoMutation = useUploadSignaturePhoto()
     const deletePhotoMutation = useDeleteSignaturePhoto()
+    const { data: personalSignaturePreview } = useSignaturePreview()
+    const { data: orgSignaturePreview } = useOrgSignaturePreview({ enabled: true, mode: "org_only" })
 
     // Get full template details when editing
     const { data: fullTemplate } = useEmailTemplate(editingTemplate?.id || null)
@@ -989,6 +991,14 @@ export default function EmailTemplatesPage() {
                 .replace(/\{\{appointment_date\}\}/g, "January 15, 2025")
                 .replace(/\{\{appointment_time\}\}/g, "2:00 PM PST")
                 .replace(/\{\{appointment_location\}\}/g, "Virtual Appointment")
+                // Unsubscribe is appended automatically at send time; don't show raw tokens in preview.
+                .replace(/\{\{\s*unsubscribe_url\s*\}\}/g, "")
+
+            // Remove legacy unsubscribe anchors (if users pasted them into templates)
+            html = html.replace(
+                /<a\b[^>]*\bhref\s*=\s*(["'])\s*\{\{\s*unsubscribe_url\s*\}\}\s*\1[^>]*>[\s\S]*?<\/a>/gi,
+                ""
+            )
 
             const hasHtmlTags = /<[a-z][\s\S]*>/i.test(html)
             if (!hasHtmlTags) {
@@ -1005,15 +1015,55 @@ export default function EmailTemplatesPage() {
                 html = normalizeTemplateHtml(html)
             }
 
+            const previewScope = libraryPreviewId ? "org" : templateScope
+            const signatureHtml =
+                previewScope === "personal"
+                    ? (personalSignaturePreview?.html || "")
+                    : (orgSignaturePreview?.html || "")
+
+            const unsubscribeUrl = "https://app.surrogacyforce.com/email/unsubscribe/EXAMPLE"
+            const includeDivider = !signatureHtml
+            const unsubscribeFooterHtml = `
+                <div style="margin-top: 14px; font-size: 12px; color: #6b7280; ${includeDivider ? "padding-top: 16px; border-top: 1px solid #e5e7eb;" : ""}">
+                    <p style="margin: 0;">
+                        Manage email preferences:
+                        <a href="${unsubscribeUrl}" target="_blank" style="color: #2563eb; text-decoration: none;">Unsubscribe</a>
+                    </p>
+                </div>
+            `.trim()
+
+            const insertion = `${signatureHtml}${unsubscribeFooterHtml}`
+            if (/<\/body\s*>/i.test(html)) {
+                html = html.replace(/<\/body\s*>/i, `${insertion}</body>`)
+            } else if (/<\/html\s*>/i.test(html)) {
+                html = html.replace(/<\/html\s*>/i, `${insertion}</html>`)
+            } else {
+                html = `${html}${insertion}`
+            }
+
             return sanitizeHtml(html)
         },
-        [sanitizeHtml, signatureData?.org_signature_company_name]
+        [
+            libraryPreviewId,
+            orgSignaturePreview?.html,
+            personalSignaturePreview?.html,
+            sanitizeHtml,
+            signatureData?.org_signature_company_name,
+            templateScope,
+        ]
     )
 
     useEffect(() => {
-        if (!libraryPreviewId || !libraryTemplateDetail) return
-        setPreviewHtml(buildPreviewHtml(libraryTemplateDetail.body))
-    }, [libraryPreviewId, libraryTemplateDetail, buildPreviewHtml])
+        if (!showPreview) return
+
+        if (libraryPreviewId) {
+            if (!libraryTemplateDetail) return
+            setPreviewHtml(buildPreviewHtml(libraryTemplateDetail.body))
+            return
+        }
+
+        setPreviewHtml(buildPreviewHtml(templateBody))
+    }, [buildPreviewHtml, libraryPreviewId, libraryTemplateDetail, showPreview, templateBody])
 
     const handlePreview = () => {
         setPreviewHtml(buildPreviewHtml(templateBody))
@@ -1699,7 +1749,13 @@ export default function EmailTemplatesPage() {
                                         variables={templateVariables}
                                         disabled={templateVariablesLoading || templateVariables.length === 0}
                                         triggerLabel={templateVariablesLoading ? "Loading..." : "Insert Variable"}
-                                        onSelect={(variable) => insertToken(`{{${variable.name}}}`)}
+                                        onSelect={(variable) => {
+                                            if (variable.name === "unsubscribe_url") {
+                                                toast.info("Unsubscribe link is added automatically.")
+                                                return
+                                            }
+                                            insertToken(`{{${variable.name}}}`)
+                                        }}
                                     />
                                     <Button variant="outline" size="sm" onClick={insertOrgLogo}>
                                         Insert Logo

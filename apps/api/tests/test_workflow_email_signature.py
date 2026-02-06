@@ -74,6 +74,8 @@ async def test_workflow_email_appends_org_signature_for_org_scope(
     assert email_log is not None
     assert "Org Signature Co" in (email_log.body or "")
     assert test_user.display_name not in (email_log.body or "")
+    assert ">Unsubscribe<" in (email_log.body or "")
+    assert "/email/unsubscribe/" in (email_log.body or "")
 
 
 @pytest.mark.asyncio
@@ -146,6 +148,8 @@ async def test_workflow_email_appends_personal_signature_for_personal_scope(
     assert email_log is not None
     assert "Org Signature Co" in (email_log.body or "")
     assert test_user.display_name in (email_log.body or "")
+    assert ">Unsubscribe<" in (email_log.body or "")
+    assert "/email/unsubscribe/" in (email_log.body or "")
 
 
 @pytest.mark.asyncio

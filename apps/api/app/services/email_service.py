@@ -999,6 +999,7 @@ def send_from_template(
     variables: dict[str, str],
     surrogate_id: UUID | None = None,
     schedule_at: datetime | None = None,
+    sender_user_id: UUID | None = None,
 ) -> tuple[EmailLog, Job | None] | None:
     """
     Queue an email using a template.
@@ -1021,7 +1022,25 @@ def send_from_template(
             "Invites and other platform templates must be sent via the platform/system sender."
         )
 
-    subject, body = render_template(template.subject, template.body, variables)
+    from app.services import email_composition_service
+
+    cleaned_body_template = email_composition_service.strip_legacy_unsubscribe_placeholders(
+        template.body
+    )
+    subject, body = render_template(template.subject, cleaned_body_template, variables)
+
+    signature_user_id: UUID | None = None
+    if template.scope == "personal":
+        signature_user_id = sender_user_id or template.owner_user_id
+
+    body = email_composition_service.compose_template_email_html(
+        db=db,
+        org_id=org_id,
+        recipient_email=recipient_email,
+        rendered_body_html=body,
+        scope="personal" if template.scope == "personal" else "org",
+        sender_user_id=signature_user_id,
+    )
     return send_email(
         db=db,
         org_id=org_id,

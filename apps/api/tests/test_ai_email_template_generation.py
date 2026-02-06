@@ -27,7 +27,7 @@ def _enable_ai(db, org_id, user_id) -> AISettings:
     return settings
 
 
-def test_generate_email_template_requires_unsubscribe(db, test_org, test_user, monkeypatch):
+def test_generate_email_template_does_not_require_unsubscribe(db, test_org, test_user, monkeypatch):
     _enable_ai(db, test_org.id, test_user.id)
 
     payload = {
@@ -61,8 +61,9 @@ def test_generate_email_template_requires_unsubscribe(db, test_org, test_user, m
         description="Draft a follow-up email",
     )
 
-    assert result.success is False
-    assert any("unsubscribe" in e.lower() for e in result.validation_errors)
+    assert result.success is True
+    assert result.template is not None
+    assert "first_name" in result.template.variables_used
 
 
 def test_generate_email_template_errors_on_unknown_variables(db, test_org, test_user, monkeypatch):
@@ -112,7 +113,7 @@ def test_generate_email_template_extracts_variables_from_body(db, test_org, test
     payload = {
         "name": "Welcome",
         "subject": "Welcome {{first_name}}",
-        "body_html": "<p>Hi {{first_name}}</p><p>{{unsubscribe_url}}</p>",
+        "body_html": "<p>Hi {{first_name}}</p>",
         "variables_used": [],
     }
 
@@ -143,4 +144,3 @@ def test_generate_email_template_extracts_variables_from_body(db, test_org, test
     assert result.success is True
     assert result.template is not None
     assert "first_name" in result.template.variables_used
-    assert "unsubscribe_url" in result.template.variables_used

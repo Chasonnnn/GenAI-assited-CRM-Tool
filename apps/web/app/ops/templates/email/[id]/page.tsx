@@ -223,7 +223,34 @@ export default function PlatformEmailTemplatePage() {
         editorMode === "visual" && hasComplexHtml && !editorModeTouched ? "html" : editorMode
 
     const previewHtml = useMemo(() => {
-        return DOMPurify.sanitize(normalizeTemplateHtml(body || ""), {
+        let html = normalizeTemplateHtml(body || "")
+
+        // Unsubscribe is appended automatically at send time; don't show raw tokens in previews.
+        html = html.replace(/\{\{\s*unsubscribe_url\s*\}\}/gi, "")
+        html = html.replace(
+            /<a\b[^>]*\bhref\s*=\s*(["'])\s*\{\{\s*unsubscribe_url\s*\}\}\s*\1[^>]*>[\s\S]*?<\/a>/gi,
+            ""
+        )
+
+        const unsubscribeUrl = "https://app.surrogacyforce.com/email/unsubscribe/EXAMPLE"
+        const footerHtml = `
+            <div style="margin-top: 14px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280;">
+                <p style="margin: 0;">
+                    Manage email preferences:
+                    <a href="${unsubscribeUrl}" target="_blank" style="color: #2563eb; text-decoration: none;">Unsubscribe</a>
+                </p>
+            </div>
+        `.trim()
+
+        if (/<\/body\s*>/i.test(html)) {
+            html = html.replace(/<\/body\s*>/i, `${footerHtml}</body>`)
+        } else if (/<\/html\s*>/i.test(html)) {
+            html = html.replace(/<\/html\s*>/i, `${footerHtml}</html>`)
+        } else {
+            html = `${html}${footerHtml}`
+        }
+
+        return DOMPurify.sanitize(html, {
             USE_PROFILES: { html: true },
             ADD_TAGS: [
                 "table",
@@ -585,7 +612,13 @@ export default function PlatformEmailTemplatePage() {
                                         variables={templateVariables}
                                         disabled={variablesLoading || templateVariables.length === 0}
                                         triggerLabel={variablesLoading ? "Loading..." : "Insert Variable"}
-                                        onSelect={(variable) => insertToken(`{{${variable.name}}}`)}
+                                        onSelect={(variable) => {
+                                            if (variable.name === "unsubscribe_url") {
+                                                toast.info("Unsubscribe link is added automatically.")
+                                                return
+                                            }
+                                            insertToken(`{{${variable.name}}}`)
+                                        }}
                                     />
                                     <Button type="button" variant="ghost" size="sm" onClick={insertOrgLogo}>
                                         Insert Logo

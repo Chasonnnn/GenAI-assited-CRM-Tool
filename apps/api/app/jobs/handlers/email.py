@@ -71,30 +71,43 @@ async def send_email_async(email_log: EmailLog, db=None) -> str:
         return "sent"
 
     try:
-        import resend
+        from app.services import resend_email_service, unsubscribe_service
 
-        resend.api_key = RESEND_API_KEY
-
-        result = resend.Emails.send(
-            {
-                "from": EMAIL_FROM,
-                "to": [email_log.recipient_email],
-                "subject": email_log.subject,
-                "html": email_log.body,
-            }
+        unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
+            org_id=email_log.organization_id,
+            email=email_log.recipient_email,
         )
+
+        success, error, message_id = await resend_email_service.send_email_direct(
+            api_key=RESEND_API_KEY,
+            to_email=email_log.recipient_email,
+            subject=email_log.subject,
+            body=email_log.body,
+            from_email=EMAIL_FROM,
+            idempotency_key=f"email-log/{email_log.id}",
+            unsubscribe_url=unsubscribe_url,
+        )
+        if not success:
+            raise Exception(f"Resend send failed: {error}")
+
+        if db:
+            email_log.external_id = message_id
+            email_log.resend_status = "sent"
+            db.commit()
+
         logger.info(
             "Email sent for email_log=%s recipient=%s message_id=%s",
             email_log.id,
             mask_email(email_log.recipient_email),
-            result.get("id"),
+            message_id,
         )
         return "sent"
-    except ImportError:
-        logger.warning("resend package not installed, skipping email send")
-        raise Exception("resend package not installed")
     except Exception as e:
-        logger.error(f"Failed to send email: {e}")
+        logger.error(
+            "Email send failed for email_log=%s error_class=%s",
+            email_log.id,
+            e.__class__.__name__,
+        )
         raise
 
 
@@ -213,7 +226,7 @@ async def process_workflow_email(db, job) -> None:
         - workflow_owner_id: Owner user ID (for personal workflows)
     """
     from app.db.models import EmailTemplate, EmailLog
-    from app.services import gmail_service, resend_settings_service, signature_template_service
+    from app.services import gmail_service, resend_settings_service
     from app.services.workflow_email_provider import (
         resolve_workflow_email_provider,
         EmailProviderError,
@@ -247,23 +260,23 @@ async def process_workflow_email(db, job) -> None:
         )
 
     # Resolve subject and body with variables (escaped)
-    subject, body = email_service.render_template(template.subject, template.body, variables)
+    from app.services import email_composition_service
 
-    # Append signature based on workflow scope
-    signature_html = ""
-    if workflow_scope == "personal" and workflow_owner_id:
-        signature_html = signature_template_service.render_signature_html(
-            db=db,
-            org_id=job.organization_id,
-            user_id=UUID(workflow_owner_id),
-        )
-    else:
-        signature_html = signature_template_service.render_org_signature_html(
-            db=db,
-            org_id=job.organization_id,
-        )
-    if signature_html:
-        body = f"{body}{signature_html}"
+    cleaned_body_template = email_composition_service.strip_legacy_unsubscribe_placeholders(
+        template.body
+    )
+    subject, body = email_service.render_template(
+        template.subject, cleaned_body_template, variables
+    )
+
+    body = email_composition_service.compose_template_email_html(
+        db=db,
+        org_id=job.organization_id,
+        recipient_email=recipient_email,
+        rendered_body_html=body,
+        scope="personal" if workflow_scope == "personal" else "org",
+        sender_user_id=UUID(workflow_owner_id) if workflow_scope == "personal" and workflow_owner_id else None,
+    )
 
     # Create email log
     email_log = EmailLog(

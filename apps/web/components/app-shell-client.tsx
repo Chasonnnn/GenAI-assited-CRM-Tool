@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect } from "react"
+import { useEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
 import { useRequireAuth } from "@/lib/auth-context"
@@ -78,23 +78,11 @@ export default function AppShellClient({
     </AIContextProvider>
   )
 
-  const content = (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-      }
-    >
-      <AppSidebar>{inner}</AppSidebar>
-    </Suspense>
-  )
-
   return (
     <>
       <OfflineBanner />
       <SessionExpiredDialog />
-      {content}
+      <AppSidebar>{inner}</AppSidebar>
     </>
   )
 }

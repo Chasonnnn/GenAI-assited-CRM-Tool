@@ -145,6 +145,10 @@ def wrap_links_in_email(html_body: str, token: str) -> str:
         if original_url.startswith(("mailto:", "tel:", "#", "{{")):
             return match.group(0)
 
+        # Keep unsubscribe links direct (avoid turning compliance links into tracking URLs).
+        if "/email/unsubscribe/" in original_url:
+            return match.group(0)
+
         # Only track safe http(s) links.
         if not _is_safe_redirect_target(original_url):
             return match.group(0)

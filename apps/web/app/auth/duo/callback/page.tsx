@@ -1,7 +1,7 @@
 "use client"
 
-import { Suspense, useEffect, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -82,9 +82,8 @@ function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: ()
     )
 }
 
-function DuoCallbackContent() {
+export default function DuoCallbackPage() {
     const router = useRouter()
-    const searchParams = useSearchParams()
     const { user, isLoading: authLoading, refetch } = useAuth()
 
     const [status, setStatus] = useState<"loading" | "error" | "success">("loading")
@@ -94,9 +93,10 @@ function DuoCallbackContent() {
     useEffect(() => {
         if (authLoading) return
         if (!user) {
+            const urlReturnTo = new URLSearchParams(window.location.search).get("return_to")
             const returnTo =
                 sessionStorage.getItem("auth_return_to") === "ops" ||
-                searchParams.get("return_to") === "ops" ||
+                urlReturnTo === "ops" ||
                 hasAuthReturnToOpsCookie() ||
                 window.location.hostname.startsWith("ops.")
                     ? "ops"
@@ -109,14 +109,15 @@ function DuoCallbackContent() {
 
             router.replace("/login")
         }
-    }, [authLoading, user, router, searchParams])
+    }, [authLoading, user, router])
 
     useEffect(() => {
         if (authLoading || !user) return
 
+        const urlParams = new URLSearchParams(window.location.search)
         const returnTo =
             sessionStorage.getItem("auth_return_to") === "ops" ||
-            searchParams.get("return_to") === "ops" ||
+            urlParams.get("return_to") === "ops" ||
             hasAuthReturnToOpsCookie() ||
             window.location.hostname.startsWith("ops.")
                 ? "ops"
@@ -127,8 +128,8 @@ function DuoCallbackContent() {
         }
 
         // Duo Web SDK can return the authorization parameter as `duo_code` (default) or `code`.
-        const code = searchParams.get("duo_code") ?? searchParams.get("code")
-        const state = searchParams.get("state")
+        const code = urlParams.get("duo_code") ?? urlParams.get("code")
+        const state = urlParams.get("state")
         if (!code || !state) {
             setStatus("error")
             setErrorMessage("Missing Duo response parameters. Please try again.")
@@ -165,7 +166,7 @@ function DuoCallbackContent() {
         }
 
         verify()
-    }, [authLoading, user, searchParams, refetch, router])
+    }, [authLoading, user, refetch, router])
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-muted/30 p-6">
@@ -208,9 +209,10 @@ function DuoCallbackContent() {
                     codes={recoveryCodes}
                     onClose={() => {
                         setRecoveryCodes(null)
+                        const urlReturnTo = new URLSearchParams(window.location.search).get("return_to")
                         const returnTo =
                             sessionStorage.getItem("auth_return_to") === "ops" ||
-                            searchParams.get("return_to") === "ops" ||
+                            urlReturnTo === "ops" ||
                             hasAuthReturnToOpsCookie() ||
                             window.location.hostname.startsWith("ops.")
                                 ? "ops"
@@ -225,19 +227,5 @@ function DuoCallbackContent() {
                 />
             )}
         </div>
-    )
-}
-
-export default function DuoCallbackPage() {
-    return (
-        <Suspense
-            fallback={
-                <div className="min-h-screen flex items-center justify-center bg-muted/30">
-                    <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
-                </div>
-            }
-        >
-            <DuoCallbackContent />
-        </Suspense>
     )
 }

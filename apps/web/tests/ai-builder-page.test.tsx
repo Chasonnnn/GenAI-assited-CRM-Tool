@@ -38,7 +38,7 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
     useEmailTemplateVariables: () => ({
         data: [
             { name: "first_name", description: "", category: "Recipient", required: false, value_type: "text", html_safe: false },
-            { name: "unsubscribe_url", description: "", category: "Compliance", required: true, value_type: "url", html_safe: false },
+            { name: "unsubscribe_url", description: "", category: "Compliance", required: false, value_type: "url", html_safe: false },
         ],
         isLoading: false,
         error: null,

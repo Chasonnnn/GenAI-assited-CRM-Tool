@@ -56,6 +56,10 @@ async def test_test_send_org_template_uses_resend_when_configured(
 ):
     from app.db.models import EmailLog
 
+    test_org.signature_company_name = "Org Signature Co"
+    test_org.signature_template = "classic"
+    db.commit()
+
     resend_settings_service.update_resend_settings(
         db,
         test_org.id,
@@ -80,7 +84,10 @@ async def test_test_send_org_template_uses_resend_when_configured(
     db.add(template)
     db.commit()
 
+    captured: dict[str, object] = {}
+
     async def fake_send_email_direct(*args, **kwargs):
+        captured["body"] = kwargs.get("body")
         return True, None, "resend_123"
 
     from app.services import resend_email_service
@@ -106,11 +113,22 @@ async def test_test_send_org_template_uses_resend_when_configured(
     assert log.resend_status == "sent"
     assert log.template_id == template.id
 
+    assert isinstance(captured.get("body"), str)
+    sent_body = captured["body"]
+    assert "Org Signature Co" in sent_body
+    assert "{{unsubscribe_url}}" not in sent_body
+    assert ">Unsubscribe<" in sent_body
+    assert "/email/unsubscribe/" in sent_body
+
 
 @pytest.mark.asyncio
 async def test_test_send_org_template_uses_org_gmail_when_configured(
     authed_client, db, test_org, test_user, monkeypatch
 ):
+    test_org.signature_company_name = "Org Signature Co"
+    test_org.signature_template = "classic"
+    db.commit()
+
     sender = User(
         id=uuid.uuid4(),
         email=f"sender-{uuid.uuid4().hex[:8]}@test.com",
@@ -183,6 +201,7 @@ async def test_test_send_org_template_uses_org_gmail_when_configured(
         headers=None,
     ):
         called["user_id"] = user_id
+        called["body"] = body
         return {"success": True, "message_id": "gmail_123", "email_log_id": str(uuid.uuid4())}
 
     from app.services import gmail_service
@@ -199,6 +218,10 @@ async def test_test_send_org_template_uses_org_gmail_when_configured(
     assert data["provider_used"] == "gmail"
     assert data["message_id"] == "gmail_123"
     assert called["user_id"] == str(sender.id)
+    assert "Org Signature Co" in (called.get("body") or "")
+    assert "{{unsubscribe_url}}" not in (called.get("body") or "")
+    assert ">Unsubscribe<" in (called.get("body") or "")
+    assert "/email/unsubscribe/" in (called.get("body") or "")
 
 
 @pytest.mark.asyncio

@@ -161,10 +161,13 @@ export default function AIWorkflowBuilderPage() {
         () => templateVariableCatalog.filter((variable) => variable.required).map((variable) => variable.name),
         [templateVariableCatalog]
     )
-    const missingRequiredVariable =
-        Boolean(generatedTemplate) &&
-        canValidateTemplateVariables &&
-        requiredTemplateVariableNames.some((required) => !templateVariables.includes(required))
+    const missingRequiredVariables = useMemo(() => {
+        if (!generatedTemplate) return []
+        if (!canValidateTemplateVariables) return []
+        if (requiredTemplateVariableNames.length === 0) return []
+        return requiredTemplateVariableNames.filter((required) => !templateVariables.includes(required))
+    }, [canValidateTemplateVariables, generatedTemplate, requiredTemplateVariableNames, templateVariables])
+    const hasMissingRequiredVariables = missingRequiredVariables.length > 0
     const unknownTemplateVariables = useMemo(() => {
         if (!canValidateTemplateVariables) return []
         return templateVariables.filter((variable) => !allowedTemplateVariableNames.has(variable))
@@ -287,8 +290,12 @@ export default function AIWorkflowBuilderPage() {
             toast.error("Template name and subject are required.")
             return
         }
-        if (missingRequiredVariable) {
-            toast.error("Template must include {{unsubscribe_url}}.")
+        if (hasMissingRequiredVariables) {
+            toast.error(
+                `Template is missing required variables: ${missingRequiredVariables
+                    .map((v) => `{{${v}}}`)
+                    .join(", ")}.`
+            )
             return
         }
 
@@ -649,13 +656,13 @@ export default function AIWorkflowBuilderPage() {
                                         <MailIcon className="size-5 text-indigo-500" />
                                         {templateName || generatedTemplate.name}
                                     </CardTitle>
-                                    {templateExplanation && (
-                                        <CardDescription className="mt-1">
-                                            {templateExplanation}
-                                        </CardDescription>
-                                    )}
-                                </div>
-                                {templateErrors.length === 0 && !missingRequiredVariable && (
+                                {templateExplanation && (
+                                    <CardDescription className="mt-1">
+                                        {templateExplanation}
+                                    </CardDescription>
+                                )}
+                            </div>
+                                {templateErrors.length === 0 && !hasMissingRequiredVariables && (
                                     <Badge variant="outline" className="border-green-500 text-green-600">
                                         <CheckCircleIcon className="size-3 mr-1" />
                                         Valid
@@ -715,12 +722,16 @@ export default function AIWorkflowBuilderPage() {
                                 </div>
                             </div>
 
-                            {missingRequiredVariable && (
+                            {hasMissingRequiredVariables && (
                                 <Alert variant="destructive">
                                     <XCircleIcon className="size-4" />
-                                    <AlertTitle>Missing required variable</AlertTitle>
+                                    <AlertTitle>Missing required variables</AlertTitle>
                                     <AlertDescription>
-                                        Add <code>{"{{unsubscribe_url}}"}</code> to the body before saving.
+                                        Add{" "}
+                                        <span className="font-mono">
+                                            {missingRequiredVariables.map((v) => `{{${v}}}`).join(", ")}
+                                        </span>{" "}
+                                        to the template before saving.
                                     </AlertDescription>
                                 </Alert>
                             )}
@@ -749,7 +760,7 @@ export default function AIWorkflowBuilderPage() {
                                     onClick={handleSaveEmailTemplate}
                                     disabled={
                                         createEmailTemplate.isPending ||
-                                        missingRequiredVariable ||
+                                        hasMissingRequiredVariables ||
                                         hasUnknownTemplateVariables ||
                                         templateErrors.length > 0
                                     }

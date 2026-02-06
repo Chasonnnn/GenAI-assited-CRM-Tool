@@ -13,14 +13,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-
-try:  # pragma: no cover - depends on installed middleware
-    from starlette.middleware.proxy_headers import ProxyHeadersMiddleware
-except Exception:  # pragma: no cover - fallback for older Starlette
-    try:
-        from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
-    except Exception:  # pragma: no cover - proxy headers middleware unavailable
-        ProxyHeadersMiddleware = None
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.core.config import settings
 from app.core.deps import COOKIE_NAME
@@ -226,10 +219,7 @@ app = FastAPI(
 )
 
 if settings.TRUST_PROXY_HEADERS:
-    if ProxyHeadersMiddleware is None:
-        logging.warning("ProxyHeadersMiddleware not available; TRUST_PROXY_HEADERS ignored")
-    else:
-        app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=settings.trusted_proxy_hosts)
+    app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=settings.trusted_proxy_hosts)
 
 configure_telemetry(app, engine)
 

@@ -116,7 +116,7 @@ def list_org_email_template_variables() -> list[TemplateVariableDefinition]:
             name="unsubscribe_url",
             description="Unsubscribe link",
             category="Compliance",
-            required=True,
+            required=False,
             value_type="url",
         ),
     ]
@@ -199,7 +199,7 @@ def list_platform_system_template_variables(system_key: str) -> list[TemplateVar
             name="unsubscribe_url",
             description="Unsubscribe link",
             category="Compliance",
-            required=True,
+            required=False,
             value_type="url",
         ),
     ]
