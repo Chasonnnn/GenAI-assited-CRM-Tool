@@ -606,9 +606,7 @@ def test_execute_campaign_run_skips_opt_out_by_default(
         run_id=run.id,
     )
 
-    recipient = (
-        db.query(CampaignRecipient).filter(CampaignRecipient.run_id == run.id).first()
-    )
+    recipient = db.query(CampaignRecipient).filter(CampaignRecipient.run_id == run.id).first()
     assert recipient is not None
     assert recipient.status == "skipped"
     assert recipient.skip_reason == "suppressed"
@@ -693,9 +691,7 @@ def test_execute_campaign_run_can_include_opt_out_when_configured(
         run_id=run.id,
     )
 
-    recipient = (
-        db.query(CampaignRecipient).filter(CampaignRecipient.run_id == run.id).first()
-    )
+    recipient = db.query(CampaignRecipient).filter(CampaignRecipient.run_id == run.id).first()
     assert recipient is not None
     assert recipient.status == "pending"
     assert recipient.external_message_id

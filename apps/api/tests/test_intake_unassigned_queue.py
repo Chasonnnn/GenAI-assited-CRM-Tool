@@ -64,7 +64,9 @@ async def test_intake_can_list_unassigned_queue_and_claim(db, test_org, default_
         mfa_verified=True,
         mfa_required=True,
     )
-    session_service.create_session(db=db, user_id=intake_user.id, org_id=test_org.id, token=token, request=None)
+    session_service.create_session(
+        db=db, user_id=intake_user.id, org_id=test_org.id, token=token, request=None
+    )
 
     def override_get_db():
         yield db
@@ -164,7 +166,9 @@ async def test_intake_cannot_access_other_users_surrogate(db, test_org, default_
         mfa_verified=True,
         mfa_required=True,
     )
-    session_service.create_session(db=db, user_id=intake_user.id, org_id=test_org.id, token=token, request=None)
+    session_service.create_session(
+        db=db, user_id=intake_user.id, org_id=test_org.id, token=token, request=None
+    )
 
     def override_get_db():
         yield db
@@ -215,7 +219,9 @@ async def test_intake_cannot_view_surrogate_pool_claim_queue(db, test_org):
         mfa_verified=True,
         mfa_required=True,
     )
-    session_service.create_session(db=db, user_id=intake_user.id, org_id=test_org.id, token=token, request=None)
+    session_service.create_session(
+        db=db, user_id=intake_user.id, org_id=test_org.id, token=token, request=None
+    )
 
     def override_get_db():
         yield db
@@ -287,7 +293,9 @@ async def test_intake_cannot_claim_from_non_unassigned_queue(db, test_org, defau
         mfa_verified=True,
         mfa_required=True,
     )
-    session_service.create_session(db=db, user_id=intake_user.id, org_id=test_org.id, token=token, request=None)
+    session_service.create_session(
+        db=db, user_id=intake_user.id, org_id=test_org.id, token=token, request=None
+    )
 
     def override_get_db():
         yield db
@@ -305,4 +313,3 @@ async def test_intake_cannot_claim_from_non_unassigned_queue(db, test_org, defau
         assert resp.status_code == 403, resp.text
 
     app.dependency_overrides.clear()
-

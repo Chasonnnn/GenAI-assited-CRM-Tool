@@ -86,4 +86,3 @@ def downgrade() -> None:
         ),
         {"old_label": OLD_LABEL, "new_label": NEW_LABEL},
     )
-

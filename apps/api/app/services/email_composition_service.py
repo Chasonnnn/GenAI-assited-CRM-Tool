@@ -50,14 +50,16 @@ def _build_unsubscribe_footer_html(*, unsubscribe_url: str, include_divider: boo
 
     # Keep the footer unobtrusive and email-client friendly (tables + inline styles).
     divider_style = (
-        "padding-top: 16px; border-top: 1px solid #e5e7eb;" if include_divider else "padding-top: 8px;"
+        "padding-top: 16px; border-top: 1px solid #e5e7eb;"
+        if include_divider
+        else "padding-top: 8px;"
     )
     return (
         '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"'
         ' style="margin-top: 14px;">'
         "<tr>"
         f'<td style="font-family: Arial, sans-serif; font-size: 11px; line-height: 16px;'
-        f" color: #6b7280; {divider_style}\">"
+        f' color: #6b7280; {divider_style}">'
         "If you no longer wish to receive these emails, you can "
         f'<a href="{url}" target="_blank" rel="noopener noreferrer"'
         ' style="color: #6b7280; text-decoration: underline;">'
