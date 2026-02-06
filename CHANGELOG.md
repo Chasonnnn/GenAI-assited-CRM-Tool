@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.72.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.71.0...surrogacy-crm-platform-v0.72.0) (2026-02-06)
+
+
+### Features
+
+* **campaigns:** add include_unsubscribed option to campaigns ([b46668a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b46668a7b465716b1cf0040d5336b95c2e343160))
+* **campaigns:** update models and routers for include_unsubscribed ([2127bd3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2127bd3a791e2c64c44258fecaa7f442abf27152))
+* **email:** implement one-click unsubscribe and improve signature rendering ([b0c87f6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b0c87f6f56c148cf1c560ae2dc257a58fb43e3d4))
+
+
+### Bug Fixes
+
+* **email:** improve template variable resolution and unsubscribe URL building ([0c42022](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0c42022882f7ecf27187522cc50056c067e0e610))
+* **email:** wrap email body with consistent typography ([a2f957d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a2f957d7f7a3437ac7b49815300e29bc3058cfd9))
+
 ## [0.71.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.70.0...surrogacy-crm-platform-v0.71.0) (2026-02-06)
 
 
