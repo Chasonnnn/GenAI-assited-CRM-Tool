@@ -156,10 +156,16 @@ def create_template(
     - scope=org: requires manage permission
     - scope=personal: any user can create their own personal templates
     """
+    from app.services import permission_service
+
     # Check permissions based on scope
     if data.scope == "org":
         # Org templates require manage permission
-        if not session.has_permission(POLICIES["email_templates"].actions["manage"]):
+        manage_perm = POLICIES["email_templates"].actions["manage"]
+        perm_key = manage_perm.value if hasattr(manage_perm, "value") else str(manage_perm)
+        if not permission_service.check_permission(
+            db, session.org_id, session.user_id, session.role.value, perm_key
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to create organization templates",
@@ -188,16 +194,20 @@ def create_template(
                 detail=f"You already have a personal template named '{data.name}'",
             )
 
-    template = email_service.create_template(
-        db,
-        org_id=session.org_id,
-        user_id=session.user_id,
-        name=data.name,
-        subject=data.subject,
-        from_email=data.from_email,
-        body=data.body,
-        scope=data.scope,
-    )
+    try:
+        template = email_service.create_template(
+            db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            name=data.name,
+            subject=data.subject,
+            from_email=data.from_email,
+            body=data.body,
+            scope=data.scope,
+        )
+    except ValueError as exc:
+        # Most commonly this is `from_email` validation.
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _build_template_response(db, template)
 
 
@@ -267,7 +277,7 @@ def get_template(
 
     # Check visibility for personal templates
     if template.scope == "personal" and template.owner_user_id != session.user_id:
-        is_admin = session.role in ("admin", "developer")
+        is_admin = session.role in (Role.ADMIN, Role.DEVELOPER)
         if not is_admin:
             raise HTTPException(status_code=404, detail="Template not found")
 
@@ -291,7 +301,7 @@ def update_template(
     - Org templates: requires manage permission
     - Personal templates: only owner can edit
     """
-    from app.services import version_service
+    from app.services import permission_service, version_service
 
     template = email_service.get_template(db, template_id, session.org_id)
     if not template:
@@ -299,7 +309,11 @@ def update_template(
 
     # Check permissions based on scope
     if template.scope == "org":
-        if not session.has_permission(POLICIES["email_templates"].actions["manage"]):
+        manage_perm = POLICIES["email_templates"].actions["manage"]
+        perm_key = manage_perm.value if hasattr(manage_perm, "value") else str(manage_perm)
+        if not permission_service.check_permission(
+            db, session.org_id, session.user_id, session.role.value, perm_key
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to edit organization templates",
@@ -347,6 +361,8 @@ def update_template(
             status_code=409,
             detail=f"Version conflict: expected {e.expected}, got {e.actual}",
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     return _build_template_response(db, updated)
 
@@ -367,13 +383,19 @@ def delete_template(
     - Org templates: requires manage permission
     - Personal templates: only owner can delete
     """
+    from app.services import permission_service
+
     template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
     # Check permissions based on scope
     if template.scope == "org":
-        if not session.has_permission(POLICIES["email_templates"].actions["manage"]):
+        manage_perm = POLICIES["email_templates"].actions["manage"]
+        perm_key = manage_perm.value if hasattr(manage_perm, "value") else str(manage_perm)
+        if not permission_service.check_permission(
+            db, session.org_id, session.user_id, session.role.value, perm_key
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to delete organization templates",
@@ -421,6 +443,8 @@ def copy_template(
             new_name=data.name,
         )
         return _build_template_response(db, template)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except LookupError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValueError as e:
@@ -476,15 +500,18 @@ def send_email(
     session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
 ):
     """Send an email using a template (queues for async sending). Manager only."""
-    result = email_service.send_from_template(
-        db,
-        org_id=session.org_id,
-        template_id=data.template_id,
-        recipient_email=data.recipient_email,
-        variables=data.variables,
-        surrogate_id=data.surrogate_id,
-        schedule_at=data.schedule_at,
-    )
+    try:
+        result = email_service.send_from_template(
+            db,
+            org_id=session.org_id,
+            template_id=data.template_id,
+            recipient_email=data.recipient_email,
+            variables=data.variables,
+            surrogate_id=data.surrogate_id,
+            schedule_at=data.schedule_at,
+        )
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
     if not result:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -514,6 +541,21 @@ async def send_test_email(
     template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
+
+    # Platform/system templates are not allowed via org endpoints (e.g. org_invite).
+    from app.services import system_email_template_service
+
+    if (
+        template.system_key
+        and template.system_key in system_email_template_service.DEFAULT_SYSTEM_TEMPLATES
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Platform system template '{template.system_key}' cannot be test-sent from org endpoints. "
+                "Use the platform endpoint instead."
+            ),
+        )
 
     # Authorization based on scope
     if template.scope == "org":
@@ -658,7 +700,13 @@ def copy_platform_email_template(
     session=Depends(get_current_session),
 ):
     """Copy a platform template into org templates."""
-    if not session.has_permission(POLICIES["email_templates"].actions["manage"]):
+    from app.services import permission_service
+
+    manage_perm = POLICIES["email_templates"].actions["manage"]
+    perm_key = manage_perm.value if hasattr(manage_perm, "value") else str(manage_perm)
+    if not permission_service.check_permission(
+        db, session.org_id, session.user_id, session.role.value, perm_key
+    ):
         raise HTTPException(status_code=403, detail="Missing permission: manage_email_templates")
 
     from app.services import platform_template_service
@@ -678,11 +726,9 @@ def copy_platform_email_template(
             subject=template.published_subject or template.subject,
             body=template.published_body or template.body,
             from_email=template.published_from_email,
-            is_active=True,
             scope="org",
-            comment=f"Copied from platform template {template.id}",
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e))
 
     return _build_template_response(db, created)

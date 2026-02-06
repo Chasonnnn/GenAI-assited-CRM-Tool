@@ -33,7 +33,7 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
                     {
                         id: "tpl_org_1",
                         name: "Org Template",
-                        subject: "Hello {{full_name}}",
+                        subject: "Your Surrogacy Journey Starts with EWI Family Global",
                         from_email: null,
                         is_active: true,
                         scope: "org",
@@ -50,8 +50,29 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
         return { data: [], isLoading: false }
     },
     useEmailTemplate: () => ({ data: null, isLoading: false }),
-    useEmailTemplateLibrary: () => ({ data: [], isLoading: false }),
-    useEmailTemplateLibraryItem: () => ({ data: null, isLoading: false }),
+    useEmailTemplateLibrary: () => ({
+        data: [
+            {
+                id: "lib_tpl_1",
+                name: "Library Template",
+                subject: "Hello {{full_name}}",
+                category: null,
+            },
+        ],
+        isLoading: false,
+    }),
+    useEmailTemplateLibraryItem: (id: string | null) => ({
+        data:
+            id === "lib_tpl_1"
+                ? {
+                      id: "lib_tpl_1",
+                      name: "Library Template",
+                      subject: "Hello {{full_name}}",
+                      body: "<p>Hi there</p>",
+                  }
+                : null,
+        isLoading: false,
+    }),
     useEmailTemplateVariables: () => ({ data: [], isLoading: false }),
     useCreateEmailTemplate: () => ({ mutate: vi.fn(), isPending: false }),
     useUpdateEmailTemplate: () => ({ mutate: vi.fn(), isPending: false }),
@@ -78,6 +99,7 @@ vi.mock("@/components/rich-text-editor", () => ({
 
 describe("EmailTemplatesPage", () => {
     beforeEach(() => {
+        document.documentElement.classList.remove("dark")
         mockUseAuth.mockReturnValue({
             user: {
                 user_id: "user_1",
@@ -93,14 +115,14 @@ describe("EmailTemplatesPage", () => {
     it("renders updated tabs", () => {
         render(<EmailTemplatesPage />)
         expect(screen.getByRole("tab", { name: "My Email Templates" })).toBeInTheDocument()
-        expect(screen.getByRole("tab", { name: "Email Templates" })).toBeInTheDocument()
+        expect(screen.getByRole("tab", { name: "Organization Templates" })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: "My Signature" })).toBeInTheDocument()
     })
 
     it("shows send test email action and opens dialog", async () => {
         render(<EmailTemplatesPage />)
 
-        fireEvent.click(screen.getByRole("tab", { name: "Email Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
 
         const triggers = document.querySelectorAll('[data-slot="dropdown-menu-trigger"]')
         expect(triggers.length).toBeGreaterThan(0)
@@ -110,5 +132,28 @@ describe("EmailTemplatesPage", () => {
         fireEvent.click(screen.getByText("Send test email"))
 
         expect(await screen.findByLabelText("To email")).toBeInTheDocument()
+    })
+
+    it("truncates long subjects on template cards", () => {
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+
+        expect(screen.getByText("Your Surrogacy Journey Starts with EWI Fam....")).toBeInTheDocument()
+    })
+
+    it("renders a readable email preview on a white background (dark theme)", async () => {
+        document.documentElement.classList.add("dark")
+
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: "Platform Templates" }))
+        fireEvent.click(screen.getByRole("button", { name: "Preview" }))
+
+        expect(await screen.findByText("Email Preview")).toBeInTheDocument()
+
+        const bodyText = await screen.findByText("Hi there")
+        const proseContainer = bodyText.closest(".prose")
+        expect(proseContainer).toHaveClass("prose-stone")
     })
 })

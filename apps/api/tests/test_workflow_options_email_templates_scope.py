@@ -110,7 +110,20 @@ async def test_workflow_options_filters_email_templates_by_scope(db, test_org):
         owner_user_id=other.id,
         is_active=True,
     )
-    db.add_all([org_template, personal_template, other_personal])
+    legacy_platform_invite = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        created_by_user_id=user.id,
+        name="Organization Invite",
+        subject="Invitation to join {{org_name}} as {{role_title}}",
+        body="<p>Invite</p>",
+        scope="org",
+        owner_user_id=None,
+        is_active=True,
+        is_system_template=True,
+        system_key="org_invite",
+    )
+    db.add_all([org_template, personal_template, other_personal, legacy_platform_invite])
     db.commit()
 
     async with authed_client_for_user(db, test_org.id, user, Role.CASE_MANAGER) as client:
@@ -120,6 +133,7 @@ async def test_workflow_options_filters_email_templates_by_scope(db, test_org):
         assert "Org Template" in names
         assert "My Personal" not in names
         assert "Other Personal" not in names
+        assert "Organization Invite" not in names
 
         res = await client.get("/workflows/options?workflow_scope=personal")
         assert res.status_code == 200
@@ -127,3 +141,4 @@ async def test_workflow_options_filters_email_templates_by_scope(db, test_org):
         assert "Org Template" in names
         assert "My Personal" in names
         assert "Other Personal" not in names
+        assert "Organization Invite" not in names

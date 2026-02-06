@@ -202,6 +202,16 @@ def _get_context_for_prompt(
         EmailTemplate.organization_id == org_id,
         EmailTemplate.is_active.is_(True),
     )
+    from app.services import system_email_template_service
+
+    platform_system_keys = set(system_email_template_service.DEFAULT_SYSTEM_TEMPLATES.keys())
+    if platform_system_keys:
+        template_query = template_query.filter(
+            or_(
+                EmailTemplate.system_key.is_(None),
+                EmailTemplate.system_key.notin_(platform_system_keys),
+            )
+        )
     if scope == "org":
         template_query = template_query.filter(EmailTemplate.scope == "org")
     else:

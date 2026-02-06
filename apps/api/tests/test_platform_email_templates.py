@@ -152,3 +152,56 @@ async def test_platform_system_email_campaign_sends_selected_users(
     assert data["failed"] == 0
     assert data["suppressed"] == 0
     assert data["recipients"] == 1
+
+
+@pytest.mark.asyncio
+async def test_platform_create_system_email_template_and_list_includes_it(
+    authed_client, db, test_user
+):
+    test_user.is_platform_admin = True
+    db.commit()
+
+    res = await authed_client.post(
+        "/platform/email/system-templates",
+        json={
+            "system_key": "custom_announcement",
+            "name": "Custom Announcement",
+            "subject": "Announcement for {{org_name}}",
+            "from_email": "Ops <ops@surrogacyforce.com>",
+            "body": "<p>Hello {{org_name}}</p>",
+            "is_active": True,
+        },
+    )
+    assert res.status_code == 201
+    created = res.json()
+    assert created["system_key"] == "custom_announcement"
+    assert created["name"] == "Custom Announcement"
+    assert created["subject"] == "Announcement for {{org_name}}"
+    assert created["from_email"] == "Ops <ops@surrogacyforce.com>"
+    assert created["is_active"] is True
+    assert created["current_version"] == 1
+
+    list_res = await authed_client.get("/platform/email/system-templates")
+    assert list_res.status_code == 200
+    keys = {row["system_key"] for row in list_res.json()}
+    assert "custom_announcement" in keys
+
+
+@pytest.mark.asyncio
+async def test_platform_create_system_email_template_rejects_reserved_new_key(
+    authed_client, db, test_user
+):
+    test_user.is_platform_admin = True
+    db.commit()
+
+    res = await authed_client.post(
+        "/platform/email/system-templates",
+        json={
+            "system_key": "new",
+            "name": "Bad",
+            "subject": "Bad",
+            "body": "<p>Bad</p>",
+            "is_active": True,
+        },
+    )
+    assert res.status_code == 422

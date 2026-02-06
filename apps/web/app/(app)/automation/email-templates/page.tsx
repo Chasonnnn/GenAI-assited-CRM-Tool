@@ -319,7 +319,7 @@ function SignaturePreviewComponent() {
 
     return (
         <div
-            className="prose prose-sm max-w-none"
+            className="prose prose-sm prose-stone max-w-none text-stone-900"
             dangerouslySetInnerHTML={{ __html: preview.html }}
         />
     )
@@ -353,7 +353,7 @@ function OrgSignaturePreviewComponent() {
 
     return (
         <div
-            className="prose prose-sm max-w-none"
+            className="prose prose-sm prose-stone max-w-none text-stone-900"
             dangerouslySetInnerHTML={{ __html: preview.html }}
         />
     )
@@ -365,6 +365,15 @@ function OrgSignaturePreviewComponent() {
 
 type EditorMode = "visual" | "html"
 type ActiveInsertionTarget = "subject" | "body_html" | "body_visual" | null
+
+function truncateCardSubject(subject: string, maxChars = 42): string {
+    const value = (subject || "").trim()
+    if (!value) return ""
+    if (value.length <= maxChars) return value
+
+    // Use 4 dots to match the UI copy style used elsewhere in the app.
+    return `${value.slice(0, maxChars).trimEnd()}....`
+}
 
 function extractTemplateVariables(text: string): string[] {
     if (!text) return []
@@ -403,7 +412,7 @@ function TemplateCard({
     onSendTest,
 }: TemplateCardProps) {
     return (
-        <Card className="group relative">
+        <Card className="group relative min-w-0">
             <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
@@ -417,8 +426,8 @@ function TemplateCard({
                                 </Badge>
                             )}
                         </div>
-                        <CardDescription className="truncate mt-1">
-                            {template.subject}
+                        <CardDescription className="truncate mt-1" title={template.subject}>
+                            {truncateCardSubject(template.subject)}
                         </CardDescription>
                         {template.owner_name && (
                             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
@@ -1178,7 +1187,7 @@ export default function EmailTemplatesPage() {
                             </TabsTrigger>
                             <TabsTrigger value="org" className="gap-2">
                                 <BuildingIcon className="size-4" />
-                                Email Templates
+                                Organization Templates
                             </TabsTrigger>
                             <TabsTrigger value="platform" className="gap-2">
                                 <LayoutTemplateIcon className="size-4" />
@@ -2036,7 +2045,7 @@ export default function EmailTemplatesPage() {
                         {/* Email body section */}
                         <div className="p-4">
                             <div
-                                className="prose prose-sm max-w-none [&_p]:whitespace-pre-wrap"
+                                className="prose prose-sm prose-stone max-w-none text-stone-900 [&_p]:whitespace-pre-wrap"
                                 dangerouslySetInnerHTML={{ __html: previewHtml }}
                             />
                         </div>
