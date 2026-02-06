@@ -253,7 +253,7 @@ export function SurrogateOverviewTab() {
 
                     <SurrogateOverviewCard title="Eligibility Checklist" icon={ClipboardCheckIcon}>
                         {[
-                            { label: "Age Eligible (18-42)", value: surrogateData.is_age_eligible },
+                            { label: "Age Eligible (21-36)", value: surrogateData.is_age_eligible },
                             { label: "US Citizen or PR", value: surrogateData.is_citizen_or_pr },
                             { label: "Has Child", value: surrogateData.has_child },
                             { label: "Non-Smoker", value: surrogateData.is_non_smoker },

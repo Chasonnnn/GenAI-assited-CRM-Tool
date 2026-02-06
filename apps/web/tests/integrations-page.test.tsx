@@ -96,10 +96,20 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/components/ui/dialog', () => ({
     Dialog: ({ open, children }: { open?: boolean; children?: ReactNode }) =>
         open ? <div data-testid="dialog-root">{children}</div> : null,
-    DialogContent: ({ children }: { children?: ReactNode }) => <div role="dialog">{children}</div>,
-    DialogHeader: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-    DialogTitle: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-    DialogDescription: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    DialogContent: ({ children, className }: { children?: ReactNode; className?: string }) => (
+        <div role="dialog" className={className}>
+            {children}
+        </div>
+    ),
+    DialogHeader: ({ children, className }: { children?: ReactNode; className?: string }) => (
+        <div className={className}>{children}</div>
+    ),
+    DialogTitle: ({ children, className }: { children?: ReactNode; className?: string }) => (
+        <div className={className}>{children}</div>
+    ),
+    DialogDescription: ({ children, className }: { children?: ReactNode; className?: string }) => (
+        <div className={className}>{children}</div>
+    ),
 }))
 
 vi.mock('@/lib/hooks/use-user-integrations', () => ({
@@ -227,6 +237,9 @@ describe('IntegrationsPage', () => {
         fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
 
         const dialog = screen.getByRole('dialog')
+        expect(dialog.className).toContain('h-[85vh]')
+        expect(within(dialog).getByTestId('zapier-dialog-body').className).toContain('overflow-y-auto')
+        expect(within(dialog).getByTestId('zapier-dialog-body').className).toContain('min-h-0')
         const inboundHeader = within(dialog).getByTestId('zapier-inbound-header')
         expect(inboundHeader.className).not.toContain('md:flex-row')
     })

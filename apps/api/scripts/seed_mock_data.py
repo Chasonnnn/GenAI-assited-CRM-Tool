@@ -291,7 +291,7 @@ def random_email(first: str, last: str, idx: int) -> str:
     return f"{first.lower()}.{last.lower()}{idx}@{random.choice(domains)}"
 
 
-def random_date_of_birth(min_age: int = 21, max_age: int = 42) -> date:
+def random_date_of_birth(min_age: int = 21, max_age: int = 36) -> date:
     """Generate random DOB for given age range."""
     today = date.today()
     days_offset = random.randint(min_age * 365, max_age * 365)
@@ -459,7 +459,7 @@ def create_surrogates(
         full_name = f"{first} {last}"
         email = random_email(first, last, i + 1)
         phone = random_phone()
-        dob = random_date_of_birth(21, 40)
+        dob = random_date_of_birth(21, 36)
         state = random.choice(STATES)
 
         # Address components for clinics/hospitals
