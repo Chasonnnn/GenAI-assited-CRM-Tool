@@ -54,6 +54,12 @@ class NotQueueMemberError(QueueServiceError):
     pass
 
 
+class NotAllowedQueueError(QueueServiceError):
+    """Surrogate is in a queue the caller isn't allowed to claim from."""
+
+    pass
+
+
 class QueueMemberExistsError(QueueServiceError):
     """Queue member already exists."""
 
@@ -280,6 +286,8 @@ def claim_surrogate(
     org_id: UUID,
     surrogate_id: UUID,
     claimer_user_id: UUID,
+    *,
+    allowed_queue_ids: set[UUID] | None = None,
 ) -> Surrogate:
     """
     Claim a surrogate from a queue. Atomic operation.
@@ -301,6 +309,9 @@ def claim_surrogate(
 
     if surrogate.owner_type != OwnerType.QUEUE.value:
         raise SurrogateAlreadyClaimedError("Surrogate is already owned by a user, not in a queue")
+
+    if allowed_queue_ids is not None and surrogate.owner_id not in allowed_queue_ids:
+        raise NotAllowedQueueError("Surrogate is not in an allowed queue for claiming")
 
     # Check if user is a member of the queue (if queue has members)
     queue = db.query(Queue).filter(Queue.id == surrogate.owner_id).first()

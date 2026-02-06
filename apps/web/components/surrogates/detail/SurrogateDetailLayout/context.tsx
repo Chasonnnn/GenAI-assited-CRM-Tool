@@ -135,6 +135,7 @@ export interface SurrogateDetailLayoutContextValue {
 
     // Permissions
     canManageQueue: boolean
+    canClaimSurrogate: boolean
     canChangeStage: boolean
     isOwnedByCurrentUser: boolean
     isInQueue: boolean
@@ -256,7 +257,9 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
     const { data: defaultPipeline } = useDefaultPipeline()
     const { data: notes } = useNotes(surrogateId)
     const { data: tasksData } = useTasks({ surrogate_id: surrogateId, exclude_approvals: true })
-    const { data: queues = [] } = useQueues()
+    const { data: queues = [] } = useQueues(false, {
+        enabled: !!user?.role && ["case_manager", "admin", "developer"].includes(user.role),
+    })
     const { data: assigneesData = [] } = useAssignees()
     const { data: zoomStatus } = useZoomStatus()
 
@@ -320,6 +323,16 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
     const isInQueue = surrogateData?.owner_type === "queue"
     const isOwnedByUser = surrogateData?.owner_type === "user"
     const zoomConnected = !!zoomStatus?.connected
+    const isUnassignedQueue = !!(
+        surrogateData?.owner_type === "queue" &&
+        surrogateData.owner_name === "Unassigned"
+    )
+    const canClaimSurrogate = !!(
+        surrogateData &&
+        !surrogateData.is_archived &&
+        isInQueue &&
+        (canManageQueue || (user?.role === "intake_specialist" && isUnassignedQueue))
+    )
 
     // Set AI context
     useSetAIContext(
@@ -446,6 +459,7 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
 
     const claimSurrogate = useCallback(async () => {
         await claimSurrogateMutation.mutateAsync(surrogateId)
+        toast.success("Surrogate claimed")
     }, [claimSurrogateMutation, surrogateId])
 
     const releaseSurrogate = useCallback(async () => {
@@ -590,6 +604,7 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
         sendZoomInvite,
 
         canManageQueue,
+        canClaimSurrogate,
         canChangeStage,
         isOwnedByCurrentUser,
         isInQueue,
@@ -648,6 +663,7 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
         createZoomMeeting,
         sendZoomInvite,
         canManageQueue,
+        canClaimSurrogate,
         canChangeStage,
         isOwnedByCurrentUser,
         isInQueue,

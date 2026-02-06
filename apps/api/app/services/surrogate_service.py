@@ -1058,6 +1058,44 @@ def list_claim_queue(
     return surrogates, total
 
 
+def list_unassigned_queue(
+    db: Session,
+    org_id: UUID,
+    page: int = 1,
+    per_page: int = 20,
+) -> tuple[list[Surrogate], int]:
+    """List surrogates in the system default Unassigned queue (org-scoped)."""
+    from app.db.enums import OwnerType
+    from app.db.models import PipelineStage, Queue
+    from app.services import queue_service
+
+    default_queue = queue_service.get_or_create_default_queue(db, org_id)
+    if not default_queue:
+        return [], 0
+
+    query = (
+        db.query(Surrogate)
+        .options(
+            joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
+            joinedload(Surrogate.owner_user).load_only(User.display_name),
+            joinedload(Surrogate.owner_queue).load_only(Queue.name),
+        )
+        .filter(
+            Surrogate.organization_id == org_id,
+            Surrogate.is_archived.is_(False),
+            Surrogate.owner_type == OwnerType.QUEUE.value,
+            Surrogate.owner_id == default_queue.id,
+        )
+        .order_by(Surrogate.updated_at.desc())
+    )
+
+    total = query.count()
+    offset = (page - 1) * per_page
+    surrogates = query.offset(offset).limit(per_page).all()
+
+    return surrogates, total
+
+
 def get_status_history(
     db: Session, surrogate_id: UUID, org_id: UUID
 ) -> list[SurrogateStatusHistory]:

@@ -5,10 +5,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_csrf_header, require_permission
+from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
 from app.core.policies import POLICIES
 from app.core.surrogate_access import can_modify_surrogate, check_surrogate_access
-from app.db.enums import OwnerType
+from app.db.enums import OwnerType, Role
 from app.schemas.auth import UserSession
 from app.schemas.surrogate import (
     BulkAssign,
@@ -46,6 +46,70 @@ def create_surrogate(
         raise
 
     return _surrogate_to_read(surrogate, db)
+
+
+@router.post(
+    "/{surrogate_id:uuid}/claim",
+    response_model=dict,
+    dependencies=[Depends(require_csrf_header)],
+)
+def claim_surrogate(
+    surrogate_id: UUID,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """
+    Claim a surrogate from a queue (atomic).
+
+    - Intake specialists: only allowed to claim from the system Unassigned queue.
+    - Case managers/admin/developer: must have assign_surrogates permission (can claim from any queue).
+    """
+    from app.services import permission_service
+    from app.services.queue_service import (
+        NotAllowedQueueError,
+        NotQueueMemberError,
+        SurrogateAlreadyClaimedError,
+        SurrogateNotFoundError,
+    )
+
+    role_str = session.role.value if hasattr(session.role, "value") else session.role
+
+    allowed_queue_ids = None
+    if session.role == Role.INTAKE_SPECIALIST:
+        default_queue = queue_service.get_or_create_default_queue(db, session.org_id)
+        allowed_queue_ids = {default_queue.id}
+    else:
+        # Respect per-user permission overrides (revoke > grant > role default).
+        if not permission_service.check_permission(
+            db,
+            session.org_id,
+            session.user_id,
+            role_str,
+            "assign_surrogates",
+        ):
+            raise HTTPException(status_code=403, detail="Missing permission: assign_surrogates")
+
+    try:
+        surrogate = queue_service.claim_surrogate(
+            db=db,
+            org_id=session.org_id,
+            surrogate_id=surrogate_id,
+            claimer_user_id=session.user_id,
+            allowed_queue_ids=allowed_queue_ids,
+        )
+        db.commit()
+        return {"message": "Surrogate claimed", "surrogate_id": str(surrogate.id)}
+    except SurrogateNotFoundError:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+    except NotAllowedQueueError:
+        raise HTTPException(
+            status_code=403,
+            detail="Only surrogates in the Unassigned queue can be claimed by intake specialists",
+        )
+    except NotQueueMemberError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except SurrogateAlreadyClaimedError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 @router.patch(

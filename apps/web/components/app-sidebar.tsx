@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button"
 import {
     Home,
     FolderOpen,
+    Inbox,
     Users,
     CheckSquare,
     BarChart3,
@@ -119,6 +120,31 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const isAdmin = user?.role === "admin"
     const isDeveloper = user?.role === "developer"
     const isMobile = useIsMobile()
+
+    const navigationItems = React.useMemo(() => {
+        if (user?.role !== "intake_specialist") return navigation
+
+        return [
+            ...navigation.slice(0, 2),
+            {
+                title: "Unassigned Queue",
+                url: "/surrogates/unassigned",
+                icon: Inbox,
+            },
+            ...navigation.slice(2),
+        ]
+    }, [user?.role])
+
+    const activeNavUrl = React.useMemo(() => {
+        if (!pathname) return null
+        const matches = navigationItems.filter(
+            (item) => pathname === item.url || pathname.startsWith(item.url + "/")
+        )
+        if (matches.length === 0) return null
+        matches.sort((a, b) => b.url.length - a.url.length)
+        return matches[0]!.url
+    }, [pathname, navigationItems])
+
     const activeSettingsTab = searchParams.get("tab")
     const activeAutomationTab = searchParams.get("tab")
 
@@ -251,7 +277,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
     const renderNavLink = useCallback(
         (item: { title: string; url: string; icon: React.ComponentType<{ className?: string }> }) => {
-            const active = pathname === item.url || pathname?.startsWith(item.url + "/")
+            const active = activeNavUrl === item.url
             const Icon = item.icon
             return (
                 <Link
@@ -265,7 +291,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                 </Link>
             )
         },
-        [pathname, navItemClass, isCollapsed]
+        [activeNavUrl, navItemClass, isCollapsed]
     )
 
     const sidebarContent = (
@@ -307,7 +333,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
             <nav className="flex-1 px-2 pt-3">
                 <div className="mb-2 text-xs font-medium text-muted-foreground">Navigation</div>
                 <div className="flex flex-col gap-1">
-                    {navigation.map((item) => (
+                    {navigationItems.map((item) => (
                         <div key={item.title}>{renderNavLink(item)}</div>
                     ))}
 

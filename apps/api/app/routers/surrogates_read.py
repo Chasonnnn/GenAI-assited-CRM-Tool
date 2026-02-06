@@ -70,6 +70,32 @@ def get_assignees(
     return surrogate_service.list_assignees(db, session.org_id)
 
 
+@router.get("/unassigned-queue", response_model=SurrogateListResponse)
+def list_unassigned_queue(
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
+):
+    """List surrogates in the system Unassigned queue (ready for intake claim)."""
+    surrogates, total = surrogate_service.list_unassigned_queue(
+        db=db,
+        org_id=session.org_id,
+        page=page,
+        per_page=per_page,
+    )
+
+    pages = (total + per_page - 1) // per_page if per_page > 0 else 0
+
+    return SurrogateListResponse(
+        items=[_surrogate_to_list_item(s, db) for s in surrogates],
+        total=total,
+        page=page,
+        per_page=per_page,
+        pages=pages,
+    )
+
+
 def list_surrogates(
     request: Request,
     session: UserSession = Depends(get_current_session),
@@ -194,6 +220,9 @@ def list_claim_queue(
     per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
 ):
     """List approved surrogates in Surrogate Pool (ready for claim)."""
+    if session.role not in (Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER):
+        raise HTTPException(status_code=403, detail="Only case managers can view the claim queue")
+
     surrogates, total = surrogate_service.list_claim_queue(
         db=db,
         org_id=session.org_id,

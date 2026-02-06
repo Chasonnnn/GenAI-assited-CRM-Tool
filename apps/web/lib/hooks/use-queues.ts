@@ -64,7 +64,7 @@ async function deleteQueue(queueId: string): Promise<void> {
 }
 
 async function claimSurrogate(surrogateId: string): Promise<{ message: string; surrogate_id: string }> {
-    return api.post(`/queues/surrogates/${surrogateId}/claim`);
+    return api.post(`/surrogates/${surrogateId}/claim`);
 }
 
 async function releaseSurrogate(surrogateId: string, queueId: string): Promise<{ message: string; surrogate_id: string }> {
@@ -94,11 +94,12 @@ export const queueKeys = {
 /**
  * Fetch all queues for the organization.
  */
-export function useQueues(includeInactive = false) {
+export function useQueues(includeInactive = false, options: { enabled?: boolean } = {}) {
     return useQuery({
         queryKey: queueKeys.list(includeInactive),
         queryFn: () => getQueues(includeInactive),
         staleTime: 60 * 1000, // 1 minute
+        enabled: options.enabled ?? true,
     });
 }
 
@@ -169,6 +170,7 @@ export function useClaimSurrogate() {
         onSuccess: (_, surrogateId) => {
             queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
             queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
             queryClient.invalidateQueries({ queryKey: queueKeys.all });
         },
     });

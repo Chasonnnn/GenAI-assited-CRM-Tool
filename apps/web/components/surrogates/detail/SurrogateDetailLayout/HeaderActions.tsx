@@ -32,6 +32,7 @@ export function HeaderActions() {
         assignees,
         openDialog,
         canManageQueue,
+        canClaimSurrogate,
         canChangeStage,
         isInQueue,
         isOwnedByUser,
@@ -103,7 +104,7 @@ export function HeaderActions() {
                 </Button>
             )}
 
-            {canManageQueue && isInQueue && (
+            {canClaimSurrogate && isInQueue && (
                 <Button
                     variant="default"
                     size="sm"

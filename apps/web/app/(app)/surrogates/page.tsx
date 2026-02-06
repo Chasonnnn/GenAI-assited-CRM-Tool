@@ -336,7 +336,7 @@ export default function SurrogatesPage() {
 
     // Fetch queues for filter dropdown (case_manager+ only)
     const canSeeQueues = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
-    const { data: queues } = useQueues()
+    const { data: queues } = useQueues(false, { enabled: !!canSeeQueues })
     const { data: defaultPipeline } = useDefaultPipeline()
     const stageOptions = defaultPipeline?.stages || []
     const stageById = new Map(stageOptions.map(stage => [stage.id, stage]))

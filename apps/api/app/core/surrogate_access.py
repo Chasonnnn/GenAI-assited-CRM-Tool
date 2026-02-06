@@ -65,7 +65,7 @@ def check_surrogate_access(
             detail="Surrogate ownership is not set",
         )
 
-    _check_owner_based_access(surrogate, role_str, user_id)
+    _check_owner_based_access(surrogate, role_str, user_id, db=db, org_id=org_id)
 
 
 def _check_post_approval_access(
@@ -98,7 +98,14 @@ def _check_post_approval_access(
         )
 
 
-def _check_owner_based_access(surrogate: Surrogate, role_str: str, user_id: UUID | None) -> None:
+def _check_owner_based_access(
+    surrogate: Surrogate,
+    role_str: str,
+    user_id: UUID | None,
+    *,
+    db: Session | None = None,
+    org_id: UUID | None = None,
+) -> None:
     """Owner-based access check."""
 
     # Queue-owned surrogates: case_manager+ can access
@@ -106,10 +113,20 @@ def _check_owner_based_access(surrogate: Surrogate, role_str: str, user_id: UUID
         if role_str == Role.CASE_MANAGER.value:
             return  # Case managers can see queue items
         if role_str == Role.INTAKE_SPECIALIST.value:
-            # Intake can only see queue surrogates if specifically allowed (future: queue membership)
+            # Intake can only see surrogates in the system Unassigned queue.
+            if not db or not org_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You don't have access to this surrogate",
+                )
+            from app.services import queue_service
+
+            default_queue = queue_service.get_or_create_default_queue(db, org_id)
+            if default_queue and surrogate.owner_id == default_queue.id:
+                return
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="This surrogate is in a case manager queue",
+                detail="You don't have access to this surrogate",
             )
         return
 

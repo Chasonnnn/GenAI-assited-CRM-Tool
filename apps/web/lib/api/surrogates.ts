@@ -239,6 +239,32 @@ export function getSurrogates(params: SurrogateListParams = {}): Promise<Surroga
     return api.get<SurrogateListResponse>(`/surrogates${query ? `?${query}` : ''}`);
 }
 
+export interface UnassignedQueueParams {
+    page?: number;
+    per_page?: number;
+}
+
+/**
+ * List surrogates in the system Unassigned queue.
+ */
+export function getUnassignedQueue(params: UnassignedQueueParams = {}): Promise<SurrogateListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.page) searchParams.set('page', String(params.page));
+    if (params.per_page) searchParams.set('per_page', String(params.per_page));
+    const query = searchParams.toString();
+    return api.get<SurrogateListResponse>(`/surrogates/unassigned-queue${query ? `?${query}` : ''}`);
+}
+
+/**
+ * Claim a surrogate from a queue.
+ *
+ * - Intake specialists: only from Unassigned queue.
+ * - Case managers/admin/developer: from any queue (subject to membership rules).
+ */
+export function claimSurrogate(surrogateId: string): Promise<{ message: string; surrogate_id: string }> {
+    return api.post<{ message: string; surrogate_id: string }>(`/surrogates/${surrogateId}/claim`);
+}
+
 /**
  * Get single surrogate by ID.
  */

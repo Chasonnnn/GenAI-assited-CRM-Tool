@@ -519,12 +519,17 @@ def list_tasks(
     if user_role == Role.INTAKE_SPECIALIST.value or user_role == Role.INTAKE_SPECIALIST:
         # Subquery: surrogates intake can access (owner-based)
         if user_id:
+            default_queue = queue_service.get_or_create_default_queue(db, org_id)
             accessible_surrogate_ids = (
                 db.query(Surrogate.id)
                 .filter(
                     Surrogate.organization_id == org_id,
-                    (Surrogate.owner_type == OwnerType.USER.value)
-                    & (Surrogate.owner_id == user_id),
+                    or_(
+                        (Surrogate.owner_type == OwnerType.USER.value)
+                        & (Surrogate.owner_id == user_id),
+                        (Surrogate.owner_type == OwnerType.QUEUE.value)
+                        & (Surrogate.owner_id == default_queue.id),
+                    ),
                 )
                 .subquery()
             )

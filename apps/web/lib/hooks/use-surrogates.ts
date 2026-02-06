@@ -12,6 +12,9 @@ export const surrogateKeys = {
     lists: () => [...surrogateKeys.all, 'list'] as const,
     list: (params: SurrogateListParams) => [...surrogateKeys.lists(), params] as const,
     stats: () => [...surrogateKeys.all, 'stats'] as const,
+    unassignedQueue: () => [...surrogateKeys.all, 'unassigned-queue'] as const,
+    unassignedQueueList: (params: surrogatesApi.UnassignedQueueParams) =>
+        [...surrogateKeys.unassignedQueue(), params] as const,
     details: () => [...surrogateKeys.all, 'detail'] as const,
     detail: (id: string) => [...surrogateKeys.details(), id] as const,
     history: (id: string) => [...surrogateKeys.detail(id), 'history'] as const,
@@ -37,6 +40,20 @@ export function useSurrogates(params: SurrogateListParams = {}) {
     return useQuery({
         queryKey: surrogateKeys.list(params),
         queryFn: () => surrogatesApi.getSurrogates(params),
+    });
+}
+
+/**
+ * Fetch paginated surrogates in the Unassigned queue.
+ */
+export function useUnassignedQueue(
+    params: surrogatesApi.UnassignedQueueParams = {},
+    options: { enabled?: boolean } = {}
+) {
+    return useQuery({
+        queryKey: surrogateKeys.unassignedQueueList(params),
+        queryFn: () => surrogatesApi.getUnassignedQueue(params),
+        enabled: options.enabled ?? true,
     });
 }
 
