@@ -26,6 +26,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
     Select,
     SelectContent,
@@ -53,6 +54,7 @@ import {
     LayoutTemplateIcon,
     LockIcon,
     SparklesIcon,
+    AlertTriangleIcon,
 } from "lucide-react"
 import DOMPurify from "dompurify"
 import {
@@ -63,6 +65,7 @@ import {
     useDeleteEmailTemplate,
     useCopyTemplateToPersonal,
     useShareTemplateWithOrg,
+    useEmailTemplateVariables,
     useEmailTemplateLibrary,
     useEmailTemplateLibraryItem,
     useCopyTemplateFromLibrary,
@@ -76,12 +79,15 @@ import {
     useOrgSignaturePreview,
 } from "@/lib/hooks/use-signature"
 import { getSignaturePreview } from "@/lib/api/signature"
-import { RichTextEditor } from "@/components/rich-text-editor"
+import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor"
+import { TemplateVariablePicker } from "@/components/email/TemplateVariablePicker"
 import type { EmailTemplateListItem, EmailTemplateScope, EmailTemplateLibraryItem } from "@/lib/api/email-templates"
 import { toast } from "sonner"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import Link from "@/components/app-link"
+import { normalizeTemplateHtml } from "@/lib/email-template-html"
+import { insertAtCursor } from "@/lib/insert-at-cursor"
 
 // =============================================================================
 // Signature Override Field Component
@@ -354,24 +360,15 @@ function OrgSignaturePreviewComponent() {
 // Available template variables
 // =============================================================================
 
-const TEMPLATE_VARIABLES = [
-    { name: "first_name", description: "Contact first name" },
-    { name: "full_name", description: "Contact full name" },
-    { name: "email", description: "Contact email" },
-    { name: "phone", description: "Contact phone" },
-    { name: "surrogate_number", description: "Surrogate number" },
-    { name: "intended_parent_number", description: "Intended parent number" },
-    { name: "status_label", description: "Current status" },
-    { name: "owner_name", description: "Surrogate owner name" },
-    { name: "org_name", description: "Organization name" },
-    { name: "org_logo_url", description: "Organization logo URL (use as image src)" },
-    { name: "appointment_date", description: "Appointment date" },
-    { name: "appointment_time", description: "Appointment time" },
-    { name: "appointment_location", description: "Appointment location" },
-    { name: "unsubscribe_url", description: "Unsubscribe link" },
-]
-
 type EditorMode = "visual" | "html"
+type ActiveInsertionTarget = "subject" | "body_html" | "body_visual" | null
+
+function extractTemplateVariables(text: string): string[] {
+    if (!text) return []
+    const matches = text.match(/{{\s*([a-zA-Z0-9_]+)\s*}}/g) ?? []
+    const variables = matches.map((match) => match.replace(/{{\s*|\s*}}/g, ""))
+    return Array.from(new Set(variables))
+}
 
 // =============================================================================
 // Template Card Component
@@ -514,6 +511,13 @@ export default function EmailTemplatesPage() {
     const [previewHtml, setPreviewHtml] = useState("")
     const [signaturePreviewMode, setSignaturePreviewMode] = useState<"personal" | "org">("personal")
 
+    const subjectRef = useRef<HTMLInputElement | null>(null)
+    const subjectSelectionRef = useRef<{ start: number; end: number } | null>(null)
+    const htmlBodyRef = useRef<HTMLTextAreaElement | null>(null)
+    const htmlBodySelectionRef = useRef<{ start: number; end: number } | null>(null)
+    const visualBodyRef = useRef<RichTextEditorHandle | null>(null)
+    const [activeInsertionTarget, setActiveInsertionTarget] = useState<ActiveInsertionTarget>(null)
+
     // Copy/Share dialog state
     const [copyDialogOpen, setCopyDialogOpen] = useState(false)
     const [shareDialogOpen, setShareDialogOpen] = useState(false)
@@ -543,6 +547,8 @@ export default function EmailTemplatesPage() {
         () => /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(templateBody),
         [templateBody]
     )
+
+    const { data: templateVariables = [], isLoading: templateVariablesLoading } = useEmailTemplateVariables()
 
     // API hooks for templates
     const { data: personalTemplates, isLoading: loadingPersonal } = useEmailTemplates({
@@ -628,11 +634,60 @@ export default function EmailTemplatesPage() {
         })
     }, [])
 
-    const normalizeTemplateHtml = useCallback((html: string) => {
-        return html
-            .replace(/<p>\s*<\/p>/gi, "<p>&nbsp;</p>")
-            .replace(/<p>\s*<br\s*\/?>\s*<\/p>/gi, "<p>&nbsp;</p>")
-    }, [])
+    const canValidateVariables = !templateVariablesLoading && templateVariables.length > 0
+    const allowedVariableNames = React.useMemo(
+        () => new Set(templateVariables.map((variable) => variable.name)),
+        [templateVariables]
+    )
+    const requiredVariableNames = React.useMemo(
+        () => templateVariables.filter((variable) => variable.required).map((variable) => variable.name),
+        [templateVariables]
+    )
+    const usedVariableNames = React.useMemo(
+        () => extractTemplateVariables(`${templateSubject}\n${templateBody}`),
+        [templateSubject, templateBody]
+    )
+    const unknownVariables = React.useMemo(() => {
+        if (!canValidateVariables) return []
+        return usedVariableNames.filter((variable) => !allowedVariableNames.has(variable))
+    }, [allowedVariableNames, canValidateVariables, usedVariableNames])
+    const missingRequiredVariables = React.useMemo(() => {
+        if (!canValidateVariables) return []
+        return requiredVariableNames.filter((variable) => !usedVariableNames.includes(variable))
+    }, [canValidateVariables, requiredVariableNames, usedVariableNames])
+
+    const recordSelection = (
+        el: HTMLInputElement | HTMLTextAreaElement,
+        ref: React.MutableRefObject<{ start: number; end: number } | null>
+    ) => {
+        ref.current = {
+            start: el.selectionStart ?? el.value.length,
+            end: el.selectionEnd ?? el.value.length,
+        }
+    }
+
+    const insertIntoTextControl = (
+        el: HTMLInputElement | HTMLTextAreaElement | null,
+        selectionRef: React.MutableRefObject<{ start: number; end: number } | null>,
+        setValue: React.Dispatch<React.SetStateAction<string>>,
+        token: string
+    ) => {
+        if (!el) {
+            setValue((prev) => `${prev}${token}`)
+            return
+        }
+        const selection = selectionRef.current ?? {
+            start: el.selectionStart ?? el.value.length,
+            end: el.selectionEnd ?? el.value.length,
+        }
+        const result = insertAtCursor(el.value, token, selection.start, selection.end)
+        setValue(result.nextValue)
+        requestAnimationFrame(() => {
+            el.focus()
+            el.setSelectionRange(result.nextSelectionStart, result.nextSelectionEnd)
+            selectionRef.current = { start: result.nextSelectionStart, end: result.nextSelectionEnd }
+        })
+    }
 
     // Load signature data on mount
     useEffect(() => {
@@ -793,7 +848,7 @@ export default function EmailTemplatesPage() {
 
             return sanitizeHtml(html)
         },
-        [normalizeTemplateHtml, sanitizeHtml, signatureData?.org_signature_company_name]
+        [sanitizeHtml, signatureData?.org_signature_company_name]
     )
 
     useEffect(() => {
@@ -829,14 +884,37 @@ export default function EmailTemplatesPage() {
         )
     }
 
-    const insertVariable = (varName: string) => {
-        setTemplateBody(templateBody + `{{${varName}}}`)
+    const insertToken = (token: string) => {
+        if (activeInsertionTarget === "subject") {
+            insertIntoTextControl(subjectRef.current, subjectSelectionRef, setTemplateSubject, token)
+            return
+        }
+        if (activeInsertionTarget === "body_html") {
+            insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setTemplateBody, token)
+            return
+        }
+        if (activeInsertionTarget === "body_visual") {
+            visualBodyRef.current?.insertText(token)
+            return
+        }
+
+        if (templateBodyMode === "html") {
+            insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setTemplateBody, token)
+            return
+        }
+        visualBodyRef.current?.insertText(token)
     }
 
     const insertOrgLogo = () => {
         if (templateBody.includes("{{org_logo_url}}")) return
         const logo = `<p><img src="{{org_logo_url}}" alt="{{org_name}} logo" style="max-width: 160px; height: auto; display: block;" /></p>\n`
-        setTemplateBody(`${logo}${templateBody}`)
+        if (templateBodyMode === "visual") {
+            visualBodyRef.current?.insertHtml(logo)
+            setActiveInsertionTarget("body_visual")
+            return
+        }
+        insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setTemplateBody, logo)
+        setActiveInsertionTarget("body_html")
     }
 
     // Save all signature settings
@@ -1420,8 +1498,16 @@ export default function EmailTemplatesPage() {
                             <Input
                                 id="subject"
                                 placeholder="Welcome to {{org_name}}, {{full_name}}!"
+                                ref={subjectRef}
                                 value={templateSubject}
                                 onChange={(e) => setTemplateSubject(e.target.value)}
+                                onFocus={(e) => {
+                                    setActiveInsertionTarget("subject")
+                                    recordSelection(e.currentTarget, subjectSelectionRef)
+                                }}
+                                onKeyUp={(e) => recordSelection(e.currentTarget, subjectSelectionRef)}
+                                onMouseUp={(e) => recordSelection(e.currentTarget, subjectSelectionRef)}
+                                onSelect={(e) => recordSelection(e.currentTarget, subjectSelectionRef)}
                             />
                         </div>
 
@@ -1446,27 +1532,12 @@ export default function EmailTemplatesPage() {
                                             HTML
                                         </ToggleGroupItem>
                                     </ToggleGroup>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger>
-                                            <span className="inline-flex items-center justify-center gap-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 px-3 text-sm cursor-pointer">
-                                                <CodeIcon className="size-4" />
-                                                Insert Variable
-                                            </span>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" className="w-56">
-                                            {TEMPLATE_VARIABLES.map((v) => (
-                                                <DropdownMenuItem
-                                                    key={v.name}
-                                                    onClick={() => insertVariable(v.name)}
-                                                >
-                                                    <span className="font-mono text-xs">{`{{${v.name}}}`}</span>
-                                                    <span className="ml-2 text-muted-foreground text-xs">
-                                                        {v.description}
-                                                    </span>
-                                                </DropdownMenuItem>
-                                            ))}
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
+                                    <TemplateVariablePicker
+                                        variables={templateVariables}
+                                        disabled={templateVariablesLoading || templateVariables.length === 0}
+                                        triggerLabel={templateVariablesLoading ? "Loading..." : "Insert Variable"}
+                                        onSelect={(variable) => insertToken(`{{${variable.name}}}`)}
+                                    />
                                     <Button variant="outline" size="sm" onClick={insertOrgLogo}>
                                         Insert Logo
                                     </Button>
@@ -1474,8 +1545,10 @@ export default function EmailTemplatesPage() {
                             </div>
                             {templateBodyMode === "visual" ? (
                                 <RichTextEditor
+                                    ref={visualBodyRef}
                                     content={templateBody}
                                     onChange={(html) => setTemplateBody(html)}
+                                    onFocus={() => setActiveInsertionTarget("body_visual")}
                                     placeholder="Write your email content here... Use the toolbar to format text."
                                     minHeight="200px"
                                     maxHeight="350px"
@@ -1484,8 +1557,16 @@ export default function EmailTemplatesPage() {
                             ) : (
                                 <Textarea
                                     id="body"
+                                    ref={htmlBodyRef}
                                     value={templateBody}
                                     onChange={(event) => setTemplateBody(event.target.value)}
+                                    onFocus={(event) => {
+                                        setActiveInsertionTarget("body_html")
+                                        recordSelection(event.currentTarget, htmlBodySelectionRef)
+                                    }}
+                                    onKeyUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
+                                    onMouseUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
+                                    onSelect={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
                                     placeholder="Paste or edit the HTML for this template..."
                                     className="min-h-[220px] font-mono text-xs leading-relaxed"
                                 />
@@ -1498,6 +1579,31 @@ export default function EmailTemplatesPage() {
                             <p className="text-xs text-muted-foreground">
                                 Use the Insert Variable button above to add dynamic placeholders like {"{{full_name}}"}
                             </p>
+                            {(unknownVariables.length > 0 || missingRequiredVariables.length > 0) &&
+                                (templateSubject.trim() || templateBody.trim()) && (
+                                    <Alert className="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-50">
+                                        <AlertTriangleIcon className="size-4" />
+                                        <AlertTitle>Template variables</AlertTitle>
+                                        <AlertDescription className="text-amber-800 dark:text-amber-100">
+                                            {unknownVariables.length > 0 && (
+                                                <p>
+                                                    Unknown:{" "}
+                                                    <span className="font-mono">
+                                                        {unknownVariables.map((v) => `{{${v}}}`).join(", ")}
+                                                    </span>
+                                                </p>
+                                            )}
+                                            {missingRequiredVariables.length > 0 && (
+                                                <p>
+                                                    Missing required:{" "}
+                                                    <span className="font-mono">
+                                                        {missingRequiredVariables.map((v) => `{{${v}}}`).join(", ")}
+                                                    </span>
+                                                </p>
+                                            )}
+                                        </AlertDescription>
+                                    </Alert>
+                                )}
                         </div>
                     </div>
 

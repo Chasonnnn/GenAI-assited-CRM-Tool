@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import re
+from email.utils import parseaddr
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -230,7 +231,13 @@ async def send_email_direct(
     Returns:
         (success, error_message, message_id)
     """
-    from_address = f"{from_name} <{from_email}>" if from_name else from_email
+    # If from_email already includes a display name ("Name <email@domain>"), do NOT
+    # prepend from_name again (prevents "Org <Name <email>>").
+    display, addr = parseaddr(from_email or "")
+    if display and addr:
+        from_address = from_email
+    else:
+        from_address = f"{from_name} <{from_email}>" if from_name else from_email
 
     payload: dict[str, object] = {
         "from": from_address,

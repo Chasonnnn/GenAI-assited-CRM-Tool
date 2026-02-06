@@ -13,7 +13,7 @@ import re
 import secrets
 from datetime import datetime, timezone
 from typing import Optional
-from urllib.parse import quote, unquote
+from urllib.parse import quote, unquote, urlsplit
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -91,6 +91,21 @@ def get_tracked_link_url(token: str, original_url: str) -> str:
     return f"{base}/tracking/click/{token}?url={encoded_url}&sig={signature}"
 
 
+def _is_safe_redirect_target(url: str) -> bool:
+    # Defense-in-depth for the click redirect endpoint. Even though the URL is signed,
+    # never redirect to non-http(s) schemes (e.g., javascript:, file:, data:).
+    if not url:
+        return False
+    if "\r" in url or "\n" in url:
+        return False
+    parts = urlsplit(url)
+    if parts.scheme not in {"http", "https"}:
+        return False
+    if not parts.netloc:
+        return False
+    return True
+
+
 # =============================================================================
 # Email Content Transformation
 # =============================================================================
@@ -128,6 +143,10 @@ def wrap_links_in_email(html_body: str, token: str) -> str:
 
         # Skip mailto:, tel:, and anchor links
         if original_url.startswith(("mailto:", "tel:", "#", "{{")):
+            return match.group(0)
+
+        # Only track safe http(s) links.
+        if not _is_safe_redirect_target(original_url):
             return match.group(0)
 
         # Skip tracking URLs (avoid double-wrapping)
@@ -223,6 +242,8 @@ def record_click(
     # Decode and verify the URL signature
     original_url = unquote(url)
     if not verify_tracking_signature(token, original_url, signature):
+        return None
+    if not _is_safe_redirect_target(original_url):
         return None
 
     # Record the event

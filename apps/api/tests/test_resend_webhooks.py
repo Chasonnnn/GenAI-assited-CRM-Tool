@@ -115,6 +115,8 @@ class TestResendWebhookHandler:
     @pytest.fixture
     def setup_email_log(self, db, test_org):
         """Create an EmailLog for testing webhook events."""
+        import base64
+
         from app.db.models import EmailLog
         from app.db.enums import EmailStatus
         from app.services import resend_settings_service
@@ -122,6 +124,11 @@ class TestResendWebhookHandler:
         # Create Resend settings
         settings = resend_settings_service.get_or_create_resend_settings(
             db, test_org.id, test_org.id
+        )
+        webhook_secret_bytes = b"test_webhook_secret_for_resend"
+        webhook_secret = (
+            "whsec_"
+            + base64.urlsafe_b64encode(webhook_secret_bytes).decode("utf-8").rstrip("=")
         )
         resend_settings_service.update_resend_settings(
             db,
@@ -131,11 +138,10 @@ class TestResendWebhookHandler:
             api_key="re_test_key",
             from_email="no-reply@example.com",
             verified_domain="example.com",
+            webhook_signing_secret=webhook_secret,
         )
 
-        # Get the webhook secret for signature generation
         db.refresh(settings)
-        webhook_secret = resend_settings_service.decrypt_api_key(settings.webhook_secret_encrypted)
 
         # Create an EmailLog
         email_log = EmailLog(
@@ -204,6 +210,29 @@ class TestResendWebhookHandler:
         db.refresh(email_log)
         assert email_log.resend_status == "delivered"
         assert email_log.delivered_at is not None
+
+    @pytest.mark.asyncio
+    async def test_webhook_rejects_missing_signature_when_secret_configured(
+        self, db, test_org, client, setup_email_log
+    ):
+        """If a signing secret is configured, requests without Svix headers must be rejected."""
+        import json
+
+        email_log, settings, _webhook_secret = setup_email_log
+
+        payload = {
+            "type": "email.delivered",
+            "data": {"email_id": email_log.external_id},
+        }
+        body = json.dumps(payload).encode("utf-8")
+
+        response = await client.post(
+            f"/webhooks/resend/{settings.webhook_id}",
+            content=body,
+            headers={"Content-Type": "application/json"},
+        )
+
+        assert response.status_code == 401
 
     @pytest.mark.asyncio
     async def test_webhook_delivered_updates_campaign_run_counts(

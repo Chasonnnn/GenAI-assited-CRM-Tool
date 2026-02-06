@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -20,26 +19,13 @@ from app.services.ai_response_validation import parse_json_object, validate_mode
 
 logger = logging.getLogger(__name__)
 
-VARIABLE_PATTERN = re.compile(r"{{\s*([a-zA-Z0-9_]+)\s*}}")
+from app.services import template_variable_catalog
 
-ALLOWED_TEMPLATE_VARIABLES = {
-    "first_name",
-    "full_name",
-    "email",
-    "phone",
-    "surrogate_number",
-    "intended_parent_number",
-    "status_label",
-    "owner_name",
-    "org_name",
-    "org_logo_url",
-    "appointment_date",
-    "appointment_time",
-    "appointment_location",
-    "unsubscribe_url",
-}
+VARIABLE_PATTERN = template_variable_catalog.VARIABLE_PATTERN
 
-REQUIRED_TEMPLATE_VARIABLES = {"unsubscribe_url"}
+_ORG_VARIABLES = template_variable_catalog.list_org_email_template_variables()
+ALLOWED_TEMPLATE_VARIABLES = {v.name for v in _ORG_VARIABLES}
+REQUIRED_TEMPLATE_VARIABLES = {v.name for v in _ORG_VARIABLES if v.required}
 
 
 class EmailTemplateGenerationRequest(BaseModel):

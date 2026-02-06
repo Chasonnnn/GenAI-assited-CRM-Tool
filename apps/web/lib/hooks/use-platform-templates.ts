@@ -9,6 +9,7 @@ import {
     createPlatformEmailTemplate,
     updatePlatformEmailTemplate,
     publishPlatformEmailTemplate,
+    listPlatformEmailTemplateVariables,
     listPlatformFormTemplates,
     getPlatformFormTemplate,
     createPlatformFormTemplate,
@@ -21,6 +22,7 @@ import {
     publishPlatformWorkflowTemplate,
     listPlatformSystemEmailTemplates,
     getPlatformSystemEmailTemplate,
+    listPlatformSystemEmailTemplateVariables,
     updatePlatformSystemEmailTemplate,
     sendTestPlatformSystemEmailTemplate,
     sendPlatformSystemEmailCampaign,
@@ -37,17 +39,20 @@ import {
     type TemplatePublishRequest,
     type PlatformEmailBranding,
 } from '@/lib/api/platform'
+import type { TemplateVariableRead } from '@/lib/types/template-variable'
 
 export const platformTemplateKeys = {
     all: ['platform-templates'] as const,
     emails: () => [...platformTemplateKeys.all, 'email'] as const,
     emailDetail: (id: string) => [...platformTemplateKeys.emails(), id] as const,
+    emailVariables: () => [...platformTemplateKeys.emails(), 'variables'] as const,
     forms: () => [...platformTemplateKeys.all, 'forms'] as const,
     formDetail: (id: string) => [...platformTemplateKeys.forms(), id] as const,
     workflows: () => [...platformTemplateKeys.all, 'workflows'] as const,
     workflowDetail: (id: string) => [...platformTemplateKeys.workflows(), id] as const,
     system: () => [...platformTemplateKeys.all, 'system'] as const,
     systemDetail: (systemKey: string) => [...platformTemplateKeys.system(), systemKey] as const,
+    systemVariables: (systemKey: string) => [...platformTemplateKeys.systemDetail(systemKey), 'variables'] as const,
     branding: () => [...platformTemplateKeys.all, 'branding'] as const,
 }
 
@@ -55,6 +60,13 @@ export function usePlatformEmailTemplates() {
     return useQuery({
         queryKey: platformTemplateKeys.emails(),
         queryFn: () => listPlatformEmailTemplates(),
+    })
+}
+
+export function usePlatformEmailTemplateVariables() {
+    return useQuery<TemplateVariableRead[]>({
+        queryKey: platformTemplateKeys.emailVariables(),
+        queryFn: () => listPlatformEmailTemplateVariables(),
     })
 }
 
@@ -210,6 +222,14 @@ export function usePlatformSystemEmailTemplate(systemKey: string | null) {
     return useQuery({
         queryKey: platformTemplateKeys.systemDetail(systemKey || ''),
         queryFn: () => getPlatformSystemEmailTemplate(systemKey!),
+        enabled: !!systemKey,
+    })
+}
+
+export function usePlatformSystemEmailTemplateVariables(systemKey: string | null) {
+    return useQuery<TemplateVariableRead[]>({
+        queryKey: platformTemplateKeys.systemVariables(systemKey || ''),
+        queryFn: () => listPlatformSystemEmailTemplateVariables(systemKey!),
         enabled: !!systemKey,
     })
 }

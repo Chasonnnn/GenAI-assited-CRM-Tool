@@ -1,8 +1,7 @@
 "use client"
 
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react"
+import { type ChangeEvent, useEffect, useMemo, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react"
 import { useParams, useRouter } from "next/navigation"
-import dynamic from "next/dynamic"
 import DOMPurify from "dompurify"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -22,13 +21,18 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeftIcon, CodeIcon, EyeIcon, Loader2Icon, SaveIcon, SearchIcon, SendIcon, UploadIcon, UsersIcon } from "lucide-react"
+import { ArrowLeftIcon, EyeIcon, Loader2Icon, SaveIcon, SearchIcon, SendIcon, UploadIcon, UsersIcon, AlertTriangleIcon } from "lucide-react"
 import { toast } from "sonner"
+import { TemplateVariablePicker } from "@/components/email/TemplateVariablePicker"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor"
+import { normalizeTemplateHtml } from "@/lib/email-template-html"
+import { insertAtCursor } from "@/lib/insert-at-cursor"
 import {
     usePlatformEmailBranding,
     usePlatformSystemEmailTemplate,
+    usePlatformSystemEmailTemplateVariables,
     useSendPlatformSystemEmailCampaign,
     useSendTestPlatformSystemEmailTemplate,
     useUploadPlatformEmailBrandingLogo,
@@ -41,33 +45,6 @@ import {
     type OrganizationSummary,
     type OrgMember,
 } from "@/lib/api/platform"
-
-const RichTextEditor = dynamic(
-    () => import("@/components/rich-text-editor").then((mod) => mod.RichTextEditor),
-    {
-        ssr: false,
-        loading: () => (
-            <div className="rounded-md border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-                Loading editor...
-            </div>
-        ),
-    }
-)
-
-const SYSTEM_TEMPLATE_VARIABLES = [
-    { name: "org_name", description: "Organization name" },
-    { name: "org_slug", description: "Organization slug" },
-    { name: "first_name", description: "Recipient first name" },
-    { name: "full_name", description: "Recipient full name" },
-    { name: "email", description: "Recipient email" },
-    { name: "inviter_text", description: "Inviter name (prefixed by 'by')" },
-    { name: "role_title", description: "Invite role title" },
-    { name: "invite_url", description: "Invite acceptance URL" },
-    { name: "expires_block", description: "Expiry block (HTML)" },
-    { name: "platform_logo_url", description: "Platform logo URL" },
-    { name: "platform_logo_block", description: "Platform logo HTML block" },
-    { name: "unsubscribe_url", description: "Unsubscribe link" },
-]
 
 const SF_INVITE_SUBJECT = "Invitation to join {{org_name}} as {{role_title}}"
 const SF_INVITE_BODY = `<div style="background-color: #f5f5f7; padding: 40px 12px; margin: 0;">
@@ -167,6 +144,15 @@ const SF_INVITE_BODY = `<div style="background-color: #f5f5f7; padding: 40px 12p
 
 type EditorMode = "visual" | "html"
 
+type ActiveInsertionTarget = "subject" | "body_html" | "body_visual" | null
+
+function extractTemplateVariables(text: string): string[] {
+    if (!text) return []
+    const matches = text.match(/{{\s*([a-zA-Z0-9_]+)\s*}}/g) ?? []
+    const variables = matches.map((match) => match.replace(/{{\s*|\s*}}/g, ""))
+    return Array.from(new Set(variables))
+}
+
 export default function PlatformSystemEmailTemplatePage() {
     const router = useRouter()
     const params = useParams()
@@ -174,6 +160,7 @@ export default function PlatformSystemEmailTemplatePage() {
     const isOrgInvite = systemKey === "org_invite"
 
     const { data: template, isLoading } = usePlatformSystemEmailTemplate(systemKey)
+    const { data: templateVariables = [], isLoading: variablesLoading } = usePlatformSystemEmailTemplateVariables(systemKey)
     const { data: branding } = usePlatformEmailBranding()
     const updateTemplate = useUpdatePlatformSystemEmailTemplate()
     const updateBranding = useUpdatePlatformEmailBranding()
@@ -204,6 +191,45 @@ export default function PlatformSystemEmailTemplatePage() {
     const [selectedUsersByOrg, setSelectedUsersByOrg] = useState<Record<string, string[]>>({})
     const [campaignSending, setCampaignSending] = useState(false)
     const logoFileInputRef = useRef<HTMLInputElement | null>(null)
+
+    const subjectRef = useRef<HTMLInputElement | null>(null)
+    const subjectSelectionRef = useRef<{ start: number; end: number } | null>(null)
+    const htmlBodyRef = useRef<HTMLTextAreaElement | null>(null)
+    const htmlBodySelectionRef = useRef<{ start: number; end: number } | null>(null)
+    const visualBodyRef = useRef<RichTextEditorHandle | null>(null)
+    const [activeInsertionTarget, setActiveInsertionTarget] = useState<ActiveInsertionTarget>(null)
+
+    const canValidateVariables = !variablesLoading && templateVariables.length > 0
+    const allowedVariableNames = useMemo(
+        () => new Set(templateVariables.map((variable) => variable.name)),
+        [templateVariables]
+    )
+    const requiredVariableNames = useMemo(
+        () => templateVariables.filter((variable) => variable.required).map((variable) => variable.name),
+        [templateVariables]
+    )
+    const usedVariableNames = useMemo(
+        () => extractTemplateVariables(`${subject}\n${body}`),
+        [subject, body]
+    )
+    const unknownVariables = useMemo(() => {
+        if (!canValidateVariables) return []
+        return usedVariableNames.filter((variable) => !allowedVariableNames.has(variable))
+    }, [allowedVariableNames, canValidateVariables, usedVariableNames])
+    const missingRequiredVariables = useMemo(() => {
+        if (!canValidateVariables) return []
+        return requiredVariableNames.filter((variable) => !usedVariableNames.includes(variable))
+    }, [canValidateVariables, requiredVariableNames, usedVariableNames])
+
+    const recordSelection = (
+        el: HTMLInputElement | HTMLTextAreaElement,
+        ref: MutableRefObject<{ start: number; end: number } | null>
+    ) => {
+        ref.current = {
+            start: el.selectionStart ?? el.value.length,
+            end: el.selectionEnd ?? el.value.length,
+        }
+    }
 
     const fromEmailError = useMemo(() => {
         const value = fromEmail.trim()
@@ -348,14 +374,60 @@ export default function PlatformSystemEmailTemplatePage() {
     const effectiveEditorMode: EditorMode =
         editorMode === "visual" && hasComplexHtml && !editorModeTouched ? "html" : editorMode
 
-    const insertVariable = (nameToInsert: string) => {
-        setBody((prev) => `${prev}{{${nameToInsert}}}`)
+    const insertIntoTextControl = (
+        el: HTMLInputElement | HTMLTextAreaElement | null,
+        selectionRef: MutableRefObject<{ start: number; end: number } | null>,
+        setValue: Dispatch<SetStateAction<string>>,
+        token: string
+    ) => {
+        if (!el) {
+            setValue((prev) => `${prev}${token}`)
+            return
+        }
+        const selection = selectionRef.current ?? {
+            start: el.selectionStart ?? el.value.length,
+            end: el.selectionEnd ?? el.value.length,
+        }
+        const result = insertAtCursor(el.value, token, selection.start, selection.end)
+        setValue(result.nextValue)
+        requestAnimationFrame(() => {
+            el.focus()
+            el.setSelectionRange(result.nextSelectionStart, result.nextSelectionEnd)
+            selectionRef.current = { start: result.nextSelectionStart, end: result.nextSelectionEnd }
+        })
+    }
+
+    const insertToken = (token: string) => {
+        if (activeInsertionTarget === "subject") {
+            insertIntoTextControl(subjectRef.current, subjectSelectionRef, setSubject, token)
+            return
+        }
+        if (activeInsertionTarget === "body_html") {
+            insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setBody, token)
+            return
+        }
+        if (activeInsertionTarget === "body_visual") {
+            visualBodyRef.current?.insertText(token)
+            return
+        }
+
+        if (effectiveEditorMode === "html") {
+            insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setBody, token)
+            return
+        }
+        visualBodyRef.current?.insertText(token)
     }
 
     const insertPlatformLogo = () => {
         if (body.includes("{{platform_logo_block}}")) return
         const block = `<p>{{platform_logo_block}}</p>\n`
-        setBody((prev) => `${block}${prev}`)
+        if (effectiveEditorMode === "visual") {
+            visualBodyRef.current?.insertHtml(block)
+            setActiveInsertionTarget("body_visual")
+            return
+        }
+        insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setBody, block)
+        setActiveInsertionTarget("body_html")
     }
 
     const applySfTemplate = () => {
@@ -384,7 +456,7 @@ export default function PlatformSystemEmailTemplatePage() {
             .replace(/\{\{platform_logo_block\}\}/g, platformLogoBlock)
             .replace(/\{\{unsubscribe_url\}\}/g, "https://app.surrogacyforce.com/email/unsubscribe/EXAMPLE")
 
-        return DOMPurify.sanitize(rawHtml, {
+        return DOMPurify.sanitize(normalizeTemplateHtml(rawHtml), {
             USE_PROFILES: { html: true },
             ADD_TAGS: [
                 "table",
@@ -911,8 +983,16 @@ export default function PlatformSystemEmailTemplatePage() {
                                 <Label htmlFor="subject">Subject</Label>
                                 <Input
                                     id="subject"
+                                    ref={subjectRef}
                                     value={subject}
                                     onChange={(event) => setSubject(event.target.value)}
+                                    onFocus={(event) => {
+                                        setActiveInsertionTarget("subject")
+                                        recordSelection(event.currentTarget, subjectSelectionRef)
+                                    }}
+                                    onKeyUp={(event) => recordSelection(event.currentTarget, subjectSelectionRef)}
+                                    onMouseUp={(event) => recordSelection(event.currentTarget, subjectSelectionRef)}
+                                    onSelect={(event) => recordSelection(event.currentTarget, subjectSelectionRef)}
                                     placeholder="Invitation to join {{org_name}}"
                                 />
                             </div>
@@ -951,31 +1031,16 @@ export default function PlatformSystemEmailTemplatePage() {
                                         <ToggleGroupItem value="visual" className="h-8">
                                             Visual
                                         </ToggleGroupItem>
-                                        <ToggleGroupItem value="html" className="h-8">
+                                    <ToggleGroupItem value="html" className="h-8">
                                             HTML
-                                        </ToggleGroupItem>
+                                    </ToggleGroupItem>
                                     </ToggleGroup>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger>
-                                            <span className="inline-flex items-center justify-center gap-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 px-3 text-sm cursor-pointer">
-                                                <CodeIcon className="size-4" />
-                                                Insert Variable
-                                            </span>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" className="w-64">
-                                            {SYSTEM_TEMPLATE_VARIABLES.map((v) => (
-                                                <DropdownMenuItem
-                                                    key={v.name}
-                                                    onClick={() => insertVariable(v.name)}
-                                                >
-                                                    <span className="font-mono text-xs">{`{{${v.name}}}`}</span>
-                                                    <span className="ml-2 text-muted-foreground text-xs">
-                                                        {v.description}
-                                                    </span>
-                                                </DropdownMenuItem>
-                                            ))}
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
+                                    <TemplateVariablePicker
+                                        variables={templateVariables}
+                                        disabled={variablesLoading || templateVariables.length === 0}
+                                        triggerLabel={variablesLoading ? "Loading..." : "Insert Variable"}
+                                        onSelect={(variable) => insertToken(`{{${variable.name}}}`)}
+                                    />
                                     <Button type="button" variant="ghost" size="sm" onClick={insertPlatformLogo}>
                                         Insert Logo
                                     </Button>
@@ -986,13 +1051,18 @@ export default function PlatformSystemEmailTemplatePage() {
                                     )}
                                 </div>
                                 <span className="text-xs text-muted-foreground">
-                                    Variables: {SYSTEM_TEMPLATE_VARIABLES.map((v) => `{{${v.name}}}`).join(", ")}
+                                    Variables:{" "}
+                                    {templateVariables.length > 0
+                                        ? templateVariables.map((v) => `{{${v.name}}}`).join(", ")
+                                        : "Loading..."}
                                 </span>
                             </div>
                             {effectiveEditorMode === "visual" ? (
                                 <RichTextEditor
+                                    ref={visualBodyRef}
                                     content={body}
                                     onChange={(html) => setBody(html)}
+                                    onFocus={() => setActiveInsertionTarget("body_visual")}
                                     placeholder="Write your system email content here..."
                                     minHeight="240px"
                                     maxHeight="480px"
@@ -1000,8 +1070,16 @@ export default function PlatformSystemEmailTemplatePage() {
                                 />
                             ) : (
                                 <Textarea
+                                    ref={htmlBodyRef}
                                     value={body}
                                     onChange={(event) => setBody(event.target.value)}
+                                    onFocus={(event) => {
+                                        setActiveInsertionTarget("body_html")
+                                        recordSelection(event.currentTarget, htmlBodySelectionRef)
+                                    }}
+                                    onKeyUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
+                                    onMouseUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
+                                    onSelect={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
                                     placeholder="Paste or edit the HTML for this template..."
                                     className="min-h-[280px] font-mono text-xs leading-relaxed"
                                 />
@@ -1011,6 +1089,31 @@ export default function PlatformSystemEmailTemplatePage() {
                                     This template contains advanced HTML. Switch to HTML mode to preserve layout.
                                 </p>
                             )}
+                            {(unknownVariables.length > 0 || missingRequiredVariables.length > 0) &&
+                                (subject.trim() || body.trim()) && (
+                                    <Alert className="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-50">
+                                        <AlertTriangleIcon className="size-4" />
+                                        <AlertTitle>Template variables</AlertTitle>
+                                        <AlertDescription className="text-amber-800 dark:text-amber-100">
+                                            {unknownVariables.length > 0 && (
+                                                <p>
+                                                    Unknown:{" "}
+                                                    <span className="font-mono">
+                                                        {unknownVariables.map((v) => `{{${v}}}`).join(", ")}
+                                                    </span>
+                                                </p>
+                                            )}
+                                            {missingRequiredVariables.length > 0 && (
+                                                <p>
+                                                    Missing required:{" "}
+                                                    <span className="font-mono">
+                                                        {missingRequiredVariables.map((v) => `{{${v}}}`).join(", ")}
+                                                    </span>
+                                                </p>
+                                            )}
+                                        </AlertDescription>
+                                    </Alert>
+                                )}
                         </CardContent>
                     </Card>
 

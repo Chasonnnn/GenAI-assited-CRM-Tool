@@ -6,6 +6,7 @@ import api from '@/lib/api';
 import type { FormSchema } from '@/lib/api/forms';
 import type { ActionConfig, Condition } from '@/lib/api/workflows';
 import type { JsonObject } from '@/lib/types/json';
+import type { TemplateVariableRead } from '@/lib/types/template-variable';
 
 // Platform user info (from /platform/me)
 export interface PlatformUser {
@@ -385,6 +386,13 @@ export function getPlatformSystemEmailTemplate(
 }
 
 /**
+ * Variables allowed in platform system email templates (system-keyed).
+ */
+export function listPlatformSystemEmailTemplateVariables(systemKey: string): Promise<TemplateVariableRead[]> {
+    return api.get<TemplateVariableRead[]>(`/platform/email/system-templates/${systemKey}/variables`);
+}
+
+/**
  * Update platform system email template by system_key.
  */
 export function updatePlatformSystemEmailTemplate(
@@ -625,6 +633,13 @@ export function publishPlatformEmailTemplate(
     payload: TemplatePublishRequest
 ): Promise<PlatformEmailTemplate> {
     return api.post<PlatformEmailTemplate>(`/platform/templates/email/${id}/publish`, payload)
+}
+
+/**
+ * Variables allowed in platform email templates (template studio).
+ */
+export function listPlatformEmailTemplateVariables(): Promise<TemplateVariableRead[]> {
+    return api.get<TemplateVariableRead[]>('/platform/templates/email/variables');
 }
 
 export function listPlatformFormTemplates(): Promise<PlatformFormTemplateListItem[]> {

@@ -63,10 +63,13 @@ def create_platform_email_template(
     from_email: str | None,
     category: str | None,
 ) -> PlatformEmailTemplate:
+    # Keep platform template HTML compatible with org template sanitation rules.
+    from app.services import email_service
+
     template = PlatformEmailTemplate(
         name=name,
         subject=subject,
-        body=body,
+        body=email_service.sanitize_template_html(body),
         from_email=from_email,
         category=category,
         status="draft",
@@ -91,6 +94,8 @@ def update_platform_email_template(
     category: str | None | object,
     expected_version: int | None,
 ) -> PlatformEmailTemplate:
+    from app.services import email_service
+
     if expected_version is not None and template.current_version != expected_version:
         raise ValueError("Template version mismatch")
 
@@ -99,7 +104,7 @@ def update_platform_email_template(
     if subject is not None:
         template.subject = subject
     if body is not None:
-        template.body = body
+        template.body = email_service.sanitize_template_html(body)
     if from_email is not _UNSET:
         template.from_email = from_email  # type: ignore[assignment]
     if category is not _UNSET:
@@ -119,11 +124,13 @@ def publish_platform_email_template(
     publish_all: bool,
     org_ids: list[UUID] | None,
 ) -> PlatformEmailTemplate:
+    from app.services import email_service
+
     _require_targets(publish_all, org_ids)
 
     template.published_name = template.name
     template.published_subject = template.subject
-    template.published_body = template.body
+    template.published_body = email_service.sanitize_template_html(template.body)
     template.published_from_email = template.from_email
     template.published_category = template.category
     template.published_version = (template.published_version or 0) + 1

@@ -10,6 +10,7 @@ import {
     updateTemplate,
     deleteTemplate,
     sendEmail,
+    listEmailTemplateVariables,
     copyTemplateToPersonal,
     shareTemplateWithOrg,
     EmailTemplateCreate,
@@ -24,6 +25,7 @@ import {
     EmailTemplateLibraryItem,
     EmailTemplateLibraryDetail,
 } from '@/lib/api/email-templates'
+import type { TemplateVariableRead } from '@/lib/types/template-variable'
 
 // Query keys
 export const emailTemplateKeys = {
@@ -34,6 +36,7 @@ export const emailTemplateKeys = {
     detail: (id: string) => [...emailTemplateKeys.details(), id] as const,
     library: () => [...emailTemplateKeys.all, 'library'] as const,
     libraryDetail: (id: string) => [...emailTemplateKeys.library(), id] as const,
+    variables: () => [...emailTemplateKeys.all, 'variables'] as const,
 }
 
 // Hooks
@@ -176,5 +179,16 @@ export function useCopyTemplateFromLibrary() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
         },
+    })
+}
+
+// ============================================================================
+// Template Variables Catalog
+// ============================================================================
+
+export function useEmailTemplateVariables() {
+    return useQuery<TemplateVariableRead[]>({
+        queryKey: emailTemplateKeys.variables(),
+        queryFn: () => listEmailTemplateVariables(),
     })
 }

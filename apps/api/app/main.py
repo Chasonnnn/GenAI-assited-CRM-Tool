@@ -229,7 +229,7 @@ if settings.TRUST_PROXY_HEADERS:
     if ProxyHeadersMiddleware is None:
         logging.warning("ProxyHeadersMiddleware not available; TRUST_PROXY_HEADERS ignored")
     else:
-        app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+        app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=settings.trusted_proxy_hosts)
 
 configure_telemetry(app, engine)
 

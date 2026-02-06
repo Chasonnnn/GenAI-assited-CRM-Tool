@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.surrogate_access import check_surrogate_access, can_modify_surrogate
 from app.core.deps import (
     get_db,
@@ -334,6 +335,8 @@ async def download_attachment(
             "File is infected" if attachment.scan_status == "infected" else "File failed virus scan"
         )
         raise HTTPException(status_code=403, detail=detail)
+    if settings.ATTACHMENT_SCAN_ENABLED and attachment.scan_status != "clean":
+        raise HTTPException(status_code=409, detail="File is still being scanned")
 
     # Verify access: case attachment requires case access, IP attachment uses org-wide access
     if attachment.surrogate_id:
@@ -472,6 +475,8 @@ async def download_local_attachment(
             "File is infected" if attachment.scan_status == "infected" else "File failed virus scan"
         )
         raise HTTPException(status_code=403, detail=detail)
+    if settings.ATTACHMENT_SCAN_ENABLED and attachment.scan_status != "clean":
+        raise HTTPException(status_code=409, detail="File is still being scanned")
 
     # Verify access: case attachment requires case access, IP attachment uses org-wide access
     if attachment.surrogate_id:

@@ -109,7 +109,7 @@ export function EmailComposeDialog({
         return text
             .replace(/\{\{full_name\}\}/g, surrogateData.full_name)
             .replace(/\{\{surrogate_number\}\}/g, surrogateData.surrogate_number)
-            .replace(/\{\{status\}\}/g, surrogateData.status)
+            .replace(/\{\{status_label\}\}/g, surrogateData.status)
             .replace(/\{\{state\}\}/g, surrogateData.state || "")
             .replace(/\{\{email\}\}/g, surrogateData.email)
             .replace(/\{\{phone\}\}/g, surrogateData.phone || "")
@@ -137,7 +137,7 @@ export function EmailComposeDialog({
         "{{email}}",
         "{{phone}}",
         "{{surrogate_number}}",
-        "{{status}}",
+        "{{status_label}}",
         "{{state}}",
         "{{owner_name}}",
         "{{org_name}}",

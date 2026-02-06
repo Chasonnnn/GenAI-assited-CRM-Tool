@@ -603,9 +603,9 @@ def test_submission_requires_file_field_keys_when_multiple_file_fields(
     )
 
     upload = UploadFile(
-        filename="doc.txt",
+        filename="doc.csv",
         file=BytesIO(b"test"),
-        headers=Headers({"content-type": "text/plain"}),
+        headers=Headers({"content-type": "text/csv"}),
     )
 
     with pytest.raises(ValueError):
@@ -632,14 +632,14 @@ def test_submission_stores_file_field_keys(db, test_org, test_user, default_stag
     )
 
     upload_a = UploadFile(
-        filename="doc-a.txt",
+        filename="doc-a.csv",
         file=BytesIO(b"a"),
-        headers=Headers({"content-type": "text/plain"}),
+        headers=Headers({"content-type": "text/csv"}),
     )
     upload_b = UploadFile(
-        filename="doc-b.txt",
+        filename="doc-b.csv",
         file=BytesIO(b"b"),
-        headers=Headers({"content-type": "text/plain"}),
+        headers=Headers({"content-type": "text/csv"}),
     )
 
     submission = form_submission_service.create_submission(
@@ -670,9 +670,9 @@ def test_submission_enforces_per_file_field_limit(db, test_org, test_user, defau
 
     uploads = [
         UploadFile(
-            filename=f"doc-{idx}.txt",
+            filename=f"doc-{idx}.csv",
             file=BytesIO(b"test"),
-            headers=Headers({"content-type": "text/plain"}),
+            headers=Headers({"content-type": "text/csv"}),
         )
         for idx in range(6)
     ]
@@ -704,9 +704,9 @@ def test_add_submission_file_enforces_per_file_field_limit(db, test_org, test_us
 
     uploads = [
         UploadFile(
-            filename=f"doc-{idx}.txt",
+            filename=f"doc-{idx}.csv",
             file=BytesIO(b"test"),
-            headers=Headers({"content-type": "text/plain"}),
+            headers=Headers({"content-type": "text/csv"}),
         )
         for idx in range(5)
     ]
@@ -720,9 +720,9 @@ def test_add_submission_file_enforces_per_file_field_limit(db, test_org, test_us
     )
 
     extra = UploadFile(
-        filename="extra.txt",
+        filename="extra.csv",
         file=BytesIO(b"extra"),
-        headers=Headers({"content-type": "text/plain"}),
+        headers=Headers({"content-type": "text/csv"}),
     )
 
     with pytest.raises(ValueError) as exc:

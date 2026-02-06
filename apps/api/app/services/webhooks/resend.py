@@ -10,7 +10,7 @@ import logging
 import time
 from datetime import datetime, timezone
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -327,7 +327,15 @@ class ResendWebhookHandler:
                     "Resend webhook invalid signature for org=%s",
                     resend_settings.organization_id,
                 )
-                return {"status": "ok"}
+                raise HTTPException(status_code=401, detail="Invalid webhook signature")
+        else:
+            # Accept webhook without signature verification if the org hasn't configured the
+            # Resend signing secret yet. The unguessable webhook_id in the URL still provides
+            # a basic level of protection.
+            logger.warning(
+                "Resend webhook signing secret not configured for org=%s; skipping signature verification",
+                resend_settings.organization_id,
+            )
 
         # 3. Parse and process
         try:
@@ -381,13 +389,13 @@ class PlatformResendWebhookHandler:
 
         secret = (settings.PLATFORM_RESEND_WEBHOOK_SECRET or "").strip()
         if not secret:
-            logger.warning("Platform Resend webhook secret not configured")
-            return {"status": "ok"}
+            logger.error("Platform Resend webhook secret not configured")
+            raise HTTPException(status_code=500, detail="Webhook not configured")
 
         headers = {k.lower(): v for k, v in request.headers.items()}
         if not _verify_svix_signature(body, headers, secret):
             logger.warning("Platform Resend webhook invalid signature")
-            return {"status": "ok"}
+            raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
         # Parse payload
         try:

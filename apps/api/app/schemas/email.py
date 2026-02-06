@@ -100,6 +100,22 @@ class EmailTemplateShareRequest(BaseModel):
 
 
 # =============================================================================
+# Template Variables Catalog
+# =============================================================================
+
+
+class TemplateVariableRead(BaseModel):
+    """Template variable definition (name + metadata)."""
+
+    name: str
+    description: str
+    category: str
+    required: bool = False
+    value_type: str = "text"  # "text" | "url" | "html"
+    html_safe: bool = False
+
+
+# =============================================================================
 # Email Logs
 # =============================================================================
 
@@ -112,6 +128,33 @@ class EmailSendRequest(BaseModel):
     variables: dict[str, str] = {}
     surrogate_id: UUID | None = None
     schedule_at: datetime | None = None
+
+
+class EmailTemplateTestSendRequest(BaseModel):
+    """Request to send a test email using an email template."""
+
+    to_email: EmailStr
+    variables: dict[str, str] = {}
+    idempotency_key: str | None = None
+
+
+class PlatformEmailTemplateTestSendRequest(BaseModel):
+    """Request to send a test email using a platform email template for a specific org."""
+
+    org_id: UUID
+    to_email: EmailStr
+    variables: dict[str, str] = {}
+    idempotency_key: str | None = None
+
+
+class EmailTemplateTestSendResponse(BaseModel):
+    """Response after sending a test email."""
+
+    success: bool
+    provider_used: Literal["resend", "gmail"] | None = None
+    email_log_id: UUID | None = None
+    message_id: str | None = None
+    error: str | None = None
 
 
 class EmailLogRead(BaseModel):

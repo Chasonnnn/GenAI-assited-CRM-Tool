@@ -3,6 +3,7 @@
 import re
 import secrets
 import uuid
+import zipfile
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
@@ -42,6 +43,63 @@ DEFAULT_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 DEFAULT_MAX_FILE_COUNT = 10
 PER_FILE_FIELD_MAX_COUNT = 5
 
+# Extensions that are always blocked for security
+BLOCKED_EXTENSIONS = {
+    "exe",
+    "dll",
+    "com",
+    "bat",
+    "cmd",
+    "sh",
+    "vbs",
+    "js",
+    "jsp",
+    "php",
+    "pl",
+    "py",
+    "cgi",
+    "ps1",
+    "jar",
+    "msi",
+}
+
+# If a form doesn't explicitly configure allowed MIME types, fall back to a safe default.
+# This is intentionally restrictive; public uploads should never be "allow anything".
+DEFAULT_ALLOWED_FORM_UPLOAD_MIME_TYPES: list[str] = [
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "text/csv",
+    "application/csv",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "video/mp4",
+    "video/quicktime",
+]
+
+# Extension allowlist for form submission uploads. Always enforce this to avoid
+# accidentally allowing executables/scripts when a form's allowed_mime_types is unset
+# or overly broad (e.g. "application/*").
+_FORM_UPLOAD_EXTENSION_TO_MIME_TYPES: dict[str, tuple[str, ...]] = {
+    "pdf": ("application/pdf",),
+    "png": ("image/png",),
+    "jpg": ("image/jpeg",),
+    "jpeg": ("image/jpeg",),
+    "csv": ("text/csv", "application/csv"),
+    "doc": ("application/msword",),
+    "docx": ("application/vnd.openxmlformats-officedocument.wordprocessingml.document",),
+    "xls": ("application/vnd.ms-excel",),
+    "xlsx": ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",),
+    "mp4": ("video/mp4",),
+    "mov": ("video/quicktime",),
+}
+
+_MIME_TYPE_ALIASES: dict[str, str] = {
+    # Non-standard but commonly seen in the wild.
+    "image/jpg": "image/jpeg",
+}
 SURROGATE_FIELD_TYPES: dict[str, str] = {
     "full_name": "str",
     "email": "str",
@@ -175,7 +233,7 @@ def create_submission(
         raise ValueError("Submission already exists for this surrogate")
 
     upload_files = files or []
-    _validate_files(form, upload_files)
+    validated_content_types = _validate_files(form, upload_files)
 
     mapping_snapshot = _snapshot_mappings(db, form.id)
 
@@ -195,7 +253,14 @@ def create_submission(
 
     for idx, file in enumerate(upload_files):
         field_key = resolved_file_field_keys[idx] if resolved_file_field_keys else None
-        _store_submission_file(db, submission, file, form, field_key=field_key)
+        _store_submission_file(
+            db,
+            submission,
+            file,
+            form,
+            field_key=field_key,
+            content_type=validated_content_types[idx],
+        )
 
     token.used_submissions += 1
     if token.used_submissions >= token.max_submissions:
@@ -313,7 +378,7 @@ def add_submission_file(
     if not form:
         raise ValueError("Form not found")
 
-    _validate_file(form, file)
+    validated_content_type = _validate_file(form, file)
 
     schema_json = submission.schema_snapshot or form.published_schema_json
     if not schema_json:
@@ -365,7 +430,7 @@ def add_submission_file(
     file.file.seek(0)
 
     checksum = calculate_checksum(file.file)
-    processed_file = strip_exif_data(file.file, file.content_type or "")
+    processed_file = strip_exif_data(file.file, validated_content_type)
     ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename else ""
     suffix = f".{ext}" if ext else ""
     storage_key = (
@@ -381,7 +446,7 @@ def add_submission_file(
         filename=file.filename or "upload",
         field_key=resolved_field_key,
         storage_key=storage_key,
-        content_type=file.content_type or "application/octet-stream",
+        content_type=validated_content_type,
         file_size=file_size,
         checksum_sha256=checksum,
         scan_status="pending" if scan_enabled else "clean",
@@ -463,6 +528,8 @@ def get_submission_file_download_url(
     user_id: uuid.UUID,
 ) -> str | None:
     if file_record.scan_status in ("infected", "error"):
+        return None
+    if getattr(settings, "ATTACHMENT_SCAN_ENABLED", False) and file_record.scan_status != "clean":
         return None
 
     ext = file_record.filename.rsplit(".", 1)[-1].lower() if "." in file_record.filename else ""
@@ -904,18 +971,84 @@ def _evaluate_condition(condition: FormFieldCondition, value: Any) -> bool:
     return True
 
 
-def _validate_files(form: Form, files: list[UploadFile]) -> None:
+def _validate_files(form: Form, files: list[UploadFile]) -> list[str]:
     if not files:
-        return
+        return []
     max_count = form.max_file_count if form.max_file_count is not None else DEFAULT_MAX_FILE_COUNT
     if len(files) > max_count:
         raise ValueError(f"Maximum {max_count} files allowed")
 
+    validated: list[str] = []
     for file in files:
-        _validate_file(form, file)
+        validated.append(_validate_file(form, file))
+    return validated
 
 
-def _validate_file(form: Form, file: UploadFile) -> None:
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_JPEG_SIGNATURE_PREFIX = b"\xff\xd8\xff"
+_OLE_SIGNATURE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+_ZIP_SIGNATURE_PREFIXES = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+_EXECUTABLE_SIGNATURE_PREFIXES = (
+    b"MZ",  # Windows PE
+    b"\x7fELF",  # Linux ELF
+    b"\xfe\xed\xfa\xce",  # Mach-O (32-bit)
+    b"\xfe\xed\xfa\xcf",  # Mach-O (64-bit)
+    b"\xcf\xfa\xed\xfe",  # Mach-O (reverse endian)
+    b"\xca\xfe\xba\xbe",  # Mach-O fat
+    b"\xbe\xba\xfe\xca",  # Mach-O fat (reverse endian)
+)
+
+
+def _read_file_prefix(file: UploadFile, size: int) -> bytes:
+    """Read bytes from the beginning of the upload without consuming the stream."""
+    try:
+        file.file.seek(0)
+        return file.file.read(size)
+    finally:
+        file.file.seek(0)
+
+
+def _zip_contains(file: UploadFile, name: str) -> bool:
+    try:
+        file.file.seek(0)
+        with zipfile.ZipFile(file.file) as zf:
+            try:
+                zf.getinfo(name)
+                return True
+            except KeyError:
+                return False
+    except zipfile.BadZipFile:
+        return False
+    finally:
+        file.file.seek(0)
+
+
+def _is_probably_text(data: bytes) -> bool:
+    if not data:
+        return True
+    if b"\x00" in data:
+        return False
+    # Reject a high concentration of control characters (common binary heuristic).
+    bad = 0
+    for b in data:
+        if b in (9, 10, 13):  # \t, \n, \r
+            continue
+        if b < 32 or b == 127:
+            bad += 1
+    return (bad / len(data)) <= 0.05
+
+
+def _sniff_video_kind(file: UploadFile) -> str | None:
+    head = _read_file_prefix(file, 16)
+    if len(head) < 12:
+        return None
+    if head[4:8] != b"ftyp":
+        return None
+    major_brand = head[8:12]
+    return "mov" if major_brand == b"qt  " else "mp4"
+
+
+def _validate_file(form: Form, file: UploadFile) -> str:
     file.file.seek(0, 2)
     file_size = file.file.tell()
     file.file.seek(0)
@@ -929,11 +1062,69 @@ def _validate_file(form: Form, file: UploadFile) -> None:
         max_mb = max_size / (1024 * 1024)
         raise ValueError(f"File size exceeds {max_mb:.0f} MB limit")
 
-    allowed = form.allowed_mime_types
-    if allowed:
-        if not _mime_allowed(file.content_type or "", allowed):
-            raise ValueError(f"Content type '{file.content_type}' not allowed")
+    if not file.filename:
+        raise ValueError("Filename is required")
 
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext in BLOCKED_EXTENSIONS:
+        raise ValueError(f"File extension '.{ext}' not allowed")
+
+    if not ext or ext not in _FORM_UPLOAD_EXTENSION_TO_MIME_TYPES:
+        raise ValueError("File type not allowed")
+
+    # Determine allowed MIME patterns for the form. If unset/empty, use a safe default.
+    allowed_patterns = [
+        s.strip().lower() for s in (form.allowed_mime_types or []) if (s or "").strip()
+    ]
+    allowed_patterns = [_MIME_TYPE_ALIASES.get(item, item) for item in allowed_patterns]
+    if not allowed_patterns:
+        allowed_patterns = DEFAULT_ALLOWED_FORM_UPLOAD_MIME_TYPES
+
+    head = _read_file_prefix(file, 512)
+    if head.startswith(_EXECUTABLE_SIGNATURE_PREFIXES):
+        raise ValueError("Executable files are not allowed")
+
+    # Verify the actual file bytes match the extension (do NOT trust multipart Content-Type).
+    if ext == "pdf":
+        stripped = head.lstrip(b"\xef\xbb\xbf \t\r\n")
+        if not stripped.startswith(b"%PDF-"):
+            raise ValueError("File content does not match .pdf")
+    elif ext == "png":
+        if not head.startswith(_PNG_SIGNATURE):
+            raise ValueError("File content does not match .png")
+    elif ext in ("jpg", "jpeg"):
+        if not head.startswith(_JPEG_SIGNATURE_PREFIX):
+            raise ValueError("File content does not match .jpg/.jpeg")
+    elif ext in ("doc", "xls"):
+        if not head.startswith(_OLE_SIGNATURE):
+            raise ValueError("File content does not match .doc/.xls")
+    elif ext in ("docx", "xlsx"):
+        if not head.startswith(_ZIP_SIGNATURE_PREFIXES):
+            raise ValueError("File content does not match .docx/.xlsx")
+        if not _zip_contains(file, "[Content_Types].xml"):
+            raise ValueError("File content does not match .docx/.xlsx")
+        if ext == "docx" and not _zip_contains(file, "word/document.xml"):
+            raise ValueError("File content does not match .docx")
+        if ext == "xlsx" and not _zip_contains(file, "xl/workbook.xml"):
+            raise ValueError("File content does not match .xlsx")
+    elif ext == "csv":
+        sample = _read_file_prefix(file, 4096)
+        if not _is_probably_text(sample):
+            raise ValueError("File content does not match .csv")
+    elif ext in ("mp4", "mov"):
+        kind = _sniff_video_kind(file)
+        if kind != ext:
+            raise ValueError("File content does not match video type")
+    else:
+        raise ValueError("File type not allowed")
+
+    # Choose a canonical MIME type for storage/auditing based on the extension, but only
+    # if it is allowed by the form's configured allowed_mime_types.
+    candidates = _FORM_UPLOAD_EXTENSION_TO_MIME_TYPES[ext]
+    for mime in candidates:
+        if _mime_allowed(mime, allowed_patterns):
+            return mime
+    raise ValueError("File type not allowed")
 
 def _mime_allowed(content_type: str, allowed: list[str]) -> bool:
     for item in allowed:
@@ -955,14 +1146,23 @@ def _store_submission_file(
     file: UploadFile,
     form: Form,
     field_key: str | None,
+    content_type: str | None = None,
 ) -> None:
+    resolved_content_type = (
+        (content_type or "").strip()
+        or (getattr(file, "content_type", None) or "").strip()
+        or ((file.headers.get("content-type") if getattr(file, "headers", None) else None) or "").strip()
+    )
+    # Strip charset, etc. and provide a safe fallback for callers that haven't validated.
+    resolved_content_type = (resolved_content_type.split(";", 1)[0].strip() or "application/octet-stream")
+
     scan_enabled = getattr(settings, "ATTACHMENT_SCAN_ENABLED", False)
     file.file.seek(0, 2)
     file_size = file.file.tell()
     file.file.seek(0)
 
     checksum = calculate_checksum(file.file)
-    processed_file = strip_exif_data(file.file, file.content_type or "")
+    processed_file = strip_exif_data(file.file, resolved_content_type)
     ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename else ""
     suffix = f".{ext}" if ext else ""
     storage_key = (
@@ -978,7 +1178,7 @@ def _store_submission_file(
         filename=file.filename or "upload",
         field_key=field_key,
         storage_key=storage_key,
-        content_type=file.content_type or "application/octet-stream",
+        content_type=resolved_content_type,
         file_size=file_size,
         checksum_sha256=checksum,
         scan_status="pending" if scan_enabled else "clean",

@@ -31,7 +31,7 @@ import {
 } from "@/lib/api/ai"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
-import { useCreateEmailTemplate } from "@/lib/hooks/use-email-templates"
+import { useCreateEmailTemplate, useEmailTemplateVariables } from "@/lib/hooks/use-email-templates"
 import Link from "@/components/app-link"
 
 // Trigger display labels
@@ -73,23 +73,6 @@ const EMAIL_SUGGESTED_PROMPTS = [
     "Follow-up email after 7 days of inactivity",
     "Appointment confirmation email with date/time and location",
     "Status update email when a case moves to approved",
-]
-
-const ALLOWED_TEMPLATE_VARIABLES = [
-    "first_name",
-    "full_name",
-    "email",
-    "phone",
-    "surrogate_number",
-    "intended_parent_number",
-    "status_label",
-    "owner_name",
-    "org_name",
-    "org_logo_url",
-    "appointment_date",
-    "appointment_time",
-    "appointment_location",
-    "unsubscribe_url",
 ]
 
 function extractTemplateVariables(text: string): string[] {
@@ -139,6 +122,11 @@ export default function AIWorkflowBuilderPage() {
     )
 
     const createEmailTemplate = useCreateEmailTemplate()
+    const {
+        data: templateVariableCatalog = [],
+        isLoading: templateVariableCatalogLoading,
+        error: templateVariableCatalogError,
+    } = useEmailTemplateVariables()
 
     useEffect(() => {
         if (workflowScope === "org" && !canManageAutomation) {
@@ -161,13 +149,26 @@ export default function AIWorkflowBuilderPage() {
         () => extractTemplateVariables(`${templateSubject}\n${templateBody}`),
         [templateSubject, templateBody]
     )
-    const missingRequiredVariable = generatedTemplate
-        ? !templateVariables.includes("unsubscribe_url")
-        : false
-    const unknownTemplateVariables = useMemo(
-        () => templateVariables.filter((variable) => !ALLOWED_TEMPLATE_VARIABLES.includes(variable)),
-        [templateVariables]
+    const canValidateTemplateVariables =
+        !templateVariableCatalogLoading &&
+        !templateVariableCatalogError &&
+        templateVariableCatalog.length > 0
+    const allowedTemplateVariableNames = useMemo(
+        () => new Set(templateVariableCatalog.map((variable) => variable.name)),
+        [templateVariableCatalog]
     )
+    const requiredTemplateVariableNames = useMemo(
+        () => templateVariableCatalog.filter((variable) => variable.required).map((variable) => variable.name),
+        [templateVariableCatalog]
+    )
+    const missingRequiredVariable =
+        Boolean(generatedTemplate) &&
+        canValidateTemplateVariables &&
+        requiredTemplateVariableNames.some((required) => !templateVariables.includes(required))
+    const unknownTemplateVariables = useMemo(() => {
+        if (!canValidateTemplateVariables) return []
+        return templateVariables.filter((variable) => !allowedTemplateVariableNames.has(variable))
+    }, [allowedTemplateVariableNames, canValidateTemplateVariables, templateVariables])
     const hasUnknownTemplateVariables = unknownTemplateVariables.length > 0
 
     const disableReason = !isAIEnabled
@@ -811,12 +812,28 @@ export default function AIWorkflowBuilderPage() {
                                     </p>
                                 </div>
                                 <div className="flex flex-wrap gap-2 justify-center">
-                                    {ALLOWED_TEMPLATE_VARIABLES.slice(0, 6).map((variable) => (
-                                        <Badge key={variable} variant="outline">
-                                            {variable}
-                                        </Badge>
-                                    ))}
-                                    <Badge variant="outline">+{ALLOWED_TEMPLATE_VARIABLES.length - 6} more</Badge>
+                                    {templateVariableCatalogLoading && (
+                                        <Badge variant="outline">Loading variables...</Badge>
+                                    )}
+                                    {!templateVariableCatalogLoading &&
+                                        templateVariableCatalog.length > 0 && (
+                                            <>
+                                                {templateVariableCatalog.slice(0, 6).map((variable) => (
+                                                    <Badge key={variable.name} variant="outline">
+                                                        {variable.name}
+                                                    </Badge>
+                                                ))}
+                                                {templateVariableCatalog.length > 6 && (
+                                                    <Badge variant="outline">
+                                                        +{templateVariableCatalog.length - 6} more
+                                                    </Badge>
+                                                )}
+                                            </>
+                                        )}
+                                    {!templateVariableCatalogLoading &&
+                                        templateVariableCatalog.length === 0 && (
+                                            <Badge variant="outline">Variables unavailable</Badge>
+                                        )}
                                 </div>
                             </div>
                         </CardContent>

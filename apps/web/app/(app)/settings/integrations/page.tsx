@@ -675,10 +675,10 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
     const [fromEmail, setFromEmail] = useState("")
     const [fromName, setFromName] = useState("")
     const [replyTo, setReplyTo] = useState("")
+    const [webhookSigningSecret, setWebhookSigningSecret] = useState("")
     const [defaultSender, setDefaultSender] = useState("")
     const [keyTested, setKeyTested] = useState<{ valid: boolean; error?: string | null; verified_domains?: string[] } | null>(null)
     const [saved, setSaved] = useState(false)
-    const [webhookSecret, setWebhookSecret] = useState<string | null>(null)
     const [isEditingKey, setIsEditingKey] = useState(false)
     const [hasUserEdited, setHasUserEdited] = useState(false)
     const { data: eligibleSenders, isLoading: eligibleSendersLoading } = useEligibleSenders(provider === "gmail")
@@ -690,6 +690,7 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
             setFromEmail(settings.from_email || "")
             setFromName(settings.from_name || "")
             setReplyTo(settings.reply_to_email || "")
+            setWebhookSigningSecret("")
             setDefaultSender(settings.default_sender_user_id || "")
             setApiKey("")
             setIsEditingKey(false)
@@ -707,10 +708,10 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
         setHasUserEdited(true)
         setSaved(false)
         setKeyTested(null)
-        setWebhookSecret(null)
         if (value !== "resend") {
             setApiKey("")
             setIsEditingKey(false)
+            setWebhookSigningSecret("")
         }
     }
 
@@ -742,6 +743,7 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
             from_email?: string;
             from_name?: string;
             reply_to_email?: string;
+            webhook_signing_secret?: string;
             default_sender_user_id?: string | null;
             expected_version?: number;
         } = {
@@ -759,6 +761,9 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
             update.from_email = fromEmail
             update.from_name = fromName
             update.reply_to_email = replyTo
+            if (webhookSigningSecret.trim()) {
+                update.webhook_signing_secret = webhookSigningSecret.trim()
+            }
         } else if (provider === "gmail") {
             update.default_sender_user_id = defaultSender || null
         }
@@ -766,6 +771,7 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
         try {
             await updateSettings.mutateAsync(update)
             setApiKey("") // Clear after save
+            setWebhookSigningSecret("") // Write-only
             setKeyTested(null)
             setIsEditingKey(false)
             setHasUserEdited(false)
@@ -781,10 +787,14 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
     const handleRotateWebhook = async () => {
         try {
             const result = await rotateWebhook.mutateAsync()
-            setWebhookSecret(result.webhook_secret)
-            toast.success("Webhook secret rotated")
+            toast.success("Webhook URL rotated. Update Resend to use the new URL.")
+            // Optional convenience: copy the new URL
+            if (result?.webhook_url) {
+                const write = navigator.clipboard?.writeText(result.webhook_url)
+                write?.catch(() => {})
+            }
         } catch (error) {
-            toast.error(getErrorMessage(error, "Failed to rotate webhook secret"))
+            toast.error(getErrorMessage(error, "Failed to rotate webhook URL"))
         }
     }
 
@@ -1048,7 +1058,7 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
                                             size="sm"
                                             onClick={handleRotateWebhook}
                                             disabled={rotateWebhook.isPending}
-                                            aria-label="Rotate webhook secret"
+                                            aria-label="Rotate webhook URL"
                                         >
                                             {rotateWebhook.isPending ? (
                                                 <Loader2Icon className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
@@ -1058,30 +1068,36 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
                                         </Button>
                                     </div>
                                     <p className="text-xs text-muted-foreground">
-                                        Add this URL to Resend webhook settings for delivery tracking
+                                        Create a webhook endpoint in Resend pointing to this URL and subscribe to: email.delivered, email.bounced, email.complained, email.opened, email.clicked.
                                     </p>
-                                    {webhookSecret && (
-                                        <div className="mt-2 rounded-md bg-yellow-50 p-3 dark:bg-yellow-900/20">
-                                            <p className="text-xs font-medium text-yellow-800 dark:text-yellow-200">
-                                                New Webhook Secret (copy now - shown only once):
-                                            </p>
-                                            <div className="mt-1 flex items-center gap-2">
-                                                <code className="flex-1 break-all rounded bg-yellow-100 px-2 py-1 text-xs dark:bg-yellow-800/30">
-                                                    {webhookSecret}
-                                                </code>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => copyToClipboard(webhookSecret)}
-                                                    aria-label="Copy webhook secret"
-                                                >
-                                                    <CopyIcon className="size-4" aria-hidden="true" />
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
                             )}
+
+                            {/* Webhook Signing Secret */}
+                            <div className="space-y-2">
+                                <Label htmlFor="resend-webhook-secret">Webhook Signing Secret</Label>
+                                <Input
+                                    id="resend-webhook-secret"
+                                    type="password"
+                                    value={webhookSigningSecret}
+                                    onChange={(e) => {
+                                        setWebhookSigningSecret(e.target.value)
+                                        setHasUserEdited(true)
+                                    }}
+                                    placeholder="whsec_…"
+                                    name="resend-webhook-signing-secret"
+                                    autoComplete="off"
+                                />
+                                {settings?.webhook_signing_secret_configured ? (
+                                    <p className="text-xs text-muted-foreground">
+                                        Signing secret is configured. Paste a new one here only if you rotated it in Resend.
+                                    </p>
+                                ) : (
+                                    <p className="text-xs text-muted-foreground">
+                                        Paste the signing secret from Resend to enable signature verification.
+                                    </p>
+                                )}
+                            </div>
                         </div>
                     )}
 

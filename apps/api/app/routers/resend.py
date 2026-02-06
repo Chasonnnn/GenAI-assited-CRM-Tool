@@ -42,6 +42,7 @@ class ResendSettingsResponse(BaseModel):
     default_sender_name: str | None
     default_sender_email: str | None
     webhook_url: str
+    webhook_signing_secret_configured: bool
     current_version: int
 
 
@@ -53,6 +54,7 @@ class ResendSettingsUpdate(BaseModel):
     from_email: str | None = None
     from_name: str | None = None
     reply_to_email: str | None = None
+    webhook_signing_secret: str | None = None  # Plain text, stored encrypted
     default_sender_user_id: str | None = None
     expected_version: int | None = Field(None, description="Required for optimistic locking")
 
@@ -72,10 +74,9 @@ class TestKeyResponse(BaseModel):
 
 
 class RotateWebhookResponse(BaseModel):
-    """Response after rotating webhook secret."""
+    """Response after rotating webhook URL routing token."""
 
     webhook_url: str
-    webhook_secret: str  # Plain text, shown only once
 
 
 class EligibleSenderResponse(BaseModel):
@@ -125,6 +126,7 @@ def get_settings(
         default_sender_name=default_sender_name,
         default_sender_email=default_sender_email,
         webhook_url=resend_settings_service.get_webhook_url(settings.webhook_id),
+        webhook_signing_secret_configured=bool(settings.webhook_secret_encrypted),
         current_version=settings.current_version,
     )
 
@@ -199,6 +201,7 @@ async def update_settings(
             from_name=update.from_name,
             reply_to_email=update.reply_to_email,
             verified_domain=verified_domain,
+            webhook_signing_secret=update.webhook_signing_secret,
             default_sender_user_id=default_sender_arg,
             expected_version=update.expected_version,
         )
@@ -241,6 +244,7 @@ async def update_settings(
         default_sender_name=default_sender_name,
         default_sender_email=default_sender_email,
         webhook_url=resend_settings_service.get_webhook_url(settings.webhook_id),
+        webhook_signing_secret_configured=bool(settings.webhook_secret_encrypted),
         current_version=settings.current_version,
     )
 
@@ -268,13 +272,10 @@ def rotate_webhook(
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
 ) -> RotateWebhookResponse:
-    """Rotate the webhook secret. The new secret is shown only once."""
-    settings, new_secret = resend_settings_service.rotate_webhook_secret(
-        db, session.org_id, session.user_id
-    )
+    """Rotate the webhook URL routing token (webhook_id)."""
+    settings = resend_settings_service.rotate_webhook_id(db, session.org_id, session.user_id)
     return RotateWebhookResponse(
         webhook_url=resend_settings_service.get_webhook_url(settings.webhook_id),
-        webhook_secret=new_secret,
     )
 
 

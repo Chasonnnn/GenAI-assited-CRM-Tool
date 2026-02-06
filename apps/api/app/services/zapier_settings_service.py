@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.url_validation import validate_outbound_webhook_url
 from app.db.models import ZapierInboundWebhook, ZapierWebhookSettings
 from app.services import oauth_service
 
@@ -273,7 +274,10 @@ def update_outbound_settings(
     settings_row = get_or_create_settings(db, organization_id)
 
     if outbound_webhook_url is not None:
-        settings_row.outbound_webhook_url = outbound_webhook_url.strip() or None
+        stripped = outbound_webhook_url.strip()
+        settings_row.outbound_webhook_url = (
+            validate_outbound_webhook_url(stripped) if stripped else None
+        )
     if outbound_webhook_secret is not None:
         settings_row.outbound_webhook_secret_encrypted = encrypt_secret(outbound_webhook_secret)
     if outbound_enabled is not None:

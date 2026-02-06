@@ -1,14 +1,15 @@
 import { describe, it, expect, vi } from "vitest"
 import { render, screen } from "@testing-library/react"
+import * as React from "react"
 import PlatformEmailTemplatePage from "../app/ops/templates/email/[id]/page"
 
 const richTextEditorSpy = vi.fn()
 
 vi.mock("@/components/rich-text-editor", () => ({
-    RichTextEditor: (props: { content?: string }) => {
+    RichTextEditor: React.forwardRef((props: { content?: string }, _ref) => {
         richTextEditorSpy(props)
         return <div data-testid="rich-text-editor" />
-    },
+    }),
 }))
 
 vi.mock("@/components/ops/templates/PublishDialog", () => ({
@@ -45,6 +46,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/hooks/use-platform-templates", () => ({
     usePlatformEmailTemplate: () => ({ data: mockTemplateData, isLoading: false }),
+    usePlatformEmailTemplateVariables: () => ({ data: [], isLoading: false }),
     useCreatePlatformEmailTemplate: () => ({ mutateAsync: vi.fn() }),
     useUpdatePlatformEmailTemplate: () => ({ mutateAsync: vi.fn() }),
     usePublishPlatformEmailTemplate: () => ({ mutateAsync: vi.fn() }),

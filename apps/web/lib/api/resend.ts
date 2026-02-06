@@ -17,6 +17,7 @@ export interface ResendSettings {
     default_sender_name: string | null;
     default_sender_email: string | null;
     webhook_url: string;
+    webhook_signing_secret_configured: boolean;
     current_version: number;
 }
 
@@ -26,6 +27,7 @@ export interface ResendSettingsUpdate {
     from_email?: string;
     from_name?: string;
     reply_to_email?: string;
+    webhook_signing_secret?: string;
     default_sender_user_id?: string | null;
     expected_version?: number;
 }
@@ -38,7 +40,6 @@ export interface TestKeyResponse {
 
 export interface RotateWebhookResponse {
     webhook_url: string;
-    webhook_secret: string;
 }
 
 export interface EligibleSender {

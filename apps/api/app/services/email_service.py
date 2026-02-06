@@ -19,12 +19,13 @@ from app.db.models import EmailTemplate, EmailLog, Job, Surrogate
 from app.db.enums import EmailStatus, JobType
 from app.services.job_service import enqueue_job
 from app.services import email_sender, version_service
+from app.services.template_variable_catalog import VARIABLE_PATTERN as _TEMPLATE_VARIABLE_PATTERN
 from app.types import JsonObject
 from app.utils.normalization import normalize_email
 
 
-# Variable pattern for template substitution: {{variable_name}}
-VARIABLE_PATTERN = re.compile(r"\{\{(\w+)\}\}")
+# Variable pattern for template substitution: {{ variable_name }} (whitespace allowed)
+VARIABLE_PATTERN = _TEMPLATE_VARIABLE_PATTERN
 
 ENTITY_TYPE = "email_template"
 
@@ -157,12 +158,21 @@ _UNSET = object()
 
 def sanitize_template_html(html: str) -> str:
     """Sanitize email template HTML to prevent XSS."""
-    return nh3.clean(
+    cleaned = nh3.clean(
         html,
         tags=ALLOWED_TEMPLATE_TAGS,
         attributes=ALLOWED_TEMPLATE_ATTRS,
         filter_style_properties=ALLOWED_TEMPLATE_STYLE_PROPERTIES,
     )
+    # Many email clients collapse empty paragraphs. Preserve authoring intent by
+    # turning `<p></p>` / `<p><br></p>` into a visible blank line.
+    cleaned = re.sub(
+        r"<p>\s*(?:<br\s*/?>)?\s*</p>",
+        "<p>&nbsp;</p>",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    return cleaned
 
 
 def _normalize_from_email(value: str | None) -> str | None:

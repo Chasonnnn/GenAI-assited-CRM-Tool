@@ -55,6 +55,11 @@ from app.schemas.platform_templates import (
     PlatformFormTemplateDraft,
     PlatformWorkflowTemplateDraft,
 )
+from app.schemas.email import (
+    EmailTemplateTestSendResponse,
+    PlatformEmailTemplateTestSendRequest,
+    TemplateVariableRead,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -1101,7 +1106,9 @@ def update_platform_system_email_template(
         if body.expected_version is not None and template.current_version != body.expected_version:
             raise ValueError("Template version mismatch")
         template.subject = body.subject
-        template.body = body.body
+        from app.services import email_service
+
+        template.body = email_service.sanitize_template_html(body.body)
         template.is_active = body.is_active
         if "from_email" in body.model_fields_set:
             template.from_email = body.from_email
@@ -1336,7 +1343,9 @@ def update_org_system_email_template(
         if body.expected_version is not None and template.current_version != body.expected_version:
             raise ValueError("Template version mismatch")
         template.subject = body.subject
-        template.body = body.body
+        from app.services import email_service
+
+        template.body = email_service.sanitize_template_html(body.body)
         template.is_active = body.is_active
         if "from_email" in body.model_fields_set:
             template.from_email = body.from_email
@@ -1651,6 +1660,55 @@ def _workflow_list_item(template) -> PlatformWorkflowTemplateListItem:
     )
 
 
+@router.get("/templates/email/variables", response_model=list[TemplateVariableRead])
+def list_platform_email_template_variables(
+    session: PlatformUserSession = Depends(require_platform_admin),  # noqa: ARG001
+):
+    """List supported template variables for Ops platform email templates."""
+    from app.services import template_variable_catalog
+
+    return [
+        TemplateVariableRead(
+            name=v.name,
+            description=v.description,
+            category=v.category,
+            required=v.required,
+            value_type=v.value_type,
+            html_safe=v.html_safe,
+        )
+        for v in template_variable_catalog.list_platform_email_template_variables()
+    ]
+
+
+@router.get(
+    "/email/system-templates/{system_key}/variables",
+    response_model=list[TemplateVariableRead],
+)
+def list_platform_system_template_variables(
+    system_key: str,
+    session: PlatformUserSession = Depends(require_platform_admin),  # noqa: ARG001
+):
+    """List supported template variables for a platform system template."""
+    from app.services import template_variable_catalog
+
+    try:
+        vars_ = template_variable_catalog.list_platform_system_template_variables(system_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    return [
+        TemplateVariableRead(
+            name=v.name,
+            description=v.description,
+            category=v.category,
+            required=v.required,
+            value_type=v.value_type,
+            html_safe=v.html_safe,
+        )
+        for v in vars_
+    ]
+
+
 @router.get("/templates/email", response_model=list[PlatformEmailTemplateListItem])
 def list_platform_email_templates(
     session: PlatformUserSession = Depends(require_platform_admin),
@@ -1796,6 +1854,59 @@ def publish_platform_email_template(
     )
     db.commit()
     return _email_read(template, db)
+
+
+@router.post(
+    "/templates/email/{template_id}/test",
+    response_model=EmailTemplateTestSendResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+async def test_send_platform_email_template(
+    template_id: UUID,
+    body: PlatformEmailTemplateTestSendRequest,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> EmailTemplateTestSendResponse:
+    """Send a test email using a platform email template for a specific org.
+
+    The send uses the target org's configured workflow email provider (Resend vs org Gmail).
+    """
+    from app.services import email_service, email_test_send_service, platform_template_service
+
+    template = platform_template_service.get_platform_email_template(db, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    variables_used = email_test_send_service.extract_variables(template.subject, template.body)
+    base_vars = email_test_send_service.build_sample_variables(
+        db=db,
+        org_id=body.org_id,
+        to_email=str(body.to_email),
+        actor_display_name=session.display_name,
+    )
+    base_vars = email_test_send_service.apply_unknown_variable_fallbacks(
+        variables_used=variables_used, variables=base_vars
+    )
+    final_vars = {**base_vars, **(body.variables or {})}
+
+    rendered_subject, rendered_body = email_service.render_template(
+        template.subject,
+        template.body,
+        final_vars,
+    )
+
+    result = await email_test_send_service.send_test_via_org_provider(
+        db=db,
+        org_id=body.org_id,
+        to_email=str(body.to_email),
+        subject=rendered_subject,
+        html=rendered_body,
+        template_id=template.id,
+        idempotency_key=body.idempotency_key,
+        template_from_email=template.from_email,
+    )
+
+    return EmailTemplateTestSendResponse(**result)
 
 
 @router.get("/templates/forms", response_model=list[PlatformFormTemplateListItem])

@@ -5,7 +5,6 @@ Supports Resend API and Gmail default sender.
 """
 
 import logging
-import secrets
 import uuid
 from datetime import datetime, timezone
 
@@ -74,15 +73,6 @@ def get_settings_by_webhook_id(db: Session, webhook_id: str) -> ResendSettings |
     return db.query(ResendSettings).filter(ResendSettings.webhook_id == webhook_id).first()
 
 
-def _generate_webhook_secret() -> str:
-    """Generate a Svix-compatible webhook secret (whsec_ prefix)."""
-    import base64
-
-    raw = secrets.token_bytes(32)
-    encoded = base64.urlsafe_b64encode(raw).decode("utf-8").rstrip("=")
-    return f"whsec_{encoded}"
-
-
 def get_or_create_resend_settings(
     db: Session,
     organization_id: uuid.UUID,
@@ -93,15 +83,16 @@ def get_or_create_resend_settings(
     if s:
         return s
 
-    # Generate webhook ID and initial secret
+    # Generate webhook ID for URL routing.
+    # NOTE: Resend (via Svix) generates the webhook signing secret. We store that
+    # secret when the admin pastes it into settings.
     webhook_id = str(uuid.uuid4())
-    webhook_secret = _generate_webhook_secret()
 
     s = ResendSettings(
         organization_id=organization_id,
         email_provider=None,  # Not configured
         webhook_id=webhook_id,
-        webhook_secret_encrypted=encrypt_api_key(webhook_secret),
+        webhook_secret_encrypted=None,
         current_version=1,
     )
     db.add(s)
@@ -121,6 +112,7 @@ def update_resend_settings(
     from_name: str | None = None,
     reply_to_email: str | None = None,
     verified_domain: str | None = None,
+    webhook_signing_secret: str | None = None,  # Plain text, will be encrypted
     default_sender_user_id: uuid.UUID | None | object = UNSET,
     expected_version: int | None = None,
 ) -> ResendSettings:
@@ -151,6 +143,13 @@ def update_resend_settings(
     if verified_domain is not None:
         s.verified_domain = verified_domain if verified_domain else None
 
+    if webhook_signing_secret is not None:
+        # Resend provides an Svix signing secret like "whsec_...".
+        # Store encrypted and never return it to the client.
+        s.webhook_secret_encrypted = (
+            encrypt_api_key(webhook_signing_secret) if webhook_signing_secret else None
+        )
+
     if default_sender_user_id is not UNSET:
         s.default_sender_user_id = default_sender_user_id
 
@@ -178,23 +177,25 @@ def clear_default_sender(
     return s
 
 
-def rotate_webhook_secret(
+def rotate_webhook_id(
     db: Session,
     organization_id: uuid.UUID,
     user_id: uuid.UUID,
-) -> tuple[ResendSettings, str]:
-    """Rotate the webhook secret. Returns the new plain secret (shown once)."""
+) -> ResendSettings:
+    """Rotate the webhook URL routing token (webhook_id).
+
+    This does not rotate the Svix signing secret (Resend controls the signing secret).
+    If you rotate the webhook_id, you must update the webhook endpoint URL in Resend.
+    """
     s = get_or_create_resend_settings(db, organization_id, user_id)
 
-    # Generate new secret
-    new_secret = _generate_webhook_secret()
-    s.webhook_secret_encrypted = encrypt_api_key(new_secret)
+    s.webhook_id = str(uuid.uuid4())
     s.current_version += 1
     s.updated_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(s)
-    return s, new_secret
+    return s
 
 
 async def test_api_key(api_key: str) -> tuple[bool, str | None, list[str]]:

@@ -24,3 +24,25 @@ def test_render_template_strips_newlines_from_subject():
 
     assert "\\n" not in subject
     assert "\\r" not in subject
+
+
+def test_render_template_supports_whitespace_in_tokens():
+    subject, body = email_service.render_template(
+        subject="Hi {{ full_name }}",
+        body="<p>{{ full_name }}</p>",
+        variables={"full_name": "Alice"},
+    )
+
+    assert subject == "Hi Alice"
+    assert "<p>Alice</p>" in body
+
+
+def test_render_template_preserves_emojis_in_static_and_variable_content():
+    subject, body = email_service.render_template(
+        subject="Hi 👋 {{ full_name }}",
+        body="<p>Welcome 😊 {{ full_name }}</p>",
+        variables={"full_name": "Alice 😊"},
+    )
+
+    assert subject == "Hi 👋 Alice 😊"
+    assert "<p>Welcome 😊 Alice 😊</p>" in body

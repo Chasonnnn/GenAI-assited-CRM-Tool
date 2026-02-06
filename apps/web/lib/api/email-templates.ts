@@ -3,6 +3,7 @@
  */
 
 import api from './index'
+import type { TemplateVariableRead } from '@/lib/types/template-variable'
 
 // Types
 export type EmailTemplateScope = 'org' | 'personal'
@@ -214,4 +215,12 @@ export async function copyTemplateFromLibrary(
     data: EmailTemplateCopyRequest
 ): Promise<EmailTemplate> {
     return api.post<EmailTemplate>(`/email-templates/library/${id}/copy`, data)
+}
+
+// ============================================================================
+// Template Variables Catalog
+// ============================================================================
+
+export async function listEmailTemplateVariables(): Promise<TemplateVariableRead[]> {
+    return api.get<TemplateVariableRead[]>(`/email-templates/variables`)
 }

@@ -78,7 +78,10 @@ class Settings(BaseSettings):
 
     # Proxy/Load Balancer Settings
     # Set to True when running behind nginx/Cloudflare to trust X-Forwarded-For
-    TRUST_PROXY_HEADERS: bool = True
+    TRUST_PROXY_HEADERS: bool = False
+    # Comma-separated list of proxy IPs/hosts to trust. Use "*" only if you fully
+    # understand the security implications (spoofed client IP/scheme).
+    TRUST_PROXY_HOSTS: str = "127.0.0.1"
 
     # Database
     DATABASE_URL: str
@@ -376,6 +379,17 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> list[str]:
         """Parse CORS_ORIGINS into a list."""
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def trusted_proxy_hosts(self) -> list[str] | str:
+        """Normalize TRUST_PROXY_HOSTS for ProxyHeadersMiddleware."""
+        raw = (self.TRUST_PROXY_HOSTS or "").strip()
+        if not raw:
+            return ["127.0.0.1"]
+        if raw == "*":
+            return "*"
+        hosts = [h.strip() for h in raw.split(",") if h.strip()]
+        return hosts or ["127.0.0.1"]
 
     @property
     def allowed_domains_list(self) -> list[str]:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from app.core.url_validation import validate_outbound_webhook_url
 from app.jobs.utils import safe_url
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,15 @@ async def process_webhook_retry(db, job) -> None:
         import httpx
 
         try:
+            try:
+                webhook_url = validate_outbound_webhook_url(str(webhook_url))
+            except ValueError as exc:
+                logger.error(
+                    "Blocked unsafe webhook retry URL: %s (%s)",
+                    safe_url(str(webhook_url)),
+                    str(exc),
+                )
+                return
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     webhook_url, json=webhook_data, headers=webhook_headers

@@ -59,6 +59,16 @@ ALLOWED_MIME_TYPES = {
 MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
 SIGNED_URL_EXPIRY_SECONDS = 300  # 5 minutes
 
+_EXECUTABLE_SIGNATURE_PREFIXES = (
+    b"MZ",  # Windows PE
+    b"\x7fELF",  # Linux ELF
+    b"\xfe\xed\xfa\xce",  # Mach-O (32-bit)
+    b"\xfe\xed\xfa\xcf",  # Mach-O (64-bit)
+    b"\xcf\xfa\xed\xfe",  # Mach-O (reverse endian)
+    b"\xca\xfe\xba\xbe",  # Mach-O fat
+    b"\xbe\xba\xfe\xca",  # Mach-O fat (reverse endian)
+)
+
 
 # =============================================================================
 # Storage Backend
@@ -97,6 +107,16 @@ def calculate_checksum(file: BinaryIO) -> str:
         sha256.update(chunk)
     file.seek(0)
     return sha256.hexdigest()
+
+
+def _read_file_prefix(file: BinaryIO, size: int) -> bytes:
+    """Read bytes from the beginning of a file without consuming the stream."""
+    pos = file.tell()
+    try:
+        file.seek(0)
+        return file.read(size)
+    finally:
+        file.seek(pos)
 
 
 def validate_file(
@@ -291,6 +311,10 @@ def upload_attachment(
 
     scan_enabled = getattr(settings, "ATTACHMENT_SCAN_ENABLED", False)
 
+    head = _read_file_prefix(file, 8)
+    if head.startswith(_EXECUTABLE_SIGNATURE_PREFIXES):
+        raise ValueError("Executable files are not allowed")
+
     # Calculate checksum
     checksum = calculate_checksum(file)
 
@@ -435,6 +459,8 @@ def get_download_url(
     """Get signed download URL and log access."""
     attachment = get_attachment(db, org_id, attachment_id)
     if not attachment or attachment.scan_status in ("infected", "error"):
+        return None
+    if getattr(settings, "ATTACHMENT_SCAN_ENABLED", False) and attachment.scan_status != "clean":
         return None
 
     # Audit log

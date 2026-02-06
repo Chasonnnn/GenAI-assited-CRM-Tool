@@ -6,6 +6,7 @@ import logging
 
 import httpx
 
+from app.core.url_validation import validate_outbound_webhook_url
 from app.jobs.utils import safe_url
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,16 @@ async def process_zapier_stage_event(db, job) -> None:
 
     if not webhook_url or not webhook_data:
         logger.warning("Invalid Zapier stage event payload: missing url or data")
+        return
+
+    try:
+        webhook_url = validate_outbound_webhook_url(str(webhook_url))
+    except ValueError as exc:
+        logger.warning(
+            "Blocked unsafe Zapier outbound webhook URL: %s (%s)",
+            safe_url(str(webhook_url)),
+            str(exc),
+        )
         return
 
     async with httpx.AsyncClient(timeout=30.0) as client:

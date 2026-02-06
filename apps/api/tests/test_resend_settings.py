@@ -157,24 +157,18 @@ class TestResendSettingsWebhook:
         found = resend_settings_service.get_settings_by_webhook_id(db, "invalid-id")
         assert found is None
 
-    def test_rotate_webhook_secret(self, db, test_org):
+    def test_rotate_webhook_id(self, db, test_org):
         from app.services import resend_settings_service
 
         settings = resend_settings_service.get_or_create_resend_settings(
             db, test_org.id, test_org.id
         )
-        initial_secret = settings.webhook_secret_encrypted
+        initial_webhook_id = settings.webhook_id
 
-        # Rotate secret
-        updated, new_secret = resend_settings_service.rotate_webhook_secret(
-            db, test_org.id, test_org.id
-        )
+        # Rotate webhook id
+        updated = resend_settings_service.rotate_webhook_id(db, test_org.id, test_org.id)
 
-        # Secret should have changed
-        assert updated.webhook_secret_encrypted != initial_secret
-        # New secret should be returned in plain text
-        assert new_secret is not None
-        assert len(new_secret) > 10
+        assert updated.webhook_id != initial_webhook_id
 
 
 class TestFromEmailValidation:

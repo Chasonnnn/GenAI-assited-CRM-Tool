@@ -25,6 +25,9 @@ from app.schemas.email import (
     EmailLogRead,
     EmailTemplateCopyRequest,
     EmailTemplateShareRequest,
+    TemplateVariableRead,
+    EmailTemplateTestSendRequest,
+    EmailTemplateTestSendResponse,
 )
 from app.schemas.platform_templates import (
     EmailTemplateLibraryItem,
@@ -36,6 +39,24 @@ router = APIRouter(
     tags=["Email Templates"],
     dependencies=[Depends(require_permission(POLICIES["email_templates"].default))],
 )
+
+
+@router.get("/variables", response_model=list[TemplateVariableRead])
+def list_template_variables():
+    """List the supported template variables for org/personal email templates."""
+    from app.services import template_variable_catalog
+
+    return [
+        TemplateVariableRead(
+            name=v.name,
+            description=v.description,
+            category=v.category,
+            required=v.required,
+            value_type=v.value_type,
+            html_safe=v.html_safe,
+        )
+        for v in template_variable_catalog.list_org_email_template_variables()
+    ]
 
 
 def _build_template_response(
@@ -470,6 +491,84 @@ def send_email(
 
     email_log, job = result
     return email_log
+
+
+@router.post(
+    "/{template_id}/test",
+    response_model=EmailTemplateTestSendResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+async def send_test_email(
+    template_id: UUID,
+    body: EmailTemplateTestSendRequest,
+    db: Session = Depends(get_db),
+    session=Depends(get_current_session),
+) -> EmailTemplateTestSendResponse:
+    """Send a test email for a given template.
+
+    - Org templates require manage_email_templates permission.
+    - Personal templates can only be test-sent by the owner (no admin override).
+    """
+    from app.services import email_test_send_service, permission_service
+
+    template = email_service.get_template(db, template_id, session.org_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    # Authorization based on scope
+    if template.scope == "org":
+        manage_perm = POLICIES["email_templates"].actions["manage"]
+        perm_key = manage_perm.value if hasattr(manage_perm, "value") else str(manage_perm)
+        if not permission_service.check_permission(
+            db, session.org_id, session.user_id, session.role.value, perm_key
+        ):
+            raise HTTPException(status_code=403, detail=f"Missing permission: {perm_key}")
+    else:
+        if template.owner_user_id != session.user_id:
+            raise HTTPException(status_code=403, detail="You can only send tests for your templates")
+
+    variables_used = email_test_send_service.extract_variables(template.subject, template.body)
+    base_vars = email_test_send_service.build_sample_variables(
+        db=db,
+        org_id=session.org_id,
+        to_email=str(body.to_email),
+        actor_display_name=session.display_name,
+    )
+    base_vars = email_test_send_service.apply_unknown_variable_fallbacks(
+        variables_used=variables_used, variables=base_vars
+    )
+    final_vars = {**base_vars, **(body.variables or {})}
+
+    rendered_subject, rendered_body = email_service.render_template(
+        template.subject,
+        template.body,
+        final_vars,
+    )
+
+    if template.scope == "personal":
+        result = await email_test_send_service.send_test_via_user_gmail(
+            db=db,
+            org_id=session.org_id,
+            sender_user_id=session.user_id,
+            to_email=str(body.to_email),
+            subject=rendered_subject,
+            html=rendered_body,
+            template_id=template.id,
+            idempotency_key=body.idempotency_key,
+        )
+    else:
+        result = await email_test_send_service.send_test_via_org_provider(
+            db=db,
+            org_id=session.org_id,
+            to_email=str(body.to_email),
+            subject=rendered_subject,
+            html=rendered_body,
+            template_id=template.id,
+            idempotency_key=body.idempotency_key,
+            template_from_email=template.from_email,
+        )
+
+    return EmailTemplateTestSendResponse(**result)
 
 
 # =============================================================================

@@ -87,7 +87,8 @@ def get_public_form(request: Request, token: str, db: Session = Depends(get_db))
         form_schema=schema,
         max_file_size_bytes=form.max_file_size_bytes,
         max_file_count=form.max_file_count,
-        allowed_mime_types=form.allowed_mime_types,
+        allowed_mime_types=form.allowed_mime_types
+        or form_submission_service.DEFAULT_ALLOWED_FORM_UPLOAD_MIME_TYPES,
     )
 
 

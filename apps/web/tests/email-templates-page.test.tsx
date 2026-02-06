@@ -1,5 +1,6 @@
 import { describe, it, beforeEach, vi, expect } from "vitest"
 import { render, screen } from "@testing-library/react"
+import * as React from "react"
 import EmailTemplatesPage from "../app/(app)/automation/email-templates/page"
 
 const mockUseAuth = vi.fn()
@@ -29,6 +30,7 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
     useEmailTemplate: () => ({ data: null, isLoading: false }),
     useEmailTemplateLibrary: () => ({ data: [], isLoading: false }),
     useEmailTemplateLibraryItem: () => ({ data: null, isLoading: false }),
+    useEmailTemplateVariables: () => ({ data: [], isLoading: false }),
     useCreateEmailTemplate: () => ({ mutate: vi.fn(), isPending: false }),
     useUpdateEmailTemplate: () => ({ mutate: vi.fn(), isPending: false }),
     useDeleteEmailTemplate: () => ({ mutate: vi.fn(), isPending: false }),
@@ -48,7 +50,7 @@ vi.mock("@/lib/hooks/use-signature", () => ({
 }))
 
 vi.mock("@/components/rich-text-editor", () => ({
-    RichTextEditor: () => <div data-testid="rich-text-editor" />,
+    RichTextEditor: React.forwardRef(() => <div data-testid="rich-text-editor" />),
 }))
 
 describe("EmailTemplatesPage", () => {

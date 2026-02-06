@@ -7,6 +7,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.surrogate_access import check_surrogate_access
 from app.core.deps import (
     get_current_session,
@@ -699,6 +700,8 @@ def download_submission_file(
             else "File failed virus scan"
         )
         raise HTTPException(status_code=403, detail=detail)
+    if settings.ATTACHMENT_SCAN_ENABLED and file_record.scan_status != "clean":
+        raise HTTPException(status_code=409, detail="File is still being scanned")
 
     url = form_submission_service.get_submission_file_download_url(
         db=db,

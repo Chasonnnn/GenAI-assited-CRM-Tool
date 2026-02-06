@@ -73,6 +73,7 @@ const resendSettingsData = {
     default_sender_name: null,
     default_sender_email: null,
     webhook_url: 'https://api.test/webhooks/resend/abc',
+    webhook_signing_secret_configured: true,
     current_version: 1,
 } as const
 

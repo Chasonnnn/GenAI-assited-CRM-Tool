@@ -240,15 +240,20 @@ def update_outbound_settings(
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
 ):
-    settings = zapier_settings_service.update_outbound_settings(
-        db,
-        session.org_id,
-        outbound_webhook_url=data.outbound_webhook_url,
-        outbound_webhook_secret=data.outbound_webhook_secret,
-        outbound_enabled=data.outbound_enabled,
-        send_hashed_pii=data.send_hashed_pii,
-        event_mapping=[m.model_dump() for m in data.event_mapping] if data.event_mapping else None,
-    )
+    try:
+        settings = zapier_settings_service.update_outbound_settings(
+            db,
+            session.org_id,
+            outbound_webhook_url=data.outbound_webhook_url,
+            outbound_webhook_secret=data.outbound_webhook_secret,
+            outbound_enabled=data.outbound_enabled,
+            send_hashed_pii=data.send_hashed_pii,
+            event_mapping=[m.model_dump() for m in data.event_mapping]
+            if data.event_mapping
+            else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     inbound_webhooks = zapier_settings_service.list_inbound_webhooks(db, session.org_id)
     return _serialize_settings(settings, inbound_webhooks)
 
