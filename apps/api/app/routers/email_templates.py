@@ -622,6 +622,7 @@ async def send_test_email(
             html=rendered_body,
             template_id=template.id,
             idempotency_key=body.idempotency_key,
+            ignore_opt_out=body.ignore_opt_out,
         )
     else:
         result = await email_test_send_service.send_test_via_org_provider(
@@ -633,6 +634,7 @@ async def send_test_email(
             template_id=template.id,
             idempotency_key=body.idempotency_key,
             template_from_email=template.from_email,
+            ignore_opt_out=body.ignore_opt_out,
         )
 
     return EmailTemplateTestSendResponse(**result)

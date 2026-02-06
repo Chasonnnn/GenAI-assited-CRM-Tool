@@ -87,8 +87,10 @@ async def test_platform_email_template_test_send_respects_org_provider_settings(
         surrogate_id=None,
         idempotency_key=None,
         headers=None,
+        ignore_opt_out=False,
     ):
         called["user_id"] = user_id
+        _ = ignore_opt_out
         return {"success": True, "message_id": "gmail_ops_1", "email_log_id": str(uuid.uuid4())}
 
     from app.services import gmail_service

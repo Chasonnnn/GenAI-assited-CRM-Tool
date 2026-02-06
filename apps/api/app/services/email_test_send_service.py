@@ -130,6 +130,7 @@ async def send_resend_logged(
     reply_to: str | None,
     template_id: UUID | None,
     idempotency_key: str | None,
+    ignore_opt_out: bool = False,
 ) -> dict:
     if idempotency_key:
         existing = (
@@ -143,7 +144,7 @@ async def send_resend_logged(
         if existing:
             return _result_from_log(provider_used="resend", log=existing).as_dict()
 
-    if email_service.is_email_suppressed(db, org_id, to_email):
+    if email_service.is_email_suppressed(db, org_id, to_email, ignore_opt_out=ignore_opt_out):
         email_log = EmailLog(
             organization_id=org_id,
             template_id=template_id,
@@ -260,6 +261,7 @@ async def send_gmail_logged(
     html: str,
     template_id: UUID | None,
     idempotency_key: str | None,
+    ignore_opt_out: bool = False,
 ) -> dict:
     result = await gmail_service.send_email_logged(
         db=db,
@@ -271,6 +273,7 @@ async def send_gmail_logged(
         html=True,
         template_id=template_id,
         idempotency_key=idempotency_key,
+        ignore_opt_out=ignore_opt_out,
     )
     return _SendResult(
         success=bool(result.get("success")),
@@ -291,6 +294,7 @@ async def send_test_via_org_provider(
     template_id: UUID | None,
     idempotency_key: str | None,
     template_from_email: str | None = None,
+    ignore_opt_out: bool = False,
 ) -> dict:
     from app.services.workflow_email_provider import (
         EmailProviderError,
@@ -324,6 +328,7 @@ async def send_test_via_org_provider(
             reply_to=config.get("reply_to"),
             template_id=template_id,
             idempotency_key=idempotency_key,
+            ignore_opt_out=ignore_opt_out,
         )
 
     if provider == "org_gmail":
@@ -336,6 +341,7 @@ async def send_test_via_org_provider(
             html=html,
             template_id=template_id,
             idempotency_key=idempotency_key,
+            ignore_opt_out=ignore_opt_out,
         )
 
     return _SendResult(
@@ -357,6 +363,7 @@ async def send_test_via_user_gmail(
     html: str,
     template_id: UUID | None,
     idempotency_key: str | None,
+    ignore_opt_out: bool = False,
 ) -> dict:
     return await send_gmail_logged(
         db=db,
@@ -367,4 +374,5 @@ async def send_test_via_user_gmail(
         html=html,
         template_id=template_id,
         idempotency_key=idempotency_key,
+        ignore_opt_out=ignore_opt_out,
     )

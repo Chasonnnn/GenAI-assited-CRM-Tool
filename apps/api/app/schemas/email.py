@@ -136,6 +136,9 @@ class EmailTemplateTestSendRequest(BaseModel):
     to_email: EmailStr
     variables: dict[str, str] = {}
     idempotency_key: str | None = None
+    # Test-only: allows sending even if the recipient opted out of marketing emails.
+    # Bounces/complaints remain suppressed.
+    ignore_opt_out: bool = False
 
 
 class PlatformEmailTemplateTestSendRequest(BaseModel):

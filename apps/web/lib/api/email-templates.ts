@@ -92,6 +92,7 @@ export interface EmailTemplateTestSendRequest {
     to_email: string
     variables?: Record<string, string>
     idempotency_key?: string | null
+    ignore_opt_out?: boolean
 }
 
 export interface EmailTemplateTestSendResponse {

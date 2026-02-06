@@ -10,7 +10,7 @@ from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.security import create_session_token
 from app.db.enums import Role
-from app.db.models import EmailTemplate, Membership, User, UserIntegration
+from app.db.models import EmailSuppression, EmailTemplate, Membership, User, UserIntegration
 from app.main import app
 from app.services import resend_settings_service, session_service
 
@@ -122,6 +122,73 @@ async def test_test_send_org_template_uses_resend_when_configured(
 
 
 @pytest.mark.asyncio
+async def test_test_send_org_template_allows_ignore_opt_out_for_opt_out_suppression(
+    authed_client, db, test_org, test_user, monkeypatch
+):
+    resend_settings_service.update_resend_settings(
+        db,
+        test_org.id,
+        test_user.id,
+        email_provider="resend",
+        api_key="re_test_key",
+        from_email="no-reply@example.com",
+        from_name="Test Org",
+    )
+
+    template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        created_by_user_id=test_user.id,
+        name="Test Template",
+        subject="Hello {{full_name}}",
+        body="<p>Hello {{full_name}}</p>",
+        scope="org",
+        owner_user_id=None,
+        is_active=True,
+    )
+    db.add(template)
+    db.commit()
+
+    db.add(
+        EmailSuppression(
+            organization_id=test_org.id,
+            email="optout@example.com",
+            reason="opt_out",
+        )
+    )
+    db.commit()
+
+    called = {"count": 0}
+
+    async def fake_send_email_direct(*_args, **_kwargs):
+        called["count"] += 1
+        return True, None, "resend_456"
+
+    from app.services import resend_email_service
+
+    monkeypatch.setattr(resend_email_service, "send_email_direct", fake_send_email_direct)
+
+    suppressed = await authed_client.post(
+        f"/email-templates/{template.id}/test",
+        json={"to_email": "optout@example.com"},
+    )
+    assert suppressed.status_code == 200
+    assert suppressed.json()["success"] is False
+    assert suppressed.json()["error"] == "Email suppressed"
+    assert called["count"] == 0
+
+    bypassed = await authed_client.post(
+        f"/email-templates/{template.id}/test",
+        json={"to_email": "optout@example.com", "ignore_opt_out": True},
+    )
+    assert bypassed.status_code == 200
+    assert bypassed.json()["success"] is True
+    assert bypassed.json()["provider_used"] == "resend"
+    assert bypassed.json()["message_id"] == "resend_456"
+    assert called["count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_test_send_org_template_uses_org_gmail_when_configured(
     authed_client, db, test_org, test_user, monkeypatch
 ):
@@ -199,9 +266,11 @@ async def test_test_send_org_template_uses_org_gmail_when_configured(
         surrogate_id=None,
         idempotency_key=None,
         headers=None,
+        ignore_opt_out=False,
     ):
         called["user_id"] = user_id
         called["body"] = body
+        _ = ignore_opt_out
         return {"success": True, "message_id": "gmail_123", "email_log_id": str(uuid.uuid4())}
 
     from app.services import gmail_service
@@ -335,8 +404,10 @@ async def test_test_send_personal_template_only_owner_can_send(db, test_org, mon
         surrogate_id=None,
         idempotency_key=None,
         headers=None,
+        ignore_opt_out=False,
     ):
         called["user_id"] = user_id
+        _ = ignore_opt_out
         return {"success": True, "message_id": "gmail_789", "email_log_id": str(uuid.uuid4())}
 
     from app.services import gmail_service

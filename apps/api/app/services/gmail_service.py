@@ -207,6 +207,7 @@ async def send_email_logged(
     surrogate_id: uuid.UUID | None = None,
     idempotency_key: str | None = None,
     headers: dict[str, str] | None = None,
+    ignore_opt_out: bool = False,
 ) -> JsonObject:
     """Send a Gmail email with EmailLog tracking + idempotency."""
     from app.services import email_service, unsubscribe_service
@@ -223,7 +224,7 @@ async def send_email_logged(
         if existing:
             return _result_from_log(existing)
 
-    if email_service.is_email_suppressed(db, org_id, to):
+    if email_service.is_email_suppressed(db, org_id, to, ignore_opt_out=ignore_opt_out):
         email_log = EmailLog(
             organization_id=org_id,
             template_id=template_id,
