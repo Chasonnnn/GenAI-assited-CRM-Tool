@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.69.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.68.0...surrogacy-crm-platform-v0.69.0) (2026-02-06)
+
+
+### Features
+
+* **a11y:** add aria-labels to file upload buttons ([3c02a66](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3c02a66fdb887d835bb1a04081b5a819c5e49576))
+* **email:** add template variable catalog and frontend picker component ([bf89d5c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bf89d5c1fabb7d191aa5ac7af9fefe1f2b273705))
+* **email:** implement test send feature for email templates ([2336b08](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2336b08b866836df4d04494334b40d2177074d9e))
+* **email:** implement test send service and template HTML rendering ([3254b41](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3254b41cf884e9522651cd2c223feaded954d4a7))
+* **platform:** implement test send for platform templates ([368355a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/368355a16ad70749c514a81fb6514fa916cf7e65))
+* **web:** add accessible name to surrogate actions menu ([c46858b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c46858b084e9f4da0f341a6cf48913e5375f7a71))
+
+
+### Bug Fixes
+
+* **platform:** organization slug update and audit logging for test sends ([611d53f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/611d53f83d073e120af84743a80a124d6f664abc))
+* surrogates-optional-totals ([d93e456](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d93e456d0a9693b602663e04eb0c4eb54062b73b))
+
 ## [0.68.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.67.0...surrogacy-crm-platform-v0.68.0) (2026-02-02)
 
 
