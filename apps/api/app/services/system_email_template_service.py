@@ -9,7 +9,6 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.db.models import EmailTemplate, PlatformSystemEmailTemplate
-from app.services import email_service
 
 
 ORG_INVITE_SYSTEM_KEY = "org_invite"
@@ -333,6 +332,10 @@ def get_system_template_defaults(system_key: str) -> dict[str, str]:
     defaults = DEFAULT_SYSTEM_TEMPLATES.get(system_key)
     if not defaults:
         raise ValueError("Unknown system template key")
+
+    # Local import to avoid circular imports (email_service also needs access to the
+    # platform system template registry for filtering).
+    from app.services import email_service
 
     return {
         **defaults,

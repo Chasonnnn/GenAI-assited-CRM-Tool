@@ -193,6 +193,69 @@ class PlatformEmailBrandingUpdate(BaseModel):
     logo_url: str | None = None
 
 
+class CreateSystemEmailTemplateRequest(BaseModel):
+    system_key: str
+    name: str
+    subject: str
+    from_email: str | None = None
+    body: str
+    is_active: bool = True
+
+    @field_validator("system_key")
+    @classmethod
+    def validate_system_key(cls, v: str) -> str:
+        import re
+
+        key = v.strip().lower()
+        if key == "new":
+            raise ValueError("system_key 'new' is reserved")
+        if not re.match(r"^[a-z0-9_]+$", key):
+            raise ValueError("system_key must contain only lowercase letters, numbers, and underscores")
+        if len(key) < 2 or len(key) > 100:
+            raise ValueError("system_key must be between 2 and 100 characters")
+        return key
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        name = v.strip()
+        if not name:
+            raise ValueError("name is required")
+        if len(name) > 120:
+            raise ValueError("name must be 120 characters or less")
+        return name
+
+    @field_validator("subject")
+    @classmethod
+    def validate_subject(cls, v: str) -> str:
+        subject = v.strip()
+        if not subject:
+            raise ValueError("subject is required")
+        if len(subject) > 200:
+            raise ValueError("subject must be 200 characters or less")
+        return subject
+
+    @field_validator("from_email")
+    @classmethod
+    def validate_from_email(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        from_email = v.strip()
+        if not from_email:
+            return None
+        if len(from_email) > 200:
+            raise ValueError("from_email must be 200 characters or less")
+        return from_email
+
+    @field_validator("body")
+    @classmethod
+    def validate_body(cls, v: str) -> str:
+        body = v.strip()
+        if not body:
+            raise ValueError("body is required")
+        return body
+
+
 class UpdateSystemEmailTemplateRequest(BaseModel):
     subject: str
     from_email: str | None = None
@@ -1034,12 +1097,71 @@ def update_platform_email_branding(
 # =============================================================================
 
 
+@router.post(
+    "/email/system-templates",
+    status_code=201,
+    dependencies=[Depends(require_csrf_header)],
+    response_model=SystemEmailTemplateRead,
+)
+def create_platform_system_email_template(
+    body: CreateSystemEmailTemplateRequest,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> SystemEmailTemplateRead:
+    """Create a platform system email template (custom system_key)."""
+    from app.db.models import PlatformSystemEmailTemplate
+    from app.services import email_service
+
+    existing = (
+        db.query(PlatformSystemEmailTemplate)
+        .filter(PlatformSystemEmailTemplate.system_key == body.system_key)
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="System template already exists")
+
+    template = PlatformSystemEmailTemplate(
+        system_key=body.system_key,
+        name=body.name,
+        subject=body.subject,
+        from_email=body.from_email,
+        body=email_service.sanitize_template_html(body.body),
+        is_active=body.is_active,
+        current_version=1,
+    )
+    db.add(template)
+
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="email_template.system.create",
+        target_org_id=None,
+        metadata={"system_key": body.system_key},
+        request=request,
+    )
+    db.commit()
+    db.refresh(template)
+
+    return SystemEmailTemplateRead(
+        system_key=template.system_key,
+        name=template.name,
+        subject=template.subject,
+        from_email=template.from_email,
+        body=template.body,
+        is_active=template.is_active,
+        current_version=template.current_version,
+        updated_at=template.updated_at.isoformat() if template.updated_at else None,
+    )
+
+
 @router.get("/email/system-templates", response_model=list[SystemEmailTemplateRead])
 def list_platform_system_email_templates(
     session: PlatformUserSession = Depends(require_platform_admin),
     db: Session = Depends(get_db),
 ) -> list[SystemEmailTemplateRead]:
     from app.services import system_email_template_service
+    from app.db.models import PlatformSystemEmailTemplate
 
     def _to_read(template) -> SystemEmailTemplateRead:
         return SystemEmailTemplateRead(
@@ -1053,11 +1175,17 @@ def list_platform_system_email_templates(
             updated_at=template.updated_at.isoformat() if template.updated_at else None,
         )
 
-    templates = []
+    # Always ensure built-in templates exist, but include any custom templates created via ops.
     for system_key in system_email_template_service.DEFAULT_SYSTEM_TEMPLATES.keys():
-        template = system_email_template_service.ensure_system_template(db, system_key=system_key)
-        templates.append(_to_read(template))
-    return templates
+        system_email_template_service.ensure_system_template(db, system_key=system_key)
+    db.commit()
+
+    templates = (
+        db.query(PlatformSystemEmailTemplate)
+        .order_by(PlatformSystemEmailTemplate.name.asc())
+        .all()
+    )
+    return [_to_read(template) for template in templates]
 
 
 @router.get(

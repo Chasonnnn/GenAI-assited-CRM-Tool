@@ -129,6 +129,15 @@ export interface SystemEmailTemplate {
     updated_at: string | null;
 }
 
+export interface PlatformSystemEmailTemplateCreate {
+    system_key: string;
+    name: string;
+    subject: string;
+    from_email?: string | null;
+    body: string;
+    is_active?: boolean;
+}
+
 export interface PlatformEmailBranding {
     logo_url: string | null;
 }
@@ -374,6 +383,15 @@ export function uploadPlatformEmailBrandingLogo(
  */
 export function listPlatformSystemEmailTemplates(): Promise<SystemEmailTemplate[]> {
     return api.get<SystemEmailTemplate[]>('/platform/email/system-templates');
+}
+
+/**
+ * Create a new platform system email template.
+ */
+export function createPlatformSystemEmailTemplate(
+    data: PlatformSystemEmailTemplateCreate
+): Promise<SystemEmailTemplate> {
+    return api.post<SystemEmailTemplate>('/platform/email/system-templates', data);
 }
 
 /**

@@ -427,11 +427,22 @@ def list_templates_for_user(
         List of templates the user can see
     """
     from sqlalchemy import or_, and_
+    from app.services import system_email_template_service
 
     query = db.query(EmailTemplate).filter(EmailTemplate.organization_id == org_id)
 
     if active_only:
         query = query.filter(EmailTemplate.is_active.is_(True))
+
+    # Hide platform-level system templates from org-facing lists (e.g. org_invite).
+    platform_system_keys = set(system_email_template_service.DEFAULT_SYSTEM_TEMPLATES.keys())
+    if platform_system_keys:
+        query = query.filter(
+            or_(
+                EmailTemplate.system_key.is_(None),
+                EmailTemplate.system_key.notin_(platform_system_keys),
+            )
+        )
 
     if scope_filter == "org":
         # Only org templates (including system templates)
@@ -522,6 +533,17 @@ def copy_template_to_personal(
     )
     if not source:
         raise LookupError("Template not found or cannot be copied")
+
+    from app.services import system_email_template_service
+
+    if (
+        source.system_key
+        and source.system_key in system_email_template_service.DEFAULT_SYSTEM_TEMPLATES
+    ):
+        raise PermissionError(
+            f"Platform system template '{source.system_key}' cannot be copied. "
+            "Invites and other platform templates must be managed via the platform endpoint."
+        )
 
     # Check for duplicate name in user's personal templates
     existing = (
@@ -987,6 +1009,17 @@ def send_from_template(
     template = get_template(db, template_id, org_id)
     if not template:
         return None
+
+    from app.services import system_email_template_service
+
+    if (
+        template.system_key
+        and template.system_key in system_email_template_service.DEFAULT_SYSTEM_TEMPLATES
+    ):
+        raise PermissionError(
+            f"Platform system template '{template.system_key}' cannot be sent from org endpoints. "
+            "Invites and other platform templates must be sent via the platform/system sender."
+        )
 
     subject, body = render_template(template.subject, template.body, variables)
     return send_email(

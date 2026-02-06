@@ -663,11 +663,21 @@ def get_workflow_options(
     # For org workflows: only org + system templates
     # For personal workflows: personal (user's own) + org + system templates
     from sqlalchemy import or_, and_
+    from app.services import system_email_template_service
 
     template_query = db.query(EmailTemplate).filter(
         EmailTemplate.organization_id == org_id,
         EmailTemplate.is_active.is_(True),
     )
+
+    platform_system_keys = set(system_email_template_service.DEFAULT_SYSTEM_TEMPLATES.keys())
+    if platform_system_keys:
+        template_query = template_query.filter(
+            or_(
+                EmailTemplate.system_key.is_(None),
+                EmailTemplate.system_key.notin_(platform_system_keys),
+            )
+        )
 
     if workflow_scope == "org":
         # Org workflows can only use org templates (including system templates)

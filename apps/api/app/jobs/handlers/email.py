@@ -235,6 +235,17 @@ async def process_workflow_email(db, job) -> None:
     if not template:
         raise Exception(f"Email template {template_id} not found")
 
+    from app.services import system_email_template_service
+
+    if (
+        template.system_key
+        and template.system_key in system_email_template_service.DEFAULT_SYSTEM_TEMPLATES
+    ):
+        raise Exception(
+            f"Platform system template '{template.system_key}' cannot be used in workflow emails. "
+            "Use the platform/system endpoint instead."
+        )
+
     # Resolve subject and body with variables (escaped)
     subject, body = email_service.render_template(template.subject, template.body, variables)
 

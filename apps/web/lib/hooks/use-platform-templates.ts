@@ -24,6 +24,7 @@ import {
     listPlatformSystemEmailTemplates,
     getPlatformSystemEmailTemplate,
     listPlatformSystemEmailTemplateVariables,
+    createPlatformSystemEmailTemplate,
     updatePlatformSystemEmailTemplate,
     sendTestPlatformSystemEmailTemplate,
     sendPlatformSystemEmailCampaign,
@@ -39,6 +40,7 @@ import {
     type PlatformWorkflowTemplateCreate,
     type PlatformWorkflowTemplateUpdate,
     type PlatformSystemEmailCampaignRequest,
+    type PlatformSystemEmailTemplateCreate,
     type TemplatePublishRequest,
     type PlatformEmailBranding,
 } from '@/lib/api/platform'
@@ -236,6 +238,20 @@ export function usePlatformSystemEmailTemplates() {
     return useQuery({
         queryKey: platformTemplateKeys.system(),
         queryFn: () => listPlatformSystemEmailTemplates(),
+    })
+}
+
+export function useCreatePlatformSystemEmailTemplate() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (payload: PlatformSystemEmailTemplateCreate) =>
+            createPlatformSystemEmailTemplate(payload),
+        onSuccess: (data) => {
+            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.system() })
+            queryClient.invalidateQueries({
+                queryKey: platformTemplateKeys.systemDetail(data.system_key),
+            })
+        },
     })
 }
 

@@ -1167,7 +1167,7 @@ export default function PlatformSystemEmailTemplatePage() {
                     <CardContent>
                         <div className="rounded-md border border-stone-200 bg-white shadow-sm">
                             <div
-                                className="p-6"
+                                className="p-6 prose prose-sm prose-stone max-w-none text-stone-900"
                                 dangerouslySetInnerHTML={{ __html: previewHtml }}
                             />
                         </div>

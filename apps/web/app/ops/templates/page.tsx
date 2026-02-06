@@ -107,7 +107,16 @@ export default function TemplatesPage() {
     const formRows = useMemo(() => formTemplates, [formTemplates])
     const workflowRows = useMemo(() => workflowTemplates, [workflowTemplates])
     const systemRows = useMemo(() => systemTemplates, [systemTemplates])
-    const canCreate = activeTab !== "system"
+    const canCreate = true
+
+    const createLabel =
+        activeTab === "email"
+            ? "Email"
+            : activeTab === "forms"
+              ? "Form"
+              : activeTab === "workflows"
+                ? "Workflow"
+                : "System Email"
 
     return (
         <div className="p-6 space-y-6">
@@ -123,7 +132,7 @@ export default function TemplatesPage() {
                 {canCreate && (
                     <Button onClick={() => router.push(`/ops/templates/${activeTab}/new`)}>
                         <PlusIcon className="mr-2 size-4" />
-                        New {activeTab === "email" ? "Email" : activeTab === "forms" ? "Form" : "Workflow"}
+                        New {createLabel}
                     </Button>
                 )}
             </div>
