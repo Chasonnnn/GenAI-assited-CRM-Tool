@@ -1,6 +1,8 @@
 """Shared helpers for surrogate routers."""
 
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import NO_VALUE
 
 from app.db.enums import OwnerType, SurrogateSource
 from app.schemas.surrogate import SurrogateListItem, SurrogateRead
@@ -11,11 +13,20 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
     """Convert Surrogate model to SurrogateRead schema with joined user names."""
     owner_name = None
     if surrogate.owner_type == OwnerType.USER.value:
-        user = user_service.get_user_by_id(db, surrogate.owner_id)
-        owner_name = user.display_name if user else None
+        # Prefer an already eager-loaded relationship (avoids redundant queries in list contexts).
+        state = inspect(surrogate)
+        if state.attrs.owner_user.loaded_value is not NO_VALUE and surrogate.owner_user:
+            owner_name = surrogate.owner_user.display_name
+        else:
+            user = user_service.get_user_by_id(db, surrogate.owner_id)
+            owner_name = user.display_name if user else None
     elif surrogate.owner_type == OwnerType.QUEUE.value:
-        queue = queue_service.get_queue(db, surrogate.organization_id, surrogate.owner_id)
-        owner_name = queue.name if queue else None
+        state = inspect(surrogate)
+        if state.attrs.owner_queue.loaded_value is not NO_VALUE and surrogate.owner_queue:
+            owner_name = surrogate.owner_queue.name
+        else:
+            queue = queue_service.get_queue(db, surrogate.organization_id, surrogate.owner_id)
+            owner_name = queue.name if queue else None
 
     return SurrogateRead(
         id=surrogate.id,

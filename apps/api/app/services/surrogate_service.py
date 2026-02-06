@@ -6,7 +6,7 @@ from uuid import UUID
 
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import (
@@ -841,7 +841,7 @@ def list_surrogates(
     """
     import base64
     from app.db.enums import Role, OwnerType
-    from app.db.models import PipelineStage
+    from app.db.models import PipelineStage, Queue
     from datetime import datetime
     from sqlalchemy import asc, desc
 
@@ -861,9 +861,9 @@ def list_surrogates(
     query = (
         db.query(Surrogate)
         .options(
-            selectinload(Surrogate.stage),
-            selectinload(Surrogate.owner_user),
-            selectinload(Surrogate.owner_queue),
+            joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
+            joinedload(Surrogate.owner_user).load_only(User.display_name),
+            joinedload(Surrogate.owner_queue).load_only(Queue.name),
         )
         .filter(Surrogate.organization_id == org_id)
     )
@@ -1022,6 +1022,7 @@ def list_claim_queue(
 ) -> tuple[list[Surrogate], int]:
     """List approved surrogates in the Surrogate Pool queue (org-scoped)."""
     from app.db.enums import OwnerType
+    from app.db.models import PipelineStage, Queue
     from app.services import pipeline_service, queue_service
 
     pool_queue = queue_service.get_or_create_surrogate_pool_queue(db, org_id)
@@ -1036,9 +1037,9 @@ def list_claim_queue(
     query = (
         db.query(Surrogate)
         .options(
-            selectinload(Surrogate.stage),
-            selectinload(Surrogate.owner_user),
-            selectinload(Surrogate.owner_queue),
+            joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
+            joinedload(Surrogate.owner_user).load_only(User.display_name),
+            joinedload(Surrogate.owner_queue).load_only(Queue.name),
         )
         .filter(
             Surrogate.organization_id == org_id,

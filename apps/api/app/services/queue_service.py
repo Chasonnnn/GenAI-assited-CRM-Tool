@@ -443,14 +443,11 @@ def add_queue_member(
     user_id: UUID,
 ) -> tuple[QueueMember, User]:
     """Add a user to a queue."""
-    user = (
-        db.query(User)
-        .filter(
-            User.id == user_id,
-            User.organization_id == org_id,
-        )
-        .first()
-    )
+    # Users are org-scoped via Membership (not a direct FK on User).
+    from app.services import membership_service
+
+    membership = membership_service.get_membership_for_org(db, org_id, user_id)
+    user = membership.user if membership else None
     if not user:
         raise QueueMemberUserNotFoundError("User not found")
 
