@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.70.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.69.0...surrogacy-crm-platform-v0.70.0) (2026-02-06)
+
+
+### Features
+
+* **email:** enhance signature rendering, Gmail error handling, and variable catalog ([66c4e61](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/66c4e61bcb2cd83b4aec06d9b52fc24c00847039))
+* **email:** improve template scoping, permissions, and workflow selection ([d93681c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d93681cced2f17db8f0562e77babd2542a5baa04))
+* **platform:** refactor system template management to service layer ([79b18cd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/79b18cd547254558cc77bdae42ed4d0d7674eac5))
+* **platform:** support custom system templates and implement safety filters ([57731cb](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/57731cbf6479026624914b0162d21454201c201c))
+
 ## [0.69.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.68.0...surrogacy-crm-platform-v0.69.0) (2026-02-06)
 
 
