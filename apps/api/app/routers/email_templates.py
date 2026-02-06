@@ -597,6 +597,11 @@ async def send_test_email(
         final_vars,
     )
 
+    from app.services import org_service
+
+    org = org_service.get_org_by_id(db, session.org_id)
+    portal_base_url = org_service.get_org_portal_base_url(org)
+
     rendered_body = email_composition_service.compose_template_email_html(
         db=db,
         org_id=session.org_id,
@@ -604,6 +609,7 @@ async def send_test_email(
         rendered_body_html=rendered_body,
         scope="personal" if template.scope == "personal" else "org",
         sender_user_id=session.user_id if template.scope == "personal" else None,
+        portal_base_url=portal_base_url,
     )
 
     if template.scope == "personal":

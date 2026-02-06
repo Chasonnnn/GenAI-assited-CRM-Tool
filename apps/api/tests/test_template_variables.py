@@ -21,4 +21,6 @@ def test_build_surrogate_template_variables_includes_unsubscribe(db, test_org, t
     variables = email_service.build_surrogate_template_variables(db, surrogate)
 
     assert "unsubscribe_url" in variables
-    assert "/email/unsubscribe/" in variables["unsubscribe_url"]
+    assert variables["unsubscribe_url"].startswith(
+        f"https://{test_org.slug}.surrogacyforce.com/email/unsubscribe/"
+    )

@@ -45,9 +45,13 @@ def build_sample_variables(
 
     unsubscribe_url = ""
     if (to_email or "").strip():
-        from app.services import unsubscribe_service
+        from app.services import unsubscribe_service, org_service
 
-        unsubscribe_url = unsubscribe_service.build_unsubscribe_url(org_id=org_id, email=to_email)
+        unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
+            org_id=org_id,
+            email=to_email,
+            base_url=org_service.get_org_portal_base_url(org),
+        )
 
     return {
         # Recipient
@@ -191,10 +195,15 @@ async def send_resend_logged(
 
     db.refresh(email_log)
 
-    from app.services import unsubscribe_service
+    from app.services import unsubscribe_service, org_service
 
     api_key = resend_settings_service.decrypt_api_key(api_key_encrypted)
-    unsubscribe_url = unsubscribe_service.build_unsubscribe_url(org_id=org_id, email=to_email)
+    org = org_service.get_org_by_id(db, org_id)
+    unsubscribe_url = unsubscribe_service.build_list_unsubscribe_url(
+        org_id=org_id,
+        email=to_email,
+        base_url=org_service.get_org_portal_base_url(org),
+    )
 
     try:
         success, error, message_id = await resend_email_service.send_email_direct(
