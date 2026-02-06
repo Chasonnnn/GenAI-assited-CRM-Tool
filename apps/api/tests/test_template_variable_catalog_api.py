@@ -56,3 +56,22 @@ async def test_platform_system_template_variables_endpoint_platform_admin(
     assert "org_name" in names
     assert "invite_url" in names
     assert "platform_logo_block" in names
+
+
+@pytest.mark.asyncio
+async def test_platform_system_template_variables_endpoint_allows_custom_key(
+    authed_client, db, test_user
+):
+    test_user.is_platform_admin = True
+    db.commit()
+
+    res = await authed_client.get(
+        "/platform/email/system-templates/custom_announcement/variables"
+    )
+    assert res.status_code == 200
+    variables = res.json()
+
+    names = {v["name"] for v in variables}
+    assert "org_name" in names
+    assert "invite_url" in names
+    assert "platform_logo_block" in names

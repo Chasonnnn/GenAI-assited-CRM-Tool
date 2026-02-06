@@ -129,11 +129,9 @@ def list_platform_email_template_variables() -> list[TemplateVariableDefinition]
 
 def list_platform_system_template_variables(system_key: str) -> list[TemplateVariableDefinition]:
     """Variables available to a given platform system template key."""
-    # Today all system templates share the same variable set; keep this keyed so we can
-    # specialize per-template later without breaking the API shape.
-    supported = {"org_invite", "platform_update"}
-    if system_key not in supported:
-        raise ValueError("Unknown system template key")
+    # Today all system templates share the same variable set. We intentionally do not
+    # validate the key here so ops can create new system templates in the console
+    # without shipping code changes for every system_key.
 
     return [
         TemplateVariableDefinition(

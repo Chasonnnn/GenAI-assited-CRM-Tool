@@ -39,6 +39,60 @@ def _result_from_log(log: EmailLog) -> JsonObject:
     }
 
 
+def _format_gmail_api_error(response: httpx.Response) -> str:
+    """Return a user-facing, dependency-free Gmail API error string.
+
+    Avoid leaking tokens or raw request details; only include status + Google-provided reason/message.
+    """
+    status = response.status_code
+    reason: str | None = None
+    message: str | None = None
+
+    try:
+        data = response.json()
+        if isinstance(data, dict):
+            err = data.get("error")
+            if isinstance(err, dict):
+                message_val = err.get("message")
+                if isinstance(message_val, str) and message_val.strip():
+                    message = message_val.strip()
+                errors_val = err.get("errors")
+                if isinstance(errors_val, list) and errors_val:
+                    first = errors_val[0]
+                    if isinstance(first, dict):
+                        reason_val = first.get("reason")
+                        if isinstance(reason_val, str) and reason_val.strip():
+                            reason = reason_val.strip()
+    except Exception:
+        # Non-JSON response or unexpected structure.
+        pass
+
+    detail = ""
+    if reason and message:
+        detail = f"{reason}: {message}"
+    elif message:
+        detail = message
+    elif reason:
+        detail = reason
+
+    base = f"Gmail API error: {status}"
+    if detail:
+        base = f"{base} ({detail})"
+
+    # Add a small, actionable hint for common configuration issues.
+    lowered = detail.lower()
+    if status == 403 and (
+        reason in {"insufficientPermissions", "insufficientAuthenticationScopes"}
+        or "insufficient authentication scopes" in lowered
+        or "insufficient permissions" in lowered
+    ):
+        base = f"{base}. Reconnect Gmail to grant send permissions."
+    elif status == 403 and (reason == "accessNotConfigured" or "access not configured" in lowered):
+        base = f"{base}. Gmail API may be disabled for your Google OAuth app."
+
+    return base[:500]
+
+
 async def send_email(
     db: Session,
     user_id: str,
@@ -135,7 +189,7 @@ async def send_email(
         return {"success": False, "error": "Gmail API request failed"}
     except httpx.HTTPStatusError as e:
         logger.error("Gmail API error: status=%s", e.response.status_code)
-        return {"success": False, "error": f"Gmail API error: {e.response.status_code}"}
+        return {"success": False, "error": _format_gmail_api_error(e.response)}
     except Exception as e:
         logger.exception("Gmail send error")
         return {"success": False, "error": str(e)}

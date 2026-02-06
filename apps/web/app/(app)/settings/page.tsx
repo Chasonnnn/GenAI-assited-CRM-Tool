@@ -950,7 +950,10 @@ function OrganizationBrandingSection() {
             <p className="text-xs text-muted-foreground mb-3 pb-3 border-b">
               Preview with sample employee data:
             </p>
-            <div dangerouslySetInnerHTML={{ __html: sanitizedPreviewHtml }} />
+            <div
+              className="prose prose-sm prose-stone max-w-none text-stone-900"
+              dangerouslySetInnerHTML={{ __html: sanitizedPreviewHtml }}
+            />
           </div>
         )}
       </div>

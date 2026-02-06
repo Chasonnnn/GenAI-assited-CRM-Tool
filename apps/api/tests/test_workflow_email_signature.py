@@ -146,3 +146,53 @@ async def test_workflow_email_appends_personal_signature_for_personal_scope(
     assert email_log is not None
     assert "Org Signature Co" in (email_log.body or "")
     assert test_user.display_name in (email_log.body or "")
+
+
+@pytest.mark.asyncio
+async def test_workflow_email_rejects_platform_system_template(
+    db, test_org, test_user, monkeypatch
+):
+    from app.db.enums import JobType
+    from app.db.models import EmailTemplate, Job
+    from app.services import workflow_email_provider
+    from app.worker import process_workflow_email
+
+    template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        created_by_user_id=test_user.id,
+        name="Organization Invite",
+        subject="Invitation to join {{org_name}} as {{role_title}}",
+        body="<p>Invite</p>",
+        scope="org",
+        owner_user_id=None,
+        is_active=True,
+        is_system_template=True,
+        system_key="org_invite",
+    )
+    db.add(template)
+    db.commit()
+
+    def fail_resolve(*_args, **_kwargs):  # pragma: no cover - should not be called
+        raise AssertionError("Provider resolution should not be called for platform templates")
+
+    monkeypatch.setattr(workflow_email_provider, "resolve_workflow_email_provider", fail_resolve)
+
+    job = Job(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        job_type=JobType.WORKFLOW_EMAIL.value,
+        payload={
+            "template_id": str(template.id),
+            "recipient_email": "recipient@test.com",
+            "variables": {},
+            "workflow_scope": "org",
+        },
+    )
+    db.add(job)
+    db.commit()
+
+    with pytest.raises(Exception) as exc_info:
+        await process_workflow_email(db, job)
+
+    assert "platform" in str(exc_info.value).lower()
