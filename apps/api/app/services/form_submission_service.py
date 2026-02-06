@@ -120,7 +120,7 @@ SURROGATE_FIELD_TYPES: dict[str, str] = {
 }
 
 
-def parse_schema(schema_json: dict) -> FormSchema:
+def parse_schema(schema_json: dict[str, Any]) -> FormSchema:
     return FormSchema.model_validate(schema_json)
 
 
@@ -404,10 +404,9 @@ def add_submission_file(
             .count()
         )
         if existing_field_count >= PER_FILE_FIELD_MAX_COUNT:
+            # Use direct indexing so static type checkers don't treat `.get()` as optional.
             label = (
-                file_fields.get(resolved_field_key).label
-                if resolved_field_key in file_fields
-                else None
+                file_fields[resolved_field_key].label if resolved_field_key in file_fields else None
             )
             label_text = label or resolved_field_key
             raise ValueError(f"Maximum {PER_FILE_FIELD_MAX_COUNT} files allowed for {label_text}")
@@ -1073,10 +1072,14 @@ def _validate_file(form: Form, file: UploadFile) -> str:
         raise ValueError("File type not allowed")
 
     # Determine allowed MIME patterns for the form. If unset/empty, use a safe default.
-    allowed_patterns = [
-        s.strip().lower() for s in (form.allowed_mime_types or []) if (s or "").strip()
-    ]
-    allowed_patterns = [_MIME_TYPE_ALIASES.get(item, item) for item in allowed_patterns]
+    allowed_patterns: list[str] = []
+    for item in form.allowed_mime_types or []:
+        if not isinstance(item, str):
+            continue
+        cleaned = item.strip().lower()
+        if not cleaned:
+            continue
+        allowed_patterns.append(_MIME_TYPE_ALIASES.get(cleaned, cleaned))
     if not allowed_patterns:
         allowed_patterns = DEFAULT_ALLOWED_FORM_UPLOAD_MIME_TYPES
 
@@ -1126,6 +1129,7 @@ def _validate_file(form: Form, file: UploadFile) -> str:
             return mime
     raise ValueError("File type not allowed")
 
+
 def _mime_allowed(content_type: str, allowed: list[str]) -> bool:
     for item in allowed:
         item = item.strip()
@@ -1148,13 +1152,15 @@ def _store_submission_file(
     field_key: str | None,
     content_type: str | None = None,
 ) -> None:
+    # Prefer a validated content type from the caller. Fall back to UploadFile.content_type.
+    # (We still verify content in `_validate_file` for public upload flows.)
     resolved_content_type = (
-        (content_type or "").strip()
-        or (getattr(file, "content_type", None) or "").strip()
-        or ((file.headers.get("content-type") if getattr(file, "headers", None) else None) or "").strip()
+        content_type or file.content_type or ""
+    ).strip() or "application/octet-stream"
+    # Strip charset, etc.
+    resolved_content_type = (
+        resolved_content_type.split(";", 1)[0].strip() or "application/octet-stream"
     )
-    # Strip charset, etc. and provide a safe fallback for callers that haven't validated.
-    resolved_content_type = (resolved_content_type.split(";", 1)[0].strip() or "application/octet-stream")
 
     scan_enabled = getattr(settings, "ATTACHMENT_SCAN_ENABLED", False)
     file.file.seek(0, 2)
@@ -1304,7 +1310,7 @@ def _validate_file_field_limits(
     for key in file_field_keys:
         counts[key] = counts.get(key, 0) + 1
         if counts[key] > PER_FILE_FIELD_MAX_COUNT:
-            label = file_fields.get(key).label if key in file_fields else None
+            label = file_fields[key].label if key in file_fields else None
             label_text = label or key
             raise ValueError(f"Maximum {PER_FILE_FIELD_MAX_COUNT} files allowed for {label_text}")
 

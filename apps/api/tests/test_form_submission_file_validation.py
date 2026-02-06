@@ -77,4 +77,3 @@ def test_validate_file_rejects_exe_when_form_allowed_mime_types_is_none():
 
     with pytest.raises(ValueError):
         form_submission_service._validate_file(form, upload)
-
