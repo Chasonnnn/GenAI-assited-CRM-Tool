@@ -122,6 +122,7 @@ def list_campaigns(
                 recipient_type=c.recipient_type,
                 status=c.status,
                 scheduled_at=c.scheduled_at,
+                include_unsubscribed=getattr(c, "include_unsubscribed", False),
                 total_recipients=row.total_count or 0,
                 sent_count=row.sent_count or 0,
                 delivered_count=row.delivered_count or 0,
@@ -173,6 +174,7 @@ def create_campaign(db: Session, org_id: UUID, user_id: UUID, data: CampaignCrea
         else {},
         scheduled_at=data.scheduled_at,
         status=CampaignStatus.DRAFT.value,
+        include_unsubscribed=data.include_unsubscribed,
         created_by_user_id=user_id,
     )
     db.add(campaign)
@@ -251,6 +253,9 @@ def update_campaign(
                 )
                 if pending_job:
                     pending_job.run_at = campaign.scheduled_at
+
+    if data.include_unsubscribed is not None:
+        campaign.include_unsubscribed = data.include_unsubscribed
 
     db.flush()
     return campaign
@@ -345,9 +350,15 @@ def _build_recipient_query(db: Session, org_id: UUID, recipient_type: str, filte
     raise ValueError(f"Unknown recipient type: {recipient_type}")
 
 
-def _load_suppressed_emails(db: Session, org_id: UUID) -> set[str]:
-    rows = db.query(EmailSuppression.email).filter(EmailSuppression.organization_id == org_id).all()
-    return {row.email.lower() for row in rows if row.email}
+def _load_suppressed_emails(db: Session, org_id: UUID, *, ignore_opt_out: bool = False) -> set[str]:
+    query = db.query(EmailSuppression.email, EmailSuppression.reason).filter(
+        EmailSuppression.organization_id == org_id
+    )
+    if ignore_opt_out:
+        query = query.filter(EmailSuppression.reason != "opt_out")
+
+    rows = query.all()
+    return {email.lower() for email, _reason in rows if email}
 
 
 def _load_existing_recipients(
@@ -376,6 +387,8 @@ def preview_recipients(
     recipient_type: str,
     filter_criteria: dict,
     limit: int = 50,
+    *,
+    ignore_opt_out: bool = False,
 ) -> CampaignPreviewResponse:
     """Preview recipients matching the filter criteria."""
     query = _build_recipient_query(db, org_id, recipient_type, filter_criteria)
@@ -384,9 +397,12 @@ def preview_recipients(
     entities = query.limit(limit).all()
 
     # Get suppressed emails for this org (handle SA 2.0 Row objects)
-    suppression_rows = (
-        db.query(EmailSuppression.email).filter(EmailSuppression.organization_id == org_id).all()
+    suppression_query = db.query(EmailSuppression.email, EmailSuppression.reason).filter(
+        EmailSuppression.organization_id == org_id
     )
+    if ignore_opt_out:
+        suppression_query = suppression_query.filter(EmailSuppression.reason != "opt_out")
+    suppression_rows = suppression_query.all()
     suppressed = {row[0].lower() for row in suppression_rows if row[0]}
 
     stage_labels: dict[UUID, str] = {}
@@ -749,17 +765,29 @@ def get_latest_run_for_campaign(
 # =============================================================================
 
 
-def is_email_suppressed(db: Session, org_id: UUID, email: str) -> bool:
-    """Check if an email is in the suppression list."""
-    return (
+def is_email_suppressed(
+    db: Session, org_id: UUID, email: str, *, ignore_opt_out: bool = False
+) -> bool:
+    """Check if an email is in the suppression list.
+
+    By default, *any* suppression reason suppresses sending.
+    When `ignore_opt_out=True`, only opt-outs are ignored (bounces/complaints still suppress).
+    """
+    suppression = (
         db.query(EmailSuppression)
         .filter(
             EmailSuppression.organization_id == org_id,
             EmailSuppression.email == email.lower(),
         )
         .first()
-        is not None
     )
+    if not suppression:
+        return False
+
+    if ignore_opt_out and suppression.reason == "opt_out":
+        return False
+
+    return True
 
 
 def add_to_suppression(
@@ -878,6 +906,11 @@ def execute_campaign_run(
     if not template:
         raise Exception(f"Email template {campaign.email_template_id} not found")
 
+    from app.services import org_service
+
+    org = org_service.get_org_by_id(db, org_id)
+    portal_base_url = org_service.get_org_portal_base_url(org)
+
     if run.status == "completed":
         return {
             "sent_count": run.sent_count,
@@ -908,7 +941,9 @@ def execute_campaign_run(
     db.commit()
 
     seen_emails: dict[str, str | None] = {}
-    suppressed_emails = _load_suppressed_emails(db, org_id)
+    suppressed_emails = _load_suppressed_emails(
+        db, org_id, ignore_opt_out=bool(getattr(campaign, "include_unsubscribed", False))
+    )
 
     def _mark_skipped(existing_recipient, reason, email, name, entity_id):
         if not existing_recipient:
@@ -1039,6 +1074,7 @@ def execute_campaign_run(
                 recipient_email=email,
                 rendered_body_html=body,
                 scope="org",
+                portal_base_url=portal_base_url,
             )
 
             # Create recipient record
@@ -1090,6 +1126,7 @@ def execute_campaign_run(
                     subject=subject,
                     body=tracked_body,
                     commit=False,
+                    ignore_opt_out=bool(getattr(campaign, "include_unsubscribed", False)),
                 )
                 cr.status = CampaignRecipientStatus.PENDING.value
                 cr.external_message_id = str(email_log.id)
@@ -1196,6 +1233,11 @@ def retry_failed_campaign_run(
     if not template:
         raise Exception(f"Email template {campaign.email_template_id} not found")
 
+    from app.services import org_service
+
+    org = org_service.get_org_by_id(db, org_id)
+    portal_base_url = org_service.get_org_portal_base_url(org)
+
     failed_recipients = (
         db.query(CampaignRecipient)
         .filter(
@@ -1219,7 +1261,9 @@ def retry_failed_campaign_run(
     run.status = "running"
     db.commit()
 
-    suppressed_emails = _load_suppressed_emails(db, org_id)
+    suppressed_emails = _load_suppressed_emails(
+        db, org_id, ignore_opt_out=bool(getattr(campaign, "include_unsubscribed", False))
+    )
     seen_emails: dict[str, str | None] = {}
     retried_count = 0
     skipped_count = 0
@@ -1306,6 +1350,7 @@ def retry_failed_campaign_run(
             recipient_email=email,
             rendered_body_html=body,
             scope="org",
+            portal_base_url=portal_base_url,
         )
 
         if run.email_provider == "resend":
@@ -1328,6 +1373,7 @@ def retry_failed_campaign_run(
                 subject=subject,
                 body=tracked_body,
                 commit=False,
+                ignore_opt_out=bool(getattr(campaign, "include_unsubscribed", False)),
             )
         except Exception as exc:
             recipient.status = CampaignRecipientStatus.FAILED.value

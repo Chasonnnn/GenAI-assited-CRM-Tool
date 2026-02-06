@@ -140,6 +140,7 @@ export default function CampaignsPage() {
     const [recipientType, setRecipientType] = useState<"case" | "intended_parent">("case")
     const [selectedStages, setSelectedStages] = useState<string[]>([])
     const [selectedStates, setSelectedStates] = useState<string[]>([])
+    const [includeUnsubscribed, setIncludeUnsubscribed] = useState(false)
     const [stateSearch, setStateSearch] = useState("")
     const [showTerritories, setShowTerritories] = useState(false)
     const [scheduleFor, setScheduleFor] = useState<"now" | "later">("now")
@@ -301,6 +302,7 @@ export default function CampaignsPage() {
         setRecipientType("case")
         setSelectedStages([])
         setSelectedStates([])
+        setIncludeUnsubscribed(false)
         setStateSearch("")
         setShowTerritories(false)
         setScheduleFor("now")
@@ -340,6 +342,7 @@ export default function CampaignsPage() {
                 email_template_id: selectedTemplateId,
                 recipient_type: recipientType,
                 filter_criteria: buildFilterCriteria(),
+                include_unsubscribed: includeUnsubscribed,
                 ...(campaignDescription ? { description: campaignDescription } : {}),
                 ...(scheduledAt ? { scheduled_at: scheduledAt } : {}),
             })
@@ -851,11 +854,33 @@ export default function CampaignsPage() {
                                         <p className="text-xs text-muted-foreground">All stages included.</p>
                                     )}
                                 </div>
+                                <div className="rounded-lg border bg-card p-4">
+                                    <div className="flex items-start gap-3">
+                                        <Checkbox
+                                            id="include-unsubscribed"
+                                            checked={includeUnsubscribed}
+                                            onCheckedChange={(checked) =>
+                                                setIncludeUnsubscribed(checked === true)
+                                            }
+                                        />
+                                        <div className="space-y-1">
+                                            <Label htmlFor="include-unsubscribed" className="cursor-pointer">
+                                                Include unsubscribed recipients
+                                            </Label>
+                                            <p className="text-xs text-muted-foreground">
+                                                By default, recipients who opted out of marketing emails are
+                                                excluded. Enable this only if you have explicit consent. Hard
+                                                bounces and complaints are always suppressed.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
                                 <Card className="bg-muted/50">
                                     <CardContent className="py-4">
                                         <p className="text-sm text-muted-foreground">
-                                            Recipients will be filtered when the campaign is sent.
-                                            Suppressed emails (opt-outs, bounces) are automatically excluded.
+                                            Recipients will be filtered when the campaign is sent. Hard bounces
+                                            and complaints are always suppressed. Marketing opt-outs are excluded
+                                            by default (unless enabled above).
                                         </p>
                                     </CardContent>
                                 </Card>
@@ -968,6 +993,12 @@ export default function CampaignsPage() {
                                                 {recipientType === "case" ? "Surrogates" : "Intended Parents"}
                                             </span>
                                         </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-muted-foreground">Unsubscribed Recipients:</span>
+                                            <span className="font-medium">
+                                                {includeUnsubscribed ? "Included" : "Excluded"}
+                                            </span>
+                                        </div>
                                         {selectedStages.length > 0 && (
                                             <div className="flex justify-between items-start">
                                                 <span className="text-muted-foreground">
@@ -1024,6 +1055,7 @@ export default function CampaignsPage() {
                                         previewFilters.mutate({
                                             recipientType,
                                             filterCriteria: buildFilterCriteria(),
+                                            includeUnsubscribed,
                                         })
                                     }}
                                     maxVisible={3}
@@ -1107,6 +1139,7 @@ export default function CampaignsPage() {
                                         previewFilters.mutate({
                                             recipientType,
                                             filterCriteria: buildFilterCriteria(),
+                                            includeUnsubscribed,
                                         })
                                     }
                                 }}
@@ -1124,6 +1157,7 @@ export default function CampaignsPage() {
                                         previewFilters.mutate({
                                             recipientType,
                                             filterCriteria: buildFilterCriteria(),
+                                            includeUnsubscribed,
                                         })
                                     }
                                 }}

@@ -25,6 +25,7 @@ export interface CampaignCreate {
     recipient_type: "case" | "intended_parent"
     filter_criteria?: FilterCriteria
     scheduled_at?: string
+    include_unsubscribed?: boolean
 }
 
 export interface CampaignUpdate {
@@ -34,6 +35,7 @@ export interface CampaignUpdate {
     recipient_type?: "case" | "intended_parent"
     filter_criteria?: FilterCriteria
     scheduled_at?: string
+    include_unsubscribed?: boolean
 }
 
 export interface Campaign {
@@ -46,6 +48,7 @@ export interface Campaign {
     filter_criteria: FilterCriteria
     scheduled_at: string | null
     status: "draft" | "scheduled" | "sending" | "completed" | "cancelled" | "failed"
+    include_unsubscribed: boolean
     created_by_user_id: string | null
     created_by_name: string | null
     created_at: string
@@ -66,6 +69,7 @@ export interface CampaignListItem {
     recipient_type: "case" | "intended_parent"
     status: "draft" | "scheduled" | "sending" | "completed" | "cancelled" | "failed"
     scheduled_at: string | null
+    include_unsubscribed: boolean
     total_recipients: number
     sent_count: number
     delivered_count: number
@@ -177,6 +181,7 @@ export async function duplicateCampaign(id: string): Promise<Campaign> {
         email_template_id: original.email_template_id,
         recipient_type: original.recipient_type,
         filter_criteria: original.filter_criteria,
+        include_unsubscribed: original.include_unsubscribed,
     }
     if (original.description) {
         payload.description = original.description
@@ -201,12 +206,14 @@ export async function previewRecipients(
 export async function previewFilters(
     recipientType: "case" | "intended_parent",
     filterCriteria: FilterCriteria,
+    includeUnsubscribed: boolean,
     limit?: number
 ): Promise<CampaignPreview> {
     const query = limit ? `?limit=${limit}` : ""
     return api.post<CampaignPreview>(`/campaigns/preview-filters${query}`, {
         recipient_type: recipientType,
         filter_criteria: filterCriteria,
+        include_unsubscribed: includeUnsubscribed,
     })
 }
 

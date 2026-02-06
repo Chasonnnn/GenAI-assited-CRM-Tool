@@ -38,6 +38,7 @@ class CampaignCreate(BaseModel):
     recipient_type: str = Field(default="case", pattern="^(case|intended_parent)$")
     filter_criteria: FilterCriteria = Field(default_factory=FilterCriteria)
     scheduled_at: datetime | None = None
+    include_unsubscribed: bool = False
 
 
 class CampaignUpdate(BaseModel):
@@ -49,6 +50,7 @@ class CampaignUpdate(BaseModel):
     recipient_type: str | None = Field(None, pattern="^(case|intended_parent)$")
     filter_criteria: FilterCriteria | None = None
     scheduled_at: datetime | None = None
+    include_unsubscribed: bool | None = None
 
 
 class CampaignResponse(BaseModel):
@@ -63,6 +65,7 @@ class CampaignResponse(BaseModel):
     filter_criteria: dict
     scheduled_at: datetime | None
     status: str
+    include_unsubscribed: bool = False
     created_by_user_id: UUID | None
     created_by_name: str | None = None
     created_at: datetime
@@ -89,6 +92,7 @@ class CampaignListItem(BaseModel):
     recipient_type: str
     status: str
     scheduled_at: datetime | None
+    include_unsubscribed: bool = False
 
     # Latest run stats
     total_recipients: int = 0
@@ -180,6 +184,7 @@ class PreviewFiltersRequest(BaseModel):
 
     recipient_type: str = Field(..., pattern="^(case|intended_parent)$")
     filter_criteria: FilterCriteria = Field(default_factory=FilterCriteria)
+    include_unsubscribed: bool = False
 
 
 # =============================================================================

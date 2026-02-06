@@ -90,12 +90,14 @@ export function usePreviewFilters() {
         mutationFn: ({
             recipientType,
             filterCriteria,
+            includeUnsubscribed,
             limit,
         }: {
             recipientType: "case" | "intended_parent";
             filterCriteria: FilterCriteria;
+            includeUnsubscribed: boolean;
             limit?: number;
-        }) => previewFilters(recipientType, filterCriteria, limit),
+        }) => previewFilters(recipientType, filterCriteria, includeUnsubscribed, limit),
     });
 }
 

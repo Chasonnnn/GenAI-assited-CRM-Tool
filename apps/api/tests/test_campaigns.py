@@ -329,6 +329,32 @@ def test_add_to_suppression(db, test_org, test_user):
     assert result.reason == "opt_out"
 
 
+def test_is_email_suppressed_can_ignore_opt_out(db, test_org):
+    """Suppression checks should support ignoring opt-outs when explicitly configured."""
+    from app.services import campaign_service
+    from app.db.models import EmailSuppression
+
+    db.add(
+        EmailSuppression(
+            id=uuid4(),
+            organization_id=test_org.id,
+            email="optedout@example.com",
+            reason="opt_out",
+        )
+    )
+    db.flush()
+
+    assert campaign_service.is_email_suppressed(
+        db, test_org.id, "optedout@example.com", ignore_opt_out=False
+    )
+    assert (
+        campaign_service.is_email_suppressed(
+            db, test_org.id, "optedout@example.com", ignore_opt_out=True
+        )
+        is False
+    )
+
+
 # =============================================================================
 # Job Type Tests
 # =============================================================================
@@ -511,6 +537,174 @@ def test_execute_campaign_run_with_no_recipients(db, test_org, test_user, test_t
     assert result["sent_count"] == 0
     assert result["failed_count"] == 0
     assert result["total_count"] == 0
+
+
+def test_execute_campaign_run_skips_opt_out_by_default(
+    db, test_org, test_user, test_template, default_stage
+):
+    """Opt-outs should be excluded from campaign sends by default."""
+    from app.db.models import Surrogate, Campaign, CampaignRun, CampaignRecipient, EmailSuppression
+    from app.services import campaign_service
+
+    email = normalize_email("optout-default@example.com")
+    case = Surrogate(
+        id=uuid4(),
+        organization_id=test_org.id,
+        stage_id=default_stage.id,
+        full_name="Opt Out Default",
+        status_label=default_stage.label,
+        email=email,
+        email_hash=hash_email(email),
+        source="manual",
+        surrogate_number=f"S{uuid4().int % 90000 + 10000:05d}",
+        owner_type="user",
+        owner_id=test_user.id,
+    )
+    db.add(case)
+    db.flush()
+
+    db.add(
+        EmailSuppression(
+            id=uuid4(),
+            organization_id=test_org.id,
+            email=email,
+            reason="opt_out",
+        )
+    )
+    db.flush()
+
+    campaign = Campaign(
+        id=uuid4(),
+        organization_id=test_org.id,
+        name="Opt-out Default Campaign",
+        email_template_id=test_template.id,
+        recipient_type="case",
+        filter_criteria={"stage_ids": [str(default_stage.id)]},
+        status="draft",
+        created_by_user_id=test_user.id,
+    )
+    db.add(campaign)
+    db.flush()
+
+    run = CampaignRun(
+        id=uuid4(),
+        organization_id=test_org.id,
+        campaign_id=campaign.id,
+        status="pending",
+        total_count=0,
+        sent_count=0,
+        failed_count=0,
+        skipped_count=0,
+    )
+    db.add(run)
+    db.flush()
+
+    campaign_service.execute_campaign_run(
+        db=db,
+        org_id=test_org.id,
+        campaign_id=campaign.id,
+        run_id=run.id,
+    )
+
+    recipient = (
+        db.query(CampaignRecipient).filter(CampaignRecipient.run_id == run.id).first()
+    )
+    assert recipient is not None
+    assert recipient.status == "skipped"
+    assert recipient.skip_reason == "suppressed"
+    assert recipient.external_message_id is None
+
+
+def test_execute_campaign_run_can_include_opt_out_when_configured(
+    db, test_org, test_user, test_template, default_stage
+):
+    """Campaigns can optionally include opt-outs (still excluding bounces/complaints)."""
+    from uuid import UUID
+
+    from app.db.models import (
+        Surrogate,
+        Campaign,
+        CampaignRun,
+        CampaignRecipient,
+        EmailSuppression,
+        EmailLog,
+    )
+    from app.services import campaign_service
+    from app.db.enums import EmailStatus
+
+    email = normalize_email("optout-include@example.com")
+    case = Surrogate(
+        id=uuid4(),
+        organization_id=test_org.id,
+        stage_id=default_stage.id,
+        full_name="Opt Out Included",
+        status_label=default_stage.label,
+        email=email,
+        email_hash=hash_email(email),
+        source="manual",
+        surrogate_number=f"S{uuid4().int % 90000 + 10000:05d}",
+        owner_type="user",
+        owner_id=test_user.id,
+    )
+    db.add(case)
+    db.flush()
+
+    db.add(
+        EmailSuppression(
+            id=uuid4(),
+            organization_id=test_org.id,
+            email=email,
+            reason="opt_out",
+        )
+    )
+    db.flush()
+
+    campaign = Campaign(
+        id=uuid4(),
+        organization_id=test_org.id,
+        name="Opt-out Included Campaign",
+        email_template_id=test_template.id,
+        recipient_type="case",
+        filter_criteria={"stage_ids": [str(default_stage.id)]},
+        status="draft",
+        created_by_user_id=test_user.id,
+        include_unsubscribed=True,
+    )
+    db.add(campaign)
+    db.flush()
+
+    run = CampaignRun(
+        id=uuid4(),
+        organization_id=test_org.id,
+        campaign_id=campaign.id,
+        status="pending",
+        total_count=0,
+        sent_count=0,
+        failed_count=0,
+        skipped_count=0,
+    )
+    db.add(run)
+    db.flush()
+
+    campaign_service.execute_campaign_run(
+        db=db,
+        org_id=test_org.id,
+        campaign_id=campaign.id,
+        run_id=run.id,
+    )
+
+    recipient = (
+        db.query(CampaignRecipient).filter(CampaignRecipient.run_id == run.id).first()
+    )
+    assert recipient is not None
+    assert recipient.status == "pending"
+    assert recipient.external_message_id
+
+    email_log = (
+        db.query(EmailLog).filter(EmailLog.id == UUID(recipient.external_message_id)).first()
+    )
+    assert email_log is not None
+    assert email_log.status == EmailStatus.PENDING.value
 
 
 def test_campaign_run_skips_existing_recipient(

@@ -144,6 +144,7 @@ export default function CampaignDetailPage() {
     const [editRecipientType, setEditRecipientType] = useState<"case" | "intended_parent">("case")
     const [editStages, setEditStages] = useState<string[]>([])
     const [editStates, setEditStates] = useState<string[]>([])
+    const [editIncludeUnsubscribed, setEditIncludeUnsubscribed] = useState(false)
     const [editScheduledAt, setEditScheduledAt] = useState("")
     const minScheduleDate = toLocalDateTimeInput(new Date())
 
@@ -204,6 +205,7 @@ export default function CampaignDetailPage() {
         setEditRecipientType(recipientType)
         setEditStages(recipientType === "intended_parent" ? stageSlugs : stageIds)
         setEditStates(states)
+        setEditIncludeUnsubscribed(!!campaign.include_unsubscribed)
         setEditScheduledAt(
             campaign.scheduled_at ? toLocalDateTimeInput(new Date(campaign.scheduled_at)) : ""
         )
@@ -274,6 +276,7 @@ export default function CampaignDetailPage() {
                     email_template_id: editTemplateId,
                     recipient_type: editRecipientType,
                     filter_criteria: buildEditFilterCriteria(),
+                    include_unsubscribed: editIncludeUnsubscribed,
                     ...(scheduledAt ? { scheduled_at: scheduledAt } : {}),
                 },
             })
@@ -535,6 +538,12 @@ export default function CampaignDetailPage() {
                                 ) : (
                                     <p className="text-sm text-muted-foreground">Anytime</p>
                                 )}
+                            </div>
+                            <div className="space-y-1">
+                                <p className="text-xs text-muted-foreground">Unsubscribed Recipients</p>
+                                <p className="text-sm text-muted-foreground">
+                                    {campaign.include_unsubscribed ? "Included" : "Excluded"}
+                                </p>
                             </div>
                         </div>
                         {(filterCriteria.source || filterCriteria.is_priority) && (
@@ -823,6 +832,26 @@ export default function CampaignDetailPage() {
                                     {editStates.length} state{editStates.length !== 1 ? "s" : ""} selected
                                 </p>
                             )}
+                        </div>
+                        <div className="rounded-lg border bg-card p-4">
+                            <div className="flex items-start gap-3">
+                                <Checkbox
+                                    id="edit-include-unsubscribed"
+                                    checked={editIncludeUnsubscribed}
+                                    onCheckedChange={(checked) =>
+                                        setEditIncludeUnsubscribed(checked === true)
+                                    }
+                                />
+                                <div className="space-y-1">
+                                    <Label htmlFor="edit-include-unsubscribed" className="cursor-pointer">
+                                        Include unsubscribed recipients
+                                    </Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        When enabled, recipients who opted out of marketing emails may be included.
+                                        Hard bounces and complaints are always suppressed.
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                         {(campaign?.status === "draft" || campaign?.status === "scheduled") && (
                             <div className="space-y-2">
