@@ -1112,27 +1112,20 @@ def create_platform_system_email_template(
     db: Session = Depends(get_db),
 ) -> SystemEmailTemplateRead:
     """Create a platform system email template (custom system_key)."""
-    from app.db.models import PlatformSystemEmailTemplate
-    from app.services import email_service
+    from app.services import system_email_template_service
 
-    existing = (
-        db.query(PlatformSystemEmailTemplate)
-        .filter(PlatformSystemEmailTemplate.system_key == body.system_key)
-        .first()
-    )
-    if existing:
+    try:
+        template = system_email_template_service.create_platform_system_template(
+            db,
+            system_key=body.system_key,
+            name=body.name,
+            subject=body.subject,
+            body=body.body,
+            from_email=body.from_email,
+            is_active=body.is_active,
+        )
+    except system_email_template_service.SystemTemplateAlreadyExistsError:
         raise HTTPException(status_code=409, detail="System template already exists")
-
-    template = PlatformSystemEmailTemplate(
-        system_key=body.system_key,
-        name=body.name,
-        subject=body.subject,
-        from_email=body.from_email,
-        body=email_service.sanitize_template_html(body.body),
-        is_active=body.is_active,
-        current_version=1,
-    )
-    db.add(template)
 
     platform_service.log_admin_action(
         db=db,
@@ -1163,7 +1156,6 @@ def list_platform_system_email_templates(
     db: Session = Depends(get_db),
 ) -> list[SystemEmailTemplateRead]:
     from app.services import system_email_template_service
-    from app.db.models import PlatformSystemEmailTemplate
 
     def _to_read(template) -> SystemEmailTemplateRead:
         return SystemEmailTemplateRead(
@@ -1177,14 +1169,7 @@ def list_platform_system_email_templates(
             updated_at=template.updated_at.isoformat() if template.updated_at else None,
         )
 
-    # Always ensure built-in templates exist, but include any custom templates created via ops.
-    for system_key in system_email_template_service.DEFAULT_SYSTEM_TEMPLATES.keys():
-        system_email_template_service.ensure_system_template(db, system_key=system_key)
-    db.commit()
-
-    templates = (
-        db.query(PlatformSystemEmailTemplate).order_by(PlatformSystemEmailTemplate.name.asc()).all()
-    )
+    templates = system_email_template_service.list_platform_system_templates(db)
     return [_to_read(template) for template in templates]
 
 

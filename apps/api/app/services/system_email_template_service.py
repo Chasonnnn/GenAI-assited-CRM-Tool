@@ -328,6 +328,58 @@ DEFAULT_SYSTEM_TEMPLATES: dict[str, dict[str, str]] = {
 }
 
 
+class SystemTemplateAlreadyExistsError(ValueError):
+    """Raised when attempting to create a system template that already exists."""
+
+
+def list_platform_system_templates(db: Session) -> list[PlatformSystemEmailTemplate]:
+    """List all platform system email templates (built-ins + custom).
+
+    Ensures built-in templates exist before returning the full list.
+    """
+
+    for system_key in DEFAULT_SYSTEM_TEMPLATES.keys():
+        ensure_system_template(db, system_key=system_key)
+    db.commit()
+
+    return (
+        db.query(PlatformSystemEmailTemplate).order_by(PlatformSystemEmailTemplate.name.asc()).all()
+    )
+
+
+def create_platform_system_template(
+    db: Session,
+    *,
+    system_key: str,
+    name: str,
+    subject: str,
+    body: str,
+    from_email: str | None,
+    is_active: bool,
+) -> PlatformSystemEmailTemplate:
+    """Create a custom platform system email template."""
+
+    existing = get_system_template(db, system_key=system_key)
+    if existing:
+        raise SystemTemplateAlreadyExistsError("System template already exists")
+
+    from app.services import email_service
+
+    template = PlatformSystemEmailTemplate(
+        system_key=system_key,
+        name=name,
+        subject=subject,
+        body=email_service.sanitize_template_html(body),
+        from_email=(from_email.strip() or None) if from_email else None,
+        is_active=is_active,
+        current_version=1,
+    )
+    db.add(template)
+    db.commit()
+    db.refresh(template)
+    return template
+
+
 def get_system_template_defaults(system_key: str) -> dict[str, str]:
     defaults = DEFAULT_SYSTEM_TEMPLATES.get(system_key)
     if not defaults:
