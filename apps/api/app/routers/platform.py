@@ -462,15 +462,18 @@ def update_organization(
         changed_fields.append("name")
 
     # Update slug
-    if body.slug is not None and body.slug.lower() != org.slug:
-        try:
-            org, old_slug = org_service.update_org_slug(db, org, body.slug)
-            changed_fields.append("slug")
-        except ValueError as e:
-            # Return 409 for conflicts, 400 for validation errors
-            error_msg = str(e)
-            status_code = 409 if "already in use" in error_msg else 400
-            raise HTTPException(status_code=status_code, detail=error_msg)
+    slug = body.slug
+    if slug is not None:
+        new_slug = slug.lower()
+        if new_slug != org.slug:
+            try:
+                org, old_slug = org_service.update_org_slug(db, org, new_slug)
+                changed_fields.append("slug")
+            except ValueError as e:
+                # Return 409 for conflicts, 400 for validation errors
+                error_msg = str(e)
+                status_code = 409 if "already in use" in error_msg else 400
+                raise HTTPException(status_code=status_code, detail=error_msg)
 
     if not changed_fields:
         # No changes
@@ -790,7 +793,7 @@ def _platform_logo_prefix_api_base(path: str) -> str:
 def _platform_logo_strip_api_base(url: str) -> str:
     base = (settings.API_BASE_URL or "").rstrip("/")
     if base and url.startswith(base):
-        return url[len(base) :]
+        return url.removeprefix(base)
     return url
 
 
@@ -941,7 +944,7 @@ async def upload_platform_email_branding_logo(
         raise HTTPException(status_code=400, detail="File too large (max 1MB)")
 
     try:
-        img = Image.open(io.BytesIO(content))
+        img = Image.open(io.BytesIO(bytes(content)))
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
             extension = "jpg"
@@ -1150,13 +1153,14 @@ async def send_test_platform_system_email_template(
     db: Session = Depends(get_db),
 ) -> dict:
     """Send a test email using the platform system template + platform sender."""
-    if body.org_id is None:
+    test_org_id = body.org_id
+    if test_org_id is None:
         raise HTTPException(status_code=400, detail="org_id is required to render the test email")
     return await _send_test_system_template(
         db=db,
         system_key=system_key,
         to_email=str(body.to_email),
-        org_id=body.org_id,
+        org_id=test_org_id,
         request=request,
         session=session,
     )
@@ -1864,6 +1868,7 @@ def publish_platform_email_template(
 async def test_send_platform_email_template(
     template_id: UUID,
     body: PlatformEmailTemplateTestSendRequest,
+    request: Request,
     session: PlatformUserSession = Depends(require_platform_admin),
     db: Session = Depends(get_db),
 ) -> EmailTemplateTestSendResponse:
@@ -1871,7 +1876,12 @@ async def test_send_platform_email_template(
 
     The send uses the target org's configured workflow email provider (Resend vs org Gmail).
     """
-    from app.services import email_service, email_test_send_service, platform_template_service
+    from app.services import (
+        audit_service,
+        email_service,
+        email_test_send_service,
+        platform_template_service,
+    )
 
     template = platform_template_service.get_platform_email_template(db, template_id)
     if not template:
@@ -1901,10 +1911,25 @@ async def test_send_platform_email_template(
         to_email=str(body.to_email),
         subject=rendered_subject,
         html=rendered_body,
-        template_id=template.id,
+        template_id=None,
         idempotency_key=body.idempotency_key,
         template_from_email=template.from_email,
     )
+
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="platform_template.email.test_send",
+        target_org_id=body.org_id,
+        metadata={
+            "template_id": str(template.id),
+            "email_hash": audit_service.hash_email(str(body.to_email)),
+            "success": bool(result.get("success")),
+            "provider_used": result.get("provider_used"),
+        },
+        request=request,
+    )
+    db.commit()
 
     return EmailTemplateTestSendResponse(**result)
 
