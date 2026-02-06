@@ -235,7 +235,14 @@ async def send_email_logged(
     if not (resolved_text or "").strip() and html:
         resolved_text = _html_to_text(html)
 
-    headers = unsubscribe_service.build_list_unsubscribe_headers(org_id=org_id, email=to_email)
+    from app.services import org_service
+
+    org = org_service.get_org_by_id(db, org_id)
+    headers = unsubscribe_service.build_list_unsubscribe_headers(
+        org_id=org_id,
+        email=to_email,
+        base_url=org_service.get_org_portal_base_url(org),
+    )
 
     try:
         result = await _send_resend_email(

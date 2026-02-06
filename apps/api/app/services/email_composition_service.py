@@ -48,17 +48,24 @@ def _build_unsubscribe_footer_html(*, unsubscribe_url: str, include_divider: boo
     if not url:
         return ""
 
-    divider_style = "padding-top: 16px; border-top: 1px solid #e5e7eb;" if include_divider else ""
+    # Keep the footer unobtrusive and email-client friendly (tables + inline styles).
+    divider_style = (
+        "padding-top: 16px; border-top: 1px solid #e5e7eb;" if include_divider else "padding-top: 8px;"
+    )
     return (
-        '<div style="margin-top: 14px; font-size: 12px; color: #6b7280;'
-        f' {divider_style}">'
-        '<p style="margin: 0;">'
-        "Manage email preferences: "
-        f'<a href="{url}" target="_blank" style="color: #2563eb; text-decoration: none;">'
+        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"'
+        ' style="margin-top: 14px;">'
+        "<tr>"
+        f'<td style="font-family: Arial, sans-serif; font-size: 11px; line-height: 16px;'
+        f" color: #6b7280; {divider_style}\">"
+        "If you no longer wish to receive these emails, you can "
+        f'<a href="{url}" target="_blank" rel="noopener noreferrer"'
+        ' style="color: #6b7280; text-decoration: underline;">'
         "Unsubscribe"
-        "</a>"
-        "</p>"
-        "</div>"
+        "</a>."
+        "</td>"
+        "</tr>"
+        "</table>"
     )
 
 
@@ -94,6 +101,7 @@ def compose_template_email_html(
     rendered_body_html: str,
     scope: TemplateScope,
     sender_user_id: uuid.UUID | None = None,
+    portal_base_url: str | None = None,
 ) -> str:
     """Compose final HTML for a template email (body + signature + unsubscribe footer)."""
     body = rendered_body_html or ""
@@ -117,6 +125,7 @@ def compose_template_email_html(
         unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
             org_id=org_id,
             email=recipient_email,
+            base_url=portal_base_url,
         )
 
     footer_html = _build_unsubscribe_footer_html(

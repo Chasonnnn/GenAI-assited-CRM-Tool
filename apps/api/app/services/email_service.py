@@ -660,14 +660,18 @@ def delete_template(db: Session, template: EmailTemplate) -> None:
     db.commit()
 
 
-def is_email_suppressed(db: Session, org_id: UUID, recipient_email: str) -> bool:
+def is_email_suppressed(
+    db: Session, org_id: UUID, recipient_email: str, *, ignore_opt_out: bool = False
+) -> bool:
     """Check if recipient is suppressed for the org."""
     email_norm = normalize_email(recipient_email) or ""
     if not email_norm:
         return False
     from app.services import campaign_service
 
-    return campaign_service.is_email_suppressed(db, org_id, email_norm)
+    return campaign_service.is_email_suppressed(
+        db, org_id, email_norm, ignore_opt_out=ignore_opt_out
+    )
 
 
 def render_template(
@@ -740,10 +744,12 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
     email = surrogate.email or ""
     unsubscribe_url = ""
     if email:
-        from app.services import unsubscribe_service
+        from app.services import unsubscribe_service, org_service
 
         unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
-            org_id=surrogate.organization_id, email=email
+            org_id=surrogate.organization_id,
+            email=email,
+            base_url=org_service.get_org_portal_base_url(org),
         )
 
     return {
@@ -783,10 +789,12 @@ def build_intended_parent_template_variables(db: Session, intended_parent) -> di
     email = intended_parent.email or ""
     unsubscribe_url = ""
     if email:
-        from app.services import unsubscribe_service
+        from app.services import unsubscribe_service, org_service
 
         unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
-            org_id=intended_parent.organization_id, email=email
+            org_id=intended_parent.organization_id,
+            email=email,
+            base_url=org_service.get_org_portal_base_url(org),
         )
 
     return {
@@ -874,6 +882,7 @@ def send_email(
     surrogate_id: UUID | None = None,
     schedule_at: datetime | None = None,
     commit: bool = True,
+    ignore_opt_out: bool = False,
 ) -> tuple[EmailLog, Job | None]:
     """
     Queue an email for sending.
@@ -881,7 +890,7 @@ def send_email(
     Creates an EmailLog record and schedules a job to send it.
     Returns (email_log, job).
     """
-    if is_email_suppressed(db, org_id, recipient_email):
+    if is_email_suppressed(db, org_id, recipient_email, ignore_opt_out=ignore_opt_out):
         email_log = EmailLog(
             organization_id=org_id,
             template_id=template_id,
@@ -1033,6 +1042,11 @@ def send_from_template(
     if template.scope == "personal":
         signature_user_id = sender_user_id or template.owner_user_id
 
+    from app.services import org_service
+
+    org = org_service.get_org_by_id(db, org_id)
+    portal_base_url = org_service.get_org_portal_base_url(org)
+
     body = email_composition_service.compose_template_email_html(
         db=db,
         org_id=org_id,
@@ -1040,6 +1054,7 @@ def send_from_template(
         rendered_body_html=body,
         scope="personal" if template.scope == "personal" else "org",
         sender_user_id=signature_user_id,
+        portal_base_url=portal_base_url,
     )
     return send_email(
         db=db,

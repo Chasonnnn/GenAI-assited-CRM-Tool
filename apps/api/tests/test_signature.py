@@ -54,6 +54,28 @@ async def test_org_signature_preview_org_only_excludes_user(
 
 
 @pytest.mark.asyncio
+async def test_org_signature_preview_does_not_include_unconfigured_linkedin(
+    authed_client: AsyncClient, db, test_org
+):
+    """
+    Org signature preview uses sample employee data.
+
+    It should NOT show LinkedIn unless it's configured, otherwise admins see a
+    confusing extra social link in the preview.
+    """
+    test_org.signature_template = "classic"
+    test_org.signature_social_links = [
+        {"platform": "Instagram", "url": "https://www.instagram.com/example/"},
+    ]
+    db.commit()
+
+    response = await authed_client.get("/settings/organization/signature/preview")
+    assert response.status_code == 200
+    html = response.json()["html"]
+    assert "LinkedIn" not in html
+
+
+@pytest.mark.asyncio
 async def test_signature_update_rejects_invalid_url(authed_client: AsyncClient):
     """Invalid social URL is rejected."""
     response = await authed_client.patch(

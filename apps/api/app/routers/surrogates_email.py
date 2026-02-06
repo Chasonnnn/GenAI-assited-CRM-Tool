@@ -71,6 +71,11 @@ async def send_surrogate_email(
     body_template = email_composition_service.strip_legacy_unsubscribe_placeholders(body_template)
     subject, body = email_service.render_template(subject_template, body_template, variables)
 
+    from app.services import org_service
+
+    org = org_service.get_org_by_id(db, session.org_id)
+    portal_base_url = org_service.get_org_portal_base_url(org)
+
     body = email_composition_service.compose_template_email_html(
         db=db,
         org_id=session.org_id,
@@ -78,6 +83,7 @@ async def send_surrogate_email(
         rendered_body_html=body,
         scope="personal" if template.scope == "personal" else "org",
         sender_user_id=session.user_id if template.scope == "personal" else None,
+        portal_base_url=portal_base_url,
     )
 
     if email_service.is_email_suppressed(db, session.org_id, surrogate.email):

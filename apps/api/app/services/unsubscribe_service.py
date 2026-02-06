@@ -105,18 +105,30 @@ def parse_unsubscribe_token(token: str) -> Optional[tuple[UUID, str]]:
     return org_id, email
 
 
-def build_unsubscribe_url(*, org_id: UUID, email: str) -> str:
-    """Build a full unsubscribe URL for use in emails."""
+def build_unsubscribe_url(*, org_id: UUID, email: str, base_url: str | None = None) -> str:
+    """Build a full unsubscribe URL for use in email bodies.
+
+    `base_url` is typically the organization's portal base URL
+    (e.g., https://ewi.surrogacyforce.com).
+    """
     token = generate_unsubscribe_token(org_id=org_id, email=email)
-    base = settings.API_BASE_URL or settings.FRONTEND_URL
+    base = (base_url or settings.FRONTEND_URL or settings.API_BASE_URL or "").strip()
     if not base:
         return f"/email/unsubscribe/{token}"
     return f"{base.rstrip('/')}/email/unsubscribe/{token}"
 
 
-def build_list_unsubscribe_headers(*, org_id: UUID, email: str) -> dict[str, str]:
+def build_list_unsubscribe_url(*, org_id: UUID, email: str, base_url: str | None = None) -> str:
+    """Build the List-Unsubscribe URL used for one-click unsubscribe."""
+    url = build_unsubscribe_url(org_id=org_id, email=email, base_url=base_url)
+    return f"{url.rstrip('/')}/one-click"
+
+
+def build_list_unsubscribe_headers(
+    *, org_id: UUID, email: str, base_url: str | None = None
+) -> dict[str, str]:
     """Build List-Unsubscribe headers for one-click unsubscribe."""
-    url = build_unsubscribe_url(org_id=org_id, email=email)
+    url = build_list_unsubscribe_url(org_id=org_id, email=email, base_url=base_url)
     return {
         "List-Unsubscribe": f"<{url}>",
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",

@@ -174,7 +174,9 @@ def _get_sample_data(org: Organization) -> dict:
         "phone": "(555) 123-4567",  # Alias for templates
         "photo_url": None,  # Sample has no photo
         # Sample user social links
-        "linkedin": "https://linkedin.com/in/sample",
+        # Keep sample social links empty unless explicitly configured; otherwise the
+        # preview shows links (e.g., LinkedIn) that admins did not set up.
+        "linkedin": None,
         "twitter": None,
         "instagram": None,
     }

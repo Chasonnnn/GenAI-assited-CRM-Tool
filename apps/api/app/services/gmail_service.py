@@ -273,7 +273,14 @@ async def send_email_logged(
     db.refresh(email_log)
 
     if headers is None:
-        headers = unsubscribe_service.build_list_unsubscribe_headers(org_id=org_id, email=to)
+        from app.services import org_service
+
+        org = org_service.get_org_by_id(db, org_id)
+        headers = unsubscribe_service.build_list_unsubscribe_headers(
+            org_id=org_id,
+            email=to,
+            base_url=org_service.get_org_portal_base_url(org),
+        )
 
     result = await send_email(
         db=db,
