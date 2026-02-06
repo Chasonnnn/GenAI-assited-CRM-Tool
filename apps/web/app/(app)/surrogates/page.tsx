@@ -1,50 +1,30 @@
 "use client"
 
-import { useState, useEffect, useCallback, useTransition, useRef } from "react"
+import { useState, useEffect, useCallback, useTransition, useRef, useMemo } from "react"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button, buttonVariants } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { PaginationJump } from "@/components/ui/pagination-jump"
-import { MoreVerticalIcon, SearchIcon, XIcon, Loader2Icon, ArchiveIcon, UserPlusIcon, UsersIcon, UploadIcon, PlusIcon } from "lucide-react"
+import { SearchIcon, XIcon, Loader2Icon, ArchiveIcon, UserPlusIcon, UsersIcon, UploadIcon, PlusIcon } from "lucide-react"
 import { SortableTableHead } from "@/components/ui/sortable-table-head"
-import { useSurrogates, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurrogate, useAssignees, useBulkAssign, useBulkArchive, useCreateSurrogate } from "@/lib/hooks/use-surrogates"
+import { useSurrogates, useAssignees, useBulkAssign, useBulkArchive, useCreateSurrogate } from "@/lib/hooks/use-surrogates"
 import { useQueues } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
 import type { SurrogateSource } from "@/lib/types/surrogate"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { cn } from "@/lib/utils"
-import { formatRace } from "@/lib/formatters"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { toast } from "sonner"
-
-// Format date for display
-function formatDate(dateString: string | null | undefined): string {
-    if (!dateString) return "—"
-    const date = parseDateInput(dateString)
-    return new Intl.DateTimeFormat("en-US", {
-        month: "short",
-        day: "2-digit",
-        year: "numeric",
-    }).format(date)
-}
-
-// Get initials from name
-function getInitials(name: string | null): string {
-    if (!name) return "?"
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-}
+import SurrogateRow from "./components/surrogate-row"
 
 // Floating Action Bar for bulk operations
 function FloatingActionBar({
@@ -337,8 +317,8 @@ export default function SurrogatesPage() {
     const canSeeQueues = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
     const { data: queues } = useQueues()
     const { data: defaultPipeline } = useDefaultPipeline()
-    const stageOptions = defaultPipeline?.stages || []
-    const stageById = new Map(stageOptions.map(stage => [stage.id, stage]))
+    const stageOptions = useMemo(() => defaultPipeline?.stages || [], [defaultPipeline])
+    const stageById = useMemo(() => new Map(stageOptions.map(stage => [stage.id, stage])), [stageOptions])
 
     // Debounce search input
     useEffect(() => {
@@ -448,10 +428,6 @@ export default function SurrogatesPage() {
         }
     }
 
-    const archiveMutation = useArchiveSurrogate()
-    const restoreMutation = useRestoreSurrogate()
-    const updateMutation = useUpdateSurrogate()
-
     const hasActiveFilters = stageFilter !== "all" || sourceFilter !== "all" || queueFilter !== "all" || searchQuery !== "" || dateRange !== "all"
 
     const resetFilters = useCallback(() => {
@@ -477,30 +453,20 @@ export default function SurrogatesPage() {
         }
     }
 
-    const handleSelectSurrogate = (surrogateId: string, checked: boolean) => {
-        const newSelected = new Set(selectedSurrogates)
-        if (checked) {
-            newSelected.add(surrogateId)
-        } else {
-            newSelected.delete(surrogateId)
-        }
-        setSelectedSurrogates(newSelected)
-    }
+    const handleSelectSurrogate = useCallback((surrogateId: string, checked: boolean) => {
+        setSelectedSurrogates(prev => {
+            const newSelected = new Set(prev)
+            if (checked) {
+                newSelected.add(surrogateId)
+            } else {
+                newSelected.delete(surrogateId)
+            }
+            return newSelected
+        })
+    }, [])
 
     const clearSelection = () => {
         setSelectedSurrogates(new Set())
-    }
-
-    const handleArchive = async (surrogateId: string) => {
-        await archiveMutation.mutateAsync(surrogateId)
-    }
-
-    const handleRestore = async (surrogateId: string) => {
-        await restoreMutation.mutateAsync(surrogateId)
-    }
-
-    const handleTogglePriority = async (surrogateId: string, currentPriority: boolean) => {
-        await updateMutation.mutateAsync({ surrogateId, data: { is_priority: !currentPriority } })
     }
 
     const resetCreateForm = () => {
@@ -810,138 +776,15 @@ export default function SurrogatesPage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {data.items.map((surrogateItem) => {
-                                        const stage = stageById.get(surrogateItem.stage_id)
-                                        const statusLabel = surrogateItem.status_label || stage?.label || "Unknown"
-                                        const statusColor = stage?.color || "#6B7280"
-                                        // Apply gold styling for entire row on priority surrogates
-                                        const rowClass = surrogateItem.is_priority ? "text-amber-600" : ""
-                                        const mutedCellClass = surrogateItem.is_priority ? "text-amber-600" : "text-muted-foreground"
-
-                                        return (
-                                            <TableRow
-                                                key={surrogateItem.id}
-                                                className={cn(rowClass, "[content-visibility:auto] [contain-intrinsic-size:auto_53px]")}
-                                            >
-                                                <TableCell>
-                                                    <Checkbox
-                                                        checked={selectedSurrogates.has(surrogateItem.id)}
-                                                        onCheckedChange={(checked) => handleSelectSurrogate(surrogateItem.id, !!checked)}
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Link href={`/surrogates/${surrogateItem.id}`} className={`font-medium hover:underline ${surrogateItem.is_priority ? "text-amber-600" : "text-primary"}`}>
-                                                        #{surrogateItem.surrogate_number}
-                                                    </Link>
-                                                </TableCell>
-                                                <TableCell className="font-medium">{surrogateItem.full_name}</TableCell>
-                                                <TableCell className={cn("text-center", mutedCellClass)}>
-                                                    {surrogateItem.age ?? "—"}
-                                                </TableCell>
-                                                <TableCell className={cn("text-center", mutedCellClass)}>
-                                                    {surrogateItem.bmi ?? "—"}
-                                                </TableCell>
-                                                <TableCell className={mutedCellClass}>
-                                                    {formatRace(surrogateItem.race) || "—"}
-                                                </TableCell>
-                                                <TableCell className={mutedCellClass}>
-                                                    {surrogateItem.state || "—"}
-                                                </TableCell>
-                                                <TableCell className={mutedCellClass}>
-                                                    {surrogateItem.phone || "—"}
-                                                </TableCell>
-                                                <TableCell className={cn("max-w-[200px] truncate", mutedCellClass)} title={surrogateItem.email}>
-                                                    {surrogateItem.email}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge style={{ backgroundColor: statusColor, color: "white" }}>
-                                                        {statusLabel}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge variant="secondary" className="capitalize">
-                                                        {(() => {
-                                                            const labels: Record<string, string> = {
-                                                                manual: "Manual",
-                                                                meta: "Meta",
-                                                                tiktok: "TikTok",
-                                                                google: "Google",
-                                                                website: "Website",
-                                                                referral: "Referral",
-                                                                other: "Others",
-                                                                agency: "Others",
-                                                                import: "Others",
-                                                            }
-                                                            return labels[surrogateItem.source] ?? surrogateItem.source
-                                                        })()}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell>
-                                                    {surrogateItem.owner_name ? (
-                                                        <TooltipProvider>
-                                                            <Tooltip>
-                                                                <TooltipTrigger>
-                                                                    <Avatar className="h-7 w-7">
-                                                                        <AvatarFallback className="text-xs">
-                                                                            {getInitials(surrogateItem.owner_name)}
-                                                                        </AvatarFallback>
-                                                                    </Avatar>
-                                                                </TooltipTrigger>
-                                                                <TooltipContent>
-                                                                    {surrogateItem.owner_name}
-                                                                </TooltipContent>
-                                                            </Tooltip>
-                                                        </TooltipProvider>
-                                                    ) : (
-                                                        <span className="text-muted-foreground">—</span>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className={mutedCellClass}>
-                                                    {formatDate(surrogateItem.created_at)}
-                                                </TableCell>
-                                                <TableCell className={mutedCellClass}>
-                                                    {formatDate(surrogateItem.last_activity_at || surrogateItem.created_at)}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger
-                                                            className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "size-8")}
-                                                            aria-label={`Actions for ${surrogateItem.full_name}`}
-                                                        >
-                                                            <MoreVerticalIcon className="size-4" />
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end">
-                                                            <DropdownMenuItem onClick={() => window.location.href = `/surrogates/${surrogateItem.id}`}>
-                                                                View Details
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem
-                                                                onClick={() => handleTogglePriority(surrogateItem.id, surrogateItem.is_priority)}
-                                                                disabled={updateMutation.isPending}
-                                                            >
-                                                                {surrogateItem.is_priority ? "Remove Priority" : "Mark as Priority"}
-                                                            </DropdownMenuItem>
-                                                            {!surrogateItem.is_archived ? (
-                                                                <DropdownMenuItem
-                                                                    onClick={() => handleArchive(surrogateItem.id)}
-                                                                    disabled={archiveMutation.isPending}
-                                                                    className="text-destructive"
-                                                                >
-                                                                    Archive
-                                                                </DropdownMenuItem>
-                                                            ) : (
-                                                                <DropdownMenuItem
-                                                                    onClick={() => handleRestore(surrogateItem.id)}
-                                                                    disabled={restoreMutation.isPending}
-                                                                >
-                                                                    Restore
-                                                                </DropdownMenuItem>
-                                                            )}
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
-                                                </TableCell>
-                                            </TableRow>
-                                        )
-                                    })}
+                                    {data.items.map((surrogateItem) => (
+                                        <SurrogateRow
+                                            key={surrogateItem.id}
+                                            item={surrogateItem}
+                                            isSelected={selectedSurrogates.has(surrogateItem.id)}
+                                            onToggleSelection={handleSelectSurrogate}
+                                            stageById={stageById}
+                                        />
+                                    ))}
                                 </TableBody>
                         </Table>
 
