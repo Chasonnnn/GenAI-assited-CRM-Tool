@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -366,15 +367,6 @@ function OrgSignaturePreviewComponent() {
 type EditorMode = "visual" | "html"
 type ActiveInsertionTarget = "subject" | "body_html" | "body_visual" | null
 
-function truncateCardSubject(subject: string, maxChars = 42): string {
-    const value = (subject || "").trim()
-    if (!value) return ""
-    if (value.length <= maxChars) return value
-
-    // Use 4 dots to match the UI copy style used elsewhere in the app.
-    return `${value.slice(0, maxChars).trimEnd()}....`
-}
-
 function extractTemplateVariables(text: string): string[] {
     if (!text) return []
     const matches = text.match(/{{\s*([a-zA-Z0-9_]+)\s*}}/g) ?? []
@@ -426,8 +418,8 @@ function TemplateCard({
                                 </Badge>
                             )}
                         </div>
-                        <CardDescription className="truncate mt-1" title={template.subject}>
-                            {truncateCardSubject(template.subject)}
+                        <CardDescription className="mt-1 line-clamp-2 min-h-10 break-words" title={template.subject}>
+                            {template.subject}
                         </CardDescription>
                         {template.owner_name && (
                             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
@@ -554,6 +546,7 @@ export default function EmailTemplatesPage() {
     const [testSendOpen, setTestSendOpen] = useState(false)
     const [testSendTarget, setTestSendTarget] = useState<EmailTemplateListItem | null>(null)
     const [testSendToEmail, setTestSendToEmail] = useState("")
+    const [testSendIgnoreOptOut, setTestSendIgnoreOptOut] = useState(false)
     const [testSendVariables, setTestSendVariables] = useState<Record<string, string>>({})
     const [testSendTouched, setTestSendTouched] = useState<Record<string, boolean>>({})
 
@@ -897,6 +890,7 @@ export default function EmailTemplatesPage() {
     const handleOpenTestDialog = (template: EmailTemplateListItem) => {
         setTestSendTarget(template)
         setTestSendToEmail(user?.email || "")
+        setTestSendIgnoreOptOut(false)
         setTestSendVariables({})
         setTestSendTouched({})
         setTestSendOpen(true)
@@ -924,6 +918,7 @@ export default function EmailTemplatesPage() {
                 payload: {
                     to_email: toEmail,
                     variables: overrides,
+                    ...(testSendIgnoreOptOut ? { ignore_opt_out: true } : {}),
                 },
             })
             const providerLabel =
@@ -1963,6 +1958,7 @@ export default function EmailTemplatesPage() {
                         setTestSendTarget(null)
                         setTestSendVariables({})
                         setTestSendTouched({})
+                        setTestSendIgnoreOptOut(false)
                     }
                 }}
             >
@@ -1985,6 +1981,22 @@ export default function EmailTemplatesPage() {
                                 onChange={(e) => setTestSendToEmail(e.target.value)}
                                 placeholder="test@example.com"
                             />
+                            <div className="flex items-start gap-3 rounded-lg border bg-muted/20 p-3">
+                                <Checkbox
+                                    id="test-send-ignore-opt-out"
+                                    checked={testSendIgnoreOptOut}
+                                    onCheckedChange={(checked) => setTestSendIgnoreOptOut(checked === true)}
+                                />
+                                <div className="space-y-1">
+                                    <Label htmlFor="test-send-ignore-opt-out" className="cursor-pointer">
+                                        Send even if unsubscribed
+                                    </Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Test-only override for marketing opt-outs. Hard bounces and complaints
+                                        remain suppressed.
+                                    </p>
+                                </div>
+                            </div>
                         </div>
 
                         <Accordion defaultValue={[]} className="rounded-lg">

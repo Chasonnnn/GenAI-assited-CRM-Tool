@@ -134,12 +134,14 @@ describe("EmailTemplatesPage", () => {
         expect(await screen.findByLabelText("To email")).toBeInTheDocument()
     })
 
-    it("truncates long subjects on template cards", () => {
+    it("clamps long subjects on template cards", () => {
         render(<EmailTemplatesPage />)
 
         fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
 
-        expect(screen.getByText("Your Surrogacy Journey Starts with EWI Fam....")).toBeInTheDocument()
+        const subject = screen.getByText("Your Surrogacy Journey Starts with EWI Family Global")
+        expect(subject).toHaveClass("line-clamp-2")
+        expect(subject).toHaveAttribute("title", "Your Surrogacy Journey Starts with EWI Family Global")
     })
 
     it("renders a readable email preview on a white background (dark theme)", async () => {
