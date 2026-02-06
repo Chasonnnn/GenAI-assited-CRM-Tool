@@ -26,6 +26,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
     Select,
@@ -55,6 +56,7 @@ import {
     LockIcon,
     SparklesIcon,
     AlertTriangleIcon,
+    SendIcon,
 } from "lucide-react"
 import DOMPurify from "dompurify"
 import {
@@ -65,6 +67,7 @@ import {
     useDeleteEmailTemplate,
     useCopyTemplateToPersonal,
     useShareTemplateWithOrg,
+    useSendTestEmailTemplate,
     useEmailTemplateVariables,
     useEmailTemplateLibrary,
     useEmailTemplateLibraryItem,
@@ -379,10 +382,12 @@ interface TemplateCardProps {
     isReadOnly?: boolean
     canCopy?: boolean
     canShare?: boolean
+    canSendTest?: boolean
     onEdit: () => void
     onDelete: () => void
     onCopy: () => void
     onShare: () => void
+    onSendTest: () => void
 }
 
 function TemplateCard({
@@ -390,10 +395,12 @@ function TemplateCard({
     isReadOnly = false,
     canCopy = false,
     canShare = false,
+    canSendTest = false,
     onEdit,
     onDelete,
     onCopy,
     onShare,
+    onSendTest,
 }: TemplateCardProps) {
     return (
         <Card className="group relative">
@@ -428,6 +435,15 @@ function TemplateCard({
                                 </span>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                                {canSendTest && (
+                                    <>
+                                        <DropdownMenuItem onClick={onSendTest}>
+                                            <SendIcon className="mr-2 size-4" />
+                                            Send test email
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                    </>
+                                )}
                                 {!template.is_system_template && (
                                     <>
                                         <DropdownMenuItem onClick={onEdit}>
@@ -496,6 +512,7 @@ export default function EmailTemplatesPage() {
     const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
     const permissions = effectivePermissions?.permissions || []
     const canUseAI = Boolean(user?.ai_enabled) && permissions.includes("use_ai_assistant")
+    const canManageEmailTemplates = isAdmin || permissions.includes("manage_email_templates")
 
     const [activeTab, setActiveTab] = useState("personal")
     const [showAllPersonal, setShowAllPersonal] = useState(false)
@@ -523,6 +540,13 @@ export default function EmailTemplatesPage() {
     const [shareDialogOpen, setShareDialogOpen] = useState(false)
     const [copyShareTarget, setCopyShareTarget] = useState<EmailTemplateListItem | null>(null)
     const [copyShareName, setCopyShareName] = useState("")
+
+    // Test send dialog state
+    const [testSendOpen, setTestSendOpen] = useState(false)
+    const [testSendTarget, setTestSendTarget] = useState<EmailTemplateListItem | null>(null)
+    const [testSendToEmail, setTestSendToEmail] = useState("")
+    const [testSendVariables, setTestSendVariables] = useState<Record<string, string>>({})
+    const [testSendTouched, setTestSendTouched] = useState<Record<string, boolean>>({})
 
     // Platform library copy/preview state
     const [libraryCopyOpen, setLibraryCopyOpen] = useState(false)
@@ -568,6 +592,7 @@ export default function EmailTemplatesPage() {
     const copyToPersonal = useCopyTemplateToPersonal()
     const shareWithOrg = useShareTemplateWithOrg()
     const copyFromLibrary = useCopyTemplateFromLibrary()
+    const sendTest = useSendTestEmailTemplate()
 
     // Signature hooks
     const { data: signatureData, refetch: refetchSignature } = useUserSignature()
@@ -577,6 +602,9 @@ export default function EmailTemplatesPage() {
 
     // Get full template details when editing
     const { data: fullTemplate } = useEmailTemplate(editingTemplate?.id || null)
+    const { data: testSendTemplateDetail, isLoading: testSendTemplateLoading } = useEmailTemplate(
+        testSendTarget?.id || null
+    )
     const { data: libraryTemplateDetail } = useEmailTemplateLibraryItem(libraryPreviewId)
 
     useEffect(() => {
@@ -633,6 +661,80 @@ export default function EmailTemplatesPage() {
             ],
         })
     }, [])
+
+    const buildTestVariableSample = useCallback(
+        (variableName: string): string => {
+            const toEmail = testSendToEmail.trim() || user?.email || ""
+            switch (variableName) {
+                case "first_name":
+                    return "Jordan"
+                case "full_name":
+                    return "Jordan Smith"
+                case "email":
+                    return toEmail
+                case "phone":
+                    return "(555) 555-5555"
+                case "surrogate_number":
+                    return "S10001"
+                case "intended_parent_number":
+                    return "I10001"
+                case "status_label":
+                    return "Qualified"
+                case "state":
+                    return "CA"
+                case "owner_name":
+                    return user?.display_name || "Case Manager"
+                case "appointment_date":
+                    return "2026-01-01"
+                case "appointment_time":
+                    return "09:00"
+                case "appointment_location":
+                    return "Zoom"
+                case "org_name":
+                    return user?.org_name || ""
+                case "org_logo_url":
+                    return ""
+                default:
+                    return `TEST_${variableName.toUpperCase()}`
+            }
+        },
+        [testSendToEmail, user?.display_name, user?.email, user?.org_name]
+    )
+
+    const testSendUsedVariables = React.useMemo(() => {
+        if (!testSendTemplateDetail) return []
+        return extractTemplateVariables(`${testSendTemplateDetail.subject}\n${testSendTemplateDetail.body}`)
+            .slice()
+            .sort((a, b) => a.localeCompare(b))
+    }, [testSendTemplateDetail])
+
+    const testSendHasUnsubscribeUrl = testSendUsedVariables.includes("unsubscribe_url")
+    const testSendEditableVariables = React.useMemo(
+        () => testSendUsedVariables.filter((name) => name !== "unsubscribe_url"),
+        [testSendUsedVariables]
+    )
+
+    useEffect(() => {
+        if (!testSendOpen) return
+        if (!testSendToEmail.trim() && user?.email) {
+            setTestSendToEmail(user.email)
+        }
+    }, [testSendOpen, testSendToEmail, user?.email])
+
+    useEffect(() => {
+        if (!testSendOpen) return
+        if (!testSendTemplateDetail) return
+
+        // Initialize defaults once per dialog open.
+        setTestSendVariables((prev) => {
+            if (Object.keys(prev).length > 0) return prev
+            const next: Record<string, string> = {}
+            for (const variableName of testSendEditableVariables) {
+                next[variableName] = buildTestVariableSample(variableName)
+            }
+            return next
+        })
+    }, [buildTestVariableSample, testSendEditableVariables, testSendOpen, testSendTemplateDetail])
 
     const canValidateVariables = !templateVariablesLoading && templateVariables.length > 0
     const allowedVariableNames = React.useMemo(
@@ -779,6 +881,54 @@ export default function EmailTemplatesPage() {
         setCopyShareTarget(template)
         setCopyShareName(template.name)
         setShareDialogOpen(true)
+    }
+
+    const handleOpenTestDialog = (template: EmailTemplateListItem) => {
+        setTestSendTarget(template)
+        setTestSendToEmail(user?.email || "")
+        setTestSendVariables({})
+        setTestSendTouched({})
+        setTestSendOpen(true)
+    }
+
+    const handleSendTest = async () => {
+        if (!testSendTarget) return
+        const toEmail = testSendToEmail.trim()
+        if (!toEmail) {
+            toast.error("To email is required")
+            return
+        }
+
+        const overrides: Record<string, string> = {}
+        for (const [key, value] of Object.entries(testSendVariables)) {
+            if (!testSendTouched[key]) continue
+            const trimmed = value.trim()
+            if (!trimmed) continue
+            overrides[key] = trimmed
+        }
+
+        try {
+            const result = await sendTest.mutateAsync({
+                id: testSendTarget.id,
+                payload: {
+                    to_email: toEmail,
+                    variables: overrides,
+                },
+            })
+            const providerLabel =
+                result.provider_used === "resend"
+                    ? "Resend"
+                    : result.provider_used === "gmail"
+                        ? "Gmail"
+                        : "provider"
+            toast.success(`Test email sent via ${providerLabel}`)
+            setTestSendOpen(false)
+            setTestSendTarget(null)
+            setTestSendVariables({})
+            setTestSendTouched({})
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Failed to send test email")
+        }
     }
 
     const handleCopy = () => {
@@ -1007,7 +1157,7 @@ export default function EmailTemplatesPage() {
                                 </Button>
                             </>
                         )}
-                        {activeTab === "org" && isAdmin && (
+                        {activeTab === "org" && canManageEmailTemplates && (
                             <Button onClick={() => handleOpenModal(undefined, "org")}>
                                 <PlusIcon className="mr-2 size-4" />
                                 Create Org Template
@@ -1088,10 +1238,12 @@ export default function EmailTemplatesPage() {
                                             isReadOnly={!isOwner}
                                             canCopy={false}
                                             canShare={isOwner}
+                                            canSendTest={isOwner}
                                             onEdit={() => handleOpenModal(template)}
                                             onDelete={() => handleDelete(template.id)}
                                             onCopy={() => {}}
                                             onShare={() => handleOpenShareDialog(template)}
+                                            onSendTest={() => handleOpenTestDialog(template)}
                                         />
                                     )
                                 })}
@@ -1110,7 +1262,7 @@ export default function EmailTemplatesPage() {
                                 <CardContent className="flex flex-col items-center justify-center py-12">
                                     <BuildingIcon className="size-12 text-muted-foreground mb-4" />
                                     <p className="text-muted-foreground mb-4">No organization templates yet</p>
-                                    {isAdmin && (
+                                    {canManageEmailTemplates && (
                                         <Button onClick={() => handleOpenModal(undefined, "org")}>
                                             <PlusIcon className="mr-2 size-4" />
                                             Create Org Template
@@ -1124,13 +1276,15 @@ export default function EmailTemplatesPage() {
                                     <TemplateCard
                                         key={template.id}
                                         template={template}
-                                        isReadOnly={!isAdmin && !template.is_system_template}
+                                        isReadOnly={!canManageEmailTemplates && !template.is_system_template}
                                         canCopy={true}
                                         canShare={false}
+                                        canSendTest={canManageEmailTemplates}
                                         onEdit={() => handleOpenModal(template)}
                                         onDelete={() => handleDelete(template.id)}
                                         onCopy={() => handleOpenCopyDialog(template)}
                                         onShare={() => {}}
+                                        onSendTest={() => handleOpenTestDialog(template)}
                                     />
                                 ))}
                             </div>
@@ -1730,6 +1884,119 @@ export default function EmailTemplatesPage() {
                             )}
                             <ShareIcon className="mr-2 size-4" />
                             Share Template
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Send Test Email Dialog */}
+            <Dialog
+                open={testSendOpen}
+                onOpenChange={(open) => {
+                    setTestSendOpen(open)
+                    if (!open) {
+                        setTestSendTarget(null)
+                        setTestSendVariables({})
+                        setTestSendTouched({})
+                    }
+                }}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Send test email</DialogTitle>
+                        <DialogDescription>
+                            Send a test email for{" "}
+                            <span className="font-medium">{testSendTarget?.name || "this template"}</span>.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="test-send-to">To email</Label>
+                            <Input
+                                id="test-send-to"
+                                type="email"
+                                value={testSendToEmail}
+                                onChange={(e) => setTestSendToEmail(e.target.value)}
+                                placeholder="test@example.com"
+                            />
+                        </div>
+
+                        <Accordion defaultValue={[]} className="rounded-lg">
+                            <AccordionItem value="variables">
+                                <AccordionTrigger>Variables (optional)</AccordionTrigger>
+                                <AccordionContent>
+                                    <div className="space-y-3">
+                                        {testSendTemplateLoading ? (
+                                            <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+                                                <Loader2Icon className="size-4 animate-spin" />
+                                                Loading variables...
+                                            </div>
+                                        ) : (
+                                            <>
+                                                {testSendHasUnsubscribeUrl && (
+                                                    <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+                                                        <span className="font-mono">
+                                                            {"{{unsubscribe_url}}"}
+                                                        </span>{" "}
+                                                        is generated automatically for the recipient.
+                                                    </div>
+                                                )}
+
+                                                {testSendEditableVariables.length === 0 ? (
+                                                    <p className="text-sm text-muted-foreground">
+                                                        No variables found in this template.
+                                                    </p>
+                                                ) : (
+                                                    testSendEditableVariables.map((variableName) => (
+                                                        <div key={variableName} className="space-y-1">
+                                                            <Label
+                                                                htmlFor={`test-var-${variableName}`}
+                                                                className="font-mono text-xs"
+                                                            >
+                                                                {`{{${variableName}}}`}
+                                                            </Label>
+                                                            <Input
+                                                                id={`test-var-${variableName}`}
+                                                                value={testSendVariables[variableName] ?? ""}
+                                                                onChange={(e) => {
+                                                                    const value = e.target.value
+                                                                    setTestSendVariables((prev) => ({
+                                                                        ...prev,
+                                                                        [variableName]: value,
+                                                                    }))
+                                                                    setTestSendTouched((prev) => ({
+                                                                        ...prev,
+                                                                        [variableName]: true,
+                                                                    }))
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
+                    </div>
+
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setTestSendOpen(false)}
+                            disabled={sendTest.isPending}
+                        >
+                            Cancel
+                        </Button>
+                        <Button onClick={handleSendTest} disabled={sendTest.isPending}>
+                            {sendTest.isPending ? (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            ) : (
+                                <SendIcon className="mr-2 size-4" />
+                            )}
+                            Send test
                         </Button>
                     </DialogFooter>
                 </DialogContent>

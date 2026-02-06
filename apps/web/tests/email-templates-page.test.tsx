@@ -1,5 +1,5 @@
 import { describe, it, beforeEach, vi, expect } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { render, screen, fireEvent } from "@testing-library/react"
 import * as React from "react"
 import EmailTemplatesPage from "../app/(app)/automation/email-templates/page"
 
@@ -10,7 +10,7 @@ vi.mock("@/lib/auth-context", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-permissions", () => ({
-    useEffectivePermissions: () => ({ data: { permissions: [] } }),
+    useEffectivePermissions: () => ({ data: { permissions: ["manage_email_templates"] } }),
 }))
 
 vi.mock("next/navigation", () => ({
@@ -26,7 +26,29 @@ vi.mock("next/navigation", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-email-templates", () => ({
-    useEmailTemplates: () => ({ data: [], isLoading: false }),
+    useEmailTemplates: (params?: { scope?: string | null }) => {
+        if (params?.scope === "org") {
+            return {
+                data: [
+                    {
+                        id: "tpl_org_1",
+                        name: "Org Template",
+                        subject: "Hello {{full_name}}",
+                        from_email: null,
+                        is_active: true,
+                        scope: "org",
+                        owner_user_id: null,
+                        owner_name: null,
+                        is_system_template: false,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                    },
+                ],
+                isLoading: false,
+            }
+        }
+        return { data: [], isLoading: false }
+    },
     useEmailTemplate: () => ({ data: null, isLoading: false }),
     useEmailTemplateLibrary: () => ({ data: [], isLoading: false }),
     useEmailTemplateLibraryItem: () => ({ data: null, isLoading: false }),
@@ -37,6 +59,7 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
     useCopyTemplateToPersonal: () => ({ mutate: vi.fn(), isPending: false }),
     useShareTemplateWithOrg: () => ({ mutate: vi.fn(), isPending: false }),
     useCopyTemplateFromLibrary: () => ({ mutate: vi.fn(), isPending: false }),
+    useSendTestEmailTemplate: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 vi.mock("@/lib/hooks/use-signature", () => ({
@@ -55,7 +78,16 @@ vi.mock("@/components/rich-text-editor", () => ({
 
 describe("EmailTemplatesPage", () => {
     beforeEach(() => {
-        mockUseAuth.mockReturnValue({ user: { role: "admin" } })
+        mockUseAuth.mockReturnValue({
+            user: {
+                user_id: "user_1",
+                role: "admin",
+                email: "admin@example.com",
+                display_name: "Admin",
+                org_name: "Test Org",
+                ai_enabled: false,
+            },
+        })
     })
 
     it("renders updated tabs", () => {
@@ -63,5 +95,20 @@ describe("EmailTemplatesPage", () => {
         expect(screen.getByRole("tab", { name: "My Email Templates" })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: "Email Templates" })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: "My Signature" })).toBeInTheDocument()
+    })
+
+    it("shows send test email action and opens dialog", async () => {
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: "Email Templates" }))
+
+        const triggers = document.querySelectorAll('[data-slot="dropdown-menu-trigger"]')
+        expect(triggers.length).toBeGreaterThan(0)
+        fireEvent.click(triggers[0] as HTMLElement)
+
+        expect(await screen.findByText("Send test email")).toBeInTheDocument()
+        fireEvent.click(screen.getByText("Send test email"))
+
+        expect(await screen.findByLabelText("To email")).toBeInTheDocument()
     })
 })

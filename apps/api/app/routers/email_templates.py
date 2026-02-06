@@ -525,7 +525,9 @@ async def send_test_email(
             raise HTTPException(status_code=403, detail=f"Missing permission: {perm_key}")
     else:
         if template.owner_user_id != session.user_id:
-            raise HTTPException(status_code=403, detail="You can only send tests for your templates")
+            raise HTTPException(
+                status_code=403, detail="You can only send tests for your templates"
+            )
 
     variables_used = email_test_send_service.extract_variables(template.subject, template.body)
     base_vars = email_test_send_service.build_sample_variables(

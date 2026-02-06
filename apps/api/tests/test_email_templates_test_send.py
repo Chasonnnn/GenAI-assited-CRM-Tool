@@ -51,7 +51,9 @@ async def authed_client_for_user(db, user: User, org_id: uuid.UUID, role: Role):
 
 
 @pytest.mark.asyncio
-async def test_test_send_org_template_uses_resend_when_configured(authed_client, db, test_org, test_user, monkeypatch):
+async def test_test_send_org_template_uses_resend_when_configured(
+    authed_client, db, test_org, test_user, monkeypatch
+):
     from app.db.models import EmailLog
 
     resend_settings_service.update_resend_settings(
@@ -106,7 +108,9 @@ async def test_test_send_org_template_uses_resend_when_configured(authed_client,
 
 
 @pytest.mark.asyncio
-async def test_test_send_org_template_uses_org_gmail_when_configured(authed_client, db, test_org, test_user, monkeypatch):
+async def test_test_send_org_template_uses_org_gmail_when_configured(
+    authed_client, db, test_org, test_user, monkeypatch
+):
     sender = User(
         id=uuid.uuid4(),
         email=f"sender-{uuid.uuid4().hex[:8]}@test.com",
@@ -164,7 +168,20 @@ async def test_test_send_org_template_uses_org_gmail_when_configured(authed_clie
 
     called: dict[str, object] = {}
 
-    async def fake_send_email_logged(*, db, org_id, user_id, to, subject, body, html, template_id=None, surrogate_id=None, idempotency_key=None, headers=None):
+    async def fake_send_email_logged(
+        *,
+        db,
+        org_id,
+        user_id,
+        to,
+        subject,
+        body,
+        html,
+        template_id=None,
+        surrogate_id=None,
+        idempotency_key=None,
+        headers=None,
+    ):
         called["user_id"] = user_id
         return {"success": True, "message_id": "gmail_123", "email_log_id": str(uuid.uuid4())}
 
@@ -282,7 +299,20 @@ async def test_test_send_personal_template_only_owner_can_send(db, test_org, mon
 
     called: dict[str, object] = {}
 
-    async def fake_send_email_logged(*, db, org_id, user_id, to, subject, body, html, template_id=None, surrogate_id=None, idempotency_key=None, headers=None):
+    async def fake_send_email_logged(
+        *,
+        db,
+        org_id,
+        user_id,
+        to,
+        subject,
+        body,
+        html,
+        template_id=None,
+        surrogate_id=None,
+        idempotency_key=None,
+        headers=None,
+    ):
         called["user_id"] = user_id
         return {"success": True, "message_id": "gmail_789", "email_log_id": str(uuid.uuid4())}
 
@@ -308,4 +338,3 @@ async def test_test_send_personal_template_only_owner_can_send(db, test_org, mon
             json={"to_email": "test@example.com"},
         )
         assert res.status_code == 403
-

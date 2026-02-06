@@ -88,6 +88,20 @@ export interface EmailSendRequest {
     schedule_at?: string
 }
 
+export interface EmailTemplateTestSendRequest {
+    to_email: string
+    variables?: Record<string, string>
+    idempotency_key?: string | null
+}
+
+export interface EmailTemplateTestSendResponse {
+    success: boolean
+    provider_used?: 'resend' | 'gmail' | null
+    email_log_id?: string | null
+    message_id?: string | null
+    error?: string | null
+}
+
 export interface EmailLog {
     id: string
     organization_id: string
@@ -156,6 +170,13 @@ export async function deleteTemplate(id: string): Promise<void> {
 
 export async function sendEmail(data: EmailSendRequest): Promise<EmailLog> {
     return api.post<EmailLog>('/email-templates/send', data)
+}
+
+export async function sendTestEmailTemplate(
+    id: string,
+    payload: EmailTemplateTestSendRequest
+): Promise<EmailTemplateTestSendResponse> {
+    return api.post<EmailTemplateTestSendResponse>(`/email-templates/${id}/test`, payload)
 }
 
 // ============================================================================

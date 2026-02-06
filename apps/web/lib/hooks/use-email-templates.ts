@@ -10,12 +10,15 @@ import {
     updateTemplate,
     deleteTemplate,
     sendEmail,
+    sendTestEmailTemplate,
     listEmailTemplateVariables,
     copyTemplateToPersonal,
     shareTemplateWithOrg,
     EmailTemplateCreate,
     EmailTemplateUpdate,
     EmailSendRequest,
+    EmailTemplateTestSendRequest,
+    EmailTemplateTestSendResponse,
     EmailTemplateCopyRequest,
     EmailTemplateShareRequest,
     ListTemplatesParams,
@@ -93,6 +96,24 @@ export function useDeleteEmailTemplate() {
 export function useSendEmail() {
     return useMutation({
         mutationFn: (data: EmailSendRequest) => sendEmail(data),
+    })
+}
+
+export function useSendTestEmailTemplate() {
+    return useMutation({
+        mutationFn: async ({
+            id,
+            payload,
+        }: {
+            id: string
+            payload: EmailTemplateTestSendRequest
+        }): Promise<EmailTemplateTestSendResponse> => {
+            const result = await sendTestEmailTemplate(id, payload)
+            if (!result.success) {
+                throw new Error(result.error || 'Failed to send test email')
+            }
+            return result
+        },
     })
 }
 

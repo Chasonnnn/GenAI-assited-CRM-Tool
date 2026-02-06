@@ -283,7 +283,10 @@ async def send_test_via_org_provider(
     idempotency_key: str | None,
     template_from_email: str | None = None,
 ) -> dict:
-    from app.services.workflow_email_provider import EmailProviderError, resolve_workflow_email_provider
+    from app.services.workflow_email_provider import (
+        EmailProviderError,
+        resolve_workflow_email_provider,
+    )
 
     try:
         provider, config = resolve_workflow_email_provider(
@@ -356,4 +359,3 @@ async def send_test_via_user_gmail(
         template_id=template_id,
         idempotency_key=idempotency_key,
     )
-
