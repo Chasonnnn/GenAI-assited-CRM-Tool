@@ -9,6 +9,7 @@ import {
     createPlatformEmailTemplate,
     updatePlatformEmailTemplate,
     publishPlatformEmailTemplate,
+    sendTestPlatformEmailTemplate,
     listPlatformEmailTemplateVariables,
     listPlatformFormTemplates,
     getPlatformFormTemplate,
@@ -29,7 +30,9 @@ import {
     getPlatformEmailBranding,
     updatePlatformEmailBranding,
     uploadPlatformEmailBrandingLogo,
+    type EmailTemplateTestSendResponse,
     type PlatformEmailTemplateCreate,
+    type PlatformEmailTemplateTestSendRequest,
     type PlatformEmailTemplateUpdate,
     type PlatformFormTemplateCreate,
     type PlatformFormTemplateUpdate,
@@ -108,6 +111,24 @@ export function usePublishPlatformEmailTemplate() {
         onSuccess: (_data, { id }) => {
             queryClient.invalidateQueries({ queryKey: platformTemplateKeys.emails() })
             queryClient.invalidateQueries({ queryKey: platformTemplateKeys.emailDetail(id) })
+        },
+    })
+}
+
+export function useSendTestPlatformEmailTemplate() {
+    return useMutation({
+        mutationFn: async ({
+            id,
+            payload,
+        }: {
+            id: string
+            payload: PlatformEmailTemplateTestSendRequest
+        }): Promise<EmailTemplateTestSendResponse> => {
+            const result = await sendTestPlatformEmailTemplate(id, payload)
+            if (!result.success) {
+                throw new Error(result.error || 'Failed to send test email')
+            }
+            return result
         },
     })
 }

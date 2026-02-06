@@ -74,7 +74,20 @@ async def test_platform_email_template_test_send_respects_org_provider_settings(
 
     called: dict[str, object] = {}
 
-    async def fake_send_email_logged(*, db, org_id, user_id, to, subject, body, html, template_id=None, surrogate_id=None, idempotency_key=None, headers=None):
+    async def fake_send_email_logged(
+        *,
+        db,
+        org_id,
+        user_id,
+        to,
+        subject,
+        body,
+        html,
+        template_id=None,
+        surrogate_id=None,
+        idempotency_key=None,
+        headers=None,
+    ):
         called["user_id"] = user_id
         return {"success": True, "message_id": "gmail_ops_1", "email_log_id": str(uuid.uuid4())}
 
@@ -92,4 +105,3 @@ async def test_platform_email_template_test_send_respects_org_provider_settings(
     assert data["provider_used"] == "gmail"
     assert data["message_id"] == "gmail_ops_1"
     assert called["user_id"] == str(sender.id)
-

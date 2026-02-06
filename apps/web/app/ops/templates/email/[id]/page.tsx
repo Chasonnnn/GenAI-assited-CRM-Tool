@@ -10,7 +10,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Loader2Icon, ArrowLeftIcon, EyeIcon, AlertTriangleIcon } from "lucide-react"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Loader2Icon, ArrowLeftIcon, EyeIcon, AlertTriangleIcon, SendIcon } from "lucide-react"
 import { toast } from "sonner"
 import { PublishDialog } from "@/components/ops/templates/PublishDialog"
 import { NotFoundState } from "@/components/not-found-state"
@@ -24,6 +25,7 @@ import {
     usePlatformEmailTemplate,
     usePlatformEmailTemplateVariables,
     usePublishPlatformEmailTemplate,
+    useSendTestPlatformEmailTemplate,
     useUpdatePlatformEmailTemplate,
 } from "@/lib/hooks/use-platform-templates"
 import type { PlatformEmailTemplate } from "@/lib/api/platform"
@@ -51,6 +53,7 @@ export default function PlatformEmailTemplatePage() {
     const createTemplate = useCreatePlatformEmailTemplate()
     const updateTemplate = useUpdatePlatformEmailTemplate()
     const publishTemplate = usePublishPlatformEmailTemplate()
+    const sendTest = useSendTestPlatformEmailTemplate()
 
     const [name, setName] = useState("")
     const [subject, setSubject] = useState("")
@@ -63,6 +66,12 @@ export default function PlatformEmailTemplatePage() {
     const [showPublishDialog, setShowPublishDialog] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [isPublishing, setIsPublishing] = useState(false)
+
+    const [testOrgId, setTestOrgId] = useState("")
+    const [testEmail, setTestEmail] = useState("")
+    const [testVariables, setTestVariables] = useState<Record<string, string>>({})
+    const [testTouched, setTestTouched] = useState<Record<string, boolean>>({})
+    const [isSendingTest, setIsSendingTest] = useState(false)
 
     const subjectRef = useRef<HTMLInputElement | null>(null)
     const subjectSelectionRef = useRef<{ start: number; end: number } | null>(null)
@@ -92,6 +101,82 @@ export default function PlatformEmailTemplatePage() {
         if (!canValidateVariables) return []
         return requiredVariableNames.filter((variable) => !usedVariableNames.includes(variable))
     }, [canValidateVariables, requiredVariableNames, usedVariableNames])
+
+    const testHasUnsubscribeUrl = usedVariableNames.includes("unsubscribe_url")
+    const testEditableVariableNames = useMemo(
+        () => usedVariableNames.filter((variable) => variable !== "unsubscribe_url"),
+        [usedVariableNames]
+    )
+
+    const buildTestVariableSample = useCallback(
+        (variableName: string): string => {
+            const toEmail = testEmail.trim()
+            switch (variableName) {
+                case "first_name":
+                    return "Jordan"
+                case "full_name":
+                    return "Jordan Smith"
+                case "email":
+                    return toEmail
+                case "phone":
+                    return "(555) 555-5555"
+                case "surrogate_number":
+                    return "S10001"
+                case "intended_parent_number":
+                    return "I10001"
+                case "status_label":
+                    return "Qualified"
+                case "state":
+                    return "CA"
+                case "owner_name":
+                    return "Operator"
+                case "appointment_date":
+                    return "2026-01-01"
+                case "appointment_time":
+                    return "09:00"
+                case "appointment_location":
+                    return "Zoom"
+                case "org_name":
+                    return "Sample Org"
+                case "org_logo_url":
+                    return ""
+                default:
+                    return `TEST_${variableName.toUpperCase()}`
+            }
+        },
+        [testEmail]
+    )
+
+    useEffect(() => {
+        setTestVariables((prev) => {
+            const next: Record<string, string> = { ...prev }
+
+            for (const variableName of testEditableVariableNames) {
+                if (next[variableName] === undefined) {
+                    next[variableName] = buildTestVariableSample(variableName)
+                }
+            }
+
+            // Drop stale values when variables are removed from the template.
+            for (const key of Object.keys(next)) {
+                if (!testEditableVariableNames.includes(key)) {
+                    delete next[key]
+                }
+            }
+
+            return next
+        })
+
+        setTestTouched((prev) => {
+            const next: Record<string, boolean> = { ...prev }
+            for (const key of Object.keys(next)) {
+                if (!testEditableVariableNames.includes(key)) {
+                    delete next[key]
+                }
+            }
+            return next
+        })
+    }, [buildTestVariableSample, testEditableVariableNames])
 
     const recordSelection = (
         el: HTMLInputElement | HTMLTextAreaElement,
@@ -327,6 +412,52 @@ export default function PlatformEmailTemplatePage() {
         }
     }
 
+    const handleSendTest = async () => {
+        if (isNew) return
+
+        if (!testOrgId.trim()) {
+            toast.error("Organization ID is required")
+            return
+        }
+        if (!testEmail.trim()) {
+            toast.error("Test email is required")
+            return
+        }
+
+        const overrides: Record<string, string> = {}
+        for (const [key, value] of Object.entries(testVariables)) {
+            if (!testTouched[key]) continue
+            const trimmed = value.trim()
+            if (!trimmed) continue
+            overrides[key] = trimmed
+        }
+
+        setIsSendingTest(true)
+        try {
+            const saved = await persistTemplate()
+            const result = await sendTest.mutateAsync({
+                id: saved.id,
+                payload: {
+                    org_id: testOrgId.trim(),
+                    to_email: testEmail.trim(),
+                    variables: overrides,
+                },
+            })
+
+            const providerLabel =
+                result.provider_used === "resend"
+                    ? "Resend"
+                    : result.provider_used === "gmail"
+                        ? "Gmail"
+                        : "provider"
+            toast.success(`Test email sent via ${providerLabel}`)
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Failed to send test email")
+        } finally {
+            setIsSendingTest(false)
+        }
+    }
+
     if (!isNew && isLoading) {
         return (
             <div className="flex h-screen items-center justify-center bg-stone-100 dark:bg-stone-950">
@@ -525,27 +656,127 @@ export default function PlatformEmailTemplatePage() {
                     </CardContent>
                 </Card>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <EyeIcon className="size-4" />
-                            Preview
-                        </CardTitle>
-                        <CardDescription>Sanitized preview of the HTML output.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {previewHtml ? (
-                            <div
-                                className="prose prose-sm max-w-none"
-                                dangerouslySetInnerHTML={{ __html: previewHtml }}
-                            />
-                        ) : (
-                            <div className="text-sm text-muted-foreground">
-                                Add content to preview the template.
+                <div className="space-y-6">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <EyeIcon className="size-4" />
+                                Preview
+                            </CardTitle>
+                            <CardDescription>Sanitized preview of the HTML output.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {previewHtml ? (
+                                <div
+                                    className="prose prose-sm max-w-none"
+                                    dangerouslySetInnerHTML={{ __html: previewHtml }}
+                                />
+                            ) : (
+                                <div className="text-sm text-muted-foreground">
+                                    Add content to preview the template.
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Send test email</CardTitle>
+                            <CardDescription>
+                                Render this template for a specific organization and send to a test inbox.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            <div className="space-y-2">
+                                <Label htmlFor="test-org-id">Organization ID</Label>
+                                <Input
+                                    id="test-org-id"
+                                    value={testOrgId}
+                                    onChange={(event) => setTestOrgId(event.target.value)}
+                                    placeholder="UUID of an organization"
+                                />
                             </div>
-                        )}
-                    </CardContent>
-                </Card>
+                            <div className="space-y-2">
+                                <Label htmlFor="test-email">Test email</Label>
+                                <Input
+                                    id="test-email"
+                                    type="email"
+                                    value={testEmail}
+                                    onChange={(event) => setTestEmail(event.target.value)}
+                                    placeholder="test@example.com"
+                                />
+                            </div>
+
+                            <Accordion defaultValue={[]} className="rounded-lg">
+                                <AccordionItem value="variables">
+                                    <AccordionTrigger>Variables (optional)</AccordionTrigger>
+                                    <AccordionContent>
+                                        <div className="space-y-3">
+                                            {testHasUnsubscribeUrl && (
+                                                <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+                                                    <span className="font-mono">
+                                                        {"{{unsubscribe_url}}"}
+                                                    </span>{" "}
+                                                    is generated automatically for the recipient.
+                                                </div>
+                                            )}
+
+                                            {testEditableVariableNames.length === 0 ? (
+                                                <p className="text-sm text-muted-foreground">
+                                                    No variables found in this template.
+                                                </p>
+                                            ) : (
+                                                testEditableVariableNames.map((variableName) => (
+                                                    <div key={variableName} className="space-y-1">
+                                                        <Label
+                                                            htmlFor={`test-var-${variableName}`}
+                                                            className="font-mono text-xs"
+                                                        >
+                                                            {`{{${variableName}}}`}
+                                                        </Label>
+                                                        <Input
+                                                            id={`test-var-${variableName}`}
+                                                            value={testVariables[variableName] ?? ""}
+                                                            onChange={(event) => {
+                                                                const value = event.target.value
+                                                                setTestVariables((prev) => ({
+                                                                    ...prev,
+                                                                    [variableName]: value,
+                                                                }))
+                                                                setTestTouched((prev) => ({
+                                                                    ...prev,
+                                                                    [variableName]: true,
+                                                                }))
+                                                            }}
+                                                        />
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    </AccordionContent>
+                                </AccordionItem>
+                            </Accordion>
+
+                            {isNew && (
+                                <p className="text-xs text-muted-foreground">
+                                    Save template first.
+                                </p>
+                            )}
+
+                            <Button
+                                onClick={handleSendTest}
+                                disabled={isNew || isSendingTest || isSaving || isPublishing}
+                            >
+                                {isSendingTest ? (
+                                    <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                ) : (
+                                    <SendIcon className="mr-2 size-4" />
+                                )}
+                                Send test
+                            </Button>
+                        </CardContent>
+                    </Card>
+                </div>
             </div>
 
             <PublishDialog

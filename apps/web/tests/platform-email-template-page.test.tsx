@@ -36,8 +36,10 @@ const mockTemplateData = {
     created_at: new Date().toISOString(),
 }
 
+let mockParamsId = "tpl_1"
+
 vi.mock("next/navigation", () => ({
-    useParams: () => ({ id: "tpl_1" }),
+    useParams: () => ({ id: mockParamsId }),
     useRouter: () => ({
         push: vi.fn(),
         replace: vi.fn(),
@@ -50,10 +52,12 @@ vi.mock("@/lib/hooks/use-platform-templates", () => ({
     useCreatePlatformEmailTemplate: () => ({ mutateAsync: vi.fn() }),
     useUpdatePlatformEmailTemplate: () => ({ mutateAsync: vi.fn() }),
     usePublishPlatformEmailTemplate: () => ({ mutateAsync: vi.fn() }),
+    useSendTestPlatformEmailTemplate: () => ({ mutateAsync: vi.fn() }),
 }))
 
 describe("PlatformEmailTemplatePage", () => {
     it("avoids rendering the rich editor with complex HTML", async () => {
+        mockParamsId = "tpl_1"
         render(<PlatformEmailTemplatePage />)
 
         await screen.findByPlaceholderText("Paste or edit the HTML for this template...")
@@ -63,5 +67,18 @@ describe("PlatformEmailTemplatePage", () => {
         )
 
         expect(richEditorCallsWithTable.length).toBe(0)
+    })
+
+    it("renders send test email card", () => {
+        mockParamsId = "tpl_1"
+        render(<PlatformEmailTemplatePage />)
+        expect(screen.getByText("Send test email")).toBeInTheDocument()
+    })
+
+    it("disables send test on new templates", () => {
+        mockParamsId = "new"
+        render(<PlatformEmailTemplatePage />)
+        expect(screen.getByRole("button", { name: "Send test" })).toBeDisabled()
+        expect(screen.getByText("Save template first.")).toBeInTheDocument()
     })
 })

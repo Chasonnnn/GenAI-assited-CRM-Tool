@@ -525,6 +525,21 @@ export interface PlatformEmailTemplateUpdate {
     expected_version?: number | null
 }
 
+export interface PlatformEmailTemplateTestSendRequest {
+    org_id: string
+    to_email: string
+    variables?: Record<string, string>
+    idempotency_key?: string | null
+}
+
+export interface EmailTemplateTestSendResponse {
+    success: boolean
+    provider_used?: 'resend' | 'gmail' | null
+    email_log_id?: string | null
+    message_id?: string | null
+    error?: string | null
+}
+
 export interface PlatformFormTemplateDraft {
     name: string
     description?: string | null
@@ -633,6 +648,13 @@ export function publishPlatformEmailTemplate(
     payload: TemplatePublishRequest
 ): Promise<PlatformEmailTemplate> {
     return api.post<PlatformEmailTemplate>(`/platform/templates/email/${id}/publish`, payload)
+}
+
+export function sendTestPlatformEmailTemplate(
+    id: string,
+    payload: PlatformEmailTemplateTestSendRequest
+): Promise<EmailTemplateTestSendResponse> {
+    return api.post<EmailTemplateTestSendResponse>(`/platform/templates/email/${id}/test`, payload)
 }
 
 /**
