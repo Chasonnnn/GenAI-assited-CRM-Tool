@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.73.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.72.0...surrogacy-crm-platform-v0.73.0) (2026-02-06)
+
+
+### Features
+
+* add Unassigned Queue for intake specialists ([c06055b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c06055b9f6d8b2489992ab9dde7b784d50c26910))
+* **api:** add presentation utility for humanizing identifiers ([6e266c1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6e266c170f5f71c7d462599df410eb66db0aab27))
+* **email:** add option to ignore opt-out for test emails ([c601942](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c601942c6ae5fab4cd21f5730e932b859a630794))
+
+
+### Bug Fixes
+
+* **api:** make utils package import-safe for tooling scripts ([4c3993d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4c3993d4d1ef811e892a61b702850dc885886f9b))
+* **email:** improve invite email role formatting ([2e89bbc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2e89bbce2bd429fcf04f7784ef54e04fca199356))
+* use humanize_identifier for consistent label formatting ([3dbaac6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3dbaac6f8db087b833ba402ae8063bb01ff79b77))
+* **web:** improve email template UI and test cases ([4d4bc7e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4d4bc7e2007d6f29c5204b40697d533e37011909))
+
+
+### Maintenance
+
+* minor fixes and improvements ([6d05dfd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6d05dfd5e5b3d2e6fa75c2d4c1f84e1f0f64c3b1))
+
 ## [0.72.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.71.0...surrogacy-crm-platform-v0.72.0) (2026-02-06)
 
 
