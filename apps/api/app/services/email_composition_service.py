@@ -93,6 +93,30 @@ def _insert_before_closing_tag(html_body: str, insertion: str) -> str:
     return f"{html_body}{insertion}"
 
 
+def _wrap_body_html(html_body: str) -> str:
+    """Apply a sane default typography baseline for fragment templates.
+
+    Many templates are stored as HTML fragments (no <html>/<body>). In clients
+    like Gmail, unstyled fragments can inherit default UI styles that make the
+    body text look like part of the signature/footer. A wrapper gives consistent,
+    enterprise-looking typography without preventing per-element inline styles.
+    """
+    if not html_body:
+        return ""
+
+    # If the content looks like a full HTML document, do not wrap; let the
+    # template control its own root styles.
+    if re.search(r"<!doctype|<html\\b|<body\\b", html_body, flags=re.IGNORECASE):
+        return html_body
+
+    return (
+        '<div style="font-family: Arial, sans-serif; font-size: 16px;'
+        ' line-height: 24px; color: #111827;">'
+        f"{html_body}"
+        "</div>"
+    )
+
+
 def compose_template_email_html(
     db: Session,
     *,
@@ -104,7 +128,7 @@ def compose_template_email_html(
     portal_base_url: str | None = None,
 ) -> str:
     """Compose final HTML for a template email (body + signature + unsubscribe footer)."""
-    body = rendered_body_html or ""
+    body = _wrap_body_html(rendered_body_html or "")
 
     signature_html = ""
     if scope == "personal":
