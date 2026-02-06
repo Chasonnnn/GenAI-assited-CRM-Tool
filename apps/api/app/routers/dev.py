@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.csrf import set_csrf_cookie
-from app.core.security import create_session_token
+from app.core.security import create_session_token, verify_secret
 from app.services import (
     dev_service,
     membership_service,
@@ -34,7 +34,7 @@ def _verify_dev_secret(x_dev_secret: str = Header(...)):
         raise HTTPException(status_code=403, detail="Dev endpoints are only available in dev/test.")
     if not settings.DEV_SECRET:
         raise HTTPException(status_code=501, detail="DEV_SECRET not configured")
-    if x_dev_secret != settings.DEV_SECRET:
+    if not verify_secret(x_dev_secret, settings.DEV_SECRET):
         raise HTTPException(status_code=403, detail="Invalid dev secret")
 
 
