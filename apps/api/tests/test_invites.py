@@ -97,6 +97,14 @@ async def test_send_invite_email_includes_inviter_name(db, test_org, test_user, 
     assert "You've been invited" in text_body
     assert test_user.display_name in text_body
     assert test_user.display_name in html_body
+    assert "Case Manager" in text_body
+    assert "Case_Manager" not in text_body
+    assert "Case Manager" in html_body
+    assert "Case_Manager" not in html_body
+    assert "as Case Manager." in text_body
+    assert "as a Case Manager." not in text_body
+    assert "as <strong>Case Manager</strong>." in html_body
+    assert "as a <strong>Case Manager</strong>." not in html_body
 
 
 @pytest.mark.asyncio

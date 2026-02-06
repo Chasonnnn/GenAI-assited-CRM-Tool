@@ -4,6 +4,7 @@ Invites are always sent via the platform/system sender (Resend).
 """
 
 import logging
+import re
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -16,8 +17,24 @@ from app.services import (
     platform_email_service,
     system_email_template_service,
 )
+from app.utils.presentation import humanize_identifier
 
 logger = logging.getLogger(__name__)
+
+
+def _strip_role_articles(html: str, *, role_title: str) -> str:
+    """Normalize invite copy to 'as <role>' (no a/an), regardless of template."""
+    role_title = (role_title or "").strip()
+    if not role_title:
+        return html
+
+    # Keep this targeted to the role phrase only to avoid mutating unrelated copy.
+    pattern = re.compile(
+        rf"(\bas)\s+(?:a|an)\s+((?:<[^>]+>\s*)*){re.escape(role_title)}",
+        flags=re.IGNORECASE,
+    )
+
+    return pattern.sub(lambda m: f"{m.group(1)} {m.group(2)}{role_title}", html)
 
 
 def _build_invite_url(invite_id: UUID, base_url: str) -> str:
@@ -33,6 +50,7 @@ def _build_invite_text(
     inviter_name: str | None,
 ) -> str:
     """Build plain text email body for invite."""
+    role_title = humanize_identifier(role)
     expiry_text = f"\nThis invitation expires {expires_at}.\n" if expires_at else ""
     inviter_line = (
         f"You've been invited by {inviter_name} to join"
@@ -44,7 +62,7 @@ def _build_invite_text(
 {org_name}
 
 {inviter_line}
-as a {role.title()}.
+as {role_title}.
 
 Accept your invitation here:
 {invite_url}
@@ -123,7 +141,7 @@ async def send_invite_email(
         "org_name": org_name,
         "org_slug": org.slug,
         "inviter_text": inviter_text,
-        "role_title": invite.role.title(),
+        "role_title": humanize_identifier(invite.role),
         "invite_url": invite_url,
         "expires_block": expires_block,
         "platform_logo_url": platform_logo_url,
@@ -146,6 +164,8 @@ async def send_invite_email(
         variables,
         safe_html_vars={"expires_block", "platform_logo_block"},
     )
+
+    html_body = _strip_role_articles(html_body, role_title=variables["role_title"])
 
     if inviter_name:
         if "You've been invited to join" in html_body:

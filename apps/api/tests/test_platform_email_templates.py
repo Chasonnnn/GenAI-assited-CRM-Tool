@@ -40,7 +40,7 @@ async def test_platform_get_system_email_template_creates_default(
     assert "background-color:#f5f5f7" in body.replace(" ", "")
     assert "{{inviter_text}}" not in body
     assert "You've been invited to join" in body
-    assert "as a <strong>{{role_title}}</strong>." in body
+    assert "as <strong>{{role_title}}</strong>." in body
     assert re.search(r"<h1[^>]*>\s*You're invited to join\s*</h1>", body)
     assert re.search(r"<div[^>]*font-size:\s*22px[^>]*>\s*{{org_name}}\s*</div>", body)
 

@@ -29,7 +29,7 @@ _LEGACY_ORG_INVITE_BODY = """
       You've been invited to join
     </p>
     <p style="font-size: 16px; color: #3f3f46; line-height: 1.6; margin: 0 0 16px 0;">
-      as a <strong>{{role_title}}</strong>.
+      as <strong>{{role_title}}</strong>.
     </p>
     <p style="font-size: 16px; color: #3f3f46; line-height: 1.6; margin: 0 0 32px 0;">
       Click the button below to accept the invitation and set up your account.
@@ -87,7 +87,7 @@ _ORG_INVITE_BODY_V1 = """
                 You've been invited to join
               </p>
               <p style="margin: 6px 0 0 0; font-size: 16px; line-height: 1.6; color: #374151;">
-                as a <strong>{{role_title}}</strong>.
+                as <strong>{{role_title}}</strong>.
               </p>
             </td>
           </tr>
@@ -181,7 +181,7 @@ _ORG_INVITE_BODY = """
                 You've been invited to join
               </p>
               <p style="margin: 6px 0 0 0; font-size: 16px; line-height: 1.6; color: #374151;">
-                as a <strong>{{role_title}}</strong>.
+                as <strong>{{role_title}}</strong>.
               </p>
             </td>
           </tr>
