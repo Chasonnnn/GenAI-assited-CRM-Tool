@@ -15,6 +15,7 @@ from app.db.models import (
     IntendedParent,
     Match,
 )
+from app.utils.presentation import humanize_identifier
 
 
 def get_request(db: Session, request_id: UUID, org_id: UUID) -> StatusChangeRequest | None:
@@ -614,4 +615,4 @@ def get_request_with_details(
 def _format_status_label(status: str | None) -> str:
     if not status:
         return "Unknown"
-    return status.replace("_", " ").title()
+    return humanize_identifier(status)

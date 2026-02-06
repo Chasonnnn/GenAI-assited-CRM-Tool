@@ -67,7 +67,7 @@ export const STAGE_DEFS: StageDef[] = [
     },
     {
         "slug": "ready_to_match",
-        "label": "Ready To Match",
+        "label": "Ready to Match",
         "color": "#0EA5E9",
         "order": 8,
         "stageType": "post_approval"

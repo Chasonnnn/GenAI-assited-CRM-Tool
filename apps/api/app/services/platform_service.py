@@ -30,6 +30,7 @@ from app.db.models import (
 from app.db.enums import Role, JobType
 from app.core.security import create_support_session_token
 from app.services import mfa_service, session_service, job_service
+from app.utils.presentation import humanize_identifier
 
 logger = logging.getLogger(__name__)
 
@@ -1396,7 +1397,7 @@ async def send_system_email_campaign(
             "first_name": first_name,
             "full_name": full_name,
             "email": user.email,
-            "role_title": membership.role.title(),
+            "role_title": humanize_identifier(membership.role),
             "inviter_text": inviter_text,
             "platform_logo_url": platform_logo_url,
             "platform_logo_block": platform_logo_block,

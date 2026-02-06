@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.utils.presentation import humanize_identifier
+
 
 # Default stage colors (matching Surrogacy Force conventions)
 DEFAULT_COLORS = {
@@ -52,6 +54,7 @@ STAGE_TYPE_MAP = {
 
 LABEL_OVERRIDES = {
     "second_hcg_confirmed": "Second hCG confirmed",
+    "ready_to_match": "Ready to Match",
     "transfer_cycle": "Transfer Cycle Initiated",
     "ob_care_established": "OB Care Established",
 }
@@ -86,7 +89,7 @@ def get_default_stage_defs() -> list[dict[str, object]]:
         stages.append(
             {
                 "slug": slug,
-                "label": LABEL_OVERRIDES.get(slug, slug.replace("_", " ").title()),
+                "label": LABEL_OVERRIDES.get(slug, humanize_identifier(slug)),
                 "color": DEFAULT_COLORS.get(slug, "#6B7280"),
                 "order": order,
                 "stage_type": STAGE_TYPE_MAP.get(slug, "intake"),

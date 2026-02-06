@@ -22,6 +22,7 @@ from app.services import email_sender, version_service
 from app.services.template_variable_catalog import VARIABLE_PATTERN as _TEMPLATE_VARIABLE_PATTERN
 from app.types import JsonObject
 from app.utils.normalization import normalize_email
+from app.utils.presentation import humanize_identifier
 
 
 # Variable pattern for template substitution: {{ variable_name }} (whitespace allowed)
@@ -803,7 +804,7 @@ def build_intended_parent_template_variables(db: Session, intended_parent) -> di
         "email": email,
         "phone": intended_parent.phone or "",
         "intended_parent_number": intended_parent.intended_parent_number or "",
-        "status_label": intended_parent.status or "",
+        "status_label": humanize_identifier(intended_parent.status),
         "state": intended_parent.state or "",
         "owner_name": owner_name,
         "org_name": org.name if org else "",

@@ -14,6 +14,7 @@ from urllib.parse import quote
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.stage_definitions import LABEL_OVERRIDES
 from app.core.security import create_export_token
 from app.db.models import Attachment, SurrogateInterview, FormSubmission
 from app.services import (
@@ -23,6 +24,7 @@ from app.services import (
     profile_service,
     tiptap_service,
 )
+from app.utils.presentation import humanize_identifier
 
 
 # Chart colors matching frontend design system
@@ -36,6 +38,12 @@ CHART_COLORS = [
     "#ec4899",  # Pink
     "#8b5cf6",  # Violet
 ]
+
+
+def _format_stage_label(value: str | None) -> str:
+    if not value:
+        return "Unknown"
+    return LABEL_OVERRIDES.get(value, humanize_identifier(value))
 
 
 async def _render_html_to_pdf(html_content: str) -> bytes:
@@ -1192,7 +1200,7 @@ def _compute_insights(trend_data: list, surrogates_by_status: list) -> dict:
         if total > 0:
             top = max(surrogates_by_status, key=lambda x: x.get("count", 0))
             top_pct = round((top.get("count", 0) / total) * 100)
-            status_name = top.get("status", "Unknown").replace("_", " ").title()
+            status_name = _format_stage_label(top.get("status"))
             insights["bottleneck"] = (
                 f"Bottleneck: {status_name} holds {top_pct}% of active surrogates."
             )
@@ -1476,7 +1484,7 @@ def _generate_analytics_html(
         # Format status labels like frontend does
         formatted_status = [
             {
-                "status": item.get("status", "Unknown").replace("_", " ").title(),
+                "status": _format_stage_label(item.get("status")),
                 "count": item.get("count", 0),
             }
             for item in surrogates_by_status

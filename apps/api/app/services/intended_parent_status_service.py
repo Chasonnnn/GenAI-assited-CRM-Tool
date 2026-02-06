@@ -17,6 +17,7 @@ from app.db.models import (
     StatusChangeRequest,
     User,
 )
+from app.utils.presentation import humanize_identifier
 
 
 class StatusChangeResult(TypedDict):
@@ -50,7 +51,7 @@ def _get_org_user(db: Session, org_id: UUID, user_id: UUID | None) -> User | Non
 def _format_status_label(status: str | None) -> str:
     if not status:
         return "Unknown"
-    return status.replace("_", " ").title()
+    return humanize_identifier(status)
 
 
 def _status_order(status: str) -> int:

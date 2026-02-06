@@ -23,6 +23,7 @@ from app.core.permissions import (
 from app.db.enums import Role
 from app.schemas.auth import UserSession
 from app.services import permission_service
+from app.utils.presentation import humanize_identifier
 
 
 router = APIRouter(prefix="/settings/permissions", tags=["Permissions"])
@@ -492,7 +493,7 @@ def list_roles(
     return [
         RoleSummary(
             role=role,
-            label=ROLE_LABELS.get(role, role.title()),
+            label=ROLE_LABELS.get(role, humanize_identifier(role)),
             permission_count=len(perms),
             is_developer=role == "developer",
         )
@@ -546,7 +547,7 @@ def get_role_detail(
 
     return RoleDetail(
         role=role,
-        label=ROLE_LABELS.get(role, role.title()),
+        label=ROLE_LABELS.get(role, humanize_identifier(role)),
         permissions_by_category=perms_by_cat,
     )
 

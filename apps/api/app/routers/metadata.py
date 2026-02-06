@@ -7,6 +7,7 @@ from app.core.deps import get_current_session, get_db
 from app.db.enums import SurrogateSource, TaskType, IntendedParentStatus, Role
 from app.services import pipeline_service
 from app.schemas.auth import UserSession
+from app.utils.presentation import humanize_identifier
 
 router = APIRouter()
 
@@ -101,7 +102,7 @@ def list_intended_parent_statuses(
         statuses.append(
             {
                 "value": status.value,
-                "label": status.value.replace("_", " ").title(),
+                "label": humanize_identifier(status.value),
             }
         )
 

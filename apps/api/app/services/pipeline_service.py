@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.stage_definitions import get_default_stage_defs
 from app.db.models import Pipeline, PipelineStage, Surrogate
 from app.services import version_service
+from app.utils.presentation import humanize_identifier
 
 ENTITY_TYPE = "pipeline"
 
@@ -397,7 +398,7 @@ def rollback_pipeline(
             stage = PipelineStage(
                 pipeline_id=pipeline.id,
                 slug=slug,
-                label=stage_data.get("label", slug.replace("_", " ").title()),
+                label=stage_data.get("label", humanize_identifier(slug)),
                 color=stage_data.get("color", "#6B7280"),
                 order=stage_data.get("order", len(existing) + 1),
                 stage_type=stage_data.get("stage_type", "intake"),

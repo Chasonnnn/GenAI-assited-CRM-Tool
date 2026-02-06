@@ -8,9 +8,11 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.stage_definitions import LABEL_OVERRIDES
 from app.db.enums import JobType, SurrogateSource
 from app.db.models import MetaLead, Surrogate
 from app.services import job_service, meta_capi, zapier_settings_service
+from app.utils.presentation import humanize_identifier
 
 logger = logging.getLogger(__name__)
 
@@ -198,7 +200,7 @@ def enqueue_test_event(
         event_name=event_name,
         event_time=event_time,
         stage_slug=stage_slug,
-        stage_label=stage_slug.replace("_", " ").title(),
+        stage_label=LABEL_OVERRIDES.get(stage_slug, humanize_identifier(stage_slug)),
         surrogate_id=None,
         include_hashed_pii=include_hashed_pii,
         email="zapier-test@example.com" if include_hashed_pii else None,
