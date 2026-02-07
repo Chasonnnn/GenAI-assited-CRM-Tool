@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.74.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.74.0...surrogacy-crm-platform-v0.74.1) (2026-02-07)
+
+
+### Bug Fixes
+
+* **ci:** use longer JWT_SECRET to suppress PyJWT warning ([ea461fc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ea461fcc8c22f6241f5aab1663acdbb214398378))
+* **forms:** add form deletion with confirmation dialog ([ae19781](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ae197815a3477ccb92e67bae17679288a4dcf6c2))
+* **release:** use always-bump-minor versioning strategy ([8d767b2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8d767b2c115b996d4e5bd2d106e5f2d9edb8487b))
+* **ui:** temporarily hide Unassigned Queue from sidebar ([aa48ef6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/aa48ef6caa2d3103f7b4d4e0b521441d705a5330))
+* **workflows:** add retry button for failed workflow executions ([9e08ed0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9e08ed0727ac6438606196310c20aef3466251dc))
+* **workflows:** extract get_execution helper to workflow_service ([affaf11](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/affaf11fda6351093605b7473b1fab7528f1524b))
+
 ## [0.74.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.73.0...surrogacy-crm-platform-v0.74.0) (2026-02-07)
 
 
