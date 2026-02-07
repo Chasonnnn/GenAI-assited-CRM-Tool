@@ -381,15 +381,17 @@ Format: **MAJOR.MINOR.PATCH** (SemVer)
 
 | Part | Meaning |
 |------|---------|
-| MAJOR | Breaking changes |
-| MINOR | New features |
-| PATCH | Fixes and maintenance |
+| MAJOR | Breaking changes (post-1.0) |
+| MINOR | All non-breaking changes (`feat`/`fix`/`chore`) |
+| PATCH | Reserved (not used by auto-release) |
 
 Pre-1.0 policy: stay in `0.x` even for breaking changes (Release Please uses `bump-minor-pre-major`).
+Auto-release policy: `feat`/`fix`/`chore` always bump **MINOR** (Release Please uses `versioning-strategy: always-bump-minor`).
 
 Examples:
-- `0.16.0` → Pre-release, feature update
-- `1.2.5` → Stable release with patch fixes
+- `0.16.0` → Pre-release, non-breaking release (feat/fix/chore)
+- `1.2.0` → Stable, non-breaking release (feat/fix/chore)
+- `2.0.0` → Stable, breaking release
 
 Current: See `apps/api/app/core/config.py` → `Settings.VERSION`
 
