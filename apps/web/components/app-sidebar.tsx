@@ -20,7 +20,6 @@ import { Button } from "@/components/ui/button"
 import {
     Home,
     FolderOpen,
-    Inbox,
     Users,
     CheckSquare,
     BarChart3,
@@ -122,20 +121,9 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const isMobile = useIsMobile()
 
     const navigationItems = React.useMemo(() => {
-        const canViewUnassignedQueue =
-            user?.role === "intake_specialist" || user?.role === "developer"
-        if (!canViewUnassignedQueue) return navigation
-
-        return [
-            ...navigation.slice(0, 2),
-            {
-                title: "Unassigned Queue",
-                url: "/surrogates/unassigned",
-                icon: Inbox,
-            },
-            ...navigation.slice(2),
-        ]
-    }, [user?.role])
+        // Temporarily hide Unassigned Queue from the sidebar.
+        return navigation
+    }, [])
 
     const activeNavUrl = React.useMemo(() => {
         if (!pathname) return null
