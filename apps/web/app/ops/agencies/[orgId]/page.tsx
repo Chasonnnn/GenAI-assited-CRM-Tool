@@ -40,6 +40,7 @@ import { AgencyInvitesTab } from '@/components/ops/agencies/AgencyInvitesTab';
 import { AgencySubscriptionTab } from '@/components/ops/agencies/AgencySubscriptionTab';
 import { AgencyAlertsTab } from '@/components/ops/agencies/AgencyAlertsTab';
 import { AgencyAuditTab } from '@/components/ops/agencies/AgencyAuditTab';
+import { SupportSessionDialog } from '@/components/ops/agencies/SupportSessionDialog';
 import {
     INVITE_ROLE_OPTIONS,
     PLAN_BADGE_VARIANTS,
@@ -457,9 +458,19 @@ export default function AgencyDetailPage() {
                                 )}
                             </div>
                         </div>
-                        <Badge variant="outline" className={PLAN_BADGE_VARIANTS[org.subscription_plan]}>
-                            {org.subscription_plan} plan
-                        </Badge>
+                        <div className="flex flex-col items-end gap-2">
+                            <Badge
+                                variant="outline"
+                                className={PLAN_BADGE_VARIANTS[org.subscription_plan]}
+                            >
+                                {org.subscription_plan} plan
+                            </Badge>
+                            <SupportSessionDialog
+                                orgId={org.id}
+                                orgName={org.name}
+                                portalBaseUrl={org.portal_base_url}
+                            />
+                        </div>
                     </div>
                 </div>
 

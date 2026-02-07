@@ -110,6 +110,39 @@ export interface PlatformStats {
     open_alerts: number;
 }
 
+// =============================================================================
+// Support Sessions (Role Override)
+// =============================================================================
+
+export type SupportSessionRole = 'intake_specialist' | 'case_manager' | 'admin' | 'developer';
+export type SupportSessionMode = 'write' | 'read_only';
+export type SupportSessionReasonCode =
+    | 'onboarding_setup'
+    | 'billing_help'
+    | 'data_fix'
+    | 'bug_repro'
+    | 'incident_response'
+    | 'other';
+
+export interface SupportSession {
+    id: string;
+    org_id: string;
+    role: SupportSessionRole;
+    mode: SupportSessionMode;
+    reason_code: SupportSessionReasonCode;
+    reason_text: string | null;
+    expires_at: string;
+    created_at: string;
+}
+
+export interface CreateSupportSessionRequest {
+    org_id: string;
+    role: SupportSessionRole;
+    reason_code: SupportSessionReasonCode;
+    reason_text?: string | null;
+    mode?: SupportSessionMode;
+}
+
 // Platform email sender status
 export interface PlatformEmailStatus {
     configured: boolean;
@@ -198,6 +231,21 @@ export function getPlatformMe(): Promise<PlatformUser> {
  */
 export function getPlatformStats(): Promise<PlatformStats> {
     return api.get<PlatformStats>('/platform/stats');
+}
+
+/**
+ * Create a support session (role override) for a target organization.
+ * Sets the session cookie for subsequent portal navigation.
+ */
+export function createSupportSession(data: CreateSupportSessionRequest): Promise<SupportSession> {
+    return api.post<SupportSession>('/platform/support-sessions', data);
+}
+
+/**
+ * Revoke a support session.
+ */
+export function revokeSupportSession(sessionId: string): Promise<{ status: 'revoked' }> {
+    return api.post(`/platform/support-sessions/${sessionId}/revoke`);
 }
 
 /**
