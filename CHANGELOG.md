@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.74.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.73.0...surrogacy-crm-platform-v0.74.0) (2026-02-07)
+
+
+### Features
+
+* add server-side form draft autosave ([55bfe8b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/55bfe8b23af9997658e72011e3a2ffde3c7b61d5))
+* **ops:** add Support Session dialog for role impersonation ([e9ab727](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e9ab7271cf1ab0b80295c2943092aa154009d36d))
+* **workflows:** add form_started trigger and email recipient options ([dc0c562](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dc0c562ed8de11aedcb4480b84f09da98f741236))
+* **workflows:** implement email recipient resolution in action execution ([19d7511](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/19d7511f5c12f9fcdb629dfbf35d28a92003d9a5))
+
+
+### Bug Fixes
+
+* improve notification delivery and unassigned queue access ([f7eac14](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f7eac14d56aefe2fdcda6d176ebab31afebb31bf))
+
 ## [0.73.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.72.0...surrogacy-crm-platform-v0.73.0) (2026-02-06)
 
 
