@@ -274,20 +274,21 @@ export function SurrogateTasksCalendar({
                                                     className="mt-0.5"
                                                     checked={task.is_completed}
                                                     onCheckedChange={() => onTaskToggle(task.id, task.is_completed)}
+                                                aria-label={`Mark ${task.title} as complete`}
                                                 />
-                                                <div
-                                                    className="flex-1 min-w-0 cursor-pointer"
+                                            <button
+                                                type="button"
+                                                className="flex-1 min-w-0 text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
                                                     onClick={() => onTaskClick?.(task)}
                                                 >
-                                                    <label
-                                                        htmlFor={`task-${task.id}`}
+                                                <span
                                                         className={cn(
-                                                            "text-sm font-medium leading-tight cursor-pointer block",
+                                                        "text-sm font-medium leading-tight block",
                                                             task.is_completed && "line-through text-muted-foreground"
                                                         )}
                                                     >
                                                         {task.title}
-                                                    </label>
+                                                </span>
                                                     <div className="flex items-center gap-2 mt-1">
                                                         <Badge
                                                             variant="outline"
@@ -304,7 +305,7 @@ export function SurrogateTasksCalendar({
                                                             </Badge>
                                                         )}
                                                     </div>
-                                                </div>
+                                            </button>
                                             </div>
                                         ))}
                                     </div>
@@ -331,13 +332,17 @@ export function SurrogateTasksCalendar({
                                                     className="mt-0.5"
                                                     checked={true}
                                                     onCheckedChange={() => onTaskToggle(task.id, true)}
+                                                    aria-label={`Mark ${task.title} as incomplete`}
                                                 />
-                                                <label
-                                                    htmlFor={`task-completed-${task.id}`}
-                                                    className="text-sm line-through text-muted-foreground cursor-pointer"
+                                                <button
+                                                    type="button"
+                                                    className="flex-1 min-w-0 text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                                                    onClick={() => onTaskClick?.(task)}
                                                 >
-                                                    {task.title}
-                                                </label>
+                                                    <span className="text-sm line-through text-muted-foreground block">
+                                                        {task.title}
+                                                    </span>
+                                                </button>
                                             </div>
                                         ))}
                                     </div>
