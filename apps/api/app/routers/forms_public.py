@@ -5,15 +5,28 @@ import os
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import get_db
 from app.core.rate_limit import limiter
 from app.db.enums import FormStatus
-from app.schemas.forms import FormPublicRead, FormSubmissionPublicResponse, FormSchema
-from app.services import form_service, form_submission_service, media_service, org_service
+from app.schemas.forms import (
+    FormDraftPublicRead,
+    FormDraftUpsertRequest,
+    FormDraftWriteResponse,
+    FormPublicRead,
+    FormSchema,
+    FormSubmissionPublicResponse,
+)
+from app.services import (
+    form_draft_service,
+    form_service,
+    form_submission_service,
+    media_service,
+    org_service,
+)
 
 router = APIRouter(prefix="/forms/public", tags=["forms-public"])
 
@@ -90,6 +103,114 @@ def get_public_form(request: Request, token: str, db: Session = Depends(get_db))
         allowed_mime_types=form.allowed_mime_types
         or form_submission_service.DEFAULT_ALLOWED_FORM_UPLOAD_MIME_TYPES,
     )
+
+
+def _has_submission(db: Session, token_row) -> bool:
+    return (
+        form_submission_service.get_submission_by_surrogate(
+            db,
+            token_row.organization_id,
+            token_row.form_id,
+            token_row.surrogate_id,
+        )
+        is not None
+    )
+
+
+@router.get("/{token}/draft", response_model=FormDraftPublicRead)
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_DRAFTS}/minute")
+def get_public_form_draft(request: Request, token: str, db: Session = Depends(get_db)):
+    token_row = form_submission_service.get_token_row(db, token)
+    if not token_row:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    # If already submitted, hide drafts (treat as not found).
+    if _has_submission(db, token_row):
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    token_record = form_submission_service.get_valid_token(db, token)
+    if not token_record:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    form = form_service.get_form(db, token_record.organization_id, token_record.form_id)
+    if not form or form.status != FormStatus.PUBLISHED.value:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    draft = form_draft_service.get_draft_by_surrogate_form(
+        db=db,
+        org_id=token_record.organization_id,
+        form_id=token_record.form_id,
+        surrogate_id=token_record.surrogate_id,
+    )
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    return FormDraftPublicRead(
+        answers=draft.answers_json or {},
+        started_at=draft.started_at,
+        updated_at=draft.updated_at,
+    )
+
+
+@router.put("/{token}/draft", response_model=FormDraftWriteResponse)
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_DRAFTS}/minute")
+def upsert_public_form_draft(
+    token: str,
+    body: FormDraftUpsertRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    token_row = form_submission_service.get_token_row(db, token)
+    if not token_row:
+        raise HTTPException(status_code=404, detail="Form not found")
+    if _has_submission(db, token_row):
+        raise HTTPException(status_code=409, detail="Submission already exists for this surrogate")
+
+    token_record = form_submission_service.get_valid_token(db, token)
+    if not token_record:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    form = form_service.get_form(db, token_record.organization_id, token_record.form_id)
+    if not form or form.status != FormStatus.PUBLISHED.value:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    try:
+        draft = form_draft_service.upsert_public_draft(
+            db=db,
+            token_record=token_record,
+            form=form,
+            answers=body.answers,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return FormDraftWriteResponse(started_at=draft.started_at, updated_at=draft.updated_at)
+
+
+@router.delete("/{token}/draft")
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_DRAFTS}/minute")
+def delete_public_form_draft(
+    token: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    token_row = form_submission_service.get_token_row(db, token)
+    if not token_row:
+        raise HTTPException(status_code=404, detail="Form not found")
+    if _has_submission(db, token_row):
+        raise HTTPException(status_code=409, detail="Submission already exists for this surrogate")
+
+    token_record = form_submission_service.get_valid_token(db, token)
+    if not token_record:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    form_draft_service.delete_draft(
+        db=db,
+        org_id=token_record.organization_id,
+        form_id=token_record.form_id,
+        surrogate_id=token_record.surrogate_id,
+    )
+    return Response(status_code=204)
 
 
 @router.post("/{token}/submit", response_model=FormSubmissionPublicResponse)

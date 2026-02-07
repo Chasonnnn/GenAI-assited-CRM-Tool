@@ -19,6 +19,7 @@ from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.schemas.forms import (
     FormCreate,
+    FormDraftStatusRead,
     FormFieldMappingsUpdate,
     FormPublishResponse,
     FormRead,
@@ -42,6 +43,7 @@ from app.schemas.platform_templates import (
 )
 from app.services import (
     audit_service,
+    form_draft_service,
     form_service,
     form_submission_service,
     org_service,
@@ -521,6 +523,37 @@ def get_surrogate_submission(
     )
     db.commit()
     return _submission_read(submission, files)
+
+
+@router.get(
+    "/{form_id}/surrogates/{surrogate_id}/draft",
+    response_model=FormDraftStatusRead,
+    dependencies=[Depends(require_permission(POLICIES["surrogates"].default))],
+)
+def get_surrogate_draft_status(
+    form_id: UUID,
+    surrogate_id: UUID,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    form = form_service.get_form(db, session.org_id, form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    draft = form_draft_service.get_draft_by_surrogate_form(
+        db=db,
+        org_id=session.org_id,
+        form_id=form.id,
+        surrogate_id=surrogate.id,
+    )
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    return FormDraftStatusRead(started_at=draft.started_at, updated_at=draft.updated_at)
 
 
 @router.get(

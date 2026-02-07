@@ -42,6 +42,7 @@ import { useAuth } from "@/lib/auth-context"
 import {
     useApproveFormSubmission,
     useSurrogateFormSubmission,
+    useSurrogateFormDraftStatus,
     useCreateFormToken,
     useRejectFormSubmission,
     useUpdateSubmissionAnswers,
@@ -144,6 +145,7 @@ export function SurrogateApplicationTab({
         isLoading,
         error: submissionError,
     } = useSurrogateFormSubmission(effectiveFormId || null, surrogateId)
+    const { data: draftStatus } = useSurrogateFormDraftStatus(effectiveFormId || null, surrogateId)
     const createTokenMutation = useCreateFormToken()
     const approveMutation = useApproveFormSubmission()
     const rejectMutation = useRejectFormSubmission()
@@ -648,6 +650,20 @@ export function SurrogateApplicationTab({
                     <p className="text-sm text-muted-foreground mb-6 max-w-md">
                         This candidate has not yet submitted their application form. Send them a secure form link to get started.
                     </p>
+                    {draftStatus?.started_at && draftStatus.updated_at && (
+                        <div className="mb-6 w-full max-w-md rounded-xl border border-amber-200/70 bg-amber-50 px-4 py-3 text-left">
+                            <div className="flex items-start gap-3">
+                                <ClipboardCheckIcon className="mt-0.5 size-5 text-amber-700" />
+                                <div className="space-y-1">
+                                    <div className="text-sm font-medium text-amber-900">Form started</div>
+                                    <div className="text-xs text-amber-900/70">
+                                        Started {formatDateTime(draftStatus.started_at)}. Last saved{" "}
+                                        {formatDateTime(draftStatus.updated_at)}.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     {hasMultipleForms && (
                         <div className="mb-4 w-full max-w-xs">
                             <Label className="mb-2 block text-xs font-medium text-muted-foreground">

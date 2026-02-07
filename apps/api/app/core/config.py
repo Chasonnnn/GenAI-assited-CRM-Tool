@@ -210,6 +210,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_SEARCH: int = 30  # Global search
     RATE_LIMIT_PUBLIC_READ: int = 60  # Public GET endpoints
     RATE_LIMIT_PUBLIC_FORMS: int = 10  # Public form submissions
+    RATE_LIMIT_PUBLIC_DRAFTS: int = 60  # Public form draft autosave
     RATE_LIMIT_FAIL_OPEN: bool = True
     REDIS_REQUIRED: bool = False
 

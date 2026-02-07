@@ -252,6 +252,53 @@ class FormSubmission(Base):
     surrogate: Mapped["Surrogate"] = relationship()
 
 
+class FormSubmissionDraft(Base):
+    """Server-side draft responses for public form autosave."""
+
+    __tablename__ = "form_submission_drafts"
+    __table_args__ = (
+        UniqueConstraint("form_id", "surrogate_id", name="uq_form_draft_surrogate"),
+        Index("idx_form_drafts_org", "organization_id"),
+        Index("idx_form_drafts_form", "form_id"),
+        Index("idx_form_drafts_surrogate", "surrogate_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    form_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("forms.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    surrogate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="CASCADE"), nullable=False
+    )
+
+    answers_json: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(), server_default=text("now()"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(),
+        server_default=text("now()"),
+        onupdate=text("now()"),
+        nullable=False,
+    )
+
+    form: Mapped["Form"] = relationship()
+    surrogate: Mapped["Surrogate"] = relationship()
+
+
 class FormSubmissionFile(Base):
     """File uploaded as part of a form submission."""
 

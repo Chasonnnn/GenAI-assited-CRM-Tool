@@ -178,6 +178,22 @@ export interface FormPublicRead {
     allowed_mime_types?: string[] | null
 }
 
+export interface FormDraftPublicRead {
+    answers: JsonObject
+    started_at: string | null
+    updated_at: string
+}
+
+export interface FormDraftWriteResponse {
+    started_at: string | null
+    updated_at: string
+}
+
+export interface FormDraftStatusRead {
+    started_at: string | null
+    updated_at: string
+}
+
 export interface FormLogoRead {
     id: string
     logo_url: string
@@ -282,6 +298,28 @@ export function rejectSubmission(submissionId: string, reviewNotes?: string | nu
 
 export function getPublicForm(token: string): Promise<FormPublicRead> {
     return api.get<FormPublicRead>(`/forms/public/${token}`)
+}
+
+export function getPublicFormDraft(token: string): Promise<FormDraftPublicRead> {
+    return api.get<FormDraftPublicRead>(`/forms/public/${token}/draft`)
+}
+
+export function savePublicFormDraft(
+    token: string,
+    answers: JsonObject,
+): Promise<FormDraftWriteResponse> {
+    return api.put<FormDraftWriteResponse>(`/forms/public/${token}/draft`, { answers })
+}
+
+export function deletePublicFormDraft(token: string): Promise<void> {
+    return api.delete<void>(`/forms/public/${token}/draft`)
+}
+
+export function getSurrogateDraftStatus(
+    formId: string,
+    surrogateId: string,
+): Promise<FormDraftStatusRead> {
+    return api.get<FormDraftStatusRead>(`/forms/${formId}/surrogates/${surrogateId}/draft`)
 }
 
 export function submitPublicForm(

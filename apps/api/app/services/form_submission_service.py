@@ -1,5 +1,6 @@
 """Form submission service for tokens, submissions, and review flows."""
 
+import logging
 import re
 import secrets
 import uuid
@@ -119,6 +120,8 @@ SURROGATE_FIELD_TYPES: dict[str, str] = {
     "is_priority": "bool",
 }
 
+logger = logging.getLogger(__name__)
+
 
 def parse_schema(schema_json: dict[str, Any]) -> FormSchema:
     return FormSchema.model_validate(schema_json)
@@ -195,6 +198,11 @@ def get_valid_token(db: Session, token: str) -> FormSubmissionToken | None:
     if expires_at < datetime.now(timezone.utc):
         return None
     return record
+
+
+def get_token_row(db: Session, token: str) -> FormSubmissionToken | None:
+    """Fetch a token row without applying validity rules (revoked/expired/used)."""
+    return db.query(FormSubmissionToken).filter(FormSubmissionToken.token == token).first()
 
 
 def create_submission(
@@ -281,18 +289,96 @@ def create_submission(
         },
     )
 
-    surrogate = db.query(Surrogate).filter(Surrogate.id == token.surrogate_id).first()
-    if surrogate:
-        from app.services import notification_facade
-
-        notification_facade.notify_form_submission_received(
-            db=db,
-            surrogate=surrogate,
-            submission_id=submission.id,
-        )
-
     db.commit()
     db.refresh(submission)
+
+    surrogate = db.query(Surrogate).filter(Surrogate.id == token.surrogate_id).first()
+    if surrogate:
+        # Notify assignee + admins (in-app)
+        try:
+            from app.services import notification_facade
+
+            notification_facade.notify_form_submission_received(
+                db=db,
+                surrogate=surrogate,
+                submission_id=submission.id,
+            )
+        except Exception:
+            logger.debug(
+                "notify_form_submission_received_failed",
+                exc_info=True,
+            )
+
+        # Best-effort: advance stage to application_submitted (never regress)
+        try:
+            from app.db.models import Pipeline
+            from app.services import pipeline_service, surrogate_status_service
+
+            current_stage = (
+                pipeline_service.get_stage_by_id(db, surrogate.stage_id)
+                if surrogate.stage_id
+                else None
+            )
+            pipeline_id = (
+                current_stage.pipeline_id
+                if current_stage
+                else pipeline_service.get_or_create_default_pipeline(
+                    db, surrogate.organization_id
+                ).id
+            )
+
+            target_stage = pipeline_service.get_stage_by_slug(
+                db=db, pipeline_id=pipeline_id, slug="application_submitted"
+            )
+            if not target_stage:
+                pipeline = db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
+                if pipeline:
+                    pipeline_service.sync_missing_stages(db, pipeline, user_id=None)
+                target_stage = pipeline_service.get_stage_by_slug(
+                    db=db, pipeline_id=pipeline_id, slug="application_submitted"
+                )
+
+            if target_stage and surrogate.stage_id != target_stage.id:
+                current_order = current_stage.order if current_stage else 0
+                if current_order < target_stage.order:
+                    old_stage_id = surrogate.stage_id
+                    old_label = surrogate.status_label
+                    old_slug = current_stage.slug if current_stage else None
+                    now = datetime.now(timezone.utc)
+                    surrogate_status_service.apply_status_change(
+                        db=db,
+                        surrogate=surrogate,
+                        new_stage=target_stage,
+                        old_stage_id=old_stage_id,
+                        old_label=old_label,
+                        old_slug=old_slug,
+                        user_id=None,
+                        reason="application_submitted via public form",
+                        effective_at=now,
+                        recorded_at=now,
+                    )
+        except Exception:
+            logger.debug(
+                "advance_stage_application_submitted_failed",
+                exc_info=True,
+            )
+
+        # Best-effort: clear server-side draft (if any)
+        try:
+            from app.services import form_draft_service
+
+            form_draft_service.delete_draft(
+                db=db,
+                org_id=form.organization_id,
+                form_id=form.id,
+                surrogate_id=token.surrogate_id,
+            )
+        except Exception:
+            logger.debug(
+                "delete_form_draft_failed",
+                exc_info=True,
+            )
+
     return submission
 
 
@@ -836,7 +922,7 @@ def _validate_field_value(field: FormField, value: Any) -> None:
                 raise ValueError(f"Invalid option for '{field.label}'")
         return
 
-    if field_type in {"multiselect", "checkbox"}:
+    if field_type == "multiselect":
         if not isinstance(value, list):
             raise ValueError(f"Field '{field.label}' must be a list")
         for item in value:
@@ -847,6 +933,24 @@ def _validate_field_value(field: FormField, value: Any) -> None:
             for item in value:
                 if item not in allowed:
                     raise ValueError(f"Invalid option for '{field.label}'")
+        return
+
+    if field_type == "checkbox":
+        # Checkbox fields with options behave like a multiselect. Without options, treat as a boolean.
+        if field.options:
+            if not isinstance(value, list):
+                raise ValueError(f"Field '{field.label}' must be a list")
+            for item in value:
+                if not isinstance(item, str):
+                    raise ValueError(f"Field '{field.label}' must be a list of strings")
+            allowed = {o.value for o in field.options}
+            for item in value:
+                if item not in allowed:
+                    raise ValueError(f"Invalid option for '{field.label}'")
+            return
+
+        if not isinstance(value, bool):
+            raise ValueError(f"Field '{field.label}' must be a boolean")
         return
 
     if field_type == "file":

@@ -27,7 +27,16 @@ import {
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
-import { getPublicForm, submitPublicForm, type FormPublicRead, type FormSchema } from "@/lib/api/forms"
+import { ApiError } from "@/lib/api"
+import {
+    deletePublicFormDraft,
+    getPublicForm,
+    getPublicFormDraft,
+    savePublicFormDraft,
+    submitPublicForm,
+    type FormPublicRead,
+    type FormSchema,
+} from "@/lib/api/forms"
 
 type Step = {
     id: number
@@ -59,6 +68,13 @@ const isFormPublicRead = (value: unknown): value is FormPublicRead => {
 function formatDate(value: string | null): string {
     if (!value) return ""
     return formatLocalDate(parseDateInput(value))
+}
+
+function formatSavedTime(value: string | null): string {
+    if (!value) return ""
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return ""
+    return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
 }
 
 function shortenStepLabel(label: string): string {
@@ -383,6 +399,11 @@ export default function PublicApplicationForm() {
     const [datePickerOpen, setDatePickerOpen] = React.useState<Record<string, boolean>>({})
     const [agreed, setAgreed] = React.useState(false)
     const [logoError, setLogoError] = React.useState(false)
+    const [draftRestored, setDraftRestored] = React.useState(false)
+    const [draftSaveState, setDraftSaveState] = React.useState<"idle" | "saving" | "saved" | "error">("idle")
+    const [draftUpdatedAt, setDraftUpdatedAt] = React.useState<string | null>(null)
+    const autosaveTimerRef = React.useRef<number | null>(null)
+    const skipNextAutosaveRef = React.useRef(true)
 
     // Validate token on mount
     React.useEffect(() => {
@@ -417,7 +438,38 @@ export default function PublicApplicationForm() {
                 const form = await getPublicForm(token)
                 setFormConfig(form)
                 setLogoError(false)
-                setIsLoading(false)
+                try {
+                    const draft = await getPublicFormDraft(token)
+                    const draftAnswers =
+                        draft && typeof draft.answers === "object" && draft.answers && !Array.isArray(draft.answers)
+                            ? (draft.answers as Record<string, unknown>)
+                            : {}
+                    const allowedKeys = new Set(
+                        form.form_schema.pages.flatMap((page) =>
+                            page.fields.filter((field) => field.type !== "file").map((field) => field.key),
+                        ),
+                    )
+                    const restored: Answers = {}
+                    for (const [key, value] of Object.entries(draftAnswers)) {
+                        if (!allowedKeys.has(key)) continue
+                        restored[key] = value as AnswerValue
+                    }
+                    if (Object.keys(restored).length > 0) {
+                        skipNextAutosaveRef.current = true
+                        setAnswers(restored)
+                        setDraftRestored(true)
+                    }
+                    if (draft?.updated_at) {
+                        setDraftUpdatedAt(draft.updated_at)
+                        setDraftSaveState("saved")
+                    }
+                } catch (error) {
+                    if (!(error instanceof ApiError && error.status === 404)) {
+                        setDraftSaveState("error")
+                    }
+                } finally {
+                    setIsLoading(false)
+                }
             } catch {
                 setFormError("This form link is invalid or has expired.")
                 setIsLoading(false)
@@ -426,7 +478,68 @@ export default function PublicApplicationForm() {
         loadForm()
     }, [token, isPreview, previewKey])
 
+    const isDraftValueEmpty = (value: AnswerValue): boolean => {
+        if (value === null || value === undefined) return true
+        if (typeof value === "string") return value.trim() === ""
+        if (typeof value === "number" || typeof value === "boolean") return false
+        if (Array.isArray(value)) return value.length === 0
+        if (typeof value === "object") return Object.keys(value as Record<string, unknown>).length === 0
+        return false
+    }
+
+    const hasAnyDraftAnswer = React.useCallback(
+        (data: Answers) => Object.values(data).some((value) => !isDraftValueEmpty(value)),
+        [],
+    )
+
+    const saveDraftNow = React.useCallback(async () => {
+        if (isPreview) return
+        if (!token || !formConfig) return
+        if (!hasAnyDraftAnswer(answers)) return
+
+        setDraftSaveState("saving")
+        try {
+            const res = await savePublicFormDraft(token, answers)
+            setDraftUpdatedAt(res.updated_at)
+            setDraftSaveState("saved")
+        } catch (error) {
+            if (error instanceof ApiError && (error.status === 404 || error.status === 409)) {
+                setDraftSaveState("idle")
+                return
+            }
+            setDraftSaveState("error")
+        }
+    }, [answers, formConfig, hasAnyDraftAnswer, isPreview, token])
+
+    // Autosave drafts (answers only, not file uploads)
+    React.useEffect(() => {
+        if (isPreview) return
+        if (!token || !formConfig) return
+        if (isSubmitted) return
+        if (!hasAnyDraftAnswer(answers)) return
+
+        if (skipNextAutosaveRef.current) {
+            skipNextAutosaveRef.current = false
+            return
+        }
+
+        if (autosaveTimerRef.current) {
+            window.clearTimeout(autosaveTimerRef.current)
+        }
+        autosaveTimerRef.current = window.setTimeout(() => {
+            void saveDraftNow()
+        }, 1500)
+
+        return () => {
+            if (autosaveTimerRef.current) {
+                window.clearTimeout(autosaveTimerRef.current)
+                autosaveTimerRef.current = null
+            }
+        }
+    }, [answers, formConfig, hasAnyDraftAnswer, isPreview, isSubmitted, saveDraftNow, token])
+
     const pages = formConfig?.form_schema.pages || []
+    const hasAnyFileFields = pages.some((page) => page.fields.some((field) => field.type === "file"))
     const publicTitle =
         formConfig?.form_schema.public_title?.trim() ||
         formConfig?.name ||
@@ -676,6 +789,7 @@ export default function PublicApplicationForm() {
 
     const handleNext = () => {
         if (!validateStep(currentStep)) return
+        if (!isPreview) void saveDraftNow()
         if (currentStep < steps.length) {
             setCurrentStep(currentStep + 1)
             window.scrollTo({ top: 0, behavior: "smooth" })
@@ -684,6 +798,7 @@ export default function PublicApplicationForm() {
 
     const handleBack = () => {
         if (currentStep > 1) {
+            if (!isPreview) void saveDraftNow()
             setCurrentStep(currentStep - 1)
             window.scrollTo({ top: 0, behavior: "smooth" })
         }
@@ -732,6 +847,11 @@ export default function PublicApplicationForm() {
                 ? fileEntries.map((entry) => entry.fieldKey)
                 : undefined
             await submitPublicForm(token, answers, files, fileFieldKeys)
+            try {
+                await deletePublicFormDraft(token)
+            } catch {
+                // Ignore: backend blocks draft ops once a submission exists.
+            }
             setIsSubmitted(true)
         } catch {
             toast.error("Failed to submit application. Please try again.")
@@ -875,7 +995,7 @@ export default function PublicApplicationForm() {
             )
         }
 
-        if (field.type === "multiselect" || field.type === "checkbox") {
+        if (field.type === "multiselect") {
             const options = field.options || []
             const selectedValues = Array.isArray(value)
                 ? value.filter((item): item is string => typeof item === "string")
@@ -904,6 +1024,59 @@ export default function PublicApplicationForm() {
                             ))}
                         </div>
                     )}
+                    {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
+                </div>
+            )
+        }
+
+        if (field.type === "checkbox") {
+            const options = field.options || []
+            if (options.length === 0) {
+                const checked = value === true
+                return (
+                    <div
+                        key={field.key}
+                        className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50 p-4"
+                    >
+                        <div className="flex items-start gap-3">
+                            <Checkbox
+                                id={field.key}
+                                checked={checked}
+                                onCheckedChange={(next) => updateField(field.key, next === true)}
+                                className="mt-0.5"
+                            />
+                            <Label htmlFor={field.key} className="text-sm font-medium">
+                                {field.label} {requiredMark}
+                            </Label>
+                        </div>
+                        {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
+                    </div>
+                )
+            }
+
+            const selectedValues = Array.isArray(value)
+                ? value.filter((item): item is string => typeof item === "string")
+                : []
+            return (
+                <div key={field.key} className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+                    <Label className="text-sm font-medium">
+                        {field.label} {requiredMark}
+                    </Label>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        {options.map((option) => (
+                            <OptionCard
+                                key={option.value}
+                                selected={selectedValues.includes(option.value)}
+                                onClick={() => {
+                                    const next = selectedValues.includes(option.value)
+                                        ? selectedValues.filter((item) => item !== option.value)
+                                        : [...selectedValues, option.value]
+                                    updateField(field.key, next)
+                                }}
+                                label={option.label}
+                            />
+                        ))}
+                    </div>
                     {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
                 </div>
             )
@@ -1142,10 +1315,38 @@ export default function PublicApplicationForm() {
                                         Preview Mode
                                     </div>
                                 )}
+                                {!isPreview && (
+                                    <div className="pt-2 text-[11px] uppercase tracking-[0.3em] text-stone-400">
+                                        {draftSaveState === "saving"
+                                            ? "Saving..."
+                                            : draftSaveState === "error"
+                                                ? "Autosave unavailable"
+                                                : draftUpdatedAt
+                                                    ? `Saved ${formatSavedTime(draftUpdatedAt)}`
+                                                    : "Autosave on"}
+                                    </div>
+                                )}
+                                {!isPreview && draftRestored && (
+                                    <div className="flex items-center justify-center gap-2 text-xs text-stone-500">
+                                        <PencilIcon className="size-3" />
+                                        Restored saved progress
+                                    </div>
+                                )}
                             </div>
                         </div>
                         <div className="mt-8">
                             <ProgressStepper currentStep={currentStep} steps={steps} />
+                            {!isPreview && hasAnyFileFields && (
+                                <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-200/70 bg-amber-50 px-4 py-3 text-left text-sm text-amber-950/80">
+                                    <LockIcon className="mt-0.5 size-4 text-amber-700" />
+                                    <div>
+                                        <div className="font-medium">Uploads aren&apos;t saved yet</div>
+                                        <div className="text-xs text-amber-950/70">
+                                            File uploads are only sent when you submit the application.
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

@@ -13,6 +13,7 @@ import {
     setFormMappings,
     createFormToken,
     getSurrogateSubmission,
+    getSurrogateDraftStatus,
     approveSubmission,
     rejectSubmission,
     uploadFormLogo,
@@ -37,6 +38,8 @@ export const formKeys = {
     mappings: (formId: string) => [...formKeys.detail(formId), 'mappings'] as const,
     surrogateSubmission: (formId: string, surrogateId: string) =>
         [...formKeys.detail(formId), 'surrogate-submission', surrogateId] as const,
+    surrogateDraftStatus: (formId: string, surrogateId: string) =>
+        [...formKeys.detail(formId), 'surrogate-draft', surrogateId] as const,
     templates: () => [...formKeys.all, 'templates'] as const,
     templateDetail: (id: string) => [...formKeys.templates(), id] as const,
 }
@@ -135,6 +138,24 @@ export function useCreateFormToken() {
     return useMutation({
         mutationFn: ({ formId, surrogateId, expiresInDays }: { formId: string; surrogateId: string; expiresInDays?: number }) =>
             createFormToken(formId, surrogateId, expiresInDays),
+    })
+}
+
+export function useSurrogateFormDraftStatus(formId: string | null, surrogateId: string | null) {
+    return useQuery({
+        queryKey: formId && surrogateId ? formKeys.surrogateDraftStatus(formId, surrogateId) : ['forms', 'surrogate-draft', 'missing'],
+        queryFn: async () => {
+            try {
+                return await getSurrogateDraftStatus(formId!, surrogateId!)
+            } catch (error) {
+                if (error instanceof ApiError && error.status === 404) {
+                    return null
+                }
+                throw error
+            }
+        },
+        enabled: !!formId && !!surrogateId,
+        retry: false,
     })
 }
 

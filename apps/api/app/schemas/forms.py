@@ -235,3 +235,28 @@ class FormSubmissionAnswersUpdateResponse(BaseModel):
 
     submission: FormSubmissionRead
     surrogate_updates: list[str]  # List of surrogate fields that were updated
+
+
+# =============================================================================
+# Draft Schemas (Public autosave)
+# =============================================================================
+
+
+class FormDraftUpsertRequest(BaseModel):
+    answers: dict[str, object] = Field(default_factory=dict)
+
+
+class FormDraftWriteResponse(BaseModel):
+    started_at: datetime | None
+    updated_at: datetime
+
+
+class FormDraftPublicRead(BaseModel):
+    answers: dict[str, object]
+    started_at: datetime | None
+    updated_at: datetime
+
+
+class FormDraftStatusRead(BaseModel):
+    started_at: datetime | None
+    updated_at: datetime
