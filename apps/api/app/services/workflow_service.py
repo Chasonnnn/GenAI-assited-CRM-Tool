@@ -841,6 +841,18 @@ def list_org_executions(
     return result, total
 
 
+def get_execution(db: Session, org_id: UUID, execution_id: UUID) -> WorkflowExecution | None:
+    """Fetch a single execution scoped to an organization."""
+    return (
+        db.query(WorkflowExecution)
+        .filter(
+            WorkflowExecution.organization_id == org_id,
+            WorkflowExecution.id == execution_id,
+        )
+        .first()
+    )
+
+
 def get_execution_stats(db: Session, org_id: UUID) -> dict:
     """Get execution statistics for the dashboard."""
     now = datetime.now(timezone.utc)
