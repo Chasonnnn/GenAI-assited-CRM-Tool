@@ -95,6 +95,7 @@ def render_action_payload(action: dict, entity: Any) -> dict:
 def _preview_send_email(db: Session, action: dict, entity: Any) -> str:
     """Preview for send_email action."""
     template_id = action.get("template_id")
+    recipients = action.get("recipients", "surrogate")
 
     # Get template name if possible
     template_name = "email template"
@@ -108,7 +109,18 @@ def _preview_send_email(db: Session, action: dict, entity: Any) -> str:
             template_name = template.name
 
     surrogate_ref = _get_surrogate_ref(entity)
-    return f"Send '{template_name}' to {surrogate_ref}"
+
+    recipient_desc = surrogate_ref
+    if recipients == "owner":
+        recipient_desc = "case owner"
+    elif recipients == "creator":
+        recipient_desc = "case creator"
+    elif recipients == "all_admins":
+        recipient_desc = "all admins"
+    elif isinstance(recipients, list):
+        recipient_desc = f"{len(recipients)} user(s)"
+
+    return f"Send '{template_name}' to {recipient_desc}"
 
 
 def _preview_create_task(db: Session, action: dict, entity: Any) -> str:

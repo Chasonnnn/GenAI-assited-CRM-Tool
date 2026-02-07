@@ -332,35 +332,86 @@ class DefaultWorkflowDomainAdapter:
     ) -> dict:
         """Queue an email using template."""
         template_id = action.get("template_id")
+        recipients = action.get("recipients", "surrogate")
 
-        if not entity.email:
-            return {"success": False, "error": "Entity has no email address"}
+        recipient_emails: list[str] = []
+        if recipients == "surrogate":
+            if entity.email:
+                recipient_emails = [entity.email]
+        elif recipients == "owner":
+            if entity.owner_type == OwnerType.USER.value and entity.owner_id:
+                owner = db.query(User).filter(User.id == entity.owner_id).first()
+                if owner and owner.email:
+                    recipient_emails = [owner.email]
+        elif recipients == "creator":
+            if entity.created_by_user_id:
+                creator = db.query(User).filter(User.id == entity.created_by_user_id).first()
+                if creator and creator.email:
+                    recipient_emails = [creator.email]
+        elif recipients == "all_admins":
+            from app.db.models import Membership
+            from app.db.enums import Role
+
+            rows = (
+                db.query(User.email)
+                .join(Membership, Membership.user_id == User.id)
+                .filter(
+                    Membership.organization_id == entity.organization_id,
+                    Membership.role.in_([Role.ADMIN.value, Role.DEVELOPER.value]),
+                    Membership.is_active.is_(True),
+                    User.is_active.is_(True),
+                )
+                .all()
+            )
+            recipient_emails = [row[0] for row in rows if row and row[0]]
+        elif isinstance(recipients, list):
+            from app.db.models import Membership
+
+            recipient_ids = [UUID(r) if isinstance(r, str) else r for r in recipients]
+            rows = (
+                db.query(User.email)
+                .join(Membership, Membership.user_id == User.id)
+                .filter(
+                    Membership.organization_id == entity.organization_id,
+                    Membership.user_id.in_(recipient_ids),
+                    Membership.is_active.is_(True),
+                    User.is_active.is_(True),
+                )
+                .all()
+            )
+            recipient_emails = [row[0] for row in rows if row and row[0]]
+
+        if not recipient_emails:
+            return {"success": False, "error": "No recipient emails resolved"}
 
         # Resolve variables
         variables = self._resolve_email_variables(db, entity)
 
-        # Queue job instead of sending inline
-        job = job_service.schedule_job(
-            db=db,
-            org_id=entity.organization_id,
-            job_type=JobType.WORKFLOW_EMAIL,
-            payload={
-                "template_id": str(template_id),
-                "recipient_email": entity.email,
-                "variables": variables,
-                "surrogate_id": str(entity.id),
-                "event_id": str(event_id),
-                # Scope info for email provider resolution
-                "workflow_scope": workflow_scope,
-                "workflow_owner_id": str(workflow_owner_id) if workflow_owner_id else None,
-            },
-        )
+        job_ids: list[str] = []
+        for email in sorted(set(recipient_emails)):
+            job = job_service.schedule_job(
+                db=db,
+                org_id=entity.organization_id,
+                job_type=JobType.WORKFLOW_EMAIL,
+                payload={
+                    "template_id": str(template_id),
+                    "recipient_email": email,
+                    "variables": variables,
+                    "surrogate_id": str(entity.id),
+                    "event_id": str(event_id),
+                    # Scope info for email provider resolution
+                    "workflow_scope": workflow_scope,
+                    "workflow_owner_id": str(workflow_owner_id) if workflow_owner_id else None,
+                },
+            )
+            job_ids.append(str(job.id))
 
         return {
             "success": True,
             "queued": True,
-            "job_id": str(job.id),
-            "description": f"Queued email to {entity.email}",
+            "job_ids": job_ids,
+            "queued_count": len(job_ids),
+            "description": f"Queued {len(job_ids)} email(s)",
         }
 
     def _action_create_task(
