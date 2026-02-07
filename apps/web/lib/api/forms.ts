@@ -242,6 +242,10 @@ export function updateForm(formId: string, payload: FormUpdatePayload): Promise<
     return api.patch<FormRead>(`/forms/${formId}`, payload)
 }
 
+export function deleteForm(formId: string): Promise<void> {
+    return api.delete<void>(`/forms/${formId}`)
+}
+
 export function publishForm(formId: string): Promise<FormPublishResponse> {
     return api.post<FormPublishResponse>(`/forms/${formId}/publish`)
 }

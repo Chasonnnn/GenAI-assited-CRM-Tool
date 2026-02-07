@@ -238,3 +238,9 @@ def set_field_mappings(
     db.add_all(created)
     db.commit()
     return created
+
+
+def delete_form(db: Session, form: Form) -> None:
+    """Permanently delete a form and all related records (via FK cascades)."""
+    db.delete(form)
+    db.commit()

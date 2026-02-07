@@ -7,6 +7,16 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
     Dialog,
     DialogContent,
     DialogDescription,
@@ -26,10 +36,13 @@ import {
     MoreVerticalIcon,
     FileTextIcon,
     EditIcon,
+    Trash2Icon,
     Loader2Icon,
     ArrowLeftIcon,
 } from "lucide-react"
-import { useForms, useCreateForm, useFormTemplates, useUseFormTemplate } from "@/lib/hooks/use-forms"
+import { toast } from "sonner"
+import { ApiError } from "@/lib/api"
+import { useForms, useCreateForm, useDeleteForm, useFormTemplates, useUseFormTemplate } from "@/lib/hooks/use-forms"
 import { parseDateInput } from "@/lib/utils/date"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
@@ -51,6 +64,7 @@ export default function FormsListPage() {
     const router = useRouter()
     const { data: forms, isLoading } = useForms()
     const createFormMutation = useCreateForm()
+    const deleteFormMutation = useDeleteForm()
     const { data: templates, isLoading: templatesLoading } = useFormTemplates()
     const useTemplateMutation = useUseFormTemplate()
 
@@ -59,6 +73,7 @@ export default function FormsListPage() {
     const [formDescription, setFormDescription] = useState("")
     const [activeTab, setActiveTab] = useState<"forms" | "templates">("forms")
     const [applyingTemplateId, setApplyingTemplateId] = useState<string | null>(null)
+    const [formToDelete, setFormToDelete] = useState<{ id: string; name: string } | null>(null)
 
     const handleCreate = async () => {
         if (!formName.trim()) return
@@ -90,6 +105,19 @@ export default function FormsListPage() {
             // Error handling is done by React Query
         } finally {
             setApplyingTemplateId(null)
+        }
+    }
+
+    const confirmDeleteForm = async () => {
+        if (!formToDelete || deleteFormMutation.isPending) return
+        try {
+            await deleteFormMutation.mutateAsync(formToDelete.id)
+            toast.success("Form deleted")
+            setFormToDelete(null)
+        } catch (error) {
+            const message =
+                error instanceof ApiError ? error.message : "Failed to delete form. Please try again."
+            toast.error(message)
         }
     }
 
@@ -217,6 +245,7 @@ export default function FormsListPage() {
                                                                         variant="ghost"
                                                                         size="icon"
                                                                         className="h-8 w-8"
+                                                                        aria-label={`Open menu for ${form.name}`}
                                                                         onClick={(e) => e.stopPropagation()}
                                                                     >
                                                                         <MoreVerticalIcon className="size-4" />
@@ -232,6 +261,17 @@ export default function FormsListPage() {
                                                                 >
                                                                     <EditIcon className="mr-2 size-4" />
                                                                     Edit
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem
+                                                                    className="text-destructive focus:text-destructive"
+                                                                    disabled={deleteFormMutation.isPending}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        setFormToDelete({ id: form.id, name: form.name })
+                                                                    }}
+                                                                >
+                                                                    <Trash2Icon className="mr-2 size-4" />
+                                                                    Delete
                                                                 </DropdownMenuItem>
                                                             </DropdownMenuContent>
                                                         </DropdownMenu>
@@ -366,6 +406,34 @@ export default function FormsListPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <AlertDialog open={!!formToDelete} onOpenChange={(open) => !open && setFormToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete form?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will permanently delete{" "}
+                            <span className="font-medium text-foreground">{formToDelete?.name}</span>{" "}
+                            and any related submissions. This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={deleteFormMutation.isPending}>
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            disabled={deleteFormMutation.isPending}
+                            onClick={confirmDeleteForm}
+                        >
+                            {deleteFormMutation.isPending && (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            )}
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }

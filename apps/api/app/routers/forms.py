@@ -329,6 +329,25 @@ def update_form(
     return _form_read(form)
 
 
+@router.delete(
+    "/{form_id}",
+    dependencies=[
+        Depends(require_permission(POLICIES["forms"].default)),
+        Depends(require_csrf_header),
+    ],
+)
+def delete_form(
+    form_id: UUID,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    form = form_service.get_form(db, session.org_id, form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
+    form_service.delete_form(db=db, form=form)
+    return {"message": "Form deleted"}
+
+
 @router.post(
     "/logos",
     response_model=FormLogoRead,

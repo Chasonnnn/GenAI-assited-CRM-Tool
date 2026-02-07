@@ -7,6 +7,7 @@ const mockPush = vi.fn()
 const mockCreateForm = vi.fn()
 const mockSetFormMappings = vi.fn()
 const mockUseTemplate = vi.fn()
+const mockDeleteForm = vi.fn()
 
 vi.mock('next/navigation', () => ({
     useRouter: () => ({ push: mockPush }),
@@ -23,6 +24,7 @@ vi.mock('@/lib/hooks/use-forms', () => ({
     useFormTemplates: () => ({ data: mockTemplates, isLoading: false }),
     useUseFormTemplate: () => ({ mutateAsync: mockUseTemplate, isPending: false }),
     useCreateForm: () => ({ mutateAsync: mockCreateForm, isPending: false }),
+    useDeleteForm: () => ({ mutateAsync: mockDeleteForm, isPending: false }),
     useSetFormMappings: () => ({ mutateAsync: mockSetFormMappings, isPending: false }),
 }))
 

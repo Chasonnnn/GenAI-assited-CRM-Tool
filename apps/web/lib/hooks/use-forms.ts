@@ -8,6 +8,7 @@ import {
     getForm,
     createForm,
     updateForm,
+    deleteForm,
     publishForm,
     listFormMappings,
     setFormMappings,
@@ -80,6 +81,18 @@ export function useUpdateForm() {
         onSuccess: (form) => {
             queryClient.invalidateQueries({ queryKey: formKeys.lists() })
             queryClient.setQueryData(formKeys.detail(form.id), form)
+        },
+    })
+}
+
+export function useDeleteForm() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (formId: string) => deleteForm(formId),
+        onSuccess: (_result, formId) => {
+            queryClient.invalidateQueries({ queryKey: formKeys.lists() })
+            queryClient.removeQueries({ queryKey: formKeys.detail(formId) })
         },
     })
 }

@@ -124,6 +124,28 @@ async def test_form_submission_approval_updates_surrogate(
 
 
 @pytest.mark.asyncio
+async def test_delete_form_removes_it_from_list(authed_client):
+    create_res = await authed_client.post(
+        "/forms",
+        json={
+            "name": "Delete Me",
+        },
+    )
+    assert create_res.status_code == 200
+    form_id = create_res.json()["id"]
+
+    del_res = await authed_client.delete(f"/forms/{form_id}")
+    assert del_res.status_code == 200
+
+    get_res = await authed_client.get(f"/forms/{form_id}")
+    assert get_res.status_code == 404
+
+    list_res = await authed_client.get("/forms")
+    assert list_res.status_code == 200
+    assert form_id not in {f["id"] for f in list_res.json()}
+
+
+@pytest.mark.asyncio
 async def test_form_submission_single_per_surrogate(
     authed_client, db, test_org, test_user, default_stage
 ):
