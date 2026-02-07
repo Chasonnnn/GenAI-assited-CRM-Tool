@@ -6,6 +6,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.db.enums import WorkflowExecutionStatus, WorkflowEventSource
+from app.db.models import WorkflowExecution
 from app.core.deps import (
     get_db,
     get_current_session,
@@ -165,6 +167,63 @@ def get_execution_stats(
     if not workflow_access.has_manage_permission(db, session):
         raise HTTPException(status_code=403, detail="Cannot view org execution stats")
     return workflow_service.get_execution_stats(db, session.org_id)
+
+
+@router.post(
+    "/executions/{execution_id}/retry",
+    response_model=ExecutionRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def retry_workflow_execution(
+    execution_id: UUID,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+):
+    """Retry a failed workflow execution (manual re-run)."""
+    execution = (
+        db.query(WorkflowExecution)
+        .filter(
+            WorkflowExecution.id == execution_id,
+            WorkflowExecution.organization_id == session.org_id,
+        )
+        .first()
+    )
+    if not execution:
+        raise HTTPException(status_code=404, detail="Execution not found")
+
+    if execution.status != WorkflowExecutionStatus.FAILED.value:
+        raise HTTPException(status_code=422, detail="Only failed executions can be retried")
+
+    workflow = workflow_service.get_workflow(db, execution.workflow_id, session.org_id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
+    if not workflow_access.can_edit(db, session, workflow):
+        raise HTTPException(status_code=403, detail="Cannot retry this workflow")
+
+    # Fail explicitly rather than silently returning no execution.
+    entity = engine.adapter.get_entity(db, execution.entity_type, execution.entity_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    event_data = dict(execution.trigger_event or {})
+    event_data.setdefault("triggered_by_user_id", str(session.user_id))
+    event_data["retry_of_execution_id"] = str(execution.id)
+
+    new_execution = engine.execute_workflow(
+        db=db,
+        workflow=workflow,
+        entity_type=execution.entity_type,
+        entity_id=execution.entity_id,
+        event_data=event_data,
+        source=WorkflowEventSource.USER,
+        bypass_dedupe=True,
+    )
+
+    if not new_execution:
+        raise HTTPException(status_code=409, detail="Execution could not be retried")
+
+    return ExecutionRead.model_validate(new_execution)
 
 
 @router.post("", response_model=WorkflowRead, dependencies=[Depends(require_csrf_header)])

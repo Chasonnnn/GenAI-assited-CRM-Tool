@@ -8,6 +8,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
     CheckCircle2Icon,
     XCircleIcon,
     AlertCircleIcon,
@@ -17,11 +27,14 @@ import {
     ActivityIcon,
     TrendingUpIcon,
     ClockIcon,
+    RotateCwIcon,
     Loader2Icon,
 } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
-import api from "@/lib/api"
+import api, { ApiError } from "@/lib/api"
 import { parseDateInput } from "@/lib/utils/date"
+import { useRetryWorkflowExecution } from "@/lib/hooks/use-workflows"
+import { toast } from "sonner"
 
 // Types for executions
 interface ExecutionAction {
@@ -159,6 +172,8 @@ export default function WorkflowExecutionsPage() {
     const [workflowFilter, setWorkflowFilter] = useState("all")
     const [page, setPage] = useState(1)
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+    const [retryTarget, setRetryTarget] = useState<Execution | null>(null)
+    const retryExecutionMutation = useRetryWorkflowExecution()
 
     useEffect(() => {
         setPage(1)
@@ -195,6 +210,23 @@ export default function WorkflowExecutionsPage() {
     const executions = executionsData?.items || []
     const totalExecutions = executionsData?.total || 0
     const totalPages = Math.ceil(totalExecutions / 20)
+
+    const confirmRetry = async () => {
+        if (!retryTarget || retryExecutionMutation.isPending) return
+        try {
+            const result = await retryExecutionMutation.mutateAsync(retryTarget.id)
+            if (result.status === "failed") {
+                toast.error(result.error_message || "Retry failed")
+            } else {
+                toast.success("Retry started")
+            }
+            setRetryTarget(null)
+        } catch (error) {
+            const message =
+                error instanceof ApiError ? error.message : "Failed to retry execution. Please try again."
+            toast.error(message)
+        }
+    }
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -488,12 +520,25 @@ export default function WorkflowExecutionsPage() {
                                                             {/* Error Message */}
                                                             {execution.error_message && (
                                                                 <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-4">
-                                                                    <div className="flex items-start gap-2">
-                                                                        <AlertCircleIcon className="mt-0.5 size-4 shrink-0 text-red-500" />
-                                                                        <div>
-                                                                            <p className="font-semibold text-red-600">Error</p>
-                                                                            <p className="mt-1 text-sm text-red-600">{execution.error_message}</p>
+                                                                    <div className="flex items-start justify-between gap-4">
+                                                                        <div className="flex items-start gap-2">
+                                                                            <AlertCircleIcon className="mt-0.5 size-4 shrink-0 text-red-500" />
+                                                                            <div>
+                                                                                <p className="font-semibold text-red-600">Error</p>
+                                                                                <p className="mt-1 text-sm text-red-600">{execution.error_message}</p>
+                                                                            </div>
                                                                         </div>
+                                                                        {execution.status === "failed" && (
+                                                                            <Button
+                                                                                variant="outline"
+                                                                                size="sm"
+                                                                                onClick={() => setRetryTarget(execution)}
+                                                                                disabled={retryExecutionMutation.isPending}
+                                                                            >
+                                                                                <RotateCwIcon className="mr-2 size-4" />
+                                                                                Retry
+                                                                            </Button>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             )}
@@ -554,6 +599,26 @@ export default function WorkflowExecutionsPage() {
                 )}
             </Card>
             </div>
+
+            <AlertDialog open={!!retryTarget} onOpenChange={(open) => !open && setRetryTarget(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Retry workflow execution?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will re-run the workflow and may duplicate actions (emails, tasks, notes).
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={retryExecutionMutation.isPending}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmRetry} disabled={retryExecutionMutation.isPending}>
+                            {retryExecutionMutation.isPending && (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            )}
+                            Retry
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }

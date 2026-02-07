@@ -15,6 +15,7 @@ import {
     getWorkflowStats,
     getWorkflowOptions,
     listExecutions,
+    retryWorkflowExecution,
     getUserPreferences,
     updateUserPreference,
     type WorkflowCreate,
@@ -95,6 +96,22 @@ export function useUserWorkflowPreferences() {
 // =============================================================================
 // Mutation Hooks
 // =============================================================================
+
+export function useRetryWorkflowExecution() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (executionId: string) => retryWorkflowExecution(executionId),
+        onSuccess: (execution) => {
+            queryClient.invalidateQueries({ queryKey: workflowKeys.executions(execution.workflow_id) })
+            queryClient.invalidateQueries({ queryKey: workflowKeys.lists() })
+            queryClient.invalidateQueries({ queryKey: workflowKeys.stats() })
+            // Org executions dashboard uses its own query keys.
+            queryClient.invalidateQueries({ queryKey: ["workflow-executions"] })
+            queryClient.invalidateQueries({ queryKey: ["workflow-execution-stats"] })
+        },
+    })
+}
 
 export function useCreateWorkflow() {
     const queryClient = useQueryClient()

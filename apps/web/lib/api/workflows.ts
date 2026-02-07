@@ -244,6 +244,10 @@ export async function listExecutions(
     return api.get<{ items: WorkflowExecution[]; total: number }>(`/workflows/${workflowId}/executions${query ? `?${query}` : ""}`)
 }
 
+export async function retryWorkflowExecution(executionId: string): Promise<WorkflowExecution> {
+    return api.post<WorkflowExecution>(`/workflows/executions/${executionId}/retry`)
+}
+
 export async function getUserPreferences(): Promise<UserWorkflowPreference[]> {
     return api.get<UserWorkflowPreference[]>("/workflows/me/preferences")
 }

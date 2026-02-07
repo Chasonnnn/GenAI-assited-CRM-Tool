@@ -94,6 +94,33 @@ class WorkflowEngineCore:
 
         return executions
 
+    def execute_workflow(
+        self,
+        db: Session,
+        workflow: AutomationWorkflow,
+        entity_type: str,
+        entity_id: UUID,
+        event_data: dict,
+        *,
+        event_id: UUID | None = None,
+        depth: int = 0,
+        source: WorkflowEventSource = WorkflowEventSource.USER,
+        bypass_dedupe: bool = False,
+    ) -> WorkflowExecution | None:
+        """Execute a single workflow directly (used for manual retries)."""
+        event_id = event_id or uuid_module.uuid4()
+        return self._execute_workflow(
+            db=db,
+            workflow=workflow,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            event_data=event_data,
+            event_id=event_id,
+            depth=depth,
+            source=source,
+            bypass_dedupe=bypass_dedupe,
+        )
+
     def _find_matching_workflows(
         self,
         db: Session,
@@ -194,13 +221,17 @@ class WorkflowEngineCore:
         event_id: UUID,
         depth: int,
         source: WorkflowEventSource,
+        bypass_dedupe: bool = False,
     ) -> WorkflowExecution | None:
         """Execute a single workflow and log the result."""
         start_time = time.time()
 
         # Check dedupe for sweep-based triggers
         dedupe_key = self._get_dedupe_key(workflow, entity_id)
-        if dedupe_key and self._is_duplicate(db, dedupe_key):
+        if dedupe_key and bypass_dedupe:
+            # Allow manual retries for sweep-based triggers by namespacing the key.
+            dedupe_key = f"{dedupe_key}:retry:{event_id}"
+        elif dedupe_key and self._is_duplicate(db, dedupe_key):
             return None
 
         # Check rate limits
