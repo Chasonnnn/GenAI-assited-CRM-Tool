@@ -7,7 +7,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.enums import WorkflowExecutionStatus, WorkflowEventSource
-from app.db.models import WorkflowExecution
 from app.core.deps import (
     get_db,
     get_current_session,
@@ -180,14 +179,7 @@ def retry_workflow_execution(
     session: UserSession = Depends(get_current_session),
 ):
     """Retry a failed workflow execution (manual re-run)."""
-    execution = (
-        db.query(WorkflowExecution)
-        .filter(
-            WorkflowExecution.id == execution_id,
-            WorkflowExecution.organization_id == session.org_id,
-        )
-        .first()
-    )
+    execution = workflow_service.get_execution(db, execution_id, session.org_id)
     if not execution:
         raise HTTPException(status_code=404, detail="Execution not found")
 

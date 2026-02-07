@@ -774,6 +774,22 @@ def get_workflow_options(
 # =============================================================================
 
 
+def get_execution(
+    db: Session,
+    execution_id: UUID,
+    org_id: UUID,
+) -> WorkflowExecution | None:
+    """Get a workflow execution by ID, scoped to org."""
+    return (
+        db.query(WorkflowExecution)
+        .filter(
+            WorkflowExecution.id == execution_id,
+            WorkflowExecution.organization_id == org_id,
+        )
+        .first()
+    )
+
+
 def list_executions(
     db: Session,
     workflow_id: UUID,
