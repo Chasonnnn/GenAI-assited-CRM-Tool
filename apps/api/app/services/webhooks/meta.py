@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import secrets
 
 from fastapi import HTTPException, Request
 from fastapi.responses import PlainTextResponse
@@ -25,7 +26,7 @@ class MetaWebhookHandler:
         When you configure the webhook in Meta, it sends a GET request
         with a challenge that must be echoed back as PLAIN TEXT (not JSON).
         """
-        if mode == "subscribe" and token == settings.META_VERIFY_TOKEN:
+        if mode == "subscribe" and secrets.compare_digest(token or "", settings.META_VERIFY_TOKEN):
             return PlainTextResponse(challenge or "")
 
         logger.warning("Meta webhook verification failed: mode=%s", mode)
@@ -144,7 +145,7 @@ async def simulate_meta_webhook(request: Request, db: Session) -> dict:
         raise HTTPException(403, "Only available in test mode")
 
     dev_secret = request.headers.get("X-Dev-Secret", "")
-    if dev_secret != settings.DEV_SECRET:
+    if not secrets.compare_digest(dev_secret, settings.DEV_SECRET):
         raise HTTPException(403, "Invalid dev secret")
 
     # Create a mock webhook payload

@@ -11,6 +11,7 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
 from app.core.config import settings
+from app.core.security import verify_secret
 from app.db.session import SessionLocal
 from app.db.enums import (
     AlertType,
@@ -39,7 +40,7 @@ def verify_internal_secret(x_internal_secret: str = Header(...)):
     expected = settings.INTERNAL_SECRET if hasattr(settings, "INTERNAL_SECRET") else None
     if not expected:
         raise HTTPException(status_code=501, detail="INTERNAL_SECRET not configured")
-    if x_internal_secret != expected:
+    if not verify_secret(x_internal_secret, expected):
         raise HTTPException(status_code=403, detail="Invalid internal secret")
 
 

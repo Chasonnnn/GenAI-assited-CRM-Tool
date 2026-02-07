@@ -191,6 +191,17 @@ def parse_oauth_state_payload(cookie_value: str) -> dict:
     return json.loads(cookie_value)
 
 
+def verify_secret(secret: str | None, expected: str | None) -> bool:
+    """
+    Verify a secret using constant-time comparison.
+
+    Prevents timing attacks on secret verification.
+    """
+    if not secret or not expected:
+        return False
+    return secrets.compare_digest(secret, expected)
+
+
 def verify_oauth_state(
     stored_payload: dict, received_state: str, user_agent: str
 ) -> tuple[bool, str]:
@@ -204,11 +215,11 @@ def verify_oauth_state(
     Returns:
         (success, error_message)
     """
-    if stored_payload.get("state") != received_state:
+    if not secrets.compare_digest(stored_payload.get("state", ""), received_state):
         return False, "State mismatch - possible CSRF attack"
 
     expected_ua_hash = hash_user_agent(user_agent)
-    if stored_payload.get("ua_hash") != expected_ua_hash:
+    if not secrets.compare_digest(stored_payload.get("ua_hash", ""), expected_ua_hash):
         return False, "User-agent mismatch - possible session hijack"
 
     return True, ""
