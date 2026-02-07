@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import logging
 from uuid import UUID
 
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, and_, case
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -1161,25 +1161,7 @@ def get_surrogate_stats(
     from app.db.models import Task, PipelineStage
     from app.db.enums import TaskType
 
-    # Base query for non-archived surrogates
-    base = db.query(Surrogate).filter(
-        Surrogate.organization_id == org_id,
-        Surrogate.is_archived.is_(False),
-    )
-    if pipeline_id:
-        base = base.join(PipelineStage, Surrogate.stage_id == PipelineStage.id).filter(
-            PipelineStage.pipeline_id == pipeline_id
-        )
-    if owner_id:
-        base = base.filter(
-            Surrogate.owner_type == OwnerType.USER.value,
-            Surrogate.owner_id == owner_id,
-        )
-
-    # Total count
-    total = base.count()
-
-    # Count by status
+    # Count by status (separate query due to GROUP BY)
     status_query = db.query(Surrogate.status_label, func.count(Surrogate.id).label("count")).filter(
         Surrogate.organization_id == org_id,
         Surrogate.is_archived.is_(False),
@@ -1197,22 +1179,66 @@ def get_surrogate_stats(
 
     by_status = {row.status_label: row.count for row in status_counts}
 
-    # This week vs last week
-    this_week = base.filter(Surrogate.created_at >= week_ago).count()
-    last_week = base.filter(
-        Surrogate.created_at >= two_weeks_ago, Surrogate.created_at < week_ago
-    ).count()
+    # Consolidated stats query: Combine 5 separate count queries into one
+    stats_query = db.query(
+        func.count(Surrogate.id).label("total"),
+        func.sum(case((Surrogate.created_at >= week_ago, 1), else_=0)).label("this_week"),
+        func.sum(
+            case(
+                (
+                    and_(Surrogate.created_at >= two_weeks_ago, Surrogate.created_at < week_ago),
+                    1,
+                ),
+                else_=0,
+            )
+        ).label("last_week"),
+        func.sum(
+            case(
+                (
+                    and_(
+                        Surrogate.contact_status == ContactStatus.UNREACHED.value,
+                        Surrogate.created_at >= last_24h,
+                    ),
+                    1,
+                ),
+                else_=0,
+            )
+        ).label("new_leads_24h"),
+        func.sum(
+            case(
+                (
+                    and_(
+                        Surrogate.contact_status == ContactStatus.UNREACHED.value,
+                        Surrogate.created_at >= prev_24h,
+                        Surrogate.created_at < last_24h,
+                    ),
+                    1,
+                ),
+                else_=0,
+            )
+        ).label("new_leads_prev_24h"),
+    ).filter(
+        Surrogate.organization_id == org_id,
+        Surrogate.is_archived.is_(False),
+    )
 
-    # New leads (unreached) in last 24h vs previous 24h
-    new_leads_24h = base.filter(
-        Surrogate.contact_status == ContactStatus.UNREACHED.value,
-        Surrogate.created_at >= last_24h,
-    ).count()
-    new_leads_prev_24h = base.filter(
-        Surrogate.contact_status == ContactStatus.UNREACHED.value,
-        Surrogate.created_at >= prev_24h,
-        Surrogate.created_at < last_24h,
-    ).count()
+    if pipeline_id:
+        stats_query = stats_query.join(
+            PipelineStage, Surrogate.stage_id == PipelineStage.id
+        ).filter(PipelineStage.pipeline_id == pipeline_id)
+    if owner_id:
+        stats_query = stats_query.filter(
+            Surrogate.owner_type == OwnerType.USER.value,
+            Surrogate.owner_id == owner_id,
+        )
+
+    stats_result = stats_query.first()
+
+    total = stats_result.total if stats_result else 0
+    this_week = stats_result.this_week or 0 if stats_result else 0
+    last_week = stats_result.last_week or 0 if stats_result else 0
+    new_leads_24h = stats_result.new_leads_24h or 0 if stats_result else 0
+    new_leads_prev_24h = stats_result.new_leads_prev_24h or 0 if stats_result else 0
 
     # Calculate percentage changes (handle division by zero)
     def calc_change_pct(current: int, previous: int) -> float | None:
