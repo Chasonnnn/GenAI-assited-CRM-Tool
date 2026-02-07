@@ -46,14 +46,15 @@ def handle_status_changed(
     actor = _get_org_user(db, surrogate.organization_id, user_id)
     actor_name = actor.display_name if actor else "Someone"
 
-    notification_facade.notify_surrogate_status_changed(
-        db=db,
-        surrogate=surrogate,
-        from_status=old_label,
-        to_status=new_stage.label,
-        actor_id=user_id or surrogate.created_by_user_id or surrogate.owner_id,
-        actor_name=actor_name,
-    )
+    if new_stage.slug != "application_submitted":
+        notification_facade.notify_surrogate_status_changed(
+            db=db,
+            surrogate=surrogate,
+            from_status=old_label,
+            to_status=new_stage.label,
+            actor_id=user_id or surrogate.created_by_user_id or surrogate.owner_id,
+            actor_name=actor_name,
+        )
 
     if new_stage.slug == "approved":
         try:

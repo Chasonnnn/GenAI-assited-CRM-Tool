@@ -122,7 +122,9 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const isMobile = useIsMobile()
 
     const navigationItems = React.useMemo(() => {
-        if (user?.role !== "intake_specialist") return navigation
+        const canViewUnassignedQueue =
+            user?.role === "intake_specialist" || user?.role === "developer"
+        if (!canViewUnassignedQueue) return navigation
 
         return [
             ...navigation.slice(0, 2),

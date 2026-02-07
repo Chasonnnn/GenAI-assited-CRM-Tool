@@ -40,7 +40,7 @@ export default function UnassignedSurrogatesPage() {
     const searchParams = useSearchParams()
 
     const authLoaded = !!user?.role
-    const isIntake = user?.role === "intake_specialist"
+    const canViewUnassignedQueue = user?.role === "intake_specialist" || user?.role === "developer"
 
     const urlPage = parsePageParam(searchParams.get("page"))
     const [page, setPage] = useState(urlPage)
@@ -51,17 +51,17 @@ export default function UnassignedSurrogatesPage() {
 
     useEffect(() => {
         if (!authLoaded) return
-        if (!isIntake) {
+        if (!canViewUnassignedQueue) {
             router.replace("/surrogates")
         }
-    }, [authLoaded, isIntake, router])
+    }, [authLoaded, canViewUnassignedQueue, router])
 
     const { data, isLoading, error, refetch } = useUnassignedQueue(
         {
             page,
             per_page: DEFAULT_PER_PAGE,
         },
-        { enabled: isIntake }
+        { enabled: canViewUnassignedQueue }
     )
     const claimMutation = useClaimSurrogate()
     const [claimingId, setClaimingId] = useState<string | null>(null)
@@ -99,7 +99,7 @@ export default function UnassignedSurrogatesPage() {
         }
     }, [claimMutation, router])
 
-    if (authLoaded && !isIntake) return null
+    if (authLoaded && !canViewUnassignedQueue) return null
 
     return (
         <div className="space-y-6">
