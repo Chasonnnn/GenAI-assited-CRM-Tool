@@ -28,7 +28,8 @@ jobs:
 
     env:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/crm_test
-      JWT_SECRET: test-secret-key-for-ci
+      # Keep >=32 bytes to avoid PyJWT InsecureKeyLengthWarning spam in CI.
+      JWT_SECRET: test-jwt-secret-0123456789abcdef
       # Fernet keys must be 32 url-safe base64-encoded bytes.
       PII_HASH_KEY: ${{ secrets.PII_HASH_KEY || 'test-pii-hash-key-please-change' }}
       DEV_BYPASS_AUTH: "False"
@@ -164,7 +165,8 @@ jobs:
 
     env:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/crm_test
-      JWT_SECRET: test-secret-key-for-ci
+      # Keep >=32 bytes to avoid PyJWT InsecureKeyLengthWarning spam in CI.
+      JWT_SECRET: test-jwt-secret-0123456789abcdef
       PII_HASH_KEY: ${{ secrets.PII_HASH_KEY || 'test-pii-hash-key-please-change' }}
       DEV_BYPASS_AUTH: "True"
       ENV: test
