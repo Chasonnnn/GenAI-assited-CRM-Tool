@@ -29,6 +29,7 @@ from app.schemas.workflow import (
     TaskDueTriggerConfig,
     InactivityTriggerConfig,
     SurrogateUpdatedTriggerConfig,
+    FormStartedTriggerConfig,
     SendEmailActionConfig,
     CreateTaskActionConfig,
     AssignSurrogateActionConfig,
@@ -50,6 +51,7 @@ TRIGGER_ENTITY_TYPES = {
     "status_changed": "surrogate",
     "surrogate_assigned": "surrogate",
     "surrogate_updated": "surrogate",
+    "form_started": "surrogate",
     "task_due": "task",
     "task_overdue": "task",
     "scheduled": "surrogate",
@@ -547,6 +549,11 @@ def get_workflow_options(
             "description": "When specific fields change",
         },
         {
+            "value": "form_started",
+            "label": "Form Started",
+            "description": "When an applicant starts a form draft",
+        },
+        {
             "value": "task_due",
             "label": "Task Due",
             "description": "Before a task is due",
@@ -730,6 +737,21 @@ def get_workflow_options(
         for s in stages
     ]
 
+    # Forms (published)
+    from app.db.models import Form
+    from app.db.enums import FormStatus
+
+    published_forms = (
+        db.query(Form)
+        .filter(
+            Form.organization_id == org_id,
+            Form.status == FormStatus.PUBLISHED.value,
+        )
+        .order_by(Form.name.asc())
+        .all()
+    )
+    forms = [{"id": str(f.id), "name": f.name} for f in published_forms]
+
     return WorkflowOptions(
         trigger_types=trigger_types,
         action_types=action_types,
@@ -743,6 +765,7 @@ def get_workflow_options(
         users=users,
         queues=queue_options,
         statuses=statuses,
+        forms=forms,
     )
 
 
@@ -1045,6 +1068,7 @@ def _validate_trigger_config(trigger_type: WorkflowTriggerType, config: dict) ->
         WorkflowTriggerType.TASK_DUE: TaskDueTriggerConfig,
         WorkflowTriggerType.INACTIVITY: InactivityTriggerConfig,
         WorkflowTriggerType.SURROGATE_UPDATED: SurrogateUpdatedTriggerConfig,
+        WorkflowTriggerType.FORM_STARTED: FormStartedTriggerConfig,
     }
 
     validator = validators.get(trigger_type)
@@ -1085,6 +1109,25 @@ def _validate_action_config(
         )
         if not template:
             raise ValueError(f"Email template {config.template_id} not found in organization")
+        # Validate internal recipients (if explicit list)
+        if isinstance(config.recipients, list):
+            from app.db.models import Membership
+
+            recipient_ids = set(config.recipients)
+            rows = (
+                db.query(Membership.user_id)
+                .filter(
+                    Membership.organization_id == org_id,
+                    Membership.user_id.in_(recipient_ids),
+                    Membership.is_active.is_(True),
+                )
+                .all()
+            )
+            found_ids = {row[0] for row in rows}
+            missing_ids = recipient_ids - found_ids
+            if missing_ids:
+                missing_str = ", ".join(str(uid) for uid in sorted(missing_ids, key=str))
+                raise ValueError(f"Missing recipients in organization: {missing_str}")
         # Enforce scope rules for workflow email templates
         if workflow_scope == "org":
             if template.scope != "org":

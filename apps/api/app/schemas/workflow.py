@@ -144,6 +144,12 @@ class SurrogateAssignedTriggerConfig(BaseModel):
     to_user_id: UUID | None = None  # Optional: only trigger for specific user
 
 
+class FormStartedTriggerConfig(BaseModel):
+    """Config for form_started trigger."""
+
+    form_id: UUID
+
+
 # =============================================================================
 # Action Config Schemas
 # =============================================================================
@@ -154,6 +160,7 @@ class SendEmailActionConfig(BaseModel):
 
     action_type: Literal["send_email"] = "send_email"
     template_id: UUID
+    recipients: Literal["surrogate", "owner", "creator", "all_admins"] | list[UUID] = "surrogate"
 
 
 class CreateTaskActionConfig(BaseModel):
@@ -391,6 +398,7 @@ class WorkflowOptions(BaseModel):
     users: list[dict]  # {id, display_name}
     queues: list[dict]  # {id, name}
     statuses: list[dict]  # {id, value, label, is_active}
+    forms: list[dict] = []  # {id, name}
 
 
 # =============================================================================

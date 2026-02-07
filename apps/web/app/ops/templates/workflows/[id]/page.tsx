@@ -43,6 +43,7 @@ const triggerLabels: Record<string, string> = {
     status_changed: "Status Changed",
     surrogate_assigned: "Surrogate Assigned",
     surrogate_updated: "Field Updated",
+    form_started: "Form Started",
     task_due: "Task Due",
     task_overdue: "Task Overdue",
     scheduled: "Scheduled",
@@ -136,6 +137,7 @@ const FALLBACK_TRIGGER_TYPES = [
     { value: "status_changed", label: "Status Changed", description: "When case status changes" },
     { value: "surrogate_assigned", label: "Surrogate Assigned", description: "When case is assigned" },
     { value: "surrogate_updated", label: "Surrogate Updated", description: "When specific fields change" },
+    { value: "form_started", label: "Form Started", description: "When a form draft is started" },
     { value: "task_due", label: "Task Due", description: "Before a task is due" },
     { value: "task_overdue", label: "Task Overdue", description: "When a task becomes overdue" },
     { value: "scheduled", label: "Scheduled", description: "On a recurring schedule" },
@@ -312,6 +314,29 @@ function normalizeActionsForUi(actions: ActionConfig[]): ActionConfig[] {
     })
 }
 
+const EMAIL_RECIPIENT_OPTIONS: SelectOption[] = [
+    { value: "surrogate", label: "Surrogate" },
+    { value: "owner", label: "Case Owner" },
+    { value: "creator", label: "Creator" },
+    { value: "all_admins", label: "All Admins" },
+    { value: "user", label: "Specific User" },
+]
+
+function getEmailRecipientKind(action: ActionConfig): string {
+    const recipients = action.recipients
+    if (Array.isArray(recipients)) return "user"
+    if (typeof recipients === "string") return recipients
+    return "surrogate"
+}
+
+function getEmailRecipientUserId(action: ActionConfig): string {
+    const recipients = action.recipients
+    if (Array.isArray(recipients)) {
+        return typeof recipients[0] === "string" ? recipients[0] : ""
+    }
+    return ""
+}
+
 function normalizeTriggerConfigForUi(
     triggerType: string,
     triggerConfig: JsonObject,
@@ -377,6 +402,10 @@ export default function PlatformWorkflowTemplatePage() {
     const conditionFields = options?.condition_fields ?? Object.keys(conditionFieldLabels)
     const userOptions = useMemo(() => options?.users ?? [], [options?.users])
     const queueOptions = useMemo(() => options?.queues ?? [], [options?.queues])
+    const formOptions = useMemo<SelectOption[]>(
+        () => (options?.forms ?? []).map((form) => ({ value: form.id, label: form.name })),
+        [options?.forms],
+    )
 
     const actionTypeValuesForTrigger =
         triggerType && options?.action_types_by_trigger?.[triggerType]
@@ -457,6 +486,9 @@ export default function PlatformWorkflowTemplatePage() {
             }
             if (triggerType === "surrogate_assigned") {
                 if (typeof next.to_user_id !== "string") delete next.to_user_id
+            }
+            if (triggerType === "form_started") {
+                if (typeof next.form_id !== "string") next.form_id = ""
             }
             return next
         })
@@ -652,6 +684,10 @@ export default function PlatformWorkflowTemplatePage() {
             const toStage = triggerConfig.to_stage_id
             if (!toStage || typeof toStage !== "string") return "Select a target stage."
         }
+        if (triggerType === "form_started") {
+            const formId = triggerConfig.form_id
+            if (!formId || typeof formId !== "string") return "Select a form."
+        }
         if (triggerType === "scheduled") {
             const cron = triggerConfig.cron
             if (!cron || typeof cron !== "string") return "Cron schedule is required."
@@ -678,11 +714,19 @@ export default function PlatformWorkflowTemplatePage() {
         if (action.action_type === "create_task" && !title.trim()) {
             return "Task actions need a title."
         }
+        if (action.action_type === "send_email") {
+            if (Array.isArray(action.recipients) && action.recipients.length === 0) {
+                return "Select at least one recipient."
+            }
+        }
         if (action.action_type === "send_notification" && !title.trim()) {
             return "Notification actions need a title."
         }
         if (action.action_type === "send_notification" && Array.isArray(action.recipients) && action.recipients.length === 0) {
             return "Select at least one recipient."
+        }
+        if (action.action_type === "send_email" && Array.isArray(action.recipients) && action.recipients.length === 0) {
+            return "Select an email recipient."
         }
         if (action.action_type === "assign_surrogate") {
             if (!action.owner_type) return "Assign actions need an owner type."
@@ -739,6 +783,9 @@ export default function PlatformWorkflowTemplatePage() {
         }
         if (triggerType === "surrogate_assigned") {
             if (typeof next.to_user_id !== "string") delete next.to_user_id
+        }
+        if (triggerType === "form_started") {
+            if (typeof next.form_id !== "string" || !next.form_id) delete next.form_id
         }
         return next
     }, [triggerConfig, triggerType])
@@ -1036,6 +1083,38 @@ export default function PlatformWorkflowTemplatePage() {
                                 </div>
                             )}
 
+                            {triggerType === "form_started" && (
+                                <div>
+                                    <Label>Form *</Label>
+                                    <Select
+                                        value={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
+                                        onValueChange={(value) => value && setTriggerConfig({ ...triggerConfig, form_id: value })}
+                                    >
+                                        <SelectTrigger className="mt-1.5">
+                                            <SelectValue placeholder="Select form">
+                                                {(value: string | null) => {
+                                                    if (!value) return "Select form"
+                                                    const form = formOptions.find((option) => option.value === value)
+                                                    return form?.label ?? value
+                                                }}
+                                            </SelectValue>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {formOptions.map((form) => (
+                                                <SelectItem key={form.value} value={form.value}>
+                                                    {form.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    {formOptions.length === 0 && (
+                                        <p className="mt-2 text-xs text-muted-foreground">
+                                            Publish a form to use this trigger.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
                             {triggerType === "task_due" && (
                                 <div>
                                     <Label>Hours Before Due *</Label>
@@ -1268,16 +1347,70 @@ export default function PlatformWorkflowTemplatePage() {
                                             </div>
 
                                             {action.action_type === "send_email" && (
-                                                <div className="space-y-2">
-                                                    <Label>Email Template ID (optional)</Label>
-                                                    <Input
-                                                        placeholder="Leave blank to force selection in each org"
-                                                        value={typeof action.template_id === "string" ? action.template_id : ""}
-                                                        onChange={(event) => updateAction(index, { template_id: event.target.value })}
-                                                    />
-                                                    <p className="text-xs text-muted-foreground">
-                                                        Use only if every target org has this template ID.
-                                                    </p>
+                                                <div className="space-y-3">
+                                                    <div className="space-y-2">
+                                                        <Label>Email Template ID (optional)</Label>
+                                                        <Input
+                                                            placeholder="Leave blank to force selection in each org"
+                                                            value={typeof action.template_id === "string" ? action.template_id : ""}
+                                                            onChange={(event) => updateAction(index, { template_id: event.target.value })}
+                                                        />
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Use only if every target org has this template ID.
+                                                        </p>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label>Recipient</Label>
+                                                        <Select
+                                                            value={getEmailRecipientKind(action)}
+                                                            onValueChange={(value) => {
+                                                                if (value === "user") {
+                                                                    const currentUser = getEmailRecipientUserId(action)
+                                                                    updateAction(index, {
+                                                                        recipients: currentUser ? [currentUser] : [],
+                                                                    })
+                                                                    return
+                                                                }
+                                                                updateAction(index, { recipients: value })
+                                                            }}
+                                                        >
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Select recipient" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {EMAIL_RECIPIENT_OPTIONS.map((option) => (
+                                                                    <SelectItem key={option.value} value={option.value}>
+                                                                        {option.label}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    {getEmailRecipientKind(action) === "user" && (
+                                                        <Select
+                                                            value={getEmailRecipientUserId(action)}
+                                                            onValueChange={(value) =>
+                                                                updateAction(index, { recipients: value ? [value] : [] })
+                                                            }
+                                                        >
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Select user">
+                                                                    {(value: string | null) => {
+                                                                        if (!value) return "Select user"
+                                                                        const user = userOptions.find((option) => option.id === value)
+                                                                        return user?.display_name ?? value
+                                                                    }}
+                                                                </SelectValue>
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {userOptions.map((user) => (
+                                                                    <SelectItem key={user.id} value={user.id}>
+                                                                        {user.display_name}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    )}
                                                 </div>
                                             )}
 

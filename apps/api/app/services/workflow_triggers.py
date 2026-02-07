@@ -169,6 +169,33 @@ def trigger_surrogate_updated(
     )
 
 
+def trigger_form_started(
+    db: Session,
+    surrogate: Surrogate,
+    form_id: UUID,
+    draft_id: UUID,
+    started_at: datetime | None,
+    updated_at: datetime | None,
+) -> None:
+    """Trigger workflows when an applicant starts a form draft."""
+    engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.FORM_STARTED,
+        entity_type="surrogate",
+        entity_id=surrogate.id,
+        event_data={
+            "surrogate_id": str(surrogate.id),
+            "form_id": str(form_id),
+            "draft_id": str(draft_id),
+            "started_at": started_at.isoformat() if started_at else None,
+            "updated_at": updated_at.isoformat() if updated_at else None,
+        },
+        org_id=surrogate.organization_id,
+        source=WorkflowEventSource.SYSTEM,
+        entity_owner_id=_get_entity_owner_id(surrogate),
+    )
+
+
 # =============================================================================
 # Task Triggers (called from worker sweep)
 # =============================================================================

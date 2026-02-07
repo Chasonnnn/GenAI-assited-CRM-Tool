@@ -135,6 +135,7 @@ export interface WorkflowOptions {
     users: { id: string; display_name: string }[]
     queues: { id: string; name: string }[]
     statuses: { id?: string; value: string; label: string; is_active?: boolean }[]
+    forms?: { id: string; name: string }[]
 }
 
 export interface WorkflowTestRequest {

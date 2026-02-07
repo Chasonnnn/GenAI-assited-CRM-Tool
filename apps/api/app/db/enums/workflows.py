@@ -10,6 +10,7 @@ class WorkflowTriggerType(str, Enum):
     STATUS_CHANGED = "status_changed"
     SURROGATE_ASSIGNED = "surrogate_assigned"
     SURROGATE_UPDATED = "surrogate_updated"
+    FORM_STARTED = "form_started"
     TASK_DUE = "task_due"
     TASK_OVERDUE = "task_overdue"
     SCHEDULED = "scheduled"

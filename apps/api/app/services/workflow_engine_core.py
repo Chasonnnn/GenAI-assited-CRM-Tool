@@ -174,6 +174,12 @@ class WorkflowEngineCore:
             changed_fields = set(event_data.get("changed_fields", []))
             return bool(required_fields & changed_fields)
 
+        if trigger_type == WorkflowTriggerType.FORM_STARTED:
+            form_id = config.get("form_id")
+            if form_id and str(event_data.get("form_id")) != str(form_id):
+                return False
+            return True
+
         # For surrogate_created, task_due, task_overdue, scheduled, inactivity
         # No trigger-level filtering needed (conditions handle it)
         return True
@@ -269,50 +275,56 @@ class WorkflowEngineCore:
         surrogate_owner = None
 
         if surrogate:
-            # Validate surrogate has a user owner (not queue/null)
-            if surrogate.owner_type != OwnerType.USER.value or not surrogate.owner_id:
-                execution = WorkflowExecution(
-                    organization_id=workflow.organization_id,
-                    workflow_id=workflow.id,
-                    event_id=event_id,
-                    depth=depth,
-                    event_source=source.value,
-                    entity_type=entity_type,
-                    entity_id=entity_id,
-                    trigger_event=event_data,
-                    dedupe_key=dedupe_key,
-                    matched_conditions=True,
-                    actions_executed=[],
-                    status=WorkflowExecutionStatus.FAILED.value,
-                    error_message="Workflow requires surrogate owner to be a user",
-                    duration_ms=int((time.time() - start_time) * 1000),
-                )
-                db.add(execution)
-                db.commit()
-                return execution
+            requires_user_owner = has_approval_actions or workflow.scope == "personal"
 
-            # Verify owner exists
-            surrogate_owner = db.query(User).filter(User.id == surrogate.owner_id).first()
-            if not surrogate_owner:
-                execution = WorkflowExecution(
-                    organization_id=workflow.organization_id,
-                    workflow_id=workflow.id,
-                    event_id=event_id,
-                    depth=depth,
-                    event_source=source.value,
-                    entity_type=entity_type,
-                    entity_id=entity_id,
-                    trigger_event=event_data,
-                    dedupe_key=dedupe_key,
-                    matched_conditions=True,
-                    actions_executed=[],
-                    status=WorkflowExecutionStatus.FAILED.value,
-                    error_message="Workflow requires surrogate owner but owner not found",
-                    duration_ms=int((time.time() - start_time) * 1000),
-                )
-                db.add(execution)
-                db.commit()
-                return execution
+            # Only enforce user ownership for personal workflows and approval-gated workflows.
+            if requires_user_owner:
+                if surrogate.owner_type != OwnerType.USER.value or not surrogate.owner_id:
+                    execution = WorkflowExecution(
+                        organization_id=workflow.organization_id,
+                        workflow_id=workflow.id,
+                        event_id=event_id,
+                        depth=depth,
+                        event_source=source.value,
+                        entity_type=entity_type,
+                        entity_id=entity_id,
+                        trigger_event=event_data,
+                        dedupe_key=dedupe_key,
+                        matched_conditions=True,
+                        actions_executed=[],
+                        status=WorkflowExecutionStatus.FAILED.value,
+                        error_message="Workflow requires surrogate owner to be a user",
+                        duration_ms=int((time.time() - start_time) * 1000),
+                    )
+                    db.add(execution)
+                    db.commit()
+                    return execution
+
+                surrogate_owner = db.query(User).filter(User.id == surrogate.owner_id).first()
+                if not surrogate_owner:
+                    execution = WorkflowExecution(
+                        organization_id=workflow.organization_id,
+                        workflow_id=workflow.id,
+                        event_id=event_id,
+                        depth=depth,
+                        event_source=source.value,
+                        entity_type=entity_type,
+                        entity_id=entity_id,
+                        trigger_event=event_data,
+                        dedupe_key=dedupe_key,
+                        matched_conditions=True,
+                        actions_executed=[],
+                        status=WorkflowExecutionStatus.FAILED.value,
+                        error_message="Workflow requires surrogate owner but owner not found",
+                        duration_ms=int((time.time() - start_time) * 1000),
+                    )
+                    db.add(execution)
+                    db.commit()
+                    return execution
+            else:
+                # Best-effort owner resolution for org workflows (may be queue-owned).
+                if surrogate.owner_type == OwnerType.USER.value and surrogate.owner_id:
+                    surrogate_owner = db.query(User).filter(User.id == surrogate.owner_id).first()
         elif has_approval_actions:
             execution = WorkflowExecution(
                 organization_id=workflow.organization_id,
