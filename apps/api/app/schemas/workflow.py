@@ -150,6 +150,12 @@ class FormStartedTriggerConfig(BaseModel):
     form_id: UUID
 
 
+class FormSubmittedTriggerConfig(BaseModel):
+    """Config for form_submitted trigger."""
+
+    form_id: UUID
+
+
 # =============================================================================
 # Action Config Schemas
 # =============================================================================

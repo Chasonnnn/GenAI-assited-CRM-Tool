@@ -30,6 +30,7 @@ from app.schemas.workflow import (
     InactivityTriggerConfig,
     SurrogateUpdatedTriggerConfig,
     FormStartedTriggerConfig,
+    FormSubmittedTriggerConfig,
     SendEmailActionConfig,
     CreateTaskActionConfig,
     AssignSurrogateActionConfig,
@@ -52,6 +53,7 @@ TRIGGER_ENTITY_TYPES = {
     "surrogate_assigned": "surrogate",
     "surrogate_updated": "surrogate",
     "form_started": "surrogate",
+    "form_submitted": "surrogate",
     "task_due": "task",
     "task_overdue": "task",
     "scheduled": "surrogate",
@@ -552,6 +554,11 @@ def get_workflow_options(
             "value": "form_started",
             "label": "Form Started",
             "description": "When an applicant starts a form draft",
+        },
+        {
+            "value": "form_submitted",
+            "label": "Application Submitted",
+            "description": "When an applicant submits a form",
         },
         {
             "value": "task_due",
@@ -1081,6 +1088,7 @@ def _validate_trigger_config(trigger_type: WorkflowTriggerType, config: dict) ->
         WorkflowTriggerType.INACTIVITY: InactivityTriggerConfig,
         WorkflowTriggerType.SURROGATE_UPDATED: SurrogateUpdatedTriggerConfig,
         WorkflowTriggerType.FORM_STARTED: FormStartedTriggerConfig,
+        WorkflowTriggerType.FORM_SUBMITTED: FormSubmittedTriggerConfig,
     }
 
     validator = validators.get(trigger_type)

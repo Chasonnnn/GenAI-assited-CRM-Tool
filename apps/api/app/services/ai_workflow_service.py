@@ -113,6 +113,7 @@ AVAILABLE_TRIGGERS = {
     "surrogate_created": "When a new surrogate is created",
     "status_changed": "When a surrogate status changes (use conditions for specific statuses)",
     "form_started": "When an applicant starts a form draft (trigger_config.form_id required)",
+    "form_submitted": "When an applicant submits a form (trigger_config.form_id required)",
     "inactivity": "When a surrogate has no activity for a period (trigger_config.days required)",
     "scheduled": "On a schedule (trigger_config.cron required)",
     "match_proposed": "When a match is proposed",

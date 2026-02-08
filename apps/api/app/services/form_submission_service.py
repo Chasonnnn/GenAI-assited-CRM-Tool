@@ -309,6 +309,23 @@ def create_submission(
                 exc_info=True,
             )
 
+        # Trigger workflows for submission (so org workflows can email admins/owner, etc.)
+        try:
+            from app.services import workflow_triggers
+
+            workflow_triggers.trigger_form_submitted(
+                db=db,
+                surrogate=surrogate,
+                form_id=form.id,
+                submission_id=submission.id,
+                submitted_at=submission.submitted_at,
+            )
+        except Exception:
+            logger.debug(
+                "trigger_form_submitted_failed",
+                exc_info=True,
+            )
+
         # Best-effort: advance stage to application_submitted (never regress)
         try:
             from app.db.models import Pipeline

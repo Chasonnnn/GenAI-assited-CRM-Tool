@@ -44,6 +44,7 @@ const triggerLabels: Record<string, string> = {
     surrogate_assigned: "Surrogate Assigned",
     surrogate_updated: "Field Updated",
     form_started: "Form Started",
+    form_submitted: "Application Submitted",
     task_due: "Task Due",
     task_overdue: "Task Overdue",
     scheduled: "Scheduled",
@@ -138,6 +139,7 @@ const FALLBACK_TRIGGER_TYPES = [
     { value: "surrogate_assigned", label: "Surrogate Assigned", description: "When case is assigned" },
     { value: "surrogate_updated", label: "Surrogate Updated", description: "When specific fields change" },
     { value: "form_started", label: "Form Started", description: "When a form draft is started" },
+    { value: "form_submitted", label: "Application Submitted", description: "When a form is submitted" },
     { value: "task_due", label: "Task Due", description: "Before a task is due" },
     { value: "task_overdue", label: "Task Overdue", description: "When a task becomes overdue" },
     { value: "scheduled", label: "Scheduled", description: "On a recurring schedule" },
@@ -490,6 +492,9 @@ export default function PlatformWorkflowTemplatePage() {
             if (triggerType === "form_started") {
                 if (typeof next.form_id !== "string") next.form_id = ""
             }
+            if (triggerType === "form_submitted") {
+                if (typeof next.form_id !== "string") next.form_id = ""
+            }
             return next
         })
     }, [triggerType])
@@ -688,6 +693,10 @@ export default function PlatformWorkflowTemplatePage() {
             const formId = triggerConfig.form_id
             if (!formId || typeof formId !== "string") return "Select a form."
         }
+        if (triggerType === "form_submitted") {
+            const formId = triggerConfig.form_id
+            if (!formId || typeof formId !== "string") return "Select a form."
+        }
         if (triggerType === "scheduled") {
             const cron = triggerConfig.cron
             if (!cron || typeof cron !== "string") return "Cron schedule is required."
@@ -785,6 +794,9 @@ export default function PlatformWorkflowTemplatePage() {
             if (typeof next.to_user_id !== "string") delete next.to_user_id
         }
         if (triggerType === "form_started") {
+            if (typeof next.form_id !== "string" || !next.form_id) delete next.form_id
+        }
+        if (triggerType === "form_submitted") {
             if (typeof next.form_id !== "string" || !next.form_id) delete next.form_id
         }
         return next
@@ -1084,6 +1096,38 @@ export default function PlatformWorkflowTemplatePage() {
                             )}
 
                             {triggerType === "form_started" && (
+                                <div>
+                                    <Label>Form *</Label>
+                                    <Select
+                                        value={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
+                                        onValueChange={(value) => value && setTriggerConfig({ ...triggerConfig, form_id: value })}
+                                    >
+                                        <SelectTrigger className="mt-1.5">
+                                            <SelectValue placeholder="Select form">
+                                                {(value: string | null) => {
+                                                    if (!value) return "Select form"
+                                                    const form = formOptions.find((option) => option.value === value)
+                                                    return form?.label ?? value
+                                                }}
+                                            </SelectValue>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {formOptions.map((form) => (
+                                                <SelectItem key={form.value} value={form.value}>
+                                                    {form.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    {formOptions.length === 0 && (
+                                        <p className="mt-2 text-xs text-muted-foreground">
+                                            Publish a form to use this trigger.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            {triggerType === "form_submitted" && (
                                 <div>
                                     <Label>Form *</Label>
                                     <Select

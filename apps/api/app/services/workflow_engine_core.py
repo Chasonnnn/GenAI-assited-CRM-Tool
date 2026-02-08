@@ -207,6 +207,12 @@ class WorkflowEngineCore:
                 return False
             return True
 
+        if trigger_type == WorkflowTriggerType.FORM_SUBMITTED:
+            form_id = config.get("form_id")
+            if form_id and str(event_data.get("form_id")) != str(form_id):
+                return False
+            return True
+
         # For surrogate_created, task_due, task_overdue, scheduled, inactivity
         # No trigger-level filtering needed (conditions handle it)
         return True

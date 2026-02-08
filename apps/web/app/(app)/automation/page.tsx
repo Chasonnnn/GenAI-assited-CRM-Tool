@@ -92,6 +92,7 @@ const triggerIcons: Record<string, React.ElementType> = {
     surrogate_assigned: UserIcon,
     surrogate_updated: FileTextIcon,
     form_started: FileTextIcon,
+    form_submitted: FileTextIcon,
     task_due: ClockIcon,
     task_overdue: AlertCircleIcon,
     scheduled: CalendarIcon,
@@ -111,6 +112,7 @@ const triggerLabels: Record<string, string> = {
     surrogate_assigned: "Surrogate Assigned",
     surrogate_updated: "Field Updated",
     form_started: "Form Started",
+    form_submitted: "Application Submitted",
     task_due: "Task Due",
     task_overdue: "Task Overdue",
     scheduled: "Scheduled",
@@ -897,6 +899,10 @@ export default function AutomationPage() {
             const formId = triggerConfig.form_id
             if (!formId || typeof formId !== "string") return "Select a form."
         }
+        if (triggerType === "form_submitted") {
+            const formId = triggerConfig.form_id
+            if (!formId || typeof formId !== "string") return "Select a form."
+        }
         if (triggerType === "surrogate_updated") {
             const fields = triggerConfig.fields
             if (!Array.isArray(fields) || fields.length === 0) return "Select at least one field to watch."
@@ -1057,6 +1063,9 @@ export default function AutomationPage() {
             if (triggerType === "form_started") {
                 if (typeof next.form_id !== "string") next.form_id = ""
             }
+            if (triggerType === "form_submitted") {
+                if (typeof next.form_id !== "string") next.form_id = ""
+            }
             if (triggerType === "surrogate_updated") {
                 if (!Array.isArray(next.fields)) next.fields = []
             }
@@ -1106,6 +1115,9 @@ export default function AutomationPage() {
                 next.hours_before = Number.isFinite(hours) ? hours : 24
             }
             if (triggerType === "form_started") {
+                if (typeof next.form_id !== "string" || !next.form_id) delete next.form_id
+            }
+            if (triggerType === "form_submitted") {
                 if (typeof next.form_id !== "string" || !next.form_id) delete next.form_id
             }
             if (triggerType === "surrogate_updated") {
@@ -1656,6 +1668,39 @@ export default function AutomationPage() {
                                     </div>
                                 )}
                                 {triggerType === "form_started" && (
+                                    <div>
+                                        <Label>Form *</Label>
+                                        <Select
+                                            value={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
+                                            onValueChange={(value) =>
+                                                setTriggerConfig({ ...triggerConfig, form_id: value })
+                                            }
+                                        >
+                                            <SelectTrigger className="mt-1.5">
+                                                <SelectValue placeholder="Select form">
+                                                    {(value: string | null) => {
+                                                        if (!value) return "Select form"
+                                                        const form = formOptions.find((option) => option.value === value)
+                                                        return form?.label ?? value
+                                                    }}
+                                                </SelectValue>
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {formOptions.map((form) => (
+                                                    <SelectItem key={form.value} value={form.value}>
+                                                        {form.label}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {formOptions.length === 0 && (
+                                            <p className="mt-2 text-xs text-muted-foreground">
+                                                Publish a form to use this trigger.
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                                {triggerType === "form_submitted" && (
                                     <div>
                                         <Label>Form *</Label>
                                         <Select

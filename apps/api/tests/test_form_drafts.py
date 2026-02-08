@@ -308,6 +308,57 @@ async def test_form_started_workflow_trigger_fires_once(
 
 
 @pytest.mark.asyncio
+async def test_form_submitted_workflow_trigger_fires(
+    authed_client, db, test_org, test_user, default_stage
+):
+    surrogate = _create_surrogate(
+        db,
+        test_org.id,
+        owner_type="user",
+        owner_id=test_user.id,
+        stage=default_stage,
+    )
+    form_id, token = await _create_published_form_and_token(
+        authed_client=authed_client, surrogate_id=str(surrogate.id)
+    )
+
+    wf = AutomationWorkflow(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Form submitted {uuid.uuid4().hex[:6]}",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": form_id},
+        conditions=[],
+        condition_logic="AND",
+        actions=[{"action_type": "add_note", "content": "Application submitted"}],
+        is_enabled=True,
+        scope="org",
+        owner_user_id=None,
+        created_by_user_id=test_user.id,
+    )
+    db.add(wf)
+    db.flush()
+
+    submit_res = await authed_client.post(
+        f"/forms/public/{token}/submit",
+        data={"answers": json.dumps({"full_name": "Jane Doe"})},
+    )
+    assert submit_res.status_code == 200
+
+    notes = (
+        db.query(EntityNote)
+        .filter(
+            EntityNote.organization_id == test_org.id,
+            EntityNote.entity_type == "surrogate",
+            EntityNote.entity_id == surrogate.id,
+            EntityNote.content == "Application submitted",
+        )
+        .all()
+    )
+    assert len(notes) == 1
+
+
+@pytest.mark.asyncio
 async def test_org_workflow_send_email_all_admins_runs_for_queue_owned_surrogate(
     db, test_org, default_stage
 ):

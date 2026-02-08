@@ -196,6 +196,31 @@ def trigger_form_started(
     )
 
 
+def trigger_form_submitted(
+    db: Session,
+    surrogate: Surrogate,
+    form_id: UUID,
+    submission_id: UUID,
+    submitted_at: datetime | None,
+) -> None:
+    """Trigger workflows when an applicant submits a form."""
+    engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.FORM_SUBMITTED,
+        entity_type="surrogate",
+        entity_id=surrogate.id,
+        event_data={
+            "surrogate_id": str(surrogate.id),
+            "form_id": str(form_id),
+            "submission_id": str(submission_id),
+            "submitted_at": submitted_at.isoformat() if submitted_at else None,
+        },
+        org_id=surrogate.organization_id,
+        source=WorkflowEventSource.SYSTEM,
+        entity_owner_id=_get_entity_owner_id(surrogate),
+    )
+
+
 # =============================================================================
 # Task Triggers (called from worker sweep)
 # =============================================================================
