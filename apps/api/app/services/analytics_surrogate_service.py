@@ -55,28 +55,6 @@ def get_analytics_summary(
     """Get high-level analytics summary."""
     from app.services import pipeline_service
 
-    total_surrogates = (
-        db.query(func.count(Surrogate.id))
-        .filter(
-            Surrogate.organization_id == organization_id,
-            Surrogate.is_archived.is_(False),
-        )
-        .scalar()
-        or 0
-    )
-
-    new_this_period = (
-        db.query(func.count(Surrogate.id))
-        .filter(
-            Surrogate.organization_id == organization_id,
-            Surrogate.is_archived.is_(False),
-            Surrogate.created_at >= start,
-            Surrogate.created_at < end,
-        )
-        .scalar()
-        or 0
-    )
-
     pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
     stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
     qualified_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "qualified")
@@ -89,16 +67,32 @@ def get_analytics_summary(
             s.id for s in stages if s.stage_type in ("post_approval", "terminal") and s.is_active
         ]
 
-    qualified_count = (
-        db.query(func.count(Surrogate.id))
+    result = (
+        db.query(
+            func.count(Surrogate.id).label("total"),
+            func.sum(
+                case(
+                    (and_(Surrogate.created_at >= start, Surrogate.created_at < end), 1),
+                    else_=0,
+                )
+            ).label("new_period"),
+            func.sum(
+                case(
+                    (Surrogate.stage_id.in_(qualified_stage_ids), 1),
+                    else_=0,
+                )
+            ).label("qualified"),
+        )
         .filter(
             Surrogate.organization_id == organization_id,
             Surrogate.is_archived.is_(False),
-            Surrogate.stage_id.in_(qualified_stage_ids),
         )
-        .scalar()
-        or 0
+        .one()
     )
+
+    total_surrogates = result.total or 0
+    new_this_period = result.new_period or 0
+    qualified_count = result.qualified or 0
 
     qualified_rate = (qualified_count / total_surrogates * 100) if total_surrogates > 0 else 0.0
 
