@@ -273,38 +273,74 @@ export function SurrogateTasksCalendar({
                                                     id={`task-${task.id}`}
                                                     className="mt-0.5"
                                                     checked={task.is_completed}
+                                                    aria-label={
+                                                        task.is_completed
+                                                            ? `Mark ${task.title} as incomplete`
+                                                            : `Mark ${task.title} as complete`
+                                                    }
                                                     onCheckedChange={() => onTaskToggle(task.id, task.is_completed)}
                                                 />
-                                                <div
-                                                    className="flex-1 min-w-0 cursor-pointer"
-                                                    onClick={() => onTaskClick?.(task)}
-                                                >
-                                                    <label
-                                                        htmlFor={`task-${task.id}`}
-                                                        className={cn(
-                                                            "text-sm font-medium leading-tight cursor-pointer block",
-                                                            task.is_completed && "line-through text-muted-foreground"
-                                                        )}
+                                                {onTaskClick ? (
+                                                    <button
+                                                        type="button"
+                                                        className="flex-1 min-w-0 text-left"
+                                                        onClick={() => onTaskClick(task)}
                                                     >
-                                                        {task.title}
-                                                    </label>
-                                                    <div className="flex items-center gap-2 mt-1">
-                                                        <Badge
-                                                            variant="outline"
-                                                            className="text-xs h-5 px-1.5 font-normal"
+                                                        <span
+                                                            className={cn(
+                                                                "text-sm font-medium leading-tight block",
+                                                                task.is_completed &&
+                                                                    "line-through text-muted-foreground"
+                                                            )}
                                                         >
-                                                            {formatDueLabel(task)}
-                                                        </Badge>
-                                                        {task.task_type && (
+                                                            {task.title}
+                                                        </span>
+                                                        <div className="flex items-center gap-2 mt-1">
                                                             <Badge
-                                                                variant="secondary"
-                                                                className="text-xs h-5 px-1.5 font-normal capitalize"
+                                                                variant="outline"
+                                                                className="text-xs h-5 px-1.5 font-normal"
                                                             >
-                                                                {task.task_type.replace(/_/g, " ")}
+                                                                {formatDueLabel(task)}
                                                             </Badge>
-                                                        )}
+                                                            {task.task_type && (
+                                                                <Badge
+                                                                    variant="secondary"
+                                                                    className="text-xs h-5 px-1.5 font-normal capitalize"
+                                                                >
+                                                                    {task.task_type.replace(/_/g, " ")}
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                    </button>
+                                                ) : (
+                                                    <div className="flex-1 min-w-0">
+                                                        <span
+                                                            className={cn(
+                                                                "text-sm font-medium leading-tight block",
+                                                                task.is_completed &&
+                                                                    "line-through text-muted-foreground"
+                                                            )}
+                                                        >
+                                                            {task.title}
+                                                        </span>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <Badge
+                                                                variant="outline"
+                                                                className="text-xs h-5 px-1.5 font-normal"
+                                                            >
+                                                                {formatDueLabel(task)}
+                                                            </Badge>
+                                                            {task.task_type && (
+                                                                <Badge
+                                                                    variant="secondary"
+                                                                    className="text-xs h-5 px-1.5 font-normal capitalize"
+                                                                >
+                                                                    {task.task_type.replace(/_/g, " ")}
+                                                                </Badge>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                </div>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
@@ -330,14 +366,22 @@ export function SurrogateTasksCalendar({
                                                     id={`task-completed-${task.id}`}
                                                     className="mt-0.5"
                                                     checked={true}
+                                                    aria-label={`Mark ${task.title} as incomplete`}
                                                     onCheckedChange={() => onTaskToggle(task.id, true)}
                                                 />
-                                                <label
-                                                    htmlFor={`task-completed-${task.id}`}
-                                                    className="text-sm line-through text-muted-foreground cursor-pointer"
-                                                >
-                                                    {task.title}
-                                                </label>
+                                                {onTaskClick ? (
+                                                    <button
+                                                        type="button"
+                                                        className="flex-1 min-w-0 text-left text-sm line-through text-muted-foreground"
+                                                        onClick={() => onTaskClick(task)}
+                                                    >
+                                                        {task.title}
+                                                    </button>
+                                                ) : (
+                                                    <span className="flex-1 min-w-0 text-sm line-through text-muted-foreground">
+                                                        {task.title}
+                                                    </span>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
