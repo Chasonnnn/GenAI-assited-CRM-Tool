@@ -38,6 +38,7 @@ const TYPE_GROUPS: Record<string, string[]> = {
         "interview_transcription_completed",
         "attachment_infected",
     ],
+    application: ["form_submission_received"],
     task: [
         "task_assigned",
         "task_due_soon",
@@ -52,6 +53,7 @@ const TYPE_GROUPS: Record<string, string[]> = {
 
 function getNotificationIcon(type: string) {
     if (type.startsWith("surrogate")) return FileTextIcon
+    if (type.startsWith("form_submission")) return FileTextIcon
     if (type.startsWith("interview")) return FileTextIcon
     if (type.startsWith("attachment")) return FileTextIcon
     if (
@@ -185,21 +187,23 @@ export default function NotificationsPage() {
                 <div className="flex items-center gap-3">
                     <Select value={typeFilter} onValueChange={(v) => { if (v) setTypeFilter(v) }}>
                         <SelectTrigger className="w-[200px]">
-                            <SelectValue placeholder="Filter by type">
-                                {(value: string | null) => {
-                                    const labels: Record<string, string> = {
-                                        all: "All",
-                                        surrogate: "Surrogate Updates",
-                                        task: "Task Updates",
-                                        appointment: "Appointments",
-                                    }
-                                    return labels[value ?? "all"] ?? "All"
-                                }}
-                            </SelectValue>
+                        <SelectValue placeholder="Filter by type">
+                            {(value: string | null) => {
+                                const labels: Record<string, string> = {
+                                    all: "All",
+                                    surrogate: "Surrogate Updates",
+                                    application: "Applications",
+                                    task: "Task Updates",
+                                    appointment: "Appointments",
+                                }
+                                return labels[value ?? "all"] ?? "All"
+                            }}
+                        </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All</SelectItem>
                             <SelectItem value="surrogate">Surrogate Updates</SelectItem>
+                            <SelectItem value="application">Applications</SelectItem>
                             <SelectItem value="task">Task Updates</SelectItem>
                             <SelectItem value="appointment">Appointments</SelectItem>
                         </SelectContent>
