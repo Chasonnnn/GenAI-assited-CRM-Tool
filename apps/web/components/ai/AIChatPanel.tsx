@@ -264,7 +264,7 @@ export function AIChatPanel({
                     <span className="font-semibold">AI Assistant</span>
                 </div>
                 {onClose && (
-                    <Button variant="ghost" size="icon" onClick={onClose}>
+                    <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close AI Assistant">
                         <XIcon className="h-4 w-4" />
                     </Button>
                 )}
@@ -483,6 +483,7 @@ function ActionCard({
                             className="h-7 w-7 text-destructive hover:bg-destructive/10"
                             onClick={onReject}
                             disabled={isRejecting}
+                            aria-label="Reject action"
                         >
                             <XCircleIcon className="h-4 w-4" />
                         </Button>
@@ -492,6 +493,7 @@ function ActionCard({
                             className="h-7 w-7 text-green-600 hover:bg-green-600/10"
                             onClick={onApprove}
                             disabled={isApproving}
+                            aria-label="Approve action"
                         >
                             {isApproving ? (
                                 <Loader2Icon className="h-4 w-4 animate-spin" />
