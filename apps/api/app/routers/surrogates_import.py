@@ -250,6 +250,10 @@ def get_import_details(
 # =============================================================================
 
 
+# Max file size: 10MB
+MAX_IMPORT_SIZE = 10 * 1024 * 1024
+
+
 @router.post(
     "/preview/enhanced",
     response_model=EnhancedImportPreviewResponse,
@@ -273,6 +277,30 @@ async def preview_csv_enhanced(
     - Shows matching templates
     - Indicates AI availability for unmatched columns
     """
+    # Check Content-Length header first (fast fail)
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > MAX_IMPORT_SIZE:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=f"File too large. Maximum size: {MAX_IMPORT_SIZE // 1024 // 1024}MB",
+                )
+        except ValueError:
+            pass  # Ignore invalid header
+
+    # Verify actual file size before reading content
+    # UploadFile uses SpooledTemporaryFile, so seek(0, 2) is efficient
+    await file.seek(0, 2)
+    file_size = await file.tell()
+    await file.seek(0)
+
+    if file_size > MAX_IMPORT_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File too large. Maximum size: {MAX_IMPORT_SIZE // 1024 // 1024}MB",
+        )
+
     content = await file.read()
 
     if not file.filename or not (file.filename.endswith(".csv") or file.filename.endswith(".tsv")):
