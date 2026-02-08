@@ -12,6 +12,22 @@ from app.core.config import settings
 
 
 # =============================================================================
+# Constant-Time Secret Verification
+# =============================================================================
+
+
+def verify_secret(provided: str | None, expected: str | None) -> bool:
+    """
+    Verify shared secrets using constant-time comparison.
+
+    Returns False if either value is missing/empty.
+    """
+    if not provided or not expected:
+        return False
+    return secrets.compare_digest(str(provided), str(expected))
+
+
+# =============================================================================
 # Session Token (JWT in cookie)
 # =============================================================================
 
@@ -204,11 +220,15 @@ def verify_oauth_state(
     Returns:
         (success, error_message)
     """
-    if stored_payload.get("state") != received_state:
+    stored_state = stored_payload.get("state")
+    if not verify_secret(received_state, stored_state if isinstance(stored_state, str) else None):
         return False, "State mismatch - possible CSRF attack"
 
     expected_ua_hash = hash_user_agent(user_agent)
-    if stored_payload.get("ua_hash") != expected_ua_hash:
+    stored_ua_hash = stored_payload.get("ua_hash")
+    if not verify_secret(
+        expected_ua_hash, stored_ua_hash if isinstance(stored_ua_hash, str) else None
+    ):
         return False, "User-agent mismatch - possible session hijack"
 
     return True, ""

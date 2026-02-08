@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.security import verify_secret
 from app.core.structured_logging import build_log_context
 from app.db.enums import AlertSeverity, AlertType, AlertStatus
 from app.core.deps import get_db
@@ -27,7 +28,7 @@ def verify_internal_secret(
     expected = settings.INTERNAL_SECRET if hasattr(settings, "INTERNAL_SECRET") else None
     if not expected:
         raise HTTPException(status_code=501, detail="INTERNAL_SECRET not configured")
-    if x_internal_secret != expected:
+    if not verify_secret(x_internal_secret, expected):
         raise HTTPException(status_code=403, detail="Invalid internal secret")
     return
 

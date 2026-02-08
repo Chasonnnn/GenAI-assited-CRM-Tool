@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.security import verify_secret
 from app.db.enums import JobType
 from app.services import job_service, meta_api, meta_page_service
 
@@ -144,7 +145,7 @@ async def simulate_meta_webhook(request: Request, db: Session) -> dict:
         raise HTTPException(403, "Only available in test mode")
 
     dev_secret = request.headers.get("X-Dev-Secret", "")
-    if dev_secret != settings.DEV_SECRET:
+    if not verify_secret(dev_secret, settings.DEV_SECRET):
         raise HTTPException(403, "Invalid dev secret")
 
     # Create a mock webhook payload
