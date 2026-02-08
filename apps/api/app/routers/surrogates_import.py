@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.schemas.import_template import (
     ColumnMappingItem,
@@ -290,10 +291,12 @@ async def preview_csv_enhanced(
             pass  # Ignore invalid header
 
     # Verify actual file size before reading content
-    # UploadFile uses SpooledTemporaryFile, so seek(0, 2) is efficient
-    await file.seek(0, 2)
-    file_size = await file.tell()
-    await file.seek(0)
+    # UploadFile uses SpooledTemporaryFile, so seek(0, 2) is efficient.
+    # NOTE: UploadFile.seek() does not support 'whence' argument in recent Starlette versions,
+    # so we access the underlying file via run_in_threadpool.
+    await run_in_threadpool(file.file.seek, 0, 2)
+    file_size = await run_in_threadpool(file.file.tell)
+    await run_in_threadpool(file.file.seek, 0)
 
     if file_size > MAX_IMPORT_SIZE:
         raise HTTPException(
