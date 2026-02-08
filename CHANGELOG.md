@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.75.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.74.1...surrogacy-crm-platform-v0.75.0) (2026-02-08)
+
+
+### Features
+
+* improve accessibility of AI Chat Panel buttons ([b035969](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b03596903bf58db61d7fec452a09a56a2a582beb))
+
+
+### Bug Fixes
+
+* **a11y:** improve task calendar keyboard accessibility ([e247847](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e247847e0722ca7ded304d555b3d05a760c6af8d))
+* **perf:** reduce DB queries in dashboard stats endpoints ([2ad67f6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2ad67f68907083d593ffbbc6d2158202864ee47b))
+* **security:** add HTTP security headers to Next.js responses ([964b464](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/964b46487f8f02de188c0839695b5fca27cad73a))
+* **security:** add size and row limits for CSV import ([a406414](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a40641472395b83af3189b6b55c14d87def63311))
+* **security:** use constant-time comparison for shared secrets ([02ffda9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/02ffda9b94c46c2f8b704abdefd8897af63dd9b9))
+* **ui:** add Applications filter to notifications page ([afb0b66](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/afb0b66a8ec7c00bd40696711040bee136668771))
+* **workflows:** add form_submitted trigger for application submissions ([0b9c360](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0b9c360b1c263fd909b95968a19697b1687b5d80))
+
 ## [0.74.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.74.0...surrogacy-crm-platform-v0.74.1) (2026-02-07)
 
 
