@@ -4,9 +4,9 @@ from datetime import datetime, timezone
 import logging
 from uuid import UUID
 
-from sqlalchemy import func, or_
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import (
@@ -1161,58 +1161,128 @@ def get_surrogate_stats(
     from app.db.models import Task, PipelineStage
     from app.db.enums import TaskType
 
-    # Base query for non-archived surrogates
-    base = db.query(Surrogate).filter(
+    surrogate_filters = [
         Surrogate.organization_id == org_id,
         Surrogate.is_archived.is_(False),
-    )
+    ]
+    if owner_id:
+        surrogate_filters.extend(
+            [
+                Surrogate.owner_type == OwnerType.USER.value,
+                Surrogate.owner_id == owner_id,
+            ]
+        )
+
+    task_filters = [
+        Task.organization_id == org_id,
+        Task.is_completed.is_(False),
+        Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
+    ]
+    if owner_id:
+        task_filters.extend(
+            [
+                Task.owner_type == OwnerType.USER.value,
+                Task.owner_id == owner_id,
+            ]
+        )
+
+    pending_tasks_stmt = select(func.count(Task.id)).select_from(Task).where(*task_filters)
     if pipeline_id:
-        base = base.join(PipelineStage, Surrogate.stage_id == PipelineStage.id).filter(
+        # Prevent implicit correlation with the outer Surrogate query.
+        surrogate_for_tasks = aliased(Surrogate)
+        stage_for_tasks = aliased(PipelineStage)
+        pending_tasks_stmt = (
+            pending_tasks_stmt.join(
+                surrogate_for_tasks, Task.surrogate_id == surrogate_for_tasks.id
+            )
+            .join(stage_for_tasks, surrogate_for_tasks.stage_id == stage_for_tasks.id)
+            .where(
+                surrogate_for_tasks.organization_id == org_id,
+                surrogate_for_tasks.is_archived.is_(False),
+                stage_for_tasks.pipeline_id == pipeline_id,
+            )
+        )
+    pending_tasks_subq = pending_tasks_stmt.scalar_subquery()
+
+    # Aggregate counts in a single query to reduce DB round trips.
+    agg_query = db.query(
+        func.count(Surrogate.id).label("total"),
+        func.coalesce(
+            func.sum(case((Surrogate.created_at >= week_ago, 1), else_=0)),
+            0,
+        ).label("this_week"),
+        func.coalesce(
+            func.sum(
+                case(
+                    (
+                        and_(
+                            Surrogate.created_at >= two_weeks_ago, Surrogate.created_at < week_ago
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ),
+            0,
+        ).label("last_week"),
+        func.coalesce(
+            func.sum(
+                case(
+                    (
+                        and_(
+                            Surrogate.contact_status == ContactStatus.UNREACHED.value,
+                            Surrogate.created_at >= last_24h,
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ),
+            0,
+        ).label("new_leads_24h"),
+        func.coalesce(
+            func.sum(
+                case(
+                    (
+                        and_(
+                            Surrogate.contact_status == ContactStatus.UNREACHED.value,
+                            Surrogate.created_at >= prev_24h,
+                            Surrogate.created_at < last_24h,
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ),
+            0,
+        ).label("new_leads_prev_24h"),
+        pending_tasks_subq.label("pending_tasks"),
+    ).filter(*surrogate_filters)
+    if pipeline_id:
+        agg_query = agg_query.join(PipelineStage, Surrogate.stage_id == PipelineStage.id).filter(
             PipelineStage.pipeline_id == pipeline_id
         )
-    if owner_id:
-        base = base.filter(
-            Surrogate.owner_type == OwnerType.USER.value,
-            Surrogate.owner_id == owner_id,
-        )
 
-    # Total count
-    total = base.count()
+    agg = agg_query.one()
 
-    # Count by status
-    status_query = db.query(Surrogate.status_label, func.count(Surrogate.id).label("count")).filter(
-        Surrogate.organization_id == org_id,
-        Surrogate.is_archived.is_(False),
-    )
+    total = int(agg.total or 0)
+    this_week = int(agg.this_week or 0)
+    last_week = int(agg.last_week or 0)
+    new_leads_24h = int(agg.new_leads_24h or 0)
+    new_leads_prev_24h = int(agg.new_leads_prev_24h or 0)
+    pending_tasks = int(agg.pending_tasks or 0)
+
+    # Count by status (separate grouped query).
+    status_query = db.query(
+        Surrogate.status_label,
+        func.count(Surrogate.id).label("count"),
+    ).filter(*surrogate_filters)
     if pipeline_id:
         status_query = status_query.join(
             PipelineStage, Surrogate.stage_id == PipelineStage.id
         ).filter(PipelineStage.pipeline_id == pipeline_id)
-    if owner_id:
-        status_query = status_query.filter(
-            Surrogate.owner_type == OwnerType.USER.value,
-            Surrogate.owner_id == owner_id,
-        )
     status_counts = status_query.group_by(Surrogate.status_label).all()
-
     by_status = {row.status_label: row.count for row in status_counts}
-
-    # This week vs last week
-    this_week = base.filter(Surrogate.created_at >= week_ago).count()
-    last_week = base.filter(
-        Surrogate.created_at >= two_weeks_ago, Surrogate.created_at < week_ago
-    ).count()
-
-    # New leads (unreached) in last 24h vs previous 24h
-    new_leads_24h = base.filter(
-        Surrogate.contact_status == ContactStatus.UNREACHED.value,
-        Surrogate.created_at >= last_24h,
-    ).count()
-    new_leads_prev_24h = base.filter(
-        Surrogate.contact_status == ContactStatus.UNREACHED.value,
-        Surrogate.created_at >= prev_24h,
-        Surrogate.created_at < last_24h,
-    ).count()
 
     # Calculate percentage changes (handle division by zero)
     def calc_change_pct(current: int, previous: int) -> float | None:
@@ -1222,29 +1292,6 @@ def get_surrogate_stats(
 
     week_change_pct = calc_change_pct(this_week, last_week)
     new_leads_change_pct = calc_change_pct(new_leads_24h, new_leads_prev_24h)
-
-    # Pending tasks count (for dashboard)
-    task_query = db.query(func.count(Task.id)).filter(
-        Task.organization_id == org_id,
-        Task.is_completed.is_(False),
-        Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
-    )
-    if owner_id:
-        task_query = task_query.filter(
-            Task.owner_type == OwnerType.USER.value,
-            Task.owner_id == owner_id,
-        )
-    if pipeline_id:
-        task_query = (
-            task_query.join(Surrogate, Task.surrogate_id == Surrogate.id)
-            .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
-            .filter(
-                Surrogate.organization_id == org_id,
-                Surrogate.is_archived.is_(False),
-                PipelineStage.pipeline_id == pipeline_id,
-            )
-        )
-    pending_tasks = task_query.scalar() or 0
 
     return {
         "total": total,
