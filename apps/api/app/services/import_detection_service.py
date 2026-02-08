@@ -23,6 +23,7 @@ from difflib import SequenceMatcher
 from enum import Enum
 from typing import TYPE_CHECKING
 
+from app.core.config import settings
 from app.services.import_transformers import get_suggested_transformer
 
 if TYPE_CHECKING:
@@ -83,6 +84,15 @@ class ColumnSuggestion:
     warnings: list[str] = field(default_factory=list)
     default_action: str | None = None  # 'ignore', 'metadata', etc.
     needs_inversion: bool = False  # For inverted boolean questions
+
+
+# =============================================================================
+# Exceptions
+# =============================================================================
+
+
+class ImportPreviewTooManyRowsError(ValueError):
+    """Raised when an import preview exceeds the configured row limit."""
 
 
 # =============================================================================
@@ -1032,9 +1042,9 @@ def detect_file_format(content: bytes) -> DetectionResult:
 
     # Parse CSV
     reader = csv.reader(io.StringIO(decoded), delimiter=delimiter)
-    rows = list(reader)
-
-    if not rows:
+    try:
+        headers = next(reader)
+    except StopIteration:
         return DetectionResult(
             encoding=encoding,
             delimiter=delimiter,
@@ -1045,19 +1055,26 @@ def detect_file_format(content: bytes) -> DetectionResult:
         )
 
     # Assume first row is header
-    headers = rows[0]
     if headers and headers[0].startswith("\ufeff"):
         headers[0] = headers[0].lstrip("\ufeff")
-    data_rows = rows[1:]
 
-    # Get sample rows (first 5)
-    sample_rows = data_rows[:5]
+    sample_rows: list[list[str]] = []
+    row_count = 0
+    max_rows = settings.IMPORT_CSV_MAX_ROWS
+
+    # Stream rows: keep only the first 5 in memory and count the rest.
+    for row in reader:
+        row_count += 1
+        if row_count <= 5:
+            sample_rows.append(row)
+        if max_rows and row_count > max_rows:
+            raise ImportPreviewTooManyRowsError(f"Too many rows (max {max_rows})")
 
     return DetectionResult(
         encoding=encoding,
         delimiter=delimiter,
         has_header=True,
-        row_count=len(data_rows),
+        row_count=row_count,
         headers=headers,
         sample_rows=sample_rows,
     )

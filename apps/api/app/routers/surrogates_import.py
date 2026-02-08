@@ -5,6 +5,7 @@ Provides REST interface for bulk surrogate imports via CSV upload.
 """
 
 import asyncio
+import os
 from collections.abc import AsyncIterator
 from uuid import UUID
 
@@ -33,6 +34,7 @@ from app.core.deps import (
 )
 from app.core.permissions import PermissionKey as P
 from app.core.policies import POLICIES
+from app.core.config import settings
 from app.db.enums import Role, SurrogateSource
 from app.schemas.auth import UserSession
 from app.services import import_service
@@ -273,13 +275,47 @@ async def preview_csv_enhanced(
     - Shows matching templates
     - Indicates AI availability for unmatched columns
     """
-    content = await file.read()
-
     if not file.filename or not (file.filename.endswith(".csv") or file.filename.endswith(".tsv")):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File must be a CSV or TSV file",
         )
+
+    # Enforce size limit BEFORE reading into memory.
+    try:
+        file.file.seek(0, os.SEEK_END)
+        file_size = file.file.tell()
+        file.file.seek(0)
+    except Exception:
+        file_size = None
+        try:
+            file.file.seek(0)
+        except Exception:
+            pass
+
+    max_bytes = settings.IMPORT_CSV_MAX_BYTES
+    if file_size is not None and file_size > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="File too large",
+        )
+
+    # Fallback: if size is unknown/unseekable, only read up to max_bytes+1.
+    if file_size is None:
+        content = await file.read(max_bytes + 1)
+        if len(content) > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail="File too large",
+            )
+    else:
+        content = await file.read()
+        if len(content) > max_bytes:
+            # Defensive check in case the underlying file changed or tell() was inaccurate.
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail="File too large",
+            )
 
     file_hash = import_service.compute_file_hash(content)
     existing = import_service.find_active_import_by_hash(db, session.org_id, file_hash)
@@ -299,6 +335,16 @@ async def preview_csv_enhanced(
             file_content=content,
             apply_template=apply_template,
             enable_ai=enable_ai,
+        )
+    except import_service.ImportPreviewTooLargeError:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="File too large",
+        )
+    except import_service.ImportPreviewTooManyRowsError as e:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=str(e),
         )
     except Exception as e:
         raise HTTPException(

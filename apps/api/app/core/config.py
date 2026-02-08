@@ -160,6 +160,10 @@ class Settings(BaseSettings):
     META_ENCRYPTION_KEY: str = ""  # Fernet key for encrypting page tokens
     META_WEBHOOK_MAX_PAYLOAD_BYTES: int = 100000  # 100KB limit
 
+    # Surrogate CSV import limits (preview/execute)
+    IMPORT_CSV_MAX_BYTES: int = 10 * 1024 * 1024  # 10MB
+    IMPORT_CSV_MAX_ROWS: int = 200_000
+
     # Meta Conversions API (CAPI) - for sending lead quality signals back to Meta
     META_CAPI_ENABLED: bool = False  # Enable sending status updates to Meta
 

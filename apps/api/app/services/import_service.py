@@ -25,6 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.encryption import hash_email
 from app.db.enums import SurrogateSource
 from app.db.models import ImportTemplate, Surrogate, SurrogateImport
@@ -33,6 +34,7 @@ from app.services import surrogate_service
 from app.services.import_detection_service import (
     AVAILABLE_IMPORT_FIELDS,
     ColumnSuggestion,
+    ImportPreviewTooManyRowsError,
     analyze_columns_with_learning,
     detect_file_format,
     normalize_column_name,
@@ -56,6 +58,15 @@ VALIDATION_MODE_SKIP = "skip_invalid_rows"
 VALIDATION_MODE_DROP_FIELDS = "drop_invalid_fields"
 VALIDATION_MODES = {VALIDATION_MODE_SKIP, VALIDATION_MODE_DROP_FIELDS}
 REQUIRED_IMPORT_FIELDS = {"full_name", "email"}
+
+
+# =============================================================================
+# Exceptions
+# =============================================================================
+
+
+class ImportPreviewTooLargeError(ValueError):
+    """Raised when a file exceeds the configured byte limit for preview."""
 
 
 # =============================================================================
@@ -726,8 +737,14 @@ async def preview_import_enhanced(
 
     logger = logging.getLogger(__name__)
 
-    # Detect file format
-    detection = detect_file_format(file_content)
+    if len(file_content) > settings.IMPORT_CSV_MAX_BYTES:
+        raise ImportPreviewTooLargeError("File too large")
+
+    # Detect file format (may raise ImportPreviewTooManyRowsError)
+    try:
+        detection = detect_file_format(file_content)
+    except ImportPreviewTooManyRowsError:
+        raise
 
     # Analyze columns WITH learning from previous corrections
     column_suggestions = analyze_columns_with_learning(
@@ -800,11 +817,6 @@ async def preview_import_enhanced(
     matched = sum(1 for s in column_suggestions if s.confidence >= 0.5)
     unmatched = len(column_suggestions) - matched
 
-    decoded = file_content.decode(detection.encoding)
-    reader = csv.reader(io.StringIO(decoded), delimiter=detection.delimiter)
-    rows = list(reader)
-    data_rows = rows[1:] if detection.has_header else rows
-
     # Check for email column and duplicates (recompute in case email mapping changed)
     email_col_idx = None
     for idx, suggestion in enumerate(column_suggestions):
@@ -812,25 +824,57 @@ async def preview_import_enhanced(
             email_col_idx = idx
             break
 
-    all_emails: list[str] = []
-    if email_col_idx is not None:
-        for row in data_rows:
-            if email_col_idx < len(row):
-                email = row[email_col_idx].strip().lower()
-                if email:
-                    all_emails.append(email)
-
     duplicate_details: list[dict[str, str]] = []
     duplicate_emails_db = 0
     duplicate_emails_csv = 0
     new_records = 0
-    if all_emails:
-        (
-            duplicate_emails_db,
-            duplicate_emails_csv,
-            duplicate_details,
-            new_records,
-        ) = _compute_dedup_stats(db, org_id, all_emails)
+    if email_col_idx is not None:
+        # Stream through rows to avoid materializing the full CSV into a list of rows.
+        try:
+            decoded = file_content.decode(detection.encoding)
+        except UnicodeDecodeError:
+            decoded = file_content.decode("latin-1")
+
+        reader = csv.reader(io.StringIO(decoded), delimiter=detection.delimiter)
+        if detection.has_header:
+            next(reader, None)
+
+        seen_emails: set[str] = set()
+        duplicate_in_csv: set[str] = set()
+        for row in reader:
+            if email_col_idx < len(row):
+                email = row[email_col_idx].strip().lower()
+                if not email:
+                    continue
+                if email in seen_emails:
+                    duplicate_in_csv.add(email)
+                else:
+                    seen_emails.add(email)
+
+        if seen_emails:
+            email_hashes = {hash_email(email): email for email in seen_emails}
+            existing = db.execute(
+                select(Surrogate.id, Surrogate.email_hash).where(
+                    Surrogate.organization_id == org_id,
+                    Surrogate.is_archived.is_(False),
+                    Surrogate.email_hash.in_(list(email_hashes.keys())),
+                )
+            ).all()
+
+            for surrogate_id, email_hash in existing:
+                email = email_hashes.get(email_hash)
+                if email:
+                    duplicate_details.append(
+                        {
+                            "email": email,
+                            "existing_id": str(surrogate_id),
+                        }
+                    )
+
+            duplicate_emails_db = len(duplicate_details)
+            duplicate_emails_csv = len(duplicate_in_csv)
+            duplicates_db_emails = {d["email"] for d in duplicate_details}
+            new_records = len(seen_emails - duplicates_db_emails)
 
     # Build sample rows dict
     sample_rows_dict = []
@@ -853,7 +897,7 @@ async def preview_import_enhanced(
 
     date_warnings = _detect_date_ambiguity_warnings(
         detection.headers,
-        data_rows,
+        detection.sample_rows[:5],
         date_column_map,
     )
 
