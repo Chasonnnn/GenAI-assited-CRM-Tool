@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.76.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.75.0...surrogacy-crm-platform-v0.76.0) (2026-02-09)
+
+
+### Features
+
+* Implement mass edit stage functionality for surrogates ([99ab76f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/99ab76f06dde1f2f78b3b8bfe5e098de7667b01a))
+
 ## [0.75.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.74.1...surrogacy-crm-platform-v0.75.0) (2026-02-08)
 
 
