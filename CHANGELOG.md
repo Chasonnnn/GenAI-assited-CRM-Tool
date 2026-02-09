@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.77.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.76.0...surrogacy-crm-platform-v0.77.0) (2026-02-09)
+
+
+### Features
+
+* **platform:** Add template delete functionality and improve listing ([ec6ba6a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ec6ba6aeabd27e1bc0acb99452ae4b2257c32250))
+
+
+### Maintenance
+
+* **db:** Add migration for surrogate full application form template ([3350ec0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3350ec05ca6cdc328c1a845df46195b59c4a04d7))
+
 ## [0.76.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.75.0...surrogacy-crm-platform-v0.76.0) (2026-02-09)
 
 
