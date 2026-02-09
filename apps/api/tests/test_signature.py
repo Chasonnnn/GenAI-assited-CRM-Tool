@@ -177,7 +177,7 @@ async def test_signature_photo_upload_rejects_large_files(authed_client: AsyncCl
 
     files = {"file": ("test.png", large_data, "image/png")}
     response = await authed_client.post("/auth/me/signature/photo", files=files)
-    assert response.status_code == 400
+    assert response.status_code == 413
     assert "maximum" in response.json()["detail"].lower()
 
 
