@@ -5,6 +5,8 @@ import logging
 import re
 from urllib.parse import urlencode, urlparse
 from uuid import UUID as UUIDType
+from typing import BinaryIO
+
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -17,6 +19,7 @@ from fastapi import (
 )
 from fastapi.responses import RedirectResponse
 from PIL import Image
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
@@ -476,9 +479,9 @@ AVATAR_ALLOWED_TYPES = {"image/png", "image/jpeg", "image/webp"}
 AVATAR_MAX_DIMENSION = 400
 
 
-def _resize_avatar(file_content: bytes, content_type: str) -> bytes:
+def _resize_avatar(file_obj: BinaryIO, content_type: str) -> bytes:
     """Resize avatar to max 400x400, maintaining aspect ratio."""
-    img = Image.open(io.BytesIO(file_content))
+    img = Image.open(file_obj)
 
     # Convert to RGB if needed (for PNG with transparency)
     if img.mode in ("RGBA", "P"):
@@ -526,6 +529,7 @@ class AvatarResponse(BaseModel):
     dependencies=[Depends(require_csrf_header)],
 )
 async def upload_avatar(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     session: UserSession = Depends(get_current_session),
@@ -538,6 +542,18 @@ async def upload_avatar(
     - Allowed types: PNG, JPEG, WebP
     - Will be resized to max 400x400
     """
+    # Fast-fail check on Content-Length (mitigates disk filling)
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > (AVATAR_MAX_SIZE + 1024):
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File too large. Maximum size: {AVATAR_MAX_SIZE // 1024 // 1024}MB",
+                )
+        except ValueError:
+            pass
+
     # Validate content type
     if file.content_type not in AVATAR_ALLOWED_TYPES:
         raise HTTPException(
@@ -545,9 +561,11 @@ async def upload_avatar(
             detail=f"Invalid file type. Allowed: {', '.join(AVATAR_ALLOWED_TYPES)}",
         )
 
-    # Read and validate size
-    content = await file.read()
-    if len(content) > AVATAR_MAX_SIZE:
+    # Verify actual file size without reading into memory
+    file_size = await run_in_threadpool(file.file.seek, 0, 2)
+    await run_in_threadpool(file.file.seek, 0)
+
+    if file_size > AVATAR_MAX_SIZE:
         raise HTTPException(
             status_code=400,
             detail=f"File too large. Maximum size: {AVATAR_MAX_SIZE // 1024 // 1024}MB",
@@ -555,7 +573,7 @@ async def upload_avatar(
 
     # Resize image
     try:
-        resized_content = _resize_avatar(content, file.content_type)
+        resized_content = _resize_avatar(file.file, file.content_type)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid image file")
 
@@ -922,6 +940,7 @@ def _delete_old_signature_photo(photo_url: str):
     dependencies=[Depends(require_csrf_header)],
 )
 async def upload_signature_photo(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     session: UserSession = Depends(get_current_session),
@@ -935,6 +954,18 @@ async def upload_signature_photo(
     - Will be resized to max 400x400
     - Falls back to profile avatar if deleted
     """
+    # Fast-fail check on Content-Length (mitigates disk filling)
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > (AVATAR_MAX_SIZE + 1024):
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File too large. Maximum size: {AVATAR_MAX_SIZE // 1024 // 1024}MB",
+                )
+        except ValueError:
+            pass
+
     # Validate content type
     if file.content_type not in AVATAR_ALLOWED_TYPES:
         raise HTTPException(
@@ -942,9 +973,11 @@ async def upload_signature_photo(
             detail=f"Invalid file type. Allowed: {', '.join(AVATAR_ALLOWED_TYPES)}",
         )
 
-    # Read and validate size
-    content = await file.read()
-    if len(content) > AVATAR_MAX_SIZE:
+    # Verify actual file size without reading into memory
+    file_size = await run_in_threadpool(file.file.seek, 0, 2)
+    await run_in_threadpool(file.file.seek, 0)
+
+    if file_size > AVATAR_MAX_SIZE:
         raise HTTPException(
             status_code=400,
             detail=f"File too large. Maximum size: {AVATAR_MAX_SIZE // 1024 // 1024}MB",
@@ -952,7 +985,7 @@ async def upload_signature_photo(
 
     # Resize image (re-use avatar resize logic)
     try:
-        resized_content = _resize_avatar(content, file.content_type)
+        resized_content = _resize_avatar(file.file, file.content_type)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid image file")
 

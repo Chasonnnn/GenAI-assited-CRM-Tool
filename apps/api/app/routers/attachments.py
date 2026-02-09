@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.surrogate_access import check_surrogate_access, can_modify_surrogate
@@ -79,6 +80,7 @@ def _get_surrogate_with_access(
 @router.post("/surrogates/{surrogate_id}/attachments", response_model=AttachmentRead)
 async def upload_attachment(
     surrogate_id: UUID,
+    request: Request,
     file: Annotated[UploadFile, File()],
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["edit"])),
@@ -89,16 +91,24 @@ async def upload_attachment(
 
     File is scanned asynchronously; only infected/failed scans are quarantined.
     """
+    # Fast-fail check on Content-Length (mitigates disk filling)
+    content_length = request.headers.get("content-length")
+    if content_length:
+        max_size = attachment_service.MAX_FILE_SIZE_BYTES
+        try:
+            if int(content_length) > (max_size + 1024):  # +1KB overhead for multipart boundaries
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File too large. Maximum size: {max_size // 1024 // 1024}MB",
+                )
+        except ValueError:
+            pass  # Invalid header, fall back to stream size check
+
     surrogate = _get_surrogate_with_access(db, surrogate_id, session, require_write=True)
 
-    # Read file content
-    content = await file.read()
-    file_size = len(content)
-
-    # Create file-like object for service
-    from io import BytesIO
-
-    file_obj = BytesIO(content)
+    # Verify actual file size without reading into memory (mitigates memory exhaustion)
+    file_size = await run_in_threadpool(file.file.seek, 0, 2)
+    await run_in_threadpool(file.file.seek, 0)  # Reset pointer
 
     try:
         attachment = attachment_service.upload_attachment(
@@ -107,7 +117,7 @@ async def upload_attachment(
             user_id=session.user_id,
             filename=file.filename or "untitled",
             content_type=file.content_type or "application/octet-stream",
-            file=file_obj,
+            file=file.file,  # Stream directly from temp file
             file_size=file_size,
             surrogate_id=surrogate.id,
         )
@@ -258,6 +268,7 @@ async def list_ip_attachments(
 @router.post("/intended-parents/{ip_id}/attachments", response_model=AttachmentRead)
 async def upload_ip_attachment(
     ip_id: UUID,
+    request: Request,
     file: Annotated[UploadFile, File()],
     db: Session = Depends(get_db),
     session: UserSession = Depends(
@@ -266,14 +277,24 @@ async def upload_ip_attachment(
     _: str = Depends(require_csrf_header),
 ):
     """Upload a file attachment to an intended parent."""
+    # Fast-fail check on Content-Length (mitigates disk filling)
+    content_length = request.headers.get("content-length")
+    if content_length:
+        max_size = attachment_service.MAX_FILE_SIZE_BYTES
+        try:
+            if int(content_length) > (max_size + 1024):
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File too large. Maximum size: {max_size // 1024 // 1024}MB",
+                )
+        except ValueError:
+            pass
+
     ip = _get_ip_with_access(db, ip_id, session)
 
-    content = await file.read()
-    file_size = len(content)
-
-    from io import BytesIO
-
-    file_obj = BytesIO(content)
+    # Verify actual file size without reading into memory
+    file_size = await run_in_threadpool(file.file.seek, 0, 2)
+    await run_in_threadpool(file.file.seek, 0)
 
     try:
         attachment = attachment_service.upload_attachment(
@@ -283,7 +304,7 @@ async def upload_ip_attachment(
             user_id=session.user_id,
             filename=file.filename or "untitled",
             content_type=file.content_type or "application/octet-stream",
-            file=file_obj,
+            file=file.file,
             file_size=file_size,
         )
         db.commit()
