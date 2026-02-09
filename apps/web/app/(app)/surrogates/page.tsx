@@ -23,11 +23,13 @@ import { useQueues } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
 import type { SurrogateSource } from "@/lib/types/surrogate"
+import type { SurrogateMassEditStageFilters } from "@/lib/api/surrogates"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { cn } from "@/lib/utils"
 import { formatRace } from "@/lib/formatters"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { toast } from "sonner"
+import { MassEditStageModal } from "@/components/surrogates/MassEditStageModal"
 
 // Format date for display
 function formatDate(dateString: string | null | undefined): string {
@@ -202,6 +204,7 @@ export default function SurrogatesPage() {
     const [sortBy, setSortBy] = useState<string | null>("surrogate_number")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
     const [isCreateOpen, setIsCreateOpen] = useState(false)
+    const [isMassEditOpen, setIsMassEditOpen] = useState(false)
     const [createForm, setCreateForm] = useState({
         full_name: "",
         email: "",
@@ -336,6 +339,7 @@ export default function SurrogatesPage() {
 
     // Fetch queues for filter dropdown (case_manager+ only)
     const canSeeQueues = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
+    const isDeveloper = user?.role === "developer"
     const { data: queues } = useQueues(false, { enabled: !!canSeeQueues })
     const { data: defaultPipeline } = useDefaultPipeline()
     const stageOptions = defaultPipeline?.stages || []
@@ -418,6 +422,14 @@ export default function SurrogatesPage() {
             from = new Date(now.getFullYear(), now.getMonth(), 1)
         }
         return from ? { created_from: formatLocalDate(from) } : {}
+    }
+
+    const baseMassEditFilters: SurrogateMassEditStageFilters = {
+        ...(stageFilter === "all" ? {} : { stage_ids: [stageFilter] }),
+        ...(sourceFilter === "all" ? {} : { source: sourceFilter as SurrogateSource }),
+        ...(queueFilter === "all" ? {} : { queue_id: queueFilter }),
+        ...(debouncedSearch ? { q: debouncedSearch } : {}),
+        ...getDateRangeParams(),
     }
 
     const { data, isLoading, isError, error, refetch } = useSurrogates({
@@ -547,12 +559,33 @@ export default function SurrogatesPage() {
                             {hasTotal ? totalCount.toLocaleString() : "—"} total surrogates
                         </p>
                     </div>
-                    <Button onClick={() => setIsCreateOpen(true)}>
-                        <PlusIcon className="mr-2 size-4" />
-                        New Surrogates
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        {isDeveloper && (
+                            <Button
+                                variant="outline"
+                                onClick={() => setIsMassEditOpen(true)}
+                                disabled={!stageOptions.length}
+                            >
+                                Mass Edit
+                            </Button>
+                        )}
+                        <Button onClick={() => setIsCreateOpen(true)}>
+                            <PlusIcon className="mr-2 size-4" />
+                            New Surrogates
+                        </Button>
+                    </div>
                 </div>
             </div>
+
+            {/* Dev-only Mass Edit Modal */}
+            {isDeveloper && (
+                <MassEditStageModal
+                    open={isMassEditOpen}
+                    onOpenChange={setIsMassEditOpen}
+                    stages={stageOptions}
+                    baseFilters={baseMassEditFilters}
+                />
+            )}
 
             {/* Filters Row */}
             <div className="flex-shrink-0 border-b border-border px-6 py-3">

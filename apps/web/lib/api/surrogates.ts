@@ -404,6 +404,104 @@ export interface SurrogateActivityResponse {
     pages: number;
 }
 
+// =============================================================================
+// Developer Tools: Mass Edit (Dev Role Only)
+// =============================================================================
+
+export interface SurrogateMassEditOptionsResponse {
+    races: string[];
+}
+
+export function getSurrogateMassEditOptions(): Promise<SurrogateMassEditOptionsResponse> {
+    return api.get<SurrogateMassEditOptionsResponse>('/surrogates/mass-edit/options');
+}
+
+export interface SurrogateMassEditStageFilters {
+    stage_ids?: string[]; // Current stage filter
+    source?: SurrogateSource;
+    queue_id?: string;
+    q?: string;
+    created_from?: string; // YYYY-MM-DD
+    created_to?: string; // YYYY-MM-DD
+    states?: string[]; // ["CA", "TX"]
+    races?: string[]; // Normalized keys or labels (server normalizes)
+    is_priority?: boolean;
+
+    // Checklist
+    is_age_eligible?: boolean;
+    is_citizen_or_pr?: boolean;
+    has_child?: boolean;
+    is_non_smoker?: boolean;
+    has_surrogate_experience?: boolean;
+    num_deliveries_min?: number;
+    num_deliveries_max?: number;
+    num_csections_min?: number;
+    num_csections_max?: number;
+
+    // Derived fields
+    age_min?: number;
+    age_max?: number;
+    bmi_min?: number;
+    bmi_max?: number;
+}
+
+export interface SurrogateMassEditStagePreviewRequest {
+    filters: SurrogateMassEditStageFilters;
+}
+
+export interface SurrogateMassEditStagePreviewItem {
+    id: string;
+    surrogate_number: string;
+    full_name: string;
+    state: string | null;
+    stage_id: string;
+    status_label: string;
+    created_at: string;
+    age?: number | null;
+}
+
+export interface SurrogateMassEditStagePreviewResponse {
+    total: number;
+    over_limit: boolean;
+    max_apply: number;
+    items: SurrogateMassEditStagePreviewItem[];
+}
+
+export function previewSurrogateMassEditStage(
+    data: SurrogateMassEditStagePreviewRequest,
+    limit: number = 25
+): Promise<SurrogateMassEditStagePreviewResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.set('limit', String(limit));
+    return api.post<SurrogateMassEditStagePreviewResponse>(`/surrogates/mass-edit/stage/preview?${searchParams.toString()}`, data);
+}
+
+export interface SurrogateMassEditStageApplyRequest {
+    filters: SurrogateMassEditStageFilters;
+    stage_id: string;
+    expected_total: number;
+    trigger_workflows?: boolean;
+    reason?: string;
+}
+
+export interface SurrogateMassEditStageApplyFailure {
+    surrogate_id: string;
+    reason: string;
+}
+
+export interface SurrogateMassEditStageApplyResponse {
+    matched: number;
+    applied: number;
+    pending_approval: number;
+    failed: SurrogateMassEditStageApplyFailure[];
+}
+
+export function applySurrogateMassEditStage(
+    data: SurrogateMassEditStageApplyRequest
+): Promise<SurrogateMassEditStageApplyResponse> {
+    return api.post<SurrogateMassEditStageApplyResponse>('/surrogates/mass-edit/stage', data);
+}
+
 /**
  * Get comprehensive activity log for a surrogate (paginated).
  */

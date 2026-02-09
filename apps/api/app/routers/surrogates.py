@@ -7,6 +7,7 @@ from app.core.policies import POLICIES
 from app.routers import (
     surrogates_contact_attempts,
     surrogates_email,
+    surrogates_mass_edit,
     surrogates_read,
     surrogates_status,
     surrogates_write,
@@ -33,5 +34,6 @@ router.add_api_route(
 router.include_router(surrogates_read.router)
 router.include_router(surrogates_write.router)
 router.include_router(surrogates_status.router)
+router.include_router(surrogates_mass_edit.router)
 router.include_router(surrogates_email.router)
 router.include_router(surrogates_contact_attempts.router)

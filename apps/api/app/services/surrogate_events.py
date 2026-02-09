@@ -39,6 +39,7 @@ def handle_status_changed(
     approved_by_user_id: UUID | None,
     approved_at: datetime | None,
     requested_at: datetime | None,
+    trigger_workflows: bool = True,
 ) -> None:
     """Dispatch surrogate status change side effects."""
     from app.services import notification_facade, queue_service, workflow_triggers
@@ -87,22 +88,23 @@ def handle_status_changed(
         effective_at=effective_at,
     )
 
-    workflow_triggers.trigger_status_changed(
-        db=db,
-        surrogate=surrogate,
-        old_stage_id=old_stage_id,
-        new_stage_id=new_stage.id,
-        old_stage_slug=old_slug,
-        new_stage_slug=new_stage.slug,
-        effective_at=effective_at,
-        recorded_at=recorded_at,
-        is_undo=is_undo,
-        request_id=request_id,
-        approved_by_user_id=approved_by_user_id,
-        approved_at=approved_at,
-        requested_at=requested_at,
-        changed_by_user_id=user_id,
-    )
+    if trigger_workflows:
+        workflow_triggers.trigger_status_changed(
+            db=db,
+            surrogate=surrogate,
+            old_stage_id=old_stage_id,
+            new_stage_id=new_stage.id,
+            old_stage_slug=old_slug,
+            new_stage_slug=new_stage.slug,
+            effective_at=effective_at,
+            recorded_at=recorded_at,
+            is_undo=is_undo,
+            request_id=request_id,
+            approved_by_user_id=approved_by_user_id,
+            approved_at=approved_at,
+            requested_at=requested_at,
+            changed_by_user_id=user_id,
+        )
 
 
 def _maybe_send_capi_event(

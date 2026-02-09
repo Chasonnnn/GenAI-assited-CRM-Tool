@@ -18,6 +18,7 @@ export const surrogateKeys = {
     details: () => [...surrogateKeys.all, 'detail'] as const,
     detail: (id: string) => [...surrogateKeys.details(), id] as const,
     history: (id: string) => [...surrogateKeys.detail(id), 'history'] as const,
+    massEditOptions: () => [...surrogateKeys.all, 'mass-edit-options'] as const,
 };
 
 /**
@@ -243,6 +244,48 @@ export function useBulkArchive() {
 
     return useMutation({
         mutationFn: surrogatesApi.bulkArchiveSurrogates,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+        },
+    });
+}
+
+/**
+ * Dev-only: get distinct filter options for mass edit.
+ */
+export function useSurrogateMassEditOptions(options: { enabled?: boolean } = {}) {
+    return useQuery({
+        queryKey: surrogateKeys.massEditOptions(),
+        queryFn: surrogatesApi.getSurrogateMassEditOptions,
+        enabled: options.enabled ?? true,
+        staleTime: 2 * 60 * 1000,
+    });
+}
+
+/**
+ * Dev-only: preview a mass stage change selection.
+ */
+export function usePreviewSurrogateMassEditStage() {
+    return useMutation({
+        mutationFn: ({
+            data,
+            limit,
+        }: {
+            data: surrogatesApi.SurrogateMassEditStagePreviewRequest;
+            limit?: number;
+        }) => surrogatesApi.previewSurrogateMassEditStage(data, limit ?? 25),
+    });
+}
+
+/**
+ * Dev-only: apply a mass stage change.
+ */
+export function useApplySurrogateMassEditStage() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: surrogatesApi.applySurrogateMassEditStage,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
             queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });

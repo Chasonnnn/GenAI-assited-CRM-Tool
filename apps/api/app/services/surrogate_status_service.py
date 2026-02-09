@@ -95,6 +95,7 @@ def change_status(
     user_role: Role | None,
     reason: str | None = None,
     effective_at: datetime | None = None,
+    trigger_workflows: bool = True,
     *,
     emit_events: bool = False,
 ) -> StatusChangeResult:
@@ -212,6 +213,7 @@ def change_status(
                 effective_at=normalized_effective_at,
                 recorded_at=now,
                 is_undo=True,
+                trigger_workflows=trigger_workflows,
             )
             if emit_events:
                 from app.services import dashboard_events
@@ -278,6 +280,7 @@ def change_status(
         effective_at=normalized_effective_at,
         recorded_at=now,
         is_undo=False,
+        trigger_workflows=trigger_workflows,
     )
     if emit_events:
         from app.services import dashboard_events
@@ -302,6 +305,7 @@ def apply_status_change(
     approved_by_user_id: UUID | None = None,
     approved_at: datetime | None = None,
     requested_at: datetime | None = None,
+    trigger_workflows: bool = True,
 ) -> StatusChangeResult:
     """
     Apply a status change to a surrogate.
@@ -358,6 +362,7 @@ def apply_status_change(
         approved_by_user_id=approved_by_user_id,
         approved_at=approved_at,
         requested_at=requested_at,
+        trigger_workflows=trigger_workflows,
     )
 
     return StatusChangeResult(
