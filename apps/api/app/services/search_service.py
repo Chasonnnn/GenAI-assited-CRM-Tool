@@ -11,7 +11,7 @@ import logging
 from typing import TypedDict
 from uuid import UUID
 
-from sqlalchemy import and_, func, literal, literal_column, or_, select, text, true, union_all, cast, String
+from sqlalchemy import and_, case, func, literal, literal_column, or_, select, text, true, union_all, cast, String
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -158,7 +158,21 @@ def _global_search_unified(
         )
 
         tsquery = func.websearch_to_tsquery("simple", query)
-        rank_expr = func.ts_rank(s_alias.c.search_vector, tsquery).label("rank")
+
+        # Prepare fallback filters
+        normalized_text = normalize_search_text(query)
+        normalized_identifier = normalize_identifier(query)
+
+        search_conditions = [s_alias.c.search_vector.op("@@")(tsquery)]
+        if normalized_text:
+            search_conditions.append(s_alias.c.full_name_normalized.ilike(f"%{normalized_text}%"))
+        if normalized_identifier:
+            search_conditions.append(s_alias.c.surrogate_number_normalized.ilike(f"%{normalized_identifier}%"))
+
+        rank_expr = case(
+            (s_alias.c.search_vector.op("@@")(tsquery), func.ts_rank(s_alias.c.search_vector, tsquery)),
+            else_=literal(0.5)
+        ).label("rank")
 
         # Determine title/snippet
         title_expr = func.coalesce(s_alias.c.full_name, "Surrogate " + func.coalesce(s_alias.c.surrogate_number, ""))
@@ -179,7 +193,7 @@ def _global_search_unified(
             )
             .where(
                 s_alias.c.organization_id == org_id,
-                s_alias.c.search_vector.op("@@")(tsquery),
+                or_(*search_conditions),
                 access_filter,
             )
         )
