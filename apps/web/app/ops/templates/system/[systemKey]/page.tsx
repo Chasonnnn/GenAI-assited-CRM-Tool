@@ -7,6 +7,16 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
     Dialog,
     DialogContent,
     DialogDescription,
@@ -22,7 +32,18 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeftIcon, EyeIcon, Loader2Icon, SaveIcon, SearchIcon, SendIcon, UploadIcon, UsersIcon, AlertTriangleIcon } from "lucide-react"
+import {
+    AlertTriangleIcon,
+    ArrowLeftIcon,
+    EyeIcon,
+    Loader2Icon,
+    SaveIcon,
+    SearchIcon,
+    SendIcon,
+    Trash2Icon,
+    UploadIcon,
+    UsersIcon,
+} from "lucide-react"
 import { toast } from "sonner"
 import { TemplateVariablePicker } from "@/components/email/TemplateVariablePicker"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -33,6 +54,7 @@ import {
     usePlatformEmailBranding,
     usePlatformSystemEmailTemplate,
     usePlatformSystemEmailTemplateVariables,
+    useDeletePlatformSystemEmailTemplate,
     useSendPlatformSystemEmailCampaign,
     useSendTestPlatformSystemEmailTemplate,
     useUploadPlatformEmailBrandingLogo,
@@ -165,6 +187,7 @@ export default function PlatformSystemEmailTemplatePage() {
     const updateTemplate = useUpdatePlatformSystemEmailTemplate()
     const updateBranding = useUpdatePlatformEmailBranding()
     const uploadBrandingLogo = useUploadPlatformEmailBrandingLogo()
+    const deleteTemplate = useDeletePlatformSystemEmailTemplate()
     const sendTest = useSendTestPlatformSystemEmailTemplate()
     const sendCampaign = useSendPlatformSystemEmailCampaign()
 
@@ -182,6 +205,7 @@ export default function PlatformSystemEmailTemplatePage() {
     const [sending, setSending] = useState(false)
     const [brandingSaving, setBrandingSaving] = useState(false)
     const [campaignOpen, setCampaignOpen] = useState(false)
+    const [showDeleteDialog, setShowDeleteDialog] = useState(false)
     const [orgs, setOrgs] = useState<OrganizationSummary[]>([])
     const [orgsLoading, setOrgsLoading] = useState(false)
     const [orgSearch, setOrgSearch] = useState("")
@@ -548,6 +572,18 @@ export default function PlatformSystemEmailTemplatePage() {
         }
     }
 
+    const handleDeleteTemplate = async () => {
+        if (deleteTemplate.isPending) return
+        try {
+            await deleteTemplate.mutateAsync({ systemKey })
+            toast.success("System template deleted")
+            setShowDeleteDialog(false)
+            router.push("/ops/templates?tab=system")
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Failed to delete system template")
+        }
+    }
+
     const handleSaveBranding = async () => {
         setBrandingSaving(true)
         try {
@@ -655,6 +691,28 @@ export default function PlatformSystemEmailTemplatePage() {
 
     return (
         <div className="p-6 space-y-6">
+            <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete system template?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This deletes{" "}
+                            <span className="font-medium text-foreground">{template.name}</span>. Built-in system templates will be restored to their default content automatically.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={deleteTemplate.isPending}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDeleteTemplate}
+                            disabled={deleteTemplate.isPending}
+                            className="bg-destructive text-white hover:bg-destructive/90"
+                        >
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <Button variant="ghost" onClick={() => router.push("/ops/templates?tab=system")}>
@@ -669,6 +727,24 @@ export default function PlatformSystemEmailTemplatePage() {
                     </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                        variant="destructive"
+                        onClick={() => setShowDeleteDialog(true)}
+                        disabled={
+                            deleteTemplate.isPending ||
+                            saving ||
+                            sending ||
+                            brandingSaving ||
+                            campaignSending
+                        }
+                    >
+                        {deleteTemplate.isPending ? (
+                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                        ) : (
+                            <Trash2Icon className="mr-2 size-4" />
+                        )}
+                        Delete
+                    </Button>
                     <Dialog open={campaignOpen} onOpenChange={setCampaignOpen}>
                         <DialogTrigger className={buttonVariants({ variant: "outline" })}>
                             <UsersIcon className="mr-2 size-4" />

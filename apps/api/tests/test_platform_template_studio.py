@@ -223,6 +223,56 @@ async def test_jotform_form_template_list_includes_schema(authed_client, db, tes
 
 
 @pytest.mark.asyncio
+async def test_platform_form_templates_list_tolerates_invalid_schema_json(
+    authed_client, db, test_user
+):
+    """
+    Ops console list endpoint should never 500 just because a stored template has
+    an invalid schema_json (e.g. older data shape or overly-long labels).
+    """
+
+    test_user.is_platform_admin = True
+    db.commit()
+
+    from app.db.models import PlatformFormTemplate
+
+    template = PlatformFormTemplate(
+        id=uuid.uuid4(),
+        name="Invalid Schema Template",
+        description="This record has an invalid schema_json",
+        schema_json={
+            "pages": [
+                {
+                    "title": "Page 1",
+                    "fields": [
+                        {
+                            "key": "q1",
+                            "label": "X" * 250,
+                            "type": "text",
+                        }
+                    ],
+                }
+            ]
+        },
+        settings_json={"max_file_count": 10},
+        status="draft",
+        current_version=1,
+        published_version=0,
+        is_published_globally=False,
+    )
+    db.add(template)
+    db.commit()
+
+    resp = await authed_client.get("/platform/templates/forms")
+    assert resp.status_code == 200
+
+    payload = resp.json()
+    found = next((item for item in payload if item["id"] == str(template.id)), None)
+    assert found is not None
+    assert found["draft"]["schema_json"] is None
+
+
+@pytest.mark.asyncio
 async def test_platform_workflow_templates_publish_targets(authed_client, db, test_user, test_org):
     test_user.is_platform_admin = True
     db.commit()
@@ -259,3 +309,119 @@ async def test_platform_workflow_templates_publish_targets(authed_client, db, te
     assert list_resp.status_code == 200
     ids = {item["id"] for item in list_resp.json()}
     assert template_id in ids
+
+
+@pytest.mark.asyncio
+async def test_platform_email_templates_delete(authed_client, db, test_user):
+    test_user.is_platform_admin = True
+    db.commit()
+
+    create_resp = await authed_client.post(
+        "/platform/templates/email",
+        json={
+            "name": "Delete Me",
+            "subject": "Hello",
+            "body": "<p>Body</p>",
+            "from_email": "Ops <ops@example.com>",
+            "category": "test",
+        },
+    )
+    assert create_resp.status_code == 201
+    template_id = create_resp.json()["id"]
+
+    delete_resp = await authed_client.delete(f"/platform/templates/email/{template_id}")
+    assert delete_resp.status_code == 204
+
+    list_resp = await authed_client.get("/platform/templates/email")
+    assert list_resp.status_code == 200
+    ids = {item["id"] for item in list_resp.json()}
+    assert template_id not in ids
+
+    get_resp = await authed_client.get(f"/platform/templates/email/{template_id}")
+    assert get_resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_platform_form_templates_delete(authed_client, db, test_user):
+    test_user.is_platform_admin = True
+    db.commit()
+
+    create_resp = await authed_client.post(
+        "/platform/templates/forms",
+        json={
+            "name": "Delete Form Template",
+            "description": "Test template",
+            "schema_json": {
+                "pages": [{"title": "P1", "fields": [{"key": "q1", "label": "Q1", "type": "text"}]}]
+            },
+            "settings_json": {"max_file_count": 5},
+        },
+    )
+    assert create_resp.status_code == 201
+    template_id = create_resp.json()["id"]
+
+    delete_resp = await authed_client.delete(f"/platform/templates/forms/{template_id}")
+    assert delete_resp.status_code == 204
+
+    list_resp = await authed_client.get("/platform/templates/forms")
+    assert list_resp.status_code == 200
+    ids = {item["id"] for item in list_resp.json()}
+    assert template_id not in ids
+
+
+@pytest.mark.asyncio
+async def test_platform_workflow_templates_delete(authed_client, db, test_user):
+    test_user.is_platform_admin = True
+    db.commit()
+
+    create_resp = await authed_client.post(
+        "/platform/templates/workflows",
+        json={
+            "name": "Delete Workflow Template",
+            "description": "Test template",
+            "icon": "template",
+            "category": "general",
+            "trigger_type": "surrogate_created",
+            "trigger_config": {},
+            "conditions": [],
+            "condition_logic": "AND",
+            "actions": [],
+        },
+    )
+    assert create_resp.status_code == 201
+    template_id = create_resp.json()["id"]
+
+    delete_resp = await authed_client.delete(f"/platform/templates/workflows/{template_id}")
+    assert delete_resp.status_code == 204
+
+    list_resp = await authed_client.get("/platform/templates/workflows")
+    assert list_resp.status_code == 200
+    ids = {item["id"] for item in list_resp.json()}
+    assert template_id not in ids
+
+
+@pytest.mark.asyncio
+async def test_platform_system_email_templates_delete(authed_client, db, test_user):
+    test_user.is_platform_admin = True
+    db.commit()
+
+    create_resp = await authed_client.post(
+        "/platform/email/system-templates",
+        json={
+            "system_key": "custom_delete_test",
+            "name": "Custom Delete Test",
+            "subject": "Subject",
+            "body": "<p>Body</p>",
+            "from_email": "Ops <ops@example.com>",
+            "is_active": True,
+        },
+    )
+    assert create_resp.status_code == 201
+
+    delete_resp = await authed_client.delete("/platform/email/system-templates/custom_delete_test")
+    assert delete_resp.status_code == 204
+
+    list_resp = await authed_client.get("/platform/email/system-templates")
+    assert list_resp.status_code == 200
+    keys = {item["system_key"] for item in list_resp.json()}
+    assert "custom_delete_test" not in keys

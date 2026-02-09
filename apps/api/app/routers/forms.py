@@ -171,7 +171,8 @@ def list_form_templates(
             name=t.published_name or t.name,
             description=t.published_description,
             published_at=t.published_at,
-            updated_at=t.updated_at,
+            # Org library reflects the published snapshot; draft edits shouldn't appear as "updated" until re-published.
+            updated_at=t.published_at or t.updated_at,
         )
         for t in templates
     ]
@@ -201,7 +202,8 @@ def get_form_template(
         schema_json=template.published_schema_json,
         settings_json=template.published_settings_json,
         published_at=template.published_at,
-        updated_at=template.updated_at,
+        # Org library reflects the published snapshot; draft edits shouldn't appear as "updated" until re-published.
+        updated_at=template.published_at or template.updated_at,
     )
 
 

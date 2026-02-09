@@ -478,6 +478,13 @@ export function updatePlatformSystemEmailTemplate(
 }
 
 /**
+ * Delete platform system email template by system_key.
+ */
+export function deletePlatformSystemEmailTemplate(systemKey: string): Promise<void> {
+    return api.delete<void>(`/platform/email/system-templates/${systemKey}`);
+}
+
+/**
  * Send a test email using a platform system email template.
  */
 export function sendTestPlatformSystemEmailTemplate(
@@ -716,6 +723,10 @@ export function publishPlatformEmailTemplate(
     return api.post<PlatformEmailTemplate>(`/platform/templates/email/${id}/publish`, payload)
 }
 
+export function deletePlatformEmailTemplate(id: string): Promise<void> {
+    return api.delete<void>(`/platform/templates/email/${id}`)
+}
+
 export function sendTestPlatformEmailTemplate(
     id: string,
     payload: PlatformEmailTemplateTestSendRequest
@@ -758,6 +769,10 @@ export function publishPlatformFormTemplate(
     return api.post<PlatformFormTemplate>(`/platform/templates/forms/${id}/publish`, payload)
 }
 
+export function deletePlatformFormTemplate(id: string): Promise<void> {
+    return api.delete<void>(`/platform/templates/forms/${id}`)
+}
+
 export function listPlatformWorkflowTemplates(): Promise<PlatformWorkflowTemplateListItem[]> {
     return api.get<PlatformWorkflowTemplateListItem[]>('/platform/templates/workflows')
 }
@@ -784,4 +799,8 @@ export function publishPlatformWorkflowTemplate(
     payload: TemplatePublishRequest
 ): Promise<PlatformWorkflowTemplate> {
     return api.post<PlatformWorkflowTemplate>(`/platform/templates/workflows/${id}/publish`, payload)
+}
+
+export function deletePlatformWorkflowTemplate(id: string): Promise<void> {
+    return api.delete<void>(`/platform/templates/workflows/${id}`)
 }

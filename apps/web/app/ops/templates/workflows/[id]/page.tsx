@@ -10,12 +10,23 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useWorkflowOptions } from "@/lib/hooks/use-workflows"
 import {
     useCreatePlatformWorkflowTemplate,
+    useDeletePlatformWorkflowTemplate,
     usePlatformWorkflowTemplate,
     usePublishPlatformWorkflowTemplate,
     useUpdatePlatformWorkflowTemplate,
@@ -30,6 +41,7 @@ import {
     ArrowLeftIcon,
     Loader2Icon,
     PlusIcon,
+    Trash2Icon,
     XIcon,
     GripVerticalIcon,
     ChevronDownIcon,
@@ -380,6 +392,7 @@ export default function PlatformWorkflowTemplatePage() {
     const createTemplate = useCreatePlatformWorkflowTemplate()
     const updateTemplate = useUpdatePlatformWorkflowTemplate()
     const publishTemplate = usePublishPlatformWorkflowTemplate()
+    const deleteTemplate = useDeletePlatformWorkflowTemplate()
     const { data: options } = useWorkflowOptions("org")
 
     const [name, setName] = useState("")
@@ -393,6 +406,7 @@ export default function PlatformWorkflowTemplatePage() {
     const [actions, setActions] = useState<ActionConfig[]>([])
     const [isPublished, setIsPublished] = useState(false)
     const [showPublishDialog, setShowPublishDialog] = useState(false)
+    const [showDeleteDialog, setShowDeleteDialog] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [isPublishing, setIsPublishing] = useState(false)
 
@@ -897,6 +911,18 @@ export default function PlatformWorkflowTemplatePage() {
         }
     }
 
+    const handleDelete = async () => {
+        if (isNew || deleteTemplate.isPending) return
+        try {
+            await deleteTemplate.mutateAsync({ id })
+            toast.success("Template deleted")
+            setShowDeleteDialog(false)
+            router.push("/ops/templates?tab=workflows")
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Failed to delete template")
+        }
+    }
+
     if (!isNew && isLoading) {
         return (
             <div className="flex h-screen items-center justify-center bg-stone-100 dark:bg-stone-950">
@@ -916,6 +942,28 @@ export default function PlatformWorkflowTemplatePage() {
 
     return (
         <div className="min-h-screen bg-stone-100 dark:bg-stone-950">
+            <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete template?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This permanently deletes{" "}
+                            <span className="font-medium text-foreground">{name || "this template"}</span>. This cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={deleteTemplate.isPending}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDelete}
+                            disabled={deleteTemplate.isPending}
+                            className="bg-destructive text-white hover:bg-destructive/90"
+                        >
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
             <div className="flex h-16 items-center justify-between border-b border-stone-200 bg-white px-6 dark:border-stone-800 dark:bg-stone-900">
                 <div className="flex items-center gap-4">
                     <Button variant="ghost" size="icon" onClick={() => router.push("/ops/templates?tab=workflows")}>
@@ -934,6 +982,21 @@ export default function PlatformWorkflowTemplatePage() {
                     </Badge>
                 </div>
                 <div className="flex items-center gap-3">
+                    {!isNew && (
+                        <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => setShowDeleteDialog(true)}
+                            disabled={deleteTemplate.isPending || isSaving || isPublishing}
+                        >
+                            {deleteTemplate.isPending ? (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            ) : (
+                                <Trash2Icon className="mr-2 size-4" />
+                            )}
+                            Delete
+                        </Button>
+                    )}
                     <Button variant="outline" size="sm" onClick={handleSave} disabled={isSaving || isPublishing}>
                         {isSaving && <Loader2Icon className="mr-2 size-4 animate-spin" />}
                         Save Draft

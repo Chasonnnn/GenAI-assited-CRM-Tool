@@ -9,6 +9,7 @@ import {
     createPlatformEmailTemplate,
     updatePlatformEmailTemplate,
     publishPlatformEmailTemplate,
+    deletePlatformEmailTemplate,
     sendTestPlatformEmailTemplate,
     listPlatformEmailTemplateVariables,
     listPlatformFormTemplates,
@@ -16,16 +17,19 @@ import {
     createPlatformFormTemplate,
     updatePlatformFormTemplate,
     publishPlatformFormTemplate,
+    deletePlatformFormTemplate,
     listPlatformWorkflowTemplates,
     getPlatformWorkflowTemplate,
     createPlatformWorkflowTemplate,
     updatePlatformWorkflowTemplate,
     publishPlatformWorkflowTemplate,
+    deletePlatformWorkflowTemplate,
     listPlatformSystemEmailTemplates,
     getPlatformSystemEmailTemplate,
     listPlatformSystemEmailTemplateVariables,
     createPlatformSystemEmailTemplate,
     updatePlatformSystemEmailTemplate,
+    deletePlatformSystemEmailTemplate,
     sendTestPlatformSystemEmailTemplate,
     sendPlatformSystemEmailCampaign,
     getPlatformEmailBranding,
@@ -117,6 +121,17 @@ export function usePublishPlatformEmailTemplate() {
     })
 }
 
+export function useDeletePlatformEmailTemplate() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ id }: { id: string }) => deletePlatformEmailTemplate(id),
+        onSuccess: (_data, { id }) => {
+            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.emails() })
+            queryClient.removeQueries({ queryKey: platformTemplateKeys.emailDetail(id) })
+        },
+    })
+}
+
 export function useSendTestPlatformEmailTemplate() {
     return useMutation({
         mutationFn: async ({
@@ -184,6 +199,17 @@ export function usePublishPlatformFormTemplate() {
     })
 }
 
+export function useDeletePlatformFormTemplate() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ id }: { id: string }) => deletePlatformFormTemplate(id),
+        onSuccess: (_data, { id }) => {
+            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.forms() })
+            queryClient.removeQueries({ queryKey: platformTemplateKeys.formDetail(id) })
+        },
+    })
+}
+
 export function usePlatformWorkflowTemplates() {
     return useQuery({
         queryKey: platformTemplateKeys.workflows(),
@@ -230,6 +256,17 @@ export function usePublishPlatformWorkflowTemplate() {
         onSuccess: (_data, { id }) => {
             queryClient.invalidateQueries({ queryKey: platformTemplateKeys.workflows() })
             queryClient.invalidateQueries({ queryKey: platformTemplateKeys.workflowDetail(id) })
+        },
+    })
+}
+
+export function useDeletePlatformWorkflowTemplate() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ id }: { id: string }) => deletePlatformWorkflowTemplate(id),
+        onSuccess: (_data, { id }) => {
+            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.workflows() })
+            queryClient.removeQueries({ queryKey: platformTemplateKeys.workflowDetail(id) })
         },
     })
 }
@@ -284,6 +321,18 @@ export function useUpdatePlatformSystemEmailTemplate() {
         onSuccess: (_data, { systemKey }) => {
             queryClient.invalidateQueries({ queryKey: platformTemplateKeys.system() })
             queryClient.invalidateQueries({ queryKey: platformTemplateKeys.systemDetail(systemKey) })
+        },
+    })
+}
+
+export function useDeletePlatformSystemEmailTemplate() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ systemKey }: { systemKey: string }) =>
+            deletePlatformSystemEmailTemplate(systemKey),
+        onSuccess: (_data, { systemKey }) => {
+            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.system() })
+            queryClient.removeQueries({ queryKey: platformTemplateKeys.systemDetail(systemKey) })
         },
     })
 }

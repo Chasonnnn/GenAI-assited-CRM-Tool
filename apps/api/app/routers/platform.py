@@ -1150,6 +1150,37 @@ def create_platform_system_email_template(
     )
 
 
+@router.delete(
+    "/email/system-templates/{system_key}",
+    status_code=204,
+    dependencies=[Depends(require_csrf_header)],
+)
+def delete_platform_system_email_template(
+    system_key: str,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Delete a platform system email template (built-in or custom)."""
+    from app.services import system_email_template_service
+
+    template = system_email_template_service.get_system_template(db, system_key=system_key)
+    if not template:
+        raise HTTPException(status_code=404, detail="System template not found")
+
+    db.delete(template)
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="email_template.system.delete",
+        target_org_id=None,
+        metadata={"system_key": system_key},
+        request=request,
+    )
+    db.commit()
+    return Response(status_code=204)
+
+
 @router.get("/email/system-templates", response_model=list[SystemEmailTemplateRead])
 def list_platform_system_email_templates(
     session: PlatformUserSession = Depends(require_platform_admin),
@@ -1666,23 +1697,54 @@ def _email_list_item(template) -> PlatformEmailTemplateListItem:
 
 
 def _form_draft_from_model(template) -> PlatformFormTemplateDraft:
-    return PlatformFormTemplateDraft(
-        name=template.name,
-        description=template.description,
-        form_schema=template.schema_json,
-        settings_json=template.settings_json,
-    )
+    settings_json = template.settings_json if isinstance(template.settings_json, dict) else None
+    try:
+        return PlatformFormTemplateDraft(
+            name=template.name,
+            description=template.description,
+            form_schema=template.schema_json,
+            settings_json=settings_json,
+        )
+    except Exception:
+        # Defensive: avoid failing the whole ops template list if one record has invalid schema_json.
+        logger.warning(
+            "platform_form_template_invalid_schema_json",
+            extra={"template_id": str(template.id)},
+        )
+        return PlatformFormTemplateDraft(
+            name=template.name,
+            description=template.description,
+            form_schema=None,
+            settings_json=settings_json,
+        )
 
 
 def _form_published_from_model(template) -> PlatformFormTemplateDraft | None:
     if not template.published_version:
         return None
-    return PlatformFormTemplateDraft(
-        name=template.published_name or template.name,
-        description=template.published_description,
-        form_schema=template.published_schema_json,
-        settings_json=template.published_settings_json,
+    settings_json = (
+        template.published_settings_json
+        if isinstance(template.published_settings_json, dict)
+        else None
     )
+    try:
+        return PlatformFormTemplateDraft(
+            name=template.published_name or template.name,
+            description=template.published_description,
+            form_schema=template.published_schema_json,
+            settings_json=settings_json,
+        )
+    except Exception:
+        logger.warning(
+            "platform_form_template_invalid_published_schema_json",
+            extra={"template_id": str(template.id)},
+        )
+        return PlatformFormTemplateDraft(
+            name=template.published_name or template.name,
+            description=template.published_description,
+            form_schema=None,
+            settings_json=settings_json,
+        )
 
 
 def _form_read(template, db: Session) -> PlatformFormTemplateRead:
@@ -1973,6 +2035,35 @@ def publish_platform_email_template(
     return _email_read(template, db)
 
 
+@router.delete(
+    "/templates/email/{template_id}",
+    status_code=204,
+    dependencies=[Depends(require_csrf_header)],
+)
+def delete_platform_email_template(
+    template_id: UUID,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    from app.services import platform_template_service
+
+    template = platform_template_service.get_platform_email_template(db, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    db.delete(template)
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="platform_template.email.delete",
+        metadata={"template_id": str(template_id)},
+        request=request,
+    )
+    db.commit()
+    return Response(status_code=204)
+
+
 @router.post(
     "/templates/email/{template_id}/test",
     response_model=EmailTemplateTestSendResponse,
@@ -2196,6 +2287,35 @@ def publish_platform_form_template(
     return _form_read(template, db)
 
 
+@router.delete(
+    "/templates/forms/{template_id}",
+    status_code=204,
+    dependencies=[Depends(require_csrf_header)],
+)
+def delete_platform_form_template(
+    template_id: UUID,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    from app.services import platform_template_service
+
+    template = platform_template_service.get_platform_form_template(db, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    db.delete(template)
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="platform_template.form.delete",
+        metadata={"template_id": str(template_id)},
+        request=request,
+    )
+    db.commit()
+    return Response(status_code=204)
+
+
 @router.get("/templates/workflows", response_model=list[PlatformWorkflowTemplateListItem])
 def list_platform_workflow_templates(
     session: PlatformUserSession = Depends(require_platform_admin),
@@ -2334,3 +2454,32 @@ def publish_platform_workflow_template(
     )
     db.commit()
     return _workflow_read(template, db)
+
+
+@router.delete(
+    "/templates/workflows/{template_id}",
+    status_code=204,
+    dependencies=[Depends(require_csrf_header)],
+)
+def delete_platform_workflow_template(
+    template_id: UUID,
+    request: Request,
+    session: PlatformUserSession = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    from app.services import platform_template_service
+
+    template = platform_template_service.get_platform_workflow_template(db, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    db.delete(template)
+    platform_service.log_admin_action(
+        db=db,
+        actor_id=session.user_id,
+        action="platform_template.workflow.delete",
+        metadata={"template_id": str(template_id)},
+        request=request,
+    )
+    db.commit()
+    return Response(status_code=204)

@@ -52,6 +52,7 @@ vi.mock("@/lib/hooks/use-platform-templates", () => ({
     useCreatePlatformEmailTemplate: () => ({ mutateAsync: vi.fn() }),
     useUpdatePlatformEmailTemplate: () => ({ mutateAsync: vi.fn() }),
     usePublishPlatformEmailTemplate: () => ({ mutateAsync: vi.fn() }),
+    useDeletePlatformEmailTemplate: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useSendTestPlatformEmailTemplate: () => ({ mutateAsync: vi.fn() }),
 }))
 

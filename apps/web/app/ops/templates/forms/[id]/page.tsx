@@ -43,6 +43,7 @@ import {
 import { toast } from "sonner"
 import {
     useCreatePlatformFormTemplate,
+    useDeletePlatformFormTemplate,
     usePlatformFormTemplate,
     usePublishPlatformFormTemplate,
     useUpdatePlatformFormTemplate,
@@ -286,6 +287,7 @@ export default function FormBuilderPage() {
     const createTemplateMutation = useCreatePlatformFormTemplate()
     const updateTemplateMutation = useUpdatePlatformFormTemplate()
     const publishTemplateMutation = usePublishPlatformFormTemplate()
+    const deleteTemplateMutation = useDeletePlatformFormTemplate()
     const lastSavedFingerprintRef = useRef<string>("")
     const currentVersionRef = useRef<number | null>(null)
     const templateIdRef = useRef<string | null>(isNewForm ? null : id)
@@ -326,6 +328,7 @@ export default function FormBuilderPage() {
 
     // Dialog state
     const [showPublishDialog, setShowPublishDialog] = useState(false)
+    const [showDeleteTemplateDialog, setShowDeleteTemplateDialog] = useState(false)
     const [showDeletePageDialog, setShowDeletePageDialog] = useState(false)
     const [pageToDelete, setPageToDelete] = useState<number | null>(null)
 
@@ -1021,6 +1024,18 @@ export default function FormBuilderPage() {
         }
     }
 
+    const handleDeleteTemplate = async () => {
+        if (isNewForm || deleteTemplateMutation.isPending) return
+        try {
+            await deleteTemplateMutation.mutateAsync({ id })
+            toast.success("Template deleted")
+            setShowDeleteTemplateDialog(false)
+            router.push("/ops/templates?tab=forms")
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Failed to delete template")
+        }
+    }
+
     // Get selected field data
     const selectedFieldData = selectedField ? currentPage.fields.find((f) => f.id === selectedField) : null
     const conditionFieldOptions = useMemo(() => {
@@ -1093,6 +1108,33 @@ export default function FormBuilderPage() {
 
     return (
         <div className="flex h-screen flex-col bg-stone-50 dark:bg-stone-950">
+            <AlertDialog open={showDeleteTemplateDialog} onOpenChange={setShowDeleteTemplateDialog}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete template?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This permanently deletes{" "}
+                            <span className="font-medium text-foreground">
+                                {formName.trim() || "this template"}
+                            </span>
+                            . This cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={deleteTemplateMutation.isPending}>
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDeleteTemplate}
+                            disabled={deleteTemplateMutation.isPending}
+                            className="bg-destructive text-white hover:bg-destructive/90"
+                        >
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
             {/* Top Bar */}
             <div className="flex h-16 items-center justify-between border-b border-stone-200 bg-white/90 px-6 shadow-sm backdrop-blur dark:border-stone-800 dark:bg-stone-900/90">
                 <div className="flex items-center gap-4">
@@ -1113,6 +1155,21 @@ export default function FormBuilderPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
+                    {!isNewForm && (
+                        <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => setShowDeleteTemplateDialog(true)}
+                            disabled={deleteTemplateMutation.isPending || isSaving || isPublishing}
+                        >
+                            {deleteTemplateMutation.isPending ? (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            ) : (
+                                <Trash2Icon className="mr-2 size-4" />
+                            )}
+                            Delete
+                        </Button>
+                    )}
                     <Button variant="outline" size="sm" onClick={handlePreview}>
                         <EyeIcon className="mr-2 size-4" />
                         Preview

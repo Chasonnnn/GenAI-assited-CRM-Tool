@@ -23,6 +23,7 @@ import {
     Loader2Icon,
     ArrowRightIcon,
     ShieldCheckIcon,
+    TriangleAlertIcon,
 } from "lucide-react"
 import {
     usePlatformEmailTemplates,
@@ -59,6 +60,37 @@ function PublishScopeBadge({ isGlobal }: { isGlobal: boolean }) {
         <Badge variant="secondary" className={isGlobal ? "bg-teal-500/10 text-teal-600" : ""}>
             {isGlobal ? "All orgs" : "Selected orgs"}
         </Badge>
+    )
+}
+
+function resolveErrorMessage(error: unknown, fallback: string) {
+    if (error instanceof Error && error.message) return error.message
+    if (typeof error === "string" && error.trim()) return error
+    return fallback
+}
+
+function QueryErrorState({
+    title,
+    error,
+    onRetry,
+}: {
+    title: string
+    error: unknown
+    onRetry: () => void
+}) {
+    return (
+        <div className="rounded-lg border border-dashed bg-white p-10 text-center dark:bg-stone-900">
+            <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-amber-500/10 text-amber-600">
+                <TriangleAlertIcon className="size-6" />
+            </div>
+            <h3 className="text-lg font-semibold text-stone-900 dark:text-stone-100">{title}</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+                {resolveErrorMessage(error, "Failed to load templates.")}
+            </p>
+            <Button className="mt-4" variant="outline" onClick={onRetry}>
+                Try again
+            </Button>
+        </div>
     )
 }
 
@@ -101,10 +133,34 @@ export default function TemplatesPage() {
         return () => window.removeEventListener("popstate", handlePopState)
     }, [])
 
-    const { data: emailTemplates = [], isLoading: emailLoading } = usePlatformEmailTemplates()
-    const { data: formTemplates = [], isLoading: formLoading } = usePlatformFormTemplates()
-    const { data: workflowTemplates = [], isLoading: workflowLoading } = usePlatformWorkflowTemplates()
-    const { data: systemTemplates = [], isLoading: systemLoading } = usePlatformSystemEmailTemplates()
+    const {
+        data: emailTemplates = [],
+        isLoading: emailLoading,
+        isError: emailIsError,
+        error: emailError,
+        refetch: refetchEmailTemplates,
+    } = usePlatformEmailTemplates()
+    const {
+        data: formTemplates = [],
+        isLoading: formLoading,
+        isError: formIsError,
+        error: formError,
+        refetch: refetchFormTemplates,
+    } = usePlatformFormTemplates()
+    const {
+        data: workflowTemplates = [],
+        isLoading: workflowLoading,
+        isError: workflowIsError,
+        error: workflowError,
+        refetch: refetchWorkflowTemplates,
+    } = usePlatformWorkflowTemplates()
+    const {
+        data: systemTemplates = [],
+        isLoading: systemLoading,
+        isError: systemIsError,
+        error: systemError,
+        refetch: refetchSystemTemplates,
+    } = usePlatformSystemEmailTemplates()
 
     const handleTabChange = (next: string) => {
         const value = TABS.includes(next as TemplatesTab) ? (next as TemplatesTab) : "email"
@@ -167,7 +223,13 @@ export default function TemplatesPage() {
                 </TabsList>
 
                 <TabsContent value="email" className="mt-6">
-                    {emailLoading ? (
+                    {emailIsError ? (
+                        <QueryErrorState
+                            title="Failed to load email templates"
+                            error={emailError}
+                            onRetry={() => void refetchEmailTemplates()}
+                        />
+                    ) : emailLoading ? (
                         <div className="flex items-center justify-center py-16">
                             <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                         </div>
@@ -237,7 +299,13 @@ export default function TemplatesPage() {
                 </TabsContent>
 
                 <TabsContent value="forms" className="mt-6">
-                    {formLoading ? (
+                    {formIsError ? (
+                        <QueryErrorState
+                            title="Failed to load form templates"
+                            error={formError}
+                            onRetry={() => void refetchFormTemplates()}
+                        />
+                    ) : formLoading ? (
                         <div className="flex items-center justify-center py-16">
                             <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                         </div>
@@ -307,7 +375,13 @@ export default function TemplatesPage() {
                 </TabsContent>
 
                 <TabsContent value="workflows" className="mt-6">
-                    {workflowLoading ? (
+                    {workflowIsError ? (
+                        <QueryErrorState
+                            title="Failed to load workflow templates"
+                            error={workflowError}
+                            onRetry={() => void refetchWorkflowTemplates()}
+                        />
+                    ) : workflowLoading ? (
                         <div className="flex items-center justify-center py-16">
                             <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                         </div>
@@ -377,7 +451,13 @@ export default function TemplatesPage() {
                 </TabsContent>
 
                 <TabsContent value="system" className="mt-6">
-                    {systemLoading ? (
+                    {systemIsError ? (
+                        <QueryErrorState
+                            title="Failed to load system email templates"
+                            error={systemError}
+                            onRetry={() => void refetchSystemTemplates()}
+                        />
+                    ) : systemLoading ? (
                         <div className="flex items-center justify-center py-16">
                             <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                         </div>

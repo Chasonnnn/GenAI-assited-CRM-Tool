@@ -5,13 +5,23 @@ import { useParams, useRouter } from "next/navigation"
 import DOMPurify from "dompurify"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { Loader2Icon, ArrowLeftIcon, EyeIcon, AlertTriangleIcon, SendIcon } from "lucide-react"
+import { Loader2Icon, ArrowLeftIcon, EyeIcon, AlertTriangleIcon, SendIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { PublishDialog } from "@/components/ops/templates/PublishDialog"
 import { NotFoundState } from "@/components/not-found-state"
@@ -24,6 +34,7 @@ import {
     useCreatePlatformEmailTemplate,
     usePlatformEmailTemplate,
     usePlatformEmailTemplateVariables,
+    useDeletePlatformEmailTemplate,
     usePublishPlatformEmailTemplate,
     useSendTestPlatformEmailTemplate,
     useUpdatePlatformEmailTemplate,
@@ -53,6 +64,7 @@ export default function PlatformEmailTemplatePage() {
     const createTemplate = useCreatePlatformEmailTemplate()
     const updateTemplate = useUpdatePlatformEmailTemplate()
     const publishTemplate = usePublishPlatformEmailTemplate()
+    const deleteTemplate = useDeletePlatformEmailTemplate()
     const sendTest = useSendTestPlatformEmailTemplate()
 
     const [name, setName] = useState("")
@@ -64,6 +76,7 @@ export default function PlatformEmailTemplatePage() {
     const [editorModeTouched, setEditorModeTouched] = useState(false)
     const [isPublished, setIsPublished] = useState(false)
     const [showPublishDialog, setShowPublishDialog] = useState(false)
+    const [showDeleteDialog, setShowDeleteDialog] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [isPublishing, setIsPublishing] = useState(false)
 
@@ -485,6 +498,18 @@ export default function PlatformEmailTemplatePage() {
         }
     }
 
+    const handleDelete = async () => {
+        if (!templateId) return
+        try {
+            await deleteTemplate.mutateAsync({ id: templateId })
+            toast.success("Template deleted")
+            setShowDeleteDialog(false)
+            router.push("/ops/templates?tab=email")
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Failed to delete template")
+        }
+    }
+
     if (!isNew && isLoading) {
         return (
             <div className="flex h-screen items-center justify-center bg-stone-100 dark:bg-stone-950">
@@ -522,6 +547,21 @@ export default function PlatformEmailTemplatePage() {
                     </Badge>
                 </div>
                 <div className="flex items-center gap-3">
+                    {!isNew && (
+                        <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => setShowDeleteDialog(true)}
+                            disabled={deleteTemplate.isPending || isSaving || isPublishing}
+                        >
+                            {deleteTemplate.isPending ? (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            ) : (
+                                <Trash2Icon className="mr-2 size-4" />
+                            )}
+                            Delete
+                        </Button>
+                    )}
                     <Button variant="outline" size="sm" onClick={handleSave} disabled={isSaving || isPublishing}>
                         {isSaving && <Loader2Icon className="mr-2 size-4 animate-spin" />}
                         Save Draft
@@ -532,6 +572,28 @@ export default function PlatformEmailTemplatePage() {
                     </Button>
                 </div>
             </div>
+
+            <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete template?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This permanently deletes{" "}
+                            <span className="font-medium text-foreground">{name || "this template"}</span>. This cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={deleteTemplate.isPending}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDelete}
+                            disabled={deleteTemplate.isPending}
+                            className="bg-destructive text-white hover:bg-destructive/90"
+                        >
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             <div className="grid gap-6 p-6 lg:grid-cols-[1.1fr_0.9fr]">
                 <Card>

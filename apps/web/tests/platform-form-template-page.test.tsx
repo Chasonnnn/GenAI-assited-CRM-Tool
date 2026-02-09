@@ -5,6 +5,7 @@ import PlatformFormTemplatePage from "../app/ops/templates/forms/[id]/page"
 const mockUpdate = vi.fn()
 const mockCreate = vi.fn()
 const mockPublish = vi.fn()
+const mockDelete = vi.fn()
 
 
 const mockTemplateData = {
@@ -42,6 +43,7 @@ vi.mock("@/lib/hooks/use-platform-templates", () => ({
     useCreatePlatformFormTemplate: () => ({ mutateAsync: mockCreate, isPending: false }),
     useUpdatePlatformFormTemplate: () => ({ mutateAsync: mockUpdate, isPending: false }),
     usePublishPlatformFormTemplate: () => ({ mutateAsync: mockPublish, isPending: false }),
+    useDeletePlatformFormTemplate: () => ({ mutateAsync: mockDelete, isPending: false }),
 }))
 
 describe("PlatformFormTemplatePage", () => {
@@ -49,6 +51,7 @@ describe("PlatformFormTemplatePage", () => {
         mockUpdate.mockReset()
         mockCreate.mockReset()
         mockPublish.mockReset()
+        mockDelete.mockReset()
         vi.useRealTimers()
     })
 
