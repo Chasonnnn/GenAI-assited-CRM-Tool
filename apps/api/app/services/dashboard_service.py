@@ -8,7 +8,7 @@ import threading
 
 import anyio
 
-from sqlalchemy import and_, or_, func
+from sqlalchemy import and_, or_, func, exists, select
 from sqlalchemy.orm import Session
 
 from app.core.websocket import send_ws_to_org
@@ -364,21 +364,41 @@ def get_attention_items(
     # -------------------------------------------------------------------------
     stuck_cutoff = now - timedelta(days=days_stuck)
 
-    # Subquery to get max changed_at for each surrogate
-    latest_change_subquery = (
-        db.query(
-            SurrogateStatusHistory.surrogate_id,
-            func.max(SurrogateStatusHistory.changed_at).label("last_change"),
-        )
-        .filter(
-            SurrogateStatusHistory.organization_id == org_id,
-            SurrogateStatusHistory.to_stage_id.isnot(None),  # Actual stage changes only
-        )
-        .group_by(SurrogateStatusHistory.surrogate_id)
-        .subquery()
+    # Optimization: Instead of aggregating all history (slow), use NOT EXISTS
+    # to efficiently filter surrogates with no recent status change.
+
+    # Base filter for "stuckness":
+    # 1. No status change since stuck_cutoff
+    # 2. AND created before stuck_cutoff (to avoid new surrogates being marked stuck)
+    has_recent_change = exists().where(
+        SurrogateStatusHistory.surrogate_id == Surrogate.id,
+        SurrogateStatusHistory.organization_id == org_id,
+        SurrogateStatusHistory.changed_at >= stuck_cutoff,
+        SurrogateStatusHistory.to_stage_id.isnot(None),
     )
 
-    last_change_col = func.coalesce(latest_change_subquery.c.last_change, Surrogate.created_at)
+    stuck_filter = and_(
+        Surrogate.created_at < stuck_cutoff,
+        ~has_recent_change,
+        Surrogate.organization_id == org_id,
+        Surrogate.is_archived.is_(False),
+        *owner_filters,
+    )
+
+    # Correlated subquery to fetch the last change date ONLY for the result set.
+    # This avoids calculating MAX(changed_at) for thousands of non-stuck surrogates.
+    last_change_subq = (
+        select(func.max(SurrogateStatusHistory.changed_at))
+        .where(
+            SurrogateStatusHistory.surrogate_id == Surrogate.id,
+            SurrogateStatusHistory.organization_id == org_id,
+            SurrogateStatusHistory.to_stage_id.isnot(None),
+        )
+        .correlate(Surrogate)
+        .scalar_subquery()
+    )
+    last_change_col = func.coalesce(last_change_subq, Surrogate.created_at)
+
     stuck_query = (
         db.query(
             Surrogate,
@@ -386,16 +406,7 @@ def get_attention_items(
             last_change_col.label("last_change"),
         )
         .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
-        .outerjoin(
-            latest_change_subquery,
-            Surrogate.id == latest_change_subquery.c.surrogate_id,
-        )
-        .filter(
-            Surrogate.organization_id == org_id,
-            Surrogate.is_archived.is_(False),
-            last_change_col < stuck_cutoff,
-            *owner_filters,
-        )
+        .filter(stuck_filter)
     )
 
     if pipeline_id:
@@ -416,20 +427,11 @@ def get_attention_items(
             }
         )
 
-    # Total count for stuck (without limit)
+    # Total count for stuck (without limit) - much faster without the join/aggregation
     stuck_total_query = (
         db.query(func.count(Surrogate.id))
         .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
-        .outerjoin(
-            latest_change_subquery,
-            Surrogate.id == latest_change_subquery.c.surrogate_id,
-        )
-        .filter(
-            Surrogate.organization_id == org_id,
-            Surrogate.is_archived.is_(False),
-            last_change_col < stuck_cutoff,
-            *owner_filters,
-        )
+        .filter(stuck_filter)
     )
     if pipeline_id:
         stuck_total_query = stuck_total_query.filter(PipelineStage.pipeline_id == pipeline_id)
