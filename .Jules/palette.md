@@ -9,3 +9,7 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+
+## 2025-05-20 - Notification Status Accessibility
+**Learning:** Visual status indicators (like blue dots for unread messages) are invisible to screen readers. Adding a nested `<span className="sr-only">Status</span>` is essential for non-visual context.
+**Action:** Always pair visual-only status indicators with screen-reader-only text.
