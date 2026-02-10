@@ -10,12 +10,14 @@ from app.services import session_service
 
 
 def _get_cookie_payload(response, cookie_name: str) -> dict:
+    from app.core.security import parse_oauth_state_payload
+
     cookie = SimpleCookie()
     for header in response.headers.get_list("set-cookie"):
         cookie.load(header)
     morsel = cookie.get(cookie_name)
     assert morsel, f"Missing cookie {cookie_name}"
-    return json.loads(morsel.value)
+    return parse_oauth_state_payload(morsel.value)
 
 
 @pytest.mark.asyncio

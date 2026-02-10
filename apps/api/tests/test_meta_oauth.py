@@ -40,7 +40,9 @@ async def test_meta_oauth_connect_sets_state_cookie_and_returns_auth_url(
         cookie.load(header)
     cookie_value = cookie.get("meta_oauth_state")
     assert cookie_value
-    payload = json.loads(cookie_value.value)
+
+    from app.core.security import parse_oauth_state_payload
+    payload = parse_oauth_state_payload(cookie_value.value)
     assert payload["state"] == state
     assert "ua_hash" in payload
 

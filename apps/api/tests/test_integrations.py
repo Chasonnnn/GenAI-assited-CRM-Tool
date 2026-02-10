@@ -34,7 +34,9 @@ async def test_zoom_connect_sets_state_cookie_and_returns_auth_url(
         cookie.load(header)
     cookie_value = cookie.get("integration_oauth_state_zoom")
     assert cookie_value
-    payload = json.loads(cookie_value.value)
+
+    from app.core.security import parse_oauth_state_payload
+    payload = parse_oauth_state_payload(cookie_value.value)
     assert payload["state"] == state
     assert "ua_hash" in payload
 
@@ -133,7 +135,9 @@ async def test_google_calendar_connect_sets_state_cookie_and_returns_auth_url(
         cookie.load(header)
     cookie_value = cookie.get("integration_oauth_state_google_calendar")
     assert cookie_value
-    payload = json.loads(cookie_value.value)
+
+    from app.core.security import parse_oauth_state_payload
+    payload = parse_oauth_state_payload(cookie_value.value)
     assert payload["state"] == state
     assert "ua_hash" in payload
 
@@ -158,7 +162,9 @@ async def test_gcp_connect_sets_state_cookie_and_returns_auth_url(
         cookie.load(header)
     cookie_value = cookie.get("integration_oauth_state_gcp")
     assert cookie_value
-    payload = json.loads(cookie_value.value)
+
+    from app.core.security import parse_oauth_state_payload
+    payload = parse_oauth_state_payload(cookie_value.value)
     assert payload["state"] == state
     assert "ua_hash" in payload
 
