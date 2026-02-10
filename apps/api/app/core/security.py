@@ -1,5 +1,6 @@
 """Security utilities for JWT session tokens and OAuth state management."""
 
+import base64
 import hashlib
 import json
 import secrets
@@ -199,12 +200,18 @@ def create_oauth_state_payload(
     }
     if return_to:
         payload["return_to"] = return_to
-    return json.dumps(payload)
+    json_str = json.dumps(payload)
+    return base64.urlsafe_b64encode(json_str.encode()).decode()
 
 
 def parse_oauth_state_payload(cookie_value: str) -> dict:
     """Parse OAuth state cookie payload."""
-    return json.loads(cookie_value)
+    try:
+        json_str = base64.urlsafe_b64decode(cookie_value).decode()
+        return json.loads(json_str)
+    except Exception:
+        # Fallback for legacy unencoded cookies (short-lived)
+        return json.loads(cookie_value)
 
 
 def verify_oauth_state(
