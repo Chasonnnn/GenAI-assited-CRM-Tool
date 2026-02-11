@@ -164,15 +164,19 @@ function OptionCard({
     onClick,
     label,
     description,
+    role = "radio",
 }: {
     selected: boolean
     onClick: () => void
     label: string
     description?: string
+    role?: "radio" | "checkbox"
 }) {
     return (
         <button
             type="button"
+            role={role}
+            aria-checked={selected}
             onClick={onClick}
             className={cn(
                 "w-full rounded-2xl border border-stone-200 bg-white p-4 text-left transition-all",
@@ -273,10 +277,21 @@ function FileUploadZone({
         onFilesChange(newFiles)
     }
 
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            inputRef.current?.click()
+        }
+    }
+
     return (
         <div className="space-y-3">
             <div
                 onClick={() => inputRef.current?.click()}
+                onKeyDown={handleKeyDown}
+                role="button"
+                tabIndex={0}
+                aria-label="Upload files"
                 onDrop={handleDrop}
                 onDragOver={(e) => {
                     e.preventDefault()
@@ -286,6 +301,7 @@ function FileUploadZone({
                 className={cn(
                     "flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed p-6 cursor-pointer transition-all",
                     "hover:border-primary/60 hover:bg-primary/5",
+                    "focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-2",
                     isDragging
                         ? "border-primary bg-primary/10"
                         : "border-stone-300 bg-white"
@@ -341,6 +357,7 @@ function FileUploadZone({
                                 size="icon"
                                 className="size-8"
                                 onClick={() => removeFile(index)}
+                                aria-label={`Remove ${file.name}`}
                             >
                                 <XIcon className="size-4" />
                             </Button>
@@ -986,6 +1003,7 @@ export default function PublicApplicationForm() {
                                     selected={value === option.value}
                                     onClick={() => updateField(field.key, option.value)}
                                     label={option.label}
+                                    role="radio"
                                 />
                             ))}
                         </div>
@@ -1020,6 +1038,7 @@ export default function PublicApplicationForm() {
                                         updateField(field.key, next)
                                     }}
                                     label={option.label}
+                                    role="checkbox"
                                 />
                             ))}
                         </div>
@@ -1074,6 +1093,7 @@ export default function PublicApplicationForm() {
                                     updateField(field.key, next)
                                 }}
                                 label={option.label}
+                                role="checkbox"
                             />
                         ))}
                     </div>
