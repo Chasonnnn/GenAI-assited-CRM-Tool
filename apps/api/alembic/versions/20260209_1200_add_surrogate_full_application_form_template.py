@@ -7,6 +7,8 @@ Create Date: 2026-02-09 12:00:00.000000
 
 from __future__ import annotations
 
+import importlib.util
+from pathlib import Path
 from typing import Sequence, Union, Any
 
 from alembic import op
@@ -26,6 +28,7 @@ TEMPLATE_DESCRIPTION = "Full surrogate application form (condensed to two pages)
 
 # We build this template by cloning the canonical seeded Jotform form template.
 BASE_TEMPLATE_NAME = "Surrogate Application Form Template"
+FALLBACK_TEMPLATE_MIGRATION_FILE = "20260202_2359_add_jotform_surrogate_application_template.py"
 
 
 def _template_table() -> sa.Table:
@@ -87,6 +90,31 @@ def _to_two_pages(schema: Any) -> Any:
     }
 
 
+def _load_fallback_base_snapshot() -> tuple[dict, dict]:
+    """Load canonical schema/settings directly from the original seed migration."""
+    migration_path = Path(__file__).resolve().parent / FALLBACK_TEMPLATE_MIGRATION_FILE
+    spec = importlib.util.spec_from_file_location(
+        "seed_surrogate_application_template_20260202_2359",
+        migration_path,
+    )
+    if spec is None or spec.loader is None:
+        return {}, {}
+
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    schema_factory = getattr(module, "_schema", None)
+    settings_factory = getattr(module, "_settings", None)
+
+    schema = schema_factory() if callable(schema_factory) else {}
+    settings = settings_factory() if callable(settings_factory) else {}
+    if not isinstance(schema, dict):
+        schema = {}
+    if not isinstance(settings, dict):
+        settings = {}
+    return schema, settings
+
+
 def _fetch_base_snapshot(conn, template_table: sa.Table) -> tuple[dict, dict]:
     row = conn.execute(
         sa.select(
@@ -98,10 +126,7 @@ def _fetch_base_snapshot(conn, template_table: sa.Table) -> tuple[dict, dict]:
     ).first()
 
     if not row:
-        raise RuntimeError(
-            f"Base platform form template not found: {BASE_TEMPLATE_NAME!r}. "
-            "Ensure prior seed migrations have been applied."
-        )
+        return _load_fallback_base_snapshot()
 
     published_schema = row[0]
     published_settings = row[1]
@@ -112,9 +137,7 @@ def _fetch_base_snapshot(conn, template_table: sa.Table) -> tuple[dict, dict]:
     settings = published_settings or draft_settings or {}
 
     if not isinstance(schema, dict):
-        raise RuntimeError(
-            f"Base platform form template schema_json is invalid for {BASE_TEMPLATE_NAME!r}."
-        )
+        return _load_fallback_base_snapshot()
     if not isinstance(settings, dict):
         settings = {}
 
