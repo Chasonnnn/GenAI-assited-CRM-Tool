@@ -419,7 +419,7 @@ export function MassEditStageModal({
                                     </div>
                                 ) : (
                                     <p className="text-xs text-muted-foreground">
-                                        Options are derived from existing surrogate race values in this org.
+                                        Uses the standardized race categories from the intake application form.
                                     </p>
                                 )}
                             </div>

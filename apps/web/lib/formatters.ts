@@ -60,7 +60,13 @@ export function formatDateTime(
 }
 
 const RACE_LABEL_OVERRIDES: Record<string, string> = {
+  american_indian_or_alaska_native: "American Indian or Alaska Native",
+  asian: "Asian",
+  black_or_african_american: "Black or African American",
   hispanic_or_latino: "Hispanic or Latino",
+  native_hawaiian_or_other_pacific_islander: "Native Hawaiian or Other Pacific Islander",
+  white: "White",
+  other_please_specify: "Other (please specify)",
   not_hispanic_or_latino: "Not Hispanic or Latino",
 }
 
