@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.78.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.77.0...surrogacy-crm-platform-v0.78.0) (2026-02-11)
+
+
+### Features
+
+* **normalization:** add race key normalization utilities with alias support ([519911c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/519911c3ee20f9f0f4898ebaa2ff9cfb672e3b8b))
+* **web:** update race label overrides and mass edit helper text ([a8bbac8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a8bbac8330987f4818ce15b419ff3762cb6ba4c1))
+
+
+### Bug Fixes
+
+* **deps:** bump cryptography 46.0.4 -&gt; 46.0.5 (CVE-2026-26007) ([9ea1164](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9ea1164bd747a51fd8086b68cde1bb52b4fee30a))
+
 ## [0.77.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.76.0...surrogacy-crm-platform-v0.77.0) (2026-02-09)
 
 
