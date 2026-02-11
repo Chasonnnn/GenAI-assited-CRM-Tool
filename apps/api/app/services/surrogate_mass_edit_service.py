@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta
 from uuid import UUID
 
-from sqlalchemy import Float, and_, cast, func, or_
+from sqlalchemy import Float, and_, case, cast, func, or_
 from sqlalchemy.orm import Session, load_only
 
 from app.core.encryption import hash_email, hash_phone
@@ -28,7 +28,13 @@ from app.schemas.surrogate_mass_edit import (
     SurrogateMassEditStagePreviewItem,
     SurrogateMassEditStagePreviewResponse,
 )
-from app.utils.normalization import normalize_identifier, normalize_phone, normalize_search_text
+from app.utils.normalization import (
+    MASS_EDIT_RACE_FILTER_KEYS,
+    RACE_KEY_ALIASES,
+    normalize_identifier,
+    normalize_phone,
+    normalize_search_text,
+)
 
 
 MAX_APPLY = 2000
@@ -81,12 +87,7 @@ def _build_base_query(db: Session, org_id: UUID, filters: SurrogateMassEditStage
         query = query.filter(Surrogate.state.in_(filters.states))
 
     if filters.races:
-        race_key = func.regexp_replace(
-            func.lower(func.trim(Surrogate.race)),
-            r"[[:space:]-]+",
-            "_",
-            "g",
-        )
+        race_key = _race_key_expr()
         query = query.filter(race_key.in_(filters.races))
 
     if filters.is_priority is not None:
@@ -158,6 +159,21 @@ def _build_base_query(db: Session, org_id: UUID, filters: SurrogateMassEditStage
             query = query.filter(bmi_expr <= float(filters.bmi_max))
 
     return query
+
+
+def _race_key_expr():
+    raw_key = func.btrim(
+        func.regexp_replace(
+            func.lower(func.trim(Surrogate.race)),
+            r"[^a-z0-9]+",
+            "_",
+            "g",
+        ),
+        "_",
+    )
+
+    alias_whens = [(raw_key == alias, canonical) for alias, canonical in RACE_KEY_ALIASES.items()]
+    return case(*alias_whens, else_=raw_key)
 
 
 def _apply_age_filter_in_memory(
@@ -370,23 +386,4 @@ def get_filter_options(db: Session, org_id: UUID) -> SurrogateMassEditOptionsRes
 
     This is dev-only and intended to power UI selects (not user-entered free text).
     """
-    race_key = func.regexp_replace(
-        func.lower(func.trim(Surrogate.race)),
-        r"[[:space:]-]+",
-        "_",
-        "g",
-    )
-    rows = (
-        db.query(race_key)
-        .filter(
-            Surrogate.organization_id == org_id,
-            Surrogate.race.is_not(None),
-            func.length(func.trim(Surrogate.race)) > 0,
-        )
-        .distinct()
-        .order_by(race_key.asc())
-        .limit(200)
-        .all()
-    )
-    races = [r[0] for r in rows if r and r[0]]
-    return SurrogateMassEditOptionsResponse(races=races)
+    return SurrogateMassEditOptionsResponse(races=list(MASS_EDIT_RACE_FILTER_KEYS))

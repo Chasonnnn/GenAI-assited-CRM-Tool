@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-import re
 from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.db.enums import SurrogateSource
-from app.utils.normalization import normalize_state
+from app.utils.normalization import (
+    MASS_EDIT_RACE_FILTER_KEYS,
+    normalize_race_key,
+    normalize_state,
+)
 
 
 class SurrogateMassEditStageFilters(BaseModel):
@@ -67,18 +70,20 @@ class SurrogateMassEditStageFilters(BaseModel):
     @field_validator("races")
     @classmethod
     def normalize_races(cls, v: list[str] | None) -> list[str] | None:
-        """Normalize race values using the same keying used by formatRace/format_race_label."""
+        """Normalize race values to canonical keys supported by mass edit."""
         if not v:
             return None
+        allowed = set(MASS_EDIT_RACE_FILTER_KEYS)
         normalized: list[str] = []
         for raw in v:
             if raw is None:
                 continue
-            trimmed = raw.strip()
-            if not trimmed:
+            race_key = normalize_race_key(raw)
+            if not race_key:
                 continue
-            normalized_key = re.sub(r"[\s-]+", "_", trimmed.lower())
-            normalized.append(normalized_key)
+            if race_key not in allowed:
+                raise ValueError(f"Unsupported race filter option: {raw}")
+            normalized.append(race_key)
         return normalized or None
 
     @model_validator(mode="after")
