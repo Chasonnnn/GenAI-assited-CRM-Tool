@@ -19,6 +19,7 @@ from app.db.enums import (
 from app.db.models import Surrogate, SurrogateStatusHistory, User
 from app.schemas.surrogate import SurrogateCreate, SurrogateUpdate
 from app.utils.normalization import (
+    escape_like_string,
     extract_email_domain,
     extract_phone_last4,
     normalize_email,
@@ -942,10 +943,14 @@ def list_surrogates(
         normalized_identifier = normalize_identifier(q)
         filters = []
         if normalized_text:
-            filters.append(Surrogate.full_name_normalized.ilike(f"%{normalized_text}%"))
+            filters.append(
+                Surrogate.full_name_normalized.ilike(f"%{escape_like_string(normalized_text)}%")
+            )
         if normalized_identifier:
             filters.append(
-                Surrogate.surrogate_number_normalized.ilike(f"%{normalized_identifier}%")
+                Surrogate.surrogate_number_normalized.ilike(
+                    f"%{escape_like_string(normalized_identifier)}%"
+                )
             )
         if "@" in q:
             try:

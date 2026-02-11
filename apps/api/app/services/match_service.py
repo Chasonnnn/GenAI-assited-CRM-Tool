@@ -15,7 +15,11 @@ from app.db.models import (
     StatusChangeRequest,
     IntendedParentStatusHistory,
 )
-from app.utils.normalization import normalize_identifier, normalize_search_text
+from app.utils.normalization import (
+    escape_like_string,
+    normalize_identifier,
+    normalize_search_text,
+)
 from sqlalchemy.exc import IntegrityError
 
 
@@ -142,6 +146,9 @@ def list_matches(
     if q:
         normalized_text = normalize_search_text(q)
         normalized_identifier = normalize_identifier(q) or q
+        escaped_text = escape_like_string(normalized_text)
+        escaped_identifier = escape_like_string(normalized_identifier)
+
         query = (
             query.join(Surrogate, Match.surrogate_id == Surrogate.id, isouter=True)
             .join(
@@ -151,16 +158,16 @@ def list_matches(
             )
             .filter(
                 or_(
-                    Match.match_number.ilike(f"%{normalized_identifier}%"),
+                    Match.match_number.ilike(f"%{escaped_identifier}%"),
                     Surrogate.full_name_normalized.ilike(
-                        f"%{normalized_text or normalized_identifier}%"
+                        f"%{escaped_text or escaped_identifier}%"
                     ),
-                    Surrogate.surrogate_number_normalized.ilike(f"%{normalized_identifier}%"),
+                    Surrogate.surrogate_number_normalized.ilike(f"%{escaped_identifier}%"),
                     IntendedParent.full_name_normalized.ilike(
-                        f"%{normalized_text or normalized_identifier}%"
+                        f"%{escaped_text or escaped_identifier}%"
                     ),
                     IntendedParent.intended_parent_number_normalized.ilike(
-                        f"%{normalized_identifier}%"
+                        f"%{escaped_identifier}%"
                     ),
                 )
             )

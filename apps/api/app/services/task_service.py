@@ -20,6 +20,7 @@ from app.db.models import (
 from app.schemas.auth import UserSession
 from app.schemas.task import TaskCreate, TaskUpdate, TaskRead, TaskListItem, BulkCompleteResponse
 from app.services import membership_service, queue_service
+from app.utils.normalization import escape_like_string
 
 
 logger = logging.getLogger(__name__)
@@ -546,7 +547,7 @@ def list_tasks(
 
     # Search filter (title or description)
     if q:
-        search_pattern = f"%{q}%"
+        search_pattern = f"%{escape_like_string(q)}%"
         query = query.filter(
             or_(
                 Task.title.ilike(search_pattern),

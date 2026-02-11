@@ -18,7 +18,11 @@ from sqlalchemy.orm import Session
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import OwnerType, Role
 from app.db.models import Attachment, Surrogate, EntityNote, IntendedParent, PipelineStage
-from app.utils.normalization import normalize_identifier, normalize_search_text
+from app.utils.normalization import (
+    escape_like_string,
+    normalize_identifier,
+    normalize_search_text,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -388,11 +392,15 @@ def _search_surrogates(
         fallback_filters = []
         if normalized_text:
             fallback_filters.append(
-                surrogate_table.c.full_name_normalized.ilike(f"%{normalized_text}%")
+                surrogate_table.c.full_name_normalized.ilike(
+                    f"%{escape_like_string(normalized_text)}%"
+                )
             )
         if normalized_identifier:
             fallback_filters.append(
-                surrogate_table.c.surrogate_number_normalized.ilike(f"%{normalized_identifier}%")
+                surrogate_table.c.surrogate_number_normalized.ilike(
+                    f"%{escape_like_string(normalized_identifier)}%"
+                )
             )
         if fallback_filters:
             fallback_stmt = (

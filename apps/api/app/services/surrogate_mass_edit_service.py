@@ -31,6 +31,7 @@ from app.schemas.surrogate_mass_edit import (
 from app.utils.normalization import (
     MASS_EDIT_RACE_FILTER_KEYS,
     RACE_KEY_ALIASES,
+    escape_like_string,
     normalize_identifier,
     normalize_phone,
     normalize_search_text,
@@ -123,10 +124,14 @@ def _build_base_query(db: Session, org_id: UUID, filters: SurrogateMassEditStage
         clauses = []
 
         if normalized_text:
-            clauses.append(Surrogate.full_name_normalized.ilike(f"%{normalized_text}%"))
+            clauses.append(
+                Surrogate.full_name_normalized.ilike(f"%{escape_like_string(normalized_text)}%")
+            )
         if normalized_identifier:
             clauses.append(
-                Surrogate.surrogate_number_normalized.ilike(f"%{normalized_identifier}%")
+                Surrogate.surrogate_number_normalized.ilike(
+                    f"%{escape_like_string(normalized_identifier)}%"
+                )
             )
         if "@" in q:
             try:

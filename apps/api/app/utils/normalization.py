@@ -373,3 +373,17 @@ def extract_phone_last4(phone: Optional[str]) -> Optional[str]:
     if not digits:
         return None
     return digits[-4:] if len(digits) >= 4 else digits
+
+
+def escape_like_string(value: str) -> str:
+    """
+    Escape characters that have special meaning in SQL LIKE clauses.
+
+    Escapes:
+    - Backslash (\\) -> \\\\
+    - Percent (%) -> \\%
+    - Underscore (_) -> \\_
+    """
+    if not value:
+        return value
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

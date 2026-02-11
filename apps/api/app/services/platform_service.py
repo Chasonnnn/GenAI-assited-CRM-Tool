@@ -30,6 +30,7 @@ from app.db.models import (
 from app.db.enums import Role, JobType
 from app.core.security import create_support_session_token
 from app.services import mfa_service, session_service, job_service
+from app.utils.normalization import escape_like_string
 from app.utils.presentation import humanize_identifier
 
 logger = logging.getLogger(__name__)
@@ -187,7 +188,7 @@ def list_organizations(
     )
 
     if search:
-        search_term = f"%{search}%"
+        search_term = f"%{escape_like_string(search)}%"
         query = query.filter(
             (Organization.name.ilike(search_term)) | (Organization.slug.ilike(search_term))
         )
