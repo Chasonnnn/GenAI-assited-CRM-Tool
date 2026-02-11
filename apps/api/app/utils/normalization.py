@@ -138,8 +138,33 @@ VALID_STATE_CODES = {
     "MP",
 }
 
+MASS_EDIT_RACE_FILTER_KEYS: tuple[str, ...] = (
+    "american_indian_or_alaska_native",
+    "asian",
+    "black_or_african_american",
+    "hispanic_or_latino",
+    "native_hawaiian_or_other_pacific_islander",
+    "white",
+    "other_please_specify",
+)
+
+RACE_KEY_ALIASES = {
+    "american_indian_alaska_native": "american_indian_or_alaska_native",
+    "black_african_american": "black_or_african_american",
+    "native_hawaiian_or_pacific_islander": "native_hawaiian_or_other_pacific_islander",
+    "native_hawaiian_or_other_pacific_islanders": "native_hawaiian_or_other_pacific_islander",
+    "other": "other_please_specify",
+    "other_please_specified": "other_please_specify",
+}
+
 RACE_LABEL_OVERRIDES = {
+    "american_indian_or_alaska_native": "American Indian or Alaska Native",
+    "asian": "Asian",
+    "black_or_african_american": "Black or African American",
     "hispanic_or_latino": "Hispanic or Latino",
+    "native_hawaiian_or_other_pacific_islander": "Native Hawaiian or Other Pacific Islander",
+    "white": "White",
+    "other_please_specify": "Other (please specify)",
     "not_hispanic_or_latino": "Not Hispanic or Latino",
 }
 
@@ -154,7 +179,9 @@ def format_race_label(race: Optional[str]) -> Optional[str]:
     if not trimmed:
         return None
 
-    normalized_key = re.sub(r"[\s-]+", "_", trimmed.lower())
+    normalized_key = normalize_race_key(trimmed)
+    if not normalized_key:
+        return None
     override = RACE_LABEL_OVERRIDES.get(normalized_key)
     if override:
         return override
@@ -167,6 +194,21 @@ def format_race_label(race: Optional[str]) -> Optional[str]:
         elif word:
             words.append(f"{word[0].upper()}{word[1:]}")
     return " ".join(words)
+
+
+def normalize_race_key(race: Optional[str]) -> Optional[str]:
+    """Normalize a race input into a stable key used by filters and display helpers."""
+    if not race:
+        return None
+    trimmed = race.strip()
+    if not trimmed:
+        return None
+
+    normalized_key = re.sub(r"[^a-z0-9]+", "_", trimmed.lower()).strip("_")
+    if not normalized_key:
+        return None
+
+    return RACE_KEY_ALIASES.get(normalized_key, normalized_key)
 
 
 def normalize_state(state: Optional[str]) -> Optional[str]:
