@@ -241,8 +241,11 @@ def bulk_assign_surrogates(
         raise HTTPException(status_code=400, detail="Invalid owner_type")
 
     results = {"assigned": 0, "failed": []}
+    surrogates = surrogate_service.get_surrogates_by_ids(db, session.org_id, data.surrogate_ids)
+    surrogates_map = {s.id: s for s in surrogates}
+
     for s_id in data.surrogate_ids:
-        surrogate = surrogate_service.get_surrogate(db, session.org_id, s_id)
+        surrogate = surrogates_map.get(s_id)
         if not surrogate:
             results["failed"].append({"surrogate_id": str(s_id), "reason": "Surrogate not found"})
             continue

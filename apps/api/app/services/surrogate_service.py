@@ -1376,3 +1376,15 @@ def list_surrogate_activity(
         )
 
     return items, total
+
+
+def get_surrogates_by_ids(db: Session, org_id: UUID, surrogate_ids: list[UUID]) -> list[Surrogate]:
+    """Get multiple surrogates by ID (org-scoped)."""
+    return (
+        db.query(Surrogate)
+        .filter(
+            Surrogate.organization_id == org_id,
+            Surrogate.id.in_(surrogate_ids),
+        )
+        .all()
+    )
