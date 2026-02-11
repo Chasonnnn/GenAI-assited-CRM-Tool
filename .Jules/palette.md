@@ -9,3 +9,7 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+
+## 2025-05-20 - Notification Badge Accessibility
+**Learning:** Visual-only badges (like unread counts) on icon buttons can be inaccessible. Using `aria-label` on the parent button to announce the status (e.g., "Notifications (3 unread)") is more robust than relying on the badge element itself, which might be skipped or read out of context.
+**Action:** Use dynamic `aria-label` on the trigger button and hide the badge from screen readers with `aria-hidden="true"`.
