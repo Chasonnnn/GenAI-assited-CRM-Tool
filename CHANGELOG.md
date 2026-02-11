@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.78.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.78.0...surrogacy-crm-platform-v0.78.1) (2026-02-11)
+
+
+### Bug Fixes
+
+* **migration:** add fallback when base form template row is missing ([2bb531b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2bb531bf6e28f79adf54a97c4f50f5203dec0bd7))
+
 ## [0.78.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.77.0...surrogacy-crm-platform-v0.78.0) (2026-02-11)
 
 
