@@ -44,7 +44,7 @@ dependencies = [
     "resend==2.21.0",
 
     # Encryption (for Meta page tokens)
-    "cryptography==46.0.4",
+    "cryptography==46.0.5",
 
     # Rate limiting
     "slowapi==0.1.9",
