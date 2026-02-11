@@ -15,6 +15,16 @@ from app.db.models import Membership, Surrogate, SurrogateStatusHistory, User
 from app.main import app
 from app.services import pipeline_service, session_service
 
+EXPECTED_MASS_EDIT_RACE_OPTIONS = [
+    "american_indian_or_alaska_native",
+    "asian",
+    "black_or_african_american",
+    "hispanic_or_latino",
+    "native_hawaiian_or_other_pacific_islander",
+    "white",
+    "other_please_specify",
+]
+
 
 def _get_stage(db, org_id, slug: str):
     pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
@@ -237,9 +247,37 @@ async def test_mass_edit_options_returns_race_keys(authed_client, db, test_auth)
     res = await authed_client.get("/surrogates/mass-edit/options")
     assert res.status_code == 200, res.text
     payload = res.json()
-    assert "races" in payload
-    assert "hispanic_or_latino" in payload["races"]
-    assert "white" in payload["races"]
+    assert payload["races"] == EXPECTED_MASS_EDIT_RACE_OPTIONS
+
+
+@pytest.mark.asyncio
+async def test_mass_edit_stage_race_filter_handles_canonical_aliases(authed_client, db, test_auth):
+    disqualified_stage = _get_stage(db, test_auth.org.id, "disqualified")
+
+    s1 = await _create_surrogate(authed_client, race="Black/African American", state="CA")
+    await _create_surrogate(authed_client, race="White", state="CA")
+
+    preview = await authed_client.post(
+        "/surrogates/mass-edit/stage/preview",
+        json={"filters": {"races": ["Black or African American"]}},
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["total"] == 1
+
+    apply_res = await authed_client.post(
+        "/surrogates/mass-edit/stage",
+        json={
+            "filters": {"races": ["black_or_african_american"]},
+            "stage_id": str(disqualified_stage.id),
+            "expected_total": 1,
+            "trigger_workflows": False,
+        },
+    )
+    assert apply_res.status_code == 200, apply_res.text
+
+    s1_row = db.query(Surrogate).filter(Surrogate.id == UUID(s1["id"])).first()
+    assert s1_row is not None
+    assert s1_row.stage_id == disqualified_stage.id
 
 
 @pytest.mark.asyncio
