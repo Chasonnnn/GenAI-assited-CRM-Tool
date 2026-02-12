@@ -87,7 +87,7 @@ export function NotificationBell() {
     return (
         <DropdownMenu>
             <DropdownMenuTrigger
-                aria-label="Notifications"
+                aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
                 className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "relative")}
             >
                 <Bell className="h-5 w-5" />
@@ -134,7 +134,10 @@ export function NotificationBell() {
                                         {notification.title}
                                     </span>
                                     {!notification.read_at && (
-                                        <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0 mt-1" />
+                                        <>
+                                            <span className="sr-only">Unread</span>
+                                            <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0 mt-1" aria-hidden="true" />
+                                        </>
                                     )}
                                 </div>
                                 {notification.body && (

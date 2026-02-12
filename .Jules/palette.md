@@ -9,3 +9,7 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+
+## 2025-05-21 - Status Indicator Button Accessibility
+**Learning:** Icon-only buttons that also convey status (like a notification bell with a badge) must include the status in the `aria-label`. A separate visual badge is often ignored by screen readers if it's inside the button but not part of the label.
+**Action:** Use a dynamic `aria-label` (e.g., "Notifications, 5 unread") for status-indicating buttons, and ensure status indicators (dots, badges) are either hidden or properly labeled.
