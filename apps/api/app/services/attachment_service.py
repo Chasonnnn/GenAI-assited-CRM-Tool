@@ -3,6 +3,7 @@
 import hashlib
 import logging
 import os
+import shutil
 import tempfile
 import uuid
 from datetime import datetime, timezone
@@ -165,7 +166,7 @@ def store_file(storage_key: str, file: BinaryIO) -> None:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as f:
             file.seek(0)
-            f.write(file.read())
+            shutil.copyfileobj(file, f)
 
 
 def strip_exif_data(file: BinaryIO, content_type: str) -> BinaryIO:

@@ -19,6 +19,7 @@ from app.core.policies import POLICIES
 from app.db.enums import Role
 from app.schemas.auth import UserSession
 from app.services import activity_service, attachment_service, surrogate_service, ip_service
+from app.utils.file_upload import get_upload_file_size
 
 
 router = APIRouter(prefix="/attachments", tags=["attachments"])
@@ -91,14 +92,11 @@ async def upload_attachment(
     """
     surrogate = _get_surrogate_with_access(db, surrogate_id, session, require_write=True)
 
-    # Read file content
-    content = await file.read()
-    file_size = len(content)
-
-    # Create file-like object for service
-    from io import BytesIO
-
-    file_obj = BytesIO(content)
+    # Validate file size without reading content
+    file_size = await get_upload_file_size(file)
+    if file_size > attachment_service.MAX_FILE_SIZE_BYTES:
+        max_mb = attachment_service.MAX_FILE_SIZE_BYTES / (1024 * 1024)
+        raise HTTPException(status_code=413, detail=f"File size exceeds {max_mb:.0f} MB limit")
 
     try:
         attachment = attachment_service.upload_attachment(
@@ -107,7 +105,7 @@ async def upload_attachment(
             user_id=session.user_id,
             filename=file.filename or "untitled",
             content_type=file.content_type or "application/octet-stream",
-            file=file_obj,
+            file=file.file,
             file_size=file_size,
             surrogate_id=surrogate.id,
         )
@@ -268,12 +266,11 @@ async def upload_ip_attachment(
     """Upload a file attachment to an intended parent."""
     ip = _get_ip_with_access(db, ip_id, session)
 
-    content = await file.read()
-    file_size = len(content)
-
-    from io import BytesIO
-
-    file_obj = BytesIO(content)
+    # Validate file size without reading content
+    file_size = await get_upload_file_size(file)
+    if file_size > attachment_service.MAX_FILE_SIZE_BYTES:
+        max_mb = attachment_service.MAX_FILE_SIZE_BYTES / (1024 * 1024)
+        raise HTTPException(status_code=413, detail=f"File size exceeds {max_mb:.0f} MB limit")
 
     try:
         attachment = attachment_service.upload_attachment(
@@ -283,7 +280,7 @@ async def upload_ip_attachment(
             user_id=session.user_id,
             filename=file.filename or "untitled",
             content_type=file.content_type or "application/octet-stream",
-            file=file_obj,
+            file=file.file,
             file_size=file_size,
         )
         db.commit()
