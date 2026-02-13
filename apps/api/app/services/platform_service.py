@@ -1084,7 +1084,7 @@ def create_invite(
 
     role_value = invite_service.validate_invite_role(role, allow_developer=True)
 
-    # Check for existing pending invite
+    # Check for existing pending invite (global uniqueness by email).
     now = datetime.now(timezone.utc)
     existing = (
         db.query(OrgInvite)
@@ -1092,12 +1092,27 @@ def create_invite(
             OrgInvite.email == email,
             OrgInvite.accepted_at.is_(None),
             OrgInvite.revoked_at.is_(None),
-            (OrgInvite.expires_at.is_(None) | (OrgInvite.expires_at > now)),
         )
         .first()
     )
+    invite: OrgInvite | None = None
     if existing:
-        raise ValueError(f"An active invite already exists for {email}")
+        existing_active = existing.expires_at is None or existing.expires_at > now
+        if existing_active:
+            raise ValueError(f"An active invite already exists for {email}")
+
+        if existing.organization_id == org_id:
+            # Re-activate the expired invite instead of inserting a duplicate row.
+            existing.role = role_value
+            existing.invited_by_user_id = actor_id
+            existing.expires_at = now + timedelta(days=7)
+            existing.last_resent_at = now
+            existing.resend_count = (existing.resend_count or 0) + 1
+            invite = existing
+        else:
+            # Release the global pending-invite uniqueness slot for this email.
+            existing.revoked_at = now
+            existing.revoked_by_user_id = actor_id
 
     # Check if user already exists and is a member
     existing_user = db.query(User).filter(User.email == email).first()
@@ -1113,14 +1128,15 @@ def create_invite(
         if existing_membership:
             raise ValueError(f"{email} is already a member of this organization")
 
-    invite = OrgInvite(
-        organization_id=org_id,
-        email=email,
-        role=role_value,
-        invited_by_user_id=actor_id,
-        expires_at=now + timedelta(days=7),
-    )
-    db.add(invite)
+    if invite is None:
+        invite = OrgInvite(
+            organization_id=org_id,
+            email=email,
+            role=role_value,
+            invited_by_user_id=actor_id,
+            expires_at=now + timedelta(days=7),
+        )
+        db.add(invite)
 
     log_admin_action(
         db=db,
@@ -1134,7 +1150,13 @@ def create_invite(
         request=request,
     )
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        if "uq_pending_invite_email" in str(exc.orig):
+            raise ValueError(f"An active invite already exists for {email}") from exc
+        raise
 
     # Send invite email (best-effort)
     try:

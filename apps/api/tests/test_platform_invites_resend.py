@@ -73,3 +73,46 @@ async def test_platform_resend_invite_updates_state(
     assert item["resend_count"] == 1
     assert item["can_resend"] is False
     assert item["resend_cooldown_seconds"] is not None
+
+
+@pytest.mark.asyncio
+async def test_platform_create_invite_reuses_expired_pending_invite(
+    authed_client, db, test_org, test_user, monkeypatch
+):
+    from app.db.enums import Role
+    from app.db.models import OrgInvite
+    from app.services import invite_email_service
+    from app.services import platform_email_service
+
+    test_user.is_platform_admin = True
+    db.commit()
+
+    existing = OrgInvite(
+        organization_id=test_org.id,
+        email="invitee@example.com",
+        role=Role.CASE_MANAGER.value,
+        expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
+    )
+    db.add(existing)
+    db.commit()
+
+    async def fake_send_invite_email(*_args, **_kwargs):
+        return {"success": True}
+
+    monkeypatch.setattr(invite_email_service, "send_invite_email", fake_send_invite_email)
+    monkeypatch.setattr(platform_email_service, "platform_sender_configured", lambda: True)
+
+    response = await authed_client.post(
+        f"/platform/orgs/{test_org.id}/invites",
+        json={"email": "invitee@example.com", "role": "admin"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == str(existing.id)
+    assert payload["role"] == Role.ADMIN.value
+    assert payload["status"] == "pending"
+
+    db.refresh(existing)
+    assert existing.expires_at is not None
+    assert existing.expires_at > datetime.now(timezone.utc)
