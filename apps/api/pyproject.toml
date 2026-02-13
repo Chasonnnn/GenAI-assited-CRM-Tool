@@ -78,7 +78,7 @@ dependencies = [
     "boto3==1.42.39",
 
     # Image processing (EXIF stripping)
-    "pillow>=10.2.0",
+    "pillow>=12.1.1",
     "reportlab==4.4.9",
 
     # MFA/TOTP support
