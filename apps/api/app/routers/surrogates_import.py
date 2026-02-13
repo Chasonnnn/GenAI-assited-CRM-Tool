@@ -275,11 +275,28 @@ async def preview_csv_enhanced(
     - Shows matching templates
     - Indicates AI availability for unmatched columns
     """
-    if not file.filename or not (file.filename.endswith(".csv") or file.filename.endswith(".tsv")):
+    if not file.filename or not (file.filename.lower().endswith(".csv") or file.filename.lower().endswith(".tsv")):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File must be a CSV or TSV file",
         )
+
+    # Validate content type matches extension
+    content_type = file.content_type or ""
+    if file.filename.lower().endswith(".csv"):
+        allowed_csv_mimes = {"text/csv", "application/csv", "application/vnd.ms-excel"}
+        if content_type not in allowed_csv_mimes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Content type '{content_type}' does not match extension '.csv'",
+            )
+    elif file.filename.lower().endswith(".tsv"):
+        # TSV often uploaded as text/plain or text/csv, but reject obvious mismatches
+        if content_type.startswith(("image/", "video/", "application/pdf", "application/zip", "application/x-dosexec")):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Content type '{content_type}' is not valid for '.tsv'",
+            )
 
     # Enforce size limit BEFORE reading into memory.
     try:
