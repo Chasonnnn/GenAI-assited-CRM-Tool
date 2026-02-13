@@ -30,6 +30,7 @@ from app.services import (
     storage_client,
     storage_url_service,
 )
+from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 logger = logging.getLogger(__name__)
@@ -624,10 +625,18 @@ async def upload_org_logo(
             detail=f"Invalid file type. Allowed: {', '.join(ALLOWED_EXTENSIONS)}",
         )
 
-    # Read and validate file
-    content = await file.read()
-    if len(content) > MAX_LOGO_UPLOAD_BYTES:
+    if content_length_exceeds_limit(
+        request.headers.get("content-length"),
+        max_size_bytes=MAX_LOGO_UPLOAD_BYTES,
+    ):
         raise HTTPException(status_code=400, detail="File too large (max 1MB)")
+
+    file_size = await get_upload_file_size(file)
+    if file_size > MAX_LOGO_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="File too large (max 1MB)")
+
+    # Read and validate file after size checks
+    content = await file.read()
 
     try:
         # Open with PIL and process

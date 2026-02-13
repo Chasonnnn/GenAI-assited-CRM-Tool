@@ -36,6 +36,7 @@ from app.core.deps import (
 from app.core.csrf import set_csrf_cookie, CSRF_COOKIE_NAME, get_csrf_cookie
 from app.core.config import settings
 from app.services import platform_service, session_service, storage_client, storage_url_service
+from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
 from app.db.enums import Role
 from app.schemas.platform_templates import (
     PlatformEmailTemplateCreate,
@@ -1004,11 +1005,18 @@ async def upload_platform_email_branding_logo(
             detail=f"Invalid file type. Allowed: {', '.join(PLATFORM_LOGO_ALLOWED_EXTENSIONS)}",
         )
 
-    content = await file.read()
-    if len(content) > PLATFORM_LOGO_UPLOAD_BYTES:
+    if content_length_exceeds_limit(
+        request.headers.get("content-length"),
+        max_size_bytes=PLATFORM_LOGO_UPLOAD_BYTES,
+    ):
+        raise HTTPException(status_code=400, detail="File too large (max 1MB)")
+
+    file_size = await get_upload_file_size(file)
+    if file_size > PLATFORM_LOGO_UPLOAD_BYTES:
         raise HTTPException(status_code=400, detail="File too large (max 1MB)")
 
     try:
+        content = await file.read()
         img = Image.open(io.BytesIO(bytes(content)))
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")

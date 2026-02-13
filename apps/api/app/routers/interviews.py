@@ -13,7 +13,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session
@@ -29,6 +29,7 @@ from app.core.deps import (
 from app.core.permissions import PermissionKey as P
 from app.db.enums import Role
 from app.schemas.auth import UserSession
+from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
 from app.utils.sse import format_sse, sse_preamble, STREAM_HEADERS
 from app.schemas.interview import (
     InterviewAttachmentRead,
@@ -485,6 +486,7 @@ def list_attachments(
 )
 async def upload_attachment(
     interview_id: UUID,
+    request: Request,
     file: UploadFile = File(...),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
@@ -493,11 +495,18 @@ async def upload_attachment(
     interview, case = _check_interview_access(db, session.org_id, interview_id, session)
     _check_can_modify_interview(case, session)
 
-    # Read file content
-    content = await file.read()
-    from io import BytesIO
+    if content_length_exceeds_limit(
+        request.headers.get("content-length"),
+        max_size_bytes=attachment_service.MAX_FILE_SIZE_BYTES,
+    ):
+        max_mb = attachment_service.MAX_FILE_SIZE_BYTES / (1024 * 1024)
+        raise HTTPException(status_code=400, detail=f"File size exceeds {max_mb:.0f} MB limit")
 
-    file_obj = BytesIO(content)
+    file_size = await get_upload_file_size(file)
+    if file_size > attachment_service.MAX_FILE_SIZE_BYTES:
+        max_mb = attachment_service.MAX_FILE_SIZE_BYTES / (1024 * 1024)
+        raise HTTPException(status_code=400, detail=f"File size exceeds {max_mb:.0f} MB limit")
+    file.file.seek(0)
 
     try:
         # Upload attachment
@@ -507,8 +516,8 @@ async def upload_attachment(
             user_id=session.user_id,
             filename=file.filename or "unknown",
             content_type=file.content_type or "application/octet-stream",
-            file=file_obj,
-            file_size=len(content),
+            file=file.file,
+            file_size=file_size,
             surrogate_id=case.id,
             allowed_extensions=interview_attachment_service.INTERVIEW_ALLOWED_EXTENSIONS,
             allowed_mime_types=interview_attachment_service.INTERVIEW_ALLOWED_MIME_TYPES,

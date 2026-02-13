@@ -19,6 +19,7 @@ from app.core.policies import POLICIES
 from app.db.enums import Role
 from app.schemas.auth import UserSession
 from app.services import activity_service, attachment_service, surrogate_service, ip_service
+from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
 
 
 router = APIRouter(prefix="/attachments", tags=["attachments"])
@@ -80,6 +81,7 @@ def _get_surrogate_with_access(
 async def upload_attachment(
     surrogate_id: UUID,
     file: Annotated[UploadFile, File()],
+    request: Request,
     db: Session = Depends(get_db),
     session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["edit"])),
     _: str = Depends(require_csrf_header),
@@ -91,14 +93,18 @@ async def upload_attachment(
     """
     surrogate = _get_surrogate_with_access(db, surrogate_id, session, require_write=True)
 
-    # Read file content
-    content = await file.read()
-    file_size = len(content)
+    if content_length_exceeds_limit(
+        request.headers.get("content-length"),
+        max_size_bytes=attachment_service.MAX_FILE_SIZE_BYTES,
+    ):
+        max_mb = attachment_service.MAX_FILE_SIZE_BYTES / (1024 * 1024)
+        raise HTTPException(status_code=400, detail=f"File size exceeds {max_mb:.0f} MB limit")
 
-    # Create file-like object for service
-    from io import BytesIO
-
-    file_obj = BytesIO(content)
+    file_size = await get_upload_file_size(file)
+    if file_size > attachment_service.MAX_FILE_SIZE_BYTES:
+        max_mb = attachment_service.MAX_FILE_SIZE_BYTES / (1024 * 1024)
+        raise HTTPException(status_code=400, detail=f"File size exceeds {max_mb:.0f} MB limit")
+    file.file.seek(0)
 
     try:
         attachment = attachment_service.upload_attachment(
@@ -107,7 +113,7 @@ async def upload_attachment(
             user_id=session.user_id,
             filename=file.filename or "untitled",
             content_type=file.content_type or "application/octet-stream",
-            file=file_obj,
+            file=file.file,
             file_size=file_size,
             surrogate_id=surrogate.id,
         )
@@ -259,6 +265,7 @@ async def list_ip_attachments(
 async def upload_ip_attachment(
     ip_id: UUID,
     file: Annotated[UploadFile, File()],
+    request: Request,
     db: Session = Depends(get_db),
     session: UserSession = Depends(
         require_permission(POLICIES["intended_parents"].actions["edit"])
@@ -268,12 +275,18 @@ async def upload_ip_attachment(
     """Upload a file attachment to an intended parent."""
     ip = _get_ip_with_access(db, ip_id, session)
 
-    content = await file.read()
-    file_size = len(content)
+    if content_length_exceeds_limit(
+        request.headers.get("content-length"),
+        max_size_bytes=attachment_service.MAX_FILE_SIZE_BYTES,
+    ):
+        max_mb = attachment_service.MAX_FILE_SIZE_BYTES / (1024 * 1024)
+        raise HTTPException(status_code=400, detail=f"File size exceeds {max_mb:.0f} MB limit")
 
-    from io import BytesIO
-
-    file_obj = BytesIO(content)
+    file_size = await get_upload_file_size(file)
+    if file_size > attachment_service.MAX_FILE_SIZE_BYTES:
+        max_mb = attachment_service.MAX_FILE_SIZE_BYTES / (1024 * 1024)
+        raise HTTPException(status_code=400, detail=f"File size exceeds {max_mb:.0f} MB limit")
+    file.file.seek(0)
 
     try:
         attachment = attachment_service.upload_attachment(
@@ -283,7 +296,7 @@ async def upload_ip_attachment(
             user_id=session.user_id,
             filename=file.filename or "untitled",
             content_type=file.content_type or "application/octet-stream",
-            file=file_obj,
+            file=file.file,
             file_size=file_size,
         )
         db.commit()

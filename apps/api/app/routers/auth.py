@@ -42,6 +42,7 @@ from app.services import (
     signature_template_service,
     user_service,
 )
+from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
 from app.services.auth_service import resolve_user_and_create_session
 from app.services.google_oauth import (
     exchange_code_for_tokens,
@@ -527,6 +528,7 @@ class AvatarResponse(BaseModel):
 )
 async def upload_avatar(
     background_tasks: BackgroundTasks,
+    request: Request,
     file: UploadFile = File(...),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
@@ -545,13 +547,24 @@ async def upload_avatar(
             detail=f"Invalid file type. Allowed: {', '.join(AVATAR_ALLOWED_TYPES)}",
         )
 
-    # Read and validate size
-    content = await file.read()
-    if len(content) > AVATAR_MAX_SIZE:
+    if content_length_exceeds_limit(
+        request.headers.get("content-length"),
+        max_size_bytes=AVATAR_MAX_SIZE,
+    ):
         raise HTTPException(
             status_code=400,
             detail=f"File too large. Maximum size: {AVATAR_MAX_SIZE // 1024 // 1024}MB",
         )
+
+    file_size = await get_upload_file_size(file)
+    if file_size > AVATAR_MAX_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large. Maximum size: {AVATAR_MAX_SIZE // 1024 // 1024}MB",
+        )
+
+    # Read after size validation
+    content = await file.read()
 
     # Resize image
     try:
@@ -923,6 +936,7 @@ def _delete_old_signature_photo(photo_url: str):
 )
 async def upload_signature_photo(
     background_tasks: BackgroundTasks,
+    request: Request,
     file: UploadFile = File(...),
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
@@ -942,13 +956,24 @@ async def upload_signature_photo(
             detail=f"Invalid file type. Allowed: {', '.join(AVATAR_ALLOWED_TYPES)}",
         )
 
-    # Read and validate size
-    content = await file.read()
-    if len(content) > AVATAR_MAX_SIZE:
+    if content_length_exceeds_limit(
+        request.headers.get("content-length"),
+        max_size_bytes=AVATAR_MAX_SIZE,
+    ):
         raise HTTPException(
             status_code=400,
             detail=f"File too large. Maximum size: {AVATAR_MAX_SIZE // 1024 // 1024}MB",
         )
+
+    file_size = await get_upload_file_size(file)
+    if file_size > AVATAR_MAX_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large. Maximum size: {AVATAR_MAX_SIZE // 1024 // 1024}MB",
+        )
+
+    # Read after size validation
+    content = await file.read()
 
     # Resize image (re-use avatar resize logic)
     try:
