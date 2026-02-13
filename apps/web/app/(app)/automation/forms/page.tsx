@@ -42,7 +42,14 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { ApiError } from "@/lib/api"
-import { useForms, useCreateForm, useDeleteForm, useFormTemplates, useUseFormTemplate } from "@/lib/hooks/use-forms"
+import {
+    useForms,
+    useCreateForm,
+    useDeleteForm,
+    useDeleteFormTemplate,
+    useFormTemplates,
+    useUseFormTemplate,
+} from "@/lib/hooks/use-forms"
 import { parseDateInput } from "@/lib/utils/date"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
@@ -65,6 +72,7 @@ export default function FormsListPage() {
     const { data: forms, isLoading } = useForms()
     const createFormMutation = useCreateForm()
     const deleteFormMutation = useDeleteForm()
+    const deleteFormTemplateMutation = useDeleteFormTemplate()
     const { data: templates, isLoading: templatesLoading } = useFormTemplates()
     const useTemplateMutation = useUseFormTemplate()
 
@@ -74,6 +82,7 @@ export default function FormsListPage() {
     const [activeTab, setActiveTab] = useState<"forms" | "templates">("forms")
     const [applyingTemplateId, setApplyingTemplateId] = useState<string | null>(null)
     const [formToDelete, setFormToDelete] = useState<{ id: string; name: string } | null>(null)
+    const [templateToDelete, setTemplateToDelete] = useState<{ id: string; name: string } | null>(null)
 
     const handleCreate = async () => {
         if (!formName.trim()) return
@@ -117,6 +126,21 @@ export default function FormsListPage() {
         } catch (error) {
             const message =
                 error instanceof ApiError ? error.message : "Failed to delete form. Please try again."
+            toast.error(message)
+        }
+    }
+
+    const confirmDeleteTemplate = async () => {
+        if (!templateToDelete || deleteFormTemplateMutation.isPending) return
+        try {
+            await deleteFormTemplateMutation.mutateAsync(templateToDelete.id)
+            toast.success("Template removed from library")
+            setTemplateToDelete(null)
+        } catch (error) {
+            const message =
+                error instanceof ApiError
+                    ? error.message
+                    : "Failed to remove template. Please try again."
             toast.error(message)
         }
     }
@@ -331,16 +355,52 @@ export default function FormsListPage() {
                                                                 )}
                                                             </div>
                                                         </div>
-                                                        <Button
-                                                            size="sm"
-                                                            onClick={() => handleUseTemplate(template.id, template.name)}
-                                                            disabled={useTemplateMutation.isPending || isApplying}
-                                                        >
-                                                            {isApplying && (
-                                                                <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                                            )}
-                                                            Use Template
-                                                        </Button>
+                                                        <div className="flex items-center gap-1">
+                                                            <Button
+                                                                size="sm"
+                                                                onClick={() => handleUseTemplate(template.id, template.name)}
+                                                                disabled={
+                                                                    useTemplateMutation.isPending ||
+                                                                    deleteFormTemplateMutation.isPending ||
+                                                                    isApplying
+                                                                }
+                                                            >
+                                                                {isApplying && (
+                                                                    <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                                                )}
+                                                                Use Template
+                                                            </Button>
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger
+                                                                    render={
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            className="h-8 w-8"
+                                                                            aria-label={`Open menu for template ${template.name}`}
+                                                                        >
+                                                                            <MoreVerticalIcon className="size-4" />
+                                                                        </Button>
+                                                                    }
+                                                                />
+                                                                <DropdownMenuContent align="end">
+                                                                    <DropdownMenuItem
+                                                                        className="text-destructive focus:text-destructive"
+                                                                        disabled={deleteFormTemplateMutation.isPending}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation()
+                                                                            setTemplateToDelete({
+                                                                                id: template.id,
+                                                                                name: template.name,
+                                                                            })
+                                                                        }}
+                                                                    >
+                                                                        <Trash2Icon className="mr-2 size-4" />
+                                                                        Remove from library
+                                                                    </DropdownMenuItem>
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
+                                                        </div>
                                                     </div>
                                                 </CardHeader>
                                                 <CardContent className="pt-0">
@@ -430,6 +490,38 @@ export default function FormsListPage() {
                                 <Loader2Icon className="mr-2 size-4 animate-spin" />
                             )}
                             Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog
+                open={!!templateToDelete}
+                onOpenChange={(open) => !open && setTemplateToDelete(null)}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Remove template from library?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will remove{" "}
+                            <span className="font-medium text-foreground">{templateToDelete?.name}</span>{" "}
+                            from your organization&apos;s Form Templates tab only. Existing forms created
+                            from this template are not affected.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={deleteFormTemplateMutation.isPending}>
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            disabled={deleteFormTemplateMutation.isPending}
+                            onClick={confirmDeleteTemplate}
+                        >
+                            {deleteFormTemplateMutation.isPending && (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            )}
+                            Remove
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

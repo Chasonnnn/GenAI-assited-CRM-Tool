@@ -207,6 +207,38 @@ def get_form_template(
     )
 
 
+@router.delete(
+    "/templates/{template_id}",
+    status_code=204,
+    dependencies=[
+        Depends(require_permission(POLICIES["forms"].default)),
+        Depends(require_csrf_header),
+    ],
+)
+def remove_form_template_from_library(
+    template_id: UUID,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """Hide a published platform form template from this org's library."""
+    from app.services import platform_template_service
+
+    template = platform_template_service.get_published_form_template_for_org(
+        db, template_id, session.org_id
+    )
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    platform_template_service.hide_published_form_template_for_org(
+        db,
+        template_id=template.id,
+        org_id=session.org_id,
+        hidden_by_user_id=session.user_id,
+    )
+    db.commit()
+    return Response(status_code=204)
+
+
 @router.post(
     "/templates/{template_id}/use",
     response_model=FormRead,

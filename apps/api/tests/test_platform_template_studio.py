@@ -167,6 +167,100 @@ async def test_platform_form_templates_publish_and_use(authed_client, db, test_u
 
 
 @pytest.mark.asyncio
+async def test_org_can_remove_published_form_template_from_library_only_for_itself(
+    authed_client, db, test_user, test_org
+):
+    from app.db.models import Membership, Organization, User
+
+    test_user.is_platform_admin = True
+    db.commit()
+
+    org2 = Organization(
+        id=uuid.uuid4(),
+        name="Second Org",
+        slug=f"second-org-{uuid.uuid4().hex[:8]}",
+    )
+    db.add(org2)
+    db.flush()
+
+    user2 = User(
+        id=uuid.uuid4(),
+        email=f"user-{uuid.uuid4().hex[:8]}@test.com",
+        display_name="Second User",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(user2)
+    db.flush()
+
+    membership2 = Membership(
+        id=uuid.uuid4(),
+        user_id=user2.id,
+        organization_id=org2.id,
+        role=Role.DEVELOPER,
+    )
+    db.add(membership2)
+    db.commit()
+
+    client2 = await _make_authed_client(db, user2.id, org2.id)
+
+    create_resp = await authed_client.post(
+        "/platform/templates/forms",
+        json={
+            "name": "Shared Intake Template",
+            "description": "Shared across orgs",
+            "schema_json": {
+                "pages": [
+                    {
+                        "title": "Basics",
+                        "fields": [{"key": "full_name", "label": "Full Name", "type": "text"}],
+                    }
+                ]
+            },
+            "settings_json": {"max_file_count": 5},
+        },
+    )
+    assert create_resp.status_code == 201
+    template_id = create_resp.json()["id"]
+
+    publish_resp = await authed_client.post(
+        f"/platform/templates/forms/{template_id}/publish",
+        json={"publish_all": True},
+    )
+    assert publish_resp.status_code == 200
+
+    org1_before = await authed_client.get("/forms/templates")
+    assert org1_before.status_code == 200
+    assert template_id in {item["id"] for item in org1_before.json()}
+
+    org2_before = await client2.get("/forms/templates")
+    assert org2_before.status_code == 200
+    assert template_id in {item["id"] for item in org2_before.json()}
+
+    remove_resp = await authed_client.delete(f"/forms/templates/{template_id}")
+    assert remove_resp.status_code == 204
+
+    org1_after = await authed_client.get("/forms/templates")
+    assert org1_after.status_code == 200
+    assert template_id not in {item["id"] for item in org1_after.json()}
+
+    get_removed_resp = await authed_client.get(f"/forms/templates/{template_id}")
+    assert get_removed_resp.status_code == 404
+
+    use_removed_resp = await authed_client.post(
+        f"/forms/templates/{template_id}/use",
+        json={"name": "Should fail"},
+    )
+    assert use_removed_resp.status_code == 404
+
+    org2_after = await client2.get("/forms/templates")
+    assert org2_after.status_code == 200
+    assert template_id in {item["id"] for item in org2_after.json()}
+
+    await client2.aclose()
+
+
+@pytest.mark.asyncio
 async def test_jotform_form_template_list_includes_schema(authed_client, db, test_user):
     test_user.is_platform_admin = True
     db.commit()

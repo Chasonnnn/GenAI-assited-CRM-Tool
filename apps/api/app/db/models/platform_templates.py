@@ -5,7 +5,17 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, Integer, String, Text, TIMESTAMP, text, ForeignKey, Index
+from sqlalchemy import (
+    Boolean,
+    Integer,
+    String,
+    Text,
+    TIMESTAMP,
+    text,
+    ForeignKey,
+    Index,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -179,6 +189,43 @@ class PlatformFormTemplateTarget(Base):
         UUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
         primary_key=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+
+    template: Mapped["PlatformFormTemplate"] = relationship()
+
+
+class PlatformFormTemplateHiddenOrg(Base):
+    """Org-level hide list for published platform form templates."""
+
+    __tablename__ = "platform_form_template_hidden_orgs"
+    __table_args__ = (
+        UniqueConstraint(
+            "template_id",
+            "organization_id",
+            name="uq_platform_form_template_hidden_org",
+        ),
+        Index("idx_platform_form_template_hidden_org_org", "organization_id"),
+        Index("idx_platform_form_template_hidden_org_template", "template_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    template_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("platform_form_templates.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    hidden_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False

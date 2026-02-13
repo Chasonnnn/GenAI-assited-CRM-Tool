@@ -76,6 +76,7 @@ from app.db.models.platform_templates import (
     PlatformEmailTemplate,
     PlatformEmailTemplateTarget,
     PlatformFormTemplate,
+    PlatformFormTemplateHiddenOrg,
     PlatformFormTemplateTarget,
     PlatformSystemEmailTemplate,
 )
@@ -187,6 +188,7 @@ __all__ = [
     "PlatformEmailTemplate",
     "PlatformEmailTemplateTarget",
     "PlatformFormTemplate",
+    "PlatformFormTemplateHiddenOrg",
     "PlatformFormTemplateTarget",
     "PlatformSystemEmailTemplate",
     "PlatformBranding",

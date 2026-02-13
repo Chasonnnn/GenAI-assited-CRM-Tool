@@ -12,6 +12,7 @@ from app.db.models import (
     PlatformEmailTemplate,
     PlatformEmailTemplateTarget,
     PlatformFormTemplate,
+    PlatformFormTemplateHiddenOrg,
     PlatformFormTemplateTarget,
     WorkflowTemplate,
     WorkflowTemplateTarget,
@@ -324,6 +325,14 @@ def list_published_form_templates_for_org(db: Session, org_id: UUID) -> list[Pla
         )
         .exists()
     )
+    hidden_exists = (
+        db.query(PlatformFormTemplateHiddenOrg)
+        .filter(
+            PlatformFormTemplateHiddenOrg.template_id == PlatformFormTemplate.id,
+            PlatformFormTemplateHiddenOrg.organization_id == org_id,
+        )
+        .exists()
+    )
     return (
         db.query(PlatformFormTemplate)
         .filter(
@@ -332,6 +341,7 @@ def list_published_form_templates_for_org(db: Session, org_id: UUID) -> list[Pla
                 PlatformFormTemplate.is_published_globally.is_(True),
                 target_exists,
             ),
+            ~hidden_exists,
         )
         .order_by(PlatformFormTemplate.published_at.desc().nullslast())
         .all()
@@ -349,6 +359,14 @@ def get_published_form_template_for_org(
         )
         .exists()
     )
+    hidden_exists = (
+        db.query(PlatformFormTemplateHiddenOrg)
+        .filter(
+            PlatformFormTemplateHiddenOrg.template_id == PlatformFormTemplate.id,
+            PlatformFormTemplateHiddenOrg.organization_id == org_id,
+        )
+        .exists()
+    )
     return (
         db.query(PlatformFormTemplate)
         .filter(
@@ -358,9 +376,38 @@ def get_published_form_template_for_org(
                 PlatformFormTemplate.is_published_globally.is_(True),
                 target_exists,
             ),
+            ~hidden_exists,
         )
         .first()
     )
+
+
+def hide_published_form_template_for_org(
+    db: Session,
+    *,
+    template_id: UUID,
+    org_id: UUID,
+    hidden_by_user_id: UUID | None,
+) -> None:
+    existing = (
+        db.query(PlatformFormTemplateHiddenOrg)
+        .filter(
+            PlatformFormTemplateHiddenOrg.template_id == template_id,
+            PlatformFormTemplateHiddenOrg.organization_id == org_id,
+        )
+        .first()
+    )
+    if existing:
+        return
+
+    db.add(
+        PlatformFormTemplateHiddenOrg(
+            template_id=template_id,
+            organization_id=org_id,
+            hidden_by_user_id=hidden_by_user_id,
+        )
+    )
+    db.flush()
 
 
 # =============================================================================

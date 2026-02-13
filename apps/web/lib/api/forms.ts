@@ -277,6 +277,10 @@ export function createFormFromTemplate(
     return api.post<FormRead>(`/forms/templates/${templateId}/use`, payload)
 }
 
+export function deleteFormTemplate(templateId: string): Promise<void> {
+    return api.delete<void>(`/forms/templates/${templateId}`)
+}
+
 export function createFormToken(formId: string, surrogateId: string, expiresInDays?: number): Promise<FormTokenRead> {
     return api.post<FormTokenRead>(`/forms/${formId}/tokens`, {
         surrogate_id: surrogateId,

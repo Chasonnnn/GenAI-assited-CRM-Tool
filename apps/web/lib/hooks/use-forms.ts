@@ -21,6 +21,7 @@ import {
     listFormTemplates,
     getFormTemplate,
     createFormFromTemplate,
+    deleteFormTemplate,
     type FormTemplateLibraryItem,
     type FormTemplateLibraryDetail,
     type FormTemplateUseRequest,
@@ -284,6 +285,18 @@ export function useUseFormTemplate() {
         onSuccess: (form) => {
             queryClient.invalidateQueries({ queryKey: formKeys.lists() })
             queryClient.setQueryData(formKeys.detail(form.id), form)
+        },
+    })
+}
+
+export function useDeleteFormTemplate() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (templateId: string) => deleteFormTemplate(templateId),
+        onSuccess: (_result, templateId) => {
+            queryClient.invalidateQueries({ queryKey: formKeys.templates() })
+            queryClient.removeQueries({ queryKey: formKeys.templateDetail(templateId) })
         },
     })
 }
