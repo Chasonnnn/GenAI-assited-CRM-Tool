@@ -351,6 +351,11 @@ def normalize_identifier(value: Optional[str]) -> Optional[str]:
     return collapsed.lower()
 
 
+def escape_like_string(value: str) -> str:
+    """Escape SQL LIKE/ILIKE wildcard characters for literal matching."""
+    return value.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_")
+
+
 def extract_email_domain(email: Optional[str]) -> Optional[str]:
     """
     Extract lowercased email domain for ops filtering.

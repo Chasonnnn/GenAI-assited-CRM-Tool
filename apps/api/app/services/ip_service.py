@@ -13,6 +13,7 @@ from app.core.encryption import hash_email, hash_phone
 from app.db.enums import IntendedParentStatus
 from app.db.models import IntendedParent, IntendedParentStatusHistory
 from app.utils.normalization import (
+    escape_like_string,
     extract_email_domain,
     extract_phone_last4,
     normalize_email,
@@ -111,10 +112,16 @@ def list_intended_parents(
         normalized_identifier = normalize_identifier(q)
         filters = []
         if normalized_text:
-            filters.append(IntendedParent.full_name_normalized.ilike(f"%{normalized_text}%"))
-        if normalized_identifier:
+            escaped_text = escape_like_string(normalized_text)
             filters.append(
-                IntendedParent.intended_parent_number_normalized.ilike(f"%{normalized_identifier}%")
+                IntendedParent.full_name_normalized.ilike(f"%{escaped_text}%", escape="\\")
+            )
+        if normalized_identifier:
+            escaped_identifier = escape_like_string(normalized_identifier)
+            filters.append(
+                IntendedParent.intended_parent_number_normalized.ilike(
+                    f"%{escaped_identifier}%", escape="\\"
+                )
             )
         if "@" in q:
             try:
