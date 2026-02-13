@@ -788,6 +788,20 @@ def get_surrogate(db: Session, org_id: UUID, surrogate_id: UUID) -> Surrogate | 
     )
 
 
+def get_surrogates_by_ids(db: Session, org_id: UUID, surrogate_ids: list[UUID]) -> list[Surrogate]:
+    """Get surrogates by IDs (org-scoped)."""
+    if not surrogate_ids:
+        return []
+    return (
+        db.query(Surrogate)
+        .filter(
+            Surrogate.organization_id == org_id,
+            Surrogate.id.in_(surrogate_ids),
+        )
+        .all()
+    )
+
+
 def get_surrogate_by_number(db: Session, org_id: UUID, surrogate_number: str) -> Surrogate | None:
     """Get surrogateby surrogatenumber (org-scoped)."""
     return (
