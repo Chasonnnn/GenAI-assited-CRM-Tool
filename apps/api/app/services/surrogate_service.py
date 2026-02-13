@@ -962,9 +962,7 @@ def list_surrogates(
         if normalized_identifier:
             escaped_identifier = escape_like_string(normalized_identifier)
             filters.append(
-                Surrogate.surrogate_number_normalized.ilike(
-                    f"%{escaped_identifier}%", escape="\\"
-                )
+                Surrogate.surrogate_number_normalized.ilike(f"%{escaped_identifier}%", escape="\\")
             )
         if "@" in q:
             try:
@@ -1359,19 +1357,22 @@ def list_surrogate_activity(
     """List activity log items for a case."""
     from app.db.models import SurrogateActivityLog, User
 
+    filters = [
+        SurrogateActivityLog.surrogate_id == surrogate_id,
+        SurrogateActivityLog.organization_id == org_id,
+    ]
+
+    # Optimized count query: Avoid joining User table for count
+    total = db.query(func.count(SurrogateActivityLog.id)).filter(*filters).scalar()
+
     base_query = (
         db.query(
             SurrogateActivityLog,
             User.display_name.label("actor_name"),
         )
         .outerjoin(User, SurrogateActivityLog.actor_user_id == User.id)
-        .filter(
-            SurrogateActivityLog.surrogate_id == surrogate_id,
-            SurrogateActivityLog.organization_id == org_id,
-        )
+        .filter(*filters)
     )
-
-    total = base_query.count()
     offset = (page - 1) * per_page
     rows = (
         base_query.order_by(SurrogateActivityLog.created_at.desc())

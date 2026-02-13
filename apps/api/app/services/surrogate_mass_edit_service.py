@@ -129,9 +129,7 @@ def _build_base_query(db: Session, org_id: UUID, filters: SurrogateMassEditStage
         if normalized_identifier:
             escaped_identifier = escape_like_string(normalized_identifier)
             clauses.append(
-                Surrogate.surrogate_number_normalized.ilike(
-                    f"%{escaped_identifier}%", escape="\\"
-                )
+                Surrogate.surrogate_number_normalized.ilike(f"%{escaped_identifier}%", escape="\\")
             )
         if "@" in q:
             try:

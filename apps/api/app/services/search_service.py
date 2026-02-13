@@ -414,9 +414,9 @@ def _global_search_unified(
                 )
 
         if "attachment" in entity_types:
-            attachment_rank = func.ts_rank(
-                attachments_table.c.search_vector, tsquery_simple
-            ).label("rank")
+            attachment_rank = func.ts_rank(attachments_table.c.search_vector, tsquery_simple).label(
+                "rank"
+            )
             surrogate_attachment_from = attachments_table.join(
                 surrogate_table,
                 and_(
@@ -575,25 +575,22 @@ def _global_search_unified(
             return []
 
         unioned = union_all(*subqueries).subquery("search_union")
-        deduped = (
-            select(
-                unioned.c.entity_type,
-                unioned.c.entity_id,
-                unioned.c.title,
-                unioned.c.snippet,
-                unioned.c.rank,
-                unioned.c.surrogate_id,
-                unioned.c.surrogate_name,
-                unioned.c.created_at,
-                func.row_number()
-                .over(
-                    partition_by=(unioned.c.entity_type, unioned.c.entity_id),
-                    order_by=(unioned.c.rank.desc(), unioned.c.created_at.desc()),
-                )
-                .label("row_num"),
+        deduped = select(
+            unioned.c.entity_type,
+            unioned.c.entity_id,
+            unioned.c.title,
+            unioned.c.snippet,
+            unioned.c.rank,
+            unioned.c.surrogate_id,
+            unioned.c.surrogate_name,
+            unioned.c.created_at,
+            func.row_number()
+            .over(
+                partition_by=(unioned.c.entity_type, unioned.c.entity_id),
+                order_by=(unioned.c.rank.desc(), unioned.c.created_at.desc()),
             )
-            .subquery("search_ranked")
-        )
+            .label("row_num"),
+        ).subquery("search_ranked")
         stmt = (
             select(
                 deduped.c.entity_type,
@@ -627,7 +624,9 @@ def _global_search_unified(
         return results
 
     try:
-        return _run_with_tsquery(lambda dictionary, text: func.websearch_to_tsquery(dictionary, text))
+        return _run_with_tsquery(
+            lambda dictionary, text: func.websearch_to_tsquery(dictionary, text)
+        )
     except SQLAlchemyError as exc:
         logger.warning("Unified search failed, retrying with plainto_tsquery: %s", exc)
         try:
