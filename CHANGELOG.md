@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.79.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.78.1...surrogacy-crm-platform-v0.79.0) (2026-02-13)
+
+
+### Features
+
+* allow orgs to hide published form templates from their library ([7d11cd8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7d11cd81548196a51e72c7a697d1f6278505310a))
+
+
+### Bug Fixes
+
+* reuse expired invite rows instead of creating duplicates ([a96202f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a96202f67a09a95a6c89d375ecb3f60bb27057d2))
+
+
+### Maintenance
+
+* add ruff 0.15.1 to test dependencies ([e10d5f8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e10d5f83fc426a836eb9da5ea95c4b6d08cbb6b5))
+
 ## [0.78.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.78.0...surrogacy-crm-platform-v0.78.1) (2026-02-11)
 
 
