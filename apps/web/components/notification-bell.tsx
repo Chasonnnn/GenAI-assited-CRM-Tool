@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Bell } from "lucide-react"
+import { Bell, BellOff } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { formatDistanceToNow } from "date-fns"
 
@@ -15,6 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
 import {
     useNotifications,
@@ -29,8 +30,8 @@ import { getNotificationHref } from "@/lib/utils/notification-routing"
 
 export function NotificationBell() {
     const router = useRouter()
-    const { data: countData } = useUnreadCount()
-    const { data: notificationsData } = useNotifications({ limit: 10 })
+    const { data: countData, isLoading: isCountLoading } = useUnreadCount()
+    const { data: notificationsData, isLoading: isNotificationsLoading } = useNotifications({ limit: 10 })
     const markRead = useMarkRead()
     const markAllRead = useMarkAllRead()
 
@@ -66,6 +67,10 @@ export function NotificationBell() {
     // Prefer WebSocket count when connected, fall back to polling
     const unreadCount = wsUnreadCount ?? countData?.count ?? 0
     const notifications = notificationsData?.items ?? []
+    const triggerLabel =
+        unreadCount > 0
+            ? `Notifications (${unreadCount} unread)`
+            : "Notifications (no unread messages)"
 
     const handleNotificationClick = (notification: Notification) => {
         // Mark as read
@@ -87,13 +92,20 @@ export function NotificationBell() {
     return (
         <DropdownMenu>
             <DropdownMenuTrigger
-                aria-label="Notifications"
+                aria-label={triggerLabel}
                 className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "relative")}
             >
-                <Bell className="h-5 w-5" />
+                <Bell className="h-5 w-5" aria-hidden="true" />
+                {isCountLoading && unreadCount === 0 && (
+                    <span
+                        aria-hidden="true"
+                        className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-muted-foreground/40 animate-pulse"
+                    />
+                )}
                 {unreadCount > 0 && (
                     <Badge
                         variant="destructive"
+                        aria-hidden="true"
                         className="absolute -top-1 -right-1 h-5 min-w-5 px-1 flex items-center justify-center text-xs"
                     >
                         {unreadCount > 99 ? "99+" : unreadCount}
@@ -116,9 +128,15 @@ export function NotificationBell() {
                 </div>
                 <DropdownMenuSeparator />
 
-                {notifications.length === 0 ? (
-                    <div className="py-6 text-center text-sm text-muted-foreground">
-                        No notifications
+                {isNotificationsLoading ? (
+                    <div className="py-6 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+                        <Spinner aria-label="Loading notifications" />
+                        <span>Loading notifications...</span>
+                    </div>
+                ) : notifications.length === 0 ? (
+                    <div className="py-6 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+                        <BellOff className="h-5 w-5" aria-hidden="true" />
+                        <span>No notifications</span>
                     </div>
                 ) : (
                     <ScrollArea className="h-[300px]">
@@ -134,7 +152,13 @@ export function NotificationBell() {
                                         {notification.title}
                                     </span>
                                     {!notification.read_at && (
-                                        <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0 mt-1" />
+                                        <>
+                                            <span className="sr-only">Unread</span>
+                                            <span
+                                                aria-hidden="true"
+                                                className="h-2 w-2 rounded-full bg-blue-500 shrink-0 mt-1"
+                                            />
+                                        </>
                                     )}
                                 </div>
                                 {notification.body && (
