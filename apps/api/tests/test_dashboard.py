@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy import event
 
 from app.core.encryption import hash_email
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
@@ -367,3 +368,54 @@ async def test_attention_stuck_includes_no_history(db, test_org, default_stage):
 async def test_attention_invalid_pipeline_id_returns_422(authed_client):
     response = await authed_client.get("/dashboard/attention?pipeline_id=not-a-uuid")
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_attention_stuck_query_uses_not_exists(db, test_org, default_stage):
+    async with role_client(db, test_org, Role.CASE_MANAGER) as (client, user):
+        now = datetime.now(timezone.utc)
+        surrogate = Surrogate(
+            id=uuid.uuid4(),
+            surrogate_number="S20999",
+            organization_id=test_org.id,
+            stage_id=default_stage.id,
+            status_label=default_stage.label,
+            source=SurrogateSource.MANUAL.value,
+            owner_type=OwnerType.USER.value,
+            owner_id=user.id,
+            full_name="Query Shape Surrogate",
+            email="query-shape@example.com",
+            email_hash=hash_email("query-shape@example.com"),
+            created_at=now - timedelta(days=30),
+            updated_at=now - timedelta(days=30),
+            last_contacted_at=now,
+        )
+        db.add(surrogate)
+        db.flush()
+
+        statements: list[str] = []
+        bind = db.get_bind()
+
+        def _capture_sql(
+            _conn,
+            _cursor,
+            statement,
+            _parameters,
+            _context,
+            _executemany,
+        ) -> None:
+            lowered = statement.lower()
+            if "surrogate_status_history" in lowered:
+                statements.append(lowered)
+
+        event.listen(bind, "before_cursor_execute", _capture_sql)
+        try:
+            response = await client.get("/dashboard/attention?days_stuck=14")
+        finally:
+            event.remove(bind, "before_cursor_execute", _capture_sql)
+
+        assert response.status_code == 200
+        combined_sql = "\n".join(statements)
+        assert "exists" in combined_sql
+        assert "not (" in combined_sql or "not exists" in combined_sql
+        assert "group by surrogate_status_history.surrogate_id" not in combined_sql
