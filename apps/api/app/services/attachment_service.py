@@ -31,32 +31,21 @@ class AttachmentStorageError(RuntimeError):
 # Configuration
 # =============================================================================
 
-ALLOWED_EXTENSIONS = {
-    "pdf",
-    "png",
-    "jpg",
-    "jpeg",
-    "doc",
-    "docx",
-    "xls",
-    "xlsx",
-    "csv",
-    "mp4",
-    "mov",
+EXTENSION_TO_MIME = {
+    "pdf": {"application/pdf"},
+    "png": {"image/png"},
+    "jpg": {"image/jpeg"},
+    "jpeg": {"image/jpeg"},
+    "doc": {"application/msword"},
+    "docx": {"application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
+    "xls": {"application/vnd.ms-excel"},
+    "xlsx": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+    "csv": {"text/csv", "application/csv", "application/vnd.ms-excel"},
+    "mp4": {"video/mp4"},
+    "mov": {"video/quicktime"},
 }
-ALLOWED_MIME_TYPES = {
-    "application/pdf",
-    "image/png",
-    "image/jpeg",
-    "text/csv",
-    "application/csv",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.ms-excel",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "video/mp4",
-    "video/quicktime",
-}
+ALLOWED_EXTENSIONS = set(EXTENSION_TO_MIME.keys())
+ALLOWED_MIME_TYPES = {mime for mimes in EXTENSION_TO_MIME.values() for mime in mimes}
 MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
 SIGNED_URL_EXPIRY_SECONDS = 300  # 5 minutes
 
@@ -129,6 +118,7 @@ def validate_file(
 ) -> tuple[bool, str | None]:
     """
     Validate file against allowlists and size limits.
+    Enforces that file extension matches the provided MIME type.
 
     Returns (is_valid, error_message)
     """
@@ -143,6 +133,13 @@ def validate_file(
     # Check MIME type
     if content_type not in allowed_mimes:
         return False, f"Content type '{content_type}' not allowed"
+
+    # Enforce strict extension <-> MIME type consistency to prevent spoofing
+    # Only enforce if the extension is known in our strict mapping
+    if ext in EXTENSION_TO_MIME:
+        valid_mimes = EXTENSION_TO_MIME[ext]
+        if content_type not in valid_mimes:
+            return False, f"Content type '{content_type}' does not match extension '.{ext}'"
 
     # Check size
     if file_size > MAX_FILE_SIZE_BYTES:
