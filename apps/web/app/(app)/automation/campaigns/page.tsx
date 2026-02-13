@@ -556,10 +556,9 @@ export default function CampaignsPage() {
                                                             <DropdownMenu>
                                                                 <DropdownMenuTrigger
                                                                     className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}
+                                                                aria-label={`Actions for ${campaign.name}`}
                                                                 >
-                                                                    <span className="inline-flex items-center justify-center">
-                                                                        <MoreVerticalIcon className="size-4" />
-                                                                    </span>
+                                                                <MoreVerticalIcon className="size-4" />
                                                                 </DropdownMenuTrigger>
                                                                 <DropdownMenuContent align="end">
                                                                     <DropdownMenuItem
