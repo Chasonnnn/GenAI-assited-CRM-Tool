@@ -11,14 +11,14 @@ import logging
 from typing import TypedDict
 from uuid import UUID
 
-from sqlalchemy import and_, func, literal, or_, select, true
+from sqlalchemy import and_, func, literal, or_, select, true, union_all
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import OwnerType, Role
 from app.db.models import Attachment, Surrogate, EntityNote, IntendedParent, PipelineStage
-from app.utils.normalization import normalize_identifier, normalize_search_text
+from app.utils.normalization import escape_like_string, normalize_identifier, normalize_search_text
 
 
 logger = logging.getLogger(__name__)
@@ -160,7 +160,6 @@ def global_search(
         return SearchResponse(query=query, total=0, results=[])
 
     query = query.strip()
-    results: list[SearchResult] = []
     role_value = role.value if hasattr(role, "value") else role
 
     # Default to all types
@@ -170,66 +169,474 @@ def global_search(
     can_view_notes = _user_can_view_notes(permissions)
     can_view_ips = _user_can_view_intended_parents(permissions)
     can_view_post_approval = _can_view_post_approval(permissions)
-    # Search surrogates
-    if "surrogate" in entity_types:
-        surrogate_results = _search_surrogates(
-            db,
-            org_id,
-            query,
-            limit,
-            offset,
-            role_value,
-            user_id,
-            can_view_post_approval,
-        )
-        results.extend(surrogate_results)
-
-    # Search notes (permission-gated)
-    if "note" in entity_types and can_view_notes:
-        note_results = _search_notes(
-            db,
-            org_id,
-            query,
-            limit,
-            offset,
-            role_value,
-            user_id,
-            can_view_post_approval,
-            can_view_ips,
-        )
-        results.extend(note_results)
-
-    # Search attachments
-    if "attachment" in entity_types:
-        attachment_results = _search_attachments(
-            db,
-            org_id,
-            query,
-            limit,
-            offset,
-            role_value,
-            user_id,
-            can_view_post_approval,
-            can_view_ips,
-        )
-        results.extend(attachment_results)
-
-    # Search intended parents (permission-gated)
-    if "intended_parent" in entity_types and can_view_ips:
-        ip_results = _search_intended_parents(db, org_id, query, limit, offset)
-        results.extend(ip_results)
-
-    # Sort by rank (descending)
-    results.sort(key=lambda r: r["rank"], reverse=True)
-
-    # Apply overall limit
-    results = results[:limit]
+    results = _global_search_unified(
+        db=db,
+        org_id=org_id,
+        query=query,
+        user_id=user_id,
+        role=role_value,
+        entity_types=entity_types,
+        can_view_notes=can_view_notes,
+        can_view_intended_parents=can_view_ips,
+        can_view_post_approval=can_view_post_approval,
+        limit=limit,
+        offset=offset,
+    )
 
     return SearchResponse(
         query=query,
         total=len(results),
         results=results,
     )
+
+
+def _global_search_unified(
+    db: Session,
+    org_id: UUID,
+    query: str,
+    user_id: UUID,
+    role: str,
+    entity_types: list[str],
+    can_view_notes: bool,
+    can_view_intended_parents: bool,
+    can_view_post_approval: bool,
+    limit: int,
+    offset: int,
+) -> list[SearchResult]:
+    """Run one unified UNION ALL query and paginate globally by relevance."""
+
+    def _run_with_tsquery(tsquery_factory) -> list[SearchResult]:
+        surrogate_table = Surrogate.__table__.alias("s")
+        stage_table = PipelineStage.__table__.alias("ps")
+        notes_table = EntityNote.__table__.alias("en")
+        attachments_table = Attachment.__table__.alias("a")
+        ip_table = IntendedParent.__table__.alias("ip")
+
+        surrogate_access_filter = _build_surrogate_access_filter(
+            role,
+            user_id,
+            can_view_post_approval,
+            surrogate_table,
+            stage_table,
+        )
+
+        tsquery_simple = tsquery_factory("simple", query)
+        tsquery_english = tsquery_factory("english", query)
+        normalized_text = normalize_search_text(query)
+        normalized_identifier = normalize_identifier(query)
+        email_hash, phone_hash = _extract_hashes(query)
+
+        subqueries = []
+
+        if "surrogate" in entity_types:
+            surrogate_from = surrogate_table.outerjoin(
+                stage_table, surrogate_table.c.stage_id == stage_table.c.id
+            )
+            hash_filters = []
+            if email_hash:
+                hash_filters.append(surrogate_table.c.email_hash == email_hash)
+            if phone_hash:
+                hash_filters.append(surrogate_table.c.phone_hash == phone_hash)
+            if hash_filters:
+                subqueries.append(
+                    select(
+                        literal("surrogate").label("entity_type"),
+                        surrogate_table.c.id.label("entity_id"),
+                        func.coalesce(
+                            surrogate_table.c.full_name,
+                            func.concat(
+                                literal("Surrogate "),
+                                func.coalesce(surrogate_table.c.surrogate_number, literal("")),
+                            ),
+                        ).label("title"),
+                        func.coalesce(surrogate_table.c.surrogate_number, literal("")).label(
+                            "snippet"
+                        ),
+                        literal(2.0).label("rank"),
+                        surrogate_table.c.id.label("surrogate_id"),
+                        surrogate_table.c.full_name.label("surrogate_name"),
+                        surrogate_table.c.created_at.label("created_at"),
+                    )
+                    .select_from(surrogate_from)
+                    .where(
+                        surrogate_table.c.organization_id == org_id,
+                        surrogate_access_filter,
+                        or_(*hash_filters),
+                    )
+                )
+
+            surrogate_rank = func.ts_rank(surrogate_table.c.search_vector, tsquery_simple).label(
+                "rank"
+            )
+            subqueries.append(
+                select(
+                    literal("surrogate").label("entity_type"),
+                    surrogate_table.c.id.label("entity_id"),
+                    func.coalesce(
+                        surrogate_table.c.full_name,
+                        func.concat(
+                            literal("Surrogate "),
+                            func.coalesce(surrogate_table.c.surrogate_number, literal("")),
+                        ),
+                    ).label("title"),
+                    func.coalesce(surrogate_table.c.surrogate_number, literal("")).label("snippet"),
+                    surrogate_rank,
+                    surrogate_table.c.id.label("surrogate_id"),
+                    surrogate_table.c.full_name.label("surrogate_name"),
+                    surrogate_table.c.created_at.label("created_at"),
+                )
+                .select_from(surrogate_from)
+                .where(
+                    surrogate_table.c.organization_id == org_id,
+                    surrogate_table.c.search_vector.op("@@")(tsquery_simple),
+                    surrogate_access_filter,
+                )
+            )
+
+            fallback_filters = []
+            if normalized_text:
+                escaped_text = escape_like_string(normalized_text)
+                fallback_filters.append(
+                    surrogate_table.c.full_name_normalized.ilike(
+                        f"%{escaped_text}%",
+                        escape="\\",
+                    )
+                )
+            if normalized_identifier:
+                escaped_identifier = escape_like_string(normalized_identifier)
+                fallback_filters.append(
+                    surrogate_table.c.surrogate_number_normalized.ilike(
+                        f"%{escaped_identifier}%",
+                        escape="\\",
+                    )
+                )
+            if fallback_filters:
+                subqueries.append(
+                    select(
+                        literal("surrogate").label("entity_type"),
+                        surrogate_table.c.id.label("entity_id"),
+                        func.coalesce(
+                            surrogate_table.c.full_name,
+                            func.concat(
+                                literal("Surrogate "),
+                                func.coalesce(surrogate_table.c.surrogate_number, literal("")),
+                            ),
+                        ).label("title"),
+                        func.coalesce(surrogate_table.c.surrogate_number, literal("")).label(
+                            "snippet"
+                        ),
+                        literal(0.5).label("rank"),
+                        surrogate_table.c.id.label("surrogate_id"),
+                        surrogate_table.c.full_name.label("surrogate_name"),
+                        surrogate_table.c.created_at.label("created_at"),
+                    )
+                    .select_from(surrogate_from)
+                    .where(
+                        surrogate_table.c.organization_id == org_id,
+                        surrogate_access_filter,
+                        or_(*fallback_filters),
+                    )
+                )
+
+        if "note" in entity_types and can_view_notes:
+            note_snippet = func.ts_headline(
+                "english",
+                func.regexp_replace(
+                    func.coalesce(notes_table.c.content, ""),
+                    literal("<[^>]+>"),
+                    literal(" "),
+                    literal("g"),
+                ),
+                tsquery_english,
+                literal("MaxWords=30, MinWords=15, StartSel=<mark>, StopSel=</mark>"),
+            ).label("snippet")
+            note_rank = func.ts_rank(notes_table.c.search_vector, tsquery_english).label("rank")
+
+            surrogate_note_from = notes_table.join(
+                surrogate_table,
+                and_(
+                    notes_table.c.entity_type == "surrogate",
+                    notes_table.c.entity_id == surrogate_table.c.id,
+                    surrogate_table.c.organization_id == notes_table.c.organization_id,
+                ),
+            ).outerjoin(stage_table, surrogate_table.c.stage_id == stage_table.c.id)
+
+            subqueries.append(
+                select(
+                    literal("note").label("entity_type"),
+                    notes_table.c.id.label("entity_id"),
+                    func.coalesce(
+                        func.concat(literal("Note on "), surrogate_table.c.full_name),
+                        literal("Surrogate Note"),
+                    ).label("title"),
+                    note_snippet,
+                    note_rank,
+                    surrogate_table.c.id.label("surrogate_id"),
+                    surrogate_table.c.full_name.label("surrogate_name"),
+                    notes_table.c.created_at.label("created_at"),
+                )
+                .select_from(surrogate_note_from)
+                .where(
+                    notes_table.c.organization_id == org_id,
+                    notes_table.c.search_vector.op("@@")(tsquery_english),
+                    surrogate_access_filter,
+                )
+            )
+
+            if can_view_intended_parents:
+                ip_note_from = notes_table.join(
+                    ip_table,
+                    and_(
+                        notes_table.c.entity_type == "intended_parent",
+                        notes_table.c.entity_id == ip_table.c.id,
+                        ip_table.c.organization_id == notes_table.c.organization_id,
+                    ),
+                )
+                subqueries.append(
+                    select(
+                        literal("note").label("entity_type"),
+                        notes_table.c.id.label("entity_id"),
+                        func.coalesce(
+                            func.concat(literal("Note on "), ip_table.c.full_name),
+                            literal("Intended Parent Note"),
+                        ).label("title"),
+                        note_snippet,
+                        note_rank,
+                        literal(None).label("surrogate_id"),
+                        literal(None).label("surrogate_name"),
+                        notes_table.c.created_at.label("created_at"),
+                    )
+                    .select_from(ip_note_from)
+                    .where(
+                        notes_table.c.organization_id == org_id,
+                        notes_table.c.search_vector.op("@@")(tsquery_english),
+                    )
+                )
+
+        if "attachment" in entity_types:
+            attachment_rank = func.ts_rank(
+                attachments_table.c.search_vector, tsquery_simple
+            ).label("rank")
+            surrogate_attachment_from = attachments_table.join(
+                surrogate_table,
+                and_(
+                    attachments_table.c.surrogate_id == surrogate_table.c.id,
+                    surrogate_table.c.organization_id == attachments_table.c.organization_id,
+                ),
+            ).outerjoin(stage_table, surrogate_table.c.stage_id == stage_table.c.id)
+            subqueries.append(
+                select(
+                    literal("attachment").label("entity_type"),
+                    attachments_table.c.id.label("entity_id"),
+                    func.coalesce(attachments_table.c.filename, literal("Attachment")).label(
+                        "title"
+                    ),
+                    literal("").label("snippet"),
+                    attachment_rank,
+                    attachments_table.c.surrogate_id.label("surrogate_id"),
+                    surrogate_table.c.full_name.label("surrogate_name"),
+                    attachments_table.c.created_at.label("created_at"),
+                )
+                .select_from(surrogate_attachment_from)
+                .where(
+                    attachments_table.c.organization_id == org_id,
+                    attachments_table.c.surrogate_id.is_not(None),
+                    attachments_table.c.deleted_at.is_(None),
+                    attachments_table.c.quarantined.is_(False),
+                    attachments_table.c.search_vector.op("@@")(tsquery_simple),
+                    surrogate_access_filter,
+                )
+            )
+
+            if can_view_intended_parents:
+                ip_attachment_from = attachments_table.join(
+                    ip_table,
+                    and_(
+                        attachments_table.c.intended_parent_id == ip_table.c.id,
+                        ip_table.c.organization_id == attachments_table.c.organization_id,
+                    ),
+                )
+                subqueries.append(
+                    select(
+                        literal("attachment").label("entity_type"),
+                        attachments_table.c.id.label("entity_id"),
+                        func.coalesce(attachments_table.c.filename, literal("Attachment")).label(
+                            "title"
+                        ),
+                        literal("").label("snippet"),
+                        attachment_rank,
+                        literal(None).label("surrogate_id"),
+                        literal(None).label("surrogate_name"),
+                        attachments_table.c.created_at.label("created_at"),
+                    )
+                    .select_from(ip_attachment_from)
+                    .where(
+                        attachments_table.c.organization_id == org_id,
+                        attachments_table.c.intended_parent_id.is_not(None),
+                        attachments_table.c.surrogate_id.is_(None),
+                        attachments_table.c.deleted_at.is_(None),
+                        attachments_table.c.quarantined.is_(False),
+                        attachments_table.c.search_vector.op("@@")(tsquery_simple),
+                    )
+                )
+
+        if "intended_parent" in entity_types and can_view_intended_parents:
+            hash_filters = []
+            if email_hash:
+                hash_filters.append(ip_table.c.email_hash == email_hash)
+            if phone_hash:
+                hash_filters.append(ip_table.c.phone_hash == phone_hash)
+
+            if hash_filters:
+                subqueries.append(
+                    select(
+                        literal("intended_parent").label("entity_type"),
+                        ip_table.c.id.label("entity_id"),
+                        func.coalesce(
+                            ip_table.c.full_name,
+                            func.concat(
+                                literal("Intended Parent "),
+                                func.coalesce(ip_table.c.intended_parent_number, literal("")),
+                            ),
+                        ).label("title"),
+                        func.coalesce(ip_table.c.intended_parent_number, literal("")).label(
+                            "snippet"
+                        ),
+                        literal(2.0).label("rank"),
+                        literal(None).label("surrogate_id"),
+                        literal(None).label("surrogate_name"),
+                        ip_table.c.created_at.label("created_at"),
+                    ).where(ip_table.c.organization_id == org_id, or_(*hash_filters))
+                )
+
+            ip_rank = func.ts_rank(ip_table.c.search_vector, tsquery_simple).label("rank")
+            subqueries.append(
+                select(
+                    literal("intended_parent").label("entity_type"),
+                    ip_table.c.id.label("entity_id"),
+                    func.coalesce(
+                        ip_table.c.full_name,
+                        func.concat(
+                            literal("Intended Parent "),
+                            func.coalesce(ip_table.c.intended_parent_number, literal("")),
+                        ),
+                    ).label("title"),
+                    func.coalesce(ip_table.c.intended_parent_number, literal("")).label("snippet"),
+                    ip_rank,
+                    literal(None).label("surrogate_id"),
+                    literal(None).label("surrogate_name"),
+                    ip_table.c.created_at.label("created_at"),
+                ).where(
+                    ip_table.c.organization_id == org_id,
+                    ip_table.c.search_vector.op("@@")(tsquery_simple),
+                )
+            )
+
+            ip_fallback_filters = []
+            if normalized_text:
+                escaped_text = escape_like_string(normalized_text)
+                ip_fallback_filters.append(
+                    ip_table.c.full_name_normalized.ilike(f"%{escaped_text}%", escape="\\")
+                )
+            if normalized_identifier:
+                escaped_identifier = escape_like_string(normalized_identifier)
+                ip_fallback_filters.append(
+                    ip_table.c.intended_parent_number_normalized.ilike(
+                        f"%{escaped_identifier}%",
+                        escape="\\",
+                    )
+                )
+            if ip_fallback_filters:
+                subqueries.append(
+                    select(
+                        literal("intended_parent").label("entity_type"),
+                        ip_table.c.id.label("entity_id"),
+                        func.coalesce(
+                            ip_table.c.full_name,
+                            func.concat(
+                                literal("Intended Parent "),
+                                func.coalesce(ip_table.c.intended_parent_number, literal("")),
+                            ),
+                        ).label("title"),
+                        func.coalesce(ip_table.c.intended_parent_number, literal("")).label(
+                            "snippet"
+                        ),
+                        literal(0.5).label("rank"),
+                        literal(None).label("surrogate_id"),
+                        literal(None).label("surrogate_name"),
+                        ip_table.c.created_at.label("created_at"),
+                    ).where(
+                        ip_table.c.organization_id == org_id,
+                        or_(*ip_fallback_filters),
+                    )
+                )
+
+        if not subqueries:
+            return []
+
+        unioned = union_all(*subqueries).subquery("search_union")
+        deduped = (
+            select(
+                unioned.c.entity_type,
+                unioned.c.entity_id,
+                unioned.c.title,
+                unioned.c.snippet,
+                unioned.c.rank,
+                unioned.c.surrogate_id,
+                unioned.c.surrogate_name,
+                unioned.c.created_at,
+                func.row_number()
+                .over(
+                    partition_by=(unioned.c.entity_type, unioned.c.entity_id),
+                    order_by=(unioned.c.rank.desc(), unioned.c.created_at.desc()),
+                )
+                .label("row_num"),
+            )
+            .subquery("search_ranked")
+        )
+        stmt = (
+            select(
+                deduped.c.entity_type,
+                deduped.c.entity_id,
+                deduped.c.title,
+                deduped.c.snippet,
+                deduped.c.rank,
+                deduped.c.surrogate_id,
+                deduped.c.surrogate_name,
+            )
+            .where(deduped.c.row_num == 1)
+            .order_by(deduped.c.rank.desc(), deduped.c.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+
+        rows = db.execute(stmt).fetchall()
+        results: list[SearchResult] = []
+        for row in rows:
+            results.append(
+                SearchResult(
+                    entity_type=row.entity_type,
+                    entity_id=str(row.entity_id),
+                    title=row.title or "",
+                    snippet=row.snippet or "",
+                    rank=float(row.rank),
+                    surrogate_id=str(row.surrogate_id) if row.surrogate_id else None,
+                    surrogate_name=row.surrogate_name,
+                )
+            )
+        return results
+
+    try:
+        return _run_with_tsquery(lambda dictionary, text: func.websearch_to_tsquery(dictionary, text))
+    except SQLAlchemyError as exc:
+        logger.warning("Unified search failed, retrying with plainto_tsquery: %s", exc)
+        try:
+            return _run_with_tsquery(
+                lambda dictionary, text: func.plainto_tsquery(dictionary, text)
+            )
+        except SQLAlchemyError as fallback_exc:
+            logger.warning("Unified search fallback failed: %s", fallback_exc)
+            return []
 
 
 def _search_surrogates(
