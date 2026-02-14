@@ -132,7 +132,7 @@ def upload_form_logo(
     logo_id = uuid.uuid4()
     storage_key = f"{org_id}/form-logos/{logo_id}.{ext}"
     processed_file = strip_exif_data(file.file, content_type)
-    store_file(storage_key, processed_file)
+    store_file(storage_key, processed_file, content_type=content_type)
 
     logo = FormLogo(
         id=logo_id,
