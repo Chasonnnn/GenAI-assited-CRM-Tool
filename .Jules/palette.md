@@ -9,3 +9,7 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+
+## 2026-02-14 - Collapsible Sidebar Accessibility
+**Learning:** Collapsible navigation groups in the sidebar were missing the `aria-expanded` attribute, leaving screen reader users unaware of the open/closed state of the section.
+**Action:** Always apply `aria-expanded={isOpen}` to the toggle button of collapsible UI components.
