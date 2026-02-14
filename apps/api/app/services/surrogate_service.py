@@ -873,19 +873,11 @@ def list_surrogates(
         except Exception as exc:
             raise ValueError("Invalid cursor") from exc
 
-    query = (
-        db.query(Surrogate)
-        .options(
-            joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
-            joinedload(Surrogate.owner_user).load_only(User.display_name),
-            joinedload(Surrogate.owner_queue).load_only(Queue.name),
-        )
-        .filter(Surrogate.organization_id == org_id)
-    )
+    filters = [Surrogate.organization_id == org_id]
 
     # Archived filter (default: exclude)
     if not include_archived:
-        query = query.filter(Surrogate.is_archived.is_(False))
+        filters.append(Surrogate.is_archived.is_(False))
 
     # Permission-based stage type filter (exclude certain stage types)
     # NULL stage_id surrogates are kept visible (not excluded)
@@ -897,57 +889,55 @@ def list_surrogates(
             )
             .scalar_subquery()
         )
-        query = query.filter(
+        filters.append(
             or_(Surrogate.stage_id.is_(None), ~Surrogate.stage_id.in_(excluded_stage_ids))
         )
 
     # Owner-type filter
     if owner_type:
-        query = query.filter(Surrogate.owner_type == owner_type)
+        filters.append(Surrogate.owner_type == owner_type)
 
     # Queue filter (for viewing specific queue's surrogates)
     if queue_id:
-        query = query.filter(Surrogate.owner_id == queue_id)
-        query = query.filter(Surrogate.owner_type == OwnerType.QUEUE.value)
+        filters.append(Surrogate.owner_id == queue_id)
+        filters.append(Surrogate.owner_type == OwnerType.QUEUE.value)
 
     # Role-based visibility filter (ownership-based)
     if role_filter == Role.INTAKE_SPECIALIST.value or role_filter == Role.INTAKE_SPECIALIST:
         # Intake specialists only see their owned surrogates.
         if user_id:
-            query = query.filter(
+            filters.append(
                 (Surrogate.owner_type == OwnerType.USER.value) & (Surrogate.owner_id == user_id)
             )
         else:
             # No user_id → no owned surrogates
-            query = query.filter(Surrogate.id.is_(None))
+            filters.append(Surrogate.id.is_(None))
 
     # Status filter
     if stage_id:
-        query = query.filter(Surrogate.stage_id == stage_id)
+        filters.append(Surrogate.stage_id == stage_id)
 
     # Source filter
     if source:
-        query = query.filter(Surrogate.source == source.value)
+        filters.append(Surrogate.source == source.value)
 
     # Assigned filter
     if owner_id:
-        query = query.filter(
-            Surrogate.owner_type == OwnerType.USER.value,
-            Surrogate.owner_id == owner_id,
-        )
+        filters.append(Surrogate.owner_type == OwnerType.USER.value)
+        filters.append(Surrogate.owner_id == owner_id)
 
     # Date range filter
     if created_from:
         try:
             from_date = datetime.fromisoformat(created_from.replace("Z", "+00:00"))
-            query = query.filter(Surrogate.created_at >= from_date)
+            filters.append(Surrogate.created_at >= from_date)
         except (ValueError, AttributeError):
             logger.debug("surrogate_filter_invalid_created_at")
 
     if created_to:
         try:
             to_date = datetime.fromisoformat(created_to.replace("Z", "+00:00"))
-            query = query.filter(Surrogate.created_at <= to_date)
+            filters.append(Surrogate.created_at <= to_date)
         except (ValueError, AttributeError):
             pass  # Ignore invalid date format
 
@@ -955,29 +945,45 @@ def list_surrogates(
     if q:
         normalized_text = normalize_search_text(q)
         normalized_identifier = normalize_identifier(q)
-        filters = []
+        search_filters = []
         if normalized_text:
             escaped_text = escape_like_string(normalized_text)
-            filters.append(Surrogate.full_name_normalized.ilike(f"%{escaped_text}%", escape="\\"))
+            search_filters.append(
+                Surrogate.full_name_normalized.ilike(f"%{escaped_text}%", escape="\\")
+            )
         if normalized_identifier:
             escaped_identifier = escape_like_string(normalized_identifier)
-            filters.append(
-                Surrogate.surrogate_number_normalized.ilike(
-                    f"%{escaped_identifier}%", escape="\\"
-                )
+            search_filters.append(
+                Surrogate.surrogate_number_normalized.ilike(f"%{escaped_identifier}%", escape="\\")
             )
         if "@" in q:
             try:
-                filters.append(Surrogate.email_hash == hash_email(q))
+                search_filters.append(Surrogate.email_hash == hash_email(q))
             except Exception as exc:
                 logger.debug("surrogate_search_email_hash_failed", exc_info=exc)
         try:
             normalized_phone = normalize_phone(q)
-            filters.append(Surrogate.phone_hash == hash_phone(normalized_phone))
+            search_filters.append(Surrogate.phone_hash == hash_phone(normalized_phone))
         except Exception as exc:
             logger.debug("surrogate_search_phone_hash_failed", exc_info=exc)
-        if filters:
-            query = query.filter(or_(*filters))
+        if search_filters:
+            filters.append(or_(*search_filters))
+
+    # Construct main query
+    query = (
+        db.query(Surrogate)
+        .options(
+            joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
+            joinedload(Surrogate.owner_user).load_only(User.display_name),
+            joinedload(Surrogate.owner_queue).load_only(Queue.name),
+        )
+        .filter(*filters)
+    )
+
+    # Count total (optional) - optimized to avoid joins/ordering
+    total = None
+    if include_total:
+        total = db.query(func.count(Surrogate.id)).filter(*filters).scalar()
 
     # Dynamic sorting
     order_func = asc if sort_order == "asc" else desc
@@ -999,8 +1005,6 @@ def list_surrogates(
         # Default: created_at desc
         query = query.order_by(Surrogate.created_at.desc(), Surrogate.id.desc())
 
-    base_query = query
-
     if cursor:
         if sort_by and sort_by != "created_at":
             raise ValueError("Cursor pagination only supports created_at sorting")
@@ -1013,9 +1017,6 @@ def list_surrogates(
                 (Surrogate.created_at == cursor_dt) & (Surrogate.id < cursor_id),
             )
         )
-
-    # Count total (optional)
-    total = base_query.count() if include_total else None
 
     # Paginate
     next_cursor = None
