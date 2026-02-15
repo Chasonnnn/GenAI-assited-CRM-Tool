@@ -873,15 +873,7 @@ def list_surrogates(
         except Exception as exc:
             raise ValueError("Invalid cursor") from exc
 
-    query = (
-        db.query(Surrogate)
-        .options(
-            joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
-            joinedload(Surrogate.owner_user).load_only(User.display_name),
-            joinedload(Surrogate.owner_queue).load_only(Queue.name),
-        )
-        .filter(Surrogate.organization_id == org_id)
-    )
+    query = db.query(Surrogate).filter(Surrogate.organization_id == org_id)
 
     # Archived filter (default: exclude)
     if not include_archived:
@@ -962,9 +954,7 @@ def list_surrogates(
         if normalized_identifier:
             escaped_identifier = escape_like_string(normalized_identifier)
             filters.append(
-                Surrogate.surrogate_number_normalized.ilike(
-                    f"%{escaped_identifier}%", escape="\\"
-                )
+                Surrogate.surrogate_number_normalized.ilike(f"%{escaped_identifier}%", escape="\\")
             )
         if "@" in q:
             try:
@@ -978,6 +968,18 @@ def list_surrogates(
             logger.debug("surrogate_search_phone_hash_failed", exc_info=exc)
         if filters:
             query = query.filter(or_(*filters))
+
+    # Count total (optional)
+    total = None
+    if include_total:
+        total = query.with_entities(func.count(Surrogate.id)).scalar()
+
+    # Apply eager loading for list results
+    query = query.options(
+        joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
+        joinedload(Surrogate.owner_user).load_only(User.display_name),
+        joinedload(Surrogate.owner_queue).load_only(Queue.name),
+    )
 
     # Dynamic sorting
     order_func = asc if sort_order == "asc" else desc
@@ -999,8 +1001,6 @@ def list_surrogates(
         # Default: created_at desc
         query = query.order_by(Surrogate.created_at.desc(), Surrogate.id.desc())
 
-    base_query = query
-
     if cursor:
         if sort_by and sort_by != "created_at":
             raise ValueError("Cursor pagination only supports created_at sorting")
@@ -1013,9 +1013,6 @@ def list_surrogates(
                 (Surrogate.created_at == cursor_dt) & (Surrogate.id < cursor_id),
             )
         )
-
-    # Count total (optional)
-    total = base_query.count() if include_total else None
 
     # Paginate
     next_cursor = None
