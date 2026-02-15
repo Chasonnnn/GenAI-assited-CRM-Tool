@@ -144,6 +144,7 @@ export function InlineEditField({
                 className="h-6 w-6"
                 onClick={handleSave}
                 disabled={isSaving}
+                aria-label={label ? `Save ${label}` : "Save"}
             >
                 {isSaving ? (
                     <Loader2Icon className="size-3 animate-spin" />
@@ -158,6 +159,7 @@ export function InlineEditField({
                 className="h-6 w-6"
                 onClick={handleCancel}
                 disabled={isSaving}
+                aria-label={label ? `Cancel ${label}` : "Cancel"}
             >
                 <XIcon className="size-3 text-destructive" />
             </Button>
