@@ -152,14 +152,15 @@ def validate_file(
     return True, None
 
 
-def store_file(storage_key: str, file: BinaryIO) -> None:
+def store_file(storage_key: str, file: BinaryIO, content_type: str | None = None) -> None:
     """Store file to configured backend."""
     backend = _get_storage_backend()
 
     if backend == "s3":
         s3 = _get_s3_client()
         bucket = getattr(settings, "S3_BUCKET", "crm-attachments")
-        s3.upload_fileobj(file, bucket, storage_key)
+        extra_args = {"ContentType": content_type} if content_type else None
+        s3.upload_fileobj(file, bucket, storage_key, ExtraArgs=extra_args)
     else:
         # Local storage
         path = os.path.join(_get_local_storage_path(), storage_key)
@@ -330,7 +331,7 @@ def upload_attachment(
 
     # Store file
     try:
-        store_file(storage_key, processed_file)
+        store_file(storage_key, processed_file, content_type=content_type)
     except Exception as exc:  # noqa: BLE001 - surface a clean error to callers
         logger.exception("Failed to store attachment for key %s", storage_key)
         raise AttachmentStorageError("Failed to store attachment. Please try again.") from exc
