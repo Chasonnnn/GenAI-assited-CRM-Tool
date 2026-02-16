@@ -18,6 +18,9 @@ from app.db.models import Appointment, ZoomWebhookEvent
 
 logger = logging.getLogger(__name__)
 
+# Limit payload size to prevent DoS (1MB)
+MAX_PAYLOAD_BYTES = 1000000
+
 
 def _verify_zoom_webhook_signature(
     body: bytes,
@@ -31,14 +34,34 @@ def _verify_zoom_webhook_signature(
     Zoom sends: v0:timestamp:body_string
     Then HMAC-SHA256 with webhook secret, compare to signature.
     """
-    message = f"v0:{timestamp}:{body.decode('utf-8')}"
+    # Construct message as bytes to avoid decoding body
+    message = b"v0:" + timestamp.encode("utf-8") + b":" + body
     expected = hmac.new(
         secret.encode("utf-8"),
-        message.encode("utf-8"),
+        message,
         hashlib.sha256,
     ).hexdigest()
     expected_signature = f"v0={expected}"
     return hmac.compare_digest(expected_signature, signature)
+
+
+async def _read_body_safe(request: Request, max_size: int) -> bytes:
+    """Read request body safely with size limit."""
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            length = int(content_length)
+            if length > max_size:
+                raise HTTPException(413, "Payload too large")
+        except ValueError:
+            pass  # Invalid content-length, rely on stream limit
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > max_size:
+            raise HTTPException(413, "Payload too large")
+        body.extend(chunk)
+    return bytes(body)
 
 
 class ZoomWebhookHandler:
@@ -54,8 +77,9 @@ class ZoomWebhookHandler:
         Security:
         - Validates webhook signature using ZOOM_WEBHOOK_SECRET
         - Deduplicates events via ZoomWebhookEvent table
+        - Limits payload size to prevent DoS
         """
-        body = await request.body()
+        body = await _read_body_safe(request, MAX_PAYLOAD_BYTES)
 
         # Handle URL validation challenge from Zoom
         try:
