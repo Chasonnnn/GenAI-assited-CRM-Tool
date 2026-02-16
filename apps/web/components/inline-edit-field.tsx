@@ -104,12 +104,13 @@ export function InlineEditField({
                 onClick={handleStartEdit}
                 role="button"
                 tabIndex={0}
+                aria-label={label ? `Edit ${label}` : `Edit ${value || placeholder || "field"}`}
                 onKeyDown={(e) => e.key === "Enter" && handleStartEdit()}
             >
                 <span className={cn("text-sm", !value && "text-muted-foreground", className)}>
                     {value || placeholder}
                 </span>
-                <PencilIcon className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                <PencilIcon className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
             </div>
         )
     }
@@ -131,7 +132,7 @@ export function InlineEditField({
                     }}
                     className={cn("h-7 text-sm", error && "border-destructive")}
                     disabled={isSaving}
-                    aria-label={label}
+                    aria-label={label || placeholder}
                 />
                 {error && (
                     <p className="text-xs text-destructive mt-1">{error}</p>
@@ -144,11 +145,12 @@ export function InlineEditField({
                 className="h-6 w-6"
                 onClick={handleSave}
                 disabled={isSaving}
+                aria-label={label ? `Save ${label}` : "Save changes"}
             >
                 {isSaving ? (
-                    <Loader2Icon className="size-3 animate-spin" />
+                    <Loader2Icon className="size-3 animate-spin" aria-hidden="true" />
                 ) : (
-                    <CheckIcon className="size-3 text-green-600" />
+                    <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
                 )}
             </Button>
             <Button
@@ -158,8 +160,9 @@ export function InlineEditField({
                 className="h-6 w-6"
                 onClick={handleCancel}
                 disabled={isSaving}
+                aria-label={label ? `Cancel editing ${label}` : "Cancel editing"}
             >
-                <XIcon className="size-3 text-destructive" />
+                <XIcon className="size-3 text-destructive" aria-hidden="true" />
             </Button>
         </div>
     )
