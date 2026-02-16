@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react"
 import Link from "@/components/app-link"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, keepPreviousData } from "@tanstack/react-query"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -51,7 +51,8 @@ const ENTITY_CONFIG = {
 
 export default function SearchPage() {
     const [query, setQuery] = useState("")
-    const debouncedQuery = useDebouncedValue(query, 300)
+    // Increase debounce to 400ms to reduce API calls while typing
+    const debouncedQuery = useDebouncedValue(query, 400)
 
     const {
         data: results,
@@ -62,6 +63,8 @@ export default function SearchPage() {
         queryFn: () => globalSearch({ q: debouncedQuery, limit: 50 }),
         enabled: debouncedQuery.length >= 2,
         staleTime: 30000,
+        // Keep previous results while loading new ones to prevent layout shift
+        placeholderData: keepPreviousData,
     })
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
