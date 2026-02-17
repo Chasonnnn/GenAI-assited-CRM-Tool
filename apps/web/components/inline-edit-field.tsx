@@ -94,6 +94,8 @@ export function InlineEditField({
         }
     }
 
+    const fieldLabel = label || placeholder || "value"
+
     if (!isEditing) {
         return (
             <div
@@ -105,6 +107,7 @@ export function InlineEditField({
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => e.key === "Enter" && handleStartEdit()}
+                aria-label={`Edit ${fieldLabel}`}
             >
                 <span className={cn("text-sm", !value && "text-muted-foreground", className)}>
                     {value || placeholder}
@@ -131,7 +134,7 @@ export function InlineEditField({
                     }}
                     className={cn("h-7 text-sm", error && "border-destructive")}
                     disabled={isSaving}
-                    aria-label={label}
+                    aria-label={fieldLabel}
                 />
                 {error && (
                     <p className="text-xs text-destructive mt-1">{error}</p>
@@ -144,6 +147,7 @@ export function InlineEditField({
                 className="h-6 w-6"
                 onClick={handleSave}
                 disabled={isSaving}
+                aria-label={`Save ${fieldLabel}`}
             >
                 {isSaving ? (
                     <Loader2Icon className="size-3 animate-spin" />
@@ -158,6 +162,7 @@ export function InlineEditField({
                 className="h-6 w-6"
                 onClick={handleCancel}
                 disabled={isSaving}
+                aria-label="Cancel"
             >
                 <XIcon className="size-3 text-destructive" />
             </Button>
