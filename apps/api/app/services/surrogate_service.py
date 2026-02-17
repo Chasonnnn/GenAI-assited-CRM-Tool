@@ -1329,9 +1329,10 @@ def list_assignees(db: Session, org_id: UUID) -> list[dict[str, str]]:
     """List assignable org members with display names."""
     from app.db.models import Membership, User
 
+    # Optimization: Select specific columns to avoid fetching full user/membership objects
     rows = (
-        db.query(Membership, User)
-        .join(User, Membership.user_id == User.id)
+        db.query(User.id, User.display_name, Membership.role)
+        .join(Membership, Membership.user_id == User.id)
         .filter(
             Membership.organization_id == org_id,
             Membership.is_active.is_(True),
@@ -1341,11 +1342,11 @@ def list_assignees(db: Session, org_id: UUID) -> list[dict[str, str]]:
 
     return [
         {
-            "id": str(user.id),
-            "name": user.display_name,
-            "role": membership.role,
+            "id": str(user_id),
+            "name": display_name,
+            "role": role,
         }
-        for membership, user in rows
+        for user_id, display_name, role in rows
     ]
 
 
