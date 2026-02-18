@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.deps import COOKIE_NAME, get_current_session, get_db, require_csrf_header
 from app.core.csrf import CSRF_COOKIE_NAME, set_csrf_cookie
+from app.core.rate_limit import limiter
 from app.core.security import create_session_token, generate_oauth_state, hash_user_agent
 from app.schemas.auth import UserSession
 from app.services import duo_service, membership_service, mfa_service, org_service, user_service
@@ -232,7 +233,9 @@ def setup_totp(
     response_model=TOTPSetupCompleteResponse,
     dependencies=[Depends(require_csrf_header)],
 )
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def verify_totp_setup(
+    request: Request,
     body: TOTPVerifyRequest,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
@@ -310,7 +313,9 @@ def regenerate_recovery_codes(
     response_model=MFAVerifyResponse,
     dependencies=[Depends(require_csrf_header)],
 )
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def verify_mfa_code(
+    request: Request,
     body: MFAVerifyRequest,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
@@ -360,6 +365,7 @@ class MFACompleteResponse(BaseModel):
     response_model=MFACompleteResponse,
     dependencies=[Depends(require_csrf_header)],
 )
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def complete_mfa_challenge(
     request: Request,
     body: MFAVerifyRequest,

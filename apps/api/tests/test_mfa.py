@@ -14,6 +14,15 @@ import pytest
 from app.services import mfa_service
 
 
+@pytest.fixture
+def rate_limiter_reset():
+    from app.core.rate_limit import limiter
+
+    limiter.reset()
+    yield
+    limiter.reset()
+
+
 class TestTOTPGeneration:
     """Tests for TOTP secret and code generation."""
 
@@ -245,3 +254,33 @@ class TestMFAEndpoints:
         payload = response.json()
         assert payload["valid"] is True
         assert payload["method"] == "recovery"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("endpoint", "expected_status"),
+        [
+            ("/mfa/totp/verify", 400),
+            ("/mfa/verify", 200),
+            ("/mfa/complete", 400),
+        ],
+    )
+    async def test_sensitive_mfa_endpoints_rate_limited_after_five_attempts(
+        self,
+        authed_client,
+        db,
+        test_user,
+        rate_limiter_reset,
+        endpoint,
+        expected_status,
+    ):
+        test_user.mfa_enabled = True
+        test_user.totp_secret = "JBSWY3DPEHPK3PXP"
+        test_user.duo_enrolled_at = None
+        db.commit()
+
+        for _ in range(5):
+            response = await authed_client.post(endpoint, json={"code": "000000"})
+            assert response.status_code == expected_status, response.text
+
+        blocked = await authed_client.post(endpoint, json={"code": "000000"})
+        assert blocked.status_code == 429
