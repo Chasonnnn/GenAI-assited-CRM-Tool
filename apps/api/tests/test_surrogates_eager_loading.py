@@ -5,10 +5,10 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from sqlalchemy import event
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import Query, joinedload
 
 from app.db.enums import Role
-from app.db.models import Surrogate
+from app.db.models import Surrogate, SurrogateActivityLog
 from app.routers.surrogates_shared import _surrogate_to_read
 from app.schemas.surrogate import SurrogateCreate
 from app.services import pipeline_service, queue_service, surrogate_service
@@ -193,3 +193,77 @@ def test_list_claim_queue_eager_loads_in_few_statements(db, db_engine, test_org,
     #
     # We allow a small ceiling to keep the test stable across ORM/dialect differences.
     assert counter["n"] <= 7
+
+
+def test_list_surrogates_does_not_use_query_count(db, test_org, test_user, monkeypatch):
+    surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(
+            full_name="Count Optimization Surrogate",
+            email=f"count-opt-surrogate-{uuid4().hex[:8]}@example.com",
+        ),
+    )
+
+    def _count_should_not_be_called(*_args, **_kwargs):
+        raise AssertionError("list_surrogates should not call Query.count()")
+
+    monkeypatch.setattr(Query, "count", _count_should_not_be_called)
+
+    surrogates, total, _ = surrogate_service.list_surrogates(
+        db=db,
+        org_id=test_org.id,
+        page=1,
+        per_page=20,
+        include_total=True,
+        role_filter=Role.DEVELOPER,
+        user_id=test_user.id,
+    )
+
+    assert total is not None
+    assert len(surrogates) >= 1
+
+
+def test_list_surrogate_activity_does_not_use_query_count(
+    db, test_org, test_user, monkeypatch
+):
+    surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(
+            full_name="Activity Count Optimization",
+            email=f"count-opt-activity-{uuid4().hex[:8]}@example.com",
+        ),
+    )
+
+    db.add(
+        SurrogateActivityLog(
+            surrogate_id=surrogate.id,
+            organization_id=test_org.id,
+            activity_type="created",
+            actor_user_id=test_user.id,
+            details={"source": "test"},
+        )
+    )
+    db.flush()
+
+    original_count = Query.count
+
+    def _count_should_not_be_called(self, *args, **kwargs):
+        if self.column_descriptions and self.column_descriptions[0].get("name") == "SurrogateActivityLog":
+            raise AssertionError("list_surrogate_activity should not call Query.count()")
+        return original_count(self, *args, **kwargs)
+
+    monkeypatch.setattr(Query, "count", _count_should_not_be_called)
+    items, total = surrogate_service.list_surrogate_activity(
+        db=db,
+        org_id=test_org.id,
+        surrogate_id=surrogate.id,
+        page=1,
+        per_page=20,
+    )
+
+    assert total >= 1
+    assert len(items) >= 1

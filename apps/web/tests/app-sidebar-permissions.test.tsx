@@ -138,4 +138,34 @@ describe("AppSidebar permission visibility", () => {
             expect(screen.getByText("Team")).toBeInTheDocument()
         })
     })
+
+    it("exposes accessible labels and expanded state for navigation and user menu", async () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["manage_team", "view_audit_log"] },
+        })
+
+        render(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        await waitFor(() => {
+            expect(screen.getByRole("button", { name: "Tasks & Scheduling" })).toBeInTheDocument()
+        })
+
+        expect(screen.getByRole("button", { name: "Tasks & Scheduling" })).toHaveAttribute(
+            "aria-expanded",
+            "false"
+        )
+        expect(screen.getByRole("button", { name: "Automation" })).toHaveAttribute(
+            "aria-expanded",
+            "false"
+        )
+        expect(screen.getByRole("button", { name: "Settings" })).toHaveAttribute(
+            "aria-expanded",
+            "true"
+        )
+        expect(screen.getByLabelText("User menu")).toBeInTheDocument()
+    })
 })
