@@ -9,3 +9,7 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+
+## 2026-01-28 - Inline Edit Keyboard Interaction
+**Learning:** Custom interactive elements with `role="button"` (like inline edit fields) must explicitly handle the `Space` key in `onKeyDown` to be accessible, as `div` elements don't handle it natively. Crucially, `e.preventDefault()` is required for Space to prevent page scrolling.
+**Action:** Always add `onKeyDown` with Space/Enter support and `preventDefault()` for Space when using `role="button"` on non-button elements.
