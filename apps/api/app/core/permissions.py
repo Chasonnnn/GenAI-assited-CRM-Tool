@@ -415,6 +415,10 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "create_tasks",
         "edit_tasks",
         "view_email_templates",
+        "use_ai_assistant",
+        "approve_ai_actions",
+        "manage_ai_settings",
+        "view_ai_usage",
     },
     "case_manager": {
         "view_dashboard",
@@ -438,6 +442,10 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "view_reports",
         "view_email_templates",
         "manage_appointments",
+        "use_ai_assistant",
+        "approve_ai_actions",
+        "manage_ai_settings",
+        "view_ai_usage",
     },
     "admin": {
         "view_dashboard",

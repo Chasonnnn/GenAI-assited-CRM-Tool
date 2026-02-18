@@ -127,6 +127,30 @@ def intake_user(db, org_a):
 
 
 @pytest.fixture
+def case_manager_user(db, org_a):
+    """Create a case manager user."""
+    user = User(
+        id=uuid.uuid4(),
+        email=f"case-manager-{uuid.uuid4().hex[:8]}@test.com",
+        display_name="Case Manager User",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+
+    membership = Membership(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        organization_id=org_a.id,
+        role=Role.CASE_MANAGER.value,
+    )
+    db.add(membership)
+    db.flush()
+    return user
+
+
+@pytest.fixture
 def user_in_org_b(db, org_b):
     """Create a user in org B for scoping tests."""
     user = User(
@@ -279,6 +303,44 @@ def test_intake_role_has_import_surrogates_by_default(db, org_a, intake_user):
         "import_surrogates",
     )
     assert result is True, "Intake should have import_surrogates access by default"
+
+
+def test_intake_role_has_ai_permissions_by_default(db, org_a, intake_user):
+    """Intake specialists should have full non-developer AI permissions."""
+    expected_ai_permissions = [
+        "use_ai_assistant",
+        "approve_ai_actions",
+        "manage_ai_settings",
+        "view_ai_usage",
+    ]
+    for permission in expected_ai_permissions:
+        result = permission_service.check_permission(
+            db,
+            org_a.id,
+            intake_user.id,
+            Role.INTAKE_SPECIALIST.value,
+            permission,
+        )
+        assert result is True, f"Intake should have {permission} by default"
+
+
+def test_case_manager_role_has_ai_permissions_by_default(db, org_a, case_manager_user):
+    """Case managers should have full non-developer AI permissions."""
+    expected_ai_permissions = [
+        "use_ai_assistant",
+        "approve_ai_actions",
+        "manage_ai_settings",
+        "view_ai_usage",
+    ]
+    for permission in expected_ai_permissions:
+        result = permission_service.check_permission(
+            db,
+            org_a.id,
+            case_manager_user.id,
+            Role.CASE_MANAGER.value,
+            permission,
+        )
+        assert result is True, f"Case manager should have {permission} by default"
 
 
 def test_missing_permission_returns_false(db, org_a, admin_user):

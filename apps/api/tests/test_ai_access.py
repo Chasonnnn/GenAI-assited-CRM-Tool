@@ -162,8 +162,8 @@ async def test_ai_org_ai_enabled_blocks_usage(authed_client: AsyncClient, db, te
 
 
 @pytest.mark.asyncio
-async def test_ai_map_requires_ai_permission(db, test_org, monkeypatch):
-    """AI import mapping should require use_ai_assistant permission."""
+async def test_ai_map_blocks_when_ai_permission_is_revoked(db, test_org, monkeypatch):
+    """AI import mapping should block when use_ai_assistant is explicitly revoked."""
     intake_user = User(
         id=uuid.uuid4(),
         email=f"intake-{uuid.uuid4().hex[:8]}@test.com",
@@ -181,6 +181,16 @@ async def test_ai_map_requires_ai_permission(db, test_org, monkeypatch):
         role=Role.INTAKE_SPECIALIST,
     )
     db.add(membership)
+    db.flush()
+
+    db.add(
+        UserPermissionOverride(
+            organization_id=test_org.id,
+            user_id=intake_user.id,
+            permission="use_ai_assistant",
+            override_type="revoke",
+        )
+    )
     db.flush()
 
     # Avoid external AI calls; the permission check should block first.
