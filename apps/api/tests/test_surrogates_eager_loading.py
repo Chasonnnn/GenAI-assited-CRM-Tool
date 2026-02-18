@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 from sqlalchemy import event
@@ -267,3 +267,23 @@ def test_list_surrogate_activity_does_not_use_query_count(
 
     assert total >= 1
     assert len(items) >= 1
+
+
+def test_list_assignees_selects_only_required_columns():
+    from app.db.models import Membership, User
+
+    org_id = uuid4()
+    user_id = uuid4()
+
+    fake_query = Mock()
+    fake_query.join.return_value = fake_query
+    fake_query.filter.return_value = fake_query
+    fake_query.all.return_value = [(user_id, "Assignee Name", "case_manager")]
+
+    db = Mock()
+    db.query.return_value = fake_query
+
+    result = surrogate_service.list_assignees(db, org_id)
+
+    db.query.assert_called_once_with(User.id, User.display_name, Membership.role)
+    assert result == [{"id": str(user_id), "name": "Assignee Name", "role": "case_manager"}]

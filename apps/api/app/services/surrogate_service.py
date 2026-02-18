@@ -1337,7 +1337,7 @@ def list_assignees(db: Session, org_id: UUID) -> list[dict[str, str]]:
     from app.db.models import Membership, User
 
     rows = (
-        db.query(Membership, User)
+        db.query(User.id, User.display_name, Membership.role)
         .join(User, Membership.user_id == User.id)
         .filter(
             Membership.organization_id == org_id,
@@ -1348,11 +1348,11 @@ def list_assignees(db: Session, org_id: UUID) -> list[dict[str, str]]:
 
     return [
         {
-            "id": str(user.id),
-            "name": user.display_name,
-            "role": membership.role,
+            "id": str(user_id),
+            "name": display_name,
+            "role": role,
         }
-        for membership, user in rows
+        for user_id, display_name, role in rows
     ]
 
 

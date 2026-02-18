@@ -192,6 +192,23 @@ describe('Inline Field Accessibility', () => {
         expect(screen.getByRole("button", { name: "Cancel Email" })).toBeInTheDocument()
     })
 
+    it('adds contextual labels to InlineEditField trigger/input with placeholder fallback', () => {
+        render(
+            <InlineEditField
+                value="Acme Health"
+                placeholder="Insurance Company"
+                onSave={vi.fn().mockResolvedValue(undefined)}
+            />
+        )
+
+        const trigger = screen.getByRole("button", { name: "Edit Insurance Company" })
+        fireEvent.click(trigger)
+
+        expect(screen.getByRole("textbox", { name: "Insurance Company" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Save Insurance Company" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Cancel Insurance Company" })).toBeInTheDocument()
+    })
+
     it('adds contextual labels to InlineDateField save/cancel icon buttons', () => {
         render(
             <InlineDateField
