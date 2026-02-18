@@ -18,10 +18,8 @@ from app.core.deps import (
     get_db,
     require_csrf_header,
     require_permission,
-    require_roles,
 )
 from app.core.policies import POLICIES
-from app.db.enums import Role
 from app.schemas.auth import UserSession
 from app.services import (
     media_service,
@@ -311,13 +309,13 @@ def get_org_signature(
 def update_org_signature(
     body: OrgSignatureUpdate,
     request: Request,
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(POLICIES["org_settings"].default)),
     db: Session = Depends(get_db),
 ):
     """
     Update organization signature settings.
 
-    Requires Admin or Developer role.
+    Requires manage_org permission.
     """
     org = org_service.get_org_by_id(db, session.org_id)
     if not org:

@@ -30,12 +30,11 @@ from app.core.deps import (
     get_db,
     require_csrf_header,
     require_permission,
-    require_roles,
 )
 from app.core.permissions import PermissionKey as P
 from app.core.policies import POLICIES
 from app.core.config import settings
-from app.db.enums import Role, SurrogateSource
+from app.db.enums import SurrogateSource
 from app.schemas.auth import UserSession
 from app.services import import_service
 from app.utils.sse import format_sse, sse_preamble, STREAM_HEADERS
@@ -156,10 +155,10 @@ def list_imports(
 # NOTE: /pending MUST come before /{import_id} to avoid routing conflict
 @router.get("/pending", response_model=list[ImportApprovalItem])
 def list_pending_approvals(
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(POLICIES["org_settings"].default)),
     db: Session = Depends(get_db),
 ):
-    """List imports awaiting admin approval."""
+    """List imports awaiting approval."""
     imports = import_service.list_pending_approvals(db, session.org_id)
 
     response_items: list[ImportApprovalItem] = []
@@ -815,13 +814,13 @@ def submit_import_for_approval(
 )
 def approve_import(
     import_id: UUID,
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(POLICIES["org_settings"].default)),
     db: Session = Depends(get_db),
 ):
     """
     Approve an import for execution.
 
-    Requires admin role. After approval, the import will be queued for processing.
+    Requires manage_org permission. After approval, the import will be queued for processing.
     """
     import_record = import_service.get_import(db, session.org_id, import_id)
     if not import_record:
@@ -864,7 +863,7 @@ def approve_import(
 def retry_import(
     import_id: UUID,
     data: ImportRetryRequest | None = None,
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(POLICIES["org_settings"].default)),
     db: Session = Depends(get_db),
 ):
     """Retry a failed/approved import by queueing a new job."""
@@ -905,7 +904,7 @@ def retry_import(
 )
 def run_import_inline(
     import_id: UUID,
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(POLICIES["org_settings"].default)),
     db: Session = Depends(get_db),
 ):
     """Run an approved import inline (no background worker)."""
@@ -932,13 +931,13 @@ def run_import_inline(
 def reject_import(
     import_id: UUID,
     data: ImportRejectRequest,
-    session: UserSession = Depends(require_roles([Role.ADMIN, Role.DEVELOPER])),
+    session: UserSession = Depends(require_permission(POLICIES["org_settings"].default)),
     db: Session = Depends(get_db),
 ):
     """
     Reject an import with a reason.
 
-    Requires admin role.
+    Requires manage_org permission.
     """
     import_record = import_service.get_import(db, session.org_id, import_id)
     if not import_record:

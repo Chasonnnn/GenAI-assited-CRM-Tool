@@ -1,0 +1,141 @@
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { render, screen, waitFor } from "@testing-library/react"
+import type { ReactNode } from "react"
+
+import { AppSidebar } from "../components/app-sidebar"
+
+const mockUseAuth = vi.fn()
+const mockUseEffectivePermissions = vi.fn()
+
+vi.mock("@/lib/auth-context", () => ({
+    useAuth: () => mockUseAuth(),
+}))
+
+vi.mock("@/lib/hooks/use-permissions", () => ({
+    useEffectivePermissions: () => mockUseEffectivePermissions(),
+}))
+
+vi.mock("next/navigation", () => ({
+    usePathname: () => "/settings/team",
+    useSearchParams: () => ({
+        get: () => null,
+    }),
+}))
+
+vi.mock("next/link", () => ({
+    default: ({
+        children,
+        href,
+        prefetch: _prefetch,
+        ...props
+    }: {
+        children: ReactNode
+        href: string
+        prefetch?: boolean
+    }) => (
+        <a href={href} {...props}>
+            {children}
+        </a>
+    ),
+}))
+
+vi.mock("@/hooks/use-mobile", () => ({
+    useIsMobile: () => false,
+}))
+
+vi.mock("@/components/search-command", () => ({
+    useSearchHotkey: () => {},
+    SearchCommandDialog: () => null,
+}))
+
+vi.mock("@/components/notification-bell", () => ({
+    NotificationBell: () => null,
+}))
+
+vi.mock("@/components/theme-toggle", () => ({
+    ThemeToggle: () => null,
+}))
+
+vi.mock("@/components/ui/avatar", () => ({
+    Avatar: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    AvatarImage: () => null,
+    AvatarFallback: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+}))
+
+vi.mock("@/components/ui/button", () => ({
+    Button: ({
+        children,
+        render,
+        ...props
+    }: {
+        children?: ReactNode
+        render?: ReactNode
+    }) => (render ? render : <button type="button" {...props}>{children}</button>),
+}))
+
+vi.mock("@/components/ui/dropdown-menu", () => ({
+    DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    DropdownMenuTrigger: ({
+        children,
+        render,
+    }: {
+        children: ReactNode
+        render?: ReactNode
+    }) => <>{render ?? children}</>,
+    DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    DropdownMenuGroup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    DropdownMenuItem: ({ children, render }: { children?: ReactNode; render?: ReactNode }) => (
+        <>{render ?? children}</>
+    ),
+    DropdownMenuLabel: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    DropdownMenuSeparator: () => <div />,
+}))
+
+describe("AppSidebar permission visibility", () => {
+    beforeEach(() => {
+        mockUseAuth.mockReturnValue({
+            user: {
+                user_id: "user-1",
+                role: "admin",
+                display_name: "Admin User",
+                email: "admin@test.com",
+                org_name: "Org",
+                org_display_name: "Org",
+                ai_enabled: false,
+            },
+        })
+    })
+
+    it("hides Team settings when manage_team permission is missing", async () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["view_audit_log"] },
+        })
+
+        render(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        await waitFor(() => {
+            expect(screen.getByText("General")).toBeInTheDocument()
+        })
+        expect(screen.queryByText("Team")).not.toBeInTheDocument()
+    })
+
+    it("shows Team settings when manage_team permission exists", async () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["manage_team", "view_audit_log"] },
+        })
+
+        render(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        await waitFor(() => {
+            expect(screen.getByText("Team")).toBeInTheDocument()
+        })
+    })
+})

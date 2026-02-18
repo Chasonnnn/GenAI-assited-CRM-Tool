@@ -36,6 +36,7 @@ import {
     PanelLeftIcon,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { getCsrfHeaders } from "@/lib/csrf"
 import { NotificationBell } from "@/components/notification-bell"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -115,9 +116,20 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const { user } = useAuth()
-    const isManager = user?.role && ["admin", "developer"].includes(user.role)
-    const isAdmin = user?.role === "admin"
     const isDeveloper = user?.role === "developer"
+    const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
+    const permissionSet = React.useMemo(
+        () => new Set(effectivePermissions?.permissions ?? []),
+        [effectivePermissions?.permissions]
+    )
+    const canViewTeam = isDeveloper || permissionSet.has("manage_team")
+    const canViewPipelines = isDeveloper || permissionSet.has("manage_pipelines")
+    const canViewQueues = isDeveloper || permissionSet.has("manage_queues")
+    const canViewCompliance = isDeveloper || permissionSet.has("manage_compliance")
+    const canViewAudit = isDeveloper || permissionSet.has("view_audit_log")
+    const canViewIntegrations = isDeveloper || permissionSet.has("manage_integrations")
+    const canViewAlerts = isDeveloper || permissionSet.has("manage_ops")
+    const canViewAutomationExecutions = isDeveloper || permissionSet.has("manage_automation")
     const isMobile = useIsMobile()
 
     const navigationItems = React.useMemo(() => {
@@ -185,13 +197,13 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const settingsItems: Array<{ title: string; url: string; tab?: string | null }> = [
         { title: "General", url: "/settings", tab: null },
         { title: "Notification", url: "/settings/notifications" },
-        ...(isManager ? [{ title: "Team", url: "/settings/team" }] : []),
-        ...((isAdmin || isDeveloper) ? [{ title: "Pipelines", url: "/settings/pipelines" }] : []),
-        ...(isManager ? [{ title: "Queue Management", url: "/settings/queues" }] : []),
-        { title: "Audit Log", url: "/settings/audit" },
-        ...(isManager ? [{ title: "Compliance", url: "/settings/compliance" }] : []),
-        { title: "Integrations", url: "/settings/integrations" },
-        { title: "System Alerts", url: "/settings/alerts" },
+        ...(canViewTeam ? [{ title: "Team", url: "/settings/team" }] : []),
+        ...(canViewPipelines ? [{ title: "Pipelines", url: "/settings/pipelines" }] : []),
+        ...(canViewQueues ? [{ title: "Queue Management", url: "/settings/queues" }] : []),
+        ...(canViewAudit ? [{ title: "Audit Log", url: "/settings/audit" }] : []),
+        ...(canViewCompliance ? [{ title: "Compliance", url: "/settings/compliance" }] : []),
+        ...(canViewIntegrations ? [{ title: "Integrations", url: "/settings/integrations" }] : []),
+        ...(canViewAlerts ? [{ title: "System Alerts", url: "/settings/alerts" }] : []),
     ]
 
     const automationItems: Array<{ title: string; url: string; tab?: string | null }> = [
@@ -200,7 +212,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
         { title: "Email Templates", url: "/automation/email-templates" },
         { title: "Form Builder", url: "/automation/forms" },
         { title: "AI Builder", url: "/automation/ai-builder" },
-        ...(isManager || isDeveloper ? [{ title: "Executions", url: "/automation/executions" }] : []),
+        ...(canViewAutomationExecutions ? [{ title: "Executions", url: "/automation/executions" }] : []),
     ]
 
     const tasksItems: Array<{ title: string; url: string }> = [
