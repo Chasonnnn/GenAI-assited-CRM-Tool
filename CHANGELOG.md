@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.80.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.79.0...surrogacy-crm-platform-v0.80.0) (2026-02-18)
+
+
+### Features
+
+* enhance attachment handling with content-type preservation and error surfacing ([d0b1b87](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d0b1b87742185e9f793c6b42320186d91b90cdec))
+* enhance support sessions with environment checks and safety guards ([7617ebf](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7617ebfe84b2546287253f2de059b03b2ae724ce))
+
+
+### Maintenance
+
+* improve accessibility and UI robustness of frontend components ([6cfd5ab](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6cfd5abccf878df3276e0d83314fc02383114324))
+
 ## [0.79.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.78.1...surrogacy-crm-platform-v0.79.0) (2026-02-13)
 
 
