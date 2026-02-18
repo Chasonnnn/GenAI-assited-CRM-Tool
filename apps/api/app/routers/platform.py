@@ -317,6 +317,7 @@ def get_platform_me(
         "email": session.email,
         "display_name": session.display_name,
         "is_platform_admin": session.is_platform_admin,
+        "support_session_allow_read_only": settings.SUPPORT_SESSION_ALLOW_READ_ONLY,
     }
 
 

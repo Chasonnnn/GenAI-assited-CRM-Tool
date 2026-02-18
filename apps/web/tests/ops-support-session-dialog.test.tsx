@@ -5,9 +5,11 @@ import "@testing-library/jest-dom"
 import { SupportSessionDialog } from "@/components/ops/agencies/SupportSessionDialog"
 
 const mockCreateSupportSession = vi.fn()
+const mockGetPlatformMe = vi.fn()
 
 vi.mock("@/lib/api/platform", () => ({
     createSupportSession: (data: unknown) => mockCreateSupportSession(data),
+    getPlatformMe: () => mockGetPlatformMe(),
 }))
 
 vi.mock("sonner", () => ({
@@ -44,6 +46,13 @@ function createPopupStub() {
 describe("SupportSessionDialog", () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        mockGetPlatformMe.mockResolvedValue({
+            user_id: "user_1",
+            email: "ops@example.com",
+            display_name: "Ops",
+            is_platform_admin: true,
+            support_session_allow_read_only: false,
+        })
     })
 
     it("creates a support session and opens the portal", async () => {
@@ -106,5 +115,36 @@ describe("SupportSessionDialog", () => {
 
         await waitFor(() => expect((popup as unknown as { close: () => void }).close).toHaveBeenCalled())
     })
-})
 
+    it("loads capabilities and shows read-only as unavailable when disabled", async () => {
+        render(
+            <SupportSessionDialog
+                orgId="org_1"
+                orgName="Test Org"
+                portalBaseUrl="https://test.example.com"
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "View as role" }))
+
+        await waitFor(() => expect(mockGetPlatformMe).toHaveBeenCalled())
+        expect(
+            await screen.findByText("Read-only mode is disabled in this environment.")
+        ).toBeInTheDocument()
+    })
+
+    it("disables starting a session when the organization is scheduled for deletion", () => {
+        render(
+            <SupportSessionDialog
+                orgId="org_1"
+                orgName="Test Org"
+                portalBaseUrl="https://test.example.com"
+                disabled
+            />
+        )
+
+        const trigger = screen.getByRole("button", { name: "View as role" })
+        expect(trigger).toBeDisabled()
+        expect(mockCreateSupportSession).not.toHaveBeenCalled()
+    })
+})

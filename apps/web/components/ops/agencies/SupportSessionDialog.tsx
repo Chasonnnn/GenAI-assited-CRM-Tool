@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { ArrowUpRight, Eye, Loader2 } from "lucide-react"
 
@@ -25,6 +25,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import {
     createSupportSession,
+    getPlatformMe,
     type SupportSessionMode,
     type SupportSessionReasonCode,
     type SupportSessionRole,
@@ -55,15 +56,22 @@ type SupportSessionDialogProps = {
     orgId: string
     orgName: string
     portalBaseUrl: string | null | undefined
+    disabled?: boolean
 }
 
-export function SupportSessionDialog({ orgId, orgName, portalBaseUrl }: SupportSessionDialogProps) {
+export function SupportSessionDialog({
+    orgId,
+    orgName,
+    portalBaseUrl,
+    disabled = false,
+}: SupportSessionDialogProps) {
     const [open, setOpen] = useState(false)
     const [role, setRole] = useState<SupportSessionRole>("admin")
     const [mode, setMode] = useState<SupportSessionMode>("write")
     const [reasonCode, setReasonCode] = useState<SupportSessionReasonCode>("bug_repro")
     const [reasonText, setReasonText] = useState("")
     const [submitting, setSubmitting] = useState(false)
+    const [readOnlySupported, setReadOnlySupported] = useState<boolean | null>(null)
 
     const reasonTextTrimmed = reasonText.trim()
     const reasonTextLength = reasonTextTrimmed.length
@@ -78,7 +86,26 @@ export function SupportSessionDialog({ orgId, orgName, portalBaseUrl }: SupportS
         }
     }, [portalBaseUrl])
 
+    useEffect(() => {
+        if (!open) return
+        if (readOnlySupported !== null) return
+
+        void getPlatformMe()
+            .then((me) => setReadOnlySupported(me.support_session_allow_read_only === true))
+            .catch(() => setReadOnlySupported(false))
+    }, [open, readOnlySupported])
+
+    useEffect(() => {
+        if (mode === "read_only" && readOnlySupported === false) {
+            setMode("write")
+        }
+    }, [mode, readOnlySupported])
+
     const handleStartAndOpen = async () => {
+        if (disabled) {
+            toast.error("Support sessions are unavailable for this organization.")
+            return
+        }
         if (!portalBaseUrl) {
             toast.error("Portal URL not available for this organization.")
             return
@@ -161,7 +188,7 @@ export function SupportSessionDialog({ orgId, orgName, portalBaseUrl }: SupportS
         >
             <DialogTrigger
                 className={buttonVariants({ variant: "outline", size: "sm" })}
-                disabled={!portalBaseUrl}
+                disabled={disabled || !portalBaseUrl}
             >
                 <Eye className="mr-2 size-4" />
                 View as role
@@ -207,12 +234,24 @@ export function SupportSessionDialog({ orgId, orgName, portalBaseUrl }: SupportS
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="write">Full access</SelectItem>
-                                <SelectItem value="read_only">Read-only</SelectItem>
+                                {readOnlySupported === true ? (
+                                    <SelectItem value="read_only">Read-only</SelectItem>
+                                ) : null}
                             </SelectContent>
                         </Select>
                         <p className="text-xs text-muted-foreground">
                             Read-only blocks mutations (POST/PATCH/PUT/DELETE) in the portal.
                         </p>
+                        {readOnlySupported === false ? (
+                            <p className="text-xs text-muted-foreground">
+                                Read-only mode is disabled in this environment.
+                            </p>
+                        ) : null}
+                        {disabled ? (
+                            <p className="text-xs text-destructive">
+                                This organization is scheduled for deletion; support sessions are disabled.
+                            </p>
+                        ) : null}
                     </div>
 
                     <div className="grid gap-2">
@@ -264,7 +303,7 @@ export function SupportSessionDialog({ orgId, orgName, portalBaseUrl }: SupportS
                     </Button>
                     <Button
                         onClick={handleStartAndOpen}
-                        disabled={submitting || !portalBaseUrl || reasonTextTooLong}
+                        disabled={disabled || submitting || !portalBaseUrl || reasonTextTooLong}
                     >
                         {submitting ? <Loader2 className="mr-2 size-4 animate-spin" /> : <ArrowUpRight className="mr-2 size-4" />}
                         Start session &amp; open

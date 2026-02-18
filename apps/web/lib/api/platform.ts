@@ -14,6 +14,7 @@ export interface PlatformUser {
     email: string;
     display_name: string;
     is_platform_admin: boolean;
+    support_session_allow_read_only?: boolean;
 }
 
 // Organization summary for list view

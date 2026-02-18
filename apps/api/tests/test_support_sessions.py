@@ -129,6 +129,25 @@ async def test_support_session_create_sets_role_and_org_override(
 
 
 @pytest.mark.asyncio
+async def test_support_session_create_rejects_deleted_org(authed_client, db, test_user, test_org):
+    test_user.is_platform_admin = True
+    test_org.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+
+    response = await authed_client.post(
+        "/platform/support-sessions",
+        json={
+            "org_id": str(test_org.id),
+            "role": "admin",
+            "reason_code": "bug_repro",
+            "reason_text": "demo role view",
+        },
+    )
+    assert response.status_code == 400
+    assert "scheduled for deletion" in response.text.lower()
+
+
+@pytest.mark.asyncio
 async def test_support_session_revocation_blocks_access(authed_client, db, test_user, test_org):
     test_user.is_platform_admin = True
     db.commit()

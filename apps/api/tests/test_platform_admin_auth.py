@@ -82,6 +82,8 @@ async def test_platform_me_requires_admin_flag(authed_client):
 
 @pytest.mark.asyncio
 async def test_platform_me_allows_admin_flag(authed_client, db, test_user):
+    from app.core.config import settings
+
     test_user.is_platform_admin = True
     db.commit()
 
@@ -90,6 +92,7 @@ async def test_platform_me_allows_admin_flag(authed_client, db, test_user):
     data = response.json()
     assert data["email"] == test_user.email
     assert data["is_platform_admin"] is True
+    assert data["support_session_allow_read_only"] is settings.SUPPORT_SESSION_ALLOW_READ_ONLY
 
 
 @pytest.mark.asyncio

@@ -739,6 +739,8 @@ def create_support_session(
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
         raise ValueError("Organization not found")
+    if org.deleted_at:
+        raise ValueError("Organization is scheduled for deletion")
 
     role_value = _validate_role(role)
     reason_code_value = _validate_reason_code(reason_code)

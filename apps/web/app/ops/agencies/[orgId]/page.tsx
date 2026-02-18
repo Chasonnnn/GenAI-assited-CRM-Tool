@@ -469,6 +469,7 @@ export default function AgencyDetailPage() {
                                 orgId={org.id}
                                 orgName={org.name}
                                 portalBaseUrl={org.portal_base_url}
+                                disabled={isDeleted}
                             />
                         </div>
                     </div>
