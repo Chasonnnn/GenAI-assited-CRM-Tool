@@ -57,6 +57,19 @@ ALLOWED_MIME_TYPES = {
     "video/mp4",
     "video/quicktime",
 }
+EXTENSION_TO_MIME_TYPES: dict[str, tuple[str, ...]] = {
+    "pdf": ("application/pdf",),
+    "png": ("image/png",),
+    "jpg": ("image/jpeg",),
+    "jpeg": ("image/jpeg",),
+    "doc": ("application/msword",),
+    "docx": ("application/vnd.openxmlformats-officedocument.wordprocessingml.document",),
+    "xls": ("application/vnd.ms-excel",),
+    "xlsx": ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",),
+    "csv": ("text/csv", "application/csv"),
+    "mp4": ("video/mp4",),
+    "mov": ("video/quicktime",),
+}
 MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
 SIGNED_URL_EXPIRY_SECONDS = 300  # 5 minutes
 
@@ -120,6 +133,13 @@ def _read_file_prefix(file: BinaryIO, size: int) -> bytes:
         file.seek(pos)
 
 
+def _normalize_content_type(content_type: str | None) -> str:
+    raw = (content_type or "").strip()
+    if not raw:
+        return "application/octet-stream"
+    return raw.split(";", 1)[0].strip().lower() or "application/octet-stream"
+
+
 def validate_file(
     filename: str,
     content_type: str,
@@ -136,13 +156,25 @@ def validate_file(
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     allowed_exts = allowed_extensions or ALLOWED_EXTENSIONS
     allowed_mimes = allowed_mime_types or ALLOWED_MIME_TYPES
+    normalized_content_type = _normalize_content_type(content_type)
 
     if ext not in allowed_exts:
         return False, f"File extension '.{ext}' not allowed"
 
     # Check MIME type
-    if content_type not in allowed_mimes:
-        return False, f"Content type '{content_type}' not allowed"
+    if normalized_content_type not in allowed_mimes:
+        return False, f"Content type '{normalized_content_type}' not allowed"
+
+    # Enforce extension/MIME consistency for known file types.
+    # Custom extension allowlists can still opt-in for additional types not mapped here.
+    expected_mimes = EXTENSION_TO_MIME_TYPES.get(ext)
+    if expected_mimes and normalized_content_type not in expected_mimes:
+        expected = ", ".join(expected_mimes)
+        return (
+            False,
+            f"Content type '{normalized_content_type}' does not match extension '.{ext}' "
+            f"(expected: {expected})",
+        )
 
     # Check size
     if file_size > MAX_FILE_SIZE_BYTES:
@@ -152,14 +184,19 @@ def validate_file(
     return True, None
 
 
-def store_file(storage_key: str, file: BinaryIO) -> None:
+def store_file(storage_key: str, file: BinaryIO, content_type: str) -> None:
     """Store file to configured backend."""
     backend = _get_storage_backend()
 
     if backend == "s3":
         s3 = _get_s3_client()
         bucket = getattr(settings, "S3_BUCKET", "crm-attachments")
-        s3.upload_fileobj(file, bucket, storage_key)
+        s3.upload_fileobj(
+            file,
+            bucket,
+            storage_key,
+            ExtraArgs={"ContentType": _normalize_content_type(content_type)},
+        )
     else:
         # Local storage
         path = os.path.join(_get_local_storage_path(), storage_key)
@@ -309,6 +346,7 @@ def upload_attachment(
     )
     if not is_valid:
         raise ValueError(error)
+    normalized_content_type = _normalize_content_type(content_type)
 
     scan_enabled = getattr(settings, "ATTACHMENT_SCAN_ENABLED", False)
 
@@ -320,7 +358,7 @@ def upload_attachment(
     checksum = calculate_checksum(file)
 
     # Strip EXIF data from images for privacy
-    processed_file = strip_exif_data(file, content_type)
+    processed_file = strip_exif_data(file, normalized_content_type)
 
     # Generate storage key
     attachment_id = uuid.uuid4()
@@ -330,7 +368,7 @@ def upload_attachment(
 
     # Store file
     try:
-        store_file(storage_key, processed_file)
+        store_file(storage_key, processed_file, normalized_content_type)
     except Exception as exc:  # noqa: BLE001 - surface a clean error to callers
         logger.exception("Failed to store attachment for key %s", storage_key)
         raise AttachmentStorageError("Failed to store attachment. Please try again.") from exc
@@ -345,7 +383,7 @@ def upload_attachment(
         uploaded_by_user_id=user_id,
         filename=filename,
         storage_key=storage_key,
-        content_type=content_type,
+        content_type=normalized_content_type,
         file_size=file_size,
         checksum_sha256=checksum,
         scan_status="pending" if scan_enabled else "clean",

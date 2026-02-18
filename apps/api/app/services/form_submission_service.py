@@ -539,7 +539,7 @@ def add_submission_file(
         f"{submission.organization_id}/form-submissions/{submission.id}/{uuid.uuid4()}{suffix}"
     )
 
-    store_file(storage_key, processed_file)
+    store_file(storage_key, processed_file, validated_content_type)
     register_storage_cleanup_on_rollback(db, storage_key)
 
     record = FormSubmissionFile(
@@ -1296,7 +1296,7 @@ def _store_submission_file(
         f"{submission.organization_id}/form-submissions/{submission.id}/{uuid.uuid4()}{suffix}"
     )
 
-    store_file(storage_key, processed_file)
+    store_file(storage_key, processed_file, resolved_content_type)
     register_storage_cleanup_on_rollback(db, storage_key)
 
     record = FormSubmissionFile(
