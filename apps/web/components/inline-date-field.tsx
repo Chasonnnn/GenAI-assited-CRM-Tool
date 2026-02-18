@@ -119,13 +119,22 @@ export function InlineDateField({
                 onClick={handleStartEdit}
                 role="button"
                 tabIndex={disabled ? -1 : 0}
-                onKeyDown={(e) => !disabled && e.key === "Enter" && handleStartEdit()}
+                onKeyDown={(e) => {
+                    if (!disabled && (e.key === "Enter" || e.key === " ")) {
+                        e.preventDefault()
+                        handleStartEdit()
+                    }
+                }}
+                aria-label={`Edit ${label}`}
             >
                 <span className={cn("text-sm", !displayValue && "text-muted-foreground", className)}>
                     {displayValue || placeholder}
                 </span>
                 {!disabled && (
-                    <PencilIcon className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <PencilIcon
+                        className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                        aria-hidden="true"
+                    />
                 )}
             </div>
         )

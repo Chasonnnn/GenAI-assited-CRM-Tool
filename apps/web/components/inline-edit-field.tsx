@@ -105,13 +105,21 @@ export function InlineEditField({
                 onClick={handleStartEdit}
                 role="button"
                 tabIndex={0}
-                onKeyDown={(e) => e.key === "Enter" && handleStartEdit()}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        handleStartEdit()
+                    }
+                }}
                 aria-label={`Edit ${fieldLabel}`}
             >
                 <span className={cn("text-sm", !value && "text-muted-foreground", className)}>
                     {value || placeholder}
                 </span>
-                <PencilIcon className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                <PencilIcon
+                    className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                    aria-hidden="true"
+                />
             </div>
         )
     }
