@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { useQuery } from "@tanstack/react-query"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import {
     Command,
     CommandDialog,
@@ -49,7 +49,8 @@ interface SearchCommandDialogProps {
 export function SearchCommandDialog({ open, onOpenChange }: SearchCommandDialogProps) {
     const router = useRouter()
     const [query, setQuery] = useState("")
-    const debouncedQuery = useDebouncedValue(query, 200)
+    // Optimization: Increased debounce to 400ms to reduce API calls
+    const debouncedQuery = useDebouncedValue(query, 400)
 
     const {
         data: results,
@@ -59,6 +60,8 @@ export function SearchCommandDialog({ open, onOpenChange }: SearchCommandDialogP
         queryFn: () => globalSearch({ q: debouncedQuery, limit: 10 }),
         enabled: open && debouncedQuery.length >= 2,
         staleTime: 30000,
+        // Optimization: Keep previous results while fetching new ones to prevent UI flicker
+        placeholderData: keepPreviousData,
     })
 
     // Reset query when dialog closes
