@@ -92,8 +92,75 @@ describe("SupportSessionDialog", () => {
             })
         )
 
-        await waitFor(() => expect(popup.location.href).toBe("https://test.example.com"))
+        await waitFor(() => expect(popup.location.href).toBe("https://test.example.com/"))
         expect((popup as unknown as { close: () => void }).close).not.toHaveBeenCalled()
+    })
+
+    it("normalizes portal url without scheme before redirecting", async () => {
+        const popup = createPopupStub()
+        vi.spyOn(window, "open").mockReturnValue(popup)
+
+        mockCreateSupportSession.mockResolvedValueOnce({
+            id: "sess_1",
+            org_id: "org_1",
+            role: "admin",
+            mode: "write",
+            reason_code: "bug_repro",
+            reason_text: null,
+            expires_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+        })
+
+        render(
+            <SupportSessionDialog
+                orgId="org_1"
+                orgName="Test Org"
+                portalBaseUrl="test.example.com"
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "View as role" }))
+        fireEvent.click(await screen.findByRole("button", { name: /start session/i }))
+
+        await waitFor(() => expect(popup.location.href).toBe("https://test.example.com/"))
+    })
+
+    it("opens destination in a fresh tab when placeholder handle is unavailable", async () => {
+        const openSpy = vi
+            .spyOn(window, "open")
+            .mockReturnValueOnce(null)
+            .mockReturnValueOnce(createPopupStub())
+
+        mockCreateSupportSession.mockResolvedValueOnce({
+            id: "sess_1",
+            org_id: "org_1",
+            role: "admin",
+            mode: "write",
+            reason_code: "bug_repro",
+            reason_text: null,
+            expires_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+        })
+
+        render(
+            <SupportSessionDialog
+                orgId="org_1"
+                orgName="Test Org"
+                portalBaseUrl="https://test.example.com"
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "View as role" }))
+        fireEvent.click(await screen.findByRole("button", { name: /start session/i }))
+
+        await waitFor(() => expect(mockCreateSupportSession).toHaveBeenCalled())
+        expect(openSpy).toHaveBeenNthCalledWith(1, "", "_blank")
+        expect(openSpy).toHaveBeenNthCalledWith(
+            2,
+            "https://test.example.com/",
+            "_blank",
+            "noopener,noreferrer"
+        )
     })
 
     it("closes the placeholder tab if creating the support session fails", async () => {

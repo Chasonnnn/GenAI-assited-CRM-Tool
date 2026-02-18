@@ -77,14 +77,28 @@ export function SupportSessionDialog({
     const reasonTextLength = reasonTextTrimmed.length
     const reasonTextTooLong = reasonTextLength > 500
 
-    const portalHost = useMemo(() => {
-        if (!portalBaseUrl) return null
+    const normalizedPortalUrl = useMemo(() => {
+        const candidate = portalBaseUrl?.trim()
+        if (!candidate) return null
         try {
-            return new URL(portalBaseUrl).host
+            return new URL(candidate).toString()
         } catch {
-            return portalBaseUrl.replace(/^https?:\/\//, "")
+            try {
+                return new URL(`https://${candidate}`).toString()
+            } catch {
+                return null
+            }
         }
     }, [portalBaseUrl])
+
+    const portalHost = useMemo(() => {
+        if (!normalizedPortalUrl) return null
+        try {
+            return new URL(normalizedPortalUrl).host
+        } catch {
+            return normalizedPortalUrl.replace(/^https?:\/\//, "")
+        }
+    }, [normalizedPortalUrl])
 
     useEffect(() => {
         if (!open) return
@@ -106,7 +120,7 @@ export function SupportSessionDialog({
             toast.error("Support sessions are unavailable for this organization.")
             return
         }
-        if (!portalBaseUrl) {
+        if (!normalizedPortalUrl) {
             toast.error("Portal URL not available for this organization.")
             return
         }
@@ -116,7 +130,7 @@ export function SupportSessionDialog({
         }
 
         // Open a placeholder tab synchronously to reduce popup-blocker issues.
-        const popup = window.open("about:blank", "_blank", "noopener,noreferrer")
+        const popup = window.open("", "_blank")
         if (popup) {
             try {
                 popup.opener = null
@@ -164,10 +178,13 @@ export function SupportSessionDialog({
             )
             setOpen(false)
 
-            if (popup) {
-                popup.location.href = portalBaseUrl
+            if (popup && !popup.closed) {
+                popup.location.href = normalizedPortalUrl
             } else {
-                toast.error("Popup blocked. Support session started; open the portal link manually.")
+                const opened = window.open(normalizedPortalUrl, "_blank", "noopener,noreferrer")
+                if (!opened) {
+                    window.location.href = normalizedPortalUrl
+                }
             }
         } catch (error) {
             if (popup) popup.close()
@@ -188,7 +205,7 @@ export function SupportSessionDialog({
         >
             <DialogTrigger
                 className={buttonVariants({ variant: "outline", size: "sm" })}
-                disabled={disabled || !portalBaseUrl}
+                disabled={disabled || !normalizedPortalUrl}
             >
                 <Eye className="mr-2 size-4" />
                 View as role
@@ -303,7 +320,7 @@ export function SupportSessionDialog({
                     </Button>
                     <Button
                         onClick={handleStartAndOpen}
-                        disabled={disabled || submitting || !portalBaseUrl || reasonTextTooLong}
+                        disabled={disabled || submitting || !normalizedPortalUrl || reasonTextTooLong}
                     >
                         {submitting ? <Loader2 className="mr-2 size-4 animate-spin" /> : <ArrowUpRight className="mr-2 size-4" />}
                         Start session &amp; open
