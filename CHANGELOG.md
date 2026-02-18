@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.83.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.82.0...surrogacy-crm-platform-v0.83.0) (2026-02-18)
+
+
+### Features
+
+* **api:** expand AI assistant access to intake specialists and case managers ([3376fe4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3376fe4bd853d08ea3050632c5c237300a5a5174))
+
 ## [0.82.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.81.0...surrogacy-crm-platform-v0.82.0) (2026-02-18)
 
 
