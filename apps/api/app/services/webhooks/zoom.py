@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.db.models import Appointment, ZoomWebhookEvent
 
 logger = logging.getLogger(__name__)
+MAX_PAYLOAD_BYTES = 1 * 1024 * 1024  # 1 MB
 
 
 def _verify_zoom_webhook_signature(
@@ -31,14 +32,35 @@ def _verify_zoom_webhook_signature(
     Zoom sends: v0:timestamp:body_string
     Then HMAC-SHA256 with webhook secret, compare to signature.
     """
-    message = f"v0:{timestamp}:{body.decode('utf-8')}"
+    message = b"v0:" + timestamp.encode("utf-8") + b":" + body
     expected = hmac.new(
         secret.encode("utf-8"),
-        message.encode("utf-8"),
+        message,
         hashlib.sha256,
     ).hexdigest()
     expected_signature = f"v0={expected}"
     return hmac.compare_digest(expected_signature, signature)
+
+
+async def _read_body_safe(request: Request) -> bytes:
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > MAX_PAYLOAD_BYTES:
+                raise HTTPException(413, "Payload too large")
+        except ValueError:
+            pass
+
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in request.stream():
+        if not chunk:
+            continue
+        total += len(chunk)
+        if total > MAX_PAYLOAD_BYTES:
+            raise HTTPException(413, "Payload too large")
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 class ZoomWebhookHandler:
@@ -55,7 +77,7 @@ class ZoomWebhookHandler:
         - Validates webhook signature using ZOOM_WEBHOOK_SECRET
         - Deduplicates events via ZoomWebhookEvent table
         """
-        body = await request.body()
+        body = await _read_body_safe(request)
 
         # Handle URL validation challenge from Zoom
         try:

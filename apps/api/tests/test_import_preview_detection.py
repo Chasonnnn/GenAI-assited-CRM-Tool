@@ -4,6 +4,8 @@ import io
 import pytest
 from httpx import AsyncClient
 
+from app.core.config import settings
+
 
 def make_delimited_content(
     rows: list[dict],
@@ -180,3 +182,45 @@ async def test_preview_maps_heard_about_question_to_source(authed_client: AsyncC
     assert suggestion is not None
     assert suggestion.get("suggested_field") == "source"
     assert suggestion.get("transformation") == "source_channel_guess"
+
+
+@pytest.mark.asyncio
+async def test_preview_import_rejects_oversized_file(authed_client: AsyncClient):
+    payload = b"a" * (settings.IMPORT_CSV_MAX_BYTES + 1)
+    res = await authed_client.post(
+        "/surrogates/import/preview/enhanced",
+        files={"file": ("too-big.csv", io.BytesIO(payload), "text/csv")},
+    )
+    assert res.status_code == 413, res.text
+
+
+@pytest.mark.asyncio
+async def test_preview_import_rejects_too_many_rows(
+    authed_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    # Keep the test fast by lowering the row cap.
+    monkeypatch.setattr(settings, "IMPORT_CSV_MAX_ROWS", 5)
+
+    lines = ["full_name,email"]
+    for i in range(settings.IMPORT_CSV_MAX_ROWS + 1):
+        lines.append(f"Name{i},test{i}@example.com")
+    csv_data = ("\n".join(lines) + "\n").encode("utf-8")
+
+    res = await authed_client.post(
+        "/surrogates/import/preview/enhanced",
+        files={"file": ("too-many-rows.csv", io.BytesIO(csv_data), "text/csv")},
+    )
+    assert res.status_code == 413, res.text
+
+
+@pytest.mark.asyncio
+async def test_preview_import_rejects_mime_extension_mismatch(
+    authed_client: AsyncClient,
+):
+    csv_data = b"full_name,email\nTest,test@example.com\n"
+    res = await authed_client.post(
+        "/surrogates/import/preview/enhanced",
+        files={"file": ("preview.csv", io.BytesIO(csv_data), "image/png")},
+    )
+    assert res.status_code == 400, res.text
+    assert "content type" in res.text.lower()

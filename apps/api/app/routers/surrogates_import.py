@@ -274,10 +274,33 @@ async def preview_csv_enhanced(
     - Shows matching templates
     - Indicates AI availability for unmatched columns
     """
-    if not file.filename or not (file.filename.endswith(".csv") or file.filename.endswith(".tsv")):
+    filename = file.filename or ""
+    lower_filename = filename.lower()
+    if not filename or not (lower_filename.endswith(".csv") or lower_filename.endswith(".tsv")):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File must be a CSV or TSV file",
+        )
+    normalized_content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
+    expected_mime_types = (
+        {
+            "text/csv",
+            "application/csv",
+            "application/vnd.ms-excel",
+            "text/plain",
+        }
+        if lower_filename.endswith(".csv")
+        else {
+            "text/tab-separated-values",
+            "text/tsv",
+            "application/tab-separated-values",
+            "text/plain",
+        }
+    )
+    if normalized_content_type and normalized_content_type not in expected_mime_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File content type does not match file extension",
         )
 
     # Enforce size limit BEFORE reading into memory.
