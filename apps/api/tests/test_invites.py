@@ -224,3 +224,45 @@ async def test_create_invite_allows_platform_sender_without_gmail(authed_client,
     data = res.json()
     assert data["email"] == "new-user@example.com"
     assert data["role"] == "case_manager"
+
+
+@pytest.mark.asyncio
+async def test_create_invite_reuses_expired_pending_invite(
+    authed_client, db, test_org, test_user, monkeypatch
+):
+    """Creating an invite for an expired pending invite should reactivate the existing row."""
+    from app.db.enums import Role
+    from app.db.models import OrgInvite
+    from app.services import invite_email_service, platform_email_service
+
+    existing = OrgInvite(
+        organization_id=test_org.id,
+        email="expired-user@example.com",
+        role=Role.CASE_MANAGER.value,
+        invited_by_user_id=test_user.id,
+        expires_at=datetime.now(timezone.utc) - timedelta(hours=2),
+        resend_count=0,
+    )
+    db.add(existing)
+    db.commit()
+
+    async def fake_send_invite_email(*_args, **_kwargs):
+        return {"success": True}
+
+    monkeypatch.setattr(invite_email_service, "send_invite_email", fake_send_invite_email)
+    monkeypatch.setattr(platform_email_service, "platform_sender_configured", lambda: True)
+
+    res = await authed_client.post(
+        "/settings/invites",
+        json={"email": "expired-user@example.com", "role": "admin"},
+    )
+
+    assert res.status_code == 200, res.text
+    data = res.json()
+    assert data["id"] == str(existing.id)
+    assert data["status"] == "pending"
+    assert data["role"] == Role.ADMIN.value
+
+    db.refresh(existing)
+    assert existing.expires_at is not None
+    assert existing.expires_at > datetime.now(timezone.utc)

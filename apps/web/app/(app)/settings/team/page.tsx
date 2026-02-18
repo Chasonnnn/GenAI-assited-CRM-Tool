@@ -59,6 +59,7 @@ const ROLE_COLORS: Record<string, string> = {
 
 const INVITE_ROLE_OPTIONS = ["intake_specialist", "case_manager", "admin"] as const
 type InviteRole = (typeof INVITE_ROLE_OPTIONS)[number]
+const ACTIONABLE_INVITE_STATUSES = new Set(["pending", "expired"])
 
 function InviteTeamModal({ onClose }: { onClose: () => void }) {
     const [email, setEmail] = useState("")
@@ -415,7 +416,7 @@ function InvitationsTab() {
         }
     }
 
-    const pendingInvites = data?.invites.filter(inv => inv.status === "pending") || []
+    const actionableInvites = data?.invites.filter((inv) => ACTIONABLE_INVITE_STATUSES.has(inv.status)) || []
 
     if (isLoading) {
         return (
@@ -425,10 +426,10 @@ function InvitationsTab() {
         )
     }
 
-    if (pendingInvites.length === 0) {
+    if (actionableInvites.length === 0) {
         return (
             <div className="text-center py-8 text-muted-foreground">
-                No pending invitations
+                No actionable invitations
             </div>
         )
     }
@@ -445,7 +446,7 @@ function InvitationsTab() {
                 </TableRow>
             </TableHeader>
             <TableBody>
-                {pendingInvites.map((invite) => (
+                {actionableInvites.map((invite) => (
                     <TableRow key={invite.id}>
                         <TableCell className="font-medium text-center">{invite.email}</TableCell>
                         <TableCell className="text-center">
@@ -494,7 +495,7 @@ export default function TeamSettingsPage() {
     const { data: inviteData } = useInvites()
     const { data: members } = useMembers()
 
-    const pendingCount = inviteData?.pending_count || 0
+    const actionableInviteCount = inviteData?.invites.filter((inv) => ACTIONABLE_INVITE_STATUSES.has(inv.status)).length || 0
     const memberCount = members?.length || 0
 
     return (
@@ -528,7 +529,7 @@ export default function TeamSettingsPage() {
                 <CardHeader>
                     <CardTitle>Team</CardTitle>
                     <CardDescription>
-                        {memberCount} member{memberCount !== 1 ? "s" : ""} • {pendingCount} pending invitation{pendingCount !== 1 ? "s" : ""}
+                        {memberCount} member{memberCount !== 1 ? "s" : ""} • {actionableInviteCount} actionable invitation{actionableInviteCount !== 1 ? "s" : ""}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -540,7 +541,7 @@ export default function TeamSettingsPage() {
                             </TabsTrigger>
                             <TabsTrigger value="invitations">
                                 <Mail className="size-4 mr-1" aria-hidden="true" />
-                                Invitations ({pendingCount})
+                                Invitations ({actionableInviteCount})
                             </TabsTrigger>
                         </TabsList>
 

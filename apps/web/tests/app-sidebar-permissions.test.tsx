@@ -139,6 +139,33 @@ describe("AppSidebar permission visibility", () => {
         })
     })
 
+    it("shows Integrations settings for case managers without manage_integrations permission", async () => {
+        mockUseAuth.mockReturnValue({
+            user: {
+                user_id: "user-2",
+                role: "case_manager",
+                display_name: "Case Manager User",
+                email: "cm@test.com",
+                org_name: "Org",
+                org_display_name: "Org",
+                ai_enabled: false,
+            },
+        })
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["view_audit_log"] },
+        })
+
+        render(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        await waitFor(() => {
+            expect(screen.getByText("Integrations")).toBeInTheDocument()
+        })
+    })
+
     it("exposes accessible labels and expanded state for navigation and user menu", async () => {
         mockUseEffectivePermissions.mockReturnValue({
             data: { permissions: ["manage_team", "view_audit_log"] },

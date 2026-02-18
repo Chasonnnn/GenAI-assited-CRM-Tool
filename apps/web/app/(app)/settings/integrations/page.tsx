@@ -44,6 +44,7 @@ import {
 } from "lucide-react"
 import { useIntegrationHealth } from "@/lib/hooks/use-ops"
 import { useAuth } from "@/lib/auth-context"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { useUserIntegrations, useConnectZoom, useConnectGmail, useConnectGoogleCalendar, useConnectGcp, useDisconnectIntegration } from "@/lib/hooks/use-user-integrations"
 import { useAISettings, useUpdateAISettings, useTestAPIKey, useAIConsent, useAcceptConsent } from "@/lib/hooks/use-ai"
 import { useResendSettings, useUpdateResendSettings, useTestResendKey, useRotateWebhook, useEligibleSenders } from "@/lib/hooks/use-resend"
@@ -2366,6 +2367,11 @@ function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "di
 }
 
 export default function IntegrationsPage() {
+    const { user } = useAuth()
+    const isDeveloper = user?.role === "developer"
+    const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
+    const canManageOrganizationIntegrations =
+        isDeveloper || (effectivePermissions?.permissions ?? []).includes("manage_integrations")
     const { data: healthData, isLoading, refetch, isFetching } = useIntegrationHealth()
     const { data: userIntegrations } = useUserIntegrations()
     const { data: aiSettings, isLoading: aiSettingsLoading } = useAISettings()
@@ -2625,6 +2631,15 @@ export default function IntegrationsPage() {
                     <p className="mb-4 text-sm text-muted-foreground">
                         Configure shared services like AI, email delivery, and Zapier for the organization.
                     </p>
+                    {!canManageOrganizationIntegrations ? (
+                        <Alert className="mb-4">
+                            <AlertTriangleIcon className="size-4" aria-hidden="true" />
+                            <AlertTitle>Read-only access</AlertTitle>
+                            <AlertDescription>
+                                You can view organization integration status, but only administrators can configure these integrations.
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {/* AI */}
                         <Card>
@@ -2657,8 +2672,9 @@ export default function IntegrationsPage() {
                                             variant="outline"
                                             className="w-full"
                                             onClick={() => setAiDialogOpen(true)}
+                                            disabled={!canManageOrganizationIntegrations}
                                         >
-                                            Configure AI
+                                            {canManageOrganizationIntegrations ? "Configure AI" : "Admin access required"}
                                         </Button>
                                     </div>
                                 )}
@@ -2696,8 +2712,9 @@ export default function IntegrationsPage() {
                                             variant="outline"
                                             className="w-full"
                                             onClick={() => setEmailDialogOpen(true)}
+                                            disabled={!canManageOrganizationIntegrations}
                                         >
-                                            Configure Email
+                                            {canManageOrganizationIntegrations ? "Configure Email" : "Admin access required"}
                                         </Button>
                                     </div>
                                 )}
@@ -2735,8 +2752,9 @@ export default function IntegrationsPage() {
                                             variant="outline"
                                             className="w-full"
                                             onClick={() => setZapierDialogOpen(true)}
+                                            disabled={!canManageOrganizationIntegrations}
                                         >
-                                            Configure Zapier
+                                            {canManageOrganizationIntegrations ? "Configure Zapier" : "Admin access required"}
                                         </Button>
                                     </div>
                                 )}
@@ -2769,8 +2787,9 @@ export default function IntegrationsPage() {
                                         variant="outline"
                                         className="w-full"
                                         onClick={() => setMetaDialogOpen(true)}
+                                        disabled={!canManageOrganizationIntegrations}
                                     >
-                                        Configure Meta
+                                        {canManageOrganizationIntegrations ? "Configure Meta" : "Admin access required"}
                                     </Button>
                                 </div>
                             </CardContent>
@@ -2778,7 +2797,13 @@ export default function IntegrationsPage() {
                     </div>
                 </div>
 
-                <Dialog open={aiDialogOpen} onOpenChange={setAiDialogOpen}>
+                <Dialog
+                    open={canManageOrganizationIntegrations && aiDialogOpen}
+                    onOpenChange={(open) => {
+                        if (!canManageOrganizationIntegrations) return
+                        setAiDialogOpen(open)
+                    }}
+                >
                     <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden">
                         <DialogHeader>
                             <div className="flex items-start justify-between gap-4">
@@ -2798,7 +2823,13 @@ export default function IntegrationsPage() {
                     </DialogContent>
                 </Dialog>
 
-                <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+                <Dialog
+                    open={canManageOrganizationIntegrations && emailDialogOpen}
+                    onOpenChange={(open) => {
+                        if (!canManageOrganizationIntegrations) return
+                        setEmailDialogOpen(open)
+                    }}
+                >
                     <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden">
                         <DialogHeader>
                             <div className="flex items-start justify-between gap-4">
@@ -2818,7 +2849,13 @@ export default function IntegrationsPage() {
                     </DialogContent>
                 </Dialog>
 
-                <Dialog open={zapierDialogOpen} onOpenChange={setZapierDialogOpen}>
+                <Dialog
+                    open={canManageOrganizationIntegrations && zapierDialogOpen}
+                    onOpenChange={(open) => {
+                        if (!canManageOrganizationIntegrations) return
+                        setZapierDialogOpen(open)
+                    }}
+                >
                     <DialogContent className="flex h-[85vh] w-[95vw] max-w-4xl flex-col gap-0 overflow-hidden p-0">
                         <DialogHeader className="shrink-0 px-6 pt-6 pb-4">
                             <div className="flex items-start justify-between gap-4">
@@ -2843,7 +2880,13 @@ export default function IntegrationsPage() {
                     </DialogContent>
                 </Dialog>
 
-                <Dialog open={metaDialogOpen} onOpenChange={setMetaDialogOpen}>
+                <Dialog
+                    open={canManageOrganizationIntegrations && metaDialogOpen}
+                    onOpenChange={(open) => {
+                        if (!canManageOrganizationIntegrations) return
+                        setMetaDialogOpen(open)
+                    }}
+                >
                     <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden">
                         <DialogHeader>
                             <div className="flex items-start justify-between gap-4">
@@ -2999,7 +3042,11 @@ export default function IntegrationsPage() {
 
                                         {/* Action buttons */}
                                         {integration.config_status !== "configured" && (
-                                            integration.integration_type === "meta_leads" || integration.integration_type === "meta_capi" ? (
+                                            !canManageOrganizationIntegrations ? (
+                                                <p className="text-xs text-muted-foreground text-center">
+                                                    Admin access required to configure
+                                                </p>
+                                            ) : integration.integration_type === "meta_leads" || integration.integration_type === "meta_capi" ? (
                                                 <Button
                                                     render={<Link href="/settings/integrations/meta" />}
                                                     variant="outline"

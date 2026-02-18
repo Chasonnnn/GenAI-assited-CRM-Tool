@@ -128,6 +128,9 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const canViewCompliance = isDeveloper || permissionSet.has("manage_compliance")
     const canViewAudit = isDeveloper || permissionSet.has("view_audit_log")
     const canViewIntegrations = isDeveloper || permissionSet.has("manage_integrations")
+    const canAccessPersonalIntegrations =
+        user?.role === "intake_specialist" || user?.role === "case_manager"
+    const canAccessIntegrations = canViewIntegrations || canAccessPersonalIntegrations
     const canViewAlerts = isDeveloper || permissionSet.has("manage_ops")
     const canViewAutomationExecutions = isDeveloper || permissionSet.has("manage_automation")
     const isMobile = useIsMobile()
@@ -202,7 +205,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
         ...(canViewQueues ? [{ title: "Queue Management", url: "/settings/queues" }] : []),
         ...(canViewAudit ? [{ title: "Audit Log", url: "/settings/audit" }] : []),
         ...(canViewCompliance ? [{ title: "Compliance", url: "/settings/compliance" }] : []),
-        ...(canViewIntegrations ? [{ title: "Integrations", url: "/settings/integrations" }] : []),
+        ...(canAccessIntegrations ? [{ title: "Integrations", url: "/settings/integrations" }] : []),
         ...(canViewAlerts ? [{ title: "System Alerts", url: "/settings/alerts" }] : []),
     ]
 

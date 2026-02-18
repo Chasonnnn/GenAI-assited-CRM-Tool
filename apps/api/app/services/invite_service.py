@@ -94,12 +94,13 @@ def create_invite(
     role: str,
     invited_by_user_id: uuid.UUID,
 ) -> OrgInvite:
-    """Create a new invitation."""
+    """Create a new invitation or reactivate an expired pending invite."""
     org = org_service.get_org_by_id(db, org_id)
     if not org:
         raise ValueError("Organization not found")
     email = email.lower().strip()
     role_value = validate_invite_role(role)
+    now = datetime.now(timezone.utc)
 
     # Check org limit
     pending_count = count_pending_invites(db, org_id)
@@ -131,14 +132,30 @@ def create_invite(
         .first()
     )
     if existing_invite:
-        raise ValueError("A pending invite already exists for this email")
+        existing_active = existing_invite.expires_at is None or existing_invite.expires_at > now
+        if existing_active:
+            raise ValueError("A pending invite already exists for this email")
+
+        if existing_invite.organization_id == org_id:
+            existing_invite.role = role_value
+            existing_invite.invited_by_user_id = invited_by_user_id
+            existing_invite.expires_at = now + timedelta(days=INVITE_EXPIRY_DAYS)
+            # Reactivation starts a fresh resend window.
+            existing_invite.resend_count = 0
+            existing_invite.last_resent_at = None
+            db.flush()
+            return existing_invite
+
+        # Release the global pending-invite uniqueness slot for this email.
+        existing_invite.revoked_at = now
+        existing_invite.revoked_by_user_id = invited_by_user_id
 
     invite = OrgInvite(
         organization_id=org_id,
         email=email,
         role=role_value,
         invited_by_user_id=invited_by_user_id,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=INVITE_EXPIRY_DAYS),
+        expires_at=now + timedelta(days=INVITE_EXPIRY_DAYS),
         resend_count=0,
     )
     db.add(invite)

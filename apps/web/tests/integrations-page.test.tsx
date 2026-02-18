@@ -3,6 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import IntegrationsPage from '../app/(app)/settings/integrations/page'
 
+const mockUseAuth = vi.fn()
+const mockUseEffectivePermissions = vi.fn()
 const mockRefetch = vi.fn()
 const mockUseIntegrationHealth = vi.fn()
 const mockConnectZoom = vi.fn()
@@ -82,7 +84,11 @@ vi.mock('@/lib/hooks/use-ops', () => ({
 }))
 
 vi.mock('@/lib/auth-context', () => ({
-    useAuth: () => ({ user: { role: 'admin', user_id: 'u1' } }),
+    useAuth: () => mockUseAuth(),
+}))
+
+vi.mock('@/lib/hooks/use-permissions', () => ({
+    useEffectivePermissions: () => mockUseEffectivePermissions(),
 }))
 
 vi.mock('next/navigation', () => ({
@@ -159,6 +165,10 @@ vi.mock('@/lib/hooks/use-meta-forms', () => ({
 
 describe('IntegrationsPage', () => {
     beforeEach(() => {
+        mockUseAuth.mockReturnValue({ user: { role: 'admin', user_id: 'u1' } })
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['manage_integrations'] },
+        })
         mockUseIntegrationHealth.mockReturnValue({
             data: [
                 {
@@ -242,5 +252,22 @@ describe('IntegrationsPage', () => {
         expect(within(dialog).getByTestId('zapier-dialog-body').className).toContain('min-h-0')
         const inboundHeader = within(dialog).getByTestId('zapier-inbound-header')
         expect(inboundHeader.className).not.toContain('md:flex-row')
+    })
+
+    it('keeps personal integrations accessible but blocks org configuration without manage_integrations', () => {
+        mockUseAuth.mockReturnValue({ user: { role: 'case_manager', user_id: 'u2' } })
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: [] },
+        })
+
+        render(<IntegrationsPage />)
+
+        expect(screen.getByRole('button', { name: /connect zoom/i })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /connect gmail/i })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /connect google calendar/i })).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /configure ai/i })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /configure email/i })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /configure zapier/i })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /configure meta/i })).not.toBeInTheDocument()
     })
 })
