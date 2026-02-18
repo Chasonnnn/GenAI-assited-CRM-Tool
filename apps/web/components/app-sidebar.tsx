@@ -344,6 +344,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                         onClick={() => setTasksOpen((o) => !o)}
                         className={navItemClass(pathname?.startsWith("/tasks") || pathname?.startsWith("/appointments") || pathname === "/settings/appointments")}
                         title={tasksNavigation.title}
+                        aria-expanded={tasksOpen}
                     >
                         <tasksNavigation.icon className="size-4 shrink-0" />
                         {!isCollapsed && (
@@ -378,6 +379,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                         onClick={() => setAutomationOpen((o) => !o)}
                         className={navItemClass(pathname?.startsWith("/automation"))}
                         title={automationNavigation.title}
+                        aria-expanded={automationOpen}
                     >
                         <automationNavigation.icon className="size-4 shrink-0" />
                         {!isCollapsed && (
@@ -418,6 +420,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                         onClick={() => setSettingsOpen((o) => !o)}
                         className={navItemClass(pathname?.startsWith("/settings") && !pathname?.startsWith("/settings/appointments"))}
                         title={settingsNavigation.title}
+                        aria-expanded={settingsOpen}
                     >
                         <settingsNavigation.icon className="size-4 shrink-0" />
                         {!isCollapsed && (
@@ -458,6 +461,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                     "w-full rounded-lg data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground",
                                     navItemClass(false)
                                 )}
+                                aria-label="User menu"
                             />
                         }
                     >

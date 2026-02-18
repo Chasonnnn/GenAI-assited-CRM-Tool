@@ -155,6 +155,7 @@ export function InlineDateField({
                 className="h-6 w-6"
                 onClick={handleSave}
                 disabled={isSaving}
+                aria-label={`Save ${label}`}
             >
                 {isSaving ? (
                     <Loader2Icon className="size-3 animate-spin" />
@@ -169,6 +170,7 @@ export function InlineDateField({
                 className="h-6 w-6"
                 onClick={handleCancel}
                 disabled={isSaving}
+                aria-label={`Cancel ${label}`}
             >
                 <XIcon className="size-3 text-destructive" />
             </Button>

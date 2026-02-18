@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import SurrogatesPage from '../app/(app)/surrogates/page'
 import { SurrogateOverviewTab } from '../components/surrogates/detail/tabs/SurrogateOverviewTab'
+import { InlineEditField } from '../components/inline-edit-field'
+import { InlineDateField } from '../components/inline-date-field'
 import { Tabs } from '@/components/ui/tabs'
 
 // ============================================================================
@@ -171,5 +173,37 @@ describe('SurrogateOverviewTab Accessibility', () => {
             </Tabs>
         )
         expect(screen.getByLabelText('Copy email')).toBeInTheDocument()
+    })
+})
+
+describe('Inline Field Accessibility', () => {
+    it('adds contextual labels to InlineEditField save/cancel icon buttons', () => {
+        render(
+            <InlineEditField
+                value="test@example.com"
+                label="Email"
+                onSave={vi.fn().mockResolvedValue(undefined)}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button"))
+
+        expect(screen.getByRole("button", { name: "Save Email" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Cancel Email" })).toBeInTheDocument()
+    })
+
+    it('adds contextual labels to InlineDateField save/cancel icon buttons', () => {
+        render(
+            <InlineDateField
+                value="2026-01-05"
+                label="Start Date"
+                onSave={vi.fn().mockResolvedValue(undefined)}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button"))
+
+        expect(screen.getByRole("button", { name: "Save Start Date" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Cancel Start Date" })).toBeInTheDocument()
     })
 })
