@@ -67,8 +67,10 @@ def _verify_svix_signature(
             if decoded:
                 secret_bytes = decoded
                 break
+
         if secret_bytes is None:
-            secret_bytes = secret.encode("utf-8")
+            logger.warning("Failed to decode whsec_ secret as base64")
+            return False
     else:
         secret_bytes = secret.encode("utf-8")
 

@@ -108,6 +108,42 @@ class TestResendWebhookSignature:
         is_valid = _verify_svix_signature(body, headers, secret)
         assert is_valid is False
 
+    def test_verify_svix_signature_rejects_malformed_whsec(self):
+        """
+        Test that a 'whsec_' secret that is NOT valid base64 fails verification.
+        Regression test for vulnerability where it fell back to raw bytes.
+        """
+        from app.services.webhooks.resend import _verify_svix_signature
+
+        # "A" results in "A===", which causes "Invalid base64-encoded string" error
+        # because 1 char of data is not enough (need at least 2 for 1 byte).
+        malformed_secret = "whsec_A"
+
+        body = b'{"type": "exploit_test"}'
+        timestamp = str(int(time.time()))
+        msg_id = str(uuid.uuid4())
+
+        # Even if we sign with the raw bytes (simulating the exploit attempt),
+        # verification should fail because the code should NOT fallback to raw bytes.
+        # Note: If secret is "whsec_A", the fallback logic used "A" (suffix) as key.
+        fallback_key = b"A"
+        signed_payload = f"{msg_id}.{timestamp}.{body.decode('utf-8')}"
+        signature_bytes = hmac.new(
+            fallback_key,
+            signed_payload.encode("utf-8"),
+            hashlib.sha256,
+        ).digest()
+        signature_b64 = base64.b64encode(signature_bytes).decode("utf-8")
+
+        headers = {
+            "svix-id": msg_id,
+            "svix-timestamp": timestamp,
+            "svix-signature": f"v1,{signature_b64}",
+        }
+
+        is_valid = _verify_svix_signature(body, headers, malformed_secret)
+        assert is_valid is False
+
 
 class TestResendWebhookHandler:
     """Test webhook event processing."""
