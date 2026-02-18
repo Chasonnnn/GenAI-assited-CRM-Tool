@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.82.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.81.0...surrogacy-crm-platform-v0.82.0) (2026-02-18)
+
+
+### Features
+
+* implement RBAC for integrations and team settings, update invite resend logic ([1194f9e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1194f9ef51b1621d07395ed89d89e7985ab29ef0))
+
+
+### Maintenance
+
+* **web:** override minimatch to 10.2.1 for security compliance ([0678f9d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0678f9d4488a427125976f1130c69cb3a6d71c65))
+
 ## [0.81.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.80.0...surrogacy-crm-platform-v0.81.0) (2026-02-18)
 
 
