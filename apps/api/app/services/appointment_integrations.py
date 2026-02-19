@@ -182,19 +182,34 @@ def sync_manual_google_events_for_appointments(
     if time_max < time_min:
         return 0
 
-    result = _run_async(
-        calendar_service.get_user_calendar_events(
+    calendar_ids = _run_async(
+        calendar_service.list_user_google_calendar_ids(
             db=db,
             user_id=user_id,
-            time_min=time_min,
-            time_max=time_max,
-            calendar_id="primary",
         )
-    )
-    if not result or not result.get("connected"):
+    ) or ["primary"]
+
+    raw_events: list[dict[str, object]] = []
+    any_connected = False
+    for calendar_id in calendar_ids:
+        result = _run_async(
+            calendar_service.get_user_calendar_events(
+                db=db,
+                user_id=user_id,
+                time_min=time_min,
+                time_max=time_max,
+                calendar_id=calendar_id,
+            )
+        )
+        if not result:
+            continue
+        if result.get("connected"):
+            any_connected = True
+            raw_events.extend(result.get("events") or [])
+
+    if not any_connected:
         return 0
 
-    raw_events = result.get("events") or []
     returned_event_ids: set[str] = {event["id"] for event in raw_events if event.get("id")}
     timed_events: list[tuple[str, str, datetime, datetime]] = []
     seen_event_ids: set[str] = set()

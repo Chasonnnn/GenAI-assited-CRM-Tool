@@ -283,6 +283,144 @@ async def test_appointments_list_imports_manual_google_calendar_event(
 
 
 @pytest.mark.asyncio
+async def test_appointments_list_imports_google_event_from_non_primary_calendar(
+    authed_client: AsyncClient,
+    db,
+    test_auth,
+    monkeypatch,
+):
+    from app.db.models import Appointment
+    from app.services import calendar_service
+
+    start = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=5)
+    end = start + timedelta(minutes=30)
+    calendar_calls: list[str] = []
+
+    async def fake_list_user_google_calendar_ids(db, user_id):
+        assert user_id == test_auth.user.id
+        return ["primary", "team-calendar"]
+
+    async def fake_get_user_calendar_events(
+        db,
+        user_id,
+        time_min,
+        time_max,
+        calendar_id="primary",
+    ):
+        assert user_id == test_auth.user.id
+        calendar_calls.append(calendar_id)
+        if calendar_id == "team-calendar":
+            return {
+                "connected": True,
+                "events": [
+                    {
+                        "id": "google_team_1",
+                        "summary": "Team calendar sync event",
+                        "start": start,
+                        "end": end,
+                        "html_link": "https://calendar.google.com/event?eid=team1",
+                        "is_all_day": False,
+                    }
+                ],
+                "error": None,
+            }
+        return {"connected": True, "events": [], "error": None}
+
+    monkeypatch.setattr(
+        calendar_service,
+        "list_user_google_calendar_ids",
+        fake_list_user_google_calendar_ids,
+        raising=False,
+    )
+    monkeypatch.setattr(calendar_service, "get_user_calendar_events", fake_get_user_calendar_events)
+
+    response = await authed_client.get("/appointments", params={"status": "confirmed"})
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["total"] == 1
+    assert payload["items"][0]["client_name"] == "Team calendar sync event"
+    assert set(calendar_calls) == {"primary", "team-calendar"}
+
+    stored = (
+        db.query(Appointment)
+        .filter(
+            Appointment.organization_id == test_auth.org.id,
+            Appointment.user_id == test_auth.user.id,
+            Appointment.google_event_id == "google_team_1",
+        )
+        .first()
+    )
+    assert stored is not None
+    assert stored.scheduled_start == start
+    assert stored.scheduled_end == end
+
+
+@pytest.mark.asyncio
+async def test_google_calendar_events_endpoint_fetches_across_calendars(
+    authed_client: AsyncClient,
+    test_auth,
+    monkeypatch,
+):
+    from app.services import calendar_service
+
+    start = datetime(2026, 2, 19, 18, 30, tzinfo=timezone.utc)
+    end = start + timedelta(minutes=30)
+    called: dict[str, object] = {}
+
+    async def fake_get_user_calendar_events_across_calendars(
+        db,
+        user_id,
+        time_min,
+        time_max,
+        calendar_ids=None,
+    ):
+        called["user_id"] = user_id
+        called["time_min"] = time_min
+        called["time_max"] = time_max
+        called["calendar_ids"] = calendar_ids
+        return {
+            "connected": True,
+            "events": [
+                {
+                    "id": "google_multi_1",
+                    "summary": "Cross-calendar event",
+                    "start": start,
+                    "end": end,
+                    "html_link": "https://calendar.google.com/event?eid=multi1",
+                    "is_all_day": False,
+                }
+            ],
+            "error": None,
+        }
+
+    monkeypatch.setattr(
+        calendar_service,
+        "get_user_calendar_events_across_calendars",
+        fake_get_user_calendar_events_across_calendars,
+    )
+
+    response = await authed_client.get(
+        "/integrations/google/calendar/events",
+        params={
+            "date_start": "2026-02-01",
+            "date_end": "2026-02-28",
+            "timezone": "America/Los_Angeles",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert called["user_id"] == test_auth.user.id
+    assert payload["connected"] is True
+    assert payload["error"] is None
+    assert len(payload["events"]) == 1
+    assert payload["events"][0]["id"] == "google_multi_1"
+    assert payload["events"][0]["summary"] == "Cross-calendar event"
+    assert payload["events"][0]["source"] == "google"
+
+
+@pytest.mark.asyncio
 async def test_appointments_list_cancels_removed_imported_google_event(
     authed_client: AsyncClient,
     db,

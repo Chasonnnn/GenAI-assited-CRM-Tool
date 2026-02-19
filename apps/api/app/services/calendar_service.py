@@ -478,6 +478,131 @@ async def get_google_events(
     return events
 
 
+async def list_google_calendar_ids(
+    access_token: str,
+    *,
+    max_results_per_page: int = 250,
+    max_total_results: int = 500,
+) -> list[str]:
+    """
+    Fetch visible calendar IDs for the connected Google account.
+
+    Returns `["primary"]` as a fallback if the API call fails.
+    """
+    calendar_ids: list[str] = ["primary"]
+    page_token: str | None = None
+
+    try:
+        async with httpx.AsyncClient() as client:
+            while len(calendar_ids) < max_total_results:
+                params = {
+                    "showDeleted": "false",
+                    "showHidden": "false",
+                    "minAccessRole": "reader",
+                    "maxResults": str(
+                        min(max_results_per_page, max_total_results - len(calendar_ids))
+                    ),
+                }
+                if page_token:
+                    params["pageToken"] = page_token
+
+                response = await client.get(
+                    "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    params=params,
+                )
+                if response.status_code != 200:
+                    break
+
+                data = response.json()
+                items = data.get("items", [])
+                for item in items:
+                    calendar_id = (item.get("id") or "").strip()
+                    if calendar_id:
+                        calendar_ids.append(calendar_id)
+                    if len(calendar_ids) >= max_total_results:
+                        break
+
+                page_token = data.get("nextPageToken")
+                if not page_token:
+                    break
+    except Exception as e:
+        logger.exception("Google Calendar list fetch failed: %s", e)
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for calendar_id in calendar_ids:
+        if calendar_id in seen:
+            continue
+        seen.add(calendar_id)
+        deduped.append(calendar_id)
+
+    return deduped or ["primary"]
+
+
+async def list_user_google_calendar_ids(
+    db: Session,
+    user_id: UUID,
+) -> list[str]:
+    """
+    List calendar IDs accessible to the connected user.
+
+    Returns an empty list if Google Calendar is not connected/token is unavailable.
+    """
+    integration = oauth_service.get_user_integration(db, user_id, "google_calendar")
+    if not integration:
+        return []
+
+    access_token = await get_google_access_token(db, user_id)
+    if not access_token:
+        return []
+
+    return await list_google_calendar_ids(access_token)
+
+
+async def get_user_calendar_events_across_calendars(
+    db: Session,
+    user_id: UUID,
+    time_min: datetime,
+    time_max: datetime,
+    calendar_ids: list[str] | None = None,
+) -> CalendarEventsResult:
+    """
+    Fetch events across all visible calendars for a user.
+
+    Falls back to `primary` if calendar discovery is unavailable.
+    """
+    integration = oauth_service.get_user_integration(db, user_id, "google_calendar")
+    if not integration:
+        return {"connected": False, "events": [], "error": "not_connected"}
+
+    access_token = await get_google_access_token(db, user_id)
+    if not access_token:
+        return {"connected": False, "events": [], "error": "token_expired"}
+
+    ids = calendar_ids or await list_google_calendar_ids(access_token)
+    if not ids:
+        ids = ["primary"]
+
+    events: list[CalendarEvent] = []
+    seen_event_ids: set[str] = set()
+    for calendar_id in ids:
+        calendar_events = await get_google_events(
+            access_token=access_token,
+            calendar_id=calendar_id,
+            time_min=time_min,
+            time_max=time_max,
+        )
+        for event in calendar_events:
+            event_id = event.get("id")
+            if not event_id or event_id in seen_event_ids:
+                continue
+            seen_event_ids.add(event_id)
+            events.append(event)
+
+    return {"connected": True, "events": events, "error": None}
+
+
 async def get_user_calendar_events(
     db: Session,
     user_id: UUID,

@@ -595,12 +595,12 @@ async def get_google_calendar_events(
     timezone: str | None = None,  # Optional: client timezone (e.g., "America/New_York")
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
-) -> list[GoogleCalendarEventRead]:
+) -> GoogleCalendarEventsResponse:
     """
     Get user's Google Calendar events for a date range.
 
     Returns empty list if Google is not connected (no error).
-    Events are fetched from the user's primary calendar only.
+    Events are fetched across visible calendars on the connected account.
 
     Query params:
     - date_start: Start date (ISO format YYYY-MM-DD)
@@ -640,13 +640,12 @@ async def get_google_calendar_events(
     time_min = dt.combine(start_date.date(), tm.min, tzinfo=client_tz)
     time_max = dt.combine(end_date.date(), tm(23, 59, 59, 999999), tzinfo=client_tz)
 
-    # Fetch events - returns empty list if not connected
-    result = await calendar_service.get_user_calendar_events(
+    # Fetch events across visible calendars - returns empty list if not connected
+    result = await calendar_service.get_user_calendar_events_across_calendars(
         db=db,
         user_id=session.user_id,
         time_min=time_min,
         time_max=time_max,
-        calendar_id="primary",
     )
     events = [
         GoogleCalendarEventRead(
