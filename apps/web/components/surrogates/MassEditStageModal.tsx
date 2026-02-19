@@ -122,10 +122,21 @@ export function MassEditStageModal({
         () => [...stages].filter((s) => s.is_active).sort((a, b) => a.order - b.order),
         [stages]
     )
+    const defaultTargetStageId = React.useMemo(
+        () => activeStages.find((s) => s.slug === "disqualified")?.id ?? "",
+        [activeStages]
+    )
+    const hasInitializedOpenRef = React.useRef(false)
 
-    // Reset when opened (and pick disqualified by default if present)
+    // Reset only once per open cycle.
     React.useEffect(() => {
-        if (!open) return
+        if (!open) {
+            hasInitializedOpenRef.current = false
+            return
+        }
+        if (hasInitializedOpenRef.current) return
+
+        hasInitializedOpenRef.current = true
         setStatesInput("")
         setSelectedRaces([])
         setRaceToAdd(null)
@@ -141,11 +152,14 @@ export function MassEditStageModal({
         setTriggerWorkflows(false)
         setReason("")
         setPreview(null)
+        setTargetStageId(defaultTargetStageId)
+    }, [open, defaultTargetStageId])
 
-        const disqualified = activeStages.find((s) => s.slug === "disqualified")
-        setTargetStageId(disqualified?.id ?? "")
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open])
+    // If stages load after opening, apply the default only while no stage is selected.
+    React.useEffect(() => {
+        if (!open || targetStageId || !defaultTargetStageId) return
+        setTargetStageId(defaultTargetStageId)
+    }, [open, targetStageId, defaultTargetStageId])
 
     const { states, error: statesError } = React.useMemo(() => parseStates(statesInput), [statesInput])
     const races = React.useMemo(() => (selectedRaces.length ? selectedRaces : undefined), [selectedRaces])

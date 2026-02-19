@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, type DragEvent } from "react"
+import { useEffect, useState, useReducer, useCallback, type DragEvent } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -125,24 +125,183 @@ function getReasonBadge(reason: string): {
     return null
 }
 
+interface CSVUploadState {
+    file: File | null
+    preview: EnhancedImportPreview | null
+    mappings: ColumnMappingDraft[]
+    unknownColumnBehavior: UnknownColumnBehavior
+    touchedColumns: Set<string>
+    backdateCreatedAt: boolean
+    backdateTouched: boolean
+    showAiPrompt: boolean
+    defaultSource: SurrogateSource
+    error: string
+    submitMessage: string | null
+    approveMessage: string | null
+    templateCleared: boolean
+    validationMode: ValidationMode
+    showValidationDialog: boolean
+}
+
+type CSVUploadAction =
+    | { type: "patch"; patch: Partial<CSVUploadState> }
+    | { type: "reset_for_new_file"; file: File }
+    | { type: "reset_for_removed_file" }
+    | { type: "update_mapping"; csvColumn: string; patch: Partial<ColumnMappingDraft> }
+    | { type: "apply_ai_suggestions"; suggestions: EnhancedImportPreview["column_suggestions"] }
+    | { type: "set_unknown_column_behavior"; value: UnknownColumnBehavior }
+    | { type: "set_backdate_toggled"; checked: boolean }
+    | { type: "sync_backdate_from_created_at_mapping"; hasCreatedAtMapping: boolean }
+
+function createInitialCSVUploadState(): CSVUploadState {
+    return {
+        file: null,
+        preview: null,
+        mappings: [],
+        unknownColumnBehavior: "ignore",
+        touchedColumns: new Set<string>(),
+        backdateCreatedAt: false,
+        backdateTouched: false,
+        showAiPrompt: false,
+        defaultSource: "manual",
+        error: "",
+        submitMessage: null,
+        approveMessage: null,
+        templateCleared: false,
+        validationMode: "drop_invalid_fields",
+        showValidationDialog: false,
+    }
+}
+
+function csvUploadReducer(state: CSVUploadState, action: CSVUploadAction): CSVUploadState {
+    switch (action.type) {
+        case "patch":
+            return { ...state, ...action.patch }
+        case "reset_for_new_file":
+            return {
+                ...state,
+                file: action.file,
+                error: "",
+                submitMessage: null,
+                approveMessage: null,
+                backdateCreatedAt: false,
+                backdateTouched: false,
+                defaultSource: "manual",
+                templateCleared: false,
+                validationMode: "drop_invalid_fields",
+            }
+        case "reset_for_removed_file":
+            return {
+                ...state,
+                file: null,
+                preview: null,
+                mappings: [],
+                touchedColumns: new Set<string>(),
+                backdateCreatedAt: false,
+                backdateTouched: false,
+                error: "",
+                submitMessage: null,
+                approveMessage: null,
+                validationMode: "drop_invalid_fields",
+                showValidationDialog: false,
+                showAiPrompt: false,
+            }
+        case "update_mapping": {
+            const nextTouchedColumns = new Set(state.touchedColumns)
+            nextTouchedColumns.add(action.csvColumn)
+            return {
+                ...state,
+                mappings: state.mappings.map((mapping) =>
+                    mapping.csv_column === action.csvColumn ? { ...mapping, ...action.patch } : mapping
+                ),
+                touchedColumns: nextTouchedColumns,
+            }
+        }
+        case "apply_ai_suggestions":
+            return {
+                ...state,
+                showAiPrompt: false,
+                mappings: state.mappings.map((mapping) => {
+                    const suggestion = action.suggestions.find(
+                        (item) => item.csv_column === mapping.csv_column
+                    )
+                    if (!suggestion) return mapping
+
+                    const derived = buildColumnMappingsFromSuggestions([suggestion])[0]
+                    if (!derived) return mapping
+                    const shouldAdopt =
+                        (!mapping.surrogate_field &&
+                            (mapping.action === "ignore" || mapping.action === "metadata")) ||
+                        mapping.action === "custom"
+
+                    return {
+                        ...mapping,
+                        ...derived,
+                        action: shouldAdopt ? derived.action : mapping.action,
+                        surrogate_field: shouldAdopt ? derived.surrogate_field : mapping.surrogate_field,
+                        transformation: shouldAdopt ? derived.transformation : mapping.transformation,
+                        custom_field_key: shouldAdopt ? derived.custom_field_key : mapping.custom_field_key,
+                        sample_values: mapping.sample_values.length ? mapping.sample_values : derived.sample_values,
+                    }
+                }),
+            }
+        case "set_unknown_column_behavior":
+            return {
+                ...state,
+                unknownColumnBehavior: action.value,
+                mappings: applyUnknownColumnBehavior(state.mappings, action.value, state.touchedColumns),
+            }
+        case "set_backdate_toggled":
+            return {
+                ...state,
+                backdateTouched: true,
+                backdateCreatedAt: action.checked,
+            }
+        case "sync_backdate_from_created_at_mapping":
+            if (!action.hasCreatedAtMapping) {
+                if (!state.backdateCreatedAt && !state.backdateTouched) {
+                    return state
+                }
+                return {
+                    ...state,
+                    backdateCreatedAt: false,
+                    backdateTouched: false,
+                }
+            }
+            if (!state.backdateTouched && !state.backdateCreatedAt) {
+                return {
+                    ...state,
+                    backdateCreatedAt: true,
+                }
+            }
+            return state
+        default: {
+            const exhaustive: never = action
+            return exhaustive
+        }
+    }
+}
+
 export function CSVUpload({ onImportComplete }: CSVUploadProps) {
     const { user } = useAuth()
-    const [file, setFile] = useState<File | null>(null)
     const [isDragging, setIsDragging] = useState(false)
-    const [preview, setPreview] = useState<EnhancedImportPreview | null>(null)
-    const [mappings, setMappings] = useState<ColumnMappingDraft[]>([])
-    const [unknownColumnBehavior, setUnknownColumnBehavior] = useState<UnknownColumnBehavior>("ignore")
-    const [touchedColumns, setTouchedColumns] = useState<Set<string>>(new Set())
-    const [backdateCreatedAt, setBackdateCreatedAt] = useState(false)
-    const [backdateTouched, setBackdateTouched] = useState(false)
-    const [showAiPrompt, setShowAiPrompt] = useState(false)
-    const [defaultSource, setDefaultSource] = useState<SurrogateSource>("manual")
-    const [error, setError] = useState<string>("")
-    const [submitMessage, setSubmitMessage] = useState<string | null>(null)
-    const [approveMessage, setApproveMessage] = useState<string | null>(null)
-    const [templateCleared, setTemplateCleared] = useState(false)
-    const [validationMode, setValidationMode] = useState<ValidationMode>("drop_invalid_fields")
-    const [showValidationDialog, setShowValidationDialog] = useState(false)
+    const [state, dispatch] = useReducer(csvUploadReducer, undefined, createInitialCSVUploadState)
+    const {
+        file,
+        preview,
+        mappings,
+        unknownColumnBehavior,
+        touchedColumns,
+        backdateCreatedAt,
+        showAiPrompt,
+        defaultSource,
+        error,
+        submitMessage,
+        approveMessage,
+        templateCleared,
+        validationMode,
+        showValidationDialog,
+    } = state
 
     const previewMutation = usePreviewImport()
     const submitMutation = useSubmitImport()
@@ -155,20 +314,11 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
     )
 
     useEffect(() => {
-        if (!hasCreatedAtMapping) {
-            if (backdateCreatedAt) {
-                setBackdateCreatedAt(false)
-            }
-            if (backdateTouched) {
-                setBackdateTouched(false)
-            }
-            return
-        }
-
-        if (!backdateTouched && !backdateCreatedAt) {
-            setBackdateCreatedAt(true)
-        }
-    }, [hasCreatedAtMapping, backdateCreatedAt, backdateTouched])
+        dispatch({
+            type: "sync_backdate_from_created_at_mapping",
+            hasCreatedAtMapping,
+        })
+    }, [hasCreatedAtMapping])
 
     const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
         e.preventDefault()
@@ -195,19 +345,11 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
 
     const handleFileSelect = useCallback(async (selectedFile: File) => {
         if (!selectedFile.name.endsWith(".csv") && !selectedFile.name.endsWith(".tsv")) {
-            setError("Please upload a CSV or TSV file")
+            dispatch({ type: "patch", patch: { error: "Please upload a CSV or TSV file" } })
             return
         }
 
-        setError("")
-        setSubmitMessage(null)
-        setApproveMessage(null)
-        setBackdateCreatedAt(false)
-        setBackdateTouched(false)
-        setDefaultSource("manual")
-        setTemplateCleared(false)
-        setValidationMode("drop_invalid_fields")
-        setFile(selectedFile)
+        dispatch({ type: "reset_for_new_file", file: selectedFile })
 
         try {
             const previewData = await previewMutation.mutateAsync({
@@ -215,27 +357,33 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                 applyTemplate: true,
                 enableAi: false,
             })
-            setPreview(previewData)
-            if (previewData.unmatched_count > 0 && previewData.ai_available && !previewData.ai_auto_triggered) {
-                setShowAiPrompt(true)
-            } else {
-                setShowAiPrompt(false)
-            }
             const baseMappings = buildColumnMappingsFromSuggestions(previewData.column_suggestions)
             const nextTouched = new Set<string>()
-            setTouchedColumns(nextTouched)
 
             // Use template's unknown_column_behavior if auto-applied, otherwise default
             const effectiveBehavior = previewData.template_unknown_column_behavior as UnknownColumnBehavior | null
             const behavior = effectiveBehavior || unknownColumnBehavior
-            if (effectiveBehavior) {
-                setUnknownColumnBehavior(effectiveBehavior)
+            const nextPatch: Partial<CSVUploadState> = {
+                preview: previewData,
+                showAiPrompt:
+                    previewData.unmatched_count > 0 &&
+                    previewData.ai_available &&
+                    !previewData.ai_auto_triggered,
+                touchedColumns: nextTouched,
+                mappings: applyUnknownColumnBehavior(baseMappings, behavior, nextTouched),
             }
-
-            setMappings(applyUnknownColumnBehavior(baseMappings, behavior, nextTouched))
+            if (effectiveBehavior) {
+                nextPatch.unknownColumnBehavior = effectiveBehavior
+            }
+            dispatch({ type: "patch", patch: nextPatch })
         } catch (err: unknown) {
-            setError(resolveErrorDetail(err, "Failed to preview CSV"))
-            setFile(null)
+            dispatch({
+                type: "patch",
+                patch: {
+                    error: resolveErrorDetail(err, "Failed to preview CSV"),
+                    file: null,
+                },
+            })
         }
     }, [previewMutation, unknownColumnBehavior])
 
@@ -250,41 +398,19 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
     }, [handleFileSelect])
 
     const handleRemoveFile = () => {
-        setFile(null)
-        setPreview(null)
-        setMappings([])
-        setTouchedColumns(new Set())
-        setBackdateCreatedAt(false)
-        setBackdateTouched(false)
-        setError("")
-        setSubmitMessage(null)
-        setApproveMessage(null)
-        setValidationMode("drop_invalid_fields")
-        setShowValidationDialog(false)
-        setShowAiPrompt(false)
+        dispatch({ type: "reset_for_removed_file" })
     }
 
     const handleBackdateToggle = (checked: boolean) => {
-        setBackdateTouched(true)
-        setBackdateCreatedAt(checked)
+        dispatch({ type: "set_backdate_toggled", checked })
     }
 
     const updateMapping = (csvColumn: string, patch: Partial<ColumnMappingDraft>) => {
-        setMappings((prev) =>
-            prev.map((mapping) =>
-                mapping.csv_column === csvColumn ? { ...mapping, ...patch } : mapping
-            )
-        )
-        setTouchedColumns((prev) => {
-            const next = new Set(prev)
-            next.add(csvColumn)
-            return next
-        })
+        dispatch({ type: "update_mapping", csvColumn, patch })
     }
 
     const handleUnknownBehaviorChange = (value: UnknownColumnBehavior) => {
-        setUnknownColumnBehavior(value)
-        setMappings((prev) => applyUnknownColumnBehavior(prev, value, touchedColumns))
+        dispatch({ type: "set_unknown_column_behavior", value })
     }
 
     const handleAiHelp = async () => {
@@ -305,35 +431,9 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                 unmatched_columns: unmatched,
                 sample_values: sampleValues,
             })
-            setShowAiPrompt(false)
-
-            setMappings((prev) =>
-                prev.map((mapping) => {
-                    const suggestion = result.suggestions.find(
-                        (item) => item.csv_column === mapping.csv_column
-                    )
-                    if (!suggestion) return mapping
-
-                    const derived = buildColumnMappingsFromSuggestions([suggestion])[0]
-                    if (!derived) return mapping
-                    const shouldAdopt =
-                        (!mapping.surrogate_field &&
-                            (mapping.action === "ignore" || mapping.action === "metadata")) ||
-                        mapping.action === "custom"
-
-                    return {
-                        ...mapping,
-                        ...derived,
-                        action: shouldAdopt ? derived.action : mapping.action,
-                        surrogate_field: shouldAdopt ? derived.surrogate_field : mapping.surrogate_field,
-                        transformation: shouldAdopt ? derived.transformation : mapping.transformation,
-                        custom_field_key: shouldAdopt ? derived.custom_field_key : mapping.custom_field_key,
-                        sample_values: mapping.sample_values.length ? mapping.sample_values : derived.sample_values,
-                    }
-                })
-            )
+            dispatch({ type: "apply_ai_suggestions", suggestions: result.suggestions })
         } catch (err: unknown) {
-            setError(resolveErrorDetail(err, "AI mapping failed"))
+            dispatch({ type: "patch", patch: { error: resolveErrorDetail(err, "AI mapping failed") } })
         }
     }
 
@@ -345,7 +445,10 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         )
 
         if (!mappedFields.has("full_name") || !mappedFields.has("email")) {
-            setError("Please map required fields: full_name and email")
+            dispatch({
+                type: "patch",
+                patch: { error: "Please map required fields: full_name and email" },
+            })
             return false
         }
 
@@ -353,7 +456,10 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
             (mapping) => mapping.action === "map" && !mapping.surrogate_field
         )
         if (hasUnselectedMaps) {
-            setError("Please select a field for every mapped column")
+            dispatch({
+                type: "patch",
+                patch: { error: "Please select a field for every mapped column" },
+            })
             return false
         }
 
@@ -362,9 +468,10 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
 
     const submitImportWithMode = async (mode: ValidationMode) => {
         if (!preview) return
-        setError("")
-        setSubmitMessage(null)
-        setApproveMessage(null)
+        dispatch({
+            type: "patch",
+            patch: { error: "", submitMessage: null, approveMessage: null },
+        })
 
         const payload = buildImportSubmitPayload(
             mappings,
@@ -387,40 +494,53 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                 },
             })
 
-            setValidationMode(mode)
-            setSubmitMessage(
-                response.status === "awaiting_approval"
-                    ? "Import submitted for approval."
-                    : "Import submitted."
-            )
+            dispatch({
+                type: "patch",
+                patch: {
+                    validationMode: mode,
+                    submitMessage:
+                        response.status === "awaiting_approval"
+                            ? "Import submitted for approval."
+                            : "Import submitted.",
+                },
+            })
             onImportComplete?.()
         } catch (err: unknown) {
-            setError(resolveErrorDetail(err, "Failed to submit import"))
+            dispatch({
+                type: "patch",
+                patch: { error: resolveErrorDetail(err, "Failed to submit import") },
+            })
         }
     }
 
     const handleSubmit = async () => {
         if (!preview) return
-        setError("")
-        setSubmitMessage(null)
-        setApproveMessage(null)
+        dispatch({
+            type: "patch",
+            patch: { error: "", submitMessage: null, approveMessage: null },
+        })
 
         if (!ensureRequiredMappings()) return
 
-        setShowValidationDialog(true)
+        dispatch({ type: "patch", patch: { showValidationDialog: true } })
     }
 
     const handleApprove = async () => {
         if (!preview) return
-        setError("")
-        setApproveMessage(null)
+        dispatch({ type: "patch", patch: { error: "", approveMessage: null } })
 
         try {
             const response = await approveMutation.mutateAsync(preview.import_id)
-            setApproveMessage(response.message || "Import approved and queued for processing")
+            dispatch({
+                type: "patch",
+                patch: { approveMessage: response.message || "Import approved and queued for processing" },
+            })
             onImportComplete?.()
         } catch (err: unknown) {
-            setError(resolveErrorDetail(err, "Failed to approve import"))
+            dispatch({
+                type: "patch",
+                patch: { error: resolveErrorDetail(err, "Failed to approve import") },
+            })
         }
     }
 
@@ -561,36 +681,44 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                     className="h-auto p-0"
                                     onClick={async () => {
                                         if (!file) return
-                                        setTemplateCleared(true)
+                                        dispatch({ type: "patch", patch: { templateCleared: true } })
                                         try {
                                             const previewData = await previewMutation.mutateAsync({
                                                 file,
                                                 applyTemplate: false,
                                                 enableAi: false,
                                             })
-                                            setPreview(previewData)
-                                            if (
-                                                previewData.unmatched_count > 0 &&
-                                                previewData.ai_available &&
-                                                !previewData.ai_auto_triggered
-                                            ) {
-                                                setShowAiPrompt(true)
-                                            } else {
-                                                setShowAiPrompt(false)
-                                            }
                                             const baseMappings = buildColumnMappingsFromSuggestions(
                                                 previewData.column_suggestions
                                             )
                                             const nextTouched = new Set<string>()
-                                            setTouchedColumns(nextTouched)
-                                            setMappings(
-                                                applyUnknownColumnBehavior(baseMappings, "ignore", nextTouched)
-                                            )
-                                            setUnknownColumnBehavior("ignore")
+                                            dispatch({
+                                                type: "patch",
+                                                patch: {
+                                                    preview: previewData,
+                                                    showAiPrompt:
+                                                        previewData.unmatched_count > 0 &&
+                                                        previewData.ai_available &&
+                                                        !previewData.ai_auto_triggered,
+                                                    touchedColumns: nextTouched,
+                                                    mappings: applyUnknownColumnBehavior(
+                                                        baseMappings,
+                                                        "ignore",
+                                                        nextTouched
+                                                    ),
+                                                    unknownColumnBehavior: "ignore",
+                                                },
+                                            })
                                         } catch (err: unknown) {
-                                            setError(
-                                                resolveErrorDetail(err, "Failed to clear template mappings")
-                                            )
+                                            dispatch({
+                                                type: "patch",
+                                                patch: {
+                                                    error: resolveErrorDetail(
+                                                        err,
+                                                        "Failed to clear template mappings"
+                                                    ),
+                                                },
+                                            })
                                         }
                                     }}
                                 >
@@ -609,7 +737,10 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                     )}
 
                     {preview.ai_available && preview.unmatched_count > 0 && (
-                        <Dialog open={showAiPrompt} onOpenChange={setShowAiPrompt}>
+                        <Dialog
+                            open={showAiPrompt}
+                            onOpenChange={(next) => dispatch({ type: "patch", patch: { showAiPrompt: next } })}
+                        >
                             <DialogContent>
                                 <DialogHeader>
                                     <DialogTitle>Unmatched columns detected</DialogTitle>
@@ -619,13 +750,18 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                     </DialogDescription>
                                 </DialogHeader>
                                 <DialogFooter>
-                                    <Button variant="outline" onClick={() => setShowAiPrompt(false)}>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() =>
+                                            dispatch({ type: "patch", patch: { showAiPrompt: false } })
+                                        }
+                                    >
                                         Not now
                                     </Button>
                                     <Button
                                         onClick={async () => {
                                             await handleAiHelp()
-                                            setShowAiPrompt(false)
+                                            dispatch({ type: "patch", patch: { showAiPrompt: false } })
                                         }}
                                         disabled={aiMapMutation.isPending}
                                     >
@@ -667,7 +803,12 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                         <span>Default source:</span>
                                         <Select
                                             value={defaultSource}
-                                            onValueChange={(value) => setDefaultSource(value as SurrogateSource)}
+                                            onValueChange={(value) =>
+                                                dispatch({
+                                                    type: "patch",
+                                                    patch: { defaultSource: value as SurrogateSource },
+                                                })
+                                            }
                                         >
                                             <SelectTrigger className="h-8 w-[140px]">
                                                 <SelectValue />
@@ -991,7 +1132,12 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                         </Card>
                     )}
 
-                    <Dialog open={showValidationDialog} onOpenChange={setShowValidationDialog}>
+                    <Dialog
+                        open={showValidationDialog}
+                        onOpenChange={(next) =>
+                            dispatch({ type: "patch", patch: { showValidationDialog: next } })
+                        }
+                    >
                         <DialogContent className="sm:max-w-lg">
                             <DialogHeader>
                                 <DialogTitle>Handle validation issues</DialogTitle>
@@ -1004,7 +1150,12 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                             <div className="space-y-3 py-2">
                                 <RadioGroup
                                     value={validationMode}
-                                    onValueChange={(value) => setValidationMode(value as ValidationMode)}
+                                    onValueChange={(value) =>
+                                        dispatch({
+                                            type: "patch",
+                                            patch: { validationMode: value as ValidationMode },
+                                        })
+                                    }
                                     className="space-y-3"
                                 >
                                     <div className="flex items-start space-x-3 rounded-md border border-border p-3">
@@ -1036,14 +1187,16 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                             <DialogFooter>
                                 <Button
                                     variant="outline"
-                                    onClick={() => setShowValidationDialog(false)}
+                                    onClick={() =>
+                                        dispatch({ type: "patch", patch: { showValidationDialog: false } })
+                                    }
                                     disabled={submitMutation.isPending}
                                 >
                                     Review mappings
                                 </Button>
                                 <Button
                                     onClick={async () => {
-                                        setShowValidationDialog(false)
+                                        dispatch({ type: "patch", patch: { showValidationDialog: false } })
                                         await submitImportWithMode(validationMode)
                                     }}
                                     disabled={submitMutation.isPending}
