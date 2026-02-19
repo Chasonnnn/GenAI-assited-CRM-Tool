@@ -48,9 +48,77 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
                 isLoading: false,
             }
         }
+        if (params?.scope === "personal") {
+            return {
+                data: [
+                    {
+                        id: "tpl_personal_1",
+                        name: "Personal Template",
+                        subject: "Hi {{full_name}}",
+                        from_email: null,
+                        is_active: true,
+                        scope: "personal",
+                        owner_user_id: "user_1",
+                        owner_name: "Admin",
+                        is_system_template: false,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                    },
+                ],
+                isLoading: false,
+            }
+        }
         return { data: [], isLoading: false }
     },
-    useEmailTemplate: () => ({ data: null, isLoading: false }),
+    useEmailTemplate: (id: string | null) => {
+        if (id === "tpl_personal_1") {
+            return {
+                data: {
+                    id: "tpl_personal_1",
+                    organization_id: "org_1",
+                    created_by_user_id: "user_1",
+                    name: "Personal Template",
+                    subject: "Hi {{full_name}}",
+                    from_email: null,
+                    body: "<p>Personal Body</p>",
+                    is_active: true,
+                    scope: "personal",
+                    owner_user_id: "user_1",
+                    owner_name: "Admin",
+                    source_template_id: null,
+                    is_system_template: false,
+                    current_version: 1,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+                isLoading: false,
+            }
+        }
+        if (id === "tpl_org_1") {
+            return {
+                data: {
+                    id: "tpl_org_1",
+                    organization_id: "org_1",
+                    created_by_user_id: "user_1",
+                    name: "Org Template",
+                    subject: "Your Surrogacy Journey Starts with EWI Family Global",
+                    from_email: null,
+                    body: "<p>Org Body</p>",
+                    is_active: true,
+                    scope: "org",
+                    owner_user_id: null,
+                    owner_name: null,
+                    source_template_id: null,
+                    is_system_template: false,
+                    current_version: 1,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+                isLoading: false,
+            }
+        }
+        return { data: null, isLoading: false }
+    },
     useEmailTemplateLibrary: () => ({
         data: [
             {
@@ -175,5 +243,37 @@ describe("EmailTemplatesPage", () => {
             ([props]) => Boolean((props as { enableEmojiPicker?: boolean }).enableEmojiPicker)
         )
         expect(hasEmojiEnabledCall).toBe(true)
+    })
+
+    it("uses personal signature in preview for personal templates", async () => {
+        render(<EmailTemplatesPage />)
+
+        const triggers = document.querySelectorAll('[data-slot="dropdown-menu-trigger"]')
+        expect(triggers.length).toBeGreaterThan(0)
+        fireEvent.click(triggers[0] as HTMLElement)
+
+        fireEvent.click(await screen.findByText("Edit"))
+        fireEvent.click(await screen.findByRole("button", { name: "Preview" }))
+
+        expect(await screen.findByText("Email Preview")).toBeInTheDocument()
+        expect(screen.getByText("Personal Signature")).toBeInTheDocument()
+        expect(screen.queryByText("Org Signature")).not.toBeInTheDocument()
+    })
+
+    it("uses org signature in preview for organization templates", async () => {
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+
+        const triggers = document.querySelectorAll('[data-slot="dropdown-menu-trigger"]')
+        expect(triggers.length).toBeGreaterThan(0)
+        fireEvent.click(triggers[0] as HTMLElement)
+
+        fireEvent.click(await screen.findByText("Edit"))
+        fireEvent.click(await screen.findByRole("button", { name: "Preview" }))
+
+        expect(await screen.findByText("Email Preview")).toBeInTheDocument()
+        expect(screen.getByText("Org Signature")).toBeInTheDocument()
+        expect(screen.queryByText("Personal Signature")).not.toBeInTheDocument()
     })
 })
