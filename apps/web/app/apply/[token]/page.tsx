@@ -15,10 +15,24 @@ function ApplicationPageFallback() {
     )
 }
 
-export default function PublicApplicationPage() {
+type PageProps = {
+    params: Promise<{ token?: string | string[] }>
+    searchParams: Promise<{ formId?: string | string[] }>
+}
+
+export default async function PublicApplicationPage({ params, searchParams }: PageProps) {
+    const resolvedParams = await params
+    const resolvedSearchParams = await searchParams
+
+    const tokenParam = resolvedParams.token
+    const token = (Array.isArray(tokenParam) ? tokenParam[0] : tokenParam) ?? ""
+
+    const formIdParam = resolvedSearchParams.formId
+    const previewKey = (Array.isArray(formIdParam) ? formIdParam[0] : formIdParam) || "draft"
+
     return (
         <Suspense fallback={<ApplicationPageFallback />}>
-            <PublicApplicationFormClient />
+            <PublicApplicationFormClient token={token} previewKey={previewKey} />
         </Suspense>
     )
 }

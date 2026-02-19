@@ -237,7 +237,7 @@ describe("EmailComposeDialog", () => {
         })
     })
 
-    it("renders html preview by default with variable interpolation and signature block", async () => {
+    it("renders html preview by default with variable interpolation and personal signature block", async () => {
         const templateId = "tpl-1"
 
         mockUseEmailTemplates.mockReturnValue({
@@ -300,8 +300,9 @@ describe("EmailComposeDialog", () => {
             expect(proseBody).toBeTruthy()
             expect(proseBody).toHaveTextContent("Hi Ashley Nicole Harden, thank you for applying.")
             expect(proseBody).not.toHaveTextContent("{{full_name}}")
-            expect(screen.getByText("Org Signature Block")).toBeInTheDocument()
         })
+        expect(await screen.findByText("Personal Signature Block", {}, { timeout: 3000 })).toBeInTheDocument()
+        expect(screen.queryByText("Org Signature Block")).not.toBeInTheDocument()
     })
 
     it("shows html editor when toggled and applies edits when returning to preview", async () => {

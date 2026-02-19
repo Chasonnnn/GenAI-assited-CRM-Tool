@@ -3,7 +3,6 @@
 import * as React from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { useParams, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -408,13 +407,13 @@ function PrivacyNotice({ text }: { text?: string | null }) {
     )
 }
 
+type PublicApplicationFormProps = {
+    token: string
+    previewKey: string
+}
+
 // Main Form Component
-export default function PublicApplicationForm() {
-    const params = useParams()
-    const searchParams = useSearchParams()
-    const tokenParam = params.token
-    const token = (Array.isArray(tokenParam) ? tokenParam[0] : tokenParam) ?? ""
-    const previewKey = searchParams.get("formId") || "draft"
+export default function PublicApplicationForm({ token, previewKey }: PublicApplicationFormProps) {
     const isPreview = token === "preview"
 
     const [currentStep, setCurrentStep] = React.useState(1)
