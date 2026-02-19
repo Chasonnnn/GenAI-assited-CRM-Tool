@@ -975,6 +975,27 @@ export default function EmailTemplatesPage() {
         )
     }
 
+    const previewScope: EmailTemplateScope = React.useMemo(() => {
+        if (libraryPreviewId) return "org"
+        if (editingTemplate?.scope === "personal" || editingTemplate?.scope === "org") {
+            return editingTemplate.scope
+        }
+        return templateScope
+    }, [editingTemplate?.scope, libraryPreviewId, templateScope])
+
+    const previewSubjectTemplate = React.useMemo(() => {
+        if (libraryPreviewId && libraryTemplateDetail?.subject) return libraryTemplateDetail.subject
+        return templateSubject
+    }, [libraryPreviewId, libraryTemplateDetail?.subject, templateSubject])
+
+    const previewSubject = React.useMemo(
+        () =>
+            previewSubjectTemplate
+                .replace(/\{\{full_name\}\}/g, "John Smith")
+                .replace(/\{\{org_name\}\}/g, signatureData?.org_signature_company_name || "ABC Surrogacy"),
+        [previewSubjectTemplate, signatureData?.org_signature_company_name]
+    )
+
     const buildPreviewHtml = useCallback(
         (rawHtml: string) => {
             let html = rawHtml
@@ -1016,7 +1037,6 @@ export default function EmailTemplatesPage() {
                 html = `<div style="font-family: ${PREVIEW_FONT_STACK}; font-size: 16px; line-height: 24px; color: #111827;">${html}</div>`
             }
 
-            const previewScope = libraryPreviewId ? "org" : templateScope
             const signatureHtml =
                 previewScope === "personal"
                     ? (personalSignaturePreview?.html || "")
@@ -1045,12 +1065,11 @@ export default function EmailTemplatesPage() {
             return sanitizeHtml(html)
         },
         [
-            libraryPreviewId,
             orgSignaturePreview?.html,
             personalSignaturePreview?.html,
+            previewScope,
             sanitizeHtml,
             signatureData?.org_signature_company_name,
-            templateScope,
         ]
     )
 
@@ -2111,9 +2130,13 @@ export default function EmailTemplatesPage() {
                             <div className="flex items-center gap-2 text-sm">
                                 <span className="font-medium text-muted-foreground w-16">Subject:</span>
                                 <span className="font-medium text-foreground">
-                                    {templateSubject
-                                        .replace(/\{\{full_name\}\}/g, "John Smith")
-                                        .replace(/\{\{org_name\}\}/g, signatureData?.org_signature_company_name || "ABC Surrogacy")}
+                                    {previewSubject}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm">
+                                <span className="font-medium text-muted-foreground w-16">Signature:</span>
+                                <span className="text-foreground">
+                                    {previewScope === "personal" ? "Personal signature" : "Organization signature"}
                                 </span>
                             </div>
                         </div>
