@@ -7,6 +7,7 @@ from typing import Awaitable, Callable, Mapping
 from app.db.enums import JobType
 from app.jobs.handlers import (
     ai,
+    appointments,
     attachments,
     campaigns,
     data_purge,
@@ -52,6 +53,8 @@ JOB_HANDLERS: Mapping[str, JobHandler] = {
     JobType.META_FORM_SYNC.value: meta.process_meta_form_sync,
     JobType.ORG_DELETE.value: orgs.process_org_delete,
     JobType.ZAPIER_STAGE_EVENT.value: zapier.process_zapier_stage_event,
+    JobType.GOOGLE_CALENDAR_SYNC.value: appointments.process_google_calendar_sync,
+    JobType.GOOGLE_CALENDAR_WATCH_REFRESH.value: appointments.process_google_calendar_watch_refresh,
 }
 
 

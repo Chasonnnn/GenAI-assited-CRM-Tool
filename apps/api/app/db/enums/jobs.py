@@ -32,6 +32,10 @@ class JobType(str, Enum):
     WORKFLOW_APPROVAL_EXPIRY = "workflow_approval_expiry"  # Sweep for expired approvals
     WORKFLOW_RESUME = "workflow_resume"  # Resume workflow after approval resolution
     ORG_DELETE = "org_delete"  # Hard delete org after grace period
+    GOOGLE_CALENDAR_SYNC = "google_calendar_sync"  # Two-way Google calendar reconciliation
+    GOOGLE_CALENDAR_WATCH_REFRESH = (
+        "google_calendar_watch_refresh"  # Refresh Google Calendar push channels
+    )
 
 
 class JobStatus(str, Enum):
