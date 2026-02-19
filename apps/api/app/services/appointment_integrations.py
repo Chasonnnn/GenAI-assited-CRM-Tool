@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime, time, timedelta, timezone
 import logging
 from typing import Coroutine, TypeVar
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from app.core.async_utils import run_async
+from app.db.enums import AppointmentStatus, MeetingMode
 from app.db.models import Appointment, AppointmentType
 
 logger = logging.getLogger(__name__)
@@ -134,6 +137,196 @@ def sync_to_google_calendar(
         return None
 
     return None
+
+
+def sync_manual_google_events_for_appointments(
+    db: Session,
+    *,
+    user_id: UUID,
+    org_id: UUID,
+    date_start: date | None = None,
+    date_end: date | None = None,
+) -> int:
+    """
+    Import/reconcile timed Google Calendar events into appointments (best-effort).
+
+    Upserts by `(organization_id, user_id, google_event_id)` in-memory scope to
+    avoid duplicates across repeated syncs. Google failures are swallowed.
+    """
+    from app.services import calendar_service
+
+    now = datetime.now(timezone.utc)
+    google_cancel_reason = "Cancelled in Google Calendar"
+
+    def _mark_cancelled_from_google(appt: Appointment) -> None:
+        appt.status = AppointmentStatus.CANCELLED.value
+        appt.cancelled_at = now
+        appt.cancelled_by_client = False
+        appt.cancellation_reason = google_cancel_reason
+        appt.pending_expires_at = None
+        appt.reschedule_token = None
+        appt.cancel_token = None
+        appt.reschedule_token_expires_at = None
+        appt.cancel_token_expires_at = None
+
+    time_min = (
+        datetime.combine(date_start, time.min, tzinfo=timezone.utc)
+        if date_start
+        else now - timedelta(days=30)
+    )
+    time_max = (
+        datetime.combine(date_end, time.max, tzinfo=timezone.utc)
+        if date_end
+        else now + timedelta(days=180)
+    )
+    if time_max < time_min:
+        return 0
+
+    result = _run_async(
+        calendar_service.get_user_calendar_events(
+            db=db,
+            user_id=user_id,
+            time_min=time_min,
+            time_max=time_max,
+            calendar_id="primary",
+        )
+    )
+    if not result or not result.get("connected"):
+        return 0
+
+    raw_events = result.get("events") or []
+    returned_event_ids: set[str] = {event["id"] for event in raw_events if event.get("id")}
+    timed_events: list[tuple[str, str, datetime, datetime]] = []
+    seen_event_ids: set[str] = set()
+    for event in raw_events:
+        event_id = event.get("id")
+        if not event_id or event_id in seen_event_ids:
+            continue
+        seen_event_ids.add(event_id)
+
+        if event.get("is_all_day"):
+            continue
+
+        start = event.get("start")
+        end = event.get("end")
+        if not isinstance(start, datetime) or not isinstance(end, datetime):
+            continue
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=timezone.utc)
+        else:
+            start = start.astimezone(timezone.utc)
+        if end.tzinfo is None:
+            end = end.replace(tzinfo=timezone.utc)
+        else:
+            end = end.astimezone(timezone.utc)
+        if end <= start:
+            continue
+
+        summary = (event.get("summary") or "(No title)").strip()
+        timed_events.append((event_id, summary[:255], start, end))
+
+    # Reconcile deletions/cancellations first for all confirmed appointments with Google IDs.
+    google_confirmed = (
+        db.query(Appointment)
+        .filter(
+            Appointment.organization_id == org_id,
+            Appointment.user_id == user_id,
+            Appointment.google_event_id.is_not(None),
+            Appointment.status == AppointmentStatus.CONFIRMED.value,
+            Appointment.scheduled_start >= time_min,
+            Appointment.scheduled_start <= time_max,
+        )
+        .all()
+    )
+    cancelled_count = 0
+    for appt in google_confirmed:
+        if appt.google_event_id and appt.google_event_id not in returned_event_ids:
+            _mark_cancelled_from_google(appt)
+            cancelled_count += 1
+
+    if not timed_events:
+        if cancelled_count:
+            db.flush()
+        return cancelled_count
+
+    event_ids = [event_id for event_id, _, _, _ in timed_events]
+    existing = (
+        db.query(Appointment)
+        .filter(
+            Appointment.organization_id == org_id,
+            Appointment.user_id == user_id,
+            Appointment.google_event_id.in_(event_ids),
+        )
+        .all()
+    )
+    existing_by_event_id = {appt.google_event_id: appt for appt in existing if appt.google_event_id}
+
+    synced_count = 0
+    for event_id, summary, start, end in timed_events:
+        duration_minutes = max(1, int((end - start).total_seconds() // 60))
+        appt = existing_by_event_id.get(event_id)
+        if appt:
+            changed = False
+            if appt.status == AppointmentStatus.CANCELLED.value:
+                # Re-open only rows previously cancelled by Google sync.
+                if appt.cancellation_reason == google_cancel_reason:
+                    appt.status = AppointmentStatus.CONFIRMED.value
+                    appt.cancelled_at = None
+                    appt.cancelled_by_client = False
+                    appt.cancellation_reason = None
+                    changed = True
+                else:
+                    continue
+            elif appt.status != AppointmentStatus.CONFIRMED.value:
+                continue
+
+            if appt.scheduled_start != start:
+                appt.scheduled_start = start
+                changed = True
+            if appt.scheduled_end != end:
+                appt.scheduled_end = end
+                changed = True
+            if appt.duration_minutes != duration_minutes:
+                appt.duration_minutes = duration_minutes
+                changed = True
+            if appt.meeting_mode != MeetingMode.GOOGLE_MEET.value:
+                appt.meeting_mode = MeetingMode.GOOGLE_MEET.value
+                changed = True
+
+            if appt.appointment_type_id is None:
+                if appt.client_name != summary:
+                    appt.client_name = summary
+                    changed = True
+                appt.cancelled_at = None
+                appt.cancelled_by_client = False
+                appt.cancellation_reason = None
+
+            if changed:
+                synced_count += 1
+            continue
+
+        appt = Appointment(
+            organization_id=org_id,
+            user_id=user_id,
+            appointment_type_id=None,
+            client_name=summary,
+            client_email="google-calendar-sync@local.invalid",
+            client_phone="google-calendar",
+            client_timezone="UTC",
+            scheduled_start=start,
+            scheduled_end=end,
+            duration_minutes=duration_minutes,
+            meeting_mode=MeetingMode.GOOGLE_MEET.value,
+            status=AppointmentStatus.CONFIRMED.value,
+            google_event_id=event_id,
+        )
+        db.add(appt)
+        synced_count += 1
+
+    total_changed = synced_count + cancelled_count
+    if total_changed:
+        db.flush()
+    return total_changed
 
 
 def create_zoom_meeting(

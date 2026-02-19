@@ -1605,6 +1605,15 @@ def list_appointments(
     When surrogate_id and/or intended_parent_id are provided, filters to appointments
     matching EITHER the surrogate_id OR the intended_parent_id (used for match-scoped views).
     """
+    if status in (None, AppointmentStatus.CONFIRMED.value):
+        appointment_integrations.sync_manual_google_events_for_appointments(
+            db=db,
+            user_id=user_id,
+            org_id=org_id,
+            date_start=date_start,
+            date_end=date_end,
+        )
+
     expire_pending_appointments(db, org_id=org_id, user_id=user_id)
     query = db.query(Appointment).filter(
         Appointment.user_id == user_id,
