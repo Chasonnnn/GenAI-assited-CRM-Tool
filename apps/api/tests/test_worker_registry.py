@@ -10,6 +10,20 @@ def test_job_registry_resolves_known_handler():
     assert callable(handler)
 
 
+def test_job_registry_resolves_google_calendar_sync_handler():
+    from app.jobs.registry import resolve_job_handler
+
+    handler = resolve_job_handler(JobType.GOOGLE_CALENDAR_SYNC.value)
+    assert callable(handler)
+
+
+def test_job_registry_resolves_google_calendar_watch_refresh_handler():
+    from app.jobs.registry import resolve_job_handler
+
+    handler = resolve_job_handler(JobType.GOOGLE_CALENDAR_WATCH_REFRESH.value)
+    assert callable(handler)
+
+
 def test_job_registry_unknown_raises():
     from app.jobs.registry import resolve_job_handler
 

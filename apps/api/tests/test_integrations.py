@@ -2,6 +2,7 @@
 
 import json
 import uuid
+from datetime import datetime, timedelta, timezone
 from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, urlparse
 
@@ -168,7 +169,7 @@ async def test_google_calendar_callback_happy_path_saves_integration(
     authed_client: AsyncClient, db, test_auth, monkeypatch
 ):
     from app.db.models import UserIntegration
-    from app.services import oauth_service
+    from app.services import calendar_service, oauth_service
 
     async def fake_exchange_code(code: str, redirect_uri: str):
         return {
@@ -180,8 +181,19 @@ async def test_google_calendar_callback_happy_path_saves_integration(
     async def fake_get_user_info(access_token: str):
         return {"email": "calendaruser@test.com"}
 
+    watch_calls: list[uuid.UUID] = []
+
+    async def fake_ensure_google_calendar_watch(*, db, user_id, calendar_id="primary"):
+        watch_calls.append(user_id)
+        return True
+
     monkeypatch.setattr(oauth_service, "exchange_google_calendar_code", fake_exchange_code)
     monkeypatch.setattr(oauth_service, "get_google_calendar_user_info", fake_get_user_info)
+    monkeypatch.setattr(
+        calendar_service,
+        "ensure_google_calendar_watch",
+        fake_ensure_google_calendar_watch,
+    )
 
     connect = await authed_client.get("/integrations/google-calendar/connect")
     assert connect.status_code == 200
@@ -203,6 +215,206 @@ async def test_google_calendar_callback_happy_path_saves_integration(
     )
     assert integration is not None
     assert integration.account_email == "calendaruser@test.com"
+    assert watch_calls == [test_auth.user.id]
+
+
+@pytest.mark.asyncio
+async def test_appointments_list_imports_manual_google_calendar_event(
+    authed_client: AsyncClient,
+    db,
+    test_auth,
+    monkeypatch,
+):
+    from app.db.enums import AppointmentStatus, MeetingMode
+    from app.db.models import Appointment
+    from app.services import calendar_service
+
+    start = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=2)
+    end = start + timedelta(minutes=45)
+
+    async def fake_get_user_calendar_events(
+        db,
+        user_id,
+        time_min,
+        time_max,
+        calendar_id="primary",
+    ):
+        assert user_id == test_auth.user.id
+        return {
+            "connected": True,
+            "events": [
+                {
+                    "id": "google_manual_1",
+                    "summary": "Manual intake consult",
+                    "start": start,
+                    "end": end,
+                    "html_link": "https://calendar.google.com/event?eid=manual1",
+                    "is_all_day": False,
+                }
+            ],
+            "error": None,
+        }
+
+    monkeypatch.setattr(calendar_service, "get_user_calendar_events", fake_get_user_calendar_events)
+
+    response = await authed_client.get("/appointments", params={"status": "confirmed"})
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["total"] == 1
+    item = payload["items"][0]
+    assert item["client_name"] == "Manual intake consult"
+    assert item["status"] == AppointmentStatus.CONFIRMED.value
+    assert item["meeting_mode"] == MeetingMode.GOOGLE_MEET.value
+    assert item["appointment_type_name"] is None
+
+    stored = (
+        db.query(Appointment)
+        .filter(
+            Appointment.organization_id == test_auth.org.id,
+            Appointment.user_id == test_auth.user.id,
+            Appointment.google_event_id == "google_manual_1",
+        )
+        .first()
+    )
+    assert stored is not None
+    assert stored.scheduled_start == start
+    assert stored.scheduled_end == end
+
+
+@pytest.mark.asyncio
+async def test_appointments_list_cancels_removed_imported_google_event(
+    authed_client: AsyncClient,
+    db,
+    test_auth,
+    monkeypatch,
+):
+    from app.db.enums import AppointmentStatus, MeetingMode
+    from app.db.models import Appointment
+    from app.services import calendar_service
+
+    start = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=3)
+    appt = Appointment(
+        organization_id=test_auth.org.id,
+        user_id=test_auth.user.id,
+        appointment_type_id=None,
+        client_name="Google imported event",
+        client_email="google-calendar-sync@local.invalid",
+        client_phone="google-calendar",
+        client_timezone="UTC",
+        scheduled_start=start,
+        scheduled_end=start + timedelta(minutes=30),
+        duration_minutes=30,
+        meeting_mode=MeetingMode.GOOGLE_MEET.value,
+        status=AppointmentStatus.CONFIRMED.value,
+        google_event_id="google_removed_1",
+    )
+    db.add(appt)
+    db.commit()
+    db.refresh(appt)
+
+    async def fake_get_user_calendar_events(
+        db,
+        user_id,
+        time_min,
+        time_max,
+        calendar_id="primary",
+    ):
+        assert user_id == test_auth.user.id
+        return {"connected": True, "events": [], "error": None}
+
+    monkeypatch.setattr(calendar_service, "get_user_calendar_events", fake_get_user_calendar_events)
+
+    confirmed_response = await authed_client.get("/appointments", params={"status": "confirmed"})
+    assert confirmed_response.status_code == 200
+    assert confirmed_response.json()["total"] == 0
+
+    db.refresh(appt)
+    assert appt.status == AppointmentStatus.CANCELLED.value
+    assert appt.cancelled_at is not None
+    assert appt.cancelled_by_client is False
+    assert appt.cancellation_reason == "Cancelled in Google Calendar"
+
+    cancelled_response = await authed_client.get("/appointments", params={"status": "cancelled"})
+    assert cancelled_response.status_code == 200
+    payload = cancelled_response.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["id"] == str(appt.id)
+
+
+@pytest.mark.asyncio
+async def test_appointments_list_cancels_removed_app_created_google_event(
+    authed_client: AsyncClient,
+    db,
+    test_auth,
+    monkeypatch,
+):
+    from app.db.enums import AppointmentStatus, MeetingMode
+    from app.db.models import Appointment, AppointmentType
+
+    from app.services import calendar_service
+
+    appt_type = AppointmentType(
+        organization_id=test_auth.org.id,
+        user_id=test_auth.user.id,
+        name="Initial Consultation",
+        slug=f"initial-consult-{uuid.uuid4().hex[:8]}",
+        duration_minutes=30,
+        meeting_mode=MeetingMode.ZOOM.value,
+        meeting_modes=[MeetingMode.ZOOM.value],
+        reminder_hours_before=24,
+        is_active=True,
+    )
+    db.add(appt_type)
+    db.flush()
+
+    start = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=4)
+    appt = Appointment(
+        organization_id=test_auth.org.id,
+        user_id=test_auth.user.id,
+        appointment_type_id=appt_type.id,
+        client_name="App-created event",
+        client_email="intake@example.com",
+        client_phone="+1-555-123-4567",
+        client_timezone="UTC",
+        scheduled_start=start,
+        scheduled_end=start + timedelta(minutes=30),
+        duration_minutes=30,
+        meeting_mode=MeetingMode.ZOOM.value,
+        status=AppointmentStatus.CONFIRMED.value,
+        google_event_id="google_removed_app_1",
+    )
+    db.add(appt)
+    db.commit()
+    db.refresh(appt)
+
+    async def fake_get_user_calendar_events(
+        db,
+        user_id,
+        time_min,
+        time_max,
+        calendar_id="primary",
+    ):
+        assert user_id == test_auth.user.id
+        return {"connected": True, "events": [], "error": None}
+
+    monkeypatch.setattr(calendar_service, "get_user_calendar_events", fake_get_user_calendar_events)
+
+    confirmed_response = await authed_client.get("/appointments", params={"status": "confirmed"})
+    assert confirmed_response.status_code == 200
+    assert confirmed_response.json()["total"] == 0
+
+    db.refresh(appt)
+    assert appt.status == AppointmentStatus.CANCELLED.value
+    assert appt.cancelled_at is not None
+    assert appt.cancelled_by_client is False
+    assert appt.cancellation_reason == "Cancelled in Google Calendar"
+
+    cancelled_response = await authed_client.get("/appointments", params={"status": "cancelled"})
+    assert cancelled_response.status_code == 200
+    payload = cancelled_response.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["id"] == str(appt.id)
 
 
 @pytest.mark.asyncio
