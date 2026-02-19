@@ -13,7 +13,7 @@ from app.db.models import MetaAd, MetaAdPlatformDaily, MetaForm, MetaLead, Organ
 from app.schemas.surrogate import SurrogateCreate
 from app.services import surrogate_service
 from app.services import custom_field_service
-from app.services.import_transformers import transform_value
+from app.services.import_transformers import transform_height_flexible, transform_value
 from app.utils.datetime_parsing import parse_datetime_with_timezone
 from app.utils.normalization import normalize_phone, normalize_state
 
@@ -735,9 +735,12 @@ def _parse_date(value) -> date | None:
 
 
 def _parse_decimal(value) -> Decimal | None:
-    """Parse decimal from string or number."""
+    """Parse height in feet from flexible formats."""
     if not value:
         return None
+    transformed = transform_height_flexible(str(value))
+    if transformed.success and transformed.value is not None:
+        return transformed.value
     try:
         return Decimal(str(value))
     except Exception:

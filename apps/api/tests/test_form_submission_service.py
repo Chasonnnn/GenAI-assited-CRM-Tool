@@ -462,6 +462,11 @@ def test_submission_service_normalizes_decimal_height_notation_for_bmi(
     assert bmi == 35.5
 
 
+def test_coerce_surrogate_height_accepts_space_separated_feet_inches():
+    coerced = form_submission_service._coerce_surrogate_value("height_ft", "5 7")
+    assert coerced == Decimal("5.6")
+
+
 def test_submission_validates_field_constraints(db, test_org, test_user, default_stage):
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     form = _create_published_form_with_validation(db, test_org.id, test_user.id)

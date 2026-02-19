@@ -242,6 +242,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
 
     Supported formats:
     - "5'4" or "5'4\"" (feet and inches)
+    - "5 4" (feet and inches, space-separated)
     - "5 ft 4 in" or "5ft 4in" (spelled out)
     - "5.4" or "5.33" (decimal feet)
     - "64" (total inches, if > 36)
@@ -266,8 +267,9 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
     if re.match(r"^\d+,\d+$", value):
         value = value.replace(",", ".")
 
-    # Pattern: 5'4" or 5'4 or 5' 4" or 5' 4
-    match = re.match(r"^(\d+)\s*['\"]?\s*(\d+)\s*\"?\s*$", value)
+    # Pattern: 5'4" or 5'4 or 5' 4" or 5' 4 or 5 4
+    # Require an explicit separator so plain "54" is not interpreted as 5'4.
+    match = re.match(r"^(\d+)(?:\s*['\"]\s*|\s+)(\d+)\s*\"?\s*$", value)
     if match:
         feet = int(match.group(1))
         inches = int(match.group(2))
@@ -313,6 +315,34 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
             success=True,
             warnings=warnings,
         )
+
+    # Pattern: feet.inches shorthand with explicit unit (5.6 ft => 5 ft 6 in)
+    match = re.match(r"^(\d+)\.(\d{1,2})\s*ft\.?\s*$", value, re.IGNORECASE)
+    if match:
+        feet = int(match.group(1))
+        inches = int(match.group(2))
+        if inches <= 11:
+            decimal_feet = Decimal(str(feet)) + Decimal(str(inches)) / Decimal("12")
+            warnings.append(f"Interpreted '{value}' as feet/inches notation")
+            return TransformOutput(
+                value=decimal_feet.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP),
+                success=True,
+                warnings=warnings,
+            )
+
+    # Pattern: feet.inches shorthand without unit (5.6 => 5 ft 6 in)
+    match = re.match(r"^(\d+)\.(\d{1,2})$", value)
+    if match:
+        feet = int(match.group(1))
+        inches = int(match.group(2))
+        if Decimal("3") <= Decimal(str(feet)) <= Decimal("8") and inches <= 11:
+            decimal_feet = Decimal(str(feet)) + Decimal(str(inches)) / Decimal("12")
+            warnings.append(f"Interpreted '{value}' as feet/inches notation")
+            return TransformOutput(
+                value=decimal_feet.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP),
+                success=True,
+                warnings=warnings,
+            )
 
     # Pattern: decimal feet (5.4, 5.33, etc.)
     try:
