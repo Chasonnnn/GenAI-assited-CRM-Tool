@@ -30,11 +30,12 @@ def list_active_mappings(db: Session) -> list[MetaPageMapping]:
     )
 
 
-def list_problem_pages(db: Session) -> list[MetaPageMapping]:
-    """List Meta page mappings with recent errors."""
+def list_problem_pages(db: Session, org_id: UUID) -> list[MetaPageMapping]:
+    """List Meta page mappings with recent errors (org-scoped)."""
     return (
         db.query(MetaPageMapping)
         .filter(
+            MetaPageMapping.organization_id == org_id,
             MetaPageMapping.last_error.isnot(None),
         )
         .all()

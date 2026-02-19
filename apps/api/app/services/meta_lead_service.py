@@ -774,18 +774,19 @@ def _parse_bool_inverse(value) -> bool | None:
     return not result if result is not None else None
 
 
-def list_problem_leads(db: Session, limit: int = 50) -> list[MetaLead]:
-    """List Meta leads with fetch/convert issues."""
+def list_problem_leads(db: Session, org_id: UUID, limit: int = 50) -> list[MetaLead]:
+    """List Meta leads with fetch/convert issues (org-scoped)."""
     from sqlalchemy import or_
 
     return (
         db.query(MetaLead)
         .filter(
+            MetaLead.organization_id == org_id,
             or_(
                 MetaLead.status.in_(["fetch_failed", "convert_failed"]),
                 MetaLead.fetch_error.isnot(None),
                 MetaLead.conversion_error.isnot(None),
-            )
+            ),
         )
         .order_by(MetaLead.received_at.desc())
         .limit(limit)
@@ -793,27 +794,27 @@ def list_problem_leads(db: Session, limit: int = 50) -> list[MetaLead]:
     )
 
 
-def count_meta_leads(db: Session) -> int:
-    """Count total Meta leads."""
-    return db.query(MetaLead).count()
+def count_meta_leads(db: Session, org_id: UUID) -> int:
+    """Count total Meta leads (org-scoped)."""
+    return db.query(MetaLead).filter(MetaLead.organization_id == org_id).count()
 
 
-def count_failed_meta_leads(db: Session) -> int:
-    """Count Meta leads with failed statuses."""
+def count_failed_meta_leads(db: Session, org_id: UUID) -> int:
+    """Count failed Meta leads (org-scoped)."""
     return (
-        db.query(MetaLead).filter(MetaLead.status.in_(["fetch_failed", "convert_failed"])).count()
+        db.query(MetaLead)
+        .filter(
+            MetaLead.organization_id == org_id,
+            MetaLead.status.in_(["fetch_failed", "convert_failed"]),
+        )
+        .count()
     )
 
 
-def list_meta_leads(
-    db: Session,
-    limit: int = 100,
-    status: str | None = None,
-) -> list[MetaLead]:
-    """List Meta leads for debugging."""
-    query = db.query(MetaLead).order_by(MetaLead.received_at.desc())
-
+def list_meta_leads(db: Session, org_id: UUID, limit: int = 100, status: str | None = None) -> list[MetaLead]:
+    """List all Meta leads for an org with optional status filter."""
+    query = db.query(MetaLead).filter(MetaLead.organization_id == org_id)
     if status:
         query = query.filter(MetaLead.status == status)
+    return query.order_by(MetaLead.received_at.desc()).limit(limit).all()
 
-    return query.limit(limit).all()

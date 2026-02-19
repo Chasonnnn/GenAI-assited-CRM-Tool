@@ -147,6 +147,7 @@ def get_cors_config():
 
 @router.get("/meta-leads/alerts", dependencies=[Depends(_verify_dev_secret)])
 def get_meta_lead_alerts(
+    org_id: UUID,
     db: Session = Depends(get_db),
     limit: int = 50,
 ):
@@ -155,10 +156,10 @@ def get_meta_lead_alerts(
 
     Dev-only endpoint for monitoring Meta lead ingestion health.
     """
-    problem_leads = meta_lead_service.list_problem_leads(db, limit=limit)
-    problem_pages = meta_page_service.list_problem_pages(db)
-    total_leads = meta_lead_service.count_meta_leads(db)
-    failed_leads = meta_lead_service.count_failed_meta_leads(db)
+    problem_leads = meta_lead_service.list_problem_leads(db, org_id, limit=limit)
+    problem_pages = meta_page_service.list_problem_pages(db, org_id)
+    total_leads = meta_lead_service.count_meta_leads(db, org_id)
+    failed_leads = meta_lead_service.count_failed_meta_leads(db, org_id)
 
     return {
         "summary": {
@@ -196,16 +197,17 @@ def get_meta_lead_alerts(
 
 @router.get("/meta-leads/all", dependencies=[Depends(_verify_dev_secret)])
 def get_all_meta_leads(
+    org_id: UUID,
     db: Session = Depends(get_db),
     limit: int = 100,
     status: str | None = None,
 ):
     """
-    Get all Meta leads for debugging.
+    Get all Meta leads for debugging (org-scoped).
 
     Dev-only endpoint for viewing raw lead data.
     """
-    leads = meta_lead_service.list_meta_leads(db, limit=limit, status=status)
+    leads = meta_lead_service.list_meta_leads(db, org_id, limit=limit, status=status)
 
     return {
         "count": len(leads),
