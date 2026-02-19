@@ -421,6 +421,44 @@ async def test_google_calendar_events_endpoint_fetches_across_calendars(
 
 
 @pytest.mark.asyncio
+async def test_get_google_events_encodes_calendar_id_in_request(monkeypatch):
+    from app.services import calendar_service
+
+    requested_urls: list[str] = []
+
+    class _FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"items": []}
+
+    class _FakeAsyncClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, headers=None, params=None):
+            requested_urls.append(str(url))
+            return _FakeResponse()
+
+    monkeypatch.setattr(calendar_service.httpx, "AsyncClient", _FakeAsyncClient)
+
+    await calendar_service.get_google_events(
+        access_token="token",
+        calendar_id="en.usa#holiday@group.v.calendar.google.com",
+        time_min=datetime(2026, 2, 1, tzinfo=timezone.utc),
+        time_max=datetime(2026, 2, 2, tzinfo=timezone.utc),
+    )
+
+    assert requested_urls
+    assert (
+        "en.usa%23holiday%40group.v.calendar.google.com" in requested_urls[0]
+    ), "Calendar ID must be URL-encoded in path requests"
+
+
+@pytest.mark.asyncio
 async def test_appointments_list_cancels_removed_imported_google_event(
     authed_client: AsyncClient,
     db,

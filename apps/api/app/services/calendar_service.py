@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 import logging
 import secrets
 from typing import TypedDict
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 from uuid import UUID, uuid4
 
 import httpx
@@ -91,8 +91,13 @@ async def get_google_access_token(
 
 
 def _calendar_events_endpoint(calendar_id: str) -> str:
-    encoded = quote(calendar_id, safe="")
+    encoded = quote(unquote(calendar_id), safe="")
     return f"https://www.googleapis.com/calendar/v3/calendars/{encoded}/events"
+
+
+def _calendar_event_endpoint(calendar_id: str, event_id: str) -> str:
+    encoded_event_id = quote(unquote(event_id), safe="")
+    return f"{_calendar_events_endpoint(calendar_id)}/{encoded_event_id}"
 
 
 def _channel_stop_endpoint() -> str:
@@ -414,7 +419,7 @@ async def get_google_events(
                     params["pageToken"] = page_token
 
                 response = await client.get(
-                    f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events",
+                    _calendar_events_endpoint(calendar_id),
                     headers={"Authorization": f"Bearer {access_token}"},
                     params=params,
                 )
@@ -677,7 +682,7 @@ async def create_google_event(
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events",
+                _calendar_events_endpoint(calendar_id),
                 headers={
                     "Authorization": f"Bearer {access_token}",
                     "Content-Type": "application/json",
@@ -724,7 +729,7 @@ async def update_google_event(
     try:
         async with httpx.AsyncClient() as client:
             get_response = await client.get(
-                f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events/{event_id}",
+                _calendar_event_endpoint(calendar_id, event_id),
                 headers={"Authorization": f"Bearer {access_token}"},
             )
 
@@ -753,7 +758,7 @@ async def update_google_event(
 
             # Update the event
             response = await client.put(
-                f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events/{event_id}",
+                _calendar_event_endpoint(calendar_id, event_id),
                 headers={
                     "Authorization": f"Bearer {access_token}",
                     "Content-Type": "application/json",
@@ -796,7 +801,7 @@ async def delete_google_event(
     try:
         async with httpx.AsyncClient() as client:
             response = await client.delete(
-                f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events/{event_id}",
+                _calendar_event_endpoint(calendar_id, event_id),
                 headers={"Authorization": f"Bearer {access_token}"},
                 params={"sendUpdates": "all"},
             )
@@ -959,7 +964,7 @@ async def create_google_meet_link(
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events",
+                _calendar_events_endpoint(calendar_id),
                 headers={
                     "Authorization": f"Bearer {access_token}",
                     "Content-Type": "application/json",
