@@ -44,6 +44,7 @@ from app.services import job_service
 DEFAULT_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 DEFAULT_MAX_FILE_COUNT = 10
 PER_FILE_FIELD_MAX_COUNT = 5
+DEFAULT_TOKEN_EXPIRES_IN_DAYS = 14
 
 # Extensions that are always blocked for security
 BLOCKED_EXTENSIONS = {
@@ -152,7 +153,7 @@ def create_submission_token(
     org_id: uuid.UUID,
     form: Form,
     surrogate: Surrogate,
-    user_id: uuid.UUID,
+    user_id: uuid.UUID | None,
     expires_in_days: int,
 ) -> FormSubmissionToken:
     if form.status != FormStatus.PUBLISHED.value:
@@ -182,6 +183,85 @@ def create_submission_token(
     db.add(record)
     db.commit()
     db.refresh(record)
+    return record
+
+
+def get_latest_active_token_for_surrogate(
+    db: Session,
+    org_id: uuid.UUID,
+    surrogate_id: uuid.UUID,
+    *,
+    form_id: uuid.UUID | None = None,
+) -> FormSubmissionToken | None:
+    now = datetime.now(timezone.utc)
+
+    query = (
+        db.query(FormSubmissionToken)
+        .join(Form, Form.id == FormSubmissionToken.form_id)
+        .filter(
+            FormSubmissionToken.organization_id == org_id,
+            FormSubmissionToken.surrogate_id == surrogate_id,
+            FormSubmissionToken.revoked_at.is_(None),
+            FormSubmissionToken.used_submissions < FormSubmissionToken.max_submissions,
+            FormSubmissionToken.expires_at >= now,
+            Form.status == FormStatus.PUBLISHED.value,
+        )
+    )
+    if form_id:
+        query = query.filter(FormSubmissionToken.form_id == form_id)
+
+    return query.order_by(FormSubmissionToken.created_at.desc(), FormSubmissionToken.id.desc()).first()
+
+
+def get_or_create_submission_token(
+    db: Session,
+    org_id: uuid.UUID,
+    form: Form,
+    surrogate: Surrogate,
+    user_id: uuid.UUID | None,
+    expires_in_days: int,
+    *,
+    commit: bool = True,
+) -> FormSubmissionToken:
+    if form.status != FormStatus.PUBLISHED.value:
+        raise ValueError("Form must be published before sending")
+
+    existing_submission = (
+        db.query(FormSubmission)
+        .filter(FormSubmission.form_id == form.id, FormSubmission.surrogate_id == surrogate.id)
+        .first()
+    )
+    if existing_submission:
+        raise ValueError("Submission already exists for this surrogate")
+
+    existing_token = get_latest_active_token_for_surrogate(
+        db,
+        org_id=org_id,
+        surrogate_id=surrogate.id,
+        form_id=form.id,
+    )
+    if existing_token:
+        return existing_token
+
+    token = _generate_token(db)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
+
+    record = FormSubmissionToken(
+        organization_id=org_id,
+        form_id=form.id,
+        surrogate_id=surrogate.id,
+        token=token,
+        expires_at=expires_at,
+        max_submissions=1,
+        used_submissions=0,
+        created_by_user_id=user_id,
+    )
+    db.add(record)
+    if commit:
+        db.commit()
+        db.refresh(record)
+    else:
+        db.flush()
     return record
 
 
