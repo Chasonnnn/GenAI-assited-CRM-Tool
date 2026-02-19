@@ -202,22 +202,17 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
     )
 
     const resolvedTab: TabValue = isTabValue(segment) ? segment : "overview"
-    const [currentTab, setCurrentTab] = useState<TabValue>(resolvedTab)
+    const currentTab: TabValue = resolvedTab
 
     const handleTabChange = useCallback(
         (value: string) => {
             const nextTab: TabValue = isTabValue(value) ? value : "overview"
-            setCurrentTab(nextTab)
             const basePath = `/surrogates/${surrogateId}`
             const nextUrl = nextTab === "overview" ? basePath : `${basePath}/${nextTab}`
             router.replace(nextUrl, { scroll: false })
         },
         [surrogateId, router, isTabValue]
     )
-
-    useEffect(() => {
-        setCurrentTab(resolvedTab)
-    }, [resolvedTab])
 
     useEffect(() => {
         if (segment === "overview" || (segment && !isTabValue(segment))) {

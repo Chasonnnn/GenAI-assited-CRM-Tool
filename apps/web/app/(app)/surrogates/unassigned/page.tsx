@@ -43,11 +43,7 @@ export default function UnassignedSurrogatesPage() {
     const canViewUnassignedQueue = user?.role === "intake_specialist" || user?.role === "developer"
 
     const urlPage = parsePageParam(searchParams.get("page"))
-    const [page, setPage] = useState(urlPage)
-
-    useEffect(() => {
-        setPage(urlPage)
-    }, [urlPage])
+    const page = urlPage
 
     useEffect(() => {
         if (!authLoaded) return
@@ -74,7 +70,6 @@ export default function UnassignedSurrogatesPage() {
     const pageEnd = useMemo(() => (page - 1) * DEFAULT_PER_PAGE + items.length, [page, items.length])
 
     const setPageAndUrl = useCallback((nextPage: number) => {
-        setPage(nextPage)
         const params = new URLSearchParams(searchParams.toString())
         if (nextPage > 1) {
             params.set("page", String(nextPage))

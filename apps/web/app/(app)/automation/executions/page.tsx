@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useEffect, useState } from "react"
+import { Fragment, useState } from "react"
 import Link from "@/components/app-link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -175,10 +175,6 @@ export default function WorkflowExecutionsPage() {
     const [retryTarget, setRetryTarget] = useState<Execution | null>(null)
     const retryExecutionMutation = useRetryWorkflowExecution()
 
-    useEffect(() => {
-        setPage(1)
-    }, [statusFilter, workflowFilter])
-
     // Fetch data
     const { data: executionsData, isLoading: executionsLoading } = useQuery({
         queryKey: ["workflow-executions", statusFilter, workflowFilter, page],
@@ -322,7 +318,14 @@ export default function WorkflowExecutionsPage() {
 
             {/* Filters */}
             <div className="flex flex-wrap items-center gap-3">
-                <Select value={statusFilter} onValueChange={(v) => v && setStatusFilter(v)}>
+                <Select
+                    value={statusFilter}
+                    onValueChange={(v) => {
+                        if (!v) return
+                        setStatusFilter(v)
+                        setPage(1)
+                    }}
+                >
                     <SelectTrigger className="w-[180px]">
                         <SelectValue placeholder="All Statuses">
                             {(value: string | null) => {
@@ -343,7 +346,14 @@ export default function WorkflowExecutionsPage() {
                     </SelectContent>
                 </Select>
 
-                <Select value={workflowFilter} onValueChange={(v) => v && setWorkflowFilter(v)}>
+                <Select
+                    value={workflowFilter}
+                    onValueChange={(v) => {
+                        if (!v) return
+                        setWorkflowFilter(v)
+                        setPage(1)
+                    }}
+                >
                     <SelectTrigger className="w-[220px]">
                         <SelectValue placeholder="All Workflows">
                             {(value: string | null) => {

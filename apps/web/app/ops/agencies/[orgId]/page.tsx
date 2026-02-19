@@ -103,7 +103,6 @@ export default function AgencyDetailPage() {
     const [inviteResending, setInviteResending] = useState<string | null>(null);
     const [notesDraft, setNotesDraft] = useState('');
     const [notesSaving, setNotesSaving] = useState(false);
-    const subscriptionNotes = subscription?.notes ?? '';
     const [platformEmailStatus, setPlatformEmailStatus] = useState<PlatformEmailStatus | null>(null);
     const [platformEmailLoading, setPlatformEmailLoading] = useState(false);
     const [deleteSubmitting, setDeleteSubmitting] = useState(false);
@@ -134,6 +133,7 @@ export default function AgencyDetailPage() {
                 if (!isCurrent) return;
                 setOrg(orgData);
                 setSubscription(subData);
+                setNotesDraft(subData?.notes ?? '');
                 setMembers(membersData);
                 setInvites(invitesData);
                 setActionLogs(logsData.items);
@@ -154,10 +154,6 @@ export default function AgencyDetailPage() {
             isCurrent = false;
         };
     }, [orgId]);
-
-    useEffect(() => {
-        setNotesDraft(subscriptionNotes);
-    }, [subscriptionNotes]);
 
     const fetchOrgAlerts = useCallback(async () => {
         if (!orgId) return;
@@ -270,6 +266,7 @@ export default function AgencyDetailPage() {
         try {
             const updated = await extendSubscription(orgId, 30);
             setSubscription(updated);
+            setNotesDraft(updated.notes ?? '');
             toast.success('Subscription extended by 30 days');
         } catch {
             toast.error('Failed to extend subscription');
@@ -294,6 +291,7 @@ export default function AgencyDetailPage() {
         try {
             const updated = await updateSubscription(orgId, { auto_renew: value });
             setSubscription(updated);
+            setNotesDraft(updated.notes ?? '');
             toast.success(`Auto-renew ${value ? 'enabled' : 'disabled'}`);
         } catch {
             toast.error('Failed to update auto-renew setting');
@@ -306,6 +304,7 @@ export default function AgencyDetailPage() {
         try {
             const updated = await updateSubscription(orgId, { notes: notesDraft });
             setSubscription(updated);
+            setNotesDraft(updated.notes ?? '');
             toast.success('Subscription notes updated');
         } catch {
             toast.error('Failed to update subscription notes');

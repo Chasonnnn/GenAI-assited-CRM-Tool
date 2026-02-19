@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { format, parseISO } from "date-fns"
 import { ImageIcon, PencilIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -46,7 +46,7 @@ export function JourneyMilestoneCard({
 }: JourneyMilestoneCardProps) {
     const styles = STATUS_STYLES[milestone.status]
     const completedDate = milestone.completed_at ? parseISO(milestone.completed_at) : null
-    const [imageError, setImageError] = useState(false)
+    const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null)
 
     // Show date only for completed/current milestones that are not soft
     const showDate = !!completedDate && !milestone.is_soft
@@ -55,9 +55,7 @@ export function JourneyMilestoneCard({
     const imageUrl = milestone.featured_image_url || milestone.default_image_url
     const hasCustomImage = !!milestone.featured_image_url
 
-    useEffect(() => {
-        setImageError(false)
-    }, [imageUrl])
+    const imageError = !!imageUrl && failedImageUrl === imageUrl
 
     return (
         <article
@@ -111,7 +109,7 @@ export function JourneyMilestoneCard({
                         width={320}
                         height={180}
                         loading="lazy"
-                        onError={() => setImageError(true)}
+                        onError={() => setFailedImageUrl(imageUrl)}
                     />
                 ) : (
                     <MilestonePlaceholder slug={milestone.slug} />

@@ -347,10 +347,10 @@ export default function FormBuilderPage() {
     const [pageToDelete, setPageToDelete] = useState<number | null>(null)
 
     const [rightSidebarTab, setRightSidebarTab] = useState<"field" | "form">("form")
-
-    useEffect(() => {
-        setRightSidebarTab(selectedField ? "field" : "form")
-    }, [selectedField])
+    const selectField = useCallback((fieldId: string | null) => {
+        setSelectedField(fieldId)
+        setRightSidebarTab(fieldId ? "field" : "form")
+    }, [])
 
     useEffect(() => {
         setHasHydrated(false)
@@ -392,9 +392,9 @@ export default function FormBuilderPage() {
         setIsPublished(formData.status === "published")
         setPages(schema ? schemaToPages(schema, mappingMap) : [{ id: 1, name: "Page 1", fields: [] }])
         setActivePage(1)
-        setSelectedField(null)
+        selectField(null)
         setHasHydrated(true)
-    }, [formData, mappingData, isMappingsLoading, hasHydrated, isNewForm])
+    }, [formData, mappingData, isMappingsLoading, hasHydrated, isNewForm, selectField])
 
     useEffect(() => {
         if (!hasHydrated || orgLogoInitRef.current) return
@@ -580,7 +580,7 @@ export default function FormBuilderPage() {
         setDraggedFieldId(null)
         setDropIndicatorId(null)
         if (nextSelectedField) {
-            setSelectedField(nextSelectedField)
+            selectField(nextSelectedField)
         }
     }
 
@@ -609,7 +609,7 @@ export default function FormBuilderPage() {
         setDraggedFieldId(null)
         setDropIndicatorId(null)
         if (nextSelectedField) {
-            setSelectedField(nextSelectedField)
+            selectField(nextSelectedField)
         }
     }
 
@@ -627,7 +627,7 @@ export default function FormBuilderPage() {
             ),
         )
         if (selectedField === fieldId) {
-            setSelectedField(null)
+            selectField(null)
         }
     }
 
@@ -651,7 +651,7 @@ export default function FormBuilderPage() {
                 return { ...page, fields: nextFields }
             }),
         )
-        setSelectedField(nextId)
+        selectField(nextId)
     }
 
     const handleUpdateField = (fieldId: string, updates: Partial<FormField>) => {
@@ -804,7 +804,7 @@ export default function FormBuilderPage() {
 
         setPages((prev) => [...prev, nextPage])
         setActivePage(nextPageId)
-        setSelectedField(duplicatedFields[0]?.id ?? null)
+        selectField(duplicatedFields[0]?.id ?? null)
     }
 
     const requestDeletePage = (pageId: number) => {
@@ -823,12 +823,12 @@ export default function FormBuilderPage() {
             if (nextPages.length === 0) {
                 const fallbackPage: FormPage = { id: 1, name: "Page 1", fields: [] }
                 setActivePage(fallbackPage.id)
-                setSelectedField(null)
+                selectField(null)
                 return [fallbackPage]
             }
             if (pageToDelete === activePage) {
                 setActivePage(nextPages[0]?.id ?? 1)
-                setSelectedField(null)
+                selectField(null)
             }
             return nextPages
         })
@@ -1321,7 +1321,7 @@ export default function FormBuilderPage() {
                                                 onDragEnd={handleDragEnd}
                                                 className={`cursor-pointer transition-all hover:shadow-md ${selectedField === field.id ? "ring-2 ring-teal-500" : ""
                                                     }`}
-                                                onClick={() => setSelectedField(field.id)}
+                                                onClick={() => selectField(field.id)}
                                             >
                                                 <CardContent className="flex items-start gap-4 p-6">
                                                     <GripVerticalIcon className="mt-1 size-5 cursor-grab text-stone-400" />

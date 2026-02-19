@@ -134,7 +134,7 @@ export default function AIWorkflowBuilderPage() {
         }
     }, [workflowScope, canManageAutomation])
 
-    useEffect(() => {
+    const resetGeneratedArtifacts = () => {
         setGeneratedWorkflow(null)
         setWorkflowExplanation(null)
         setWorkflowErrors([])
@@ -143,7 +143,14 @@ export default function AIWorkflowBuilderPage() {
         setTemplateExplanation(null)
         setTemplateErrors([])
         setTemplateWarnings([])
-    }, [mode])
+    }
+
+    const handleModeChange = (value: string) => {
+        const nextMode = value as "workflow" | "email_template"
+        if (nextMode === mode) return
+        resetGeneratedArtifacts()
+        setMode(nextMode)
+    }
 
     const templateVariables = useMemo(
         () => extractTemplateVariables(`${templateSubject}\n${templateBody}`),
@@ -359,7 +366,7 @@ export default function AIWorkflowBuilderPage() {
                             </p>
                         </div>
                     </div>
-                    <Tabs value={mode} onValueChange={(value) => setMode(value as "workflow" | "email_template")}>
+                    <Tabs value={mode} onValueChange={handleModeChange}>
                         <TabsList>
                             <TabsTrigger value="workflow" className="gap-2">
                                 <ZapIcon className="size-4" />

@@ -976,16 +976,11 @@ export default function SettingsPage() {
   const urlTabParam = searchParams.get("tab")
   const urlTab: SettingsTab =
     isAdmin && urlTabParam === "email-signature" ? "email-signature" : "general"
-  const [activeTab, setActiveTab] = useState<SettingsTab>(urlTab)
-
-  useEffect(() => {
-    setActiveTab(urlTab)
-  }, [urlTab])
+  const activeTab: SettingsTab = urlTab
 
   const handleTabChange = (value: string) => {
     const nextTab: SettingsTab =
       isAdmin && value === "email-signature" ? "email-signature" : "general"
-    setActiveTab(nextTab)
 
     const nextParams = new URLSearchParams(searchParams.toString())
     if (nextTab === "general") {
