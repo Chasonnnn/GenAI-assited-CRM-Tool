@@ -237,35 +237,76 @@ const VALUELESS_OPERATORS = new Set(["is_empty", "is_not_empty"])
 type StatusOption = WorkflowOptions["statuses"][number]
 const EMPTY_STATUS_OPTIONS: StatusOption[] = []
 
-function normalizeConditionsForUi(conditions: Condition[]): Condition[] {
+type EditableCondition = Condition & { clientId: string }
+type EditableAction = ActionConfig & { clientId: string }
+
+function createClientRowId(): string {
+    if (typeof globalThis.crypto?.randomUUID === "function") {
+        return globalThis.crypto.randomUUID()
+    }
+    return `row-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function withConditionClientId(condition: Condition): EditableCondition {
+    const existingClientId =
+        "clientId" in condition && typeof condition.clientId === "string" ? condition.clientId : ""
+    return {
+        ...condition,
+        clientId: existingClientId || createClientRowId(),
+    }
+}
+
+function withActionClientId(action: ActionConfig): EditableAction {
+    const existingClientId =
+        "clientId" in action && typeof action.clientId === "string" ? action.clientId : ""
+    return {
+        ...action,
+        clientId: existingClientId || createClientRowId(),
+    }
+}
+
+function stripConditionClientId(condition: EditableCondition): Condition {
+    const { clientId, ...rest } = condition
+    void clientId
+    return rest
+}
+
+function stripActionClientId(action: EditableAction): ActionConfig {
+    const { clientId, ...rest } = action
+    void clientId
+    return rest
+}
+
+function normalizeConditionsForUi(conditions: Condition[]): EditableCondition[] {
     return conditions.map((condition) => {
-        if (!LIST_OPERATORS.has(condition.operator)) {
-            return condition
+        const conditionWithId = withConditionClientId(condition)
+        if (!LIST_OPERATORS.has(conditionWithId.operator)) {
+            return conditionWithId
         }
-        if (MULTISELECT_FIELDS.has(condition.field)) {
-            if (Array.isArray(condition.value)) {
-                return condition
+        if (MULTISELECT_FIELDS.has(conditionWithId.field)) {
+            if (Array.isArray(conditionWithId.value)) {
+                return conditionWithId
             }
-            if (typeof condition.value === "string") {
-                const values = condition.value
+            if (typeof conditionWithId.value === "string") {
+                const values = conditionWithId.value
                     .split(",")
                     .map((value) => value.trim())
                     .filter(Boolean)
-                return { ...condition, value: values }
+                return { ...conditionWithId, value: values }
             }
-            return { ...condition, value: [] }
+            return { ...conditionWithId, value: [] }
         }
-        if (Array.isArray(condition.value)) {
-            return { ...condition, value: condition.value.join(", ") }
+        if (Array.isArray(conditionWithId.value)) {
+            return { ...conditionWithId, value: conditionWithId.value.join(", ") }
         }
-        return condition
+        return conditionWithId
     })
 }
 
-function normalizeConditionsForSave(conditions: Condition[]): Condition[] {
+function normalizeConditionsForSave(conditions: EditableCondition[]): Condition[] {
     return conditions.map((condition) => {
         if (VALUELESS_OPERATORS.has(condition.operator)) {
-            return { ...condition, value: null }
+            return stripConditionClientId({ ...condition, value: null })
         }
         if (LIST_OPERATORS.has(condition.operator)) {
             const raw =
@@ -278,18 +319,19 @@ function normalizeConditionsForSave(conditions: Condition[]): Condition[] {
                 .split(",")
                 .map((value) => value.trim())
                 .filter(Boolean)
-            return { ...condition, value: values }
+            return stripConditionClientId({ ...condition, value: values })
         }
-        return condition
+        return stripConditionClientId(condition)
     })
 }
 
-function normalizeActionsForUi(actions: ActionConfig[]): ActionConfig[] {
+function normalizeActionsForUi(actions: ActionConfig[]): EditableAction[] {
     return actions.map((action) => {
-        const stageId = action["stage_id"]
-        if (action.action_type === "update_status" && typeof stageId === "string" && stageId) {
-            const normalized: ActionConfig = {
-                ...action,
+        const actionWithId = withActionClientId(action)
+        const stageId = actionWithId["stage_id"]
+        if (actionWithId.action_type === "update_status" && typeof stageId === "string" && stageId) {
+            const normalized: EditableAction = {
+                ...actionWithId,
                 action_type: "update_field",
                 field: "stage_id",
                 value: stageId,
@@ -297,8 +339,12 @@ function normalizeActionsForUi(actions: ActionConfig[]): ActionConfig[] {
             delete normalized["stage_id"]
             return normalized
         }
-        return action
+        return actionWithId
     })
+}
+
+function normalizeActionsForSave(actions: EditableAction[]): ActionConfig[] {
+    return actions.map((action) => stripActionClientId(action))
 }
 
 const EMAIL_RECIPIENT_OPTIONS: SelectOption[] = [
@@ -593,9 +639,9 @@ export default function AutomationPage() {
     const [workflowDescription, setWorkflowDescription] = useState("")
     const [triggerType, setTriggerType] = useState("")
     const [triggerConfig, setTriggerConfig] = useState<JsonObject>({})
-    const [conditions, setConditions] = useState<Condition[]>([])
+    const [conditions, setConditions] = useState<EditableCondition[]>([])
     const [conditionLogic, setConditionLogic] = useState<"AND" | "OR">("AND")
-    const [actions, setActions] = useState<ActionConfig[]>([])
+    const [actions, setActions] = useState<EditableAction[]>([])
 
     // Email template state (preserved from original)
     const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false)
@@ -1135,7 +1181,7 @@ export default function AutomationPage() {
             trigger_config: buildTriggerConfig(),
             conditions: normalizeConditionsForSave(conditions),
             condition_logic: conditionLogic,
-            actions,
+            actions: normalizeActionsForSave(actions),
             is_enabled: true,
             scope: workflowScope,
             ...(workflowDescription ? { description: workflowDescription } : {}),
@@ -1158,7 +1204,7 @@ export default function AutomationPage() {
     }
 
     const addCondition = () => {
-        setConditions([...conditions, { field: "", operator: "equals", value: "" }])
+        setConditions([...conditions, { clientId: createClientRowId(), field: "", operator: "equals", value: "" }])
     }
 
     const removeCondition = (index: number) => {
@@ -1169,7 +1215,7 @@ export default function AutomationPage() {
         setConditions(
             conditions.map((condition, i) => {
                 if (i !== index) return condition
-                const next = { ...condition, ...updates }
+                const next: EditableCondition = { ...condition, ...updates }
                 const fieldChanged = typeof updates.field === "string" && updates.field !== condition.field
                 if (fieldChanged) {
                     next.value = ""
@@ -1203,15 +1249,15 @@ export default function AutomationPage() {
     }
 
     const addAction = () => {
-        setActions([...actions, { action_type: "" }])
+        setActions([...actions, { clientId: createClientRowId(), action_type: "" }])
     }
 
     const removeAction = (index: number) => {
         setActions(actions.filter((_, i) => i !== index))
     }
 
-    const mergeActionConfig = (action: ActionConfig, updates: Partial<ActionConfig>): ActionConfig => {
-        const next: ActionConfig = { ...action }
+    const mergeActionConfig = (action: EditableAction, updates: Partial<ActionConfig>): EditableAction => {
+        const next: EditableAction = { ...action }
         for (const [key, value] of Object.entries(updates)) {
             if (value !== undefined) {
                 next[key] = value as JsonValue
@@ -1848,7 +1894,7 @@ export default function AutomationPage() {
                                 ) : (
                                     <>
                                         {conditions.map((condition, index) => (
-                                            <Card key={index}>
+                                            <Card key={condition.clientId}>
                                                 <CardContent className="space-y-3 p-4">
                                                     <div className="flex items-center gap-3">
                                                         <Select
@@ -1931,7 +1977,7 @@ export default function AutomationPage() {
                                     <p className="text-sm text-muted-foreground">Add at least one action</p>
                                 ) : (
                                     actions.map((action, index) => (
-                                        <Card key={index}>
+                                        <Card key={action.clientId}>
                                             <CardContent className="space-y-3 p-4">
                                                 <div className="flex items-center gap-3">
                                                     <GripVerticalIcon className="size-4 text-muted-foreground" />
@@ -2265,7 +2311,7 @@ export default function AutomationPage() {
                                                 {action.action_type && (
                                                     <div className="flex items-center justify-between pt-2 border-t mt-2">
                                                         <div className="flex flex-col">
-                                                            <Label htmlFor={`approval-${index}`} className="text-sm font-medium">
+                                                            <Label htmlFor={`approval-${action.clientId}`} className="text-sm font-medium">
                                                                 Requires Approval
                                                             </Label>
                                                             <span className="text-xs text-muted-foreground">
@@ -2273,7 +2319,7 @@ export default function AutomationPage() {
                                                             </span>
                                                         </div>
                                                         <Switch
-                                                            id={`approval-${index}`}
+                                                            id={`approval-${action.clientId}`}
                                                             checked={!!action.requires_approval}
                                                             onCheckedChange={(checked) => updateAction(index, { requires_approval: checked })}
                                                         />
