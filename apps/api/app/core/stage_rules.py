@@ -7,7 +7,7 @@ ROLE_STAGE_VISIBILITY: dict[str, dict[str, list[str]]] = {
     },
     "case_manager": {
         "stage_types": ["post_approval"],
-        "extra_slugs": ["approved"],
+        "extra_slugs": ["approved", "lost", "disqualified"],
     },
     "admin": {
         "stage_types": ["intake", "post_approval", "terminal"],
@@ -26,7 +26,7 @@ ROLE_STAGE_MUTATION: dict[str, dict[str, list[str]]] = {
     },
     "case_manager": {
         "stage_types": ["post_approval"],
-        "extra_slugs": [],
+        "extra_slugs": ["lost", "disqualified"],
     },
     "admin": {
         "stage_types": ["intake", "post_approval", "terminal"],

@@ -206,7 +206,9 @@ export const ROLE_STAGE_VISIBILITY: Record<string, RoleStageRule> = {
     },
     "case_manager": {
         "extraSlugs": [
-            "approved"
+            "approved",
+            "lost",
+            "disqualified"
         ],
         "stageTypes": [
             "post_approval"
@@ -239,7 +241,10 @@ export const ROLE_STAGE_MUTATION: Record<string, RoleStageRule> = {
         ]
     },
     "case_manager": {
-        "extraSlugs": [],
+        "extraSlugs": [
+            "lost",
+            "disqualified"
+        ],
         "stageTypes": [
             "post_approval"
         ]
