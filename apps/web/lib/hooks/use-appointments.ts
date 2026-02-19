@@ -396,7 +396,10 @@ export function useGoogleCalendarEvents(
         queryKey: calendarKeys.googleEvents(dateStart, dateEnd, timezone),
         queryFn: () => appointmentsApi.getGoogleCalendarEvents(dateStart, dateEnd, timezone),
         enabled: (options?.enabled ?? true) && !!dateStart && !!dateEnd,
-        // Cache for 5 minutes to reduce API calls
-        staleTime: 5 * 60 * 1000,
+        // Keep Google events near-real-time when users update calendars outside the app.
+        staleTime: 15 * 1000,
+        refetchInterval: 30 * 1000,
+        refetchIntervalInBackground: true,
+        refetchOnWindowFocus: "always",
     });
 }
