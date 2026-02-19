@@ -34,6 +34,27 @@ class SendEmailResponse(BaseModel):
     error: str | None = None
 
 
+@router.get(
+    "/{surrogate_id:uuid}/template-variables",
+    response_model=dict[str, str],
+)
+async def get_surrogate_template_variables(
+    surrogate_id: UUID,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """Get resolved email template variables for surrogate preview."""
+    from app.services import email_service
+
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    return email_service.build_surrogate_template_variables(db, surrogate)
+
+
 @router.post(
     "/{surrogate_id:uuid}/send-email",
     response_model=SendEmailResponse,

@@ -29,6 +29,42 @@ async def test_send_email_case_not_found(authed_client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_get_template_variables_case_not_found(authed_client: AsyncClient):
+    """Template variable preview should return 404 for unknown surrogate."""
+    surrogate_id = uuid4()
+    response = await authed_client.get(f"/surrogates/{surrogate_id}/template-variables")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_template_variables_returns_resolved_values(
+    authed_client: AsyncClient, db, test_org, test_user
+):
+    """Template variable preview should return resolved values for the surrogate context."""
+    from app.services import surrogate_service
+    from app.schemas.surrogate import SurrogateCreate
+    from app.db.enums import SurrogateSource
+
+    case_data = SurrogateCreate(
+        full_name="Ashley Nicole Harden",
+        email="ashley@example.com",
+        source=SurrogateSource.MANUAL,
+    )
+    case = surrogate_service.create_surrogate(db, test_org.id, test_user.id, case_data)
+
+    response = await authed_client.get(f"/surrogates/{case.id}/template-variables")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["first_name"] == "Ashley"
+    assert data["full_name"] == "Ashley Nicole Harden"
+    assert data["email"] == "ashley@example.com"
+    assert data["surrogate_number"].startswith("S")
+    assert data["org_name"] == test_org.name
+    assert "owner_name" in data
+
+
+@pytest.mark.asyncio
 async def test_send_email_template_not_found(authed_client: AsyncClient, db, test_org, test_user):
     """Test send email with non-existent template returns 404."""
     from app.services import surrogate_service
