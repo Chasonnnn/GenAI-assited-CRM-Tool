@@ -212,7 +212,7 @@ jobs:
 
       - name: Run pnpm audit (Dependency Scan)
         working-directory: apps/web
-        run: pnpm audit --audit-level=high
+        run: bash scripts/pnpm_audit_guard.sh
 
       - name: Run migrations
         working-directory: apps/api
