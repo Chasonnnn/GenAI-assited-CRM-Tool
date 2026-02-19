@@ -375,4 +375,95 @@ describe("EmailComposeDialog", () => {
             expect(proseBody).toHaveTextContent("Custom hello Ashley Nicole Harden.")
         })
     })
+
+    it("allows customizing message directly in preview mode without toggling to html editor", async () => {
+        const templateId = "tpl-preview-edit"
+        const mutateAsync = vi.fn().mockResolvedValue({ success: true })
+
+        mockUseSendSurrogateEmail.mockReturnValue({
+            mutateAsync,
+            isPending: false,
+            isError: false,
+            isSuccess: false,
+            error: null,
+        })
+
+        mockUseEmailTemplates.mockReturnValue({
+            data: [
+                {
+                    id: templateId,
+                    name: "Preview Editable Template",
+                    subject: "Welcome {{full_name}}",
+                    from_email: null,
+                    is_active: true,
+                    scope: "org",
+                    owner_user_id: null,
+                    owner_name: null,
+                    is_system_template: false,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+            ],
+            isLoading: false,
+        })
+
+        mockUseEmailTemplate.mockImplementation((id: string | null) => {
+            if (id !== templateId) return { data: null, isLoading: false }
+            return {
+                data: {
+                    id: templateId,
+                    organization_id: "org-1",
+                    created_by_user_id: null,
+                    name: "Preview Editable Template",
+                    subject: "Welcome {{full_name}}",
+                    from_email: null,
+                    body: "<p>Initial draft for {{full_name}}.</p>",
+                    is_active: true,
+                    scope: "org",
+                    owner_user_id: null,
+                    owner_name: null,
+                    source_template_id: null,
+                    is_system_template: false,
+                    current_version: 1,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+                isLoading: false,
+            }
+        })
+
+        render(
+            <EmailComposeDialog
+                open
+                onOpenChange={vi.fn()}
+                surrogateData={baseSurrogateData}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "Preview Editable Template" }))
+
+        const previewEditor = await screen.findByLabelText("Message preview editor")
+        expect(previewEditor).toHaveTextContent("Initial draft for Ashley Nicole Harden.")
+
+        previewEditor.innerHTML = "<p>Final custom note for Ashley before send.</p>"
+        fireEvent.input(previewEditor)
+
+        await waitFor(() => {
+            expect(previewEditor).toHaveTextContent("Final custom note for Ashley before send.")
+        })
+
+        fireEvent.click(screen.getByRole("button", { name: /send email/i }))
+
+        await waitFor(() => {
+            expect(mutateAsync).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    surrogateId: "sur-1",
+                    data: expect.objectContaining({
+                        subject: "Welcome {{full_name}}",
+                        body: expect.stringContaining("Final custom note for Ashley before send."),
+                    }),
+                })
+            )
+        })
+    })
 })

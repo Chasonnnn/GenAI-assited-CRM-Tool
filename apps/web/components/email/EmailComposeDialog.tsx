@@ -44,6 +44,7 @@ interface EmailComposeDialogProps {
 
 const PREVIEW_FONT_STACK =
     '-apple-system, BlinkMacSystemFont, "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", Arial, sans-serif'
+const PREVIEW_FORM_LINK = "https://app.surrogacyforce.com/apply/EXAMPLE_TOKEN"
 
 const LEGACY_UNSUBSCRIBE_TOKEN_RE = /\{\{\s*unsubscribe_url\s*\}\}/gi
 const LEGACY_UNSUBSCRIBE_ANCHOR_RE =
@@ -70,6 +71,7 @@ export function EmailComposeDialog({
     const [isPreview, setIsPreview] = React.useState(true)
     const idempotencyKeyRef = React.useRef<string | null>(null)
     const hydratedTemplateIdRef = React.useRef<string | null>(null)
+    const previewEditorRef = React.useRef<HTMLDivElement | null>(null)
 
     // Fetch email templates list
     const { data: templates = [], isLoading: templatesLoading } = useEmailTemplates({ activeOnly: true })
@@ -122,45 +124,18 @@ export function EmailComposeDialog({
         }
     }, [open])
 
-    const handleSend = async () => {
-        try {
-            if (!idempotencyKeyRef.current) {
-                idempotencyKeyRef.current =
-                    typeof crypto !== "undefined" && "randomUUID" in crypto
-                        ? crypto.randomUUID()
-                        : `${Date.now()}-${Math.random().toString(16).slice(2)}`
-            }
-            await sendEmailMutation.mutateAsync({
-                surrogateId: surrogateData.id,
-                data: {
-                    template_id: selectedTemplate,
-                    subject,
-                    body,
-                    idempotency_key: idempotencyKeyRef.current,
-                },
-            })
-            onSuccess?.()
-            onOpenChange(false)
-        } catch (error) {
-            console.error("Failed to send email:", error)
-        }
-    }
-
-    const handleCancel = () => {
-        onOpenChange(false)
-    }
-
     const replaceTemplateVariables = React.useCallback(
         (text: string) => {
             return text
-            .replace(/\{\{full_name\}\}/g, surrogateData.full_name)
-            .replace(/\{\{surrogate_number\}\}/g, surrogateData.surrogate_number)
-            .replace(/\{\{status_label\}\}/g, surrogateData.status)
-            .replace(/\{\{state\}\}/g, surrogateData.state || "")
-            .replace(/\{\{email\}\}/g, surrogateData.email)
-            .replace(/\{\{phone\}\}/g, surrogateData.phone || "")
-            .replace(/\{\{owner_name\}\}/g, "")
-            .replace(/\{\{org_name\}\}/g, "")
+                .replace(/\{\{full_name\}\}/g, surrogateData.full_name)
+                .replace(/\{\{surrogate_number\}\}/g, surrogateData.surrogate_number)
+                .replace(/\{\{status_label\}\}/g, surrogateData.status)
+                .replace(/\{\{state\}\}/g, surrogateData.state || "")
+                .replace(/\{\{email\}\}/g, surrogateData.email)
+                .replace(/\{\{phone\}\}/g, surrogateData.phone || "")
+                .replace(/\{\{owner_name\}\}/g, "")
+                .replace(/\{\{org_name\}\}/g, "")
+                .replace(/\{\{form_link\}\}/g, PREVIEW_FORM_LINK)
         },
         [surrogateData]
     )
@@ -214,12 +189,63 @@ export function EmailComposeDialog({
         })
     }, [])
 
+    const syncPreviewEditorToBody = React.useCallback(() => {
+        const editor = previewEditorRef.current
+        if (!editor || !isPreview) return body
+
+        const editedHtml = editor.innerHTML.trim()
+        const normalizedHtml = editedHtml ? normalizeTemplateHtml(editedHtml) : ""
+        const sanitizedEditedHtml = normalizedHtml ? sanitizePreviewHtml(normalizedHtml) : ""
+
+        if (sanitizedEditedHtml !== body) {
+            setBody(sanitizedEditedHtml)
+        }
+
+        return sanitizedEditedHtml
+    }, [body, isPreview, sanitizePreviewHtml])
+
+    const handleSend = async () => {
+        try {
+            const bodyForSend = isPreview ? syncPreviewEditorToBody() : body
+            if (!idempotencyKeyRef.current) {
+                idempotencyKeyRef.current =
+                    typeof crypto !== "undefined" && "randomUUID" in crypto
+                        ? crypto.randomUUID()
+                        : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+            }
+            await sendEmailMutation.mutateAsync({
+                surrogateId: surrogateData.id,
+                data: {
+                    template_id: selectedTemplate,
+                    subject,
+                    body: bodyForSend,
+                    idempotency_key: idempotencyKeyRef.current,
+                },
+            })
+            onSuccess?.()
+            onOpenChange(false)
+        } catch (error) {
+            console.error("Failed to send email:", error)
+        }
+    }
+
+    const handleCancel = () => {
+        onOpenChange(false)
+    }
+
+    const handlePreviewToggle = React.useCallback(() => {
+        if (isPreview) {
+            syncPreviewEditorToBody()
+        }
+        setIsPreview((current) => !current)
+    }, [isPreview, syncPreviewEditorToBody])
+
     const previewSubject = React.useMemo(
         () => replaceTemplateVariables(subject),
         [replaceTemplateVariables, subject]
     )
 
-    const previewBodyHtml = React.useMemo(() => {
+    const previewMessageHtml = React.useMemo(() => {
         if (!body) return ""
 
         let html = replaceTemplateVariables(body)
@@ -244,6 +270,10 @@ export function EmailComposeDialog({
             html = `<div style="font-family: ${PREVIEW_FONT_STACK}; font-size: 16px; line-height: 24px; color: #111827;">${html}</div>`
         }
 
+        return sanitizePreviewHtml(html)
+    }, [body, replaceTemplateVariables, sanitizePreviewHtml])
+
+    const previewFooterHtml = React.useMemo(() => {
         const signatureHtml =
             fullTemplate?.scope === "personal"
                 ? (personalSignaturePreview?.html || "")
@@ -259,24 +289,8 @@ export function EmailComposeDialog({
             </div>
         `.trim()
 
-        const insertion = `${signatureHtml}${unsubscribeFooterHtml}`
-        if (/<\/body\s*>/i.test(html)) {
-            html = html.replace(/<\/body\s*>/i, `${insertion}</body>`)
-        } else if (/<\/html\s*>/i.test(html)) {
-            html = html.replace(/<\/html\s*>/i, `${insertion}</html>`)
-        } else {
-            html = `${html}${insertion}`
-        }
-
-        return sanitizePreviewHtml(html)
-    }, [
-        body,
-        fullTemplate?.scope,
-        orgSignaturePreview?.html,
-        personalSignaturePreview?.html,
-        replaceTemplateVariables,
-        sanitizePreviewHtml,
-    ])
+        return sanitizePreviewHtml(`${signatureHtml}${unsubscribeFooterHtml}`)
+    }, [fullTemplate?.scope, orgSignaturePreview?.html, personalSignaturePreview?.html, sanitizePreviewHtml])
 
     // Highlight variables in edit mode
     const renderWithHighlights = (text: string) => {
@@ -301,6 +315,7 @@ export function EmailComposeDialog({
         "{{status_label}}",
         "{{state}}",
         "{{owner_name}}",
+        "{{form_link}}",
         "{{org_name}}",
     ]
 
@@ -380,7 +395,7 @@ export function EmailComposeDialog({
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => setIsPreview(!isPreview)}
+                                onClick={handlePreviewToggle}
                                 className="h-7 gap-2"
                             >
                                 {isPreview ? (
@@ -409,11 +424,27 @@ export function EmailComposeDialog({
                                         <span className="font-medium text-foreground">{previewSubject}</span>
                                     </div>
                                 </div>
-                                <div className="bg-white p-4">
+                                <div className="bg-white p-4 space-y-4">
                                     <div
-                                        className="prose prose-sm prose-stone max-w-none text-stone-900 [&_p]:whitespace-pre-wrap"
-                                        dangerouslySetInnerHTML={{ __html: previewBodyHtml }}
+                                        ref={previewEditorRef}
+                                        role="textbox"
+                                        aria-label="Message preview editor"
+                                        aria-multiline="true"
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        onBlur={syncPreviewEditorToBody}
+                                        className="prose prose-sm prose-stone max-w-none min-h-40 rounded-md border border-transparent px-1 text-stone-900 outline-none transition-colors [&_p]:whitespace-pre-wrap focus:border-ring"
+                                        dangerouslySetInnerHTML={{ __html: previewMessageHtml }}
                                     />
+                                    <div className="border-t border-stone-200 pt-4">
+                                        <div
+                                            className="prose prose-sm prose-stone max-w-none text-stone-900 [&_p]:whitespace-pre-wrap"
+                                            dangerouslySetInnerHTML={{ __html: previewFooterHtml }}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="border-t bg-muted/20 px-4 py-2 text-xs text-muted-foreground">
+                                    You can edit the message directly in preview mode.
                                 </div>
                             </div>
                         )}
