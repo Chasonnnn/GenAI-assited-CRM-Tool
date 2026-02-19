@@ -811,10 +811,11 @@ def count_failed_meta_leads(db: Session, org_id: UUID) -> int:
     )
 
 
-def list_meta_leads(db: Session, org_id: UUID, limit: int = 100, status: str | None = None) -> list[MetaLead]:
+def list_meta_leads(
+    db: Session, org_id: UUID, limit: int = 100, status: str | None = None
+) -> list[MetaLead]:
     """List all Meta leads for an org with optional status filter."""
     query = db.query(MetaLead).filter(MetaLead.organization_id == org_id)
     if status:
         query = query.filter(MetaLead.status == status)
     return query.order_by(MetaLead.received_at.desc()).limit(limit).all()
-

@@ -225,9 +225,7 @@ def test_list_surrogates_does_not_use_query_count(db, test_org, test_user, monke
     assert len(surrogates) >= 1
 
 
-def test_list_surrogate_activity_does_not_use_query_count(
-    db, test_org, test_user, monkeypatch
-):
+def test_list_surrogate_activity_does_not_use_query_count(db, test_org, test_user, monkeypatch):
     surrogate = surrogate_service.create_surrogate(
         db,
         test_org.id,
@@ -252,7 +250,10 @@ def test_list_surrogate_activity_does_not_use_query_count(
     original_count = Query.count
 
     def _count_should_not_be_called(self, *args, **kwargs):
-        if self.column_descriptions and self.column_descriptions[0].get("name") == "SurrogateActivityLog":
+        if (
+            self.column_descriptions
+            and self.column_descriptions[0].get("name") == "SurrogateActivityLog"
+        ):
             raise AssertionError("list_surrogate_activity should not call Query.count()")
         return original_count(self, *args, **kwargs)
 

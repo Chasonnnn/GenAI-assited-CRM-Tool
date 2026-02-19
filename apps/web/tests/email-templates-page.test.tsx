@@ -5,6 +5,88 @@ import EmailTemplatesPage from "../app/(app)/automation/email-templates/page"
 
 const mockUseAuth = vi.fn()
 const mockRichTextEditorProps = vi.fn()
+const FIXED_TIMESTAMP = "2026-01-01T00:00:00.000Z"
+
+const ORG_TEMPLATE = {
+    id: "tpl_org_1",
+    name: "Org Template",
+    subject: "Your Surrogacy Journey Starts with EWI Family Global",
+    from_email: null,
+    is_active: true,
+    scope: "org",
+    owner_user_id: null,
+    owner_name: null,
+    is_system_template: false,
+    created_at: FIXED_TIMESTAMP,
+    updated_at: FIXED_TIMESTAMP,
+} as const
+
+const PERSONAL_TEMPLATE = {
+    id: "tpl_personal_1",
+    name: "Personal Template",
+    subject: "Hi {{full_name}}",
+    from_email: null,
+    is_active: true,
+    scope: "personal",
+    owner_user_id: "user_1",
+    owner_name: "Admin",
+    is_system_template: false,
+    created_at: FIXED_TIMESTAMP,
+    updated_at: FIXED_TIMESTAMP,
+} as const
+
+const TEMPLATE_DETAIL_BY_ID = {
+    tpl_personal_1: {
+        id: "tpl_personal_1",
+        organization_id: "org_1",
+        created_by_user_id: "user_1",
+        name: "Personal Template",
+        subject: "Hi {{full_name}}",
+        from_email: null,
+        body: "<p>Personal Body</p>",
+        is_active: true,
+        scope: "personal",
+        owner_user_id: "user_1",
+        owner_name: "Admin",
+        source_template_id: null,
+        is_system_template: false,
+        current_version: 1,
+        created_at: FIXED_TIMESTAMP,
+        updated_at: FIXED_TIMESTAMP,
+    },
+    tpl_org_1: {
+        id: "tpl_org_1",
+        organization_id: "org_1",
+        created_by_user_id: "user_1",
+        name: "Org Template",
+        subject: "Your Surrogacy Journey Starts with EWI Family Global",
+        from_email: null,
+        body: "<p>Org Body</p>",
+        is_active: true,
+        scope: "org",
+        owner_user_id: null,
+        owner_name: null,
+        source_template_id: null,
+        is_system_template: false,
+        current_version: 1,
+        created_at: FIXED_TIMESTAMP,
+        updated_at: FIXED_TIMESTAMP,
+    },
+} as const
+
+const LIBRARY_TEMPLATE = {
+    id: "lib_tpl_1",
+    name: "Library Template",
+    subject: "Hello {{full_name}}",
+    category: null,
+} as const
+
+const LIBRARY_TEMPLATE_DETAIL = {
+    id: "lib_tpl_1",
+    name: "Library Template",
+    subject: "Hello {{full_name}}",
+    body: "<p>Hi there</p>",
+} as const
 
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => mockUseAuth(),
@@ -30,116 +112,30 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
     useEmailTemplates: (params?: { scope?: string | null }) => {
         if (params?.scope === "org") {
             return {
-                data: [
-                    {
-                        id: "tpl_org_1",
-                        name: "Org Template",
-                        subject: "Your Surrogacy Journey Starts with EWI Family Global",
-                        from_email: null,
-                        is_active: true,
-                        scope: "org",
-                        owner_user_id: null,
-                        owner_name: null,
-                        is_system_template: false,
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString(),
-                    },
-                ],
+                data: [ORG_TEMPLATE],
                 isLoading: false,
             }
         }
         if (params?.scope === "personal") {
             return {
-                data: [
-                    {
-                        id: "tpl_personal_1",
-                        name: "Personal Template",
-                        subject: "Hi {{full_name}}",
-                        from_email: null,
-                        is_active: true,
-                        scope: "personal",
-                        owner_user_id: "user_1",
-                        owner_name: "Admin",
-                        is_system_template: false,
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString(),
-                    },
-                ],
+                data: [PERSONAL_TEMPLATE],
                 isLoading: false,
             }
         }
         return { data: [], isLoading: false }
     },
     useEmailTemplate: (id: string | null) => {
-        if (id === "tpl_personal_1") {
-            return {
-                data: {
-                    id: "tpl_personal_1",
-                    organization_id: "org_1",
-                    created_by_user_id: "user_1",
-                    name: "Personal Template",
-                    subject: "Hi {{full_name}}",
-                    from_email: null,
-                    body: "<p>Personal Body</p>",
-                    is_active: true,
-                    scope: "personal",
-                    owner_user_id: "user_1",
-                    owner_name: "Admin",
-                    source_template_id: null,
-                    is_system_template: false,
-                    current_version: 1,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                },
-                isLoading: false,
-            }
-        }
-        if (id === "tpl_org_1") {
-            return {
-                data: {
-                    id: "tpl_org_1",
-                    organization_id: "org_1",
-                    created_by_user_id: "user_1",
-                    name: "Org Template",
-                    subject: "Your Surrogacy Journey Starts with EWI Family Global",
-                    from_email: null,
-                    body: "<p>Org Body</p>",
-                    is_active: true,
-                    scope: "org",
-                    owner_user_id: null,
-                    owner_name: null,
-                    source_template_id: null,
-                    is_system_template: false,
-                    current_version: 1,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                },
-                isLoading: false,
-            }
-        }
-        return { data: null, isLoading: false }
+        const templateDetail = id
+            ? TEMPLATE_DETAIL_BY_ID[id as keyof typeof TEMPLATE_DETAIL_BY_ID] ?? null
+            : null
+        return { data: templateDetail, isLoading: false }
     },
     useEmailTemplateLibrary: () => ({
-        data: [
-            {
-                id: "lib_tpl_1",
-                name: "Library Template",
-                subject: "Hello {{full_name}}",
-                category: null,
-            },
-        ],
+        data: [LIBRARY_TEMPLATE],
         isLoading: false,
     }),
     useEmailTemplateLibraryItem: (id: string | null) => ({
-        data:
-            id === "lib_tpl_1"
-                ? {
-                      id: "lib_tpl_1",
-                      name: "Library Template",
-                      subject: "Hello {{full_name}}",
-                      body: "<p>Hi there</p>",
-                  }
-                : null,
+        data: id === "lib_tpl_1" ? LIBRARY_TEMPLATE_DETAIL : null,
         isLoading: false,
     }),
     useEmailTemplateVariables: () => ({ data: [], isLoading: false }),
@@ -172,6 +168,7 @@ vi.mock("@/components/rich-text-editor", () => ({
 describe("EmailTemplatesPage", () => {
     beforeEach(() => {
         document.documentElement.classList.remove("dark")
+        mockRichTextEditorProps.mockClear()
         mockUseAuth.mockReturnValue({
             user: {
                 user_id: "user_1",

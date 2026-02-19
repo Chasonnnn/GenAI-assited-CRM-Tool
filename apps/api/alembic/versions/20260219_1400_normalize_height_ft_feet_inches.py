@@ -50,4 +50,3 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Irreversible data migration: previous shorthand intent cannot be reconstructed.
     pass
-

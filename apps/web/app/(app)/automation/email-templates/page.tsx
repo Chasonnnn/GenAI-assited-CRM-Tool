@@ -730,6 +730,7 @@ export default function EmailTemplatesPage() {
     useEffect(() => {
         if (!testSendOpen) return
         if (!testSendTemplateDetail) return
+        if (testSendEditableVariables.length === 0) return
 
         // Initialize defaults once per dialog open.
         setTestSendVariables((prev) => {
