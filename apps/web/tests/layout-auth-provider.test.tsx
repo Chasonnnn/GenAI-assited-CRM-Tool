@@ -35,6 +35,10 @@ vi.mock("@/components/ui/sonner", () => ({
     Toaster: () => <div data-testid="toaster" />,
 }))
 
+vi.mock("next/font/google", () => ({
+    Noto_Sans: () => ({ variable: "font-noto-sans" }),
+}))
+
 describe("layout auth provider placement", () => {
     it("does not wrap root layout with AuthProvider", () => {
         const markup = renderToStaticMarkup(
