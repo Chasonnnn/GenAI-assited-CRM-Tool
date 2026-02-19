@@ -5,13 +5,10 @@ Protected by X-Internal-Secret header.
 Call from external cron (Render/Railway/GH Actions).
 """
 
-import logging
 from datetime import datetime, timezone, timedelta
-from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
 from app.core.security import verify_secret
@@ -32,11 +29,11 @@ from app.services import (
     ops_service,
     org_service,
     task_service,
+    google_calendar_sync_service,
 )
 
 
 router = APIRouter(prefix="/internal/scheduled", tags=["internal"])
-logger = logging.getLogger(__name__)
 
 
 def verify_internal_secret(x_internal_secret: str = Header(...)):
@@ -343,119 +340,18 @@ def google_calendar_sync_schedule(x_internal_secret: str = Header(...)):
     """
     verify_internal_secret(x_internal_secret)
 
-    from app.db.models import Job, Membership, Organization, UserIntegration
-
-    now = datetime.now(timezone.utc)
-    sync_bucket_seconds = 5 * 60
-    sync_bucket = int(now.timestamp()) // sync_bucket_seconds
-    watch_bucket_seconds = 60 * 60
-    watch_bucket = int(now.timestamp()) // watch_bucket_seconds
-
-    connected_users = 0
-    jobs_created = 0
-    duplicates_skipped = 0
-    watch_jobs_created = 0
-    watch_duplicates_skipped = 0
-
     with SessionLocal() as db:
-        connected = (
-            db.query(UserIntegration.user_id, Membership.organization_id)
-            .join(Membership, Membership.user_id == UserIntegration.user_id)
-            .join(Organization, Organization.id == Membership.organization_id)
-            .filter(
-                UserIntegration.integration_type == "google_calendar",
-                Membership.is_active.is_(True),
-                Organization.deleted_at.is_(None),
-            )
-            .all()
+        counts = google_calendar_sync_service.schedule_google_calendar_sync_jobs(
+            db=db,
+            now=datetime.now(timezone.utc),
         )
 
-        # De-dupe by user to guard against accidental duplicate rows.
-        seen_users = set()
-        targets: list[tuple[str, str]] = []
-        for user_id, org_id in connected:
-            key = str(user_id)
-            if key in seen_users:
-                continue
-            seen_users.add(key)
-            targets.append((str(user_id), str(org_id)))
-
-        connected_users = len(targets)
-
-        for user_id, org_id in targets:
-            try:
-                idempotency_key = f"google-calendar-sync:{user_id}:{sync_bucket}"
-                existing = (
-                    db.query(Job)
-                    .filter(Job.idempotency_key == idempotency_key)
-                    .first()
-                )
-                if existing:
-                    duplicates_skipped += 1
-                else:
-                    run_at = now + timedelta(seconds=(UUID(user_id).int % 120))
-                    job_service.schedule_job(
-                        db=db,
-                        job_type=JobType.GOOGLE_CALENDAR_SYNC,
-                        org_id=UUID(org_id),
-                        payload={"user_id": user_id},
-                        run_at=run_at,
-                        idempotency_key=idempotency_key,
-                    )
-                    jobs_created += 1
-            except IntegrityError:
-                db.rollback()
-                duplicates_skipped += 1
-            except Exception:
-                db.rollback()
-                logger.exception(
-                    "Failed to enqueue google calendar sync job for user=%s org=%s",
-                    user_id,
-                    org_id,
-                )
-                raise
-
-            try:
-                watch_idempotency_key = (
-                    f"google-calendar-watch-refresh:{user_id}:{watch_bucket}"
-                )
-                watch_existing = (
-                    db.query(Job)
-                    .filter(Job.idempotency_key == watch_idempotency_key)
-                    .first()
-                )
-                if watch_existing:
-                    watch_duplicates_skipped += 1
-                    continue
-
-                watch_run_at = now + timedelta(seconds=(UUID(user_id).int % 300))
-                job_service.schedule_job(
-                    db=db,
-                    job_type=JobType.GOOGLE_CALENDAR_WATCH_REFRESH,
-                    org_id=UUID(org_id),
-                    payload={"user_id": user_id},
-                    run_at=watch_run_at,
-                    idempotency_key=watch_idempotency_key,
-                )
-                watch_jobs_created += 1
-            except IntegrityError:
-                db.rollback()
-                watch_duplicates_skipped += 1
-            except Exception:
-                db.rollback()
-                logger.exception(
-                    "Failed to enqueue google calendar watch refresh job for user=%s org=%s",
-                    user_id,
-                    org_id,
-                )
-                raise
-
     return GoogleCalendarSyncScheduleResponse(
-        connected_users=connected_users,
-        jobs_created=jobs_created,
-        duplicates_skipped=duplicates_skipped,
-        watch_jobs_created=watch_jobs_created,
-        watch_duplicates_skipped=watch_duplicates_skipped,
+        connected_users=counts["connected_users"],
+        jobs_created=counts["jobs_created"],
+        duplicates_skipped=counts["duplicates_skipped"],
+        watch_jobs_created=counts["watch_jobs_created"],
+        watch_duplicates_skipped=counts["watch_duplicates_skipped"],
     )
 
 
