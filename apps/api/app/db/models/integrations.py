@@ -217,7 +217,15 @@ class UserIntegration(Base):
     # Relationships
     user: Mapped["User"] = relationship()
 
-    __table_args__ = (UniqueConstraint("user_id", "integration_type"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "integration_type"),
+        Index(
+            "idx_user_integrations_google_calendar_watch_lookup",
+            "integration_type",
+            "google_calendar_channel_id",
+            "google_calendar_resource_id",
+        ),
+    )
 
 
 # =============================================================================
