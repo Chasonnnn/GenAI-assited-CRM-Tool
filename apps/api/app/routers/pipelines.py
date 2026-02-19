@@ -26,8 +26,8 @@ from app.services import pipeline_service, version_service
 router = APIRouter(
     prefix="/settings/pipelines",
     tags=["Pipelines"],
-    dependencies=[Depends(require_permission(POLICIES["pipelines"].default))],
 )
+MANAGE_PIPELINES_DEP = Depends(require_permission(POLICIES["pipelines"].default))
 
 
 # =============================================================================
@@ -134,7 +134,7 @@ class StageReorder(BaseModel):
 # =============================================================================
 
 
-@router.get("", response_model=list[PipelineRead])
+@router.get("", response_model=list[PipelineRead], dependencies=[MANAGE_PIPELINES_DEP])
 def list_pipelines(
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
@@ -187,7 +187,7 @@ def get_default_pipeline(
     )
 
 
-@router.get("/{pipeline_id}", response_model=PipelineRead)
+@router.get("/{pipeline_id}", response_model=PipelineRead, dependencies=[MANAGE_PIPELINES_DEP])
 def get_pipeline(
     pipeline_id: UUID,
     db: Session = Depends(get_db),
@@ -213,7 +213,7 @@ def get_pipeline(
     "",
     response_model=PipelineRead,
     status_code=201,
-    dependencies=[Depends(require_csrf_header)],
+    dependencies=[MANAGE_PIPELINES_DEP, Depends(require_csrf_header)],
 )
 def create_pipeline(
     data: PipelineCreate,
@@ -248,7 +248,10 @@ def create_pipeline(
     )
 
 
-@router.post("/default/sync-stages", dependencies=[Depends(require_csrf_header)])
+@router.post(
+    "/default/sync-stages",
+    dependencies=[MANAGE_PIPELINES_DEP, Depends(require_csrf_header)],
+)
 def sync_default_pipeline_stages(
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
@@ -273,7 +276,7 @@ def sync_default_pipeline_stages(
 @router.patch(
     "/{pipeline_id}",
     response_model=PipelineRead,
-    dependencies=[Depends(require_csrf_header)],
+    dependencies=[MANAGE_PIPELINES_DEP, Depends(require_csrf_header)],
 )
 def update_pipeline(
     pipeline_id: UUID,
@@ -325,7 +328,11 @@ def update_pipeline(
     )
 
 
-@router.delete("/{pipeline_id}", status_code=204, dependencies=[Depends(require_csrf_header)])
+@router.delete(
+    "/{pipeline_id}",
+    status_code=204,
+    dependencies=[MANAGE_PIPELINES_DEP, Depends(require_csrf_header)],
+)
 def delete_pipeline(
     pipeline_id: UUID,
     db: Session = Depends(get_db),
@@ -354,7 +361,11 @@ def delete_pipeline(
 # =============================================================================
 
 
-@router.get("/{pipeline_id}/versions", response_model=list[PipelineVersionRead])
+@router.get(
+    "/{pipeline_id}/versions",
+    response_model=list[PipelineVersionRead],
+    dependencies=[MANAGE_PIPELINES_DEP],
+)
 def get_pipeline_versions(
     pipeline_id: UUID,
     limit: int = Query(50, ge=1, le=100),
@@ -388,7 +399,7 @@ def get_pipeline_versions(
 @router.post(
     "/{pipeline_id}/rollback",
     response_model=PipelineRead,
-    dependencies=[Depends(require_csrf_header)],
+    dependencies=[MANAGE_PIPELINES_DEP, Depends(require_csrf_header)],
 )
 def rollback_pipeline(
     pipeline_id: UUID,
@@ -451,7 +462,11 @@ def rollback_pipeline(
 # =============================================================================
 
 
-@router.get("/{pipeline_id}/stages", response_model=list[StageRead])
+@router.get(
+    "/{pipeline_id}/stages",
+    response_model=list[StageRead],
+    dependencies=[MANAGE_PIPELINES_DEP],
+)
 async def list_stages(
     pipeline_id: UUID,
     include_inactive: bool = Query(False),
@@ -472,7 +487,12 @@ async def list_stages(
     return pipeline_service.get_stages(db, pipeline_id, include_inactive)
 
 
-@router.post("/{pipeline_id}/stages", response_model=StageRead, status_code=201)
+@router.post(
+    "/{pipeline_id}/stages",
+    response_model=StageRead,
+    status_code=201,
+    dependencies=[MANAGE_PIPELINES_DEP],
+)
 async def create_stage(
     pipeline_id: UUID,
     data: StageCreate,
@@ -514,7 +534,11 @@ async def create_stage(
         raise HTTPException(400, str(e))
 
 
-@router.put("/{pipeline_id}/stages/reorder", response_model=list[StageRead])
+@router.put(
+    "/{pipeline_id}/stages/reorder",
+    response_model=list[StageRead],
+    dependencies=[MANAGE_PIPELINES_DEP],
+)
 async def reorder_stages(
     pipeline_id: UUID,
     data: StageReorder,
@@ -543,7 +567,11 @@ async def reorder_stages(
         raise HTTPException(400, str(e))
 
 
-@router.put("/{pipeline_id}/stages/{stage_id}", response_model=StageRead)
+@router.put(
+    "/{pipeline_id}/stages/{stage_id}",
+    response_model=StageRead,
+    dependencies=[MANAGE_PIPELINES_DEP],
+)
 async def update_stage(
     pipeline_id: UUID,
     stage_id: UUID,
@@ -587,7 +615,10 @@ async def update_stage(
     )
 
 
-@router.delete("/{pipeline_id}/stages/{stage_id}")
+@router.delete(
+    "/{pipeline_id}/stages/{stage_id}",
+    dependencies=[MANAGE_PIPELINES_DEP],
+)
 async def delete_stage(
     pipeline_id: UUID,
     stage_id: UUID,

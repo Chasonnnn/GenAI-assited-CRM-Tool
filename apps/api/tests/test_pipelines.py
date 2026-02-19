@@ -1,11 +1,18 @@
 """Tests for Pipelines API with versioning."""
 
+import uuid
 from uuid import UUID
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
-from app.db.models import PipelineStage
+from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
+from app.core.deps import COOKIE_NAME, get_db
+from app.core.security import create_session_token
+from app.db.enums import Role
+from app.db.models import Membership, PipelineStage, User
+from app.main import app
+from app.services import session_service
 
 
 @pytest.mark.asyncio
@@ -163,3 +170,59 @@ async def test_create_pipeline_sets_is_intake_stage(authed_client, db):
     assert stage_by_slug["new_unread"].is_intake_stage is True
     assert stage_by_slug["ready_to_match"].is_intake_stage is False
     assert stage_by_slug["delivered"].is_intake_stage is False
+
+
+@pytest.mark.asyncio
+async def test_intake_can_get_default_pipeline(db, test_org):
+    intake_user = User(
+        id=uuid.uuid4(),
+        email=f"intake-{uuid.uuid4().hex[:8]}@test.com",
+        display_name="Intake Pipeline Reader",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(intake_user)
+    db.flush()
+
+    db.add(
+        Membership(
+            id=uuid.uuid4(),
+            user_id=intake_user.id,
+            organization_id=test_org.id,
+            role=Role.INTAKE_SPECIALIST,
+            is_active=True,
+        )
+    )
+    db.flush()
+
+    token = create_session_token(
+        user_id=intake_user.id,
+        org_id=test_org.id,
+        role=Role.INTAKE_SPECIALIST.value,
+        token_version=intake_user.token_version,
+        mfa_verified=True,
+        mfa_required=True,
+    )
+    session_service.create_session(
+        db=db, user_id=intake_user.id, org_id=test_org.id, token=token, request=None
+    )
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    csrf_token = generate_csrf_token()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="https://test",
+        cookies={COOKIE_NAME: token, CSRF_COOKIE_NAME: csrf_token},
+        headers={CSRF_HEADER: csrf_token},
+    ) as client:
+        response = await client.get("/settings/pipelines/default")
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["is_default"] is True
+        assert len(payload["stages"]) > 0
+
+    app.dependency_overrides.clear()
