@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.85.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.85.0...surrogacy-crm-platform-v0.85.1) (2026-02-19)
+
+
+### Bug Fixes
+
+* **api:** add unit tests for meta lead monitoring organization scoping ([205bc25](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/205bc259d23712b10ad10f1ace55c371d7e7e8d4))
+* **api:** enforce organization scoping for meta lead monitoring and dev endpoints ([2679573](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/26795737113cf9224ca6cb446a5678d77bd449d5))
+* **ci:** implement retry logic for pnpm audit to handle transient registry errors ([c689107](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c689107dcbb1a7e989871fb376eb65342be79384))
+* resolve email templates preview/test loop and stabilize tests ([b3afb90](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b3afb90919c634927a1c180c3343e7536e5de645))
+* **tests:** add edge case coverage for integer-only height formatting ([841c6bc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/841c6bc782dd9c851eccf73866d1f3f162834765))
+* **web:** add unit tests for signature preview in email templates page ([80b33dd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/80b33dd4ccf3395b0c089ad1693ac465e66a730c))
+* **web:** display active signature type in email template preview ([722412a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/722412a98978f227b386290fdeb9f8227080052f))
+* **web:** handle string-serialized decimals in height formatting and restore assignee submenu ([438eaf0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/438eaf0a0d8849b3084237deecdf886acbfcf453))
+* **web:** improve template name resolution and signature preview in email composer ([f091812](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f091812feffe8ff06d5125d07ba56f3a97371a0f))
+
 ## [Unreleased]
 
 ### Bug Fixes
