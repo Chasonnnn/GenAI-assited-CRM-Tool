@@ -31,3 +31,15 @@ def test_transform_height_flexible_interprets_space_separated_feet_inches_rounde
     result = transform_height_flexible("5 7")
     assert result.success is True
     assert result.value == Decimal("5.6")
+
+
+def test_transform_height_flexible_interprets_feet_only_integer() -> None:
+    result = transform_height_flexible("5")
+    assert result.success is True
+    assert result.value == Decimal("5.0")
+
+
+def test_transform_height_flexible_interprets_feet_only_integer_with_trailing_space() -> None:
+    result = transform_height_flexible("5 ")
+    assert result.success is True
+    assert result.value == Decimal("5.0")

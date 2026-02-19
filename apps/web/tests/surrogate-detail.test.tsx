@@ -443,6 +443,28 @@ describe('SurrogateDetailPage', () => {
         expect(heightRow).toHaveTextContent('5 ft 6 in')
     })
 
+    it('shows 5 ft 0 in when API height is feet-only string', () => {
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                height_ft: '5' as unknown as number,
+                weight_lb: 120,
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        const heightRow = screen.getByText('Height:').parentElement
+        expect(heightRow).toBeTruthy()
+        expect(heightRow).toHaveTextContent('5 ft 0 in')
+    })
+
     it('hides Medical Information and Pregnancy Tracker before ready_to_match', () => {
         render(
             <SurrogateDetailLayoutClient>
