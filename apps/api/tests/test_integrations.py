@@ -459,6 +459,49 @@ async def test_get_google_events_encodes_calendar_id_in_request(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_google_events_defaults_blank_summary_to_no_title(monkeypatch):
+    from app.services import calendar_service
+
+    class _FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {
+                "items": [
+                    {
+                        "id": "evt-blank-summary",
+                        "summary": "",
+                        "start": {"dateTime": "2026-02-19T18:30:00-05:00"},
+                        "end": {"dateTime": "2026-02-19T19:30:00-05:00"},
+                        "htmlLink": "https://calendar.google.com/event?eid=blank",
+                    }
+                ]
+            }
+
+    class _FakeAsyncClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, headers=None, params=None):
+            return _FakeResponse()
+
+    monkeypatch.setattr(calendar_service.httpx, "AsyncClient", _FakeAsyncClient)
+
+    events = await calendar_service.get_google_events(
+        access_token="token",
+        calendar_id="primary",
+        time_min=datetime(2026, 2, 1, tzinfo=timezone.utc),
+        time_max=datetime(2026, 2, 2, tzinfo=timezone.utc),
+    )
+
+    assert len(events) == 1
+    assert events[0]["summary"] == "(No title)"
+
+
+@pytest.mark.asyncio
 async def test_appointments_list_cancels_removed_imported_google_event(
     authed_client: AsyncClient,
     db,

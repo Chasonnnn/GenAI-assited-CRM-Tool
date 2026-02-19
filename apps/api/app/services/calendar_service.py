@@ -464,7 +464,7 @@ async def get_google_events(
                     events.append(
                         CalendarEvent(
                             id=item.get("id", ""),
-                            summary=item.get("summary", "(No title)"),
+                            summary=(item.get("summary") or "").strip() or "(No title)",
                             start=start_dt,
                             end=end_dt,
                             html_link=item.get("htmlLink", ""),
