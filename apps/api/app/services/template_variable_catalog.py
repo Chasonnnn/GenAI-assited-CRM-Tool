@@ -83,6 +83,18 @@ def list_org_email_template_variables() -> list[TemplateVariableDefinition]:
             description="Surrogate owner name",
             category="Case",
         ),
+        TemplateVariableDefinition(
+            name="form_link",
+            description="Surrogate application form link",
+            category="Case",
+            value_type="url",
+        ),
+        TemplateVariableDefinition(
+            name="appointment_link",
+            description="Surrogate appointment booking link",
+            category="Case",
+            value_type="url",
+        ),
         # Organization
         TemplateVariableDefinition(
             name="org_name",

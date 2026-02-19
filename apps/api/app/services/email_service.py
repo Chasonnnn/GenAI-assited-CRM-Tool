@@ -725,8 +725,9 @@ def render_template(
 
 def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dict[str, str]:
     """Build flat template variables for a surrogate context."""
+    from app.db.enums import FormStatus
     from app.db.enums import OwnerType
-    from app.db.models import Organization, Queue, User
+    from app.db.models import BookingLink, Form, Organization, Queue, User
     from app.services import media_service
 
     org = db.query(Organization).filter(Organization.id == surrogate.organization_id).first()
@@ -753,6 +754,79 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
             base_url=org_service.get_org_portal_base_url(org),
         )
 
+    form_link = ""
+    appointment_link = ""
+    from app.services import form_submission_service
+
+    form_token = form_submission_service.get_latest_active_token_for_surrogate(
+        db,
+        org_id=surrogate.organization_id,
+        surrogate_id=surrogate.id,
+    )
+    if not form_token:
+        latest_published_form = (
+            db.query(Form)
+            .filter(
+                Form.organization_id == surrogate.organization_id,
+                Form.status == FormStatus.PUBLISHED.value,
+            )
+            .order_by(Form.updated_at.desc(), Form.created_at.desc())
+            .first()
+        )
+        if latest_published_form:
+            form_token = form_submission_service.get_or_create_submission_token(
+                db=db,
+                org_id=surrogate.organization_id,
+                form=latest_published_form,
+                surrogate=surrogate,
+                user_id=surrogate.created_by_user_id,
+                expires_in_days=form_submission_service.DEFAULT_TOKEN_EXPIRES_IN_DAYS,
+                commit=False,
+            )
+
+    if form_token:
+        from app.services import org_service
+
+        portal_base_url = org_service.get_org_portal_base_url(org)
+        form_link = (
+            f"{portal_base_url}/apply/{form_token.token}"
+            if portal_base_url
+            else f"/apply/{form_token.token}"
+        )
+
+    booking_link_user_id: UUID | None = None
+    if surrogate.owner_type == OwnerType.USER.value and surrogate.owner_id:
+        booking_link_user_id = surrogate.owner_id
+    elif surrogate.created_by_user_id:
+        booking_link_user_id = surrogate.created_by_user_id
+
+    if booking_link_user_id:
+        booking_link = (
+            db.query(BookingLink)
+            .filter(
+                BookingLink.organization_id == surrogate.organization_id,
+                BookingLink.user_id == booking_link_user_id,
+            )
+            .first()
+        )
+        if not booking_link:
+            from app.services import appointment_service
+
+            booking_link = appointment_service.get_or_create_booking_link(
+                db=db,
+                user_id=booking_link_user_id,
+                org_id=surrogate.organization_id,
+            )
+        if booking_link:
+            from app.services import org_service
+
+            portal_base_url = org_service.get_org_portal_base_url(org)
+            appointment_link = (
+                f"{portal_base_url}/book/{booking_link.public_slug}"
+                if portal_base_url
+                else f"/book/{booking_link.public_slug}"
+            )
+
     return {
         "first_name": first_name,
         "full_name": full_name,
@@ -762,6 +836,8 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
         "status_label": surrogate.status_label or "",
         "state": surrogate.state or "",
         "owner_name": owner_name,
+        "form_link": form_link,
+        "appointment_link": appointment_link,
         "org_name": org.name if org else "",
         "org_logo_url": org_logo_url or "",
         "unsubscribe_url": unsubscribe_url,

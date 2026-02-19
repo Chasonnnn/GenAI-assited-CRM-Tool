@@ -44,13 +44,25 @@ def build_sample_variables(
     ) or ""
 
     unsubscribe_url = ""
+    form_link = ""
+    appointment_link = ""
     if (to_email or "").strip():
         from app.services import unsubscribe_service, org_service
+
+        portal_base_url = org_service.get_org_portal_base_url(org)
 
         unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
             org_id=org_id,
             email=to_email,
-            base_url=org_service.get_org_portal_base_url(org),
+            base_url=portal_base_url,
+        )
+        form_link = (
+            f"{portal_base_url}/apply/EXAMPLE_TOKEN" if portal_base_url else "/apply/EXAMPLE_TOKEN"
+        )
+        appointment_link = (
+            f"{portal_base_url}/book/EXAMPLE_APPOINTMENT_SLUG"
+            if portal_base_url
+            else "/book/EXAMPLE_APPOINTMENT_SLUG"
         )
 
     return {
@@ -65,6 +77,8 @@ def build_sample_variables(
         "status_label": "Qualified",
         "state": "CA",
         "owner_name": actor_display_name or "Case Manager",
+        "form_link": form_link,
+        "appointment_link": appointment_link,
         # Organization
         "org_name": org_name,
         "org_logo_url": org_logo_url,

@@ -12,6 +12,8 @@ async def test_org_email_template_variables_endpoint(authed_client):
     names = {v["name"] for v in variables}
     assert "status_label" in names
     assert "state" in names
+    assert "form_link" in names
+    assert "appointment_link" in names
     assert "unsubscribe_url" in names
 
 
@@ -38,6 +40,8 @@ async def test_platform_email_template_variables_endpoint_platform_admin(
     names = {v["name"] for v in variables}
     assert "status_label" in names
     assert "state" in names
+    assert "form_link" in names
+    assert "appointment_link" in names
     assert "unsubscribe_url" in names
 
 
