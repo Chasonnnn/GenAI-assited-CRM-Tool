@@ -67,8 +67,9 @@ export function EmailComposeDialog({
     const [selectedTemplate, setSelectedTemplate] = React.useState<string>("")
     const [subject, setSubject] = React.useState("")
     const [body, setBody] = React.useState("")
-    const [isPreview, setIsPreview] = React.useState(false)
+    const [isPreview, setIsPreview] = React.useState(true)
     const idempotencyKeyRef = React.useRef<string | null>(null)
+    const hydratedTemplateIdRef = React.useRef<string | null>(null)
 
     // Fetch email templates list
     const { data: templates = [], isLoading: templatesLoading } = useEmailTemplates({ activeOnly: true })
@@ -81,12 +82,32 @@ export function EmailComposeDialog({
     })
     const sendEmailMutation = useSendSurrogateEmail()
 
+    const resolveTemplateLabel = React.useCallback(
+        (templateId: string | null) => {
+            if (!templateId) return ""
+
+            const listTemplate = templates.find((template) => template.id === templateId)
+            const selectedFullTemplate = fullTemplate?.id === templateId ? fullTemplate : null
+
+            return (
+                selectedFullTemplate?.name?.trim() ||
+                listTemplate?.name?.trim() ||
+                listTemplate?.subject?.trim() ||
+                selectedFullTemplate?.subject?.trim() ||
+                templateId
+            )
+        },
+        [fullTemplate, templates]
+    )
+
     // Update subject and body when full template loads
     React.useEffect(() => {
-        if (fullTemplate) {
-            setSubject(fullTemplate.subject)
-            setBody(fullTemplate.body)
-        }
+        if (!fullTemplate?.id) return
+        if (hydratedTemplateIdRef.current === fullTemplate.id) return
+
+        setSubject(fullTemplate.subject)
+        setBody(fullTemplate.body)
+        hydratedTemplateIdRef.current = fullTemplate.id
     }, [fullTemplate])
 
     // Reset form when dialog closes
@@ -95,8 +116,9 @@ export function EmailComposeDialog({
             setSelectedTemplate("")
             setSubject("")
             setBody("")
-            setIsPreview(false)
+            setIsPreview(true)
             idempotencyKeyRef.current = null
+            hydratedTemplateIdRef.current = null
         }
     }, [open])
 
@@ -302,16 +324,13 @@ export function EmailComposeDialog({
                                             ? "Loading templates..."
                                             : "Select a template..."
                                     }
-                                />
+                                >
+                                    {(value) => resolveTemplateLabel(value)}
+                                </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
                                 {templates.map((template) => {
-                                    const isSelectedTemplate = template.id === selectedTemplate
-                                    const resolvedLabel =
-                                        (isSelectedTemplate ? fullTemplate?.name?.trim() : "") ||
-                                        template.name?.trim() ||
-                                        template.subject?.trim() ||
-                                        template.id
+                                    const resolvedLabel = resolveTemplateLabel(template.id)
 
                                     return (
                                         <SelectItem key={template.id} value={template.id}>
@@ -363,23 +382,22 @@ export function EmailComposeDialog({
                                 size="sm"
                                 onClick={() => setIsPreview(!isPreview)}
                                 className="h-7 gap-2"
-                                disabled={!body}
                             >
                                 {isPreview ? (
                                     <>
                                         <EyeOffIcon className="size-4" />
-                                        Edit
+                                        Edit HTML
                                     </>
                                 ) : (
                                     <>
                                         <EyeIcon className="size-4" />
-                                        Preview
+                                        Show Preview
                                     </>
                                 )}
                             </Button>
                         </div>
 
-                        {isPreview ? (
+                        {isPreview && (
                             <div className="rounded-xl border border-input overflow-hidden">
                                 <div className="bg-muted/30 border-b px-4 py-3 space-y-2">
                                     <div className="flex items-center gap-2 text-sm">
@@ -398,28 +416,29 @@ export function EmailComposeDialog({
                                     />
                                 </div>
                             </div>
-                        ) : (
-                            <>
-                                <Textarea
-                                    id="body"
-                                    value={body}
-                                    onChange={(e) => setBody(e.target.value)}
-                                    placeholder="Enter email message..."
-                                    className="min-h-48 font-mono text-sm"
-                                />
-                                {body && (
-                                    <div className="bg-muted/30 rounded-lg px-3 py-2 text-xs">
-                                        <div className="font-medium mb-2 text-muted-foreground">Available Variables:</div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {availableVariables.map((variable) => (
-                                                <code key={variable} className="bg-teal-500/20 text-teal-400 px-2 py-1 rounded text-xs">
-                                                    {variable}
-                                                </code>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </>
+                        )}
+
+                        {!isPreview && (
+                            <Textarea
+                                id="body"
+                                value={body}
+                                onChange={(e) => setBody(e.target.value)}
+                                placeholder="Enter email message..."
+                                className="min-h-48 font-mono text-sm"
+                            />
+                        )}
+
+                        {body && !isPreview && (
+                            <div className="bg-muted/30 rounded-lg px-3 py-2 text-xs">
+                                <div className="font-medium mb-2 text-muted-foreground">Available Variables:</div>
+                                <div className="flex flex-wrap gap-2">
+                                    {availableVariables.map((variable) => (
+                                        <code key={variable} className="bg-teal-500/20 text-teal-400 px-2 py-1 rounded text-xs">
+                                            {variable}
+                                        </code>
+                                    ))}
+                                </div>
+                            </div>
                         )}
                     </div>
 

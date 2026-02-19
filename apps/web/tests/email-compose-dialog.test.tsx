@@ -36,13 +36,9 @@ vi.mock("@/components/ui/select", async () => {
     const SelectContext = ReactModule.createContext<{
         value: string
         onValueChange: (value: string) => void
-        selectedLabel: string
-        setSelectedLabel: (label: string) => void
     }>({
         value: "",
         onValueChange: () => undefined,
-        selectedLabel: "",
-        setSelectedLabel: () => undefined,
     })
 
     function Select({
@@ -54,9 +50,8 @@ vi.mock("@/components/ui/select", async () => {
         onValueChange: (value: string) => void
         children: React.ReactNode
     }) {
-        const [selectedLabel, setSelectedLabel] = ReactModule.useState("")
         return (
-            <SelectContext.Provider value={{ value, onValueChange, selectedLabel, setSelectedLabel }}>
+            <SelectContext.Provider value={{ value, onValueChange }}>
                 <div>{children}</div>
             </SelectContext.Provider>
         )
@@ -81,11 +76,14 @@ vi.mock("@/components/ui/select", async () => {
         children,
     }: {
         placeholder?: string
-        children?: React.ReactNode
+        children?: ((value: string | null) => React.ReactNode) | React.ReactNode
     }) {
-        const { value, selectedLabel } = ReactModule.useContext(SelectContext)
-        const fallback = selectedLabel || value || placeholder
-        return <span>{children ?? fallback}</span>
+        const { value } = ReactModule.useContext(SelectContext)
+        if (!value) return <span>{placeholder}</span>
+        if (typeof children === "function") {
+            return <span>{children(value)}</span>
+        }
+        return <span>{value}</span>
     }
 
     function SelectContent({ children }: { children: React.ReactNode }) {
@@ -99,22 +97,16 @@ vi.mock("@/components/ui/select", async () => {
         value: string
         children: React.ReactNode
     }) {
-        const { onValueChange, value: selectedValue, setSelectedLabel } = ReactModule.useContext(SelectContext)
+        const { onValueChange } = ReactModule.useContext(SelectContext)
         const label = extractNodeText(children)
-
-        ReactModule.useEffect(() => {
-            if (selectedValue === value && label) {
-                setSelectedLabel(label)
-            }
-        }, [label, selectedValue, setSelectedLabel, value])
 
         return (
             <button
                 type="button"
                 onClick={() => {
-                    setSelectedLabel(label)
                     onValueChange(value)
                 }}
+                aria-label={label}
             >
                 {children}
             </button>
@@ -238,7 +230,7 @@ describe("EmailComposeDialog", () => {
         })
     })
 
-    it("renders html preview with variable interpolation and signature block", async () => {
+    it("renders html preview by default with variable interpolation and signature block", async () => {
         const templateId = "tpl-1"
 
         mockUseEmailTemplates.mockReturnValue({
@@ -294,15 +286,93 @@ describe("EmailComposeDialog", () => {
         )
 
         fireEvent.click(screen.getByRole("button", { name: "Initial Outreach" }))
-        fireEvent.click(await screen.findByRole("button", { name: "Preview" }))
 
         await waitFor(() => {
             expect(screen.getByText("Hello Ashley Nicole Harden")).toBeInTheDocument()
             const proseBody = document.querySelector(".prose")
             expect(proseBody).toBeTruthy()
             expect(proseBody).toHaveTextContent("Hi Ashley Nicole Harden, thank you for applying.")
+            expect(proseBody).not.toHaveTextContent("{{full_name}}")
             expect(screen.getByText("Org Signature Block")).toBeInTheDocument()
-            expect(screen.queryByText("<p>Hi <strong>{{full_name}}</strong>, thank you for applying.</p>")).not.toBeInTheDocument()
+        })
+    })
+
+    it("shows html editor when toggled and applies edits when returning to preview", async () => {
+        const templateId = "tpl-live-edit"
+
+        mockUseEmailTemplates.mockReturnValue({
+            data: [
+                {
+                    id: templateId,
+                    name: "Welcome Email",
+                    subject: "Welcome {{full_name}}",
+                    from_email: null,
+                    is_active: true,
+                    scope: "org",
+                    owner_user_id: null,
+                    owner_name: null,
+                    is_system_template: false,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+            ],
+            isLoading: false,
+        })
+
+        mockUseEmailTemplate.mockImplementation((id: string | null) => {
+            if (id !== templateId) return { data: null, isLoading: false }
+            return {
+                data: {
+                    id: templateId,
+                    organization_id: "org-1",
+                    created_by_user_id: null,
+                    name: "Welcome Email",
+                    subject: "Welcome {{full_name}}",
+                    from_email: null,
+                    body: "<p>Initial content.</p>",
+                    is_active: true,
+                    scope: "org",
+                    owner_user_id: null,
+                    owner_name: null,
+                    source_template_id: null,
+                    is_system_template: false,
+                    current_version: 1,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+                isLoading: false,
+            }
+        })
+
+        render(
+            <EmailComposeDialog
+                open
+                onOpenChange={vi.fn()}
+                surrogateData={baseSurrogateData}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "Welcome Email" }))
+
+        await waitFor(() => {
+            const proseBody = document.querySelector(".prose")
+            expect(proseBody).toBeTruthy()
+            expect(proseBody).toHaveTextContent("Initial content.")
+        })
+
+        fireEvent.click(await screen.findByRole("button", { name: /edit html/i }))
+
+        const bodyTextarea = screen.getByPlaceholderText("Enter email message...")
+        fireEvent.change(bodyTextarea, {
+            target: { value: "<p>Custom hello {{full_name}}.</p>" },
+        })
+
+        fireEvent.click(screen.getByRole("button", { name: /show preview/i }))
+
+        await waitFor(() => {
+            const proseBody = document.querySelector(".prose")
+            expect(proseBody).toBeTruthy()
+            expect(proseBody).toHaveTextContent("Custom hello Ashley Nicole Harden.")
         })
     })
 })
