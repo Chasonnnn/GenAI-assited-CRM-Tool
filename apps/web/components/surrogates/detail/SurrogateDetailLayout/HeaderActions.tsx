@@ -6,6 +6,9 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -107,17 +110,6 @@ export function HeaderActions() {
                 </Button>
             )}
 
-            {canManageQueue && isOwnedByUser && queues.length > 0 && (
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openDialog({ type: "release_queue" })}
-                    disabled={surrogate.is_archived}
-                >
-                    Release to Queue
-                </Button>
-            )}
-
             {zoomConnected && (
                 <Button
                     variant="outline"
@@ -147,53 +139,6 @@ export function HeaderActions() {
                 </Button>
             )}
 
-            {user?.role &&
-                ["case_manager", "admin", "developer"].includes(user.role) &&
-                !surrogate.is_archived && (
-                    <DropdownMenu>
-                        <DropdownMenuTrigger
-                            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-                            disabled={isAssignPending}
-                        >
-                            {isAssignPending && <Loader2Icon className="size-4 mr-2 animate-spin" />}
-                            Assign
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            {surrogate.owner_type === "user" && surrogate.owner_id && (() => {
-                                const defaultQueue = queues.find((queue) => queue.name === "Unassigned")
-                                if (!defaultQueue) return null
-                                return (
-                                    <>
-                                        <DropdownMenuItem
-                                            onClick={() => assignSurrogate(null)}
-                                            disabled={isReleasePending}
-                                        >
-                                            <XIcon className="size-4 mr-2" />
-                                            Unassign
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                    </>
-                                )
-                            })()}
-                            {assignees.map((assignee) => (
-                                <DropdownMenuItem
-                                    key={assignee.id}
-                                    onClick={() => assignSurrogate(assignee.id)}
-                                    disabled={surrogate.owner_id === assignee.id}
-                                >
-                                    {assignee.name}
-                                    {surrogate.owner_id === assignee.id && (
-                                        <CheckIcon className="size-4 ml-auto" />
-                                    )}
-                                </DropdownMenuItem>
-                            ))}
-                            {assignees.length === 0 && (
-                                <DropdownMenuItem disabled>No users available</DropdownMenuItem>
-                            )}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                )}
-
             <DropdownMenu>
                 <DropdownMenuTrigger
                     className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}
@@ -205,6 +150,61 @@ export function HeaderActions() {
                     <DropdownMenuItem onClick={() => openDialog({ type: "edit_surrogate" })}>
                         Edit
                     </DropdownMenuItem>
+                    {canManageQueue && isOwnedByUser && queues.length > 0 && (
+                        <DropdownMenuItem
+                            onClick={() => openDialog({ type: "release_queue" })}
+                            disabled={surrogate.is_archived}
+                        >
+                            Release to Queue
+                        </DropdownMenuItem>
+                    )}
+                    {user?.role &&
+                        ["case_manager", "admin", "developer"].includes(user.role) &&
+                        !surrogate.is_archived && (
+                            <DropdownMenuSub>
+                                <DropdownMenuSubTrigger disabled={isAssignPending}>
+                                    {isAssignPending && (
+                                        <Loader2Icon className="size-4 mr-2 animate-spin" />
+                                    )}
+                                    Assign
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                    {surrogate.owner_type === "user" && surrogate.owner_id && (() => {
+                                        const defaultQueue = queues.find(
+                                            (queue) => queue.name === "Unassigned"
+                                        )
+                                        if (!defaultQueue) return null
+                                        return (
+                                            <>
+                                                <DropdownMenuItem
+                                                    onClick={() => assignSurrogate(null)}
+                                                    disabled={isReleasePending}
+                                                >
+                                                    <XIcon className="size-4 mr-2" />
+                                                    Unassign
+                                                </DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                            </>
+                                        )
+                                    })()}
+                                    {assignees.map((assignee) => (
+                                        <DropdownMenuItem
+                                            key={assignee.id}
+                                            onClick={() => assignSurrogate(assignee.id)}
+                                            disabled={surrogate.owner_id === assignee.id}
+                                        >
+                                            {assignee.name}
+                                            {surrogate.owner_id === assignee.id && (
+                                                <CheckIcon className="size-4 ml-auto" />
+                                            )}
+                                        </DropdownMenuItem>
+                                    ))}
+                                    {assignees.length === 0 && (
+                                        <DropdownMenuItem disabled>No users available</DropdownMenuItem>
+                                    )}
+                                </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+                        )}
                     {surrogate.is_archived ? (
                         <DropdownMenuItem onClick={restoreSurrogate}>Restore</DropdownMenuItem>
                     ) : (

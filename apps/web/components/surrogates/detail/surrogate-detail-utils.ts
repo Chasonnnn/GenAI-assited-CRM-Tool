@@ -22,9 +22,15 @@ export function formatDate(dateString: string): string {
     })
 }
 
-export function formatHeight(heightFt: number | null | undefined): string {
-    if (heightFt == null || !Number.isFinite(heightFt)) return "-"
-    const totalInches = Math.round(heightFt * 12)
+export function formatHeight(heightFt: number | string | null | undefined): string {
+    const numericHeight =
+        typeof heightFt === "number"
+            ? heightFt
+            : typeof heightFt === "string"
+                ? Number(heightFt.trim())
+                : Number.NaN
+    if (!Number.isFinite(numericHeight)) return "-"
+    const totalInches = Math.round(numericHeight * 12)
     if (totalInches <= 0) return "-"
     const feet = Math.floor(totalInches / 12)
     const inches = totalInches % 12
