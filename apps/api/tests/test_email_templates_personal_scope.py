@@ -273,6 +273,42 @@ async def test_admin_cannot_share_other_users_personal_template(db, test_org):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("privileged_role", [Role.ADMIN, Role.DEVELOPER])
+async def test_admin_and_developer_can_edit_other_users_personal_templates(
+    db, test_org, privileged_role: Role
+):
+    owner = create_user_with_role(db, test_org.id, Role.CASE_MANAGER)
+    privileged_user = create_user_with_role(db, test_org.id, privileged_role)
+
+    personal_template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        created_by_user_id=owner.id,
+        name="Owner Template",
+        subject="Original Subject",
+        body="<p>Body</p>",
+        scope="personal",
+        owner_user_id=owner.id,
+        is_active=True,
+    )
+    db.add(personal_template)
+    db.commit()
+
+    async with authed_client_for_user(
+        db, test_org.id, privileged_user, privileged_role
+    ) as client:
+        res = await client.patch(
+            f"/email-templates/{personal_template.id}",
+            json={"subject": "Updated By Privileged User"},
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["subject"] == "Updated By Privileged User"
+        assert data["scope"] == "personal"
+        assert data["owner_user_id"] == str(owner.id)
+
+
+@pytest.mark.asyncio
 async def test_create_org_template_invalid_from_email_returns_422(db, test_org):
     admin = create_user_with_role(db, test_org.id, Role.ADMIN)
 

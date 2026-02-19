@@ -319,8 +319,9 @@ def update_template(
                 detail="You don't have permission to edit organization templates",
             )
     else:
-        # Personal templates: only owner can edit
-        if template.owner_user_id != session.user_id:
+        # Personal templates: owner or admin/developer can edit
+        is_admin = session.role in (Role.ADMIN, Role.DEVELOPER)
+        if template.owner_user_id != session.user_id and not is_admin:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only edit your own personal templates",
