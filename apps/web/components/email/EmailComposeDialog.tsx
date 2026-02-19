@@ -21,7 +21,10 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { EyeIcon, EyeOffIcon, SendIcon, Loader2Icon } from "lucide-react"
+import DOMPurify from "dompurify"
+import { normalizeTemplateHtml } from "@/lib/email-template-html"
 import { useEmailTemplates, useEmailTemplate } from "@/lib/hooks/use-email-templates"
+import { useOrgSignaturePreview, useSignaturePreview } from "@/lib/hooks/use-signature"
 import { useSendSurrogateEmail } from "@/lib/hooks/use-surrogates"
 
 interface EmailComposeDialogProps {
@@ -37,6 +40,22 @@ interface EmailComposeDialogProps {
         phone?: string
     }
     onSuccess?: () => void
+}
+
+const PREVIEW_FONT_STACK =
+    '-apple-system, BlinkMacSystemFont, "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", Arial, sans-serif'
+
+const LEGACY_UNSUBSCRIBE_TOKEN_RE = /\{\{\s*unsubscribe_url\s*\}\}/gi
+const LEGACY_UNSUBSCRIBE_ANCHOR_RE =
+    /<a\b[^>]*\bhref\s*=\s*(["'])\s*\{\{\s*unsubscribe_url\s*\}\}\s*\1[^>]*>[\s\S]*?<\/a>/gi
+
+function escapeHtml(raw: string): string {
+    return raw
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;")
 }
 
 export function EmailComposeDialog({
@@ -55,6 +74,11 @@ export function EmailComposeDialog({
     const { data: templates = [], isLoading: templatesLoading } = useEmailTemplates({ activeOnly: true })
     // Fetch full template when one is selected
     const { data: fullTemplate } = useEmailTemplate(selectedTemplate || null)
+    const { data: personalSignaturePreview } = useSignaturePreview()
+    const { data: orgSignaturePreview } = useOrgSignaturePreview({
+        enabled: fullTemplate?.scope !== "personal",
+        mode: "org_only",
+    })
     const sendEmailMutation = useSendSurrogateEmail()
 
     // Update subject and body when full template loads
@@ -104,9 +128,9 @@ export function EmailComposeDialog({
         onOpenChange(false)
     }
 
-    // Replace variables with surrogate data for preview
-    const renderPreview = (text: string) => {
-        return text
+    const replaceTemplateVariables = React.useCallback(
+        (text: string) => {
+            return text
             .replace(/\{\{full_name\}\}/g, surrogateData.full_name)
             .replace(/\{\{surrogate_number\}\}/g, surrogateData.surrogate_number)
             .replace(/\{\{status_label\}\}/g, surrogateData.status)
@@ -115,7 +139,122 @@ export function EmailComposeDialog({
             .replace(/\{\{phone\}\}/g, surrogateData.phone || "")
             .replace(/\{\{owner_name\}\}/g, "")
             .replace(/\{\{org_name\}\}/g, "")
-    }
+        },
+        [surrogateData]
+    )
+
+    const sanitizePreviewHtml = React.useCallback((html: string) => {
+        return DOMPurify.sanitize(html, {
+            USE_PROFILES: { html: true },
+            ADD_TAGS: [
+                "table",
+                "thead",
+                "tbody",
+                "tfoot",
+                "tr",
+                "td",
+                "th",
+                "colgroup",
+                "col",
+                "img",
+                "hr",
+                "div",
+                "span",
+                "center",
+                "h1",
+                "h2",
+                "h3",
+                "h4",
+                "h5",
+                "h6",
+            ],
+            ADD_ATTR: [
+                "style",
+                "class",
+                "align",
+                "valign",
+                "width",
+                "height",
+                "cellpadding",
+                "cellspacing",
+                "border",
+                "bgcolor",
+                "colspan",
+                "rowspan",
+                "role",
+                "target",
+                "rel",
+                "href",
+                "src",
+                "alt",
+                "title",
+            ],
+        })
+    }, [])
+
+    const previewSubject = React.useMemo(
+        () => replaceTemplateVariables(subject),
+        [replaceTemplateVariables, subject]
+    )
+
+    const previewBodyHtml = React.useMemo(() => {
+        if (!body) return ""
+
+        let html = replaceTemplateVariables(body)
+        html = html.replace(LEGACY_UNSUBSCRIBE_TOKEN_RE, "")
+        html = html.replace(LEGACY_UNSUBSCRIBE_ANCHOR_RE, "")
+
+        const hasHtmlTags = /<[a-z][\s\S]*>/i.test(html)
+        if (!hasHtmlTags) {
+            html = html
+                .split(/\r?\n/)
+                .map((line) =>
+                    line.trim()
+                        ? `<p style="margin: 0 0 1em 0;">${escapeHtml(line)}</p>`
+                        : `<p style="margin: 0 0 1em 0;">&nbsp;</p>`
+                )
+                .join("")
+        } else {
+            html = normalizeTemplateHtml(html)
+        }
+
+        if (!/<html\b|<body\b/i.test(html)) {
+            html = `<div style="font-family: ${PREVIEW_FONT_STACK}; font-size: 16px; line-height: 24px; color: #111827;">${html}</div>`
+        }
+
+        const signatureHtml =
+            fullTemplate?.scope === "personal"
+                ? (personalSignaturePreview?.html || "")
+                : (orgSignaturePreview?.html || "")
+
+        const includeDivider = !signatureHtml
+        const unsubscribeFooterHtml = `
+            <div style="margin-top: 14px; font-size: 12px; color: #6b7280; ${includeDivider ? "padding-top: 16px; border-top: 1px solid #e5e7eb;" : ""}">
+                <p style="margin: 0;">
+                    If you no longer wish to receive these emails, you can
+                    <a href="https://app.example.com/email/unsubscribe/preview" target="_blank" rel="noopener noreferrer" style="color: #6b7280; text-decoration: underline;">Unsubscribe</a>.
+                </p>
+            </div>
+        `.trim()
+
+        const insertion = `${signatureHtml}${unsubscribeFooterHtml}`
+        if (/<\/body\s*>/i.test(html)) {
+            html = html.replace(/<\/body\s*>/i, `${insertion}</body>`)
+        } else if (/<\/html\s*>/i.test(html)) {
+            html = html.replace(/<\/html\s*>/i, `${insertion}</html>`)
+        } else {
+            html = `${html}${insertion}`
+        }
+
+        return sanitizePreviewHtml(html)
+    }, [
+        body,
+        fullTemplate?.scope,
+        orgSignaturePreview?.html,
+        personalSignaturePreview?.html,
+        replaceTemplateVariables,
+        sanitizePreviewHtml,
+    ])
 
     // Highlight variables in edit mode
     const renderWithHighlights = (text: string) => {
@@ -157,14 +296,29 @@ export function EmailComposeDialog({
                         <Label htmlFor="template">Email Template</Label>
                         <Select value={selectedTemplate} onValueChange={(value) => setSelectedTemplate(value || "")} disabled={templatesLoading}>
                             <SelectTrigger id="template" className="w-full">
-                                <SelectValue placeholder={templatesLoading ? "Loading templates..." : "Select a template..."} />
+                                <SelectValue
+                                    placeholder={
+                                        templatesLoading
+                                            ? "Loading templates..."
+                                            : "Select a template..."
+                                    }
+                                />
                             </SelectTrigger>
                             <SelectContent>
-                                {templates.map((template) => (
-                                    <SelectItem key={template.id} value={template.id}>
-                                        {template.name}
-                                    </SelectItem>
-                                ))}
+                                {templates.map((template) => {
+                                    const isSelectedTemplate = template.id === selectedTemplate
+                                    const resolvedLabel =
+                                        (isSelectedTemplate ? fullTemplate?.name?.trim() : "") ||
+                                        template.name?.trim() ||
+                                        template.subject?.trim() ||
+                                        template.id
+
+                                    return (
+                                        <SelectItem key={template.id} value={template.id}>
+                                            {resolvedLabel}
+                                        </SelectItem>
+                                    )
+                                })}
                             </SelectContent>
                         </Select>
                     </div>
@@ -226,9 +380,23 @@ export function EmailComposeDialog({
                         </div>
 
                         {isPreview ? (
-                            <div className="border-input bg-muted/30 min-h-48 rounded-xl border px-4 py-3 text-sm whitespace-pre-wrap">
-                                {renderPreview(subject ? `Subject: ${subject}\n\n` : "")}
-                                {renderPreview(body)}
+                            <div className="rounded-xl border border-input overflow-hidden">
+                                <div className="bg-muted/30 border-b px-4 py-3 space-y-2">
+                                    <div className="flex items-center gap-2 text-sm">
+                                        <span className="font-medium text-muted-foreground w-16">To:</span>
+                                        <span className="text-foreground">{surrogateData.email}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-sm">
+                                        <span className="font-medium text-muted-foreground w-16">Subject:</span>
+                                        <span className="font-medium text-foreground">{previewSubject}</span>
+                                    </div>
+                                </div>
+                                <div className="bg-white p-4">
+                                    <div
+                                        className="prose prose-sm prose-stone max-w-none text-stone-900 [&_p]:whitespace-pre-wrap"
+                                        dangerouslySetInnerHTML={{ __html: previewBodyHtml }}
+                                    />
+                                </div>
                             </div>
                         ) : (
                             <>
