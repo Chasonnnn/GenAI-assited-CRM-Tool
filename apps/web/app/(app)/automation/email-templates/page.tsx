@@ -386,6 +386,7 @@ interface TemplateCardProps {
     canCopy?: boolean
     canShare?: boolean
     canSendTest?: boolean
+    canDelete?: boolean
     onEdit: () => void
     onDelete: () => void
     onCopy: () => void
@@ -399,12 +400,16 @@ function TemplateCard({
     canCopy = false,
     canShare = false,
     canSendTest = false,
+    canDelete = true,
     onEdit,
     onDelete,
     onCopy,
     onShare,
     onSendTest,
 }: TemplateCardProps) {
+    const canEdit = !template.is_system_template
+    const showDelete = !template.is_system_template && canDelete
+
     return (
         <Card className="group relative min-w-0">
             <CardHeader className="pb-3">
@@ -444,16 +449,20 @@ function TemplateCard({
                                             <SendIcon className="mr-2 size-4" />
                                             Send test email
                                         </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
+                                        {(canEdit || canCopy || canShare || showDelete) && (
+                                            <DropdownMenuSeparator />
+                                        )}
                                     </>
                                 )}
-                                {!template.is_system_template && (
+                                {canEdit && (
                                     <>
                                         <DropdownMenuItem onClick={onEdit}>
                                             <EditIcon className="mr-2 size-4" />
                                             Edit
                                         </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
+                                        {(canCopy || canShare || showDelete) && (
+                                            <DropdownMenuSeparator />
+                                        )}
                                     </>
                                 )}
                                 {canCopy && (
@@ -468,10 +477,10 @@ function TemplateCard({
                                         Share with Org
                                     </DropdownMenuItem>
                                 )}
-                                {!template.is_system_template && (canCopy || canShare) && (
+                                {(canCopy || canShare) && showDelete && (
                                     <DropdownMenuSeparator />
                                 )}
-                                {!template.is_system_template && (
+                                {showDelete && (
                                     <DropdownMenuItem
                                         onClick={onDelete}
                                         className="text-destructive"
@@ -580,12 +589,12 @@ export default function EmailTemplatesPage() {
 
     // API hooks for templates
     const { data: personalTemplates, isLoading: loadingPersonal } = useEmailTemplates({
-        activeOnly: false,
+        activeOnly: true,
         scope: "personal",
         showAllPersonal: isAdmin && showAllPersonal,
     })
     const { data: orgTemplates, isLoading: loadingOrg } = useEmailTemplates({
-        activeOnly: false,
+        activeOnly: true,
         scope: "org",
     })
     const { data: libraryTemplates, isLoading: loadingLibrary } = useEmailTemplateLibrary()
@@ -690,6 +699,8 @@ export default function EmailTemplatesPage() {
                     return "CA"
                 case "owner_name":
                     return user?.display_name || "Case Manager"
+                case "form_link":
+                    return "https://app.surrogacyforce.com/apply/EXAMPLE_TOKEN"
                 case "appointment_date":
                     return "2026-01-01"
                 case "appointment_time":
@@ -1006,6 +1017,7 @@ export default function EmailTemplatesPage() {
                 .replace(/\{\{surrogate_number\}\}/g, "S10001")
                 .replace(/\{\{status_label\}\}/g, "Qualified")
                 .replace(/\{\{owner_name\}\}/g, "Sara Manager")
+                .replace(/\{\{form_link\}\}/g, "https://app.surrogacyforce.com/apply/EXAMPLE_TOKEN")
                 .replace(/\{\{org_name\}\}/g, signatureData?.org_signature_company_name || "ABC Surrogacy")
                 .replace(/\{\{appointment_date\}\}/g, "January 15, 2025")
                 .replace(/\{\{appointment_time\}\}/g, "2:00 PM PST")
@@ -1315,10 +1327,11 @@ export default function EmailTemplatesPage() {
                                         <TemplateCard
                                             key={template.id}
                                             template={template}
-                                            isReadOnly={!isOwner}
+                                            isReadOnly={!isOwner && !isAdmin}
                                             canCopy={false}
                                             canShare={isOwner}
                                             canSendTest={isOwner}
+                                            canDelete={isOwner}
                                             onEdit={() => handleOpenModal(template)}
                                             onDelete={() => handleDelete(template.id)}
                                             onCopy={() => {}}

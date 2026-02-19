@@ -5,6 +5,7 @@ import EmailTemplatesPage from "../app/(app)/automation/email-templates/page"
 
 const mockUseAuth = vi.fn()
 const mockRichTextEditorProps = vi.fn()
+const mockUseEmailTemplates = vi.fn()
 const FIXED_TIMESTAMP = "2026-01-01T00:00:00.000Z"
 
 const ORG_TEMPLATE = {
@@ -33,6 +34,14 @@ const PERSONAL_TEMPLATE = {
     is_system_template: false,
     created_at: FIXED_TIMESTAMP,
     updated_at: FIXED_TIMESTAMP,
+} as const
+
+const OTHER_USER_PERSONAL_TEMPLATE = {
+    ...PERSONAL_TEMPLATE,
+    id: "tpl_personal_2",
+    name: "Other User Personal Template",
+    owner_user_id: "user_2",
+    owner_name: "Maegan Fee",
 } as const
 
 const TEMPLATE_DETAIL_BY_ID = {
@@ -88,6 +97,9 @@ const LIBRARY_TEMPLATE_DETAIL = {
     body: "<p>Hi there</p>",
 } as const
 
+let personalTemplatesFixture = [PERSONAL_TEMPLATE]
+let orgTemplatesFixture = [ORG_TEMPLATE]
+
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => mockUseAuth(),
 }))
@@ -109,16 +121,22 @@ vi.mock("next/navigation", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-email-templates", () => ({
-    useEmailTemplates: (params?: { scope?: string | null }) => {
+    useEmailTemplates: (params?: { scope?: string | null; activeOnly?: boolean }) => {
+        mockUseEmailTemplates(params)
+
         if (params?.scope === "org") {
             return {
-                data: [ORG_TEMPLATE],
+                data: params?.activeOnly === false
+                    ? orgTemplatesFixture
+                    : orgTemplatesFixture.filter((template) => template.is_active),
                 isLoading: false,
             }
         }
         if (params?.scope === "personal") {
             return {
-                data: [PERSONAL_TEMPLATE],
+                data: params?.activeOnly === false
+                    ? personalTemplatesFixture
+                    : personalTemplatesFixture.filter((template) => template.is_active),
                 isLoading: false,
             }
         }
@@ -169,6 +187,9 @@ describe("EmailTemplatesPage", () => {
     beforeEach(() => {
         document.documentElement.classList.remove("dark")
         mockRichTextEditorProps.mockClear()
+        mockUseEmailTemplates.mockClear()
+        personalTemplatesFixture = [PERSONAL_TEMPLATE]
+        orgTemplatesFixture = [ORG_TEMPLATE]
         mockUseAuth.mockReturnValue({
             user: {
                 user_id: "user_1",
@@ -272,5 +293,46 @@ describe("EmailTemplatesPage", () => {
         expect(await screen.findByText("Email Preview")).toBeInTheDocument()
         expect(screen.getByText("Org Signature")).toBeInTheDocument()
         expect(screen.queryByText("Personal Signature")).not.toBeInTheDocument()
+    })
+
+    it.each(["admin", "developer"] as const)(
+        "allows %s to edit non-owned personal templates",
+        async (role) => {
+            mockUseAuth.mockReturnValue({
+                user: {
+                    user_id: "user_1",
+                    role,
+                    email: "admin@example.com",
+                    display_name: "Admin",
+                    org_name: "Test Org",
+                    ai_enabled: false,
+                },
+            })
+            personalTemplatesFixture = [OTHER_USER_PERSONAL_TEMPLATE]
+
+            render(<EmailTemplatesPage />)
+
+            expect(screen.queryByText("View Only")).not.toBeInTheDocument()
+
+            const triggers = document.querySelectorAll('[data-slot="dropdown-menu-trigger"]')
+            expect(triggers.length).toBeGreaterThan(0)
+            fireEvent.click(triggers[0] as HTMLElement)
+
+            expect(await screen.findByText("Edit")).toBeInTheDocument()
+        }
+    )
+
+    it("does not show inactive personal templates", () => {
+        personalTemplatesFixture = [{
+            ...PERSONAL_TEMPLATE,
+            id: "tpl_personal_deleted",
+            name: "Deleted Personal Template",
+            is_active: false,
+        }]
+
+        render(<EmailTemplatesPage />)
+
+        expect(screen.queryByText("Deleted Personal Template")).not.toBeInTheDocument()
+        expect(screen.getByText("You don't have any personal templates yet")).toBeInTheDocument()
     })
 })
