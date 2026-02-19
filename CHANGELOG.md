@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.85.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.85.1...surrogacy-crm-platform-v0.85.2) (2026-02-19)
+
+
+### Bug Fixes
+
+* add google calendar push-channel watch lifecycle ([c4dd6fa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c4dd6fad639c3d9fa4c1188fd784af9d21f08b3d))
+* add google calendar sync and watch test coverage ([8d42e4b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8d42e4b6a4305a413684b4ecd46e76b560ef19f0))
+* align google calendar watch index with model metadata ([f86e409](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f86e4099a1172595f4c0bdddf2968e9573c4e4e8))
+* move google calendar model access out of routers ([80c9831](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/80c983176ea0b141ac1367c8697799c08e37fa17))
+* reconcile google calendar events into appointments ([2d8f4a2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2d8f4a27b0e38074a52e0b4dc4bd3bfc4602cbbc))
+* schedule google calendar sync and watch refresh jobs ([b4fc20b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b4fc20be2ac9373bce82aa32acd94b95ac2df5e2))
+* trigger ci on latest main ([c1e552f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c1e552f447e9742391fb14192752b5decb2f0484))
+* **web:** add type annotation to resolveTemplateLabel callback in EmailComposeDialog ([16f2f67](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/16f2f67cf4ddaf260aba7c9e428f7d663349e576))
+* **web:** default email compose to preview mode and fix template hydration ([b89c738](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b89c7381cec698e2efd2576ca369e7e2d4f182dd))
+
 ## [0.85.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.85.0...surrogacy-crm-platform-v0.85.1) (2026-02-19)
 
 
