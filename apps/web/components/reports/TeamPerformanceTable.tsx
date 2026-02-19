@@ -28,6 +28,23 @@ interface TeamPerformanceTableProps {
 type SortKey = "user_name" | "total_surrogates" | "contacted" | "qualified" | "ready_to_match" | "matched" | "application_submitted" | "lost" | "conversion_rate" | "avg_days_to_match" | "avg_days_to_application_submitted"
 type SortDirection = "asc" | "desc"
 
+function SortDirectionIcon({
+    columnKey,
+    sortKey,
+    sortDirection,
+}: {
+    columnKey: SortKey
+    sortKey: SortKey
+    sortDirection: SortDirection
+}) {
+    if (sortKey !== columnKey) {
+        return <ArrowUpDownIcon className="ml-1 size-3 text-muted-foreground/50" />
+    }
+    return sortDirection === "asc"
+        ? <ArrowUpIcon className="ml-1 size-3" />
+        : <ArrowDownIcon className="ml-1 size-3" />
+}
+
 export function TeamPerformanceTable({
     data,
     unassigned,
@@ -69,15 +86,6 @@ export function TeamPerformanceTable({
             return sortDirection === "asc" ? numA - numB : numB - numA
         })
     }, [data, sortKey, sortDirection])
-
-    const SortIcon = ({ columnKey }: { columnKey: SortKey }) => {
-        if (sortKey !== columnKey) {
-            return <ArrowUpDownIcon className="ml-1 size-3 text-muted-foreground/50" />
-        }
-        return sortDirection === "asc"
-            ? <ArrowUpIcon className="ml-1 size-3" />
-            : <ArrowDownIcon className="ml-1 size-3" />
-    }
 
     if (isLoading) {
         return (
@@ -167,7 +175,7 @@ export function TeamPerformanceTable({
                                     onClick={() => handleSort("user_name")}
                                 >
                                     Team Member
-                                    <SortIcon columnKey="user_name" />
+                                    <SortDirectionIcon columnKey="user_name" sortKey={sortKey} sortDirection={sortDirection} />
                                 </Button>
                             </TableHead>
                             <TableHead className="text-center">
@@ -178,7 +186,7 @@ export function TeamPerformanceTable({
                                     onClick={() => handleSort("total_surrogates")}
                                 >
                                     Surrogates
-                                    <SortIcon columnKey="total_surrogates" />
+                                    <SortDirectionIcon columnKey="total_surrogates" sortKey={sortKey} sortDirection={sortDirection} />
                                 </Button>
                             </TableHead>
                             <TableHead className="text-center">
@@ -189,7 +197,7 @@ export function TeamPerformanceTable({
                                     onClick={() => handleSort("contacted")}
                                 >
                                     Contacted
-                                    <SortIcon columnKey="contacted" />
+                                    <SortDirectionIcon columnKey="contacted" sortKey={sortKey} sortDirection={sortDirection} />
                                 </Button>
                             </TableHead>
                             <TableHead className="text-center">
@@ -200,7 +208,7 @@ export function TeamPerformanceTable({
                                     onClick={() => handleSort("qualified")}
                                 >
                                     Qualified
-                                    <SortIcon columnKey="qualified" />
+                                    <SortDirectionIcon columnKey="qualified" sortKey={sortKey} sortDirection={sortDirection} />
                                 </Button>
                             </TableHead>
                             <TableHead className="text-center">
@@ -211,7 +219,7 @@ export function TeamPerformanceTable({
                                     onClick={() => handleSort("ready_to_match")}
                                 >
                                     Ready to Match
-                                    <SortIcon columnKey="ready_to_match" />
+                                    <SortDirectionIcon columnKey="ready_to_match" sortKey={sortKey} sortDirection={sortDirection} />
                                 </Button>
                             </TableHead>
                             <TableHead className="text-center">
@@ -222,7 +230,7 @@ export function TeamPerformanceTable({
                                     onClick={() => handleSort("matched")}
                                 >
                                     Matched
-                                    <SortIcon columnKey="matched" />
+                                    <SortDirectionIcon columnKey="matched" sortKey={sortKey} sortDirection={sortDirection} />
                                 </Button>
                             </TableHead>
                             <TableHead className="text-center">
@@ -233,7 +241,7 @@ export function TeamPerformanceTable({
                                     onClick={() => handleSort("application_submitted")}
                                 >
                                     Application Submitted
-                                    <SortIcon columnKey="application_submitted" />
+                                    <SortDirectionIcon columnKey="application_submitted" sortKey={sortKey} sortDirection={sortDirection} />
                                 </Button>
                             </TableHead>
                             <TableHead className="text-center">
@@ -244,7 +252,7 @@ export function TeamPerformanceTable({
                                     onClick={() => handleSort("lost")}
                                 >
                                     Lost
-                                    <SortIcon columnKey="lost" />
+                                    <SortDirectionIcon columnKey="lost" sortKey={sortKey} sortDirection={sortDirection} />
                                 </Button>
                             </TableHead>
                             <TableHead className="text-center">
@@ -255,7 +263,7 @@ export function TeamPerformanceTable({
                                     onClick={() => handleSort("conversion_rate")}
                                 >
                                     Conv. Rate
-                                    <SortIcon columnKey="conversion_rate" />
+                                    <SortDirectionIcon columnKey="conversion_rate" sortKey={sortKey} sortDirection={sortDirection} />
                                 </Button>
                             </TableHead>
                             <TableHead className="text-center">
@@ -266,7 +274,7 @@ export function TeamPerformanceTable({
                                     onClick={() => handleSort("avg_days_to_match")}
                                 >
                                     Avg to Match
-                                    <SortIcon columnKey="avg_days_to_match" />
+                                    <SortDirectionIcon columnKey="avg_days_to_match" sortKey={sortKey} sortDirection={sortDirection} />
                                 </Button>
                             </TableHead>
                             <TableHead className="text-center">
@@ -277,7 +285,7 @@ export function TeamPerformanceTable({
                                     onClick={() => handleSort("avg_days_to_application_submitted")}
                                 >
                                     Avg to Application Submitted
-                                    <SortIcon columnKey="avg_days_to_application_submitted" />
+                                    <SortDirectionIcon columnKey="avg_days_to_application_submitted" sortKey={sortKey} sortDirection={sortDirection} />
                                 </Button>
                             </TableHead>
                         </TableRow>
