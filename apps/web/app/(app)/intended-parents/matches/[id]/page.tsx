@@ -54,6 +54,7 @@ import { ScheduleParserDialog } from "@/components/ai/ScheduleParserDialog"
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { parseDateInput } from "@/lib/utils/date"
 import { formatRace } from "@/lib/formatters"
+import { formatHeight } from "@/components/surrogates/detail/surrogate-detail-utils"
 
 const STATUS_LABELS: Record<string, string> = {
     proposed: "Proposed",
@@ -666,7 +667,7 @@ export default function MatchDetailPage() {
                                                 <p className="text-xs text-muted-foreground mb-1">Demographics</p>
                                                 <div className="grid grid-cols-3 gap-1 text-xs">
                                                     <div><span className="text-muted-foreground">Race:</span> {formatRace(surrogateData.race) || "—"}</div>
-                                                    <div><span className="text-muted-foreground">Ht:</span> {surrogateData.height_ft ? `${surrogateData.height_ft}ft` : "—"}</div>
+                                                    <div><span className="text-muted-foreground">Ht:</span> {formatHeight(surrogateData.height_ft)}</div>
                                                     <div><span className="text-muted-foreground">Wt:</span> {surrogateData.weight_lb ? `${surrogateData.weight_lb}lb` : "—"}</div>
                                                 </div>
                                             </div>

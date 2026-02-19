@@ -22,6 +22,15 @@ export function formatDate(dateString: string): string {
     })
 }
 
+export function formatHeight(heightFt: number | null | undefined): string {
+    if (heightFt == null || !Number.isFinite(heightFt)) return "-"
+    const totalInches = Math.round(heightFt * 12)
+    if (totalInches <= 0) return "-"
+    const feet = Math.floor(totalInches / 12)
+    const inches = totalInches % 12
+    return `${feet} ft ${inches} in`
+}
+
 export function computeBmi(heightFt: number | null, weightLb: number | null): number | null {
     if (!heightFt || !weightLb) return null
     const heightInches = heightFt * 12

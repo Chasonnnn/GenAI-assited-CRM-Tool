@@ -373,7 +373,7 @@ describe('SurrogateDetailPage', () => {
         expect(onBack).toHaveBeenCalled()
     })
 
-    it('shows BMI in demographics when height and weight are set', () => {
+    it('shows formatted height and BMI in demographics when height and weight are set', () => {
         mockUseSurrogate.mockReturnValueOnce({
             data: {
                 ...baseSurrogateData,
@@ -391,8 +391,33 @@ describe('SurrogateDetailPage', () => {
         )
 
         const bmiValue = Math.round((120 / ((5.5 * 12) ** 2)) * 703 * 10) / 10
+        const heightRow = screen.getByText('Height:').parentElement
+        expect(heightRow).toBeTruthy()
+        expect(heightRow).toHaveTextContent('5 ft 6 in')
         expect(screen.getByText('BMI:')).toBeInTheDocument()
         expect(screen.getByText(String(bmiValue))).toBeInTheDocument()
+    })
+
+    it('shows "-" for height when missing but demographics section is visible', () => {
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                height_ft: null,
+                weight_lb: 120,
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        const heightRow = screen.getByText('Height:').parentElement
+        expect(heightRow).toBeTruthy()
+        expect(heightRow).toHaveTextContent(/Height:\s*-/)
     })
 
     it('hides Medical Information and Pregnancy Tracker before ready_to_match', () => {
