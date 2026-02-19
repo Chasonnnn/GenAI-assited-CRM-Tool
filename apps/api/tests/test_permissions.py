@@ -305,6 +305,18 @@ def test_intake_role_has_import_surrogates_by_default(db, org_a, intake_user):
     assert result is True, "Intake should have import_surrogates access by default"
 
 
+def test_intake_role_has_manage_appointments_by_default(db, org_a, intake_user):
+    """Intake specialists should be able to manage appointments by default."""
+    result = permission_service.check_permission(
+        db,
+        org_a.id,
+        intake_user.id,
+        Role.INTAKE_SPECIALIST.value,
+        "manage_appointments",
+    )
+    assert result is True, "Intake should have manage_appointments access by default"
+
+
 def test_intake_role_has_ai_permissions_by_default(db, org_a, intake_user):
     """Intake specialists should have full non-developer AI permissions."""
     expected_ai_permissions = [

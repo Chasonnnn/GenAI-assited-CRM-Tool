@@ -415,6 +415,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "create_tasks",
         "edit_tasks",
         "view_email_templates",
+        "manage_appointments",
         "use_ai_assistant",
         "approve_ai_actions",
         "manage_ai_settings",

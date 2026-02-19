@@ -17,7 +17,7 @@ manage_admin_exports,0,0,0,1
 manage_admin_imports,0,0,0,1
 manage_admin_versions,0,0,0,1
 manage_ai_settings,1,1,1,1
-manage_appointments,0,1,1,1
+manage_appointments,1,1,1,1
 manage_automation,0,0,1,1
 manage_compliance,0,0,1,1
 manage_email_templates,0,0,1,1
