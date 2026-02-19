@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Bug Fixes
+
+* **api:** enforce organization scoping for meta lead monitoring and dev endpoints ([2679573](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/26795737))
+* **ci:** implement retry logic for pnpm audit to handle transient registry errors ([c689107](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c689107d))
+* **web:** handle string-serialized decimals in height formatting and restore assignee submenu ([438eaf0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/438eaf0a))
+
 ## [0.85.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.84.0...surrogacy-crm-platform-v0.85.0) (2026-02-19)
 
 
