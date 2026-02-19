@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.85.3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.85.2...surrogacy-crm-platform-v0.85.3) (2026-02-19)
+
+
+### Bug Fixes
+
+* add appointment link email template variable ([baba14a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/baba14a3dd76176b869498b543a9aab564c36034))
+* add missing surrogate template variables test mock ([3f5aaf7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3f5aaf76a6d5f5ce6a916ab10ead7945c38b3585))
+* add surrogate template variable preview endpoint ([b1eba5c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b1eba5c9a8a71e7bf3864e0fb2d93cbc6249cc5c))
+* **api:** allow admin and developer edits for personal templates ([464d3d9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/464d3d92761ab1829d90e6aaedf20b081cbbfb85))
+* correct email editor form label associations ([2f4aca1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2f4aca17840aba309f9ec6550273f81927d691c4))
+* enable email customization directly in preview mode ([558f26a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/558f26a1ad1bd015ee3415fe1c825d9f0438ba82))
+* keep booking links stable without regeneration ([8e59021](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8e5902117c29263de7105dc547b90bd89e016312))
+* render resolved template values in email preview ([9ef961e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9ef961e9e7d5905b5dcb8ceec26846047c0180ec))
+* reuse active form submission tokens for surrogates ([15b45ef](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/15b45ef449e6277837931ac83470f79fa1697a84))
+* sync Google Calendar events across visible calendars ([7a1c741](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7a1c74148b688cd5724fb4249195d3536d57e85f))
+* update preview samples and booking link settings UI ([2e02742](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2e02742bb87f6ca4eb6fcbc06dc0d451c794ede2))
+* URL-encode Google Calendar IDs in event API paths ([9916db6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9916db62b7b697567090deee6cecf7889db5aba4))
+* **web:** allow privileged editing and hide inactive email templates ([2f9b807](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2f9b80718d0a627c985fd247370de33e9814fc4a))
+
 ## [0.85.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.85.1...surrogacy-crm-platform-v0.85.2) (2026-02-19)
 
 
