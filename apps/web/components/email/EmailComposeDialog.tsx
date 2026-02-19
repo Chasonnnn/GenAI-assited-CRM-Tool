@@ -357,9 +357,14 @@ export function EmailComposeDialog({
                 <div className="grid gap-6 py-4">
                     {/* Template Selector */}
                     <div className="grid gap-2">
-                        <Label htmlFor="template">Email Template</Label>
+                        <Label id="email-template-label">Email Template</Label>
                         <Select value={selectedTemplate} onValueChange={(value) => setSelectedTemplate(value || "")} disabled={templatesLoading}>
-                            <SelectTrigger id="template" className="w-full">
+                            <SelectTrigger
+                                id="template"
+                                className="w-full"
+                                aria-label="Email Template"
+                                aria-labelledby="email-template-label"
+                            >
                                 <SelectValue
                                     placeholder={
                                         templatesLoading
@@ -417,7 +422,9 @@ export function EmailComposeDialog({
                     {/* Body with Preview Toggle */}
                     <div className="grid gap-2">
                         <div className="flex items-center justify-between">
-                            <Label htmlFor="body">Message</Label>
+                            <Label id="message-label" htmlFor={isPreview ? undefined : "body"}>
+                                Message
+                            </Label>
                             <Button
                                 type="button"
                                 variant="ghost"
@@ -456,6 +463,7 @@ export function EmailComposeDialog({
                                         ref={previewEditorRef}
                                         role="textbox"
                                         aria-label="Message preview editor"
+                                        aria-labelledby="message-label"
                                         aria-multiline="true"
                                         contentEditable
                                         suppressContentEditableWarning
@@ -479,6 +487,7 @@ export function EmailComposeDialog({
                         {!isPreview && (
                             <Textarea
                                 id="body"
+                                aria-labelledby="message-label"
                                 value={body}
                                 onChange={(e) => setBody(e.target.value)}
                                 placeholder="Enter email message..."

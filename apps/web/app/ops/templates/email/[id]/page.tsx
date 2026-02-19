@@ -607,8 +607,9 @@ export default function PlatformEmailTemplatePage() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="space-y-2">
-                            <Label>Subject *</Label>
+                            <Label htmlFor="template-subject">Subject *</Label>
                             <Input
+                                id="template-subject"
                                 ref={subjectRef}
                                 value={subject}
                                 onChange={(e) => setSubject(e.target.value)}
@@ -627,8 +628,9 @@ export default function PlatformEmailTemplatePage() {
                         </div>
                         <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2">
-                                <Label>From (optional)</Label>
+                                <Label htmlFor="template-from-email">From (optional)</Label>
                                 <Input
+                                    id="template-from-email"
                                     value={fromEmail}
                                     onChange={(e) => setFromEmail(e.target.value)}
                                     placeholder="Invites <invites@surrogacyforce.com>"
@@ -642,8 +644,9 @@ export default function PlatformEmailTemplatePage() {
                                 )}
                             </div>
                             <div className="space-y-2">
-                                <Label>Category (optional)</Label>
+                                <Label htmlFor="template-category">Category (optional)</Label>
                                 <Input
+                                    id="template-category"
                                     value={category}
                                     onChange={(e) => setCategory(e.target.value)}
                                     placeholder="onboarding"
@@ -655,7 +658,12 @@ export default function PlatformEmailTemplatePage() {
                         </div>
                         <div className="space-y-2">
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                                <Label>Email Body *</Label>
+                                <Label
+                                    id="template-body-label"
+                                    htmlFor={effectiveEditorMode === "html" ? "template-body-html" : undefined}
+                                >
+                                    Email Body *
+                                </Label>
                                 <div className="flex flex-wrap items-center gap-2">
                                     <ToggleGroup
                                         multiple={false}
@@ -697,6 +705,7 @@ export default function PlatformEmailTemplatePage() {
                                     content={body}
                                     onChange={(html) => setBody(html)}
                                     onFocus={() => setActiveInsertionTarget("body_visual")}
+                                    ariaLabelledBy="template-body-label"
                                     placeholder="Write your email content here..."
                                     minHeight="220px"
                                     maxHeight="420px"
@@ -705,6 +714,8 @@ export default function PlatformEmailTemplatePage() {
                                 />
                             ) : (
                                 <Textarea
+                                    id="template-body-html"
+                                    aria-labelledby="template-body-label"
                                     ref={htmlBodyRef}
                                     value={body}
                                     onChange={(event) => setBody(event.target.value)}

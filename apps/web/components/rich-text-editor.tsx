@@ -40,6 +40,8 @@ interface RichTextEditorProps {
     maxHeight?: string
     enableImages?: boolean
     enableEmojiPicker?: boolean
+    ariaLabel?: string
+    ariaLabelledBy?: string
 }
 
 export type RichTextEditorHandle = {
@@ -61,6 +63,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         maxHeight = '300px',
         enableImages = false,
         enableEmojiPicker = false,
+        ariaLabel,
+        ariaLabelledBy,
     }: RichTextEditorProps,
     ref
 ) {
@@ -386,7 +390,11 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
 
             {/* Editor Content - with scroll support */}
             <div className="overflow-y-auto" style={{ maxHeight }} onFocusCapture={() => onFocus?.()}>
-                <EditorContent editor={editor} />
+                <EditorContent
+                    editor={editor}
+                    aria-label={ariaLabel}
+                    aria-labelledby={ariaLabelledBy}
+                />
             </div>
         </div>
     )

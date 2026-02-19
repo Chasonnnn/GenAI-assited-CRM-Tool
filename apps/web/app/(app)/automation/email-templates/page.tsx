@@ -1763,7 +1763,12 @@ export default function EmailTemplatesPage() {
 
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
-                                <Label htmlFor="body">Email Body</Label>
+                                <Label
+                                    id="template-body-label"
+                                    htmlFor={templateBodyMode === "html" ? "template-body-html" : undefined}
+                                >
+                                    Email Body
+                                </Label>
                                 <div className="flex flex-wrap items-center gap-2">
                                     <ToggleGroup
                                         multiple={false}
@@ -1805,6 +1810,7 @@ export default function EmailTemplatesPage() {
                                     content={templateBody}
                                     onChange={(html) => setTemplateBody(html)}
                                     onFocus={() => setActiveInsertionTarget("body_visual")}
+                                    ariaLabelledBy="template-body-label"
                                     placeholder="Write your email content here... Use the toolbar to format text."
                                     minHeight="200px"
                                     maxHeight="350px"
@@ -1813,7 +1819,8 @@ export default function EmailTemplatesPage() {
                                 />
                             ) : (
                                 <Textarea
-                                    id="body"
+                                    id="template-body-html"
+                                    aria-labelledby="template-body-label"
                                     ref={htmlBodyRef}
                                     value={templateBody}
                                     onChange={(event) => setTemplateBody(event.target.value)}
