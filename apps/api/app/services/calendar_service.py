@@ -8,14 +8,18 @@ Handles:
 Note: Requires calendar.readonly and calendar.events scopes.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import logging
+import secrets
 from typing import TypedDict
-from uuid import UUID
+from urllib.parse import quote
+from uuid import UUID, uuid4
 
 import httpx
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+from app.core.security import verify_secret
 from app.services import oauth_service
 
 logger = logging.getLogger(__name__)
@@ -51,6 +55,18 @@ class CalendarEventsResult(TypedDict):
     error: str | None
 
 
+class CalendarWatchResult(TypedDict):
+    """Result from Google events.watch."""
+
+    channel_id: str
+    resource_id: str
+    expires_at: datetime | None
+
+
+WATCH_RENEW_BUFFER = timedelta(hours=6)
+WATCH_CHANNEL_TTL_SECONDS = 24 * 60 * 60
+
+
 # =============================================================================
 # Token Management
 # =============================================================================
@@ -67,6 +83,242 @@ async def get_google_access_token(
     Returns None if no integration exists.
     """
     return await oauth_service.get_access_token_async(db, user_id, "google_calendar")
+
+
+# =============================================================================
+# Google Push Channels (events.watch)
+# =============================================================================
+
+
+def _calendar_events_endpoint(calendar_id: str) -> str:
+    encoded = quote(calendar_id, safe="")
+    return f"https://www.googleapis.com/calendar/v3/calendars/{encoded}/events"
+
+
+def _channel_stop_endpoint() -> str:
+    return "https://www.googleapis.com/calendar/v3/channels/stop"
+
+
+def _google_calendar_webhook_address() -> str:
+    base = (settings.API_BASE_URL or "").strip()
+    if not base:
+        raise ValueError("API_BASE_URL must be configured for Google Calendar push channels")
+    return f"{base.rstrip('/')}/webhooks/google-calendar"
+
+
+def _parse_google_watch_expiration(value: object | None) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        # Google returns epoch milliseconds as string.
+        expiration_ms = int(str(value))
+    except (TypeError, ValueError):
+        return None
+    if expiration_ms <= 0:
+        return None
+    return datetime.fromtimestamp(expiration_ms / 1000, tz=timezone.utc)
+
+
+def _watch_is_fresh(expires_at: datetime | None, *, renew_before: timedelta) -> bool:
+    if not expires_at:
+        return False
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at > (datetime.now(timezone.utc) + renew_before)
+
+
+def verify_watch_channel_token(
+    encrypted_token: str | None,
+    provided_token: str | None,
+) -> bool:
+    if not encrypted_token:
+        return False
+    try:
+        expected = oauth_service.decrypt_token(encrypted_token)
+    except Exception:
+        return False
+    return verify_secret(provided_token, expected)
+
+
+async def _post_google_events_watch(
+    *,
+    access_token: str,
+    calendar_id: str,
+    channel_id: str,
+    channel_token: str,
+    ttl_seconds: int,
+) -> CalendarWatchResult | None:
+    payload = {
+        "id": channel_id,
+        "type": "web_hook",
+        "address": _google_calendar_webhook_address(),
+        "token": channel_token,
+    }
+    if ttl_seconds > 0:
+        payload["params"] = {"ttl": str(ttl_seconds)}
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{_calendar_events_endpoint(calendar_id)}/watch",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=30.0,
+        )
+        if response.status_code not in (200, 201):
+            logger.warning(
+                "Failed to start Google Calendar watch: status=%s body=%s",
+                response.status_code,
+                response.text[:300],
+            )
+            return None
+
+        data = response.json()
+        resource_id = data.get("resourceId")
+        if not resource_id:
+            logger.warning("Google Calendar watch response missing resourceId")
+            return None
+
+        return CalendarWatchResult(
+            channel_id=channel_id,
+            resource_id=resource_id,
+            expires_at=_parse_google_watch_expiration(data.get("expiration")),
+        )
+
+
+async def _post_google_channel_stop(
+    *,
+    access_token: str,
+    channel_id: str,
+    resource_id: str,
+) -> bool:
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            _channel_stop_endpoint(),
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+            json={"id": channel_id, "resourceId": resource_id},
+            timeout=15.0,
+        )
+    return response.status_code in (200, 204)
+
+
+async def stop_google_calendar_watch(
+    db: Session,
+    user_id: UUID,
+    *,
+    calendar_id: str = "primary",
+) -> bool:
+    """
+    Stop an existing Google Calendar push channel and clear local metadata.
+
+    Returns True when local metadata was cleared, even if remote stop was not needed.
+    """
+    del calendar_id  # Reserved for future multi-calendar watch support.
+
+    integration = oauth_service.get_user_integration(db, user_id, "google_calendar")
+    if not integration:
+        return False
+
+    channel_id = integration.google_calendar_channel_id
+    resource_id = integration.google_calendar_resource_id
+    if not channel_id and not resource_id:
+        return False
+
+    access_token = await get_google_access_token(db, user_id)
+    if access_token and channel_id and resource_id:
+        try:
+            stopped = await _post_google_channel_stop(
+                access_token=access_token,
+                channel_id=channel_id,
+                resource_id=resource_id,
+            )
+            if not stopped:
+                logger.warning("Google Calendar channel stop failed for user=%s", user_id)
+        except Exception:
+            logger.exception("Google Calendar channel stop raised for user=%s", user_id)
+
+    integration.google_calendar_channel_id = None
+    integration.google_calendar_resource_id = None
+    integration.google_calendar_channel_token_encrypted = None
+    integration.google_calendar_watch_expires_at = None
+    integration.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return True
+
+
+async def ensure_google_calendar_watch(
+    *,
+    db: Session,
+    user_id: UUID,
+    calendar_id: str = "primary",
+    renew_before: timedelta = WATCH_RENEW_BUFFER,
+    channel_ttl_seconds: int = WATCH_CHANNEL_TTL_SECONDS,
+) -> bool:
+    """
+    Ensure an active Google Calendar events.watch subscription for the user.
+
+    Returns True if a new/renewed channel was created, False if unchanged or unable.
+    """
+    integration = oauth_service.get_user_integration(db, user_id, "google_calendar")
+    if not integration:
+        return False
+
+    has_watch_metadata = bool(
+        integration.google_calendar_channel_id
+        and integration.google_calendar_resource_id
+        and integration.google_calendar_channel_token_encrypted
+    )
+    if has_watch_metadata and _watch_is_fresh(
+        integration.google_calendar_watch_expires_at,
+        renew_before=renew_before,
+    ):
+        return False
+
+    access_token = await get_google_access_token(db, user_id)
+    if not access_token:
+        logger.warning("Cannot ensure Google Calendar watch: no access token for user=%s", user_id)
+        return False
+
+    old_channel_id = integration.google_calendar_channel_id
+    old_resource_id = integration.google_calendar_resource_id
+    if old_channel_id and old_resource_id:
+        try:
+            await _post_google_channel_stop(
+                access_token=access_token,
+                channel_id=old_channel_id,
+                resource_id=old_resource_id,
+            )
+        except Exception:
+            logger.warning(
+                "Best-effort old Google Calendar channel stop failed for user=%s",
+                user_id,
+            )
+
+    new_channel_id = str(uuid4())
+    channel_token = secrets.token_urlsafe(32)
+
+    watch_result = await _post_google_events_watch(
+        access_token=access_token,
+        calendar_id=calendar_id,
+        channel_id=new_channel_id,
+        channel_token=channel_token,
+        ttl_seconds=channel_ttl_seconds,
+    )
+    if not watch_result:
+        return False
+
+    integration.google_calendar_channel_id = watch_result["channel_id"]
+    integration.google_calendar_resource_id = watch_result["resource_id"]
+    integration.google_calendar_channel_token_encrypted = oauth_service.encrypt_token(channel_token)
+    integration.google_calendar_watch_expires_at = watch_result["expires_at"]
+    integration.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return True
 
 
 # =============================================================================

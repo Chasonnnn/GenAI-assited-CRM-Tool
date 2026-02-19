@@ -198,6 +198,15 @@ class UserIntegration(Base):
     refresh_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     token_expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
     account_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Google Calendar push channel metadata (events.watch)
+    google_calendar_channel_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    google_calendar_resource_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    google_calendar_channel_token_encrypted: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    google_calendar_watch_expires_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     # Version control

@@ -15,6 +15,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core.async_utils import run_async
 from app.core.config import settings
 from app.core.deps import get_db, get_current_session, require_csrf_header
 from app.core.security import (
@@ -94,7 +95,7 @@ def disconnect_integration(
 ) -> dict[str, Any]:
     """Disconnect an integration."""
     from app.db.enums import AuditEventType
-    from app.services import audit_service
+    from app.services import audit_service, calendar_service
 
     integration = oauth_service.get_user_integration(db, session.user_id, integration_type)
     if not integration:
@@ -102,6 +103,24 @@ def disconnect_integration(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Integration '{integration_type}' not found",
         )
+
+    # Best-effort channel cleanup before deleting integration credentials.
+    if integration_type == "google_calendar":
+        try:
+            run_async(
+                calendar_service.stop_google_calendar_watch(
+                    db=db,
+                    user_id=session.user_id,
+                    calendar_id="primary",
+                ),
+                timeout=20,
+            )
+        except Exception:
+            logger.warning(
+                "Google Calendar watch cleanup failed for user=%s org=%s",
+                session.user_id,
+                session.org_id,
+            )
 
     deleted = oauth_service.delete_integration(db, session.user_id, integration_type)
     if not deleted:
@@ -355,6 +374,22 @@ async def google_calendar_callback(
             expires_in=tokens.get("expires_in"),
             account_email=user_info.get("email"),
         )
+
+        # Best-effort push-channel registration for near-real-time updates.
+        from app.services import calendar_service
+
+        try:
+            await calendar_service.ensure_google_calendar_watch(
+                db=db,
+                user_id=session.user_id,
+                calendar_id="primary",
+            )
+        except Exception:
+            logger.exception(
+                "Google Calendar watch registration failed for user=%s org=%s",
+                session.user_id,
+                session.org_id,
+            )
 
         # Audit log (no secrets)
         from app.db.enums import AuditEventType
