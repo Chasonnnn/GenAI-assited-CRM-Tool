@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.84.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.83.0...surrogacy-crm-platform-v0.84.0) (2026-02-19)
+
+
+### Features
+
+* **api:** grant manage_appointments permission to intake specialists ([311f16c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/311f16c9336a9f09dc1d022b4f47a00aa08089e4))
+* improve email emoji rendering with native font stack and enable editor emoji picker ([27e3026](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/27e3026f0c9fc9f66fdcacc8c1c8022997ffd71d))
+* **web:** add emoji picker support to rich text editor and surrogate notes ([3501d94](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3501d945a1c2454ce8b61ee3550560e2e90bbe15))
+
+
+### Bug Fixes
+
+* **web:** use timezone-aware date keys in public booking calendar ([ad2cf4a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ad2cf4a9fe50508f4a1b2e2d2007afe1294bebd7))
+
 ## [0.83.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.82.0...surrogacy-crm-platform-v0.83.0) (2026-02-18)
 
 
