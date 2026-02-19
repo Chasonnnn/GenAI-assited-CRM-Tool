@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 from io import BytesIO
 
 import pytest
@@ -118,6 +119,52 @@ def _create_published_form_with_validation(db, org_id, user_id):
         allowed_mime_types=None,
     )
     form_service.publish_form(db, form, user_id)
+    return form
+
+
+def _create_published_form_with_height_weight(db, org_id, user_id):
+    schema = {
+        "pages": [
+            {
+                "title": "Vitals",
+                "fields": [
+                    {
+                        "key": "height",
+                        "label": "Height (ft)",
+                        "type": "number",
+                        "required": False,
+                    },
+                    {
+                        "key": "weight",
+                        "label": "Weight (lb)",
+                        "type": "number",
+                        "required": False,
+                    },
+                ],
+            }
+        ]
+    }
+
+    form = form_service.create_form(
+        db=db,
+        org_id=org_id,
+        user_id=user_id,
+        name="Vitals Form",
+        description="Height and weight mapping",
+        schema=schema,
+        max_file_size_bytes=None,
+        max_file_count=None,
+        allowed_mime_types=None,
+    )
+    form_service.publish_form(db, form, user_id)
+    form_service.set_field_mappings(
+        db,
+        form,
+        [
+            {"field_key": "height", "surrogate_field": "height_ft"},
+            {"field_key": "weight", "surrogate_field": "weight_lb"},
+        ],
+    )
     return form
 
 
@@ -374,6 +421,45 @@ def test_submission_service_update_answers_syncs_surrogate(db, test_org, test_us
     db.refresh(surrogate)
     assert surrogate.full_name == "Jane Smith"
     assert str(surrogate.date_of_birth) == "1991-02-03"
+
+
+def test_submission_service_normalizes_decimal_height_notation_for_bmi(
+    db, test_org, test_user, default_stage
+):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+    form = _create_published_form_with_height_weight(db, test_org.id, test_user.id)
+
+    token_record = form_submission_service.create_submission_token(
+        db=db,
+        org_id=test_org.id,
+        form=form,
+        surrogate=surrogate,
+        user_id=test_user.id,
+        expires_in_days=7,
+    )
+
+    submission = form_submission_service.create_submission(
+        db=db,
+        token=token_record,
+        form=form,
+        answers={"height": "5.6", "weight": 220},
+        files=[],
+    )
+
+    form_submission_service.approve_submission(
+        db=db,
+        submission=submission,
+        reviewer_id=test_user.id,
+        review_notes="Normalize height",
+    )
+
+    db.refresh(surrogate)
+    assert surrogate.height_ft == Decimal("5.5")
+    assert surrogate.weight_lb == 220
+
+    height_inches = float(surrogate.height_ft) * 12
+    bmi = round((surrogate.weight_lb / (height_inches**2)) * 703, 1)
+    assert bmi == 35.5
 
 
 def test_submission_validates_field_constraints(db, test_org, test_user, default_stage):
