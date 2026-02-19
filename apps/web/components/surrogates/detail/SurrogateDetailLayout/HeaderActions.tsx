@@ -27,7 +27,6 @@ export function HeaderActions() {
     const {
         surrogate,
         stageById,
-        stageOptions,
         queues,
         assignees,
         openDialog,
@@ -50,19 +49,12 @@ export function HeaderActions() {
 
     // Determine if log contact button should be shown
     const currentStage = stageById.get(surrogate.stage_id)
-    const contactedStage = stageOptions.find((stage) => stage.slug === "contacted")
     const isIntakeStage = currentStage?.stage_type === "intake"
-    const isBeforeContacted = !!(
-        currentStage &&
-        contactedStage &&
-        currentStage.order < contactedStage.order
-    )
     const isAssignee = !!(user?.user_id && surrogate.owner_id === user.user_id)
     const canLogContact =
         surrogate.owner_type === "user" &&
         (isAssignee || canManageQueue) &&
         isIntakeStage &&
-        isBeforeContacted &&
         !surrogate.is_archived
 
     // Determine if propose match button should be shown
