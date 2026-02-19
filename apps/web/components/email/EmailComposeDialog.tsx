@@ -24,7 +24,7 @@ import { EyeIcon, EyeOffIcon, SendIcon, Loader2Icon } from "lucide-react"
 import DOMPurify from "dompurify"
 import { normalizeTemplateHtml } from "@/lib/email-template-html"
 import { useEmailTemplates, useEmailTemplate } from "@/lib/hooks/use-email-templates"
-import { useOrgSignaturePreview, useSignaturePreview } from "@/lib/hooks/use-signature"
+import { useSignaturePreview } from "@/lib/hooks/use-signature"
 import { useSendSurrogateEmail, useSurrogateTemplateVariables } from "@/lib/hooks/use-surrogates"
 
 type TemplatePreviewValue = string | number | boolean | null | undefined
@@ -83,10 +83,6 @@ export function EmailComposeDialog({
     // Fetch full template when one is selected
     const { data: fullTemplate } = useEmailTemplate(selectedTemplate || null)
     const { data: personalSignaturePreview } = useSignaturePreview()
-    const { data: orgSignaturePreview } = useOrgSignaturePreview({
-        enabled: fullTemplate?.scope !== "personal",
-        mode: "org_only",
-    })
     const sendEmailMutation = useSendSurrogateEmail()
     const { data: resolvedTemplateVariables = {} } = useSurrogateTemplateVariables(surrogateData.id, {
         enabled: open && Boolean(surrogateData.id),
@@ -297,10 +293,7 @@ export function EmailComposeDialog({
     }, [body, replaceTemplateVariables, sanitizePreviewHtml])
 
     const previewFooterHtml = React.useMemo(() => {
-        const signatureHtml =
-            fullTemplate?.scope === "personal"
-                ? (personalSignaturePreview?.html || "")
-                : (orgSignaturePreview?.html || "")
+        const signatureHtml = personalSignaturePreview?.html || ""
 
         const includeDivider = !signatureHtml
         const unsubscribeFooterHtml = `
@@ -313,7 +306,7 @@ export function EmailComposeDialog({
         `.trim()
 
         return sanitizePreviewHtml(`${signatureHtml}${unsubscribeFooterHtml}`)
-    }, [fullTemplate?.scope, orgSignaturePreview?.html, personalSignaturePreview?.html, sanitizePreviewHtml])
+    }, [personalSignaturePreview?.html, sanitizePreviewHtml])
 
     // Highlight variables in edit mode
     const renderWithHighlights = (text: string) => {

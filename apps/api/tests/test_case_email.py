@@ -174,10 +174,10 @@ async def test_send_email_suppressed_returns_error(
 
 
 @pytest.mark.asyncio
-async def test_send_email_gmail_appends_org_signature_and_unsubscribe_footer(
+async def test_send_email_gmail_appends_personal_signature_and_unsubscribe_footer(
     authed_client: AsyncClient, db, test_org, test_user, monkeypatch
 ):
-    """Case send-email should append org signature + unsubscribe footer for org templates."""
+    """Case send-email should append personal signature + unsubscribe footer for surrogate sends."""
     from app.services import surrogate_service, email_service
     from app.schemas.surrogate import SurrogateCreate
     from app.db.enums import SurrogateSource
@@ -252,7 +252,7 @@ async def test_send_email_gmail_appends_org_signature_and_unsubscribe_footer(
 
     assert isinstance(captured.get("body"), str)
     sent_body = captured["body"]
-    assert "Org Signature Co" in sent_body
+    assert f"mailto:{test_user.email}" in sent_body
     assert "{{unsubscribe_url}}" not in sent_body
     assert ">Unsubscribe<" in sent_body
     assert "/email/unsubscribe/" in sent_body

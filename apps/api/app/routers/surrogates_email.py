@@ -102,8 +102,8 @@ async def send_surrogate_email(
         org_id=session.org_id,
         recipient_email=surrogate.email,
         rendered_body_html=body,
-        scope="personal" if template.scope == "personal" else "org",
-        sender_user_id=session.user_id if template.scope == "personal" else None,
+        scope="personal",
+        sender_user_id=session.user_id,
         portal_base_url=portal_base_url,
     )
 
