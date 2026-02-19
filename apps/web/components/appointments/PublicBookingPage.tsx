@@ -54,8 +54,14 @@ import type {
     PublicAppointmentView,
     MeetingMode,
 } from "@/lib/api/appointments"
-import { format, addDays, startOfDay, parseISO, isSameDay } from "date-fns"
+import { format, addDays, parseISO } from "date-fns"
 import { toast } from "sonner"
+import {
+    formatDateKeyInTimeZone,
+    formatPlainDateKey,
+    getTodayDateKeyInTimeZone,
+    isPastDateKey,
+} from "@/lib/utils/date-keys"
 
 // Timezone options
 const TIMEZONE_OPTIONS = [
@@ -127,15 +133,6 @@ function getMeetingModes(type: AppointmentType | null | undefined): MeetingMode[
         return type.meeting_modes
     }
     return type.meeting_mode ? [type.meeting_mode] : []
-}
-
-function formatDateKey(date: Date, timezone: string) {
-    return new Intl.DateTimeFormat("en-CA", {
-        timeZone: timezone,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-    }).format(date)
 }
 
 function formatTimeInZone(date: Date, timezone: string) {
@@ -366,22 +363,27 @@ function CalendarView({
         const startDay = start.getDay() // 0 = Sunday
         const daysInMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0).getDate()
 
-        const result: Array<{ date: Date | null; isToday: boolean; hasSlots: boolean }> = []
+        const result: Array<{
+            date: Date | null
+            dateKey: string | null
+            isToday: boolean
+            hasSlots: boolean
+        }> = []
 
         // Padding for days before month starts
         for (let i = 0; i < startDay; i++) {
-            result.push({ date: null, isToday: false, hasSlots: false })
+            result.push({ date: null, dateKey: null, isToday: false, hasSlots: false })
         }
 
-        const todayDate = startOfDay(new Date())
-        const todayKey = formatDateKey(new Date(), timezone)
+        const todayKey = getTodayDateKeyInTimeZone(timezone)
         for (let d = 1; d <= daysInMonth; d++) {
             const date = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), d)
-            const dateStr = formatDateKey(date, timezone)
+            const dateKey = formatPlainDateKey(date)
             result.push({
                 date,
-                isToday: dateStr === todayKey,
-                hasSlots: availableDates.has(dateStr) && date >= todayDate,
+                dateKey,
+                isToday: dateKey === todayKey,
+                hasSlots: availableDates.has(dateKey) && !isPastDateKey(dateKey, timezone),
             })
         }
 
@@ -423,8 +425,7 @@ function CalendarView({
                                 return <div key={i} className="h-10" />
                             }
 
-                            const isSelected = selectedDate && isSameDay(day.date, selectedDate)
-                            const isPast = day.date < startOfDay(new Date())
+                            const isSelected = selectedDate && day.dateKey === formatPlainDateKey(selectedDate)
 
                             return (
                                 <Button
@@ -432,7 +433,7 @@ function CalendarView({
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => day.hasSlots && onSelect(day.date!)}
-                                    disabled={!day.hasSlots || isPast}
+                                    disabled={!day.hasSlots}
                                     className={`h-10 text-sm font-medium ${isSelected
                                         ? "bg-primary text-primary-foreground hover:bg-primary/90"
                                         : day.isToday
@@ -1013,16 +1014,16 @@ export function PublicBookingPage({
     const availableDates = useMemo(() => {
         const dates = new Set<string>()
         slotsData?.slots.forEach((slot) => {
-            dates.add(formatDateKey(parseISO(slot.start), timezone))
+            dates.add(formatDateKeyInTimeZone(parseISO(slot.start), timezone))
         })
         return dates
     }, [slotsData, timezone])
 
     const slotsForDate = useMemo(() => {
         if (!selectedDate || !slotsData) return []
-        const dateStr = formatDateKey(selectedDate, timezone)
+        const dateStr = formatPlainDateKey(selectedDate)
         return slotsData.slots.filter((slot) =>
-            formatDateKey(parseISO(slot.start), timezone) === dateStr
+            formatDateKeyInTimeZone(parseISO(slot.start), timezone) === dateStr
         )
     }, [selectedDate, slotsData, timezone])
 
