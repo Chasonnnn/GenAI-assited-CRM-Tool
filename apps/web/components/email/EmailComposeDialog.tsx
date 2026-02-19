@@ -325,7 +325,7 @@ export function EmailComposeDialog({
                                             : "Select a template..."
                                     }
                                 >
-                                    {(value) => resolveTemplateLabel(value)}
+                                    {(value: string | null) => resolveTemplateLabel(value)}
                                 </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
