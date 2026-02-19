@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest"
+import { beforeEach, describe, it, expect, vi } from "vitest"
 import { render, screen } from "@testing-library/react"
 import * as React from "react"
 import PlatformEmailTemplatePage from "../app/ops/templates/email/[id]/page"
@@ -57,6 +57,10 @@ vi.mock("@/lib/hooks/use-platform-templates", () => ({
 }))
 
 describe("PlatformEmailTemplatePage", () => {
+    beforeEach(() => {
+        richTextEditorSpy.mockClear()
+    })
+
     it("avoids rendering the rich editor with complex HTML", async () => {
         mockParamsId = "tpl_1"
         render(<PlatformEmailTemplatePage />)
@@ -81,5 +85,23 @@ describe("PlatformEmailTemplatePage", () => {
         render(<PlatformEmailTemplatePage />)
         expect(screen.getByRole("button", { name: "Send test" })).toBeDisabled()
         expect(screen.getByText("Save template first.")).toBeInTheDocument()
+    })
+
+    it("enables emoji picker in visual editor mode", async () => {
+        mockParamsId = "tpl_1"
+        const previousBody = mockTemplateData.draft.body
+        mockTemplateData.draft.body = "<p>Hello there</p>"
+
+        try {
+            render(<PlatformEmailTemplatePage />)
+            await screen.findByTestId("rich-text-editor")
+
+            const hasEmojiEnabled = richTextEditorSpy.mock.calls.some(
+                ([props]) => Boolean((props as { enableEmojiPicker?: boolean }).enableEmojiPicker)
+            )
+            expect(hasEmojiEnabled).toBe(true)
+        } finally {
+            mockTemplateData.draft.body = previousBody
+        }
     })
 })

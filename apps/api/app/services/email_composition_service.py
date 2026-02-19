@@ -17,6 +17,10 @@ from app.services import signature_template_service, unsubscribe_service
 
 
 TemplateScope = Literal["org", "personal"]
+EMAIL_FONT_STACK = (
+    '-apple-system, BlinkMacSystemFont, "Segoe UI", "Apple Color Emoji", '
+    '"Segoe UI Emoji", "Noto Color Emoji", Arial, sans-serif'
+)
 
 # Match {{ unsubscribe_url }} with optional whitespace.
 _UNSUB_TOKEN_RE = re.compile(r"{{\s*unsubscribe_url\s*}}", flags=re.IGNORECASE)
@@ -58,7 +62,7 @@ def _build_unsubscribe_footer_html(*, unsubscribe_url: str, include_divider: boo
         '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"'
         ' style="margin-top: 14px;">'
         "<tr>"
-        f'<td style="font-family: Arial, sans-serif; font-size: 11px; line-height: 16px;'
+        f'<td style="font-family: {EMAIL_FONT_STACK}; font-size: 11px; line-height: 16px;'
         f' color: #6b7280; {divider_style}">'
         "If you no longer wish to receive these emails, you can "
         f'<a href="{url}" target="_blank" rel="noopener noreferrer"'
@@ -112,7 +116,7 @@ def _wrap_body_html(html_body: str) -> str:
         return html_body
 
     return (
-        '<div style="font-family: Arial, sans-serif; font-size: 16px;'
+        f'<div style="font-family: {EMAIL_FONT_STACK}; font-size: 16px;'
         ' line-height: 24px; color: #111827;">'
         f"{html_body}"
         "</div>"

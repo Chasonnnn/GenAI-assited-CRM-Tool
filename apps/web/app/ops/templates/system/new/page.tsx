@@ -474,6 +474,7 @@ export default function PlatformSystemEmailTemplateNewPage() {
                                     minHeight="240px"
                                     maxHeight="480px"
                                     enableImages
+                                    enableEmojiPicker
                                 />
                             ) : (
                                 <Textarea

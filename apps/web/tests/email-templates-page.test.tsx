@@ -4,6 +4,7 @@ import * as React from "react"
 import EmailTemplatesPage from "../app/(app)/automation/email-templates/page"
 
 const mockUseAuth = vi.fn()
+const mockRichTextEditorProps = vi.fn()
 
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => mockUseAuth(),
@@ -94,7 +95,10 @@ vi.mock("@/lib/hooks/use-signature", () => ({
 }))
 
 vi.mock("@/components/rich-text-editor", () => ({
-    RichTextEditor: React.forwardRef(() => <div data-testid="rich-text-editor" />),
+    RichTextEditor: React.forwardRef((props: Record<string, unknown>, _ref) => {
+        mockRichTextEditorProps(props)
+        return <div data-testid="rich-text-editor" />
+    }),
 }))
 
 describe("EmailTemplatesPage", () => {
@@ -160,5 +164,16 @@ describe("EmailTemplatesPage", () => {
 
         expect(screen.getByText("Org Signature")).toBeInTheDocument()
         expect(screen.getByText("Unsubscribe")).toBeInTheDocument()
+    })
+
+    it("enables emoji picker for visual template editing", () => {
+        render(<EmailTemplatesPage />)
+        fireEvent.click(screen.getByRole("button", { name: /Create Template/i }))
+
+        expect(mockRichTextEditorProps).toHaveBeenCalled()
+        const hasEmojiEnabledCall = mockRichTextEditorProps.mock.calls.some(
+            ([props]) => Boolean((props as { enableEmojiPicker?: boolean }).enableEmojiPicker)
+        )
+        expect(hasEmojiEnabledCall).toBe(true)
     })
 })

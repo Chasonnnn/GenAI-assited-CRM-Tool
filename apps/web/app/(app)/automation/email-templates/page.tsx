@@ -366,6 +366,8 @@ function OrgSignaturePreviewComponent() {
 
 type EditorMode = "visual" | "html"
 type ActiveInsertionTarget = "subject" | "body_html" | "body_visual" | null
+const PREVIEW_FONT_STACK =
+    '-apple-system, BlinkMacSystemFont, "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", Arial, sans-serif'
 
 function extractTemplateVariables(text: string): string[] {
     if (!text) return []
@@ -1008,6 +1010,10 @@ export default function EmailTemplatesPage() {
                     .join("")
             } else {
                 html = normalizeTemplateHtml(html)
+            }
+
+            if (!/<html\b|<body\b/i.test(html)) {
+                html = `<div style="font-family: ${PREVIEW_FONT_STACK}; font-size: 16px; line-height: 24px; color: #111827;">${html}</div>`
             }
 
             const previewScope = libraryPreviewId ? "org" : templateScope
@@ -1767,6 +1773,7 @@ export default function EmailTemplatesPage() {
                                     minHeight="200px"
                                     maxHeight="350px"
                                     enableImages
+                                    enableEmojiPicker
                                 />
                             ) : (
                                 <Textarea
