@@ -5,7 +5,9 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import TextAlign from '@tiptap/extension-text-align'
 import Image from '@tiptap/extension-image'
+import EmojiPicker, { EmojiStyle, SuggestionMode, type EmojiClickData } from 'emoji-picker-react'
 import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Toggle } from '@/components/ui/toggle'
 import {
     BoldIcon,
@@ -20,6 +22,7 @@ import {
     ImageIcon,
     Undo2Icon,
     Redo2Icon,
+    SmileIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react'
@@ -36,6 +39,7 @@ interface RichTextEditorProps {
     minHeight?: string
     maxHeight?: string
     enableImages?: boolean
+    enableEmojiPicker?: boolean
 }
 
 export type RichTextEditorHandle = {
@@ -56,10 +60,13 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         minHeight = '80px',
         maxHeight = '300px',
         enableImages = false,
+        enableEmojiPicker = false,
     }: RichTextEditorProps,
     ref
 ) {
     const [mounted, setMounted] = useState(false)
+    const [emojiOpen, setEmojiOpen] = useState(false)
+    const [suggestedEmojisMode, setSuggestedEmojisMode] = useState<SuggestionMode>(SuggestionMode.FREQUENT)
 
     useEffect(() => {
         setMounted(true)
@@ -158,6 +165,28 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         editor.chain().focus().setImage({ src: url.trim(), alt: 'Logo' }).run()
     }, [editor])
 
+    const insertEmoji = useCallback(
+        (emoji: string) => {
+            if (!editor) return
+            editor.chain().focus().insertContent(emoji).run()
+            setEmojiOpen(false)
+        },
+        [editor]
+    )
+
+    const handleEmojiOpenChange = useCallback((open: boolean) => {
+        setEmojiOpen(open)
+        if (!open) return
+        setSuggestedEmojisMode(SuggestionMode.FREQUENT)
+    }, [])
+
+    const handleEmojiClick = useCallback(
+        (emojiData: EmojiClickData) => {
+            insertEmoji(emojiData.emoji)
+        },
+        [insertEmoji]
+    )
+
     if (!mounted || !editor) {
         // Show placeholder while editor initializes
         return (
@@ -240,6 +269,63 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                     >
                         <ImageIcon className="size-4" />
                     </Toggle>
+                )}
+                {enableEmojiPicker && (
+                    <Popover open={emojiOpen} onOpenChange={handleEmojiOpenChange}>
+                        <PopoverTrigger
+                            render={
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="size-8 p-0"
+                                    aria-label="Insert Emoji"
+                                >
+                                    <SmileIcon className="size-4" />
+                                </Button>
+                            }
+                        />
+                        <PopoverContent className="w-[27rem] p-2" align="start">
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between px-1">
+                                    <span className="text-xs font-medium text-muted-foreground">Suggested</span>
+                                    <div className="flex items-center gap-1">
+                                        <Button
+                                            type="button"
+                                            variant={suggestedEmojisMode === SuggestionMode.FREQUENT ? 'default' : 'ghost'}
+                                            size="sm"
+                                            className="h-7 px-2 text-xs"
+                                            onClick={() => setSuggestedEmojisMode(SuggestionMode.FREQUENT)}
+                                        >
+                                            Frequent
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant={suggestedEmojisMode === SuggestionMode.RECENT ? 'default' : 'ghost'}
+                                            size="sm"
+                                            className="h-7 px-2 text-xs"
+                                            onClick={() => setSuggestedEmojisMode(SuggestionMode.RECENT)}
+                                        >
+                                            Recent
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                <div data-testid="emoji-picker-root" className="[&_aside.EmojiPickerReact]:!w-full">
+                                    <EmojiPicker
+                                        onEmojiClick={handleEmojiClick}
+                                        suggestedEmojisMode={suggestedEmojisMode}
+                                        emojiStyle={EmojiStyle.NATIVE}
+                                        searchPlaceholder="Search emojis"
+                                        lazyLoadEmojis
+                                        width="100%"
+                                        height={360}
+                                        previewConfig={{ showPreview: false }}
+                                    />
+                                </div>
+                            </div>
+                        </PopoverContent>
+                    </Popover>
                 )}
                 <div className="w-px h-4 bg-border mx-1" />
                 <Toggle

@@ -55,6 +55,7 @@ export function SurrogateNotesTab({
                                 onSubmit={onAddNote}
                                 submitLabel="Add Note"
                                 isSubmitting={isSubmitting}
+                                enableEmojiPicker
                             />
                         </div>
 
