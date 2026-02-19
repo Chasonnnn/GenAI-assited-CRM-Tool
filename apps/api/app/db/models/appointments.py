@@ -198,7 +198,7 @@ class BookingLink(Base):
     Secure public booking link for a user.
 
     Public slug is used in URLs (/book/{public_slug}).
-    Can be regenerated to invalidate old links.
+    Slug remains stable so previously shared links stay valid.
     """
 
     __tablename__ = "booking_links"

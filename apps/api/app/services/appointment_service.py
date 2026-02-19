@@ -674,7 +674,7 @@ def regenerate_booking_link(
     user_id: UUID,
     org_id: UUID,
 ) -> BookingLink | None:
-    """Regenerate a booking link with a new slug."""
+    """Return the existing booking link without rotating its slug."""
     link = (
         db.query(BookingLink)
         .filter(
@@ -687,9 +687,6 @@ def regenerate_booking_link(
     if not link:
         return None
 
-    link.public_slug = generate_public_slug()
-    db.commit()
-    db.refresh(link)
     return link
 
 

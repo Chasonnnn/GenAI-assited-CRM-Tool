@@ -374,7 +374,7 @@ def regenerate_booking_link(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Regenerate booking link with a new slug."""
+    """Return the current booking link (slug rotation disabled)."""
     link = appointment_service.regenerate_booking_link(
         db=db,
         user_id=session.user_id,
