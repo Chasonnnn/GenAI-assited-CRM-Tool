@@ -701,6 +701,8 @@ export default function EmailTemplatesPage() {
                     return user?.display_name || "Case Manager"
                 case "form_link":
                     return "https://app.surrogacyforce.com/apply/EXAMPLE_TOKEN"
+                case "appointment_link":
+                    return "https://app.surrogacyforce.com/book/EXAMPLE_APPOINTMENT_SLUG"
                 case "appointment_date":
                     return "2026-01-01"
                 case "appointment_time":
@@ -1018,6 +1020,7 @@ export default function EmailTemplatesPage() {
                 .replace(/\{\{status_label\}\}/g, "Qualified")
                 .replace(/\{\{owner_name\}\}/g, "Sara Manager")
                 .replace(/\{\{form_link\}\}/g, "https://app.surrogacyforce.com/apply/EXAMPLE_TOKEN")
+                .replace(/\{\{appointment_link\}\}/g, "https://app.surrogacyforce.com/book/EXAMPLE_APPOINTMENT_SLUG")
                 .replace(/\{\{org_name\}\}/g, signatureData?.org_signature_company_name || "ABC Surrogacy")
                 .replace(/\{\{appointment_date\}\}/g, "January 15, 2025")
                 .replace(/\{\{appointment_time\}\}/g, "2:00 PM PST")

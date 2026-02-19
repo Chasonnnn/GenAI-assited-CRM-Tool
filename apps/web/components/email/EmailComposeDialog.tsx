@@ -45,6 +45,7 @@ interface EmailComposeDialogProps {
 const PREVIEW_FONT_STACK =
     '-apple-system, BlinkMacSystemFont, "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", Arial, sans-serif'
 const PREVIEW_FORM_LINK = "https://app.surrogacyforce.com/apply/EXAMPLE_TOKEN"
+const PREVIEW_APPOINTMENT_LINK = "https://app.surrogacyforce.com/book/EXAMPLE_APPOINTMENT_SLUG"
 
 const LEGACY_UNSUBSCRIBE_TOKEN_RE = /\{\{\s*unsubscribe_url\s*\}\}/gi
 const LEGACY_UNSUBSCRIBE_ANCHOR_RE =
@@ -136,6 +137,7 @@ export function EmailComposeDialog({
                 .replace(/\{\{owner_name\}\}/g, "")
                 .replace(/\{\{org_name\}\}/g, "")
                 .replace(/\{\{form_link\}\}/g, PREVIEW_FORM_LINK)
+                .replace(/\{\{appointment_link\}\}/g, PREVIEW_APPOINTMENT_LINK)
         },
         [surrogateData]
     )
@@ -316,6 +318,7 @@ export function EmailComposeDialog({
         "{{state}}",
         "{{owner_name}}",
         "{{form_link}}",
+        "{{appointment_link}}",
         "{{org_name}}",
     ]
 

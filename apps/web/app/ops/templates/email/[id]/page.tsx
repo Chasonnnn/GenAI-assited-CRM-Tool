@@ -143,6 +143,10 @@ export default function PlatformEmailTemplatePage() {
                     return "CA"
                 case "owner_name":
                     return "Operator"
+                case "form_link":
+                    return "https://app.surrogacyforce.com/apply/EXAMPLE_TOKEN"
+                case "appointment_link":
+                    return "https://app.surrogacyforce.com/book/EXAMPLE_APPOINTMENT_SLUG"
                 case "appointment_date":
                     return "2026-01-01"
                 case "appointment_time":

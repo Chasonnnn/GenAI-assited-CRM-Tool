@@ -43,7 +43,6 @@ import {
     ClockIcon,
     PlusIcon,
     TrashIcon,
-    RefreshCwIcon,
     CheckIcon,
     AlertCircleIcon,
     VideoIcon,
@@ -59,7 +58,6 @@ import { useAuth } from "@/lib/auth-context"
 import { ApiError } from "@/lib/api"
 import {
     useBookingLink,
-    useRegenerateBookingLink,
     useAppointmentTypes,
     useCreateAppointmentType,
     useUpdateAppointmentType,
@@ -159,7 +157,6 @@ const MEETING_MODE_LABELS = MEETING_MODE_OPTIONS.reduce<Record<string, string>>(
 
 function BookingLinkCard() {
     const { data: link, isLoading } = useBookingLink()
-    const regenerateMutation = useRegenerateBookingLink()
     const [copied, setCopied] = useState(false)
 
     const copyLink = () => {
@@ -212,17 +209,8 @@ function BookingLinkCard() {
                     <EyeIcon className="size-4 mr-2" />
                     Preview Booking Page
                 </Button>
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => regenerateMutation.mutate()}
-                    disabled={regenerateMutation.isPending}
-                >
-                    <RefreshCwIcon className={`size-4 mr-2 ${regenerateMutation.isPending ? "animate-spin" : ""}`} />
-                    Regenerate Link
-                </Button>
                 <p className="text-xs text-muted-foreground">
-                    Regenerating will invalidate the current link. Any bookmarked links will stop working.
+                    This booking link stays the same, so previously shared links remain valid.
                 </p>
             </CardContent>
         </Card>
