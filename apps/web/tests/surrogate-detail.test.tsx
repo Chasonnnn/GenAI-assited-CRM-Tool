@@ -156,6 +156,7 @@ vi.mock('@/lib/hooks/use-surrogates', () => ({
     useSurrogate: (id: string) => mockUseSurrogate(id),
     useSurrogateActivity: (id: string) => mockUseSurrogateActivity(id),
     useSurrogateHistory: (id: string) => mockUseSurrogateHistory(id),
+    useSurrogateTemplateVariables: () => ({ data: {}, isLoading: false }),
     useChangeSurrogateStatus: () => ({ mutateAsync: mockChangeStatus }),
     useArchiveSurrogate: () => ({ mutateAsync: mockArchive }),
     useRestoreSurrogate: () => ({ mutateAsync: mockRestore }),
