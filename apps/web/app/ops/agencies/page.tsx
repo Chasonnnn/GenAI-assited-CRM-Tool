@@ -47,6 +47,8 @@ export default function AgenciesPage() {
     const [statusFilter, setStatusFilter] = useState<string>('');
 
     useEffect(() => {
+        let isCurrent = true;
+
         async function fetchAgencies() {
             setIsLoading(true);
             try {
@@ -54,15 +56,24 @@ export default function AgenciesPage() {
                     ...(search ? { search } : {}),
                     ...(statusFilter ? { status: statusFilter } : {}),
                 });
+                if (!isCurrent) return;
                 setAgencies(data.items.filter((item) => !item.deleted_at));
                 setTotal(data.total);
             } catch (error) {
+                if (!isCurrent) return;
                 console.error('Failed to fetch agencies:', error);
             } finally {
-                setIsLoading(false);
+                if (isCurrent) {
+                    setIsLoading(false);
+                }
             }
         }
+
         fetchAgencies();
+
+        return () => {
+            isCurrent = false;
+        };
     }, [search, statusFilter]);
 
     return (

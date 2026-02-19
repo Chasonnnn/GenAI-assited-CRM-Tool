@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from "@/components/app-link";
 import {
@@ -89,7 +89,6 @@ export default function AgencyDetailPage() {
     const [actionLogs, setActionLogs] = useState<AdminActionLog[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('overview');
-    const [openAlertCount, setOpenAlertCount] = useState(0);
     const [orgAlerts, setOrgAlerts] = useState<PlatformAlert[]>([]);
     const [alertsLoading, setAlertsLoading] = useState(false);
     const [alertsUpdating, setAlertsUpdating] = useState<string | null>(null);
@@ -110,8 +109,18 @@ export default function AgencyDetailPage() {
     const [deleteSubmitting, setDeleteSubmitting] = useState(false);
     const [restoreSubmitting, setRestoreSubmitting] = useState(false);
     const [purgeSubmitting, setPurgeSubmitting] = useState(false);
+    const isMountedRef = useRef(true);
+    const alertsRequestIdRef = useRef(0);
 
     useEffect(() => {
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        let isCurrent = true;
+
         async function fetchData() {
             setIsLoading(true);
             try {
@@ -122,19 +131,28 @@ export default function AgencyDetailPage() {
                     listInvites(orgId),
                     getAdminActionLogs(orgId, { limit: 20 }),
                 ]);
+                if (!isCurrent) return;
                 setOrg(orgData);
                 setSubscription(subData);
                 setMembers(membersData);
                 setInvites(invitesData);
                 setActionLogs(logsData.items);
             } catch (error) {
+                if (!isCurrent) return;
                 console.error('Failed to fetch agency data:', error);
                 toast.error('Failed to load agency details');
             } finally {
-                setIsLoading(false);
+                if (isCurrent) {
+                    setIsLoading(false);
+                }
             }
         }
+
         fetchData();
+
+        return () => {
+            isCurrent = false;
+        };
     }, [orgId]);
 
     useEffect(() => {
@@ -143,16 +161,21 @@ export default function AgencyDetailPage() {
 
     const fetchOrgAlerts = useCallback(async () => {
         if (!orgId) return;
+        const requestId = alertsRequestIdRef.current + 1;
+        alertsRequestIdRef.current = requestId;
         setAlertsLoading(true);
         try {
             const data = await listAlerts({ org_id: orgId });
+            if (!isMountedRef.current || requestId !== alertsRequestIdRef.current) return;
             setOrgAlerts(data.items);
         } catch (error) {
+            if (!isMountedRef.current || requestId !== alertsRequestIdRef.current) return;
             console.error('Failed to fetch org alerts:', error);
             toast.error('Failed to load organization alerts');
-            setOpenAlertCount(0);
         } finally {
-            setAlertsLoading(false);
+            if (isMountedRef.current && requestId === alertsRequestIdRef.current) {
+                setAlertsLoading(false);
+            }
         }
     }, [orgId]);
 
@@ -160,29 +183,37 @@ export default function AgencyDetailPage() {
         fetchOrgAlerts();
     }, [fetchOrgAlerts]);
 
-    useEffect(() => {
-        setOpenAlertCount(
-            orgAlerts.filter((alert) => alert.status === 'open').length
-        );
-    }, [orgAlerts]);
+    const openAlertCount = useMemo(
+        () => orgAlerts.filter((alert) => alert.status === 'open').length,
+        [orgAlerts]
+    );
 
     useEffect(() => {
         if (activeTab !== 'invites') return;
+        let isCurrent = true;
 
         async function fetchEmailStatus() {
             setPlatformEmailLoading(true);
             try {
                 const status = await getPlatformEmailStatus();
+                if (!isCurrent) return;
                 setPlatformEmailStatus(status);
             } catch (error) {
+                if (!isCurrent) return;
                 console.error('Failed to fetch platform email status:', error);
                 toast.error('Failed to load platform email sender status');
             } finally {
-                setPlatformEmailLoading(false);
+                if (isCurrent) {
+                    setPlatformEmailLoading(false);
+                }
             }
         }
 
         fetchEmailStatus();
+
+        return () => {
+            isCurrent = false;
+        };
     }, [activeTab]);
 
     const handleDeleteOrganization = async () => {
