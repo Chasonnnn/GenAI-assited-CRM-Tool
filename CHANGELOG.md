@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.85.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.84.0...surrogacy-crm-platform-v0.85.0) (2026-02-19)
+
+
+### Features
+
+* **api,web:** allow case managers to manage lost and disqualified stages ([0b50fa1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0b50fa176432b471933b660519a14b4e6666d82b))
+* **api:** implement flexible height parsing (feet.inches shorthand) ([dd28910](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dd28910b7278a47bc6d6db32b9ad1002c279c41e))
+* **web:** improve height formatting and display in surrogate profiles and IP matches ([0362cc7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0362cc735bf8553f0254a3e770d1e79d20f3c55b))
+
+
+### Bug Fixes
+
+* **api:** secure pipeline management endpoints with MANAGE_PIPELINES dependency ([f49177a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f49177a8d616378c9efbfcb03167428138475db2))
+
 ## [0.84.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.83.0...surrogacy-crm-platform-v0.84.0) (2026-02-19)
 
 
