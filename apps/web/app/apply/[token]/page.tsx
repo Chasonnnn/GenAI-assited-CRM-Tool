@@ -164,18 +164,18 @@ function OptionCard({
     onClick,
     label,
     description,
-    role = "radio",
+    selectionRole = "radio",
 }: {
     selected: boolean
     onClick: () => void
     label: string
     description?: string
-    role?: "radio" | "checkbox"
+    selectionRole?: "radio" | "checkbox"
 }) {
     return (
         <button
             type="button"
-            role={role}
+            role={selectionRole}
             aria-checked={selected}
             onClick={onClick}
             className={cn(
@@ -1003,7 +1003,7 @@ export default function PublicApplicationForm() {
                                     selected={value === option.value}
                                     onClick={() => updateField(field.key, option.value)}
                                     label={option.label}
-                                    role="radio"
+                                    selectionRole="radio"
                                 />
                             ))}
                         </div>
@@ -1038,7 +1038,7 @@ export default function PublicApplicationForm() {
                                         updateField(field.key, next)
                                     }}
                                     label={option.label}
-                                    role="checkbox"
+                                    selectionRole="checkbox"
                                 />
                             ))}
                         </div>
@@ -1093,7 +1093,7 @@ export default function PublicApplicationForm() {
                                     updateField(field.key, next)
                                 }}
                                 label={option.label}
-                                role="checkbox"
+                                selectionRole="checkbox"
                             />
                         ))}
                     </div>
