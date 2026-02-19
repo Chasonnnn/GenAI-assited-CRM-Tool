@@ -203,6 +203,8 @@ export interface SurrogateSendEmailResponse {
     error?: string | null;
 }
 
+export type SurrogateTemplateVariables = Record<string, string>;
+
 /**
  * Get surrogate statistics for dashboard.
  */
@@ -307,6 +309,13 @@ export function assignSurrogate(surrogateId: string, data: SurrogateAssignPayloa
  */
 export function sendSurrogateEmail(surrogateId: string, data: SurrogateSendEmailPayload): Promise<SurrogateSendEmailResponse> {
     return api.post<SurrogateSendEmailResponse>(`/surrogates/${surrogateId}/send-email`, data);
+}
+
+/**
+ * Get resolved template variables for surrogate email preview.
+ */
+export function getSurrogateTemplateVariables(surrogateId: string): Promise<SurrogateTemplateVariables> {
+    return api.get<SurrogateTemplateVariables>(`/surrogates/${surrogateId}/template-variables`);
 }
 
 /**

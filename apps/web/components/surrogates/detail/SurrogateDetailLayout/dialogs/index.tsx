@@ -39,6 +39,7 @@ export function Dialogs() {
                     status: surrogate.status_label,
                     ...(surrogate.state ? { state: surrogate.state } : {}),
                     ...(surrogate.phone ? { phone: surrogate.phone } : {}),
+                    ...(surrogate.owner_name ? { owner_name: surrogate.owner_name } : {}),
                 }}
             />
 

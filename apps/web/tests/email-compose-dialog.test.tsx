@@ -6,6 +6,7 @@ import { EmailComposeDialog } from "@/components/email/EmailComposeDialog"
 const mockUseEmailTemplates = vi.fn()
 const mockUseEmailTemplate = vi.fn()
 const mockUseSendSurrogateEmail = vi.fn()
+const mockUseSurrogateTemplateVariables = vi.fn()
 const mockUseSignaturePreview = vi.fn()
 const mockUseOrgSignaturePreview = vi.fn()
 
@@ -129,6 +130,8 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
 
 vi.mock("@/lib/hooks/use-surrogates", () => ({
     useSendSurrogateEmail: () => mockUseSendSurrogateEmail(),
+    useSurrogateTemplateVariables: (surrogateId: string, options?: unknown) =>
+        mockUseSurrogateTemplateVariables(surrogateId, options),
 }))
 
 vi.mock("@/lib/hooks/use-signature", () => ({
@@ -155,6 +158,10 @@ describe("EmailComposeDialog", () => {
             isError: false,
             isSuccess: false,
             error: null,
+        })
+        mockUseSurrogateTemplateVariables.mockReturnValue({
+            data: {},
+            isLoading: false,
         })
         mockUseSignaturePreview.mockReturnValue({
             data: { html: "<div>Personal Signature Block</div>" },
@@ -464,6 +471,83 @@ describe("EmailComposeDialog", () => {
                     }),
                 })
             )
+        })
+    })
+
+    it("renders resolved values for any available template variables in preview mode", async () => {
+        const templateId = "tpl-all-vars"
+
+        mockUseEmailTemplates.mockReturnValue({
+            data: [
+                {
+                    id: templateId,
+                    name: "All Variables Template",
+                    subject: "Hi {{first_name}} from {{org_name}}",
+                    from_email: null,
+                    is_active: true,
+                    scope: "org",
+                    owner_user_id: null,
+                    owner_name: null,
+                    is_system_template: false,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+            ],
+            isLoading: false,
+        })
+
+        mockUseEmailTemplate.mockImplementation((id: string | null) => {
+            if (id !== templateId) return { data: null, isLoading: false }
+            return {
+                data: {
+                    id: templateId,
+                    organization_id: "org-1",
+                    created_by_user_id: null,
+                    name: "All Variables Template",
+                    subject: "Hi {{first_name}} from {{org_name}}",
+                    from_email: null,
+                    body: "<p>Owner: {{owner_name}}</p><p>Book here: {{appointment_link}}</p><p>Unknown: {{custom_var}}</p>",
+                    is_active: true,
+                    scope: "org",
+                    owner_user_id: null,
+                    owner_name: null,
+                    source_template_id: null,
+                    is_system_template: false,
+                    current_version: 1,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+                isLoading: false,
+            }
+        })
+
+        mockUseSurrogateTemplateVariables.mockReturnValue({
+            data: {
+                first_name: "Ashley",
+                org_name: "EWI Family Global",
+                owner_name: "Jordan Case Manager",
+                appointment_link: "https://app.surrogacyforce.com/book/jordan",
+            },
+            isLoading: false,
+        })
+
+        render(
+            <EmailComposeDialog
+                open
+                onOpenChange={vi.fn()}
+                surrogateData={baseSurrogateData}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "All Variables Template" }))
+
+        await waitFor(() => {
+            expect(screen.getByText("Hi Ashley from EWI Family Global")).toBeInTheDocument()
+            const proseBody = document.querySelector(".prose")
+            expect(proseBody).toBeTruthy()
+            expect(proseBody).toHaveTextContent("Owner: Jordan Case Manager")
+            expect(proseBody).toHaveTextContent("Book here: https://app.surrogacyforce.com/book/jordan")
+            expect(proseBody).toHaveTextContent("Unknown: {{custom_var}}")
         })
     })
 })

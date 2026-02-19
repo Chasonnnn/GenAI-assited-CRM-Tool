@@ -17,6 +17,7 @@ export const surrogateKeys = {
         [...surrogateKeys.unassignedQueue(), params] as const,
     details: () => [...surrogateKeys.all, 'detail'] as const,
     detail: (id: string) => [...surrogateKeys.details(), id] as const,
+    templateVariables: (id: string) => [...surrogateKeys.detail(id), 'template-variables'] as const,
     history: (id: string) => [...surrogateKeys.detail(id), 'history'] as const,
     massEditOptions: () => [...surrogateKeys.all, 'mass-edit-options'] as const,
 };
@@ -66,6 +67,20 @@ export function useSurrogate(surrogateId: string) {
         queryKey: surrogateKeys.detail(surrogateId),
         queryFn: () => surrogatesApi.getSurrogate(surrogateId),
         enabled: !!surrogateId,
+    });
+}
+
+/**
+ * Fetch resolved template variables for a surrogate email preview.
+ */
+export function useSurrogateTemplateVariables(
+    surrogateId: string,
+    options: { enabled?: boolean } = {}
+) {
+    return useQuery({
+        queryKey: surrogateKeys.templateVariables(surrogateId),
+        queryFn: () => surrogatesApi.getSurrogateTemplateVariables(surrogateId),
+        enabled: Boolean(surrogateId) && (options.enabled ?? true),
     });
 }
 

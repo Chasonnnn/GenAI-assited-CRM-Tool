@@ -25,7 +25,9 @@ import DOMPurify from "dompurify"
 import { normalizeTemplateHtml } from "@/lib/email-template-html"
 import { useEmailTemplates, useEmailTemplate } from "@/lib/hooks/use-email-templates"
 import { useOrgSignaturePreview, useSignaturePreview } from "@/lib/hooks/use-signature"
-import { useSendSurrogateEmail } from "@/lib/hooks/use-surrogates"
+import { useSendSurrogateEmail, useSurrogateTemplateVariables } from "@/lib/hooks/use-surrogates"
+
+type TemplatePreviewValue = string | number | boolean | null | undefined
 
 interface EmailComposeDialogProps {
     open: boolean
@@ -38,6 +40,7 @@ interface EmailComposeDialogProps {
         status: string
         state?: string
         phone?: string
+        [key: string]: TemplatePreviewValue
     }
     onSuccess?: () => void
 }
@@ -50,6 +53,7 @@ const PREVIEW_APPOINTMENT_LINK = "https://app.surrogacyforce.com/book/EXAMPLE_AP
 const LEGACY_UNSUBSCRIBE_TOKEN_RE = /\{\{\s*unsubscribe_url\s*\}\}/gi
 const LEGACY_UNSUBSCRIBE_ANCHOR_RE =
     /<a\b[^>]*\bhref\s*=\s*(["'])\s*\{\{\s*unsubscribe_url\s*\}\}\s*\1[^>]*>[\s\S]*?<\/a>/gi
+const TEMPLATE_TOKEN_RE = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g
 
 function escapeHtml(raw: string): string {
     return raw
@@ -84,6 +88,9 @@ export function EmailComposeDialog({
         mode: "org_only",
     })
     const sendEmailMutation = useSendSurrogateEmail()
+    const { data: resolvedTemplateVariables = {} } = useSurrogateTemplateVariables(surrogateData.id, {
+        enabled: open && Boolean(surrogateData.id),
+    })
 
     const resolveTemplateLabel = React.useCallback(
         (templateId: string | null) => {
@@ -125,21 +132,35 @@ export function EmailComposeDialog({
         }
     }, [open])
 
+    const previewVariableValues = React.useMemo(() => {
+        const fallbackValues: Record<string, string> = {}
+        for (const [key, value] of Object.entries(surrogateData)) {
+            if (value === undefined || value === null) continue
+            fallbackValues[key] = String(value)
+        }
+
+        const fullName = fallbackValues.full_name || ""
+        fallbackValues.first_name = fullName ? (fullName.trim().split(/\s+/)[0] ?? "") : ""
+        fallbackValues.status_label = fallbackValues.status_label || fallbackValues.status || ""
+        fallbackValues.form_link = fallbackValues.form_link || PREVIEW_FORM_LINK
+        fallbackValues.appointment_link = fallbackValues.appointment_link || PREVIEW_APPOINTMENT_LINK
+
+        return {
+            ...fallbackValues,
+            ...resolvedTemplateVariables,
+        }
+    }, [resolvedTemplateVariables, surrogateData])
+
     const replaceTemplateVariables = React.useCallback(
-        (text: string) => {
-            return text
-                .replace(/\{\{full_name\}\}/g, surrogateData.full_name)
-                .replace(/\{\{surrogate_number\}\}/g, surrogateData.surrogate_number)
-                .replace(/\{\{status_label\}\}/g, surrogateData.status)
-                .replace(/\{\{state\}\}/g, surrogateData.state || "")
-                .replace(/\{\{email\}\}/g, surrogateData.email)
-                .replace(/\{\{phone\}\}/g, surrogateData.phone || "")
-                .replace(/\{\{owner_name\}\}/g, "")
-                .replace(/\{\{org_name\}\}/g, "")
-                .replace(/\{\{form_link\}\}/g, PREVIEW_FORM_LINK)
-                .replace(/\{\{appointment_link\}\}/g, PREVIEW_APPOINTMENT_LINK)
-        },
-        [surrogateData]
+        (text: string) =>
+            text.replace(TEMPLATE_TOKEN_RE, (match: string, variableName: string) => {
+                const value = previewVariableValues[variableName]
+                if (value === undefined || value === null) {
+                    return match
+                }
+                return String(value)
+            }),
+        [previewVariableValues]
     )
 
     const sanitizePreviewHtml = React.useCallback((html: string) => {
@@ -310,6 +331,7 @@ export function EmailComposeDialog({
     }
 
     const availableVariables = [
+        "{{first_name}}",
         "{{full_name}}",
         "{{email}}",
         "{{phone}}",
@@ -320,6 +342,8 @@ export function EmailComposeDialog({
         "{{form_link}}",
         "{{appointment_link}}",
         "{{org_name}}",
+        "{{org_logo_url}}",
+        "{{unsubscribe_url}}",
     ]
 
     return (
