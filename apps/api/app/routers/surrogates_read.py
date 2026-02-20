@@ -3,10 +3,13 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import Response
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_permission
 from app.core.policies import POLICIES
+from app.core.security import decode_export_token
 from app.core.surrogate_access import check_surrogate_access
 from app.db.enums import AuditEventType, Role, SurrogateSource
 from app.schemas.auth import UserSession
@@ -18,12 +21,22 @@ from app.schemas.surrogate import (
     SurrogateStats,
     SurrogateStatusHistoryRead,
 )
-from app.services import surrogate_service, user_service
+from app.schemas.task import TaskListItem
+from app.services import org_service, surrogate_service, user_service
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
 from .surrogates_shared import _surrogate_to_list_item, _surrogate_to_read
 
 router = APIRouter()
+export_router = APIRouter()
+
+
+class SurrogateCaseDetailsExportView(BaseModel):
+    surrogate: SurrogateRead
+    activities: list[SurrogateActivityRead]
+    tasks: list[TaskListItem]
+    show_medical: bool
+    show_pregnancy: bool
 
 
 @router.get("/stats", response_model=SurrogateStats)
@@ -278,6 +291,174 @@ def get_surrogate(
     db.commit()
 
     return _surrogate_to_read(surrogate, db)
+
+
+@router.get("/{surrogate_id:uuid}/export")
+def export_surrogate_packet(
+    surrogate_id: UUID,
+    request: Request,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """Export case details and include the latest application when available."""
+    from app.services import audit_service, pdf_export_service
+
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    org = org_service.get_org_by_id(db, session.org_id)
+    org_name = org.name if org else ""
+    surrogate_name = surrogate.full_name or f"Surrogate #{surrogate.surrogate_number or surrogate.id}"
+
+    try:
+        pdf_bytes, includes_application = pdf_export_service.export_surrogate_packet_pdf(
+            db=db,
+            org_id=session.org_id,
+            surrogate_id=surrogate_id,
+            surrogate_name=surrogate_name,
+            org_name=org_name,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.DATA_VIEW_SURROGATE,
+        actor_user_id=session.user_id,
+        target_type="surrogate",
+        target_id=surrogate.id,
+        request=request,
+    )
+    audit_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="surrogate",
+        target_id=surrogate.id,
+        request=request,
+        details={
+            "view": "surrogate_overview_application_export",
+            "includes_application": includes_application,
+        },
+    )
+    db.commit()
+
+    filename = f"surrogate_export_{surrogate.surrogate_number or surrogate_id}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Includes-Application": str(includes_application).lower(),
+        },
+    )
+
+
+@export_router.get(
+    "/surrogates/{surrogate_id:uuid}/export-view",
+    response_model=SurrogateCaseDetailsExportView,
+)
+def get_surrogate_export_view(
+    surrogate_id: UUID,
+    export_token: str = Query(..., alias="export_token"),
+    db: Session = Depends(get_db),
+) -> SurrogateCaseDetailsExportView:
+    """Token-authenticated payload for rendering the case details print view."""
+    from app.services import pipeline_service, task_service
+
+    try:
+        payload = decode_export_token(export_token)
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Invalid export token") from exc
+
+    if payload.get("purpose") != "case_details_export":
+        raise HTTPException(status_code=401, detail="Invalid export token")
+    if payload.get("surrogate_id") != str(surrogate_id):
+        raise HTTPException(status_code=403, detail="Export token scope mismatch")
+
+    org_id = payload.get("org_id")
+    if not org_id:
+        raise HTTPException(status_code=401, detail="Invalid export token")
+    try:
+        org_uuid = UUID(org_id)
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Invalid export token") from exc
+
+    surrogate = surrogate_service.get_surrogate(db, org_uuid, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+
+    surrogate_read = _surrogate_to_read(surrogate, db)
+
+    current_stage = pipeline_service.get_stage_by_id(db, surrogate.stage_id)
+    ready_to_match_stage = None
+    heartbeat_stage = None
+    if current_stage:
+        ready_to_match_stage = pipeline_service.get_stage_by_slug(
+            db,
+            current_stage.pipeline_id,
+            "ready_to_match",
+        )
+        heartbeat_stage = pipeline_service.get_stage_by_slug(
+            db,
+            current_stage.pipeline_id,
+            "heartbeat_confirmed",
+        )
+
+    is_terminal_intake_outcome = bool(
+        current_stage and current_stage.slug in {"lost", "disqualified"}
+    )
+    show_medical = bool(
+        current_stage and ready_to_match_stage and current_stage.order >= ready_to_match_stage.order
+    )
+    show_pregnancy = bool(
+        current_stage
+        and heartbeat_stage
+        and current_stage.order >= heartbeat_stage.order
+        and not is_terminal_intake_outcome
+    )
+
+    activity_data, _ = surrogate_service.list_surrogate_activity(
+        db=db,
+        org_id=org_uuid,
+        surrogate_id=surrogate_id,
+        page=1,
+        per_page=DEFAULT_PER_PAGE,
+    )
+    activities = [
+        SurrogateActivityRead(
+            id=item["id"],
+            activity_type=item["activity_type"],
+            actor_user_id=item["actor_user_id"],
+            actor_name=item["actor_name"],
+            details=item["details"],
+            created_at=item["created_at"],
+        )
+        for item in activity_data
+    ]
+
+    tasks, _ = task_service.list_tasks(
+        db=db,
+        org_id=org_uuid,
+        page=1,
+        per_page=DEFAULT_PER_PAGE,
+        surrogate_id=surrogate_id,
+        exclude_approvals=True,
+    )
+    task_context = task_service.get_task_context(db, org_uuid, tasks)
+    task_items = [task_service.to_task_list_item(task, task_context) for task in tasks]
+
+    return SurrogateCaseDetailsExportView(
+        surrogate=surrogate_read,
+        activities=activities,
+        tasks=task_items,
+        show_medical=show_medical,
+        show_pregnancy=show_pregnancy,
+    )
 
 
 @router.get("/{surrogate_id:uuid}/history", response_model=list[SurrogateStatusHistoryRead])

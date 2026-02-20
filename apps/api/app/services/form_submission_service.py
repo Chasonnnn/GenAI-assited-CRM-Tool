@@ -519,6 +519,21 @@ def get_submission(
     )
 
 
+def get_latest_submission_for_surrogate(
+    db: Session, org_id: uuid.UUID, surrogate_id: uuid.UUID
+) -> FormSubmission | None:
+    """Get the most recently submitted form submission for a surrogate (org-scoped)."""
+    return (
+        db.query(FormSubmission)
+        .filter(
+            FormSubmission.organization_id == org_id,
+            FormSubmission.surrogate_id == surrogate_id,
+        )
+        .order_by(FormSubmission.submitted_at.desc())
+        .first()
+    )
+
+
 def list_submission_files(
     db: Session, org_id: uuid.UUID, submission_id: uuid.UUID
 ) -> list[FormSubmissionFile]:

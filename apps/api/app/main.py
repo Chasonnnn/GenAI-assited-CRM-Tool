@@ -42,6 +42,7 @@ from app.routers import (
     campaigns,
     custom_fields,
     surrogates,
+    surrogates_read,
     surrogates_import,
     compliance,
     dashboard,
@@ -443,6 +444,7 @@ app.include_router(
     interviews.router, tags=["interviews"]
 )  # Mixed paths: /surrogates/{id}/interviews and /interviews/{id}
 app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
+app.include_router(surrogates_read.export_router)  # Token-auth surrogate export view
 
 # Surrogate Journey (timeline view)
 app.include_router(journey.router)  # Authenticated journey endpoints

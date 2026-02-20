@@ -25,10 +25,8 @@ dependencies = [
     "typing-extensions==4.15.0",
     "typing-inspection==0.4.2",
     "uvicorn[standard]==0.40.0",
-
     # Required for UploadFile/Form parsing (FastAPI will error at import-time without it)
     "python-multipart==0.0.22",
-
     # Auth dependencies
     "httpx==0.28.1",
     "pyjwt==2.11.0",
@@ -36,24 +34,18 @@ dependencies = [
     "google-genai==1.61.0",
     "requests==2.32.5",
     "email-validator==2.3.0",
-
     # Security
     "nh3==0.3.2",
-
     # Email
     "resend==2.21.0",
-
     # Encryption (for Meta page tokens)
     "cryptography==46.0.5",
-
     # Rate limiting
     "slowapi==0.1.9",
-
     # Error tracking (optional)
     "sentry-sdk[fastapi]==2.51.0",
     "google-cloud-logging==3.13.0",
     "google-cloud-error-reporting==1.14.0",
-
     # Observability (OpenTelemetry)
     "opentelemetry-api==1.39.1",
     "opentelemetry-sdk==1.39.1",
@@ -63,32 +55,24 @@ dependencies = [
     "opentelemetry-instrumentation-httpx==0.60b1",
     "opentelemetry-instrumentation-requests==0.60b1",
     "opentelemetry-instrumentation-sqlalchemy==0.60b1",
-
     # Protobuf (avoid deprecated PyType_Spec usage warnings in Python 3.14+)
     "protobuf==6.33.5",
-
     # Timezone support (for containers without system tzdata)
     "tzdata==2025.3",
     "holidays>=0.40",
-
     # Rate limiting (distributed storage for multi-worker setups)
     "redis==7.1.0",
-
     # Export storage (S3)
     "boto3==1.42.39",
-
     # Image processing (EXIF stripping)
     "pillow>=12.1.1",
     "reportlab==4.4.9",
-
     # MFA/TOTP support
     "pyotp==2.9.0",
     "duo_universal==2.2.0",
     "playwright==1.58.0",
-
     # Session tracking (user agent parsing)
     "user-agents==2.2.0",
-
     # Google Cloud resolver pins (formerly constraints.txt)
     "google-api-core==2.29.0",
     "google-cloud-core==2.5.0",
@@ -97,6 +81,7 @@ dependencies = [
     "grpcio==1.76.0",
     "grpcio-status==1.76.0",
     "proto-plus==1.27.0",
+    "pypdf==6.1.3",
 ]
 
 [project.optional-dependencies]

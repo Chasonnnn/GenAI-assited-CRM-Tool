@@ -6,11 +6,13 @@ import html
 import math
 import os
 import uuid
+from io import BytesIO
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
 
+from pypdf import PdfReader, PdfWriter
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -63,7 +65,10 @@ async def _render_html_to_pdf(html_content: str) -> bytes:
         return pdf_bytes
 
 
-async def _render_url_to_pdf(url: str) -> bytes:
+async def _render_url_to_pdf(
+    url: str,
+    wait_selector: str = "[data-journey-print='ready']",
+) -> bytes:
     """Render a URL to PDF using Playwright."""
     from playwright.async_api import async_playwright
 
@@ -72,7 +77,7 @@ async def _render_url_to_pdf(url: str) -> bytes:
         page = await browser.new_page(viewport={"width": 1280, "height": 720})
         await page.goto(url, wait_until="networkidle")
         await page.emulate_media(media="screen")
-        await page.wait_for_selector("[data-journey-print='ready']")
+        await page.wait_for_selector(wait_selector)
         pdf_bytes = await page.pdf(
             format="Letter",
             print_background=True,
@@ -80,6 +85,19 @@ async def _render_url_to_pdf(url: str) -> bytes:
         )
         await browser.close()
         return pdf_bytes
+
+
+def _merge_pdf_bytes(pdf_documents: list[bytes]) -> bytes:
+    """Merge multiple PDF byte streams into a single PDF."""
+    writer = PdfWriter()
+    for pdf_document in pdf_documents:
+        reader = PdfReader(BytesIO(pdf_document))
+        for page in reader.pages:
+            writer.add_page(page)
+
+    merged = BytesIO()
+    writer.write(merged)
+    return merged.getvalue()
 
 
 def _load_file_bytes(storage_key: str) -> tuple[bytes | None, str | None]:
@@ -2229,3 +2247,56 @@ def export_journey_pdf(
         loop.close()
 
     return pdf_bytes
+
+
+def export_surrogate_packet_pdf(
+    db: Session,
+    org_id: uuid.UUID,
+    surrogate_id: uuid.UUID,
+    surrogate_name: str,
+    org_name: str = "",
+) -> tuple[bytes, bool]:
+    """Export case details and append the latest application PDF when available."""
+    if not settings.FRONTEND_URL:
+        raise ValueError("FRONTEND_URL is not configured")
+
+    export_token = create_export_token(
+        org_id=org_id,
+        surrogate_id=surrogate_id,
+        purpose="case_details_export",
+    )
+    token_param = quote(export_token)
+    frontend_base = settings.FRONTEND_URL.rstrip("/")
+    print_url = (
+        f"{frontend_base}/surrogates/{surrogate_id}/case-details/print?export_token={token_param}"
+    )
+
+    loop = asyncio.new_event_loop()
+    try:
+        case_details_pdf = loop.run_until_complete(
+            _render_url_to_pdf(
+                print_url,
+                wait_selector="[data-case-details-print='ready']",
+            )
+        )
+    except Exception as exc:
+        raise ValueError("Failed to render case details export") from exc
+    finally:
+        loop.close()
+
+    latest_submission = form_submission_service.get_latest_submission_for_surrogate(
+        db=db,
+        org_id=org_id,
+        surrogate_id=surrogate_id,
+    )
+    if not latest_submission:
+        return case_details_pdf, False
+
+    application_pdf = export_submission_pdf(
+        db=db,
+        submission_id=latest_submission.id,
+        org_id=org_id,
+        surrogate_name=surrogate_name,
+        org_name=org_name,
+    )
+    return _merge_pdf_bytes([case_details_pdf, application_pdf]), True

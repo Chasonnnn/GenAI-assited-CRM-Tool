@@ -121,6 +121,7 @@ def create_export_token(
     surrogate_id: UUID,
     ttl_minutes: int = 5,
     variant: str | None = None,
+    purpose: str = "journey_export",
 ) -> str:
     """
     Create a short-lived export token for Journey PDF rendering.
@@ -130,7 +131,7 @@ def create_export_token(
     payload = {
         "org_id": str(org_id),
         "surrogate_id": str(surrogate_id),
-        "purpose": "journey_export",
+        "purpose": purpose,
         "iat": datetime.now(timezone.utc),
         "exp": datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes),
     }
