@@ -89,7 +89,6 @@ export default function SearchPage() {
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={handleKeyDown}
                     className="pl-10 h-12 text-lg"
-                    autoFocus
                 />
                 {query && (
                     <Button

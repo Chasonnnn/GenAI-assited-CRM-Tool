@@ -73,7 +73,7 @@ export default function MatchesPage() {
     const [statusFilter, setStatusFilter] = useState<MatchStatusFilter>(
         urlStatus && (urlStatus === "all" || isMatchStatus(urlStatus)) ? urlStatus : "all"
     )
-    const [page, setPage] = useState(parsePageParam(urlPage))
+    const [page, setPage] = useState(() => parsePageParam(urlPage))
     const [search, setSearch] = useState(urlSearch || "")
     const [debouncedSearch, setDebouncedSearch] = useState(urlSearch || "")
     const hasSyncedSearchRef = useRef(false)

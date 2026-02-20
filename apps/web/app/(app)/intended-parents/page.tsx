@@ -115,7 +115,7 @@ export default function IntendedParentsPage() {
         : { from: undefined, to: undefined }
     const [dateRange, setDateRange] = useState<DateRangePreset>(initialRange)
     const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>(initialCustomRange)
-    const [page, setPage] = useState(parsePageParam(urlPage))
+    const [page, setPage] = useState(() => parsePageParam(urlPage))
     const [isCreateOpen, setIsCreateOpen] = useState(false)
     const [sortBy, setSortBy] = useState<string | null>("intended_parent_number")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")

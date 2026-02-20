@@ -1129,7 +1129,7 @@ export default function AutomationPage() {
             return
         }
         setValidationError(null)
-        setWizardStep(wizardStep + 1)
+        setWizardStep((previousStep) => previousStep + 1)
     }
 
     const handleSaveWorkflow = () => {
@@ -2396,7 +2396,7 @@ export default function AutomationPage() {
                                 variant="outline"
                                 onClick={() => {
                                     setValidationError(null)
-                                    setWizardStep(wizardStep - 1)
+                                    setWizardStep((previousStep) => previousStep - 1)
                                 }}
                             >
                                 Back

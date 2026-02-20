@@ -199,7 +199,7 @@ export default function SurrogatesPage() {
     const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>(initialCustomRange)
     const [searchQuery, setSearchQuery] = useState(urlSearch || "")
     const [debouncedSearch, setDebouncedSearch] = useState(urlSearch || "")
-    const [page, setPage] = useState(parsePageParam(urlPage))
+    const [page, setPage] = useState(() => parsePageParam(urlPage))
     const [selectedSurrogates, setSelectedSurrogates] = useState<Set<string>>(new Set())
     const [sortBy, setSortBy] = useState<string | null>("surrogate_number")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")

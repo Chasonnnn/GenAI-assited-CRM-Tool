@@ -1120,7 +1120,7 @@ export default function CampaignsPage() {
                             Cancel
                         </Button>
                         {wizardStep > 1 && (
-                            <Button variant="outline" onClick={() => setWizardStep(wizardStep - 1)}>
+                            <Button variant="outline" onClick={() => setWizardStep((previousStep) => previousStep - 1)}>
                                 Back
                             </Button>
                         )}

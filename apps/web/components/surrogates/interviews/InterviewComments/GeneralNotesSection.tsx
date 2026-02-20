@@ -56,7 +56,6 @@ export function GeneralNotesSection({ className }: GeneralNotesSectionProps) {
                                 onChange={(e) => setNewNoteContent(e.target.value)}
                                 placeholder="Add a note..."
                                 className="min-h-[60px] text-sm resize-none"
-                                autoFocus
                                 onKeyDown={(e) => {
                                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                                         e.preventDefault()

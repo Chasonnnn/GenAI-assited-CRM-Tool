@@ -54,7 +54,6 @@ export function FieldRow({ fieldKey, field, mergedValue, baseValue }: FieldRowPr
                         value={String(editedFields[fieldKey] ?? mergedValue ?? "")}
                         onChange={(e) => setFieldValue(fieldKey, e.target.value)}
                         className="h-8 text-sm"
-                        autoFocus
                     />
                     <Button
                         size="sm"

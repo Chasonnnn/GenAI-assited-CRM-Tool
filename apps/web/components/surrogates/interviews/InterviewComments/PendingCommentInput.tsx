@@ -30,7 +30,6 @@ export function PendingCommentInput({
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="Add your comment..."
                 className="min-h-[80px] text-sm resize-none"
-                autoFocus
                 onKeyDown={(e) => {
                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                         e.preventDefault()
