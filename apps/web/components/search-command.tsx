@@ -49,7 +49,8 @@ interface SearchCommandDialogProps {
 export function SearchCommandDialog({ open, onOpenChange }: SearchCommandDialogProps) {
     const router = useRouter()
     const [query, setQuery] = useState("")
-    const debouncedQuery = useDebouncedValue(query, 200)
+    // Debounce search input by 400ms to reduce API calls while typing
+    const debouncedQuery = useDebouncedValue(query, 400)
 
     const {
         data: results,
