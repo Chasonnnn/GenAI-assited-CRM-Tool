@@ -3,12 +3,14 @@
  */
 
 import api from './index';
+import { getCsrfHeaders } from '@/lib/csrf';
 import type { JsonObject } from '../types/json';
 import type {
     SurrogateListResponse,
     SurrogateRead,
     SurrogateSource,
 } from '../types/surrogate';
+import type { TaskListItem } from './tasks';
 
 // Query params for listing surrogates
 export interface SurrogateListParams {
@@ -414,6 +416,18 @@ export interface SurrogateActivityResponse {
     pages: number;
 }
 
+export interface SurrogateCaseDetailsExportView {
+    surrogate: SurrogateRead;
+    activities: SurrogateActivity[];
+    tasks: TaskListItem[];
+    show_medical: boolean;
+    show_pregnancy: boolean;
+}
+
+export interface SurrogatePacketExportResult {
+    includesApplication: boolean;
+}
+
 // =============================================================================
 // Developer Tools: Mass Edit (Dev Role Only)
 // =============================================================================
@@ -524,6 +538,63 @@ export function getSurrogateActivity(
     searchParams.set('page', String(page));
     searchParams.set('per_page', String(perPage));
     return api.get<SurrogateActivityResponse>(`/surrogates/${surrogateId}/activity?${searchParams.toString()}`);
+}
+
+export async function exportSurrogatePacketPdf(
+    surrogateId: string,
+): Promise<SurrogatePacketExportResult> {
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+    const url = `${baseUrl}/surrogates/${surrogateId}/export`;
+
+    const response = await fetch(url, {
+        method: 'GET',
+        credentials: 'include',
+        headers: { ...getCsrfHeaders() },
+    });
+    if (!response.ok) {
+        throw new Error(`Export failed (${response.status})`);
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/pdf')) {
+        const errorText = await response.text();
+        throw new Error(errorText || 'Export failed (unexpected response)');
+    }
+
+    const buffer = await response.arrayBuffer();
+    const headerBytes = new Uint8Array(buffer.slice(0, 4));
+    const headerText = String.fromCharCode(...headerBytes);
+    if (headerText !== '%PDF') {
+        const errorText = new TextDecoder().decode(buffer);
+        throw new Error(errorText || 'Export failed (invalid PDF)');
+    }
+
+    const includesApplication =
+        (response.headers.get('x-includes-application') || '').toLowerCase() === 'true';
+    const contentDisposition = response.headers.get('content-disposition') || '';
+    const filenameMatch =
+        contentDisposition.match(/filename\*=UTF-8''([^;]+)/i) ||
+        contentDisposition.match(/filename="?([^";]+)"?/i);
+    let downloadFilename = `surrogate_export_${surrogateId}.pdf`;
+    if (filenameMatch?.[1]) {
+        try {
+            downloadFilename = decodeURIComponent(filenameMatch[1]);
+        } catch {
+            downloadFilename = filenameMatch[1];
+        }
+    }
+
+    const blob = new Blob([buffer], { type: 'application/pdf' });
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = downloadFilename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(objectUrl);
+
+    return { includesApplication };
 }
 
 // =============================================================================

@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import {
     DropdownMenu,
@@ -20,9 +21,12 @@ import {
     HeartHandshakeIcon,
     PhoneIcon,
     VideoIcon,
+    DownloadIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
+import { toast } from "sonner"
+import { exportSurrogatePacketPdf } from "@/lib/api/surrogates"
 import { useSurrogateDetailLayout } from "./context"
 
 export function HeaderActions() {
@@ -47,6 +51,7 @@ export function HeaderActions() {
         isAssignPending,
         isReleasePending,
     } = useSurrogateDetailLayout()
+    const [isExporting, setIsExporting] = React.useState(false)
 
     if (!surrogate) return null
 
@@ -64,6 +69,22 @@ export function HeaderActions() {
     const isReadyToMatchStage = currentStage?.slug === "ready_to_match"
     const isManagerRole = user?.role && ["case_manager", "admin", "developer"].includes(user.role)
     const canProposeMatch = isManagerRole && isReadyToMatchStage && !surrogate.is_archived
+
+    const handleExport = async () => {
+        setIsExporting(true)
+        try {
+            const result = await exportSurrogatePacketPdf(surrogate.id)
+            if (result.includesApplication) {
+                toast.success("Exported case details + application")
+            } else {
+                toast.success("Exported case details (no submitted application yet)")
+            }
+        } catch {
+            toast.error("Failed to export")
+        } finally {
+            setIsExporting(false)
+        }
+    }
 
     return (
         <>
@@ -149,6 +170,14 @@ export function HeaderActions() {
                 <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => openDialog({ type: "edit_surrogate" })}>
                         Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleExport} disabled={isExporting} className="gap-2">
+                        {isExporting ? (
+                            <Loader2Icon className="size-4 animate-spin" />
+                        ) : (
+                            <DownloadIcon className="size-4" />
+                        )}
+                        Export
                     </DropdownMenuItem>
                     {canManageQueue && isOwnedByUser && queues.length > 0 && (
                         <DropdownMenuItem

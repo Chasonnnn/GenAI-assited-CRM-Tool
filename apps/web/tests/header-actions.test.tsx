@@ -1,12 +1,64 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import type { ReactNode } from "react"
 import { HeaderActions } from "@/components/surrogates/detail/SurrogateDetailLayout/HeaderActions"
 
 const mockUseAuth = vi.fn()
 const mockUseSurrogateDetailLayout = vi.fn()
+const mockExportSurrogatePacketPdf = vi.fn()
+const mockToastSuccess = vi.fn()
+const mockToastError = vi.fn()
+
+vi.mock("@/components/ui/dropdown-menu", () => ({
+    DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    DropdownMenuTrigger: ({
+        children,
+        ...props
+    }: {
+        children: ReactNode
+        [key: string]: unknown
+    }) => <button {...props}>{children}</button>,
+    DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    DropdownMenuItem: ({
+        children,
+        onClick,
+        disabled,
+        className,
+    }: {
+        children: ReactNode
+        onClick?: () => void
+        disabled?: boolean
+        className?: string
+    }) => (
+        <button onClick={onClick} disabled={disabled} className={className}>
+            {children}
+        </button>
+    ),
+    DropdownMenuSeparator: () => <hr />,
+    DropdownMenuSub: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    DropdownMenuSubTrigger: ({
+        children,
+        disabled,
+    }: {
+        children: ReactNode
+        disabled?: boolean
+    }) => <button disabled={disabled}>{children}</button>,
+    DropdownMenuSubContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+}))
 
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => mockUseAuth(),
+}))
+
+vi.mock("@/lib/api/surrogates", () => ({
+    exportSurrogatePacketPdf: (...args: unknown[]) => mockExportSurrogatePacketPdf(...args),
+}))
+
+vi.mock("sonner", () => ({
+    toast: {
+        success: (...args: unknown[]) => mockToastSuccess(...args),
+        error: (...args: unknown[]) => mockToastError(...args),
+    },
 }))
 
 vi.mock("@/components/surrogates/detail/SurrogateDetailLayout/context", () => ({
@@ -53,6 +105,9 @@ describe("HeaderActions", () => {
             isAssignPending: false,
             isReleasePending: false,
         })
+        mockExportSurrogatePacketPdf.mockReset()
+        mockToastSuccess.mockReset()
+        mockToastError.mockReset()
     })
 
     it("renders 'More actions' button with accessible label", () => {
@@ -103,5 +158,66 @@ describe("HeaderActions", () => {
 
         render(<HeaderActions />)
         expect(screen.getByRole("button", { name: /log contact/i })).toBeInTheDocument()
+    })
+
+    it("disables export action while request is in progress", async () => {
+        let resolveExport: ((value: { includesApplication: boolean }) => void) | null = null
+        mockExportSurrogatePacketPdf.mockReturnValue(
+            new Promise((resolve) => {
+                resolveExport = resolve
+            })
+        )
+
+        render(<HeaderActions />)
+        const exportButton = screen.getByRole("button", { name: /^export$/i })
+        fireEvent.click(exportButton)
+
+        await waitFor(() => {
+            expect(mockExportSurrogatePacketPdf).toHaveBeenCalledWith("s1")
+        })
+        expect(exportButton).toBeDisabled()
+
+        resolveExport?.({ includesApplication: false })
+        await waitFor(() => {
+            expect(exportButton).not.toBeDisabled()
+        })
+    })
+
+    it("exports combined packet and shows combined success toast", async () => {
+        mockExportSurrogatePacketPdf.mockResolvedValue({ includesApplication: true })
+
+        render(<HeaderActions />)
+        fireEvent.click(screen.getByRole("button", { name: /^export$/i }))
+
+        await waitFor(() => {
+            expect(mockExportSurrogatePacketPdf).toHaveBeenCalledWith("s1")
+        })
+        expect(mockToastSuccess).toHaveBeenCalledWith("Exported case details + application")
+        expect(mockToastError).not.toHaveBeenCalled()
+    })
+
+    it("exports case details only and shows no-application success toast", async () => {
+        mockExportSurrogatePacketPdf.mockResolvedValue({ includesApplication: false })
+
+        render(<HeaderActions />)
+        fireEvent.click(screen.getByRole("button", { name: /^export$/i }))
+
+        await waitFor(() => {
+            expect(mockExportSurrogatePacketPdf).toHaveBeenCalledWith("s1")
+        })
+        expect(mockToastSuccess).toHaveBeenCalledWith(
+            "Exported case details (no submitted application yet)"
+        )
+    })
+
+    it("shows failure toast when export fails", async () => {
+        mockExportSurrogatePacketPdf.mockRejectedValue(new Error("boom"))
+
+        render(<HeaderActions />)
+        fireEvent.click(screen.getByRole("button", { name: /^export$/i }))
+
+        await waitFor(() => {
+            expect(mockToastError).toHaveBeenCalledWith("Failed to export")
+        })
     })
 })
