@@ -24,6 +24,11 @@ type PublishDialogProps = {
     initialOrgIds?: string[]
 }
 
+const EMPTY_ORG_IDS: string[] = []
+const MODE_ALL_ID = "publish-dialog-mode-all"
+const MODE_SELECTED_ID = "publish-dialog-mode-selected"
+const SELECT_ALL_ID = "publish-dialog-select-all"
+
 export function PublishDialog({
     open,
     onOpenChange,
@@ -32,11 +37,11 @@ export function PublishDialog({
     title = "Publish template",
     description = "Choose which organizations should see this template in their library. Publishing never overwrites org copies.",
     defaultPublishAll = true,
-    initialOrgIds = [],
+    initialOrgIds = EMPTY_ORG_IDS,
 }: PublishDialogProps) {
     const [mode, setMode] = useState<"all" | "selected">(defaultPublishAll ? "all" : "selected")
     const [search, setSearch] = useState("")
-    const [selectedOrgIds, setSelectedOrgIds] = useState<string[]>(initialOrgIds)
+    const [selectedOrgIds, setSelectedOrgIds] = useState<string[]>([])
 
     useEffect(() => {
         if (!open) return
@@ -102,8 +107,8 @@ export function PublishDialog({
                         onValueChange={(value) => setMode(value as "all" | "selected")}
                         className="space-y-3"
                     >
-                        <label className="flex items-start gap-3 rounded-lg border p-3">
-                            <RadioGroupItem value="all" />
+                        <label htmlFor={MODE_ALL_ID} className="flex items-start gap-3 rounded-lg border p-3">
+                            <RadioGroupItem id={MODE_ALL_ID} value="all" />
                             <div className="space-y-1">
                                 <div className="flex items-center gap-2 font-medium">
                                     <GlobeIcon className="size-4 text-teal-500" />
@@ -115,8 +120,8 @@ export function PublishDialog({
                                 </p>
                             </div>
                         </label>
-                        <label className="flex items-start gap-3 rounded-lg border p-3">
-                            <RadioGroupItem value="selected" />
+                        <label htmlFor={MODE_SELECTED_ID} className="flex items-start gap-3 rounded-lg border p-3">
+                            <RadioGroupItem id={MODE_SELECTED_ID} value="selected" />
                             <div className="space-y-1">
                                 <div className="flex items-center gap-2 font-medium">
                                     <Building2Icon className="size-4 text-stone-500" />
@@ -141,8 +146,9 @@ export function PublishDialog({
                                 />
                             </div>
                             <div className="flex items-center justify-between text-sm">
-                                <Label className="flex items-center gap-2">
+                                <Label htmlFor={SELECT_ALL_ID} className="flex items-center gap-2">
                                     <Checkbox
+                                        id={SELECT_ALL_ID}
                                         checked={allFilteredSelected}
                                         onCheckedChange={() => toggleSelectAll()}
                                     />
@@ -168,13 +174,16 @@ export function PublishDialog({
                                         <div className="divide-y">
                                             {filteredOrgs.map((org: OrganizationSummary) => {
                                                 const checked = selectedSet.has(org.id)
+                                                const checkboxId = `publish-dialog-org-${org.id}`
                                                 return (
                                                     <label
+                                                        htmlFor={checkboxId}
                                                         key={org.id}
                                                         className="flex items-center justify-between gap-3 p-3 text-sm hover:bg-stone-50 dark:hover:bg-stone-800/40"
                                                     >
                                                         <div className="flex items-center gap-3">
                                                             <Checkbox
+                                                                id={checkboxId}
                                                                 checked={checked}
                                                                 onCheckedChange={(next) =>
                                                                     toggleOrg(org.id, next === true)
