@@ -305,10 +305,11 @@ export default function NotificationsPage() {
                                     {notifications.map((notification) => {
                                         const Icon = getNotificationIcon(notification.type)
                                         return (
-                                            <div
+                                            <button
+                                                type="button"
                                                 key={notification.id}
                                                 onClick={() => handleNotificationClick(notification)}
-                                                className={`block rounded-lg border p-4 transition-colors hover:bg-accent cursor-pointer ${!notification.read_at ? "border-l-4 border-l-blue-500 bg-blue-500/5" : "border-border"
+                                                className={`block w-full rounded-lg border p-4 text-left transition-colors hover:bg-accent cursor-pointer ${!notification.read_at ? "border-l-4 border-l-blue-500 bg-blue-500/5" : "border-border"
                                                     }`}
                                             >
                                                 <div className="flex items-start gap-3">
@@ -330,7 +331,7 @@ export default function NotificationsPage() {
                                                         </div>
                                                     </div>
                                                 </div>
-                                            </div>
+                                            </button>
                                         )
                                     })}
                                 </div>

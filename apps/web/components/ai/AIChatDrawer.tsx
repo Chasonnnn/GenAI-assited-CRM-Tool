@@ -27,7 +27,9 @@ export function AIChatDrawer() {
     return (
         <>
             {/* Backdrop for mobile */}
-            <div
+            <button
+                type="button"
+                aria-label="Close AI chat drawer"
                 className={cn(
                     "fixed inset-0 z-40 bg-background/80 backdrop-blur-sm md:hidden",
                     isOpen ? "block" : "hidden"

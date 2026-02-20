@@ -46,9 +46,10 @@ export function ListItem({ interview, isSelected, onClick }: ListItemProps) {
     const colorClass = INTERVIEW_TYPE_COLORS[interview.interview_type as InterviewType]
 
     return (
-        <div
+        <button
+            type="button"
             className={cn(
-                "p-4 border-b cursor-pointer transition-colors",
+                "w-full p-4 border-b text-left cursor-pointer transition-colors",
                 isSelected ? "bg-primary/5" : "hover:bg-muted/50"
             )}
             onClick={onClick}
@@ -87,6 +88,6 @@ export function ListItem({ interview, isSelected, onClick }: ListItemProps) {
                     </div>
                 </div>
             </div>
-        </div>
+        </button>
     )
 }
