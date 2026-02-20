@@ -2377,8 +2377,8 @@ export default function AutomationPage() {
                             <div className="space-y-2">
                                 <p className="font-medium text-destructive">Fix these errors</p>
                                 <ul className="space-y-1 text-xs text-destructive">
-                                    {serverErrors.map((message, index) => (
-                                        <li key={`${message}-${index}`}>• {message}</li>
+                                    {serverErrors.map((message) => (
+                                        <li key={message}>• {message}</li>
                                     ))}
                                 </ul>
                             </div>
@@ -2624,8 +2624,11 @@ export default function AutomationPage() {
                                 {testResult.conditions_evaluated.length > 0 && (
                                     <div className="space-y-2">
                                         <p className="text-sm font-medium">Condition Results:</p>
-                                        {testResult.conditions_evaluated.map((cond, i) => (
-                                            <div key={i} className="flex items-center justify-between rounded bg-muted/50 px-3 py-2 text-sm">
+                                        {testResult.conditions_evaluated.map((cond) => (
+                                            <div
+                                                key={`${cond.field}-${cond.operator}-${String(cond.expected)}-${String(cond.actual)}-${cond.result ? "matched" : "unmatched"}`}
+                                                className="flex items-center justify-between rounded bg-muted/50 px-3 py-2 text-sm"
+                                            >
                                                 <span>{cond.field} {cond.operator} {String(cond.expected)}</span>
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-muted-foreground">Actual: {cond.actual}</span>
@@ -2643,8 +2646,8 @@ export default function AutomationPage() {
                                 {testResult.conditions_matched && testResult.actions_preview.length > 0 && (
                                     <div className="space-y-2">
                                         <p className="text-sm font-medium">Actions that would run:</p>
-                                        {testResult.actions_preview.map((action, i) => (
-                                            <div key={i} className="rounded bg-muted/50 px-3 py-2 text-sm">
+                                        {testResult.actions_preview.map((action) => (
+                                            <div key={`${action.action_type}-${action.description}`} className="rounded bg-muted/50 px-3 py-2 text-sm">
                                                 <span className="font-medium">{action.action_type}:</span> {action.description}
                                             </div>
                                         ))}

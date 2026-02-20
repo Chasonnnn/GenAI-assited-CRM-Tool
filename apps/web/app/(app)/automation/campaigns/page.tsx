@@ -1079,14 +1079,18 @@ export default function CampaignsPage() {
                                         }}
                                         className="flex gap-4"
                                     >
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <RadioGroupItem value="now" />
-                                            <span>Send now</span>
-                                        </label>
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <RadioGroupItem value="later" />
-                                            <span>Schedule for later</span>
-                                        </label>
+                                        <div className="flex items-center gap-2">
+                                            <RadioGroupItem id="campaign-send-now" value="now" />
+                                            <Label htmlFor="campaign-send-now" className="cursor-pointer">
+                                                Send now
+                                            </Label>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <RadioGroupItem id="campaign-send-later" value="later" />
+                                            <Label htmlFor="campaign-send-later" className="cursor-pointer">
+                                                Schedule for later
+                                            </Label>
+                                        </div>
                                     </RadioGroup>
                                 </div>
 
