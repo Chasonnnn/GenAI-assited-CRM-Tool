@@ -117,6 +117,20 @@ async def _google_request(
                 payload = decoded
         except Exception:
             payload = None
+
+    if response.status_code >= 400:
+        error_message = None
+        if payload and isinstance(payload.get("error"), dict):
+            raw_message = payload["error"].get("message")
+            if isinstance(raw_message, str) and raw_message.strip():
+                error_message = raw_message.strip()
+        logger.warning(
+            "Google Tasks API error method=%s path=%s status=%s message=%s",
+            method,
+            path,
+            response.status_code,
+            error_message or response.text[:300],
+        )
     return response.status_code, payload
 
 
@@ -161,6 +175,7 @@ async def _list_google_tasks(access_token: str, task_list_id: str) -> list[dict[
             "showCompleted": "true",
             "showDeleted": "true",
             "showHidden": "true",
+            "showAssigned": "true",
         }
         if page_token:
             params["pageToken"] = page_token
@@ -482,3 +497,39 @@ def sync_google_tasks_for_user(db: Session, *, user_id: UUID, org_id: UUID) -> i
             "Google→Platform task sync failed user=%s org=%s error=%s", user_id, org_id, exc
         )
         return 0
+
+
+async def _check_google_tasks_access_async(db: Session, user_id: UUID) -> tuple[bool, str | None]:
+    token = await oauth_service.get_access_token_async(db, user_id, "google_calendar")
+    if not token:
+        return False, "missing_access_token"
+
+    status_code, payload = await _google_request(
+        access_token=token,
+        method="GET",
+        path="/users/@me/lists",
+        params={"maxResults": "1"},
+    )
+    if status_code == 200:
+        return True, None
+
+    if payload and isinstance(payload.get("error"), dict):
+        raw_message = payload["error"].get("message")
+        if isinstance(raw_message, str) and raw_message.strip():
+            return False, raw_message.strip()
+    if status_code == 0:
+        return False, "request_failed"
+    return False, f"http_{status_code}"
+
+
+def check_google_tasks_access(db: Session, user_id: UUID) -> tuple[bool, str | None]:
+    """Verify whether a connected user can access Google Tasks API."""
+    integration = oauth_service.get_user_integration(db, user_id, "google_calendar")
+    if not integration:
+        return False, "not_connected"
+
+    try:
+        return run_async(_check_google_tasks_access_async(db, user_id), timeout=20)
+    except Exception as exc:
+        logger.warning("Google Tasks access probe failed user=%s error=%s", user_id, exc)
+        return False, "probe_failed"

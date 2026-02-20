@@ -223,6 +223,44 @@ async def test_google_calendar_callback_happy_path_saves_integration(
 
 
 @pytest.mark.asyncio
+async def test_google_calendar_status_includes_tasks_access_diagnostics(
+    authed_client: AsyncClient,
+    db,
+    test_auth,
+    monkeypatch,
+):
+    from app.db.models import UserIntegration
+    from app.services import google_tasks_sync_service
+
+    db.add(
+        UserIntegration(
+            user_id=test_auth.user.id,
+            integration_type="google_calendar",
+            access_token_encrypted="token-1",
+            account_email="owner@example.com",
+        )
+    )
+    db.commit()
+
+    def fake_check_google_tasks_access(db, user_id):
+        assert user_id == test_auth.user.id
+        return True, None
+
+    monkeypatch.setattr(
+        google_tasks_sync_service,
+        "check_google_tasks_access",
+        fake_check_google_tasks_access,
+    )
+
+    response = await authed_client.get("/integrations/google-calendar/status")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["connected"] is True
+    assert data["tasks_accessible"] is True
+    assert data["tasks_error"] is None
+
+
+@pytest.mark.asyncio
 async def test_appointments_list_imports_manual_google_calendar_event(
     authed_client: AsyncClient,
     db,

@@ -435,6 +435,15 @@ def google_calendar_connection_status(
 ) -> dict[str, Any]:
     """Check if current user has Google Calendar connected."""
     integration = oauth_service.get_user_integration(db, session.user_id, "google_calendar")
+    tasks_accessible = False
+    tasks_error = "not_connected"
+    if integration:
+        from app.services import google_tasks_sync_service
+
+        tasks_accessible, tasks_error = google_tasks_sync_service.check_google_tasks_access(
+            db,
+            session.user_id,
+        )
 
     return {
         "connected": integration is not None,
@@ -442,6 +451,8 @@ def google_calendar_connection_status(
         "expires_at": integration.token_expires_at.isoformat()
         if integration and integration.token_expires_at
         else None,
+        "tasks_accessible": tasks_accessible,
+        "tasks_error": tasks_error,
     }
 
 
