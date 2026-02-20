@@ -2,6 +2,45 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.86.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.85.3...surrogacy-crm-platform-v0.86.0) (2026-02-20)
+
+
+### Features
+
+* **api:** add surrogate send attachment validation and provider routing ([a97862d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a97862d80327ed1dae619e04f24ab48b80d780d6))
+* **api:** persist and deliver email attachments across providers ([4430a67](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4430a67165063036af0b09640655e9d67ef8c627))
+* **web:** add drag-drop compose attachments with send gating ([539cd59](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/539cd592a64c02a648b6af816a5d404b925e1efe))
+
+
+### Bug Fixes
+
+* add source-level regression guards for hook fixes ([c37df08](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c37df08e948b2ce2fd8cc984e8136234087e804e))
+* always use personal signature in surrogate email send and preview ([85d3dd5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/85d3dd57a4536254c698a6c1edcc804e0afa3f9e))
+* auto-refresh Google calendar events in tasks view ([1c89ba8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1c89ba8c0f5f3ca1b5a444f3a5ddd1206578996e))
+* default blank Google event titles to no-title fallback ([dffa333](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dffa333181df0035505f485901a4c99bb7572cdb))
+* enforce strict provider policy for surrogate and campaign sends ([9969f99](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9969f99c807af0f00c66cbca09f4eaab465d4410))
+* enforce strict provider rules for surrogate and org email flows ([bcbe4be](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bcbe4beef85df0524c5176b320d70e528f77df0c))
+* guard ops agencies effects against stale async updates ([f10ab2f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f10ab2f36e30e6a075cd0730a2be1d03b5f471d2))
+* harden keyboard interactions for clickable surfaces ([ccd3a32](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ccd3a32dfc2a7c392708a42eece33fa72eaddbb5))
+* harden mass-edit defaults and import state handling ([70f78ae](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/70f78aeaf0f75a410dcee92e32a0fb278add4d1e))
+* hide terminal pregnancy tracker and show real status transition ([a655a50](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a655a50423b26f5d802f79cb54bc620bb5a3bf4e))
+* hoist team report sort icon component ([304ca64](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/304ca643d7e48b3ea59ad4eafd327af36c366b70))
+* implement google tasks two-way task sync ([dbd1a1e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dbd1a1e380e84429287161bbe554eb8f41f477bd))
+* modernize global font and navigation semantics ([a73164c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a73164ce82f529e6b75ac2626dd6cea84a6d603a))
+* move apply token parsing to server page wrapper ([1403a15](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1403a15d397bb16e605ccbcd36cf1e95191f970b))
+* preserve aria radio semantics in apply options ([e959fcf](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e959fcfe46ac11418e2080c6d217e0d3caa75055))
+* reduce expensive backdrop blur on auth pages ([76127d5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/76127d5f2aceb3c0a53e439c456c1f23e859fa09))
+* remove autofocus and stale state update patterns ([13fa8fa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/13fa8fafc8e7c3cd8950cd509cc2bf9488fb529e))
+* remove effect-driven derived state in web flows ([c482183](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c482183c50af9325a1f97df4aa221456ce159346))
+* replace unstable index keys in dynamic ui lists ([008659e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/008659ea4ad1efa99bd1e0452066120cf841562f))
+* split public application page for metadata and suspense ([580142a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/580142afb70577a153271d9e6f1ac7f780e4a533))
+* stabilize default array props in scheduling and surrogate tabs ([28acb93](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/28acb93b5b6171fe067fe303284412ae271dc833))
+* stabilize publish dialog defaults and label wiring ([c62e8ee](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c62e8ee5ba22a21bd8ae6d749b77f58bbc623fae))
+* stabilize workflow builder row keys ([5de592b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5de592beaa6df78cd28891561b4a369c3c1c0b91))
+* tighten automation wizard labels and stable keys ([9b742e3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9b742e31992aa917a5846cab3c298603c959e4fb))
+* tighten label associations in scheduling and campaign forms ([7caa1c0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7caa1c037be2a56ae05961b926a0a897ce4d14ac))
+* use semantic interactive elements for click targets ([099c901](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/099c901a265b4998485bf37d611c0093e26e2ed3))
+
 ## [0.85.3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.85.2...surrogacy-crm-platform-v0.85.3) (2026-02-19)
 
 
