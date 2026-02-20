@@ -1,5 +1,6 @@
 """Tests for Resend settings service and email provider resolution."""
 
+import uuid
 import httpx
 import pytest
 
@@ -338,6 +339,77 @@ class TestResendEmailService:
         # 409 (idempotency conflict) should be treated as success
         assert success is True
         assert error is None
+
+
+@pytest.mark.asyncio
+async def test_campaign_send_execution_rejects_gmail_provider(db, test_org, test_user):
+    """Campaign send jobs must reject non-Resend providers at execution time."""
+    from app.db.models import Campaign, CampaignRecipient, CampaignRun, EmailLog, EmailTemplate
+    from app.jobs.handlers.email import send_email_async
+
+    template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        created_by_user_id=test_user.id,
+        name=f"Policy Template {uuid.uuid4().hex[:6]}",
+        subject="Policy Subject",
+        body="<p>Policy Body</p>",
+        scope="org",
+        owner_user_id=None,
+        is_active=True,
+    )
+    db.add(template)
+    db.flush()
+
+    campaign = Campaign(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Policy Campaign {uuid.uuid4().hex[:6]}",
+        email_template_id=template.id,
+        recipient_type="case",
+        filter_criteria={},
+        created_by_user_id=test_user.id,
+    )
+    db.add(campaign)
+    db.flush()
+
+    run = CampaignRun(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        campaign_id=campaign.id,
+        email_provider="gmail",
+    )
+    db.add(run)
+    db.flush()
+
+    email_log = EmailLog(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        template_id=template.id,
+        recipient_email="recipient@example.com",
+        subject="Campaign Subject",
+        body="<p>Campaign Body</p>",
+        status="pending",
+    )
+    db.add(email_log)
+    db.flush()
+
+    campaign_recipient = CampaignRecipient(
+        id=uuid.uuid4(),
+        run_id=run.id,
+        entity_type="case",
+        entity_id=uuid.uuid4(),
+        recipient_email="recipient@example.com",
+        status="pending",
+        external_message_id=str(email_log.id),
+    )
+    db.add(campaign_recipient)
+    db.commit()
+
+    with pytest.raises(Exception) as exc:
+        await send_email_async(email_log, db=db)
+
+    assert "campaign emails must use resend" in str(exc.value).lower()
 
     @pytest.mark.asyncio
     async def test_send_email_direct_failure(self, monkeypatch):

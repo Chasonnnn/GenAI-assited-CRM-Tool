@@ -21,7 +21,7 @@ async def send_email_async(email_log: EmailLog, db=None) -> str:
     """
     Send an email using the appropriate provider.
 
-    For campaign emails: uses the org's configured provider (Resend/Gmail).
+    For campaign emails: uses the org's configured provider (Resend only).
     For other emails: uses the global RESEND_API_KEY if available.
     """
     # Check if this is a campaign email and get the provider
@@ -70,6 +70,11 @@ async def send_email_async(email_log: EmailLog, db=None) -> str:
 
     # Use org-level provider for campaigns
     if campaign_provider and db:
+        if campaign_provider != "resend":
+            raise Exception(
+                "Campaign emails must use Resend. "
+                "Set Email provider to Resend in Settings -> Integrations -> Email Configuration."
+            )
         await _send_via_org_provider(db, email_log, campaign_provider, campaign_run.organization_id)
         return "sent"
 
@@ -127,7 +132,7 @@ async def send_email_async(email_log: EmailLog, db=None) -> str:
 
 async def _send_via_org_provider(db, email_log: EmailLog, provider: str, org_id) -> None:
     """Send email using org-level provider configuration."""
-    from app.services import resend_settings_service, gmail_service, org_service
+    from app.services import resend_settings_service, org_service
 
     org = org_service.get_org_by_id(db, org_id)
     portal_base_url = org_service.get_org_portal_base_url(org)
@@ -170,39 +175,6 @@ async def _send_via_org_provider(db, email_log: EmailLog, provider: str, org_id)
             )
         else:
             raise Exception(f"Resend send failed: {error}")
-
-    elif provider == "gmail":
-        settings = resend_settings_service.get_resend_settings(db, org_id)
-        if not settings or not settings.default_sender_user_id:
-            raise Exception("Gmail sender not configured for organization")
-
-        from app.services import unsubscribe_service
-
-        headers = unsubscribe_service.build_list_unsubscribe_headers(
-            org_id=org_id,
-            email=email_log.recipient_email,
-            base_url=portal_base_url,
-        )
-
-        result = await gmail_service.send_email(
-            db=db,
-            user_id=str(settings.default_sender_user_id),
-            to=email_log.recipient_email,
-            subject=email_log.subject,
-            body=email_log.body,
-            html=True,
-            headers=headers,
-        )
-
-        if result.get("success"):
-            email_log.external_id = result.get("message_id")
-            logger.info(
-                "Email sent via Gmail for email_log=%s message_id=%s",
-                email_log.id,
-                result.get("message_id"),
-            )
-        else:
-            raise Exception(f"Gmail send failed: {result.get('error')}")
 
     else:
         raise Exception(f"Unknown email provider: {provider}")

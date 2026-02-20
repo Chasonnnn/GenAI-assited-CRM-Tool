@@ -117,6 +117,9 @@ async def test_send_email_no_provider_returns_error(
 
     # Even if Resend is configured, surrogate-tab sends must require personal Gmail.
     monkeypatch.setenv("RESEND_API_KEY", "re_should_not_be_used")
+    from app.services import oauth_service
+
+    monkeypatch.setattr(oauth_service, "get_user_integration", lambda *_args, **_kwargs: None)
 
     # Send with auto provider
     response = await authed_client.post(

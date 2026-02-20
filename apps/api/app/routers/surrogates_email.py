@@ -70,8 +70,6 @@ async def send_surrogate_email(
     db: Session = Depends(get_db),
 ):
     """Send email to surrogate contact using template."""
-    import os
-
     from app.services import activity_service, email_service, gmail_service, oauth_service
 
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
@@ -143,116 +141,61 @@ async def send_surrogate_email(
         )
 
     provider = (data.provider or "auto").lower()
+    if provider not in {"auto", "gmail", "resend"}:
+        return SendEmailResponse(
+            success=False,
+            error="Invalid email provider. Supported options are auto or gmail.",
+        )
+    if provider == "resend":
+        return SendEmailResponse(
+            success=False,
+            error="Surrogate emails must be sent from personal Gmail. Resend is not allowed.",
+        )
+
     gmail_connected = oauth_service.get_user_integration(db, session.user_id, "gmail") is not None
-    resend_configured = bool(os.getenv("RESEND_API_KEY"))
-
-    use_gmail = False
-    use_resend = False
-
-    if provider == "gmail":
-        if not gmail_connected:
-            return SendEmailResponse(
-                success=False,
-                error="Gmail not connected. Connect Gmail in Settings > Integrations.",
-            )
-        use_gmail = True
-    elif provider == "resend":
-        if not resend_configured:
-            return SendEmailResponse(
-                success=False,
-                error="Resend not configured. Contact administrator.",
-            )
-        use_resend = True
-    elif provider == "auto":
-        if gmail_connected:
-            use_gmail = True
-        elif resend_configured:
-            use_resend = True
-        else:
-            return SendEmailResponse(
-                success=False,
-                error="No email provider available. Connect Gmail in Settings.",
-            )
-    else:
+    if not gmail_connected:
         return SendEmailResponse(
             success=False,
-            error="Invalid email provider. Supported options are auto, gmail, or resend.",
+            error="Gmail not connected. Surrogate emails require personal Gmail in Settings > Integrations.",
         )
 
-    if use_gmail:
-        gmail_kwargs = {
-            "db": db,
-            "org_id": session.org_id,
-            "user_id": str(session.user_id),
-            "to": surrogate.email,
-            "subject": subject,
-            "body": body,
-            "html": True,
-            "template_id": data.template_id,
-            "surrogate_id": surrogate_id,
-            "idempotency_key": data.idempotency_key,
-        }
-        if selected_attachments:
-            gmail_kwargs["attachment_ids"] = [attachment.id for attachment in selected_attachments]
+    gmail_kwargs = {
+        "db": db,
+        "org_id": session.org_id,
+        "user_id": str(session.user_id),
+        "to": surrogate.email,
+        "subject": subject,
+        "body": body,
+        "html": True,
+        "template_id": data.template_id,
+        "surrogate_id": surrogate_id,
+        "idempotency_key": data.idempotency_key,
+    }
+    if selected_attachments:
+        gmail_kwargs["attachment_ids"] = [attachment.id for attachment in selected_attachments]
 
-        result = await gmail_service.send_email_logged(**gmail_kwargs)
+    result = await gmail_service.send_email_logged(**gmail_kwargs)
 
-        if result.get("success"):
-            activity_service.log_email_sent(
-                db=db,
-                surrogate_id=surrogate_id,
-                organization_id=session.org_id,
-                actor_user_id=session.user_id,
-                email_log_id=result.get("email_log_id"),
-                subject=subject,
-                provider="gmail",
-                attachments=selected_attachments,
-            )
-
-            return SendEmailResponse(
-                success=True,
-                email_log_id=result.get("email_log_id"),
-                message_id=result.get("message_id"),
-                provider_used="gmail",
-            )
-        return SendEmailResponse(
-            success=False,
+    if result.get("success"):
+        activity_service.log_email_sent(
+            db=db,
+            surrogate_id=surrogate_id,
+            organization_id=session.org_id,
+            actor_user_id=session.user_id,
             email_log_id=result.get("email_log_id"),
-            error=result.get("error"),
+            subject=subject,
+            provider="gmail",
+            attachments=selected_attachments,
         )
 
-    if use_resend:
-        try:
-            result = email_service.send_email(
-                db=db,
-                org_id=session.org_id,
-                template_id=data.template_id,
-                recipient_email=surrogate.email,
-                subject=subject,
-                body=body,
-                surrogate_id=surrogate_id,
-                attachments=selected_attachments,
-            )
-
-            if result:
-                log, _job = result
-                activity_service.log_email_sent(
-                    db=db,
-                    surrogate_id=surrogate_id,
-                    organization_id=session.org_id,
-                    actor_user_id=session.user_id,
-                    email_log_id=log.id,
-                    subject=subject,
-                    provider="resend",
-                    attachments=selected_attachments,
-                )
-                return SendEmailResponse(
-                    success=True,
-                    email_log_id=log.id,
-                    provider_used="resend",
-                )
-            return SendEmailResponse(success=False, error="Failed to queue email")
-        except Exception as e:
-            return SendEmailResponse(success=False, error=str(e))
-
-    return SendEmailResponse(success=False, error="No provider selected")
+        return SendEmailResponse(
+            success=True,
+            email_log_id=result.get("email_log_id"),
+            message_id=result.get("message_id"),
+            provider_used="gmail",
+        )
+    return SendEmailResponse(
+        success=False,
+        email_log_id=result.get("email_log_id"),
+        error=result.get("error"),
+    )
