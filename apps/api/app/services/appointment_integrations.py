@@ -21,12 +21,24 @@ def _run_async(coro: Coroutine[object, object, T]) -> T | None:
     """
     Run an async coroutine from sync code.
 
-    Works whether called from sync or async context.
     Returns None on failure (best-effort). Exceptions are intentionally swallowed
     to avoid blocking appointment workflows on third-party outages.
     """
     try:
         return run_async(coro, timeout=30)
+    except Exception as exc:
+        try:
+            coro.close()
+        except Exception:
+            pass
+        logger.warning("Async operation failed: %s", exc)
+        return None
+
+
+async def _await_async(coro: Coroutine[object, object, T]) -> T | None:
+    """Await an async coroutine and swallow/log failures for best-effort workflows."""
+    try:
+        return await coro
     except Exception as exc:
         logger.warning("Async operation failed: %s", exc)
         return None
@@ -139,7 +151,7 @@ def sync_to_google_calendar(
     return None
 
 
-def sync_manual_google_events_for_appointments(
+async def _sync_manual_google_events_for_appointments_async(
     db: Session,
     *,
     user_id: UUID,
@@ -182,7 +194,7 @@ def sync_manual_google_events_for_appointments(
     if time_max < time_min:
         return 0
 
-    calendar_ids = _run_async(
+    calendar_ids = await _await_async(
         calendar_service.list_user_google_calendar_ids(
             db=db,
             user_id=user_id,
@@ -192,7 +204,7 @@ def sync_manual_google_events_for_appointments(
     raw_events: list[dict[str, object]] = []
     any_connected = False
     for calendar_id in calendar_ids:
-        result = _run_async(
+        result = await _await_async(
             calendar_service.get_user_calendar_events(
                 db=db,
                 user_id=user_id,
@@ -342,6 +354,65 @@ def sync_manual_google_events_for_appointments(
     if total_changed:
         db.flush()
     return total_changed
+
+
+def sync_manual_google_events_for_appointments(
+    db: Session,
+    *,
+    user_id: UUID,
+    org_id: UUID,
+    date_start: date | None = None,
+    date_end: date | None = None,
+) -> int:
+    """Sync-safe wrapper for Google Calendar appointment reconciliation."""
+    coro = _sync_manual_google_events_for_appointments_async(
+        db=db,
+        user_id=user_id,
+        org_id=org_id,
+        date_start=date_start,
+        date_end=date_end,
+    )
+    try:
+        return run_async(coro, timeout=45)
+    except Exception as exc:
+        try:
+            coro.close()
+        except Exception:
+            pass
+        logger.warning(
+            "Google calendar appointment sync failed user=%s org=%s error=%s",
+            user_id,
+            org_id,
+            exc,
+        )
+        return 0
+
+
+async def sync_manual_google_events_for_appointments_async(
+    db: Session,
+    *,
+    user_id: UUID,
+    org_id: UUID,
+    date_start: date | None = None,
+    date_end: date | None = None,
+) -> int:
+    """Async-safe Google Calendar appointment reconciliation."""
+    try:
+        return await _sync_manual_google_events_for_appointments_async(
+            db=db,
+            user_id=user_id,
+            org_id=org_id,
+            date_start=date_start,
+            date_end=date_end,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Google calendar appointment async sync failed user=%s org=%s error=%s",
+            user_id,
+            org_id,
+            exc,
+        )
+        return 0
 
 
 def create_zoom_meeting(

@@ -56,6 +56,24 @@ BATCH_SIZE = int(os.getenv("WORKER_BATCH_SIZE", "10"))
 SESSION_CLEANUP_INTERVAL_SECONDS = int(os.getenv("SESSION_CLEANUP_INTERVAL_SECONDS", "3600"))
 
 
+def _env_flag_enabled(raw: str | None, *, default: bool = True) -> bool:
+    if raw is None:
+        return default
+    token = raw.strip().lower()
+    if not token:
+        return default
+    return token not in {"0", "false", "no", "off"}
+
+
+GOOGLE_CALENDAR_SYNC_FALLBACK_ENABLED = _env_flag_enabled(
+    os.getenv("GOOGLE_CALENDAR_SYNC_FALLBACK_ENABLED"),
+    default=True,
+)
+GOOGLE_CALENDAR_SYNC_FALLBACK_INTERVAL_SECONDS = int(
+    os.getenv("GOOGLE_CALENDAR_SYNC_FALLBACK_INTERVAL_SECONDS", "300")
+)
+
+
 def parse_worker_job_types(raw: str | None) -> list[str] | None:
     if raw is None:
         return None
@@ -84,6 +102,40 @@ def parse_worker_job_types(raw: str | None) -> list[str] | None:
 
 
 WORKER_JOB_TYPES = parse_worker_job_types(os.getenv("WORKER_JOB_TYPES"))
+
+
+def maybe_schedule_google_calendar_sync_jobs(
+    db,
+    *,
+    now: datetime,
+    last_run_at: datetime | None,
+) -> datetime | None:
+    """
+    Best-effort fallback scheduler for Google Calendar/Tasks sync jobs.
+
+    This keeps sync running even when external cron isn't configured.
+    """
+    if not GOOGLE_CALENDAR_SYNC_FALLBACK_ENABLED:
+        return last_run_at
+
+    interval_seconds = max(1, GOOGLE_CALENDAR_SYNC_FALLBACK_INTERVAL_SECONDS)
+    if last_run_at and now < (last_run_at + timedelta(seconds=interval_seconds)):
+        return last_run_at
+
+    from app.services import google_calendar_sync_service
+
+    counts = google_calendar_sync_service.schedule_google_calendar_sync_jobs(
+        db=db,
+        now=now,
+    )
+    logger.info(
+        "Google sync fallback scheduled (connected=%s calendar_jobs=%s task_jobs=%s watch_jobs=%s)",
+        counts["connected_users"],
+        counts["jobs_created"],
+        counts["task_jobs_created"],
+        counts["watch_jobs_created"],
+    )
+    return now
 
 
 def _ensure_attachment_scanner_available() -> None:
@@ -326,11 +378,21 @@ async def worker_loop() -> None:
         logger.warning("RESEND_API_KEY not set - emails will be logged but not sent")
 
     last_session_cleanup = datetime.min.replace(tzinfo=timezone.utc)
+    last_google_sync_schedule: datetime | None = None
 
     while True:
         with SessionLocal() as db:
             try:
                 now = datetime.now(timezone.utc)
+                try:
+                    last_google_sync_schedule = maybe_schedule_google_calendar_sync_jobs(
+                        db,
+                        now=now,
+                        last_run_at=last_google_sync_schedule,
+                    )
+                except Exception:
+                    logger.exception("Google sync fallback scheduling failed")
+
                 if now - last_session_cleanup >= timedelta(
                     seconds=SESSION_CLEANUP_INTERVAL_SECONDS
                 ):

@@ -487,14 +487,34 @@ def sync_google_tasks_for_user(db: Session, *, user_id: UUID, org_id: UUID) -> i
     if not integration:
         return 0
 
+    coro = _sync_google_tasks_for_user_async(db, user_id=user_id, org_id=org_id)
     try:
-        return run_async(
-            _sync_google_tasks_for_user_async(db, user_id=user_id, org_id=org_id),
-            timeout=45,
-        )
+        return run_async(coro, timeout=45)
     except Exception as exc:
+        try:
+            coro.close()
+        except Exception:
+            pass
         logger.warning(
             "Google→Platform task sync failed user=%s org=%s error=%s", user_id, org_id, exc
+        )
+        return 0
+
+
+async def sync_google_tasks_for_user_async(db: Session, *, user_id: UUID, org_id: UUID) -> int:
+    """Async-safe inbound sync from Google Tasks to platform tasks."""
+    integration = oauth_service.get_user_integration(db, user_id, "google_calendar")
+    if not integration:
+        return 0
+
+    try:
+        return await _sync_google_tasks_for_user_async(db, user_id=user_id, org_id=org_id)
+    except Exception as exc:
+        logger.warning(
+            "Google→Platform task async sync failed user=%s org=%s error=%s",
+            user_id,
+            org_id,
+            exc,
         )
         return 0
 

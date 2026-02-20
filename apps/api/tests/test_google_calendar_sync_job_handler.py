@@ -9,7 +9,7 @@ async def test_google_calendar_sync_job_handler_invokes_reconciler(db, test_auth
 
     called: dict[str, object] = {}
 
-    def fake_sync_manual_google_events_for_appointments(
+    async def fake_sync_manual_google_events_for_appointments_async(
         db,
         *,
         user_id,
@@ -24,8 +24,8 @@ async def test_google_calendar_sync_job_handler_invokes_reconciler(db, test_auth
         return 2
 
     monkeypatch.setattr(
-        "app.services.appointment_integrations.sync_manual_google_events_for_appointments",
-        fake_sync_manual_google_events_for_appointments,
+        "app.services.appointment_integrations.sync_manual_google_events_for_appointments_async",
+        fake_sync_manual_google_events_for_appointments_async,
     )
 
     job = type(
@@ -86,14 +86,14 @@ async def test_google_tasks_sync_job_handler_invokes_reconciler(db, test_auth, m
 
     called: dict[str, object] = {}
 
-    def fake_sync_google_tasks_for_user(db, *, user_id, org_id):
+    async def fake_sync_google_tasks_for_user_async(db, *, user_id, org_id):
         called["user_id"] = user_id
         called["org_id"] = org_id
         return 3
 
     monkeypatch.setattr(
-        "app.services.google_tasks_sync_service.sync_google_tasks_for_user",
-        fake_sync_google_tasks_for_user,
+        "app.services.google_tasks_sync_service.sync_google_tasks_for_user_async",
+        fake_sync_google_tasks_for_user_async,
     )
 
     job = type(

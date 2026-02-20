@@ -45,7 +45,7 @@ async def process_google_calendar_sync(db, job) -> None:
         except ValueError as exc:
             raise ValueError("Invalid date_end format in google_calendar_sync payload") from exc
 
-    updated_count = appointment_integrations.sync_manual_google_events_for_appointments(
+    updated_count = await appointment_integrations.sync_manual_google_events_for_appointments_async(
         db=db,
         user_id=user_id,
         org_id=job.organization_id,
@@ -112,7 +112,7 @@ async def process_google_tasks_sync(db, job) -> None:
     except ValueError as exc:
         raise ValueError("Invalid user_id in google_tasks_sync payload") from exc
 
-    changed_count = google_tasks_sync_service.sync_google_tasks_for_user(
+    changed_count = await google_tasks_sync_service.sync_google_tasks_for_user_async(
         db=db,
         user_id=user_id,
         org_id=job.organization_id,
