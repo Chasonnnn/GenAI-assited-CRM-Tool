@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.86.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.86.0...surrogacy-crm-platform-v0.86.1) (2026-02-20)
+
+
+### Bug Fixes
+
+* add google tasks access diagnostics and assigned task sync ([39bb57f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/39bb57fa79d79416d3edbd51e2db0e8d3a90cde9))
+
 ## [0.86.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.85.3...surrogacy-crm-platform-v0.86.0) (2026-02-20)
 
 
