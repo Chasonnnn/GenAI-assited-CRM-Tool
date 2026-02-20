@@ -152,6 +152,15 @@ const baseSurrogateData = {
     delivery_baby_weight: null,
 }
 
+const defaultPipelineStages = [
+    { id: 's1', slug: 'new_unread', label: 'New Unread', color: '#3b82f6', stage_type: 'intake', order: 1, is_active: true },
+    { id: 's2', slug: 'ready_to_match', label: 'Ready to Match', color: '#10b981', stage_type: 'post_approval', order: 10, is_active: true },
+    { id: 's3', slug: 'heartbeat_confirmed', label: 'Heartbeat Confirmed', color: '#f97316', stage_type: 'post_approval', order: 20, is_active: true },
+    { id: 's4', slug: 'lost', label: 'Lost', color: '#ef4444', stage_type: 'terminal', order: 90, is_active: true },
+    { id: 's5', slug: 'disqualified', label: 'Disqualified', color: '#dc2626', stage_type: 'terminal', order: 91, is_active: true },
+]
+let mockPipelineStages = [...defaultPipelineStages]
+
 vi.mock('@/lib/hooks/use-surrogates', () => ({
     useSurrogate: (id: string) => mockUseSurrogate(id),
     useSurrogateActivity: (id: string) => mockUseSurrogateActivity(id),
@@ -202,11 +211,7 @@ vi.mock('@/lib/hooks/use-pipelines', () => ({
     useDefaultPipeline: () => ({
         data: {
             id: 'p1',
-            stages: [
-                { id: 's1', slug: 'new_unread', label: 'New Unread', color: '#3b82f6', stage_type: 'intake', order: 1, is_active: true },
-                { id: 's2', slug: 'ready_to_match', label: 'Ready to Match', color: '#10b981', stage_type: 'post_approval', order: 10, is_active: true },
-                { id: 's3', slug: 'heartbeat_confirmed', label: 'Heartbeat Confirmed', color: '#f97316', stage_type: 'post_approval', order: 20, is_active: true },
-            ],
+            stages: mockPipelineStages,
         },
         isLoading: false,
     }),
@@ -228,6 +233,7 @@ vi.mock('@/lib/hooks/use-matches', () => ({
 
 describe('SurrogateDetailPage', () => {
     beforeEach(() => {
+        mockPipelineStages = [...defaultPipelineStages]
         mockUseAssignees.mockReturnValue({ data: [] })
         mockUseSurrogate.mockReturnValue({
             data: {
@@ -499,6 +505,31 @@ describe('SurrogateDetailPage', () => {
         expect(screen.getByText('Medical Information')).toBeInTheDocument()
         expect(screen.getByText('Pregnancy Tracker')).toBeInTheDocument()
         expect(screen.queryByText('Due Date:')).not.toBeInTheDocument()
+    })
+
+    it.each([
+        { statusLabel: 'Disqualified', stageId: 's5', stageSlug: 'disqualified' as const },
+        { statusLabel: 'Lost', stageId: 's4', stageSlug: 'lost' as const },
+    ])('hides Pregnancy Tracker for terminal stage: $statusLabel', ({ statusLabel, stageId, stageSlug }) => {
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                status_label: statusLabel,
+                stage_id: stageId,
+                stage_slug: stageSlug,
+                stage_type: 'terminal',
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        expect(screen.queryByText('Pregnancy Tracker')).not.toBeInTheDocument()
     })
 
     it('shows Due Date row when pregnancy start date is set', () => {

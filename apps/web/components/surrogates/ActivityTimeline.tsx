@@ -49,6 +49,8 @@ interface StageGroup {
     isCurrent: boolean
     isCompleted: boolean // order < current stage order
     isUpcoming: boolean // order > current stage order
+    isTerminal: boolean
+    transitionLabel: string | null
     isBackdated: boolean // effective_at !== recorded_at (> 60s diff)
     activityCount: number // Total count (BEFORE per-stage cap)
     activities: ActivityItem[] // Capped to max per stage
@@ -193,6 +195,22 @@ function dedupeStageHistory(history: SurrogateStatusHistory[]): SurrogateStatusH
     return deduped
 }
 
+function getStageTransitionLabel(
+    entry: SurrogateStatusHistory,
+    stageLabelById: Map<string, string>
+): string | null {
+    const toLabel =
+        entry.to_label_snapshot ||
+        (entry.to_stage_id ? stageLabelById.get(entry.to_stage_id) : null)
+    if (!toLabel) return null
+
+    const fromLabel =
+        entry.from_label_snapshot ||
+        (entry.from_stage_id ? stageLabelById.get(entry.from_stage_id) : null)
+
+    return fromLabel ? `${fromLabel} -> ${toLabel}` : toLabel
+}
+
 function assignActivityToStage(
     activity: SurrogateActivity,
     stageHistory: SurrogateStatusHistory[]
@@ -244,6 +262,8 @@ function buildTimelineData(
     activities: SurrogateActivity[],
     currentStageId: string
 ): { stageGroups: StageGroup[] } {
+    const stageLabelById = new Map(allPipelineStages.map((stage) => [stage.id, stage.label]))
+
     // 1. Filter: ignore status_changed activity types (duplicates stage history)
     const filteredActivities = activities.filter(
         (a) => !IGNORED_ACTIVITY_TYPES.includes(a.activity_type)
@@ -255,13 +275,14 @@ function buildTimelineData(
     // 3. Build a map of stage ID -> entry metadata
     const stageEntryMeta = new Map<
         string,
-        { entryAt: string; isBackdated: boolean }
+        { entryAt: string; isBackdated: boolean; transitionLabel: string | null }
     >()
     for (const entry of dedupedHistory) {
         if (entry.to_stage_id) {
             stageEntryMeta.set(entry.to_stage_id, {
                 entryAt: getEntryTimestamp(entry),
                 isBackdated: isBackdatedEntry(entry),
+                transitionLabel: getStageTransitionLabel(entry, stageLabelById),
             })
         }
     }
@@ -300,13 +321,17 @@ function buildTimelineData(
     const currentStageOrder = currentStage?.order ?? 0
 
     // 7. Create StageGroup for ALL pipeline stages (preserve full story)
-    const displayStages = activeStages.filter(
-        (stage) => stage.stage_type !== "terminal" && !["lost", "disqualified"].includes(stage.slug)
-    )
+    const displayStages = activeStages.filter((stage) => {
+        const isTerminalStage =
+            stage.stage_type === "terminal" || ["lost", "disqualified"].includes(stage.slug)
+        return !isTerminalStage || stage.id === currentStageId
+    })
     const stageGroups: StageGroup[] = displayStages.map((stage) => {
         const allActivities = activitiesByStage.get(stage.id) || []
         const entryMeta = stageEntryMeta.get(stage.id)
         const entryAt = entryMeta?.entryAt || null
+        const isTerminalStage =
+            stage.stage_type === "terminal" || ["lost", "disqualified"].includes(stage.slug)
 
         return {
             id: stage.id,
@@ -318,6 +343,8 @@ function buildTimelineData(
             isCurrent: stage.id === currentStageId,
             isCompleted: stage.order < currentStageOrder,
             isUpcoming: stage.order > currentStageOrder,
+            isTerminal: isTerminalStage,
+            transitionLabel: entryMeta?.transitionLabel ?? null,
             isBackdated: entryMeta?.isBackdated ?? false,
             activityCount: allActivities.length, // Total count BEFORE cap
             activities: allActivities.slice(0, MAX_PER_STAGE), // Cap per stage
@@ -358,10 +385,12 @@ const ActivityRow = memo(function ActivityRow({ item }: { item: ActivityItem }) 
 })
 
 const StageEntryRow = memo(function StageEntryRow({
+    entryTitle,
     entryLabel,
     isBackdated,
 }: {
-    entryLabel: string
+    entryTitle: string
+    entryLabel?: string | null
     isBackdated: boolean
 }) {
     return (
@@ -371,14 +400,16 @@ const StageEntryRow = memo(function StageEntryRow({
                 <ArrowRightIcon className="size-3.5 text-muted-foreground" />
             </div>
             <div className="flex-1 min-w-0">
-                <div className="text-xs font-medium text-muted-foreground">Entered stage</div>
+                <div className="text-xs font-medium text-muted-foreground">{entryTitle}</div>
                 {isBackdated && (
                     <div className="text-[11px] text-muted-foreground/70">
                         Backdated entry
                     </div>
                 )}
             </div>
-            <div className="text-xs text-muted-foreground shrink-0">{entryLabel}</div>
+            {entryLabel && (
+                <div className="text-xs text-muted-foreground shrink-0">{entryLabel}</div>
+            )}
         </div>
     )
 })
@@ -460,7 +491,10 @@ export function ActivityTimeline({
             stageGroups
                 .filter(
                     (stage) =>
-                        (stage.isCurrent && stage.activityCount > 0) || stage.isBackdated
+                        (stage.isCurrent &&
+                            (stage.activityCount > 0 ||
+                                (stage.isTerminal && !!stage.transitionLabel))) ||
+                        stage.isBackdated
                 )
                 .map((stage) => stage.id),
         [stageGroups]
@@ -541,9 +575,15 @@ export function ActivityTimeline({
                     {visibleStages.map((stage) => {
                         // hasContent = has activity OR is backdated (backdated stages always get full row)
                         const hasContent = stage.activityCount > 0 || stage.isBackdated
-                        // Show stage entry row when backdated or has activities
+                        // Show stage entry row when backdated, has activities, or current terminal transition exists.
                         const showStageEntryRow =
-                            !!stage.rawDate && (stage.isBackdated || stage.activityCount > 0)
+                            !!stage.rawDate &&
+                            (stage.isBackdated ||
+                                stage.activityCount > 0 ||
+                                (stage.isTerminal && !!stage.transitionLabel))
+                        const stageEntryTitle =
+                            (stage.isTerminal && stage.transitionLabel) || "Entered stage"
+                        const stageEntryLabel = stage.date
 
                         // Empty non-current stages without content: minimal row (no chevron, no timestamp)
                         if (!hasContent && !stage.isCurrent) {
@@ -620,9 +660,10 @@ export function ActivityTimeline({
                                 {/* Stage Details */}
                                 <CollapsibleContent>
                                     <div className="ml-6 pl-4 border-l border-border/50">
-                                        {showStageEntryRow && (
+                                        {showStageEntryRow && stageEntryLabel && (
                                             <StageEntryRow
-                                                entryLabel={stage.date as string}
+                                                entryTitle={stageEntryTitle}
+                                                entryLabel={stageEntryLabel}
                                                 isBackdated={stage.isBackdated}
                                             />
                                         )}

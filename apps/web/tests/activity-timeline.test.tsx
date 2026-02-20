@@ -274,4 +274,53 @@ describe('ActivityTimeline', () => {
 
         expect(screen.queryByText('Unknown Stage')).not.toBeInTheDocument()
     })
+
+    it('shows terminal status transitions as explicit from-to labels', () => {
+        const stages = [
+            makeStage({ id: 's1', label: 'New Unread', order: 1 }),
+            makeStage({
+                id: 's2',
+                slug: 'disqualified',
+                label: 'Disqualified',
+                stage_type: 'terminal',
+                order: 99,
+            }),
+        ]
+
+        mockUseSurrogateHistory.mockReturnValue({
+            data: [
+                makeHistory({
+                    id: 'h1',
+                    to_stage_id: 's1',
+                    to_label_snapshot: 'New Unread',
+                    changed_at: '2024-01-01T00:00:00.000Z',
+                    effective_at: '2024-01-01T00:00:00.000Z',
+                    recorded_at: '2024-01-01T00:00:00.000Z',
+                }),
+                makeHistory({
+                    id: 'h2',
+                    from_stage_id: 's1',
+                    to_stage_id: 's2',
+                    from_label_snapshot: 'New Unread',
+                    to_label_snapshot: 'Disqualified',
+                    changed_at: '2024-02-01T00:00:00.000Z',
+                    effective_at: '2024-02-01T00:00:00.000Z',
+                    recorded_at: '2024-02-01T00:00:00.000Z',
+                }),
+            ],
+        })
+
+        render(
+            <ActivityTimeline
+                surrogateId="surr1"
+                currentStageId="s2"
+                stages={stages}
+                activities={[]}
+                tasks={[]}
+            />
+        )
+
+        expect(screen.getByText('Disqualified')).toBeInTheDocument()
+        expect(screen.getByText('New Unread -> Disqualified')).toBeInTheDocument()
+    })
 })

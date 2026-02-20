@@ -64,6 +64,9 @@ export function SurrogateOverviewTab() {
         heartbeatStage &&
         currentStage.order >= heartbeatStage.order
     )
+    const isTerminalIntakeOutcome = ["lost", "disqualified"].includes(
+        surrogateData.stage_slug ?? ""
+    )
 
     const copyEmail = () => {
         navigator.clipboard.writeText(surrogateData.email)
@@ -227,7 +230,7 @@ export function SurrogateOverviewTab() {
                 </div>
 
                 <div className="space-y-4">
-                    {isHeartbeatConfirmedOrLater && (
+                    {isHeartbeatConfirmedOrLater && !isTerminalIntakeOutcome && (
                         <PregnancyTrackerCard
                             surrogateData={surrogateData}
                             onUpdate={async (data) => {
