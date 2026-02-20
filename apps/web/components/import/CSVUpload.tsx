@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useReducer, useCallback, type DragEvent } from "react"
+import { useEffect, useState, useReducer, useCallback, type DragEvent, type KeyboardEvent } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -86,6 +86,17 @@ const SOURCE_OPTIONS: Array<{ value: SurrogateSource; label: string }> = [
 
 interface CSVUploadProps {
     onImportComplete?: () => void
+}
+
+function openFilePicker() {
+    document.getElementById("file-upload")?.click()
+}
+
+function handleDropzoneKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault()
+        openFilePicker()
+    }
 }
 
 /** Get badge info based on suggestion reason */
@@ -558,7 +569,10 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
-                        onClick={() => document.getElementById("file-upload")?.click()}
+                        onClick={openFilePicker}
+                        onKeyDown={handleDropzoneKeyDown}
+                        role="button"
+                        tabIndex={0}
                     >
                         <input
                             id="file-upload"

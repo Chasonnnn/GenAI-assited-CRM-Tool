@@ -539,9 +539,11 @@ export function AppSidebar({ children }: AppSidebarProps) {
     return (
         <div className="flex min-h-svh w-full bg-sidebar">
             {isMobile && mobileOpen && (
-                <div
-                    className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm"
+                <button
+                    type="button"
+                    className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm appearance-none border-0 p-0 m-0"
                     onClick={() => setMobileOpen(false)}
+                    aria-label="Close sidebar overlay"
                 />
             )}
 

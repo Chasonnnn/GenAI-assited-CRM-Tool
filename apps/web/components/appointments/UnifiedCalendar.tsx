@@ -10,7 +10,7 @@
  * - Click to view details
  */
 
-import { memo, useState, useMemo, useCallback, useEffect } from "react"
+import { memo, useState, useMemo, useCallback, useEffect, type KeyboardEvent } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -89,6 +89,12 @@ const MEETING_MODE_ICONS: Record<string, typeof VideoIcon> = {
     in_person: MapPinIcon,
 }
 
+function activateWithKeyboard(event: KeyboardEvent<HTMLDivElement>, onActivate: () => void) {
+    if (event.key !== "Enter" && event.key !== " ") return
+    event.preventDefault()
+    onActivate()
+}
+
 // View type
 type ViewType = "month" | "week" | "day"
 
@@ -107,11 +113,15 @@ const TaskItem = memo(function TaskItem({
 }) {
     const time = task.due_time ? format(parseISO(`2000-01-01T${task.due_time}`), "h:mm a") : ""
     const clickable = typeof onClick === "function"
+    const handleTaskClick = () => onClick?.(task)
 
     if (compact) {
         return (
             <div
-                onClick={() => onClick?.(task)}
+                onClick={clickable ? handleTaskClick : undefined}
+                onKeyDown={clickable ? (e) => activateWithKeyboard(e, handleTaskClick) : undefined}
+                role={clickable ? "button" : undefined}
+                tabIndex={clickable ? 0 : undefined}
                 className={cn(
                     "w-full text-left px-2 py-1 rounded text-xs truncate",
                     TASK_COLOR,
@@ -126,7 +136,10 @@ const TaskItem = memo(function TaskItem({
 
     return (
         <div
-            onClick={() => onClick?.(task)}
+            onClick={clickable ? handleTaskClick : undefined}
+            onKeyDown={clickable ? (e) => activateWithKeyboard(e, handleTaskClick) : undefined}
+            role={clickable ? "button" : undefined}
+            tabIndex={clickable ? 0 : undefined}
             className={cn(
                 "w-full text-left p-2 rounded-lg border-l-4 border-purple-500 bg-muted/50",
                 clickable && "cursor-pointer hover:bg-muted"
@@ -169,6 +182,9 @@ const GoogleEventItem = memo(function GoogleEventItem({
         return (
             <div
                 onClick={handleClick}
+                onKeyDown={(e) => activateWithKeyboard(e, handleClick)}
+                role="button"
+                tabIndex={0}
                 className={`w-full text-left px-2 py-1 rounded text-xs truncate ${GOOGLE_EVENT_COLOR} text-white cursor-pointer hover:opacity-90`}
                 title="Click to open in Google Calendar"
             >
@@ -180,6 +196,9 @@ const GoogleEventItem = memo(function GoogleEventItem({
     return (
         <div
             onClick={handleClick}
+            onKeyDown={(e) => activateWithKeyboard(e, handleClick)}
+            role="button"
+            tabIndex={0}
             className={`w-full text-left p-2 rounded-lg border-l-4 border-slate-400 bg-muted/50 cursor-pointer hover:bg-muted`}
             title="Click to open in Google Calendar"
         >
@@ -225,6 +244,9 @@ const EventItem = memo(function EventItem({
                 draggable={canDrag}
                 onDragStart={handleDragStart}
                 onClick={onClick}
+                onKeyDown={(e) => activateWithKeyboard(e, onClick)}
+                role="button"
+                tabIndex={0}
                 className={`w-full text-left px-2 py-1 rounded text-xs truncate ${statusColor} text-white hover:opacity-90 transition-opacity ${canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
             >
                 {time} - {appointment.client_name}
@@ -237,6 +259,9 @@ const EventItem = memo(function EventItem({
             draggable={canDrag}
             onDragStart={handleDragStart}
             onClick={onClick}
+            onKeyDown={(e) => activateWithKeyboard(e, onClick)}
+            role="button"
+            tabIndex={0}
             className={`w-full text-left p-2 rounded-lg border-l-4 ${statusColor.replace('bg-', 'border-')} bg-muted/50 hover:bg-muted transition-colors ${canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
         >
             <p className="font-medium text-sm truncate">{appointment.client_name}</p>

@@ -48,16 +48,20 @@ export function TranscriptPane({ className }: TranscriptPaneProps) {
         setHoveredCommentId(null)
     }, [setHoveredCommentId])
 
-    // Handle click on transcript highlights
-    const handleClick = useCallback((e: React.MouseEvent) => {
-        if (isSelectingRef.current) return
-        const target = e.target instanceof HTMLElement ? e.target : null
+    const focusCommentFromTarget = useCallback((target: HTMLElement | null) => {
         const commentSpan = target?.closest("[data-comment-id]")
         if (commentSpan) {
             const commentId = commentSpan.getAttribute("data-comment-id")
             setFocusedCommentId(commentId)
         }
-    }, [isSelectingRef, setFocusedCommentId])
+    }, [setFocusedCommentId])
+
+    // Handle click on transcript highlights
+    const handleClick = useCallback((e: React.MouseEvent) => {
+        if (isSelectingRef.current) return
+        const target = e.target instanceof HTMLElement ? e.target : null
+        focusCommentFromTarget(target)
+    }, [focusCommentFromTarget, isSelectingRef])
 
     return (
         <>
@@ -72,6 +76,16 @@ export function TranscriptPane({ className }: TranscriptPaneProps) {
                 onMouseOut={handleMouseOut}
                 onMouseLeave={handleMouseLeave}
                 onClick={handleClick}
+                onKeyDown={(e) => {
+                    if (isSelectingRef.current) return
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        const target = e.target instanceof HTMLElement ? e.target : null
+                        focusCommentFromTarget(target)
+                    }
+                }}
+                role="button"
+                tabIndex={0}
                 dangerouslySetInnerHTML={{ __html: transcriptHtml }}
             />
             <SelectionPopover

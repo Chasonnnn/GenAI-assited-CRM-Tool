@@ -95,6 +95,14 @@ function AppointmentCard({
         <div
             className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors"
             onClick={onSelect}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    onSelect()
+                }
+            }}
         >
             <div className="flex items-center gap-4">
                 <Avatar className="size-12">
@@ -131,12 +139,15 @@ function AppointmentCard({
                 </div>
             </div>
 
-            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
                 {appointment.status === "pending" && onApprove && onCancel && (
                     <>
                         <Button
                             size="sm"
-                            onClick={onApprove}
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                onApprove()
+                            }}
                             disabled={isApproving}
                             className="bg-green-600 hover:bg-green-700"
                         >
@@ -150,7 +161,10 @@ function AppointmentCard({
                         <Button
                             size="sm"
                             variant="outline"
-                            onClick={onCancel}
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                onCancel()
+                            }}
                             disabled={isCancelling}
                             className="text-destructive border-destructive/30 hover:bg-destructive/10"
                         >
