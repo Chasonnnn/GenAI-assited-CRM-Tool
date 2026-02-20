@@ -1069,7 +1069,7 @@ export default function CampaignsPage() {
                                 <h3 className="font-medium">Schedule & Send</h3>
 
                                 <div className="space-y-2">
-                                    <Label>When to send?</Label>
+                                    <p className="text-sm font-medium">When to send?</p>
                                     <RadioGroup
                                         value={scheduleFor}
                                         onValueChange={(value) => {

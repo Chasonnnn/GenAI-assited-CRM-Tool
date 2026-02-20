@@ -664,20 +664,22 @@ function AppointmentTypesCard() {
                                     {MEETING_MODE_OPTIONS.map((option) => {
                                         const Icon = option.icon
                                         const checked = formData.meeting_modes.includes(option.value)
+                                        const checkboxId = `appointment-format-${option.value}`
                                         return (
-                                            <label
+                                            <div
                                                 key={option.value}
                                                 className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm"
                                             >
-                                                <div className="flex items-center gap-2">
+                                                <Label htmlFor={checkboxId} className="flex items-center gap-2 cursor-pointer">
                                                     <Icon className="size-4 text-muted-foreground" />
                                                     <span>{option.label}</span>
-                                                </div>
+                                                </Label>
                                                 <Checkbox
+                                                    id={checkboxId}
                                                     checked={checked}
                                                     onCheckedChange={(value) => toggleMeetingMode(option.value, value)}
                                                 />
-                                            </label>
+                                            </div>
                                         )
                                     })}
                                 </div>

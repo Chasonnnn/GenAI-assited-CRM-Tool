@@ -199,13 +199,16 @@ export function LogContactAttemptDialog({
 
                     {/* Back-dating toggle and input */}
                     <div className="grid gap-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
+                        <div className="flex items-center gap-2">
                             <Checkbox
+                                id="contact-attempt-backdate"
                                 checked={isBackdating}
                                 onCheckedChange={(checked) => setIsBackdating(checked === true)}
                             />
-                            <span className="text-sm">Log for a different date/time</span>
-                        </label>
+                            <Label htmlFor="contact-attempt-backdate" className="cursor-pointer">
+                                Log for a different date/time
+                            </Label>
+                        </div>
                         {isBackdating && (
                             <div className="flex items-center gap-2">
                                 <CalendarIcon className="h-4 w-4 text-muted-foreground" />

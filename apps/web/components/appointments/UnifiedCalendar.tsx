@@ -493,7 +493,7 @@ function AppointmentDetailDialog({
                         ) : (
                             <div className="space-y-3">
                                 <div>
-                                    <label className="text-xs text-muted-foreground">Link to Surrogate</label>
+                                    <p className="text-xs text-muted-foreground">Link to Surrogate</p>
                                     <Select
                                         value={selectedSurrogateId || "none"}
                                         onValueChange={(val) => setSelectedSurrogateId(val === "none" ? null : val)}
@@ -513,7 +513,7 @@ function AppointmentDetailDialog({
                                 </div>
 
                                 <div>
-                                    <label className="text-xs text-muted-foreground">Link to Intended Parent</label>
+                                    <p className="text-xs text-muted-foreground">Link to Intended Parent</p>
                                     <Select
                                         value={selectedIpId || "none"}
                                         onValueChange={(val) => setSelectedIpId(val === "none" ? null : val)}
