@@ -460,12 +460,15 @@ interface ActivityTimelineProps {
     tasks?: TaskListItem[]
 }
 
+const EMPTY_ACTIVITIES: SurrogateActivity[] = []
+const EMPTY_TASKS: TaskListItem[] = []
+
 export function ActivityTimeline({
     surrogateId,
     currentStageId,
     stages,
-    activities = [],
-    tasks = [],
+    activities = EMPTY_ACTIVITIES,
+    tasks = EMPTY_TASKS,
 }: ActivityTimelineProps) {
     const [showFullJourney, setShowFullJourney] = useState(false)
     const [openStageIds, setOpenStageIds] = useState<Set<string>>(() => new Set())

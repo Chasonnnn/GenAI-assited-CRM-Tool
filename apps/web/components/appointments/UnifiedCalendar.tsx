@@ -80,6 +80,7 @@ const TASK_COLOR = "bg-purple-500"
 
 // Google Calendar event color
 const GOOGLE_EVENT_COLOR = "bg-slate-400"
+const EMPTY_GOOGLE_EVENTS: GoogleCalendarEvent[] = []
 
 // Meeting mode icons
 const MEETING_MODE_ICONS: Record<string, typeof VideoIcon> = {
@@ -576,7 +577,7 @@ function MonthView({
     currentDate,
     appointments,
     tasks,
-    googleEvents = [],
+    googleEvents = EMPTY_GOOGLE_EVENTS,
     onEventClick,
     onTaskClick,
     onDragStart,
@@ -757,7 +758,7 @@ function WeekView({
     currentDate,
     appointments,
     tasks,
-    googleEvents = [],
+    googleEvents = EMPTY_GOOGLE_EVENTS,
     onEventClick,
     onTaskClick,
 }: {
@@ -877,7 +878,7 @@ function DayView({
     currentDate,
     appointments,
     tasks,
-    googleEvents = [],
+    googleEvents = EMPTY_GOOGLE_EVENTS,
     onEventClick,
     onTaskClick,
 }: {

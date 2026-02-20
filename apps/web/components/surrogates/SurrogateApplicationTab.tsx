@@ -64,6 +64,8 @@ interface SurrogateApplicationTabProps {
     publishedForms?: FormSummary[]
 }
 
+const EMPTY_PUBLISHED_FORMS: FormSummary[] = []
+
 // Format file size for display
 function formatFileSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`
@@ -117,7 +119,7 @@ function formatTableCellValue(value: unknown): string {
 export function SurrogateApplicationTab({
     surrogateId,
     formId,
-    publishedForms = [],
+    publishedForms = EMPTY_PUBLISHED_FORMS,
 }: SurrogateApplicationTabProps) {
     const { user } = useAuth()
     const [baseUrl, setBaseUrl] = React.useState("")
