@@ -102,9 +102,9 @@ export function RecipientPreviewCard({
                             className="overflow-y-auto space-y-2 pr-1"
                             style={{ maxHeight: `${maxVisible * 56}px` }}
                         >
-                            {sampleRecipients.map((recipient, index) => (
+                            {sampleRecipients.map((recipient) => (
                                 <div
-                                    key={index}
+                                    key={recipient.email}
                                     className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 flex-shrink-0"
                                 >
                                     <Avatar className="size-7">

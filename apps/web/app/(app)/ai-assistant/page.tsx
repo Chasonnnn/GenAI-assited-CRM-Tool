@@ -798,9 +798,9 @@ export default function AIAssistantPage() {
                             <div className="text-sm font-medium">Quick Actions</div>
                             <div className="text-xs text-muted-foreground">Common tasks to get started</div>
                             <div className="space-y-1">
-                                {quickActions.map((action, index) => (
+                                {quickActions.map((action) => (
                                     <Button
-                                        key={index}
+                                        key={action.label}
                                         variant="outline"
                                         size="sm"
                                         className="w-full justify-start gap-2 bg-transparent text-sm"
@@ -819,9 +819,9 @@ export default function AIAssistantPage() {
                             <div className="text-sm font-medium">Suggested Actions</div>
                             <div className="text-xs text-muted-foreground">Based on your recent activity</div>
                             <div className="space-y-0">
-                                {suggestedActions.map((suggestion, index) => (
+                                {suggestedActions.map((suggestion) => (
                                     <button
-                                        key={index}
+                                        key={suggestion}
                                         onClick={() => setMessage(suggestion)}
                                         disabled={!selectedSurrogateId || !isAIEnabled || isStreaming}
                                         className="flex w-full items-start gap-2 rounded-md py-1 text-left hover:bg-muted/50 transition-colors disabled:opacity-50"

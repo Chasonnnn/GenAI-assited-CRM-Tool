@@ -478,7 +478,7 @@ export default function WorkflowExecutionsPage() {
                                                                 <div>
                                                                     <h4 className="mb-3 font-semibold">Actions Executed</h4>
                                                                     <div className="space-y-3">
-                                                                        {execution.actions_executed.map((action, index) => {
+                                                                        {execution.actions_executed.map((action) => {
                                                                             const status = action.success ? "success" : "failed"
                                                                             const name =
                                                                                 action.description ||
@@ -487,8 +487,10 @@ export default function WorkflowExecutionsPage() {
                                                                             const duration = action.duration_ms
                                                                                 ? formatDuration(action.duration_ms)
                                                                                 : "—"
+                                                                            const actionKey =
+                                                                                `${execution.id}-${action.action_type ?? "action"}-${action.description ?? ""}-${action.duration_ms ?? 0}-${action.error ?? ""}-${action.success ? "1" : "0"}`
                                                                             return (
-                                                                            <div key={index} className="flex items-start gap-3">
+                                                                            <div key={actionKey} className="flex items-start gap-3">
                                                                                 <div
                                                                                     className={`mt-1 flex size-6 shrink-0 items-center justify-center rounded-full ${status === "success" ? "bg-green-500/20" : "bg-red-500/20"
                                                                                         }`}
