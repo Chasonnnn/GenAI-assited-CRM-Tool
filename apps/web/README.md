@@ -63,3 +63,13 @@ Uses shadcn/ui with custom theming. See `globals.css` for:
 - CSS custom properties for colors
 - View Transitions API for theme toggle
 - Noto Sans font
+
+## Surrogate Email Compose Attachments
+
+The surrogate compose dialog supports Gmail-style drag-and-drop attachments.
+
+- Users can upload new files directly in compose, or select existing surrogate attachments.
+- Send is blocked until all selected attachments are malware-scanned and `clean`.
+- Compose send limits are:
+  - Max `10` attachments
+  - Max `18 MiB` total selected bytes (pre-encoding)

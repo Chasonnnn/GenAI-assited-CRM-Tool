@@ -114,11 +114,22 @@ function getActivityPreview(activity: SurrogateActivity): string {
 
     switch (type) {
         case "email_sent":
-            return (
-                (details.subject as string) ||
-                (details.preview as string) ||
-                (details.provider as string ? `via ${details.provider as string}` : "")
-            )
+            {
+                const basePreview =
+                    (details.subject as string) ||
+                    (details.preview as string) ||
+                    (details.provider as string ? `via ${details.provider as string}` : "")
+                const attachments = Array.isArray(details.attachments)
+                    ? details.attachments as Array<{ filename?: string }>
+                    : []
+                if (attachments.length === 0) return basePreview
+
+                const attachmentSummary =
+                    attachments.length === 1 && attachments[0]?.filename
+                        ? `Attachment: ${attachments[0].filename}`
+                        : `${attachments.length} attachments`
+                return [basePreview, attachmentSummary].filter(Boolean).join(" • ")
+            }
         case "contact_attempt":
             return [
                 details.outcome as string | undefined,

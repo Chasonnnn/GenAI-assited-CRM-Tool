@@ -26,6 +26,7 @@ import { normalizeTemplateHtml } from "@/lib/email-template-html"
 import { useEmailTemplates, useEmailTemplate } from "@/lib/hooks/use-email-templates"
 import { useSignaturePreview } from "@/lib/hooks/use-signature"
 import { useSendSurrogateEmail, useSurrogateTemplateVariables } from "@/lib/hooks/use-surrogates"
+import { EmailAttachmentsPanel, type EmailAttachmentSelectionState } from "@/components/email/EmailAttachmentsPanel"
 
 type TemplatePreviewValue = string | number | boolean | null | undefined
 
@@ -74,6 +75,12 @@ export function EmailComposeDialog({
     const [subject, setSubject] = React.useState("")
     const [body, setBody] = React.useState("")
     const [isPreview, setIsPreview] = React.useState(true)
+    const [attachmentSelection, setAttachmentSelection] = React.useState<EmailAttachmentSelectionState>({
+        selectedAttachmentIds: [],
+        hasBlockingAttachments: false,
+        totalBytes: 0,
+        errorMessage: null,
+    })
     const idempotencyKeyRef = React.useRef<string | null>(null)
     const hydratedTemplateIdRef = React.useRef<string | null>(null)
     const previewEditorRef = React.useRef<HTMLDivElement | null>(null)
@@ -123,6 +130,12 @@ export function EmailComposeDialog({
             setSubject("")
             setBody("")
             setIsPreview(true)
+            setAttachmentSelection({
+                selectedAttachmentIds: [],
+                hasBlockingAttachments: false,
+                totalBytes: 0,
+                errorMessage: null,
+            })
             idempotencyKeyRef.current = null
             hydratedTemplateIdRef.current = null
         }
@@ -239,6 +252,7 @@ export function EmailComposeDialog({
                     subject,
                     body: bodyForSend,
                     idempotency_key: idempotencyKeyRef.current,
+                    attachment_ids: attachmentSelection.selectedAttachmentIds,
                 },
             })
             onSuccess?.()
@@ -396,6 +410,11 @@ export function EmailComposeDialog({
                         />
                     </div>
 
+                    <EmailAttachmentsPanel
+                        surrogateId={surrogateData.id}
+                        onSelectionChange={setAttachmentSelection}
+                    />
+
                     {/* Subject Line */}
                     <div className="grid gap-2">
                         <Label htmlFor="subject">Subject</Label>
@@ -531,7 +550,13 @@ export function EmailComposeDialog({
                     <Button
                         type="button"
                         onClick={handleSend}
-                        disabled={!selectedTemplate || !subject || !body || sendEmailMutation.isPending}
+                        disabled={
+                            !selectedTemplate ||
+                            !subject ||
+                            !body ||
+                            attachmentSelection.hasBlockingAttachments ||
+                            sendEmailMutation.isPending
+                        }
                         className="gap-2"
                     >
                         {sendEmailMutation.isPending ? (

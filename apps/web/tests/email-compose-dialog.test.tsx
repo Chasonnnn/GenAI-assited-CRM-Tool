@@ -9,6 +9,12 @@ const mockUseSendSurrogateEmail = vi.fn()
 const mockUseSurrogateTemplateVariables = vi.fn()
 const mockUseSignaturePreview = vi.fn()
 const mockUseOrgSignaturePreview = vi.fn()
+let mockAttachmentSelectionState = {
+    selectedAttachmentIds: [] as string[],
+    hasBlockingAttachments: false,
+    totalBytes: 0,
+    errorMessage: null as string | null,
+}
 
 vi.mock("@/components/ui/dialog", () => ({
     Dialog: ({ open, children }: { open: boolean; children: React.ReactNode }) =>
@@ -139,6 +145,19 @@ vi.mock("@/lib/hooks/use-signature", () => ({
     useOrgSignaturePreview: (options?: unknown) => mockUseOrgSignaturePreview(options),
 }))
 
+vi.mock("@/components/email/EmailAttachmentsPanel", () => ({
+    EmailAttachmentsPanel: ({
+        onSelectionChange,
+    }: {
+        onSelectionChange: (state: typeof mockAttachmentSelectionState) => void
+    }) => {
+        React.useEffect(() => {
+            onSelectionChange(mockAttachmentSelectionState)
+        }, [onSelectionChange])
+        return <div data-testid="email-attachments-panel" />
+    },
+}))
+
 const baseSurrogateData = {
     id: "sur-1",
     email: "ashley@example.com",
@@ -152,6 +171,12 @@ const baseSurrogateData = {
 describe("EmailComposeDialog", () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        mockAttachmentSelectionState = {
+            selectedAttachmentIds: [],
+            hasBlockingAttachments: false,
+            totalBytes: 0,
+            errorMessage: null,
+        }
         mockUseSendSurrogateEmail.mockReturnValue({
             mutateAsync: vi.fn().mockResolvedValue({ success: true }),
             isPending: false,
@@ -549,6 +574,157 @@ describe("EmailComposeDialog", () => {
             expect(proseBody).toHaveTextContent("Owner: Jordan Case Manager")
             expect(proseBody).toHaveTextContent("Book here: https://app.surrogacyforce.com/book/jordan")
             expect(proseBody).toHaveTextContent("Unknown: {{custom_var}}")
+        })
+    })
+
+    it("forwards selected attachment ids in send payload", async () => {
+        const templateId = "tpl-attachment-send"
+        const mutateAsync = vi.fn().mockResolvedValue({ success: true })
+        mockUseSendSurrogateEmail.mockReturnValue({
+            mutateAsync,
+            isPending: false,
+            isError: false,
+            isSuccess: false,
+            error: null,
+        })
+
+        mockAttachmentSelectionState = {
+            selectedAttachmentIds: ["att-1", "att-2"],
+            hasBlockingAttachments: false,
+            totalBytes: 1024,
+            errorMessage: null,
+        }
+
+        mockUseEmailTemplates.mockReturnValue({
+            data: [
+                {
+                    id: templateId,
+                    name: "Attachment Template",
+                    subject: "Welcome {{full_name}}",
+                    from_email: null,
+                    is_active: true,
+                    scope: "org",
+                    owner_user_id: null,
+                    owner_name: null,
+                    is_system_template: false,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+            ],
+            isLoading: false,
+        })
+
+        mockUseEmailTemplate.mockImplementation((id: string | null) => {
+            if (id !== templateId) return { data: null, isLoading: false }
+            return {
+                data: {
+                    id: templateId,
+                    organization_id: "org-1",
+                    created_by_user_id: null,
+                    name: "Attachment Template",
+                    subject: "Welcome {{full_name}}",
+                    from_email: null,
+                    body: "<p>Hello {{full_name}}</p>",
+                    is_active: true,
+                    scope: "org",
+                    owner_user_id: null,
+                    owner_name: null,
+                    source_template_id: null,
+                    is_system_template: false,
+                    current_version: 1,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+                isLoading: false,
+            }
+        })
+
+        render(
+            <EmailComposeDialog
+                open
+                onOpenChange={vi.fn()}
+                surrogateData={baseSurrogateData}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "Attachment Template" }))
+        fireEvent.click(screen.getByRole("button", { name: /send email/i }))
+
+        await waitFor(() => {
+            expect(mutateAsync).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    surrogateId: "sur-1",
+                    data: expect.objectContaining({
+                        attachment_ids: ["att-1", "att-2"],
+                    }),
+                })
+            )
+        })
+    })
+
+    it("disables send when attachment selection is blocked", async () => {
+        const templateId = "tpl-blocked-attachments"
+        mockAttachmentSelectionState = {
+            selectedAttachmentIds: ["att-pending"],
+            hasBlockingAttachments: true,
+            totalBytes: 1024,
+            errorMessage: "All selected attachments must be clean before sending.",
+        }
+
+        mockUseEmailTemplates.mockReturnValue({
+            data: [
+                {
+                    id: templateId,
+                    name: "Blocked Attachment Template",
+                    subject: "Hello {{full_name}}",
+                    from_email: null,
+                    is_active: true,
+                    scope: "org",
+                    owner_user_id: null,
+                    owner_name: null,
+                    is_system_template: false,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+            ],
+            isLoading: false,
+        })
+        mockUseEmailTemplate.mockImplementation((id: string | null) => {
+            if (id !== templateId) return { data: null, isLoading: false }
+            return {
+                data: {
+                    id: templateId,
+                    organization_id: "org-1",
+                    created_by_user_id: null,
+                    name: "Blocked Attachment Template",
+                    subject: "Hello {{full_name}}",
+                    from_email: null,
+                    body: "<p>Body</p>",
+                    is_active: true,
+                    scope: "org",
+                    owner_user_id: null,
+                    owner_name: null,
+                    source_template_id: null,
+                    is_system_template: false,
+                    current_version: 1,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+                isLoading: false,
+            }
+        })
+
+        render(
+            <EmailComposeDialog
+                open
+                onOpenChange={vi.fn()}
+                surrogateData={baseSurrogateData}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "Blocked Attachment Template" }))
+        await waitFor(() => {
+            expect(screen.getByRole("button", { name: /send email/i })).toBeDisabled()
         })
     })
 })

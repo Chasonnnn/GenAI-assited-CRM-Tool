@@ -193,6 +193,7 @@ export interface SurrogateSendEmailPayload {
     body?: string;
     provider?: 'auto' | 'gmail' | 'resend';
     idempotency_key?: string;
+    attachment_ids?: string[];
 }
 
 export interface SurrogateSendEmailResponse {
