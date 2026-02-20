@@ -24,6 +24,8 @@ class GoogleCalendarSyncScheduleCounts(TypedDict):
     connected_users: int
     jobs_created: int
     duplicates_skipped: int
+    task_jobs_created: int
+    task_duplicates_skipped: int
     watch_jobs_created: int
     watch_duplicates_skipped: int
 
@@ -65,6 +67,8 @@ def schedule_google_calendar_sync_jobs(
     connected_users = len(targets)
     jobs_created = 0
     duplicates_skipped = 0
+    task_jobs_created = 0
+    task_duplicates_skipped = 0
     watch_jobs_created = 0
     watch_duplicates_skipped = 0
 
@@ -98,8 +102,40 @@ def schedule_google_calendar_sync_jobs(
             raise
 
         try:
+            task_idempotency_key = f"google-tasks-sync:{user_id}:{sync_bucket}"
+            task_existing = (
+                db.query(Job).filter(Job.idempotency_key == task_idempotency_key).first()
+            )
+            if task_existing:
+                task_duplicates_skipped += 1
+            else:
+                task_run_at = now + timedelta(seconds=(UUID(user_id).int % 120))
+                job_service.schedule_job(
+                    db=db,
+                    job_type=JobType.GOOGLE_TASKS_SYNC,
+                    org_id=UUID(org_id),
+                    payload={"user_id": user_id},
+                    run_at=task_run_at,
+                    idempotency_key=task_idempotency_key,
+                )
+                task_jobs_created += 1
+        except IntegrityError:
+            db.rollback()
+            task_duplicates_skipped += 1
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "Failed to enqueue google tasks sync job for user=%s org=%s",
+                user_id,
+                org_id,
+            )
+            raise
+
+        try:
             watch_idempotency_key = f"google-calendar-watch-refresh:{user_id}:{watch_bucket}"
-            watch_existing = db.query(Job).filter(Job.idempotency_key == watch_idempotency_key).first()
+            watch_existing = (
+                db.query(Job).filter(Job.idempotency_key == watch_idempotency_key).first()
+            )
             if watch_existing:
                 watch_duplicates_skipped += 1
                 continue
@@ -130,6 +166,8 @@ def schedule_google_calendar_sync_jobs(
         "connected_users": connected_users,
         "jobs_created": jobs_created,
         "duplicates_skipped": duplicates_skipped,
+        "task_jobs_created": task_jobs_created,
+        "task_duplicates_skipped": task_duplicates_skipped,
         "watch_jobs_created": watch_jobs_created,
         "watch_duplicates_skipped": watch_duplicates_skipped,
     }

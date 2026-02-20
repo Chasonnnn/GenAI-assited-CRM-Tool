@@ -186,6 +186,7 @@ GMAIL_SCOPES = [
 GOOGLE_CALENDAR_SCOPES = [
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/calendar.events",
+    "https://www.googleapis.com/auth/tasks",
     "https://www.googleapis.com/auth/userinfo.email",
 ]
 

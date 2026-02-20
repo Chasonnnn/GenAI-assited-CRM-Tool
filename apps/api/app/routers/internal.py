@@ -327,6 +327,8 @@ class GoogleCalendarSyncScheduleResponse(BaseModel):
     connected_users: int
     jobs_created: int
     duplicates_skipped: int
+    task_jobs_created: int
+    task_duplicates_skipped: int
     watch_jobs_created: int
     watch_duplicates_skipped: int
 
@@ -350,6 +352,8 @@ def google_calendar_sync_schedule(x_internal_secret: str = Header(...)):
         connected_users=counts["connected_users"],
         jobs_created=counts["jobs_created"],
         duplicates_skipped=counts["duplicates_skipped"],
+        task_jobs_created=counts["task_jobs_created"],
+        task_duplicates_skipped=counts["task_duplicates_skipped"],
         watch_jobs_created=counts["watch_jobs_created"],
         watch_duplicates_skipped=counts["watch_duplicates_skipped"],
     )

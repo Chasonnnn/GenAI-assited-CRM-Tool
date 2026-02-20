@@ -54,6 +54,14 @@ class Task(Base):
         Index("idx_tasks_org_created", "organization_id", "created_at"),
         Index("idx_tasks_org_updated", "organization_id", "updated_at"),
         Index(
+            "idx_tasks_google_task_lookup",
+            "organization_id",
+            "owner_type",
+            "owner_id",
+            "google_task_list_id",
+            "google_task_id",
+        ),
+        Index(
             "idx_tasks_due",
             "organization_id",
             "due_date",
@@ -117,6 +125,11 @@ class Task(Base):
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     completed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    google_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    google_task_list_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    google_task_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)

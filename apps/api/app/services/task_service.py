@@ -26,6 +26,36 @@ from app.utils.normalization import escape_like_string
 logger = logging.getLogger(__name__)
 
 
+def _sync_task_to_google_best_effort(db: Session, task: Task) -> None:
+    """Best-effort outbound Google Tasks sync."""
+    try:
+        from app.services import google_tasks_sync_service
+
+        google_tasks_sync_service.sync_platform_task_to_google(db, task)
+    except Exception as exc:
+        logger.warning("Task Google sync failed task=%s error=%s", task.id, exc)
+
+
+def _delete_task_from_google_best_effort(db: Session, task: Task) -> None:
+    """Best-effort deletion from Google Tasks."""
+    try:
+        from app.services import google_tasks_sync_service
+
+        google_tasks_sync_service.delete_platform_task_from_google(db, task)
+    except Exception as exc:
+        logger.warning("Task Google delete sync failed task=%s error=%s", task.id, exc)
+
+
+def _pull_google_tasks_for_user_best_effort(db: Session, user_id: UUID, org_id: UUID) -> None:
+    """Best-effort inbound Google Tasks pull for a user."""
+    try:
+        from app.services import google_tasks_sync_service
+
+        google_tasks_sync_service.sync_google_tasks_for_user(db, user_id=user_id, org_id=org_id)
+    except Exception as exc:
+        logger.warning("Task Google pull failed user=%s org=%s error=%s", user_id, org_id, exc)
+
+
 def create_task(
     db: Session,
     org_id: UUID,
@@ -61,6 +91,8 @@ def create_task(
     db.add(task)
     db.commit()
     db.refresh(task)
+
+    _sync_task_to_google_best_effort(db, task)
 
     # Notify assignee (if assigned to user different from creator)
     if owner_type == "user" and owner_id != user_id:
@@ -122,6 +154,8 @@ def update_task(
     db.commit()
     db.refresh(task)
 
+    _sync_task_to_google_best_effort(db, task)
+
     # Notify new assignee if reassigned (and not self-assign)
     if (
         actor_user_id
@@ -167,6 +201,7 @@ def complete_task(
     if commit:
         db.commit()
         db.refresh(task)
+        _sync_task_to_google_best_effort(db, task)
     else:
         db.flush()
 
@@ -190,6 +225,7 @@ def uncomplete_task(
     task.completed_by_user_id = None
     db.commit()
     db.refresh(task)
+    _sync_task_to_google_best_effort(db, task)
     if emit_events:
         from app.services import dashboard_events
 
@@ -214,6 +250,7 @@ def bulk_complete_tasks(
     from app.services import surrogate_service, dashboard_events
 
     results: dict = {"completed": 0, "failed": []}
+    completed_tasks_to_sync: list[Task] = []
 
     for task_id in task_ids:
         try:
@@ -253,6 +290,7 @@ def bulk_complete_tasks(
                 continue
 
             complete_task(db, task, session.user_id, commit=False)
+            completed_tasks_to_sync.append(task)
             results["completed"] += 1
 
         except HTTPException as exc:
@@ -264,6 +302,8 @@ def bulk_complete_tasks(
             )
 
     db.commit()
+    for completed_task in completed_tasks_to_sync:
+        _sync_task_to_google_best_effort(db, completed_task)
     dashboard_events.push_dashboard_stats(db, session.org_id)
 
     return BulkCompleteResponse(completed=results["completed"], failed=results["failed"])
@@ -288,6 +328,7 @@ def delete_task(
     emit_events: bool = False,
 ) -> None:
     """Delete a task."""
+    _delete_task_from_google_best_effort(db, task)
     db.delete(task)
     db.commit()
     if emit_events:
@@ -512,6 +553,9 @@ def list_tasks(
     from datetime import date
     from app.db.enums import Role, OwnerType
     from app.db.models import Surrogate
+
+    if user_id:
+        _pull_google_tasks_for_user_best_effort(db, user_id, org_id)
 
     query = db.query(Task).filter(Task.organization_id == org_id)
 

@@ -86,6 +86,8 @@ async def test_internal_google_calendar_sync_schedules_jobs_for_connected_users(
     assert data["duplicates_skipped"] == 0
     assert data["watch_jobs_created"] == 2
     assert data["watch_duplicates_skipped"] == 0
+    assert data["task_jobs_created"] == 2
+    assert data["task_duplicates_skipped"] == 0
 
     jobs = db.query(Job).filter(Job.job_type == JobType.GOOGLE_CALENDAR_SYNC.value).all()
     assert len(jobs) == 2
@@ -96,6 +98,9 @@ async def test_internal_google_calendar_sync_schedules_jobs_for_connected_users(
         db.query(Job).filter(Job.job_type == JobType.GOOGLE_CALENDAR_WATCH_REFRESH.value).all()
     )
     assert len(watch_jobs) == 2
+
+    task_jobs = db.query(Job).filter(Job.job_type == JobType.GOOGLE_TASKS_SYNC.value).all()
+    assert len(task_jobs) == 2
 
 
 @pytest.mark.asyncio
@@ -140,6 +145,8 @@ async def test_internal_google_calendar_sync_skips_duplicate_jobs_in_same_window
     assert first.json()["duplicates_skipped"] == 0
     assert first.json()["watch_jobs_created"] == 1
     assert first.json()["watch_duplicates_skipped"] == 0
+    assert first.json()["task_jobs_created"] == 1
+    assert first.json()["task_duplicates_skipped"] == 0
 
     second = await client.post(
         "/internal/scheduled/google-calendar-sync",
@@ -151,6 +158,8 @@ async def test_internal_google_calendar_sync_skips_duplicate_jobs_in_same_window
     assert second.json()["duplicates_skipped"] == 1
     assert second.json()["watch_jobs_created"] == 0
     assert second.json()["watch_duplicates_skipped"] == 1
+    assert second.json()["task_jobs_created"] == 0
+    assert second.json()["task_duplicates_skipped"] == 1
 
     jobs = db.query(Job).filter(Job.job_type == JobType.GOOGLE_CALENDAR_SYNC.value).all()
     assert len(jobs) == 1
@@ -159,3 +168,6 @@ async def test_internal_google_calendar_sync_skips_duplicate_jobs_in_same_window
         db.query(Job).filter(Job.job_type == JobType.GOOGLE_CALENDAR_WATCH_REFRESH.value).all()
     )
     assert len(watch_jobs) == 1
+
+    task_jobs = db.query(Job).filter(Job.job_type == JobType.GOOGLE_TASKS_SYNC.value).all()
+    assert len(task_jobs) == 1

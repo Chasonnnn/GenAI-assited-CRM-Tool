@@ -95,6 +95,71 @@ def test_task_service_bulk_complete_emits_dashboard(db, test_org, test_user, mon
     assert calls["count"] == 1
 
 
+def test_task_service_create_triggers_google_tasks_sync(db, test_org, test_user, monkeypatch):
+    from app.schemas.task import TaskCreate
+    from app.services import task_service
+
+    calls: list[uuid.UUID] = []
+
+    def fake_sync_platform_task_to_google(db, task):
+        calls.append(task.id)
+
+    monkeypatch.setattr(
+        "app.services.google_tasks_sync_service.sync_platform_task_to_google",
+        fake_sync_platform_task_to_google,
+    )
+
+    task = task_service.create_task(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        data=TaskCreate(title="Sync to Google"),
+    )
+
+    assert calls == [task.id]
+
+
+def test_task_service_list_triggers_google_tasks_pull_for_user(
+    db, test_org, test_user, monkeypatch
+):
+    from app.db.enums import TaskType
+    from app.db.models import Task
+    from app.services import task_service
+
+    db.add(
+        Task(
+            organization_id=test_org.id,
+            created_by_user_id=test_user.id,
+            owner_type="user",
+            owner_id=test_user.id,
+            title="Task 1",
+            task_type=TaskType.OTHER.value,
+        )
+    )
+    db.commit()
+
+    calls: list[tuple[uuid.UUID, uuid.UUID]] = []
+
+    def fake_sync_google_tasks_for_user(db, *, user_id, org_id):
+        calls.append((user_id, org_id))
+        return 1
+
+    monkeypatch.setattr(
+        "app.services.google_tasks_sync_service.sync_google_tasks_for_user",
+        fake_sync_google_tasks_for_user,
+    )
+
+    task_service.list_tasks(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        page=1,
+        per_page=20,
+    )
+
+    assert calls == [(test_user.id, test_org.id)]
+
+
 def test_surrogate_change_status_emits_dashboard(db, test_org, test_user, monkeypatch):
     from app.schemas.surrogate import SurrogateCreate
     from app.services import dashboard_events, pipeline_service, surrogate_service

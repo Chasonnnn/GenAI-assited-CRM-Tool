@@ -128,6 +128,10 @@ async def test_google_calendar_connect_sets_state_cookie_and_returns_auth_url(
     qs = parse_qs(parsed.query)
     assert "state" in qs
     state = qs["state"][0]
+    assert "scope" in qs
+    scopes = set(qs["scope"][0].split(" "))
+    assert "https://www.googleapis.com/auth/calendar.events" in scopes
+    assert "https://www.googleapis.com/auth/tasks" in scopes
 
     cookie = SimpleCookie()
     for header in response.headers.get_list("set-cookie"):
@@ -453,9 +457,9 @@ async def test_get_google_events_encodes_calendar_id_in_request(monkeypatch):
     )
 
     assert requested_urls
-    assert (
-        "en.usa%23holiday%40group.v.calendar.google.com" in requested_urls[0]
-    ), "Calendar ID must be URL-encoded in path requests"
+    assert "en.usa%23holiday%40group.v.calendar.google.com" in requested_urls[0], (
+        "Calendar ID must be URL-encoded in path requests"
+    )
 
 
 @pytest.mark.asyncio

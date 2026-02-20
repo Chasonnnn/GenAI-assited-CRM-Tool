@@ -91,3 +91,36 @@ async def process_google_calendar_watch_refresh(db, job) -> None:
         job.organization_id,
         refreshed,
     )
+
+
+async def process_google_tasks_sync(db, job) -> None:
+    """
+    Reconcile Google Tasks for a single user into platform tasks.
+
+    Payload:
+      - user_id (required): target user UUID
+    """
+    from app.services import google_tasks_sync_service
+
+    payload = job.payload or {}
+    user_id_raw = payload.get("user_id")
+    if not user_id_raw:
+        raise ValueError("Missing user_id in google_tasks_sync payload")
+
+    try:
+        user_id = UUID(str(user_id_raw))
+    except ValueError as exc:
+        raise ValueError("Invalid user_id in google_tasks_sync payload") from exc
+
+    changed_count = google_tasks_sync_service.sync_google_tasks_for_user(
+        db=db,
+        user_id=user_id,
+        org_id=job.organization_id,
+    )
+    db.commit()
+    logger.info(
+        "Google tasks sync complete for user=%s org=%s changed=%s",
+        user_id,
+        job.organization_id,
+        changed_count,
+    )

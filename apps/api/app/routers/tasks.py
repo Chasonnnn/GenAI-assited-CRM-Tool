@@ -91,6 +91,7 @@ def list_tasks(
         db=db,
         org_id=session.org_id,
         user_role=session.role,
+        user_id=session.user_id,
         page=page,
         per_page=per_page,
         q=q,

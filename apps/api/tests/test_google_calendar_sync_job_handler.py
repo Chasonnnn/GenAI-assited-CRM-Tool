@@ -78,3 +78,35 @@ async def test_google_calendar_watch_refresh_job_handler_invokes_watch_ensure(
 
     assert called["user_id"] == test_auth.user.id
     assert called["calendar_id"] == "primary"
+
+
+@pytest.mark.asyncio
+async def test_google_tasks_sync_job_handler_invokes_reconciler(db, test_auth, monkeypatch):
+    from app.jobs.handlers import appointments as appointments_handler
+
+    called: dict[str, object] = {}
+
+    def fake_sync_google_tasks_for_user(db, *, user_id, org_id):
+        called["user_id"] = user_id
+        called["org_id"] = org_id
+        return 3
+
+    monkeypatch.setattr(
+        "app.services.google_tasks_sync_service.sync_google_tasks_for_user",
+        fake_sync_google_tasks_for_user,
+    )
+
+    job = type(
+        "Job",
+        (),
+        {
+            "id": uuid.uuid4(),
+            "organization_id": test_auth.org.id,
+            "payload": {"user_id": str(test_auth.user.id)},
+        },
+    )()
+
+    await appointments_handler.process_google_tasks_sync(db, job)
+
+    assert called["user_id"] == test_auth.user.id
+    assert called["org_id"] == test_auth.org.id
