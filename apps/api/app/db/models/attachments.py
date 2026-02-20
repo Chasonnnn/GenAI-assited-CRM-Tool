@@ -15,7 +15,7 @@ from app.db.base import Base
 
 
 if TYPE_CHECKING:
-    from app.db.models import Organization, Surrogate, User
+    from app.db.models import EmailLogAttachment, Organization, Surrogate, User
 
 
 class Attachment(Base):
@@ -97,3 +97,4 @@ class Attachment(Base):
     surrogate: Mapped["Surrogate"] = relationship()
     uploaded_by: Mapped["User | None"] = relationship(foreign_keys=[uploaded_by_user_id])
     deleted_by: Mapped["User | None"] = relationship(foreign_keys=[deleted_by_user_id])
+    email_log_links: Mapped[list["EmailLogAttachment"]] = relationship(back_populates="attachment")

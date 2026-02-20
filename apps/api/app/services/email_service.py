@@ -7,6 +7,7 @@ from email.utils import parseaddr
 from html import escape as html_escape
 import re
 from datetime import datetime, timezone
+from typing import TypedDict
 from uuid import UUID
 
 from sqlalchemy import func
@@ -15,7 +16,7 @@ from sqlalchemy.orm import Session
 import nh3
 from email_validator import EmailNotValidError, validate_email
 
-from app.db.models import EmailTemplate, EmailLog, Job, Surrogate
+from app.db.models import Attachment, EmailLog, EmailLogAttachment, EmailTemplate, Job, Surrogate
 from app.db.enums import EmailStatus, JobType
 from app.services.job_service import enqueue_job
 from app.services import email_sender, version_service
@@ -155,6 +156,23 @@ ALLOWED_TEMPLATE_STYLE_PROPERTIES = {
 }
 
 _UNSET = object()
+
+EMAIL_ATTACHMENT_MAX_COUNT = 10
+EMAIL_ATTACHMENT_MAX_TOTAL_BYTES = 18 * 1024 * 1024
+
+
+class EmailAttachmentNotFoundError(LookupError):
+    """Raised when one or more requested attachments are not visible to the caller."""
+
+
+class EmailAttachmentValidationError(ValueError):
+    """Raised when attachment selection violates email-send constraints."""
+
+
+class ProviderAttachment(TypedDict):
+    filename: str
+    content_type: str
+    content_bytes: bytes
 
 
 def sanitize_template_html(html: str) -> str:
@@ -949,6 +967,139 @@ def build_appointment_template_variables(
     return variables
 
 
+def resolve_surrogate_email_attachments(
+    db: Session,
+    org_id: UUID,
+    surrogate_id: UUID,
+    attachment_ids: list[UUID] | None,
+) -> list[Attachment]:
+    """Resolve and validate selected surrogate attachments for outbound email."""
+    ordered_ids = list(dict.fromkeys(attachment_ids or []))
+    if not ordered_ids:
+        return []
+
+    if len(ordered_ids) > EMAIL_ATTACHMENT_MAX_COUNT:
+        raise EmailAttachmentValidationError(
+            f"You can attach at most {EMAIL_ATTACHMENT_MAX_COUNT} files per email."
+        )
+
+    attachments = (
+        db.query(Attachment)
+        .filter(
+            Attachment.organization_id == org_id,
+            Attachment.id.in_(ordered_ids),
+            Attachment.deleted_at.is_(None),
+        )
+        .all()
+    )
+    attachments_by_id = {attachment.id: attachment for attachment in attachments}
+
+    resolved: list[Attachment] = []
+    for attachment_id in ordered_ids:
+        attachment = attachments_by_id.get(attachment_id)
+        if not attachment or attachment.surrogate_id != surrogate_id:
+            raise EmailAttachmentNotFoundError("Attachment not found")
+
+        if attachment.quarantined or attachment.scan_status != "clean":
+            raise EmailAttachmentValidationError(
+                f"Attachment '{attachment.filename}' is not ready for sending. "
+                "Only clean attachments can be emailed."
+            )
+        resolved.append(attachment)
+
+    total_bytes = sum(attachment.file_size for attachment in resolved)
+    if total_bytes > EMAIL_ATTACHMENT_MAX_TOTAL_BYTES:
+        limit_mb = EMAIL_ATTACHMENT_MAX_TOTAL_BYTES // (1024 * 1024)
+        raise EmailAttachmentValidationError(
+            f"Total attachment size exceeds {limit_mb} MiB email limit."
+        )
+
+    return resolved
+
+
+def link_attachments_to_email_log(
+    db: Session,
+    org_id: UUID,
+    email_log_id: UUID,
+    attachments: list[Attachment],
+) -> None:
+    """Persist attachment links for an EmailLog."""
+    unique_attachments = list({attachment.id: attachment for attachment in attachments}.values())
+    for attachment in unique_attachments:
+        db.add(
+            EmailLogAttachment(
+                organization_id=org_id,
+                email_log_id=email_log_id,
+                attachment_id=attachment.id,
+            )
+        )
+    db.flush()
+
+
+def list_email_log_attachments(
+    db: Session,
+    org_id: UUID,
+    email_log_id: UUID,
+) -> list[Attachment]:
+    """Return linked attachments for an EmailLog in insertion order."""
+    rows = (
+        db.query(Attachment)
+        .join(EmailLogAttachment, EmailLogAttachment.attachment_id == Attachment.id)
+        .filter(
+            EmailLogAttachment.organization_id == org_id,
+            EmailLogAttachment.email_log_id == email_log_id,
+            Attachment.organization_id == org_id,
+            Attachment.deleted_at.is_(None),
+        )
+        .order_by(EmailLogAttachment.created_at.asc())
+        .all()
+    )
+    return rows
+
+
+def load_email_log_provider_attachments(
+    db: Session,
+    org_id: UUID,
+    email_log_id: UUID,
+) -> list[ProviderAttachment]:
+    """Load linked email attachments as provider-ready byte payloads."""
+    from app.services import attachment_service
+
+    attachments = list_email_log_attachments(db, org_id, email_log_id)
+    if not attachments:
+        return []
+
+    if len(attachments) > EMAIL_ATTACHMENT_MAX_COUNT:
+        raise EmailAttachmentValidationError(
+            f"Email has too many attachments ({len(attachments)}). "
+            f"Max allowed is {EMAIL_ATTACHMENT_MAX_COUNT}."
+        )
+
+    total_bytes = 0
+    provider_attachments: list[ProviderAttachment] = []
+    for attachment in attachments:
+        if attachment.quarantined or attachment.scan_status != "clean":
+            raise EmailAttachmentValidationError(
+                f"Attachment '{attachment.filename}' is not clean and cannot be sent."
+            )
+        total_bytes += int(attachment.file_size)
+        provider_attachments.append(
+            ProviderAttachment(
+                filename=attachment.filename,
+                content_type=attachment.content_type,
+                content_bytes=attachment_service.load_file_bytes(attachment.storage_key),
+            )
+        )
+
+    if total_bytes > EMAIL_ATTACHMENT_MAX_TOTAL_BYTES:
+        limit_mb = EMAIL_ATTACHMENT_MAX_TOTAL_BYTES // (1024 * 1024)
+        raise EmailAttachmentValidationError(
+            f"Total attachment size exceeds {limit_mb} MiB email limit."
+        )
+
+    return provider_attachments
+
+
 def send_email(
     db: Session,
     org_id: UUID,
@@ -957,6 +1108,7 @@ def send_email(
     subject: str,
     body: str,
     surrogate_id: UUID | None = None,
+    attachments: list[Attachment] | None = None,
     schedule_at: datetime | None = None,
     commit: bool = True,
     ignore_opt_out: bool = False,
@@ -999,6 +1151,14 @@ def send_email(
     db.add(email_log)
     db.flush()  # Get ID before creating job
 
+    if attachments:
+        link_attachments_to_email_log(
+            db=db,
+            org_id=org_id,
+            email_log_id=email_log.id,
+            attachments=attachments,
+        )
+
     # Schedule job to send
     job = enqueue_job(
         db=db,
@@ -1034,6 +1194,7 @@ async def send_immediate_email(
     idempotency_key: str | None = None,
     sender_user_id: UUID | None = None,
     prefer_platform: bool = True,
+    attachments: list[ProviderAttachment] | None = None,
 ) -> JsonObject:
     """
     Send an email immediately via the configured sender (platform or Gmail).
@@ -1074,6 +1235,7 @@ async def send_immediate_email(
         template_id=template_id,
         surrogate_id=surrogate_id,
         idempotency_key=idempotency_key,
+        attachments=attachments,
     )
 
 

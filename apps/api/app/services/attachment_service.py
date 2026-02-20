@@ -267,6 +267,26 @@ def generate_signed_url(storage_key: str, expires_in_seconds: int | None = None)
         return f"/attachments/local/{storage_key}"
 
 
+def load_file_bytes(storage_key: str) -> bytes:
+    """Load raw file bytes from the configured storage backend."""
+    backend = _get_storage_backend()
+
+    if backend == "s3":
+        s3 = _get_s3_client()
+        bucket = getattr(settings, "S3_BUCKET", "crm-attachments")
+        response = s3.get_object(Bucket=bucket, Key=storage_key)
+        body = response.get("Body")
+        if body is None:
+            raise FileNotFoundError(f"Attachment storage object missing: {storage_key}")
+        return body.read()
+
+    path = os.path.join(_get_local_storage_path(), storage_key)
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Attachment storage object missing: {storage_key}")
+    with open(path, "rb") as f:
+        return f.read()
+
+
 def delete_file(storage_key: str) -> None:
     """Delete file from storage (for permanent deletion)."""
     backend = _get_storage_backend()

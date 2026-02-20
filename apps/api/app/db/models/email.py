@@ -27,7 +27,7 @@ from app.db.enums import (
 )
 
 if TYPE_CHECKING:
-    from app.db.models import Job, Organization, Surrogate, User
+    from app.db.models import Attachment, Job, Organization, Surrogate, User
 
 
 class EmailTemplate(Base):
@@ -200,6 +200,49 @@ class EmailLog(Base):
     job: Mapped["Job | None"] = relationship()
     template: Mapped["EmailTemplate | None"] = relationship()
     surrogate: Mapped["Surrogate | None"] = relationship()
+    attachment_links: Mapped[list["EmailLogAttachment"]] = relationship(
+        back_populates="email_log",
+        cascade="all, delete-orphan",
+    )
+
+
+class EmailLogAttachment(Base):
+    """Join table linking sent emails to attachment records."""
+
+    __tablename__ = "email_log_attachments"
+    __table_args__ = (
+        UniqueConstraint(
+            "email_log_id", "attachment_id", name="uq_email_log_attachments_unique_link"
+        ),
+        Index("idx_email_log_attachments_org", "organization_id"),
+        Index("idx_email_log_attachments_email_log", "email_log_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    email_log_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("email_logs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    attachment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("attachments.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+
+    organization: Mapped["Organization"] = relationship()
+    email_log: Mapped["EmailLog"] = relationship(back_populates="attachment_links")
+    attachment: Mapped["Attachment"] = relationship(back_populates="email_log_links")
 
 
 # =============================================================================

@@ -1,5 +1,6 @@
 import httpx
 import pytest
+import base64
 
 
 @pytest.mark.asyncio
@@ -82,3 +83,59 @@ async def test_send_resend_email_treats_409_as_duplicate_success(monkeypatch):
     )
 
     assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_send_resend_email_includes_attachment_payload(monkeypatch):
+    from app.services import platform_email_service
+
+    monkeypatch.setattr(platform_email_service.settings, "PLATFORM_RESEND_API_KEY", "re_test_key")
+
+    captured: dict[str, object] = {}
+
+    class _FakeAsyncClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, _url, headers=None, json=None):
+            captured["headers"] = headers
+            captured["payload"] = json
+            return httpx.Response(200, json={"id": "msg_123"})
+
+    async def fake_request_with_retries(request_fn, **_kwargs):
+        return await request_fn()
+
+    monkeypatch.setattr(
+        platform_email_service.httpx, "AsyncClient", lambda **_kwargs: _FakeAsyncClient()
+    )
+    monkeypatch.setattr(platform_email_service, "request_with_retries", fake_request_with_retries)
+
+    attachment_bytes = b"hello world"
+    result = await platform_email_service._send_resend_email(
+        to_email="to@example.com",
+        subject="Hello",
+        from_email="Invites <invites@surrogacyforce.com>",
+        html="<p>Hello</p>",
+        text="Hello",
+        idempotency_key="attachments-idem",
+        attachments=[
+            {
+                "filename": "greeting.txt",
+                "content_type": "text/plain",
+                "content_bytes": attachment_bytes,
+            }
+        ],
+    )
+
+    assert result["success"] is True
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert "attachments" in payload
+    assert payload["attachments"][0]["filename"] == "greeting.txt"
+    assert payload["attachments"][0]["type"] == "text/plain"
+    assert payload["attachments"][0]["content"] == base64.b64encode(attachment_bytes).decode(
+        "ascii"
+    )

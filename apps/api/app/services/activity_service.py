@@ -251,8 +251,19 @@ def log_email_sent(
     email_log_id: UUID,
     subject: str,
     provider: str,
+    attachments: list[object] | None = None,
 ) -> SurrogateActivityLog:
     """Log email sent without storing subject/body."""
+    attachment_details = []
+    for attachment in attachments or []:
+        attachment_details.append(
+            {
+                "attachment_id": str(getattr(attachment, "id", "")),
+                "filename": getattr(attachment, "filename", ""),
+                "content_type": getattr(attachment, "content_type", ""),
+                "file_size": int(getattr(attachment, "file_size", 0) or 0),
+            }
+        )
     return log_activity(
         db=db,
         surrogate_id=surrogate_id,
@@ -262,6 +273,7 @@ def log_email_sent(
         details={
             "email_log_id": str(email_log_id),
             "provider": provider,
+            "attachments": attachment_details,
         },
     )
 

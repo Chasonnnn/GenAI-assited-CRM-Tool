@@ -37,7 +37,7 @@ from app.db.models.auth import (
     UserSession,
 )
 from app.db.models.campaigns import Campaign, CampaignRecipient, CampaignRun, CampaignTrackingEvent
-from app.db.models.email import EmailLog, EmailSuppression, EmailTemplate
+from app.db.models.email import EmailLog, EmailLogAttachment, EmailSuppression, EmailTemplate
 from app.db.models.forms import (
     Form,
     FormFieldMapping,
@@ -141,6 +141,7 @@ __all__ = [
     "DataRetentionPolicy",
     "ImportMappingCorrection",
     "EmailLog",
+    "EmailLogAttachment",
     "EmailSuppression",
     "EmailTemplate",
     "EntityNote",

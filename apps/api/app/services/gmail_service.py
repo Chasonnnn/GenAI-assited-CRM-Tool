@@ -8,6 +8,8 @@ import logging
 import uuid
 from uuid import UUID
 from datetime import datetime, timezone
+from email import encoders
+from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -16,7 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.enums import EmailStatus
-from app.db.models import EmailLog
+from app.db.models import Attachment, EmailLog
 from app.services import oauth_service
 from app.services.http_service import DEFAULT_RETRY_STATUSES, request_with_retries
 from app.types import JsonObject
@@ -101,6 +103,7 @@ async def send_email(
     body: str,
     html: bool = False,
     headers: dict[str, str] | None = None,
+    attachments: list[dict[str, object]] | None = None,
 ) -> JsonObject:
     """Send an email via Gmail API.
 
@@ -126,11 +129,20 @@ async def send_email(
 
     try:
         # Build email message
-        if html:
-            msg = MIMEMultipart("alternative")
-            msg.attach(MIMEText(body, "html"))
+        if attachments:
+            msg = MIMEMultipart("mixed")
+            if html:
+                alt_part = MIMEMultipart("alternative")
+                alt_part.attach(MIMEText(body, "html"))
+                msg.attach(alt_part)
+            else:
+                msg.attach(MIMEText(body))
         else:
-            msg = MIMEText(body)
+            if html:
+                msg = MIMEMultipart("alternative")
+                msg.attach(MIMEText(body, "html"))
+            else:
+                msg = MIMEText(body)
 
         msg["To"] = to
         msg["From"] = sender_email
@@ -139,6 +151,23 @@ async def send_email(
             for key, value in headers.items():
                 if key and value:
                     msg[key] = value
+
+        if attachments:
+            for attachment in attachments:
+                filename = str(attachment.get("filename") or "attachment")
+                content_type = str(attachment.get("content_type") or "application/octet-stream")
+                content_bytes = bytes(attachment.get("content_bytes") or b"")
+
+                maintype, subtype = "application", "octet-stream"
+                if "/" in content_type:
+                    maintype, subtype = content_type.split("/", 1)
+
+                part = MIMEBase(maintype, subtype)
+                part.set_payload(content_bytes)
+                encoders.encode_base64(part)
+                part.add_header("Content-Disposition", "attachment", filename=filename)
+                part.add_header("Content-Type", content_type, name=filename)
+                msg.attach(part)
 
         # Encode message
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
@@ -208,6 +237,8 @@ async def send_email_logged(
     idempotency_key: str | None = None,
     headers: dict[str, str] | None = None,
     ignore_opt_out: bool = False,
+    attachment_ids: list[uuid.UUID] | None = None,
+    attachments: list[dict[str, object]] | None = None,
 ) -> JsonObject:
     """Send a Gmail email with EmailLog tracking + idempotency."""
     from app.services import email_service, unsubscribe_service
@@ -223,6 +254,21 @@ async def send_email_logged(
         )
         if existing:
             return _result_from_log(existing)
+
+    resolved_attachments: list[Attachment] = []
+    provider_attachments = attachments
+    if attachment_ids:
+        if not surrogate_id:
+            return {
+                "success": False,
+                "error": "Attachments require a surrogate context",
+            }
+        resolved_attachments = email_service.resolve_surrogate_email_attachments(
+            db=db,
+            org_id=org_id,
+            surrogate_id=surrogate_id,
+            attachment_ids=attachment_ids,
+        )
 
     if email_service.is_email_suppressed(db, org_id, to, ignore_opt_out=ignore_opt_out):
         email_log = EmailLog(
@@ -257,6 +303,14 @@ async def send_email_logged(
     )
     db.add(email_log)
     try:
+        db.flush()
+        if resolved_attachments:
+            email_service.link_attachments_to_email_log(
+                db=db,
+                org_id=org_id,
+                email_log_id=email_log.id,
+                attachments=resolved_attachments,
+            )
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -272,6 +326,13 @@ async def send_email_logged(
             return _result_from_log(existing)
         raise
     db.refresh(email_log)
+
+    if resolved_attachments:
+        provider_attachments = email_service.load_email_log_provider_attachments(
+            db=db,
+            org_id=org_id,
+            email_log_id=email_log.id,
+        )
 
     if headers is None:
         from app.services import org_service
@@ -291,6 +352,7 @@ async def send_email_logged(
         body=body,
         html=html,
         headers=headers,
+        attachments=provider_attachments,
     )
 
     if result.get("success"):
@@ -328,6 +390,7 @@ class GmailEmailSender:
         template_id: uuid.UUID | None = None,
         surrogate_id: uuid.UUID | None = None,
         idempotency_key: str | None = None,
+        attachments: list[dict[str, object]] | None = None,
     ) -> JsonObject:
         _ = text
         _ = from_email
@@ -342,4 +405,5 @@ class GmailEmailSender:
             template_id=template_id,
             surrogate_id=surrogate_id,
             idempotency_key=idempotency_key,
+            attachments=attachments,
         )

@@ -73,10 +73,29 @@ async def send_email_async(email_log: EmailLog, db=None) -> str:
         if campaign_provider != "resend":
             raise Exception(
                 "Campaign emails must use Resend. "
-                "Set Email provider to Resend in Settings -> Integrations -> Email Configuration."
+                "Set Email provider to Resend in Settings → Integrations → Email Configuration."
             )
-        await _send_via_org_provider(db, email_log, campaign_provider, campaign_run.organization_id)
+        provider_attachments = email_service.load_email_log_provider_attachments(
+            db=db,
+            org_id=email_log.organization_id,
+            email_log_id=email_log.id,
+        )
+        await _send_via_org_provider(
+            db,
+            email_log,
+            campaign_provider,
+            campaign_run.organization_id,
+            attachments=provider_attachments,
+        )
         return "sent"
+
+    provider_attachments: list[dict[str, object]] = []
+    if db:
+        provider_attachments = email_service.load_email_log_provider_attachments(
+            db=db,
+            org_id=email_log.organization_id,
+            email_log_id=email_log.id,
+        )
 
     # Fallback to global RESEND_API_KEY for non-campaign emails
     if not RESEND_API_KEY:
@@ -105,6 +124,7 @@ async def send_email_async(email_log: EmailLog, db=None) -> str:
             from_email=EMAIL_FROM,
             idempotency_key=f"email-log/{email_log.id}",
             unsubscribe_url=unsubscribe_url,
+            attachments=provider_attachments,
         )
         if not success:
             raise Exception(f"Resend send failed: {error}")
@@ -130,7 +150,13 @@ async def send_email_async(email_log: EmailLog, db=None) -> str:
         raise
 
 
-async def _send_via_org_provider(db, email_log: EmailLog, provider: str, org_id) -> None:
+async def _send_via_org_provider(
+    db,
+    email_log: EmailLog,
+    provider: str,
+    org_id,
+    attachments: list[dict[str, object]] | None = None,
+) -> None:
     """Send email using org-level provider configuration."""
     from app.services import resend_settings_service, org_service
 
@@ -163,6 +189,7 @@ async def _send_via_org_provider(db, email_log: EmailLog, provider: str, org_id)
             reply_to=settings.reply_to_email,
             idempotency_key=f"email-log/{email_log.id}",
             unsubscribe_url=unsubscribe_url,
+            attachments=attachments,
         )
 
         if success:

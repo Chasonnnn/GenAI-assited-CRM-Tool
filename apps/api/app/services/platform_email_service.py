@@ -11,6 +11,7 @@ is supported only as an optional fallback for local/dev or emergency ops.
 
 from __future__ import annotations
 
+import base64
 import logging
 from datetime import datetime, timezone
 from uuid import UUID
@@ -75,6 +76,7 @@ async def _send_resend_email(
     text: str | None,
     idempotency_key: str | None,
     headers: dict[str, str] | None = None,
+    attachments: list[dict[str, object]] | None = None,
 ) -> JsonObject:
     api_key = settings.PLATFORM_RESEND_API_KEY
     resolved_from = (from_email or "").strip() or (settings.PLATFORM_EMAIL_FROM or "").strip()
@@ -99,6 +101,15 @@ async def _send_resend_email(
         payload["text"] = text
     if headers:
         payload["headers"] = headers
+    if attachments:
+        payload["attachments"] = [
+            {
+                "filename": str(attachment["filename"]),
+                "content": base64.b64encode(bytes(attachment["content_bytes"])).decode("ascii"),
+                "type": str(attachment["content_type"]),
+            }
+            for attachment in attachments
+        ]
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -170,6 +181,7 @@ async def send_email_logged(
     template_id: UUID | None = None,
     surrogate_id: UUID | None = None,
     idempotency_key: str | None = None,
+    attachments: list[dict[str, object]] | None = None,
 ) -> JsonObject:
     """Send a platform/system email with EmailLog tracking + idempotency."""
     from app.services import email_service, unsubscribe_service
@@ -253,6 +265,7 @@ async def send_email_logged(
             text=resolved_text,
             idempotency_key=idempotency_key,
             headers=headers,
+            attachments=attachments,
         )
     except Exception as exc:
         email_log.status = EmailStatus.FAILED.value
@@ -305,6 +318,7 @@ class PlatformEmailSender:
         template_id: UUID | None = None,
         surrogate_id: UUID | None = None,
         idempotency_key: str | None = None,
+        attachments: list[dict[str, object]] | None = None,
     ) -> JsonObject:
         return await send_email_logged(
             db=db,
@@ -317,4 +331,5 @@ class PlatformEmailSender:
             template_id=template_id,
             surrogate_id=surrogate_id,
             idempotency_key=idempotency_key,
+            attachments=attachments,
         )

@@ -5,6 +5,7 @@ Sends campaign emails via Resend API with idempotency, retry logic, and suppress
 
 from __future__ import annotations
 
+import base64
 import logging
 import re
 from email.utils import parseaddr
@@ -214,6 +215,7 @@ async def send_email_direct(
     reply_to: str | None = None,
     idempotency_key: str | None = None,
     unsubscribe_url: str | None = None,
+    attachments: list[dict[str, object]] | None = None,
 ) -> tuple[bool, str | None, str | None]:
     """
     Send an email directly via Resend (no campaign context).
@@ -257,6 +259,15 @@ async def send_email_direct(
             "List-Unsubscribe": f"<{unsubscribe_url}>",
             "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         }
+    if attachments:
+        payload["attachments"] = [
+            {
+                "filename": str(attachment["filename"]),
+                "content": base64.b64encode(bytes(attachment["content_bytes"])).decode("ascii"),
+                "type": str(attachment["content_type"]),
+            }
+            for attachment in attachments
+        ]
 
     headers = {
         "Authorization": f"Bearer {api_key}",

@@ -28,6 +28,7 @@ class EmailSender(Protocol):
         template_id: UUID | None = None,
         surrogate_id: UUID | None = None,
         idempotency_key: str | None = None,
+        attachments: list[dict[str, object]] | None = None,
     ):
         """Send and log an email with provider-specific tracking."""
 
