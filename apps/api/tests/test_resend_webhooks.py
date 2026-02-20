@@ -23,7 +23,8 @@ def _generate_svix_signature(body: bytes, secret: str, timestamp: str) -> str:
         try:
             secret_bytes = base64.urlsafe_b64decode(_pad_b64(secret))
         except Exception:
-            secret_bytes = secret.encode("utf-8")
+            # We must not fall back to raw bytes for whsec_ secrets in tests either
+            raise ValueError("Invalid base64 secret in test generator")
     else:
         try:
             secret_bytes = base64.b64decode(secret)
@@ -105,6 +106,39 @@ class TestResendWebhookSignature:
             "svix-signature": signature,
         }
 
+        is_valid = _verify_svix_signature(body, headers, secret)
+        assert is_valid is False
+
+    def test_verify_svix_signature_fail_on_invalid_base64(self):
+        """Ensure verification fails if whsec_ secret is not valid base64."""
+        from app.services.webhooks.resend import _verify_svix_signature
+
+        body = b'{"type": "email.delivered", "data": {}}'
+        # Invalid base64 (contains '!')
+        secret = "whsec_NOT_VALID_BASE64_!!!!"
+        timestamp = str(int(time.time()))
+
+        # We construct a signature as if the system fell back to raw bytes
+        # (which is the vulnerability we fixed).
+        # We want to ensure the system does NOT use this fallback signature.
+        raw_secret_bytes = secret[6:].encode("utf-8")
+        msg_id = str(uuid.uuid4())
+        signed_payload = f"{msg_id}.{timestamp}.{body.decode('utf-8')}"
+        signature = hmac.new(
+            raw_secret_bytes,
+            signed_payload.encode("utf-8"),
+            hashlib.sha256,
+        ).digest()
+        signature_b64 = base64.b64encode(signature).decode("utf-8")
+
+        headers = {
+            "svix-id": msg_id,
+            "svix-timestamp": timestamp,
+            "svix-signature": f"v1,{signature_b64}",
+        }
+
+        # Verification should fail because the secret is invalid base64,
+        # so it should NOT try to verify against the raw-bytes signature.
         is_valid = _verify_svix_signature(body, headers, secret)
         assert is_valid is False
 
