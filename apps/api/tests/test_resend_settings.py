@@ -275,10 +275,10 @@ class TestEmailProviderResolver:
         assert provider_type == "resend"
         assert config.from_email == "no-reply@example.com"
 
-    def test_resolve_gmail_missing_sender(self, db, test_org):
+    def test_resolve_campaign_provider_requires_resend(self, db, test_org):
         from app.services import email_provider_service, resend_settings_service
 
-        # Create settings with Gmail but no sender
+        # Campaign policy: org provider must be Resend (Gmail not allowed).
         resend_settings_service.update_resend_settings(
             db,
             test_org.id,
@@ -289,7 +289,7 @@ class TestEmailProviderResolver:
         with pytest.raises(email_provider_service.ConfigurationError) as exc:
             email_provider_service.resolve_campaign_provider(db, test_org.id)
 
-        assert "sender not configured" in str(exc.value).lower()
+        assert "resend" in str(exc.value).lower()
 
 
 class TestResendEmailService:

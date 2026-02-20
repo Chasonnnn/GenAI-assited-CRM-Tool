@@ -1,9 +1,11 @@
 """Surrogate email routes."""
 
+from __future__ import annotations
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header
@@ -22,6 +24,7 @@ class SendEmailRequest(BaseModel):
     body: str | None = None
     provider: str = "auto"
     idempotency_key: str | None = None
+    attachment_ids: list[UUID] = Field(default_factory=list)
 
 
 class SendEmailResponse(BaseModel):
@@ -67,8 +70,9 @@ async def send_surrogate_email(
     db: Session = Depends(get_db),
 ):
     """Send email to surrogate contact using template."""
-    from app.services import activity_service, email_service, gmail_service, oauth_service
     import os
+
+    from app.services import activity_service, email_service, gmail_service, oauth_service
 
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
     if not surrogate:
@@ -82,6 +86,20 @@ async def send_surrogate_email(
     template = email_service.get_template(db, data.template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Email template not found")
+
+    selected_attachments = []
+    if data.attachment_ids:
+        try:
+            selected_attachments = email_service.resolve_surrogate_email_attachments(
+                db=db,
+                org_id=session.org_id,
+                surrogate_id=surrogate_id,
+                attachment_ids=data.attachment_ids,
+            )
+        except email_service.EmailAttachmentNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except email_service.EmailAttachmentValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     variables = email_service.build_surrogate_template_variables(db, surrogate)
 
@@ -116,6 +134,7 @@ async def send_surrogate_email(
             subject=subject,
             body=body,
             surrogate_id=surrogate_id,
+            attachments=selected_attachments,
         )
         return SendEmailResponse(
             success=False,
@@ -123,7 +142,7 @@ async def send_surrogate_email(
             error="Email suppressed",
         )
 
-    provider = data.provider
+    provider = (data.provider or "auto").lower()
     gmail_connected = oauth_service.get_user_integration(db, session.user_id, "gmail") is not None
     resend_configured = bool(os.getenv("RESEND_API_KEY"))
 
@@ -140,10 +159,11 @@ async def send_surrogate_email(
     elif provider == "resend":
         if not resend_configured:
             return SendEmailResponse(
-                success=False, error="Resend not configured. Contact administrator."
+                success=False,
+                error="Resend not configured. Contact administrator.",
             )
         use_resend = True
-    else:
+    elif provider == "auto":
         if gmail_connected:
             use_gmail = True
         elif resend_configured:
@@ -153,20 +173,29 @@ async def send_surrogate_email(
                 success=False,
                 error="No email provider available. Connect Gmail in Settings.",
             )
+    else:
+        return SendEmailResponse(
+            success=False,
+            error="Invalid email provider. Supported options are auto, gmail, or resend.",
+        )
 
     if use_gmail:
-        result = await gmail_service.send_email_logged(
-            db=db,
-            org_id=session.org_id,
-            user_id=str(session.user_id),
-            to=surrogate.email,
-            subject=subject,
-            body=body,
-            html=True,
-            template_id=data.template_id,
-            surrogate_id=surrogate_id,
-            idempotency_key=data.idempotency_key,
-        )
+        gmail_kwargs = {
+            "db": db,
+            "org_id": session.org_id,
+            "user_id": str(session.user_id),
+            "to": surrogate.email,
+            "subject": subject,
+            "body": body,
+            "html": True,
+            "template_id": data.template_id,
+            "surrogate_id": surrogate_id,
+            "idempotency_key": data.idempotency_key,
+        }
+        if selected_attachments:
+            gmail_kwargs["attachment_ids"] = [attachment.id for attachment in selected_attachments]
+
+        result = await gmail_service.send_email_logged(**gmail_kwargs)
 
         if result.get("success"):
             activity_service.log_email_sent(
@@ -177,6 +206,7 @@ async def send_surrogate_email(
                 email_log_id=result.get("email_log_id"),
                 subject=subject,
                 provider="gmail",
+                attachments=selected_attachments,
             )
 
             return SendEmailResponse(
@@ -201,11 +231,11 @@ async def send_surrogate_email(
                 subject=subject,
                 body=body,
                 surrogate_id=surrogate_id,
+                attachments=selected_attachments,
             )
 
             if result:
                 log, _job = result
-
                 activity_service.log_email_sent(
                     db=db,
                     surrogate_id=surrogate_id,
@@ -214,8 +244,8 @@ async def send_surrogate_email(
                     email_log_id=log.id,
                     subject=subject,
                     provider="resend",
+                    attachments=selected_attachments,
                 )
-
                 return SendEmailResponse(
                     success=True,
                     email_log_id=log.id,

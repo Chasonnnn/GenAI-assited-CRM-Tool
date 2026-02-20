@@ -154,7 +154,13 @@ def validate_email_provider(
         - (False, "error message") if provider is not available
     """
     try:
-        resolve_workflow_email_provider(db, scope, org_id, owner_user_id)
+        provider_type, _config = resolve_workflow_email_provider(db, scope, org_id, owner_user_id)
+        if scope == "org" and provider_type != "resend":
+            return (
+                False,
+                "Org workflows must use Resend. "
+                "Set Email provider to Resend in Settings → Integrations → Email Configuration.",
+            )
         return True, None
     except EmailProviderError as e:
         return False, str(e)

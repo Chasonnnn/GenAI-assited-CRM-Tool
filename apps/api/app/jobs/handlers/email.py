@@ -231,7 +231,7 @@ async def process_workflow_email(db, job) -> None:
 
     Uses the centralized email provider resolver based on workflow scope:
     - Personal workflows: Send via user's connected Gmail
-    - Org workflows: Send via org's Resend or org's default Gmail sender
+    - Org workflows: Send via org's Resend only
 
     NO FALLBACK: If the configured provider is not available, the job fails
     with an explicit error message.
@@ -344,6 +344,16 @@ async def process_workflow_email(db, job) -> None:
         db.commit()
         raise Exception(str(e))
 
+    if workflow_scope == "org" and provider != "resend":
+        error_message = (
+            "Org workflows must use Resend. "
+            "Set Email provider to Resend in Settings → Integrations → Email Configuration."
+        )
+        email_log.status = "failed"
+        email_log.error = error_message
+        db.commit()
+        raise Exception(error_message)
+
     # Send via resolved provider
     try:
         from app.services import unsubscribe_service, org_service
@@ -362,21 +372,6 @@ async def process_workflow_email(db, job) -> None:
             result = await gmail_service.send_email(
                 db=db,
                 user_id=str(config["user_id"]),
-                to=recipient_email,
-                subject=subject,
-                body=body,
-                html=True,
-                headers=headers,
-            )
-            if not result.get("success"):
-                raise Exception(f"Gmail send failed: {result.get('error')}")
-            email_log.external_id = result.get("message_id")
-
-        elif provider == "org_gmail":
-            # Org workflow via org's default Gmail sender
-            result = await gmail_service.send_email(
-                db=db,
-                user_id=str(config["sender_user_id"]),
                 to=recipient_email,
                 subject=subject,
                 body=body,

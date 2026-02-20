@@ -30,7 +30,6 @@ def resolve_campaign_provider(
 
     Returns (provider_type, config).
     - For "resend": config is ResendSettings
-    - For "gmail": config is UserIntegration
 
     Raises ConfigurationError with a clear message for UI.
     """
@@ -41,13 +40,13 @@ def resolve_campaign_provider(
             "Email provider not configured. Go to Settings → Integrations → Email Configuration."
         )
 
-    if settings.email_provider == "resend":
-        return _resolve_resend(settings)
+    if settings.email_provider != "resend":
+        raise ConfigurationError(
+            "Campaign emails must use Resend. "
+            "Set Email provider to Resend in Settings → Integrations → Email Configuration."
+        )
 
-    if settings.email_provider == "gmail":
-        return _resolve_gmail(db, settings)
-
-    raise ConfigurationError(f"Unknown email provider: {settings.email_provider}")
+    return _resolve_resend(settings)
 
 
 def _resolve_resend(settings: ResendSettings) -> tuple[str, ResendSettings]:

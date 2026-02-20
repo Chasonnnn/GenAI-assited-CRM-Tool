@@ -92,7 +92,7 @@ async def test_send_email_template_not_found(authed_client: AsyncClient, db, tes
 async def test_send_email_no_provider_returns_error(
     authed_client: AsyncClient, db, test_org, test_user, monkeypatch
 ):
-    """Test send email when no provider available returns error."""
+    """Surrogate email sends must fail when personal Gmail is not connected."""
     from app.services import surrogate_service, email_service
     from app.schemas.surrogate import SurrogateCreate
     from app.db.enums import SurrogateSource
@@ -115,19 +115,60 @@ async def test_send_email_no_provider_returns_error(
         body="<p>Welcome {{full_name}}!</p>",
     )
 
-    # Ensure no Resend API key and no Gmail connected
-    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    # Even if Resend is configured, surrogate-tab sends must require personal Gmail.
+    monkeypatch.setenv("RESEND_API_KEY", "re_should_not_be_used")
 
-    # Send with auto provider (no providers available)
+    # Send with auto provider
     response = await authed_client.post(
         f"/surrogates/{case.id}/send-email",
         json={"template_id": str(template.id), "provider": "auto"},
     )
 
-    assert response.status_code == 200  # Returns success=False in body
+    assert response.status_code == 200
     data = response.json()
     assert data["success"] is False
-    assert "no email provider" in data["error"].lower()
+    assert "gmail not connected" in data["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_send_email_rejects_resend_provider_for_surrogate_send(
+    authed_client: AsyncClient, db, test_org, test_user, monkeypatch
+):
+    """Surrogate email sends must reject Resend provider selection."""
+    from app.services import surrogate_service, email_service
+    from app.schemas.surrogate import SurrogateCreate
+    from app.db.enums import SurrogateSource
+
+    case_data = SurrogateCreate(
+        full_name="Provider Strict Case",
+        email="strict@example.com",
+        source=SurrogateSource.MANUAL,
+    )
+    case = surrogate_service.create_surrogate(db, test_org.id, test_user.id, case_data)
+
+    template = email_service.create_template(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        name="Provider Strict Template",
+        subject="Hello {{full_name}}",
+        body="<p>Welcome {{full_name}}!</p>",
+    )
+
+    # Gmail connected should not matter for provider-policy rejection.
+    from app.services import oauth_service
+
+    monkeypatch.setattr(oauth_service, "get_user_integration", lambda *_args, **_kwargs: object())
+
+    response = await authed_client.post(
+        f"/surrogates/{case.id}/send-email",
+        json={"template_id": str(template.id), "provider": "resend"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is False
+    assert "personal gmail" in data["error"].lower()
 
 
 @pytest.mark.asyncio
