@@ -65,8 +65,8 @@ export default function LoginPage() {
         className="w-full max-w-md relative z-10 border border-white/40 shadow-2xl"
         style={{
           background: "linear-gradient(180deg, rgba(255, 255, 255, 0.7) 0%, rgba(253, 242, 248, 0.6) 100%)",
-          backdropFilter: "blur(24px) saturate(180%)",
-          WebkitBackdropFilter: "blur(24px) saturate(180%)",
+          backdropFilter: "blur(8px) saturate(160%)",
+          WebkitBackdropFilter: "blur(8px) saturate(160%)",
           boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.6)",
         }}
       >
