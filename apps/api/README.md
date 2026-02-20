@@ -75,3 +75,14 @@ The `--org-slug` check is optional but recommended in multi-tenant environments.
 - "not_invited": the email has no pending invite.
 - "invite_expired": the invite expired (CLI invites do not expire).
 - "User already belongs to an organization": the user has an active membership; use another email.
+
+## Surrogate Email Attachments (Compose)
+
+Surrogate compose sends support attachments for both Gmail and Resend providers.
+
+- Request payload accepts `attachment_ids` on `POST /surrogates/{id}/send-email`.
+- Selected attachments must belong to the surrogate, be visible in-org, and be `clean`.
+- Email send limits:
+  - Max `10` attachments
+  - Max `18 MiB` total attachment bytes (pre-encoding)
+- Sent attachment links are persisted in `email_log_attachments` for audit and retry diagnostics.

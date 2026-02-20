@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import os
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,6 +16,7 @@ from app.schemas.auth import UserSession
 from app.services import surrogate_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class SendEmailRequest(BaseModel):
@@ -144,19 +147,75 @@ async def send_surrogate_email(
     if provider not in {"auto", "gmail", "resend"}:
         return SendEmailResponse(
             success=False,
-            error="Invalid email provider. Supported options are auto or gmail.",
-        )
-    if provider == "resend":
-        return SendEmailResponse(
-            success=False,
-            error="Surrogate emails must be sent from personal Gmail. Resend is not allowed.",
+            error="Invalid email provider. Supported options are auto, gmail, or resend.",
         )
 
     gmail_connected = oauth_service.get_user_integration(db, session.user_id, "gmail") is not None
-    if not gmail_connected:
+    resend_configured = bool(os.getenv("RESEND_API_KEY"))
+
+    resolved_provider = provider
+    if provider == "auto":
+        if gmail_connected:
+            resolved_provider = "gmail"
+        elif resend_configured:
+            resolved_provider = "resend"
+        else:
+            return SendEmailResponse(
+                success=False,
+                error=(
+                    "No email provider is available. Connect Gmail or configure "
+                    "Resend (RESEND_API_KEY)."
+                ),
+            )
+
+    if resolved_provider == "gmail" and not gmail_connected:
         return SendEmailResponse(
             success=False,
-            error="Gmail not connected. Surrogate emails require personal Gmail in Settings > Integrations.",
+            error="Gmail not connected. Connect Gmail in Settings > Integrations.",
+        )
+    if resolved_provider == "resend" and not resend_configured:
+        return SendEmailResponse(
+            success=False,
+            error="Resend not configured. Set RESEND_API_KEY for non-Gmail sends.",
+        )
+
+    attachment_count = len(selected_attachments)
+    attachment_total_bytes = sum(int(attachment.file_size or 0) for attachment in selected_attachments)
+    logger.info(
+        "surrogate_send_email_attempt provider=%s attachments_count=%s attachments_total_bytes=%s",
+        resolved_provider,
+        attachment_count,
+        attachment_total_bytes,
+    )
+
+    if resolved_provider == "resend":
+        email_log, _job = email_service.send_email(
+            db=db,
+            org_id=session.org_id,
+            template_id=data.template_id,
+            recipient_email=surrogate.email,
+            subject=subject,
+            body=body,
+            surrogate_id=surrogate_id,
+            attachments=selected_attachments,
+        )
+
+        activity_service.log_email_sent(
+            db=db,
+            surrogate_id=surrogate_id,
+            organization_id=session.org_id,
+            actor_user_id=session.user_id,
+            email_log_id=email_log.id,
+            subject=subject,
+            provider="resend",
+            attachments=selected_attachments,
+        )
+        db.commit()
+
+        return SendEmailResponse(
+            success=True,
+            email_log_id=email_log.id,
+            provider_used="resend",
         )
 
     gmail_kwargs = {
@@ -187,6 +246,7 @@ async def send_surrogate_email(
             provider="gmail",
             attachments=selected_attachments,
         )
+        db.commit()
 
         return SendEmailResponse(
             success=True,
