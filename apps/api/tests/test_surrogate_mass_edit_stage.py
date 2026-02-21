@@ -240,6 +240,46 @@ async def test_mass_edit_stage_can_filter_by_race(authed_client, db, test_auth):
 
 
 @pytest.mark.asyncio
+async def test_mass_edit_stage_bmi_filter_uses_rounded_inches(authed_client, db, test_auth):
+    disqualified_stage = _get_stage(db, test_auth.org.id, "disqualified")
+
+    target = await _create_surrogate(
+        authed_client,
+        state="CA",
+        height_ft=5.1,
+        weight_lb=180,
+    )
+    await _create_surrogate(
+        authed_client,
+        state="CA",
+        height_ft=5.1,
+        weight_lb=170,
+    )
+
+    preview = await authed_client.post(
+        "/surrogates/mass-edit/stage/preview",
+        json={"filters": {"bmi_min": 33.9}},
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["total"] == 1
+
+    apply_res = await authed_client.post(
+        "/surrogates/mass-edit/stage",
+        json={
+            "filters": {"bmi_min": 33.9},
+            "stage_id": str(disqualified_stage.id),
+            "expected_total": 1,
+            "trigger_workflows": False,
+        },
+    )
+    assert apply_res.status_code == 200, apply_res.text
+
+    target_row = db.query(Surrogate).filter(Surrogate.id == UUID(target["id"])).first()
+    assert target_row is not None
+    assert target_row.stage_id == disqualified_stage.id
+
+
+@pytest.mark.asyncio
 async def test_mass_edit_options_returns_race_keys(authed_client, db, test_auth):
     await _create_surrogate(authed_client, race="Hispanic or Latino", state="CA")
     await _create_surrogate(authed_client, race="White", state="CA")

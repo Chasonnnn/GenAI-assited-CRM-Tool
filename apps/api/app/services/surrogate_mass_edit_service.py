@@ -147,13 +147,15 @@ def _build_base_query(db: Session, org_id: UUID, filters: SurrogateMassEditStage
 
     # BMI range (DB-filterable)
     if filters.bmi_min is not None or filters.bmi_max is not None:
-        height_inches = cast(Surrogate.height_ft, Float) * 12.0
-        bmi_expr = (cast(Surrogate.weight_lb, Float) / (height_inches * height_inches)) * 703.0
+        rounded_height_inches = cast(func.round(cast(Surrogate.height_ft, Float) * 12.0), Float)
+        bmi_expr = (
+            cast(Surrogate.weight_lb, Float) / (rounded_height_inches * rounded_height_inches)
+        ) * 703.0
         query = query.filter(
             and_(
                 Surrogate.height_ft.is_not(None),
                 Surrogate.weight_lb.is_not(None),
-                height_inches > 0,
+                rounded_height_inches > 0,
             )
         )
         if filters.bmi_min is not None:

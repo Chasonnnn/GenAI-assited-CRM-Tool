@@ -131,7 +131,7 @@ def _surrogate_to_list_item(surrogate, db: Session, last_activity_at=None) -> Su
 
     bmi = None
     if surrogate.height_ft and surrogate.weight_lb:
-        height_inches = surrogate.height_ft * 12
+        height_inches = round(float(surrogate.height_ft) * 12)
         if height_inches > 0:
             bmi = round((surrogate.weight_lb / (height_inches**2)) * 703, 1)
 

@@ -4,7 +4,7 @@ from uuid import UUID
 import pytest
 
 from app.db.enums import ContactStatus
-from app.db.models import Surrogate, PipelineStage
+from app.db.models import Surrogate, PipelineStage, SurrogateActivityLog
 
 
 @pytest.mark.asyncio
@@ -111,3 +111,36 @@ async def test_manual_stage_change_sets_contact_status(authed_client, db):
     db.refresh(case)
     assert case.contact_status == ContactStatus.REACHED.value
     assert case.contacted_at is not None
+
+
+@pytest.mark.asyncio
+async def test_contact_attempt_activity_includes_note_preview(authed_client, db):
+    case_res = await authed_client.post(
+        "/surrogates",
+        json={"full_name": "Contact Notes", "email": "contact-notes@example.com"},
+    )
+    assert case_res.status_code == 201, case_res.text
+    surrogate_id = case_res.json()["id"]
+
+    attempt_res = await authed_client.post(
+        f"/surrogates/{surrogate_id}/contact-attempts",
+        json={
+            "contact_methods": ["phone"],
+            "outcome": "no_answer",
+            "notes": "<p>Left voicemail and asked for callback.</p>",
+        },
+    )
+    assert attempt_res.status_code == 201, attempt_res.text
+
+    activity = (
+        db.query(SurrogateActivityLog)
+        .filter(
+            SurrogateActivityLog.surrogate_id == UUID(surrogate_id),
+            SurrogateActivityLog.activity_type == "contact_attempt",
+        )
+        .order_by(SurrogateActivityLog.created_at.desc())
+        .first()
+    )
+    assert activity is not None
+    details = activity.details or {}
+    assert details.get("note_preview") == "Left voicemail and asked for callback."

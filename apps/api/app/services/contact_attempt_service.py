@@ -1,5 +1,6 @@
 """Service layer for contact attempts tracking."""
 
+import re
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -22,6 +23,22 @@ from app.schemas.surrogate import (
     ContactAttemptsSummary,
 )
 from app.services import surrogate_service, pipeline_service
+
+
+def _sanitize_note_preview(note: str | None, max_chars: int = 120) -> str | None:
+    if not note:
+        return None
+    text = re.sub(r"<br\s*/?>", " • ", note)
+    text = re.sub(r"</(?:p|div)>", " • ", text)
+    text = re.sub(r"<[^>]*>", "", text)
+    text = (
+        text.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+    )
+    text = re.sub(r"\s*•\s*", " • ", text)
+    text = re.sub(r"\s+", " ", text).strip().strip(" •")
+    if not text:
+        return None
+    return text[:max_chars] + ("..." if len(text) > max_chars else "")
 
 
 def create_contact_attempt(
@@ -124,6 +141,7 @@ def create_contact_attempt(
             "contact_methods": data.contact_methods,
             "outcome": data.outcome,
             "notes": data.notes,
+            "note_preview": _sanitize_note_preview(data.notes),
             "is_backdated": is_backdated,
             "attempted_at": attempted_at.isoformat(),
         },
