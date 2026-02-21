@@ -67,8 +67,13 @@ def _verify_svix_signature(
             if decoded:
                 secret_bytes = decoded
                 break
+
+        # Security: If whsec_ prefix is present, we MUST successfully decode it.
+        # If decoding fails, it means the secret is invalid/corrupted.
+        # Do NOT fall back to using the raw bytes as the key.
         if secret_bytes is None:
-            secret_bytes = secret.encode("utf-8")
+            logger.warning("Resend webhook secret has whsec_ prefix but failed base64 decoding")
+            return False
     else:
         secret_bytes = secret.encode("utf-8")
 
