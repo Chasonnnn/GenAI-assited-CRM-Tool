@@ -6,6 +6,7 @@ Each user connects their own accounts.
 
 import logging
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -52,6 +53,7 @@ class IntegrationStatus(BaseModel):
     connected: bool
     account_email: str | None = None
     expires_at: str | None = None
+    last_sync_at: str | None = None
 
 
 class IntegrationListResponse(BaseModel):
@@ -80,6 +82,7 @@ def list_integrations(
                 connected=True,
                 account_email=i.account_email,
                 expires_at=i.token_expires_at.isoformat() if i.token_expires_at else None,
+                last_sync_at=i.updated_at.isoformat() if i.updated_at else None,
             )
             for i in integrations
         ]
@@ -375,8 +378,12 @@ async def google_calendar_callback(
             account_email=user_info.get("email"),
         )
 
-        # Best-effort push-channel registration for near-real-time updates.
-        from app.services import calendar_service
+        # Best-effort push-channel registration + initial reconciliation.
+        from app.services import (
+            appointment_integrations,
+            calendar_service,
+            google_tasks_sync_service,
+        )
 
         try:
             await calendar_service.ensure_google_calendar_watch(
@@ -387,6 +394,30 @@ async def google_calendar_callback(
         except Exception:
             logger.exception(
                 "Google Calendar watch registration failed for user=%s org=%s",
+                session.user_id,
+                session.org_id,
+            )
+
+        # Initial one-shot import so users see existing Google events/tasks immediately
+        # after connecting, even before scheduler/webhook cycles run.
+        try:
+            appointment_changes = (
+                await appointment_integrations.sync_manual_google_events_for_appointments_async(
+                    db=db,
+                    user_id=session.user_id,
+                    org_id=session.org_id,
+                )
+            )
+            task_changes = await google_tasks_sync_service.sync_google_tasks_for_user_async(
+                db=db,
+                user_id=session.user_id,
+                org_id=session.org_id,
+            )
+            if appointment_changes or task_changes:
+                db.commit()
+        except Exception:
+            logger.exception(
+                "Initial Google reconciliation failed for user=%s org=%s",
                 session.user_id,
                 session.org_id,
             )
@@ -428,11 +459,29 @@ async def google_calendar_callback(
         return error
 
 
-@router.get("/google-calendar/status")
+class GoogleCalendarStatusResponse(BaseModel):
+    connected: bool
+    account_email: str | None = None
+    expires_at: str | None = None
+    tasks_accessible: bool = False
+    tasks_error: str | None = None
+    last_sync_at: str | None = None
+
+
+class GoogleCalendarSyncResponse(BaseModel):
+    connected: bool
+    outbound_backfilled: int
+    appointment_changes: int
+    task_changes: int
+    last_sync_at: str
+    warnings: list[str] = []
+
+
+@router.get("/google-calendar/status", response_model=GoogleCalendarStatusResponse)
 def google_calendar_connection_status(
     db: Session = Depends(get_db),
     session: UserSession = Depends(get_current_session),
-) -> dict[str, Any]:
+) -> GoogleCalendarStatusResponse:
     """Check if current user has Google Calendar connected."""
     integration = oauth_service.get_user_integration(db, session.user_id, "google_calendar")
     tasks_accessible = False
@@ -445,15 +494,118 @@ def google_calendar_connection_status(
             session.user_id,
         )
 
-    return {
-        "connected": integration is not None,
-        "account_email": integration.account_email if integration else None,
-        "expires_at": integration.token_expires_at.isoformat()
+    return GoogleCalendarStatusResponse(
+        connected=integration is not None,
+        account_email=integration.account_email if integration else None,
+        expires_at=integration.token_expires_at.isoformat()
         if integration and integration.token_expires_at
         else None,
-        "tasks_accessible": tasks_accessible,
-        "tasks_error": tasks_error,
-    }
+        tasks_accessible=tasks_accessible,
+        tasks_error=tasks_error,
+        last_sync_at=integration.updated_at.isoformat() if integration and integration.updated_at else None,
+    )
+
+
+@router.post(
+    "/google-calendar/sync",
+    response_model=GoogleCalendarSyncResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+async def sync_google_calendar_now(
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+) -> GoogleCalendarSyncResponse:
+    """
+    Manually run Google Calendar/Tasks reconciliation for the current user.
+
+    This lets staff verify sync health immediately from the integrations page.
+    """
+    integration = oauth_service.get_user_integration(db, session.user_id, "google_calendar")
+    if not integration:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google Calendar not connected.",
+        )
+
+    from app.services import (
+        appointment_integrations,
+        calendar_service,
+        google_tasks_sync_service,
+    )
+
+    warnings: list[str] = []
+
+    try:
+        await calendar_service.ensure_google_calendar_watch(
+            db=db,
+            user_id=session.user_id,
+            calendar_id="primary",
+        )
+    except Exception:
+        warnings.append("watch_registration_failed")
+        logger.exception(
+            "Google Calendar watch ensure failed during manual sync user=%s org=%s",
+            session.user_id,
+            session.org_id,
+        )
+
+    try:
+        outbound_backfilled = appointment_integrations.backfill_confirmed_appointments_to_google(
+            db=db,
+            user_id=session.user_id,
+            org_id=session.org_id,
+        )
+    except Exception:
+        outbound_backfilled = 0
+        warnings.append("outbound_backfill_failed")
+        logger.exception(
+            "Google Calendar outbound backfill failed user=%s org=%s",
+            session.user_id,
+            session.org_id,
+        )
+
+    try:
+        appointment_changes = await appointment_integrations.sync_manual_google_events_for_appointments_async(
+            db=db,
+            user_id=session.user_id,
+            org_id=session.org_id,
+        )
+    except Exception:
+        appointment_changes = 0
+        warnings.append("calendar_reconciliation_failed")
+        logger.exception(
+            "Google Calendar appointment sync failed user=%s org=%s",
+            session.user_id,
+            session.org_id,
+        )
+
+    try:
+        task_changes = await google_tasks_sync_service.sync_google_tasks_for_user_async(
+            db=db,
+            user_id=session.user_id,
+            org_id=session.org_id,
+        )
+    except Exception:
+        task_changes = 0
+        warnings.append("task_reconciliation_failed")
+        logger.exception(
+            "Google Tasks sync failed user=%s org=%s",
+            session.user_id,
+            session.org_id,
+        )
+
+    integration.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(integration)
+
+    return GoogleCalendarSyncResponse(
+        connected=True,
+        outbound_backfilled=outbound_backfilled,
+        appointment_changes=appointment_changes,
+        task_changes=task_changes,
+        last_sync_at=integration.updated_at.isoformat(),
+        warnings=warnings,
+    )
 
 
 # ============================================================================

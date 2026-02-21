@@ -7,9 +7,12 @@ const mockUseAuth = vi.fn()
 const mockUseEffectivePermissions = vi.fn()
 const mockRefetch = vi.fn()
 const mockUseIntegrationHealth = vi.fn()
+const mockUseUserIntegrations = vi.fn()
+const mockUseGoogleCalendarStatus = vi.fn()
 const mockConnectZoom = vi.fn()
 const mockConnectGmail = vi.fn()
 const mockConnectGoogleCalendar = vi.fn()
+const mockSyncGoogleCalendarNow = vi.fn()
 const mockConnectGcp = vi.fn()
 const mockDisconnectIntegration = vi.fn()
 const mockZapierRotate = vi.fn()
@@ -119,10 +122,12 @@ vi.mock('@/components/ui/dialog', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-user-integrations', () => ({
-    useUserIntegrations: () => ({ data: [], isLoading: false }),
+    useUserIntegrations: () => mockUseUserIntegrations(),
+    useGoogleCalendarStatus: () => mockUseGoogleCalendarStatus(),
     useConnectZoom: () => ({ mutate: mockConnectZoom, isPending: false }),
     useConnectGmail: () => ({ mutate: mockConnectGmail, isPending: false }),
     useConnectGoogleCalendar: () => ({ mutate: mockConnectGoogleCalendar, isPending: false }),
+    useSyncGoogleCalendarNow: () => ({ mutate: mockSyncGoogleCalendarNow, isPending: false }),
     useConnectGcp: () => ({ mutate: mockConnectGcp, isPending: false }),
     useDisconnectIntegration: () => ({ mutate: mockDisconnectIntegration, isPending: false }),
 }))
@@ -169,6 +174,18 @@ describe('IntegrationsPage', () => {
         mockUseEffectivePermissions.mockReturnValue({
             data: { permissions: ['manage_integrations'] },
         })
+        mockUseUserIntegrations.mockReturnValue({ data: [], isLoading: false })
+        mockUseGoogleCalendarStatus.mockReturnValue({
+            data: {
+                connected: false,
+                account_email: null,
+                expires_at: null,
+                tasks_accessible: false,
+                tasks_error: 'not_connected',
+                last_sync_at: null,
+            },
+            isLoading: false,
+        })
         mockUseIntegrationHealth.mockReturnValue({
             data: [
                 {
@@ -192,6 +209,7 @@ describe('IntegrationsPage', () => {
         mockConnectZoom.mockReset()
         mockConnectGmail.mockReset()
         mockConnectGoogleCalendar.mockReset()
+        mockSyncGoogleCalendarNow.mockReset()
         mockConnectGcp.mockReset()
         mockDisconnectIntegration.mockReset()
         mockZapierInboundCreate.mockReset()
@@ -252,6 +270,42 @@ describe('IntegrationsPage', () => {
         expect(within(dialog).getByTestId('zapier-dialog-body').className).toContain('min-h-0')
         const inboundHeader = within(dialog).getByTestId('zapier-inbound-header')
         expect(inboundHeader.className).not.toContain('md:flex-row')
+    })
+
+    it('shows last sync and triggers sync now for connected Google Calendar', () => {
+        const lastSyncAt = '2026-02-21T02:30:00Z'
+        mockUseUserIntegrations.mockReturnValue({
+            data: [
+                {
+                    integration_type: 'google_calendar',
+                    connected: true,
+                    account_email: 'calendaruser@test.com',
+                    expires_at: null,
+                    last_sync_at: lastSyncAt,
+                },
+            ],
+            isLoading: false,
+        })
+        mockUseGoogleCalendarStatus.mockReturnValue({
+            data: {
+                connected: true,
+                account_email: 'calendaruser@test.com',
+                expires_at: null,
+                tasks_accessible: true,
+                tasks_error: null,
+                last_sync_at: lastSyncAt,
+            },
+            isLoading: false,
+        })
+
+        render(<IntegrationsPage />)
+
+        const googleCard = screen.getByText('Google Calendar + Meeting').closest('[data-slot="card"]')
+        expect(googleCard).not.toBeNull()
+        expect(within(googleCard as HTMLElement).getByText(/last sync/i)).toBeInTheDocument()
+
+        fireEvent.click(within(googleCard as HTMLElement).getByRole('button', { name: /sync now/i }))
+        expect(mockSyncGoogleCalendarNow).toHaveBeenCalled()
     })
 
     it('keeps personal integrations accessible but blocks org configuration without manage_integrations', () => {

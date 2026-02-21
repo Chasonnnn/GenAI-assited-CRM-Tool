@@ -204,6 +204,7 @@ def _get_google_auth_url(scopes: list[str], redirect_uri: str, state: str) -> st
         "response_type": "code",
         "scope": " ".join(scopes),
         "access_type": "offline",
+        "include_granted_scopes": "true",
         "prompt": "consent",
         "state": state,
     }

@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, urlparse
 
@@ -132,6 +132,8 @@ async def test_google_calendar_connect_sets_state_cookie_and_returns_auth_url(
     scopes = set(qs["scope"][0].split(" "))
     assert "https://www.googleapis.com/auth/calendar.events" in scopes
     assert "https://www.googleapis.com/auth/tasks" in scopes
+    assert qs.get("access_type") == ["offline"]
+    assert qs.get("include_granted_scopes") == ["true"]
 
     cookie = SimpleCookie()
     for header in response.headers.get_list("set-cookie"):
@@ -173,7 +175,12 @@ async def test_google_calendar_callback_happy_path_saves_integration(
     authed_client: AsyncClient, db, test_auth, monkeypatch
 ):
     from app.db.models import UserIntegration
-    from app.services import calendar_service, oauth_service
+    from app.services import (
+        appointment_integrations,
+        calendar_service,
+        google_tasks_sync_service,
+        oauth_service,
+    )
 
     async def fake_exchange_code(code: str, redirect_uri: str):
         return {
@@ -186,10 +193,23 @@ async def test_google_calendar_callback_happy_path_saves_integration(
         return {"email": "calendaruser@test.com"}
 
     watch_calls: list[uuid.UUID] = []
+    appointment_sync_calls: list[tuple[uuid.UUID, uuid.UUID]] = []
+    task_sync_calls: list[tuple[uuid.UUID, uuid.UUID]] = []
 
     async def fake_ensure_google_calendar_watch(*, db, user_id, calendar_id="primary"):
         watch_calls.append(user_id)
         return True
+
+    async def fake_sync_manual_google_events_for_appointments_async(
+        db, *, user_id, org_id, date_start=None, date_end=None
+    ):
+        del date_start, date_end
+        appointment_sync_calls.append((user_id, org_id))
+        return 2
+
+    async def fake_sync_google_tasks_for_user_async(db, *, user_id, org_id):
+        task_sync_calls.append((user_id, org_id))
+        return 3
 
     monkeypatch.setattr(oauth_service, "exchange_google_calendar_code", fake_exchange_code)
     monkeypatch.setattr(oauth_service, "get_google_calendar_user_info", fake_get_user_info)
@@ -197,6 +217,16 @@ async def test_google_calendar_callback_happy_path_saves_integration(
         calendar_service,
         "ensure_google_calendar_watch",
         fake_ensure_google_calendar_watch,
+    )
+    monkeypatch.setattr(
+        appointment_integrations,
+        "sync_manual_google_events_for_appointments_async",
+        fake_sync_manual_google_events_for_appointments_async,
+    )
+    monkeypatch.setattr(
+        google_tasks_sync_service,
+        "sync_google_tasks_for_user_async",
+        fake_sync_google_tasks_for_user_async,
     )
 
     connect = await authed_client.get("/integrations/google-calendar/connect")
@@ -220,6 +250,8 @@ async def test_google_calendar_callback_happy_path_saves_integration(
     assert integration is not None
     assert integration.account_email == "calendaruser@test.com"
     assert watch_calls == [test_auth.user.id]
+    assert appointment_sync_calls == [(test_auth.user.id, test_auth.org.id)]
+    assert task_sync_calls == [(test_auth.user.id, test_auth.org.id)]
 
 
 @pytest.mark.asyncio
@@ -258,6 +290,90 @@ async def test_google_calendar_status_includes_tasks_access_diagnostics(
     assert data["connected"] is True
     assert data["tasks_accessible"] is True
     assert data["tasks_error"] is None
+    assert data["last_sync_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_google_calendar_manual_sync_runs_reconciliation_and_updates_last_sync(
+    authed_client: AsyncClient,
+    db,
+    test_auth,
+    monkeypatch,
+):
+    from app.db.models import UserIntegration
+    from app.services import (
+        appointment_integrations,
+        calendar_service,
+        google_tasks_sync_service,
+    )
+
+    integration = UserIntegration(
+        user_id=test_auth.user.id,
+        integration_type="google_calendar",
+        access_token_encrypted="token-1",
+        account_email="owner@example.com",
+    )
+    db.add(integration)
+    db.commit()
+    db.refresh(integration)
+    previous_updated_at = integration.updated_at
+
+    watch_calls: list[uuid.UUID] = []
+
+    async def fake_ensure_google_calendar_watch(*, db, user_id, calendar_id="primary"):
+        del db, calendar_id
+        watch_calls.append(user_id)
+        return True
+
+    monkeypatch.setattr(
+        calendar_service,
+        "ensure_google_calendar_watch",
+        fake_ensure_google_calendar_watch,
+    )
+    monkeypatch.setattr(
+        appointment_integrations,
+        "backfill_confirmed_appointments_to_google",
+        lambda **kwargs: 1,
+    )
+
+    async def fake_sync_manual_google_events_for_appointments_async(
+        db, *, user_id, org_id, date_start=None, date_end=None
+    ):
+        del db, date_start, date_end
+        assert user_id == test_auth.user.id
+        assert org_id == test_auth.org.id
+        return 2
+
+    async def fake_sync_google_tasks_for_user_async(db, *, user_id, org_id):
+        del db
+        assert user_id == test_auth.user.id
+        assert org_id == test_auth.org.id
+        return 3
+
+    monkeypatch.setattr(
+        appointment_integrations,
+        "sync_manual_google_events_for_appointments_async",
+        fake_sync_manual_google_events_for_appointments_async,
+    )
+    monkeypatch.setattr(
+        google_tasks_sync_service,
+        "sync_google_tasks_for_user_async",
+        fake_sync_google_tasks_for_user_async,
+    )
+
+    response = await authed_client.post("/integrations/google-calendar/sync")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["connected"] is True
+    assert payload["outbound_backfilled"] == 1
+    assert payload["appointment_changes"] == 2
+    assert payload["task_changes"] == 3
+    assert payload["warnings"] == []
+    assert payload["last_sync_at"] is not None
+    assert watch_calls == [test_auth.user.id]
+
+    db.refresh(integration)
+    assert integration.updated_at >= previous_updated_at
 
 
 @pytest.mark.asyncio
@@ -396,6 +512,247 @@ async def test_appointments_list_imports_google_event_from_non_primary_calendar(
     assert stored is not None
     assert stored.scheduled_start == start
     assert stored.scheduled_end == end
+
+
+@pytest.mark.asyncio
+async def test_appointments_list_backfills_missing_google_event_for_confirmed_platform_appointment(
+    authed_client: AsyncClient,
+    db,
+    test_auth,
+    monkeypatch,
+):
+    from app.db.enums import AppointmentStatus, MeetingMode
+    from app.db.models import Appointment, AppointmentType
+    from app.services import appointment_integrations, calendar_service
+
+    appt_type = AppointmentType(
+        organization_id=test_auth.org.id,
+        user_id=test_auth.user.id,
+        name="Backfill Test",
+        slug=f"backfill-test-{uuid.uuid4().hex[:8]}",
+        duration_minutes=30,
+        meeting_mode=MeetingMode.ZOOM.value,
+        meeting_modes=[MeetingMode.ZOOM.value],
+        reminder_hours_before=24,
+        is_active=True,
+    )
+    db.add(appt_type)
+    db.flush()
+
+    scheduled_start = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=3)
+    appointment = Appointment(
+        organization_id=test_auth.org.id,
+        user_id=test_auth.user.id,
+        appointment_type_id=appt_type.id,
+        client_name="Backfill Client",
+        client_email="backfill@example.com",
+        client_phone="+1-555-000-1234",
+        client_timezone="UTC",
+        scheduled_start=scheduled_start,
+        scheduled_end=scheduled_start + timedelta(minutes=30),
+        duration_minutes=30,
+        meeting_mode=MeetingMode.ZOOM.value,
+        status=AppointmentStatus.CONFIRMED.value,
+        google_event_id=None,
+    )
+    db.add(appointment)
+    db.commit()
+    db.refresh(appointment)
+
+    sync_calls: list[tuple[str, str]] = []
+
+    def fake_sync_to_google_calendar(db, appt, action):
+        sync_calls.append((str(appt.id), action))
+        return "google_evt_backfilled"
+
+    monkeypatch.setattr(
+        appointment_integrations,
+        "sync_to_google_calendar",
+        fake_sync_to_google_calendar,
+    )
+    monkeypatch.setattr(
+        appointment_integrations,
+        "sync_manual_google_events_for_appointments",
+        lambda *args, **kwargs: 0,
+    )
+    monkeypatch.setattr(
+        calendar_service,
+        "check_user_has_google_calendar",
+        lambda _db, _user_id: True,
+    )
+
+    response = await authed_client.get("/appointments", params={"status": "confirmed"})
+    assert response.status_code == 200
+
+    db.refresh(appointment)
+    assert sync_calls == [(str(appointment.id), "create")]
+    assert appointment.google_event_id == "google_evt_backfilled"
+
+
+@pytest.mark.asyncio
+async def test_staff_reschedule_slots_endpoint_returns_slots_for_owned_appointment(
+    authed_client: AsyncClient,
+    db,
+    test_auth,
+):
+    from app.db.enums import AppointmentStatus, MeetingMode
+    from app.db.models import Appointment, AppointmentType, AvailabilityRule
+
+    timezone_name = "America/Los_Angeles"
+
+    appt_type = AppointmentType(
+        organization_id=test_auth.org.id,
+        user_id=test_auth.user.id,
+        name="Reschedule Endpoint Type",
+        slug=f"reschedule-endpoint-{uuid.uuid4().hex[:8]}",
+        duration_minutes=30,
+        buffer_before_minutes=0,
+        buffer_after_minutes=10,
+        meeting_mode=MeetingMode.GOOGLE_MEET.value,
+        meeting_modes=[MeetingMode.GOOGLE_MEET.value],
+        is_active=True,
+        reminder_hours_before=24,
+    )
+    db.add(appt_type)
+    db.flush()
+
+    # Monday availability 9:00-17:00 in Pacific
+    db.add(
+        AvailabilityRule(
+            organization_id=test_auth.org.id,
+            user_id=test_auth.user.id,
+            day_of_week=0,
+            start_time=time(9, 0),
+            end_time=time(17, 0),
+            timezone=timezone_name,
+        )
+    )
+    db.flush()
+
+    target_date = date(2026, 2, 23)  # Monday
+    scheduled_start = datetime(2026, 2, 23, 20, 0, tzinfo=timezone.utc)  # 12:00 PT
+    appointment = Appointment(
+        organization_id=test_auth.org.id,
+        user_id=test_auth.user.id,
+        appointment_type_id=appt_type.id,
+        client_name="Reschedule Owner",
+        client_email="reschedule-owner@example.com",
+        client_phone="+1-555-777-9999",
+        client_timezone=timezone_name,
+        scheduled_start=scheduled_start,
+        scheduled_end=scheduled_start + timedelta(minutes=30),
+        duration_minutes=30,
+        meeting_mode=MeetingMode.GOOGLE_MEET.value,
+        status=AppointmentStatus.CONFIRMED.value,
+        google_event_id="g_evt_123",
+    )
+    db.add(appointment)
+    db.commit()
+
+    response = await authed_client.get(
+        f"/appointments/{appointment.id}/reschedule/slots",
+        params={
+            "date_start": target_date.isoformat(),
+            "date_end": target_date.isoformat(),
+            "client_timezone": timezone_name,
+        },
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["appointment_type"]["id"] == str(appt_type.id)
+    assert len(data["slots"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_staff_reschedule_endpoint_accepts_valid_available_slot(
+    authed_client: AsyncClient,
+    db,
+    test_auth,
+    monkeypatch,
+):
+    from app.db.enums import AppointmentStatus, MeetingMode
+    from app.db.models import Appointment, AppointmentType, AvailabilityRule
+    from app.routers import appointments as appointments_router
+    from app.services import appointment_integrations
+
+    timezone_name = "America/Los_Angeles"
+
+    appt_type = AppointmentType(
+        organization_id=test_auth.org.id,
+        user_id=test_auth.user.id,
+        name="Reschedule Submit Type",
+        slug=f"reschedule-submit-{uuid.uuid4().hex[:8]}",
+        duration_minutes=30,
+        buffer_before_minutes=0,
+        buffer_after_minutes=10,
+        meeting_mode=MeetingMode.GOOGLE_MEET.value,
+        meeting_modes=[MeetingMode.GOOGLE_MEET.value],
+        is_active=True,
+        reminder_hours_before=24,
+    )
+    db.add(appt_type)
+    db.flush()
+
+    db.add(
+        AvailabilityRule(
+            organization_id=test_auth.org.id,
+            user_id=test_auth.user.id,
+            day_of_week=0,
+            start_time=time(9, 0),
+            end_time=time(17, 0),
+            timezone=timezone_name,
+        )
+    )
+    db.flush()
+
+    scheduled_start = datetime(2026, 2, 23, 20, 0, tzinfo=timezone.utc)  # 12:00 PT
+    appointment = Appointment(
+        organization_id=test_auth.org.id,
+        user_id=test_auth.user.id,
+        appointment_type_id=appt_type.id,
+        client_name="Reschedule Submit",
+        client_email="reschedule-submit@example.com",
+        client_phone="+1-555-111-2222",
+        client_timezone=timezone_name,
+        scheduled_start=scheduled_start,
+        scheduled_end=scheduled_start + timedelta(minutes=30),
+        duration_minutes=30,
+        meeting_mode=MeetingMode.GOOGLE_MEET.value,
+        status=AppointmentStatus.CONFIRMED.value,
+        google_event_id="google_evt_reschedule",
+    )
+    db.add(appointment)
+    db.commit()
+
+    def fake_update_google_meet_event(db, appointment, new_start, new_end):
+        del db, appointment, new_start, new_end
+        return None
+
+    monkeypatch.setattr(
+        appointment_integrations,
+        "update_google_meet_event",
+        fake_update_google_meet_event,
+    )
+    monkeypatch.setattr(
+        appointments_router.appointment_email_service,
+        "send_rescheduled",
+        lambda db, appt, old_start, base_url: None,
+    )
+
+    response = await authed_client.post(
+        f"/appointments/{appointment.id}/reschedule",
+        json={"scheduled_start": "2026-02-23T18:00:00Z"},  # 10:00 PT
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["id"] == str(appointment.id)
+    assert payload["scheduled_start"] in {
+        "2026-02-23T18:00:00Z",
+        "2026-02-23T18:00:00+00:00",
+    }
+
+    db.refresh(appointment)
+    assert appointment.scheduled_start == datetime(2026, 2, 23, 18, 0, tzinfo=timezone.utc)
 
 
 @pytest.mark.asyncio

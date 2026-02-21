@@ -45,7 +45,16 @@ import {
 import { useIntegrationHealth } from "@/lib/hooks/use-ops"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
-import { useUserIntegrations, useConnectZoom, useConnectGmail, useConnectGoogleCalendar, useConnectGcp, useDisconnectIntegration } from "@/lib/hooks/use-user-integrations"
+import {
+    useUserIntegrations,
+    useConnectZoom,
+    useConnectGmail,
+    useConnectGoogleCalendar,
+    useConnectGcp,
+    useDisconnectIntegration,
+    useGoogleCalendarStatus,
+    useSyncGoogleCalendarNow,
+} from "@/lib/hooks/use-user-integrations"
 import { useAISettings, useUpdateAISettings, useTestAPIKey, useAIConsent, useAcceptConsent } from "@/lib/hooks/use-ai"
 import { useResendSettings, useUpdateResendSettings, useTestResendKey, useRotateWebhook, useEligibleSenders } from "@/lib/hooks/use-resend"
 import {
@@ -2374,6 +2383,7 @@ export default function IntegrationsPage() {
         isDeveloper || (effectivePermissions?.permissions ?? []).includes("manage_integrations")
     const { data: healthData, isLoading, refetch, isFetching } = useIntegrationHealth()
     const { data: userIntegrations } = useUserIntegrations()
+    const { data: googleCalendarStatus } = useGoogleCalendarStatus(true)
     const { data: aiSettings, isLoading: aiSettingsLoading } = useAISettings()
     const { data: resendSettings, isLoading: resendSettingsLoading } = useResendSettings()
     const { data: zapierSettings, isLoading: zapierSettingsLoading } = useZapierSettings()
@@ -2386,6 +2396,7 @@ export default function IntegrationsPage() {
     const connectZoom = useConnectZoom()
     const connectGmail = useConnectGmail()
     const connectGoogleCalendar = useConnectGoogleCalendar()
+    const syncGoogleCalendarNow = useSyncGoogleCalendarNow()
     const disconnectIntegration = useDisconnectIntegration()
     const [aiDialogOpen, setAiDialogOpen] = useState(false)
     const [emailDialogOpen, setEmailDialogOpen] = useState(false)
@@ -2395,6 +2406,10 @@ export default function IntegrationsPage() {
     const zoomIntegration = userIntegrations?.find(i => i.integration_type === 'zoom')
     const gmailIntegration = userIntegrations?.find(i => i.integration_type === 'gmail')
     const googleCalendarIntegration = userIntegrations?.find(i => i.integration_type === 'google_calendar')
+    const googleLastSyncAt = googleCalendarStatus?.last_sync_at ?? googleCalendarIntegration?.last_sync_at ?? null
+    const googleLastSyncLabel = googleLastSyncAt
+        ? `${formatRelativeTime(googleLastSyncAt)}`
+        : "Not synced yet"
     const aiProviderLabel = aiSettings?.provider
         ? AI_PROVIDERS.find((providerOption) => providerOption.value === aiSettings.provider)?.label
             ?? aiSettings.provider
@@ -2594,6 +2609,38 @@ export default function IntegrationsPage() {
                                             </Badge>
                                         </div>
                                         <p className="text-xs text-muted-foreground">{googleCalendarIntegration.account_email}</p>
+                                        <div className="rounded-md border border-border/60 bg-muted/40 px-3 py-2">
+                                            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                                Last Sync
+                                            </p>
+                                            <p className="text-xs font-medium">
+                                                {googleLastSyncLabel}
+                                            </p>
+                                            {googleLastSyncAt ? (
+                                                <p className="text-[11px] text-muted-foreground">
+                                                    {new Date(googleLastSyncAt).toLocaleString()}
+                                                </p>
+                                            ) : null}
+                                        </div>
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            className="w-full"
+                                            onClick={() => syncGoogleCalendarNow.mutate()}
+                                            disabled={syncGoogleCalendarNow.isPending}
+                                        >
+                                            {syncGoogleCalendarNow.isPending ? (
+                                                <Loader2Icon className="mr-2 size-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                            ) : (
+                                                <RefreshCwIcon className="mr-2 size-3" aria-hidden="true" />
+                                            )}
+                                            Sync now
+                                        </Button>
+                                        {googleCalendarStatus && !googleCalendarStatus.tasks_accessible ? (
+                                            <p className="text-xs text-amber-700">
+                                                Google Tasks sync is not accessible ({googleCalendarStatus.tasks_error ?? "unknown"}).
+                                            </p>
+                                        ) : null}
                                         <Button
                                             variant="outline"
                                             size="sm"

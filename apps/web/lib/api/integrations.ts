@@ -13,6 +13,7 @@ export interface IntegrationStatus {
     connected: boolean
     account_email: string | null
     expires_at: string | null
+    last_sync_at?: string | null
 }
 
 export interface IntegrationListResponse {
@@ -21,6 +22,24 @@ export interface IntegrationListResponse {
 
 export interface ZoomConnectResponse {
     auth_url: string
+}
+
+export interface GoogleCalendarStatusResponse {
+    connected: boolean
+    account_email: string | null
+    expires_at: string | null
+    tasks_accessible: boolean
+    tasks_error: string | null
+    last_sync_at: string | null
+}
+
+export interface GoogleCalendarSyncResponse {
+    connected: boolean
+    outbound_backfilled: number
+    appointment_changes: number
+    task_changes: number
+    last_sync_at: string
+    warnings: string[]
 }
 
 export interface ZoomStatusResponse {
@@ -91,6 +110,20 @@ export async function getGmailConnectUrl(): Promise<{ auth_url: string }> {
  */
 export async function getGoogleCalendarConnectUrl(): Promise<{ auth_url: string }> {
     return api.get<{ auth_url: string }>('/integrations/google-calendar/connect')
+}
+
+/**
+ * Get Google Calendar connection status and last sync metadata.
+ */
+export async function getGoogleCalendarStatus(): Promise<GoogleCalendarStatusResponse> {
+    return api.get<GoogleCalendarStatusResponse>('/integrations/google-calendar/status')
+}
+
+/**
+ * Manually trigger Google Calendar + Google Tasks reconciliation.
+ */
+export async function syncGoogleCalendarNow(): Promise<GoogleCalendarSyncResponse> {
+    return api.post<GoogleCalendarSyncResponse>('/integrations/google-calendar/sync')
 }
 
 /**

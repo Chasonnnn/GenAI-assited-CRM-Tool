@@ -151,6 +151,64 @@ def sync_to_google_calendar(
     return None
 
 
+def backfill_confirmed_appointments_to_google(
+    db: Session,
+    *,
+    user_id: UUID,
+    org_id: UUID,
+    date_start: date | None = None,
+    date_end: date | None = None,
+    limit: int = 100,
+) -> int:
+    """
+    Best-effort outbound backfill for confirmed platform appointments missing Google IDs.
+
+    This retries outbound sync on list/reconciliation paths so transient create-time
+    failures do not leave appointments permanently unsynced.
+    """
+    from app.services import calendar_service
+
+    if not calendar_service.check_user_has_google_calendar(db, user_id):
+        return 0
+
+    query = (
+        db.query(Appointment)
+        .filter(
+            Appointment.organization_id == org_id,
+            Appointment.user_id == user_id,
+            Appointment.status == AppointmentStatus.CONFIRMED.value,
+            Appointment.google_event_id.is_(None),
+            Appointment.meeting_mode != MeetingMode.GOOGLE_MEET.value,
+        )
+        .order_by(Appointment.scheduled_start.asc())
+    )
+
+    if date_start:
+        start_dt = datetime.combine(date_start, time.min, tzinfo=timezone.utc)
+        query = query.filter(Appointment.scheduled_start >= start_dt)
+    if date_end:
+        end_dt = datetime.combine(date_end, time.max, tzinfo=timezone.utc)
+        query = query.filter(Appointment.scheduled_start <= end_dt)
+
+    targets = query.limit(max(1, limit)).all()
+    if not targets:
+        return 0
+
+    updated_count = 0
+    for appt in targets:
+        google_event_id = sync_to_google_calendar(db, appt, "create")
+        if not google_event_id:
+            continue
+        if appt.google_event_id == google_event_id:
+            continue
+        appt.google_event_id = google_event_id
+        updated_count += 1
+
+    if updated_count:
+        db.flush()
+    return updated_count
+
+
 async def _sync_manual_google_events_for_appointments_async(
     db: Session,
     *,

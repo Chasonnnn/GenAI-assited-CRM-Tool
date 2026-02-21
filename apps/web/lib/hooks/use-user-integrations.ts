@@ -10,9 +10,11 @@ import {
     getZoomConnectUrl,
     getGmailConnectUrl,
     getGoogleCalendarConnectUrl,
+    getGoogleCalendarStatus,
     getGcpConnectUrl,
     getZoomStatus,
     getZoomMeetings,
+    syncGoogleCalendarNow,
     disconnectIntegration,
     createZoomMeeting,
     sendZoomInvite,
@@ -23,6 +25,8 @@ import {
     type ZoomMeetingRead,
     type SendZoomInviteRequest,
     type SendZoomInviteResponse,
+    type GoogleCalendarStatusResponse,
+    type GoogleCalendarSyncResponse,
 } from '@/lib/api/integrations'
 
 // ============================================================================
@@ -32,6 +36,7 @@ import {
 export const integrationKeys = {
     all: ['user-integrations'] as const,
     list: () => [...integrationKeys.all, 'list'] as const,
+    googleCalendarStatus: () => [...integrationKeys.all, 'google-calendar-status'] as const,
     zoomStatus: () => [...integrationKeys.all, 'zoom-status'] as const,
     zoomMeetings: (params?: { limit?: number }) => [...integrationKeys.all, 'zoom-meetings', params] as const,
 }
@@ -149,6 +154,57 @@ export function useConnectGoogleCalendar() {
 }
 
 /**
+ * Get Google Calendar connection diagnostics including last sync timestamp.
+ */
+export function useGoogleCalendarStatus(enabled = true) {
+    return useQuery({
+        queryKey: integrationKeys.googleCalendarStatus(),
+        queryFn: getGoogleCalendarStatus,
+        enabled,
+        staleTime: 15 * 1000,
+    })
+}
+
+/**
+ * Trigger an immediate Google Calendar/Tasks reconciliation.
+ */
+export function useSyncGoogleCalendarNow() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: syncGoogleCalendarNow,
+        onSuccess: (result) => {
+            queryClient.invalidateQueries({ queryKey: integrationKeys.list() })
+            queryClient.invalidateQueries({ queryKey: integrationKeys.googleCalendarStatus() })
+
+            if (result.warnings?.length) {
+                toast.warning('Google sync completed with warnings.')
+                return
+            }
+
+            const totalChanges =
+                (result.outbound_backfilled ?? 0)
+                + (result.appointment_changes ?? 0)
+                + (result.task_changes ?? 0)
+            toast.success(
+                totalChanges > 0
+                    ? `Google sync complete (${totalChanges} changes).`
+                    : 'Google sync complete. No changes detected.'
+            )
+        },
+        onError: (error) => {
+            const message =
+                error instanceof ApiError
+                    ? error.message || 'Failed to sync Google Calendar.'
+                    : error instanceof Error
+                        ? error.message
+                        : 'Failed to sync Google Calendar.'
+            toast.error(message)
+        },
+    })
+}
+
+/**
  * Connect Google Cloud - returns auth URL and redirects user.
  */
 export function useConnectGcp() {
@@ -213,4 +269,14 @@ export function useSendZoomInvite() {
 }
 
 // Re-export types for convenience
-export type { IntegrationStatus, ZoomStatusResponse, ZoomMeetingRead, CreateMeetingRequest, CreateMeetingResponse, SendZoomInviteRequest, SendZoomInviteResponse }
+export type {
+    IntegrationStatus,
+    ZoomStatusResponse,
+    ZoomMeetingRead,
+    CreateMeetingRequest,
+    CreateMeetingResponse,
+    SendZoomInviteRequest,
+    SendZoomInviteResponse,
+    GoogleCalendarStatusResponse,
+    GoogleCalendarSyncResponse,
+}
