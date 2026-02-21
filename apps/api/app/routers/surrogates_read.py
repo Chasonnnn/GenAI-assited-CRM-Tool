@@ -311,7 +311,9 @@ def export_surrogate_packet(
 
     org = org_service.get_org_by_id(db, session.org_id)
     org_name = org.name if org else ""
-    surrogate_name = surrogate.full_name or f"Surrogate #{surrogate.surrogate_number or surrogate.id}"
+    surrogate_name = (
+        surrogate.full_name or f"Surrogate #{surrogate.surrogate_number or surrogate.id}"
+    )
 
     try:
         pdf_bytes, includes_application = pdf_export_service.export_surrogate_packet_pdf(

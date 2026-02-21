@@ -153,7 +153,9 @@ async def test_surrogate_export_requires_auth(client, db, test_org, test_user, d
 
 
 @pytest.mark.asyncio
-async def test_surrogate_export_cross_org_hidden(authed_client, db, test_org, test_user, default_stage):
+async def test_surrogate_export_cross_org_hidden(
+    authed_client, db, test_org, test_user, default_stage
+):
     surrogate = _create_surrogate(
         db,
         test_org.id,
@@ -190,7 +192,9 @@ async def test_surrogate_export_cross_org_hidden(authed_client, db, test_org, te
     )
     db.flush()
 
-    async with _authed_client_for_user(db, other_org.id, other_user, Role.DEVELOPER) as other_client:
+    async with _authed_client_for_user(
+        db, other_org.id, other_user, Role.DEVELOPER
+    ) as other_client:
         response = await other_client.get(f"/surrogates/{surrogate.id}/export")
     assert response.status_code == 404
 

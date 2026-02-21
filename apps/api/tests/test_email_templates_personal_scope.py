@@ -294,9 +294,7 @@ async def test_admin_and_developer_can_edit_other_users_personal_templates(
     db.add(personal_template)
     db.commit()
 
-    async with authed_client_for_user(
-        db, test_org.id, privileged_user, privileged_role
-    ) as client:
+    async with authed_client_for_user(db, test_org.id, privileged_user, privileged_role) as client:
         res = await client.patch(
             f"/email-templates/{personal_template.id}",
             json={"subject": "Updated By Privileged User"},

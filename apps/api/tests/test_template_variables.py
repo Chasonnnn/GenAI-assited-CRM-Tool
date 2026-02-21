@@ -66,7 +66,9 @@ def test_build_surrogate_template_variables_includes_form_link(db, test_org, tes
     assert variables["form_link"].startswith(f"{base_url}/apply/")
 
     issued_token = variables["form_link"].removeprefix(f"{base_url}/apply/")
-    token_row = db.query(FormSubmissionToken).filter(FormSubmissionToken.token == issued_token).first()
+    token_row = (
+        db.query(FormSubmissionToken).filter(FormSubmissionToken.token == issued_token).first()
+    )
     assert token_row is not None
     assert token_row.form_id == created_form.id
     assert token_row.surrogate_id == surrogate.id

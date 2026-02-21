@@ -181,7 +181,9 @@ async def send_surrogate_email(
         )
 
     attachment_count = len(selected_attachments)
-    attachment_total_bytes = sum(int(attachment.file_size or 0) for attachment in selected_attachments)
+    attachment_total_bytes = sum(
+        int(attachment.file_size or 0) for attachment in selected_attachments
+    )
     logger.info(
         "surrogate_send_email_attempt provider=%s attachments_count=%s attachments_total_bytes=%s",
         resolved_provider,

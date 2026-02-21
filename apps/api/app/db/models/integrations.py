@@ -201,9 +201,7 @@ class UserIntegration(Base):
     # Google Calendar push channel metadata (events.watch)
     google_calendar_channel_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     google_calendar_resource_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    google_calendar_channel_token_encrypted: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
+    google_calendar_channel_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     google_calendar_watch_expires_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )

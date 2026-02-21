@@ -210,7 +210,9 @@ def get_latest_active_token_for_surrogate(
     if form_id:
         query = query.filter(FormSubmissionToken.form_id == form_id)
 
-    return query.order_by(FormSubmissionToken.created_at.desc(), FormSubmissionToken.id.desc()).first()
+    return query.order_by(
+        FormSubmissionToken.created_at.desc(), FormSubmissionToken.id.desc()
+    ).first()
 
 
 def get_or_create_submission_token(
