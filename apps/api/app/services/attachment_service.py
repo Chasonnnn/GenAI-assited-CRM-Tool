@@ -216,21 +216,20 @@ def strip_exif_data(file: BinaryIO, content_type: str) -> BinaryIO:
         return file
 
     try:
-        from PIL import Image
+        from PIL import Image, UnidentifiedImageError
         from io import BytesIO
 
         file.seek(0)
         img = Image.open(file)
 
-        # Create new image without EXIF
-        data = list(img.getdata())
-        img_no_exif = Image.new(img.mode, img.size)
-        img_no_exif.putdata(data)
+        # Convert to RGB if needed (for PNG with transparency -> JPEG)
+        if content_type == "image/jpeg" and img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
 
-        # Save to new buffer
+        # Save to new buffer (strips EXIF by default unless exif=... is passed)
         output = BytesIO()
         img_format = "JPEG" if content_type == "image/jpeg" else "PNG"
-        img_no_exif.save(output, format=img_format, quality=95)
+        img.save(output, format=img_format, quality=95)
         output.seek(0)
 
         return output
@@ -239,10 +238,12 @@ def strip_exif_data(file: BinaryIO, content_type: str) -> BinaryIO:
         # Pillow not installed, skip stripping
         file.seek(0)
         return file
+    except (UnidentifiedImageError, ValueError, OSError) as exc:
+        # Failed to process (invalid image), reject it
+        raise ValueError("Invalid image file") from exc
     except Exception:
-        # Failed to process, return original
-        file.seek(0)
-        return file
+        # Unexpected error, reject for safety
+        raise ValueError("Image processing failed")
 
 
 def generate_signed_url(storage_key: str, expires_in_seconds: int | None = None) -> str:
