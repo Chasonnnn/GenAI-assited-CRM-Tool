@@ -99,19 +99,24 @@ export function InlineEditField({
         return (
             <div
                 className={cn(
-                    "group flex items-center gap-1 cursor-pointer rounded px-1 -mx-1 hover:bg-muted/50 transition-colors",
+                    "group flex items-center gap-1 cursor-pointer rounded px-1 -mx-1 hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                     displayClassName
                 )}
                 onClick={handleStartEdit}
                 role="button"
                 tabIndex={0}
-                onKeyDown={(e) => e.key === "Enter" && handleStartEdit()}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        handleStartEdit()
+                    }
+                }}
                 aria-label={`Edit ${fieldLabel}`}
             >
                 <span className={cn("text-sm", !value && "text-muted-foreground", className)}>
                     {value || placeholder}
                 </span>
-                <PencilIcon className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                <PencilIcon className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity" />
             </div>
         )
     }

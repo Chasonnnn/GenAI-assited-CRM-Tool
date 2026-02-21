@@ -9,3 +9,7 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+
+## 2025-05-21 - Custom Interactive Elements & Keyboard Support
+**Learning:** Custom components using `role="button"` (like `InlineEditField`) must explicitly handle the `Space` key in `onKeyDown` to match native button behavior, as `onClick` only handles mouse clicks and `Enter` key (sometimes). Visual focus indicators (`focus-visible`) are also frequently missed on these custom controls.
+**Action:** When using `role="button"`, always add `onKeyDown` for Space (with preventDefault) and ensure visible focus styles are applied.
