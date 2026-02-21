@@ -392,6 +392,7 @@ export default function PlatformSystemEmailTemplatePage() {
         if (editorModeTouched) return
         if (body && hasComplexHtml && editorMode !== "html") {
             setEditorMode("html")
+            setActiveInsertionTarget(null)
         }
     }, [body, editorModeTouched, hasComplexHtml, editorMode])
 
@@ -1102,6 +1103,13 @@ export default function PlatformSystemEmailTemplatePage() {
                                             if (!next) return
                                             setEditorMode(next)
                                             setEditorModeTouched(true)
+                                            setActiveInsertionTarget((current) =>
+                                                current === "subject"
+                                                    ? current
+                                                    : next === "html"
+                                                      ? "body_html"
+                                                      : "body_visual"
+                                            )
                                         }}
                                     >
                                         <ToggleGroupItem value="visual" className="h-8">

@@ -335,8 +335,10 @@ export function AppSidebar({ children }: AppSidebarProps) {
                 </Button>
             </div>
 
-            <nav className="flex-1 px-2 pt-3">
-                <div className="mb-2 text-xs font-medium text-muted-foreground">Navigation</div>
+            <nav className="flex-1 px-2 pt-3" aria-label="Navigation">
+                {!isCollapsed && (
+                    <div className="mb-2 text-xs font-medium text-muted-foreground">Navigation</div>
+                )}
                 <div className="flex flex-col gap-1">
                     {navigationItems.map((item) => (
                         <div key={item.title}>{renderNavLink(item)}</div>

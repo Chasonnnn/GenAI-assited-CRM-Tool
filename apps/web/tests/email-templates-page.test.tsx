@@ -7,6 +7,16 @@ const mockUseAuth = vi.fn()
 const mockRichTextEditorProps = vi.fn()
 const mockUseEmailTemplates = vi.fn()
 const FIXED_TIMESTAMP = "2026-01-01T00:00:00.000Z"
+const TEMPLATE_VARIABLES = [
+    {
+        name: "full_name",
+        description: "Recipient full name",
+        category: "Recipient",
+        required: false,
+        value_type: "text",
+        html_safe: false,
+    },
+]
 
 const ORG_TEMPLATE = {
     id: "tpl_org_1",
@@ -156,7 +166,7 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
         data: id === "lib_tpl_1" ? LIBRARY_TEMPLATE_DETAIL : null,
         isLoading: false,
     }),
-    useEmailTemplateVariables: () => ({ data: [], isLoading: false }),
+    useEmailTemplateVariables: () => ({ data: TEMPLATE_VARIABLES, isLoading: false }),
     useCreateEmailTemplate: () => ({ mutate: vi.fn(), isPending: false }),
     useUpdateEmailTemplate: () => ({ mutate: vi.fn(), isPending: false }),
     useDeleteEmailTemplate: () => ({ mutate: vi.fn(), isPending: false }),
@@ -232,6 +242,24 @@ describe("EmailTemplatesPage", () => {
         const subject = screen.getByText("Your Surrogacy Journey Starts with EWI Family Global")
         expect(subject).toHaveClass("line-clamp-2")
         expect(subject).toHaveAttribute("title", "Your Surrogacy Journey Starts with EWI Family Global")
+    })
+
+    it("clamps long template names to two lines to protect actions area", () => {
+        orgTemplatesFixture = [
+            {
+                ...ORG_TEMPLATE,
+                id: "tpl_org_long_name",
+                name: "Gift Card Email-Completed the interview and waiting for GC to process through the payroll team",
+            },
+        ]
+
+        render(<EmailTemplatesPage />)
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+
+        const title = screen.getByText(
+            "Gift Card Email-Completed the interview and waiting for GC to process through the payroll team"
+        )
+        expect(title).toHaveClass("line-clamp-2")
     })
 
     it("renders a readable email preview on a white background (dark theme)", async () => {
@@ -334,5 +362,27 @@ describe("EmailTemplatesPage", () => {
 
         expect(screen.queryByText("Deleted Personal Template")).not.toBeInTheDocument()
         expect(screen.getByText("You don't have any personal templates yet")).toBeInTheDocument()
+    })
+
+    it("does not insert variables into hidden HTML field after switching to visual mode", async () => {
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: /Create Template/i }))
+        fireEvent.change(screen.getByLabelText("Template Name"), { target: { value: "My Template" } })
+        fireEvent.change(screen.getByLabelText("Subject Line"), { target: { value: "Hello" } })
+
+        fireEvent.click(screen.getByRole("button", { name: "HTML" }))
+
+        const htmlTextarea = screen.getByLabelText("Email Body") as HTMLTextAreaElement
+        fireEvent.change(htmlTextarea, { target: { value: "<p>Body</p>" } })
+        htmlTextarea.focus()
+
+        fireEvent.click(screen.getByRole("button", { name: "Visual" }))
+        fireEvent.click(screen.getByRole("button", { name: "Insert Variable" }))
+        fireEvent.click(await screen.findByText("{{full_name}}"))
+
+        fireEvent.click(screen.getByRole("button", { name: "HTML" }))
+        const htmlTextareaAfter = screen.getByLabelText("Email Body") as HTMLTextAreaElement
+        expect(htmlTextareaAfter.value).toBe("<p>Body</p>")
     })
 })

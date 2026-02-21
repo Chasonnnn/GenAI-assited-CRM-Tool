@@ -138,6 +138,7 @@ function getActivityPreview(activity: SurrogateActivity): string {
                 Array.isArray(details.contact_methods)
                     ? (details.contact_methods as string[]).join(", ")
                     : undefined,
+                (details.note_preview as string | undefined) || undefined,
             ]
                 .filter(Boolean)
                 .join(" • ")

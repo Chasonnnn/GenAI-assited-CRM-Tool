@@ -427,6 +427,30 @@ describe('SurrogateDetailPage', () => {
         expect(heightRow).toHaveTextContent(/Height:\s*-/)
     })
 
+    it('computes BMI from rounded inches for decimal-feet height values', () => {
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                height_ft: 5.1,
+                weight_lb: 180,
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        const heightRow = screen.getByText('Height:').parentElement
+        expect(heightRow).toBeTruthy()
+        expect(heightRow).toHaveTextContent('5 ft 1 in')
+        expect(screen.getByText('BMI:')).toBeInTheDocument()
+        expect(screen.getByText("34")).toBeInTheDocument()
+    })
+
     it('shows formatted height when API returns numeric string height', () => {
         mockUseSurrogate.mockReturnValueOnce({
             data: {

@@ -112,13 +112,22 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
             return details.title
                 ? withAiPrefix(`Deleted: ${String(details.title)}`)
                 : withAiPrefix("Task deleted")
+        case "email_sent": {
+            const subject = details.subject ? `Subject: ${String(details.subject)}` : ""
+            const provider = details.provider ? `via ${String(details.provider)}` : ""
+            const templateId = details.template_id ? `template ${String(details.template_id)}` : ""
+            const parts = [subject, provider, templateId].filter(Boolean)
+            return parts.length > 0 ? withAiPrefix(parts.join(" • ")) : withAiPrefix("Email sent")
+        }
         case "contact_attempt": {
             const methods = Array.isArray(details.contact_methods)
                 ? details.contact_methods.map((method) => String(method)).join(", ")
                 : ""
             const outcome = String(details.outcome || "").replace(/_/g, " ")
             const backdated = details.is_backdated ? " (backdated)" : ""
-            return withAiPrefix(`${methods}: ${outcome}${backdated}`)
+            const summary = `${methods}: ${outcome}${backdated}`
+            const notePreview = details.note_preview ? String(details.note_preview) : ""
+            return withAiPrefix([summary, notePreview].filter(Boolean).join(" • "))
         }
         default:
             return aiOnly()

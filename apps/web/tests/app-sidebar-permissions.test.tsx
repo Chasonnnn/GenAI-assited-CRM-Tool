@@ -195,4 +195,22 @@ describe("AppSidebar permission visibility", () => {
         )
         expect(screen.getByLabelText("User menu")).toBeInTheDocument()
     })
+
+    it("hides the visual Navigation heading when collapsed but keeps nav aria-label", async () => {
+        document.cookie = "sidebar_state=false"
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["manage_team", "view_audit_log"] },
+        })
+
+        render(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        await waitFor(() => {
+            expect(screen.getByRole("navigation", { name: "Navigation" })).toBeInTheDocument()
+        })
+        expect(screen.queryByText("Navigation")).not.toBeInTheDocument()
+    })
 })

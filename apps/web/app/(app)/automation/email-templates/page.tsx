@@ -413,10 +413,10 @@ function TemplateCard({
     return (
         <Card className="group relative min-w-0">
             <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                            <CardTitle className="text-base truncate">
+                        <div className="flex items-start gap-2">
+                            <CardTitle className="text-base leading-6 line-clamp-2 min-h-12 break-words">
                                 {template.name}
                             </CardTitle>
                             {template.is_system_template && (
@@ -846,6 +846,7 @@ export default function EmailTemplatesPage() {
             setTemplateScope(template.scope)
             setTemplateBodyMode("visual")
             setTemplateBodyModeTouched(false)
+            setActiveInsertionTarget(null)
         } else {
             setEditingTemplate(null)
             setTemplateName("")
@@ -854,6 +855,7 @@ export default function EmailTemplatesPage() {
             setTemplateScope(scope)
             setTemplateBodyMode("visual")
             setTemplateBodyModeTouched(false)
+            setActiveInsertionTarget(null)
         }
         setIsModalOpen(true)
     }
@@ -866,6 +868,7 @@ export default function EmailTemplatesPage() {
         if (!templateBodyModeTouched) {
             const complex = /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(fullTemplate.body)
             setTemplateBodyMode(complex ? "html" : "visual")
+            setActiveInsertionTarget(null)
         }
     }, [fullTemplate, editingTemplate, templateBody, templateBodyModeTouched])
 
@@ -1712,7 +1715,15 @@ export default function EmailTemplatesPage() {
             </div>
 
             {/* Create/Edit Template Modal */}
-            <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+            <Dialog
+                open={isModalOpen}
+                onOpenChange={(open) => {
+                    setIsModalOpen(open)
+                    if (!open) {
+                        setActiveInsertionTarget(null)
+                    }
+                }}
+            >
                 <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
                     <DialogHeader>
                         <DialogTitle>
@@ -1778,6 +1789,13 @@ export default function EmailTemplatesPage() {
                                             if (!next) return
                                             setTemplateBodyMode(next)
                                             setTemplateBodyModeTouched(true)
+                                            setActiveInsertionTarget((current) =>
+                                                current === "subject"
+                                                    ? current
+                                                    : next === "html"
+                                                      ? "body_html"
+                                                      : "body_visual"
+                                            )
                                         }}
                                     >
                                         <ToggleGroupItem value="visual" className="h-8">

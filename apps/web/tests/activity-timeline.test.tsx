@@ -219,6 +219,40 @@ describe('ActivityTimeline', () => {
         expect(screen.getByText(/via gmail/i)).toBeInTheDocument()
     })
 
+    it('shows contact note preview in activity tracker entries', () => {
+        const stages = [makeStage({ id: 's1', label: 'New Unread', order: 1 })]
+
+        mockUseSurrogateHistory.mockReturnValue({
+            data: [makeHistory({ id: 'h1', to_stage_id: 's1' })],
+        })
+
+        const activities = [
+            makeActivity({
+                id: 'a1',
+                activity_type: 'contact_attempt',
+                details: {
+                    outcome: 'no_answer',
+                    contact_methods: ['phone'],
+                    note_preview: 'Left voicemail and asked for callback',
+                },
+                created_at: '2024-02-02T00:00:00.000Z',
+            }),
+        ]
+
+        render(
+            <ActivityTimeline
+                surrogateId="surr1"
+                currentStageId="s1"
+                stages={stages}
+                activities={activities}
+                tasks={[]}
+            />
+        )
+
+        expect(screen.getByText(/no_answer/i)).toBeInTheDocument()
+        expect(screen.getByText(/left voicemail and asked for callback/i)).toBeInTheDocument()
+    })
+
     it('separates overdue tasks from upcoming tasks', () => {
         const stages = [makeStage({ id: 's1', label: 'New Unread', order: 1 })]
 

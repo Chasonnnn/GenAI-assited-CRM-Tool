@@ -32,4 +32,29 @@ describe("SurrogateHistoryTab", () => {
         expect(screen.getByText("Alex • formatted 2024-01-01T00:00:00Z")).toBeInTheDocument()
         expect(screen.getByText("New → Contacted: Phone")).toBeInTheDocument()
     })
+
+    it("shows contact note preview for contact attempt entries", () => {
+        render(
+            <SurrogateHistoryTab
+                activities={[
+                    {
+                        id: "a2",
+                        activity_type: "contact_attempt",
+                        actor_name: "Alex",
+                        created_at: "2024-01-02T00:00:00Z",
+                        details: {
+                            contact_methods: ["phone"],
+                            outcome: "no_answer",
+                            note_preview: "Left voicemail requesting callback",
+                        },
+                    },
+                ]}
+                formatDateTime={formatDateTime}
+            />
+        )
+
+        expect(screen.getByText("Contact Attempt")).toBeInTheDocument()
+        expect(screen.getByText(/phone: no answer/i)).toBeInTheDocument()
+        expect(screen.getByText(/left voicemail requesting callback/i)).toBeInTheDocument()
+    })
 })

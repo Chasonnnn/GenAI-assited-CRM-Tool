@@ -39,7 +39,7 @@ export function formatHeight(heightFt: number | string | null | undefined): stri
 
 export function computeBmi(heightFt: number | null, weightLb: number | null): number | null {
     if (!heightFt || !weightLb) return null
-    const heightInches = heightFt * 12
+    const heightInches = Math.round(heightFt * 12)
     if (heightInches <= 0) return null
     return Math.round((weightLb / (heightInches ** 2)) * 703 * 10) / 10
 }
