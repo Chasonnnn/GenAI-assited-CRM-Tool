@@ -13,6 +13,10 @@ const notoSans = Noto_Sans({
 export const metadata: Metadata = {
   title: "Surrogacy Force",
   description: "Surrogacy Force case management platform",
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({

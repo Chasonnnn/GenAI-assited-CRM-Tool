@@ -65,7 +65,7 @@ export function useBrowserNotifications(hookOptions: UseBrowserNotificationsOpti
 
         try {
             const notificationOptions: NotificationOptions = {
-                icon: options?.icon || '/icon-192x192.png',
+                icon: options?.icon || '/favicon.ico',
                 ...(options?.body ? { body: options.body } : {}),
                 ...(options?.tag ? { tag: options.tag } : {}),
             }
