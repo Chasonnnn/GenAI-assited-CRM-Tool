@@ -251,9 +251,24 @@ def log_email_sent(
     email_log_id: UUID,
     subject: str,
     provider: str,
+    template_id: UUID | None = None,
     attachments: list[object] | None = None,
 ) -> SurrogateActivityLog:
-    """Log email sent without storing subject/body."""
+    """Log email sent with idempotency keyed by email_log_id."""
+    existing = (
+        db.query(SurrogateActivityLog)
+        .filter(
+            SurrogateActivityLog.organization_id == organization_id,
+            SurrogateActivityLog.surrogate_id == surrogate_id,
+            SurrogateActivityLog.activity_type == SurrogateActivityType.EMAIL_SENT.value,
+            SurrogateActivityLog.details["email_log_id"].astext == str(email_log_id),
+        )
+        .order_by(SurrogateActivityLog.created_at.desc())
+        .first()
+    )
+    if existing:
+        return existing
+
     attachment_details = []
     for attachment in attachments or []:
         attachment_details.append(
@@ -272,6 +287,8 @@ def log_email_sent(
         actor_user_id=actor_user_id,
         details={
             "email_log_id": str(email_log_id),
+            "template_id": str(template_id) if template_id else None,
+            "subject": (subject or "").strip()[:200],
             "provider": provider,
             "attachments": attachment_details,
         },

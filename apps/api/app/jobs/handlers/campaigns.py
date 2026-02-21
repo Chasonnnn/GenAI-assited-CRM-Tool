@@ -23,6 +23,13 @@ async def process_campaign_send(db, job) -> None:
     campaign_id = payload.get("campaign_id")
     run_id = payload.get("run_id")
     retry_failed_only = bool(payload.get("retry_failed_only"))
+    user_id = payload.get("user_id")
+    actor_user_id = None
+    if user_id:
+        try:
+            actor_user_id = UUID(str(user_id))
+        except (TypeError, ValueError):
+            actor_user_id = None
 
     if not campaign_id or not run_id:
         raise Exception("Missing campaign_id or run_id in campaign send job")
@@ -49,6 +56,7 @@ async def process_campaign_send(db, job) -> None:
                 org_id=job.organization_id,
                 campaign_id=UUID(campaign_id),
                 run_id=UUID(run_id),
+                actor_user_id=actor_user_id,
             )
         else:
             result = campaign_service.execute_campaign_run(
@@ -56,6 +64,7 @@ async def process_campaign_send(db, job) -> None:
                 org_id=job.organization_id,
                 campaign_id=UUID(campaign_id),
                 run_id=UUID(run_id),
+                actor_user_id=actor_user_id,
             )
 
         if retry_failed_only:

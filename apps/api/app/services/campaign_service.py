@@ -860,6 +860,7 @@ def execute_campaign_run(
     org_id: UUID,
     campaign_id: UUID,
     run_id: UUID,
+    actor_user_id: UUID | None = None,
 ) -> dict:
     """
     Execute a campaign run - send emails to all recipients.
@@ -1125,6 +1126,8 @@ def execute_campaign_run(
                     recipient_email=email,
                     subject=subject,
                     body=tracked_body,
+                    surrogate_id=entity_id if campaign.recipient_type == "case" else None,
+                    sender_user_id=actor_user_id,
                     commit=False,
                     ignore_opt_out=bool(getattr(campaign, "include_unsubscribed", False)),
                 )
@@ -1201,6 +1204,7 @@ def retry_failed_campaign_run(
     org_id: UUID,
     campaign_id: UUID,
     run_id: UUID,
+    actor_user_id: UUID | None = None,
 ) -> dict:
     """Retry failed recipients for an existing campaign run."""
     from app.services import email_service
@@ -1372,6 +1376,8 @@ def retry_failed_campaign_run(
                 recipient_email=email,
                 subject=subject,
                 body=tracked_body,
+                surrogate_id=entity.id if campaign.recipient_type == "case" else None,
+                sender_user_id=actor_user_id,
                 commit=False,
                 ignore_opt_out=bool(getattr(campaign, "include_unsubscribed", False)),
             )

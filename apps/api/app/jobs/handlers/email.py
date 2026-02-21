@@ -209,9 +209,18 @@ async def _send_via_org_provider(
 
 async def process_send_email(db, job) -> None:
     """Process SEND_EMAIL job."""
-    email_log_id = job.payload.get("email_log_id")
+    payload = job.payload or {}
+    email_log_id = payload.get("email_log_id")
     if not email_log_id:
         raise Exception("Missing email_log_id in job payload")
+
+    sender_user_id = None
+    raw_sender_user_id = payload.get("sender_user_id")
+    if raw_sender_user_id:
+        try:
+            sender_user_id = UUID(str(raw_sender_user_id))
+        except (TypeError, ValueError):
+            sender_user_id = None
 
     email_log = db.query(EmailLog).filter(EmailLog.id == UUID(email_log_id)).first()
     if not email_log:
@@ -222,6 +231,22 @@ async def process_send_email(db, job) -> None:
         email_service.mark_email_skipped(db, email_log, "suppressed")
     else:
         email_service.mark_email_sent(db, email_log)
+        attachments = email_service.list_email_log_attachments(
+            db=db,
+            org_id=email_log.organization_id,
+            email_log_id=email_log.id,
+        )
+        email_service.log_surrogate_email_send_success(
+            db=db,
+            org_id=email_log.organization_id,
+            surrogate_id=email_log.surrogate_id,
+            email_log_id=email_log.id,
+            subject=email_log.subject,
+            provider="resend",
+            template_id=email_log.template_id,
+            actor_user_id=sender_user_id,
+            attachments=attachments,
+        )
 
 
 async def process_workflow_email(db, job) -> None:
@@ -412,6 +437,16 @@ async def process_workflow_email(db, job) -> None:
 
         # Mark as sent
         email_service.mark_email_sent(db, email_log)
+        email_service.log_surrogate_email_send_success(
+            db=db,
+            org_id=email_log.organization_id,
+            surrogate_id=email_log.surrogate_id,
+            email_log_id=email_log.id,
+            subject=email_log.subject,
+            provider="gmail" if provider == "user_gmail" else provider,
+            template_id=email_log.template_id,
+            actor_user_id=UUID(workflow_owner_id) if workflow_owner_id else None,
+        )
 
         logger.info(
             "Workflow email sent via %s for case=%s recipient=%s",

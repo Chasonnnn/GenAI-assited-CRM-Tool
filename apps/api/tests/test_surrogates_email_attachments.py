@@ -8,8 +8,8 @@ from uuid import UUID, uuid4
 import pytest
 from httpx import AsyncClient
 
-from app.db.enums import SurrogateSource, SurrogateActivityType
-from app.db.models import EmailLogAttachment, SurrogateActivityLog
+from app.db.enums import AuditEventType, SurrogateSource, SurrogateActivityType
+from app.db.models import AuditLog, EmailLogAttachment, SurrogateActivityLog
 from app.schemas.surrogate import SurrogateCreate
 from app.services import attachment_service, email_service, surrogate_service
 
@@ -160,6 +160,23 @@ async def test_send_email_gmail_passes_attachments_and_logs_activity_details(
     assert len(attachments) == 1
     assert attachments[0]["attachment_id"] == str(attachment.id)
     assert attachments[0]["filename"] == attachment.filename
+    assert details.get("subject", "").startswith("Hello ")
+    assert details.get("template_id") == str(template.id)
+
+    audit_log = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.organization_id == test_org.id,
+            AuditLog.event_type == AuditEventType.DATA_EMAIL_SENT.value,
+            AuditLog.target_type == "surrogate",
+            AuditLog.target_id == surrogate.id,
+        )
+        .order_by(AuditLog.created_at.desc())
+        .first()
+    )
+    assert audit_log is not None
+    assert audit_log.actor_user_id == test_user.id
+    assert (audit_log.details or {}).get("email_log_id") == details.get("email_log_id")
 
 
 @pytest.mark.asyncio
@@ -196,3 +213,24 @@ async def test_send_email_resend_links_attachments_to_email_log(
     )
     assert len(links) == 1
     assert links[0].attachment_id == attachment.id
+
+    activity = (
+        db.query(SurrogateActivityLog)
+        .filter(
+            SurrogateActivityLog.surrogate_id == surrogate.id,
+            SurrogateActivityLog.activity_type == SurrogateActivityType.EMAIL_SENT.value,
+        )
+        .first()
+    )
+    assert activity is None
+
+    audit = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.organization_id == test_org.id,
+            AuditLog.event_type == AuditEventType.DATA_EMAIL_SENT.value,
+            AuditLog.target_id == surrogate.id,
+        )
+        .first()
+    )
+    assert audit is None

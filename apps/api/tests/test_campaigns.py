@@ -539,6 +539,77 @@ def test_execute_campaign_run_with_no_recipients(db, test_org, test_user, test_t
     assert result["total_count"] == 0
 
 
+def test_execute_campaign_run_propagates_sender_user_id_to_send_email_jobs(
+    db, test_org, test_user, test_template, default_stage
+):
+    from app.db.enums import JobType
+    from app.db.models import Campaign, CampaignRun, Job, Surrogate
+    from app.services import campaign_service
+
+    recipient_email = normalize_email("campaign-sender@example.com")
+    surrogate = Surrogate(
+        id=uuid4(),
+        organization_id=test_org.id,
+        stage_id=default_stage.id,
+        full_name="Campaign Sender",
+        status_label=default_stage.label,
+        email=recipient_email,
+        email_hash=hash_email(recipient_email),
+        source="manual",
+        surrogate_number=f"S{uuid4().int % 90000 + 10000:05d}",
+        owner_type="user",
+        owner_id=test_user.id,
+    )
+    db.add(surrogate)
+    db.flush()
+
+    campaign = Campaign(
+        id=uuid4(),
+        organization_id=test_org.id,
+        name="Sender Propagation Campaign",
+        email_template_id=test_template.id,
+        recipient_type="case",
+        filter_criteria={"stage_ids": [str(default_stage.id)]},
+        status="draft",
+        created_by_user_id=test_user.id,
+    )
+    db.add(campaign)
+    db.flush()
+
+    run = CampaignRun(
+        id=uuid4(),
+        organization_id=test_org.id,
+        campaign_id=campaign.id,
+        status="pending",
+        total_count=0,
+        sent_count=0,
+        failed_count=0,
+        skipped_count=0,
+    )
+    db.add(run)
+    db.flush()
+
+    campaign_service.execute_campaign_run(
+        db=db,
+        org_id=test_org.id,
+        campaign_id=campaign.id,
+        run_id=run.id,
+        actor_user_id=test_user.id,
+    )
+
+    job = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.SEND_EMAIL.value,
+        )
+        .order_by(Job.created_at.desc())
+        .first()
+    )
+    assert job is not None
+    assert job.payload["sender_user_id"] == str(test_user.id)
+
+
 def test_execute_campaign_run_skips_opt_out_by_default(
     db, test_org, test_user, test_template, default_stage
 ):

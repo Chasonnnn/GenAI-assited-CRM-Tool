@@ -1110,6 +1110,7 @@ def send_email(
     surrogate_id: UUID | None = None,
     attachments: list[Attachment] | None = None,
     schedule_at: datetime | None = None,
+    sender_user_id: UUID | None = None,
     commit: bool = True,
     ignore_opt_out: bool = False,
 ) -> tuple[EmailLog, Job | None]:
@@ -1160,11 +1161,15 @@ def send_email(
         )
 
     # Schedule job to send
+    payload: dict[str, str] = {"email_log_id": str(email_log.id)}
+    if sender_user_id:
+        payload["sender_user_id"] = str(sender_user_id)
+
     job = enqueue_job(
         db=db,
         org_id=org_id,
         job_type=JobType.SEND_EMAIL,
-        payload={"email_log_id": str(email_log.id)},
+        payload=payload,
         run_at=schedule_at,
         commit=commit,
     )
@@ -1304,6 +1309,7 @@ def send_from_template(
         body=body,
         surrogate_id=surrogate_id,
         schedule_at=schedule_at,
+        sender_user_id=sender_user_id,
     )
 
 
@@ -1336,6 +1342,67 @@ def mark_email_skipped(db: Session, email_log: EmailLog, reason: str) -> EmailLo
     db.refresh(email_log)
     _sync_campaign_recipient(db, email_log, EmailStatus.SKIPPED.value, error=reason)
     return email_log
+
+
+def _resolve_sender_user_id_from_job(db: Session, email_log: EmailLog) -> UUID | None:
+    """Best-effort sender lookup from SEND_EMAIL job payload."""
+    if not email_log.job_id:
+        return None
+    job = db.query(Job).filter(Job.id == email_log.job_id).first()
+    if not job or not isinstance(job.payload, dict):
+        return None
+    sender = job.payload.get("sender_user_id")
+    if not sender:
+        return None
+    try:
+        return UUID(str(sender))
+    except (TypeError, ValueError):
+        return None
+
+
+def log_surrogate_email_send_success(
+    db: Session,
+    *,
+    org_id: UUID,
+    surrogate_id: UUID | None,
+    email_log_id: UUID,
+    subject: str,
+    provider: str,
+    template_id: UUID | None = None,
+    actor_user_id: UUID | None = None,
+    attachments: list[Attachment] | None = None,
+) -> None:
+    """Write surrogate activity + audit for successful outbound sends."""
+    if not surrogate_id:
+        return
+
+    from app.core.constants import SYSTEM_USER_ID
+    from app.services import activity_service, audit_service
+
+    resolved_actor_user_id = actor_user_id or SYSTEM_USER_ID
+
+    activity_service.log_email_sent(
+        db=db,
+        surrogate_id=surrogate_id,
+        organization_id=org_id,
+        actor_user_id=resolved_actor_user_id,
+        email_log_id=email_log_id,
+        subject=subject,
+        provider=provider,
+        template_id=template_id,
+        attachments=attachments,
+    )
+    audit_service.log_surrogate_email_sent(
+        db=db,
+        org_id=org_id,
+        surrogate_id=surrogate_id,
+        actor_user_id=resolved_actor_user_id,
+        email_log_id=email_log_id,
+        provider=provider,
+        subject=subject,
+        template_id=template_id,
+    )
+    db.commit()
 
 
 def get_email_log(db: Session, email_id: UUID, org_id: UUID) -> EmailLog | None:

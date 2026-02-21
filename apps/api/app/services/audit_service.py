@@ -190,6 +190,53 @@ def log_phi_access(
     )
 
 
+def log_surrogate_email_sent(
+    db: Session,
+    org_id: UUID,
+    surrogate_id: UUID,
+    actor_user_id: UUID | None,
+    email_log_id: UUID,
+    provider: str,
+    subject: str,
+    template_id: UUID | None = None,
+    request: Request | None = None,
+) -> AuditLog:
+    """Log outbound surrogate email sends, idempotent by email_log_id."""
+    existing = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.organization_id == org_id,
+            AuditLog.event_type == AuditEventType.DATA_EMAIL_SENT.value,
+            AuditLog.target_type == "surrogate",
+            AuditLog.target_id == surrogate_id,
+            AuditLog.details["email_log_id"].astext == str(email_log_id),
+        )
+        .order_by(AuditLog.created_at.desc())
+        .first()
+    )
+    if existing:
+        return existing
+
+    details: JsonObject = {
+        "email_log_id": str(email_log_id),
+        "provider": provider,
+        "subject": (subject or "").strip()[:200],
+    }
+    if template_id:
+        details["template_id"] = str(template_id)
+
+    return log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.DATA_EMAIL_SENT,
+        actor_user_id=actor_user_id,
+        target_type="surrogate",
+        target_id=surrogate_id,
+        details=details,
+        request=request,
+    )
+
+
 def _get_actor_names(db: Session, actor_ids: set[UUID]) -> dict[UUID, str | None]:
     if not actor_ids:
         return {}

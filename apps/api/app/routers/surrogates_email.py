@@ -73,7 +73,7 @@ async def send_surrogate_email(
     db: Session = Depends(get_db),
 ):
     """Send email to surrogate contact using template."""
-    from app.services import activity_service, email_service, gmail_service, oauth_service
+    from app.services import email_service, gmail_service, oauth_service
 
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
     if not surrogate:
@@ -136,6 +136,7 @@ async def send_surrogate_email(
             body=body,
             surrogate_id=surrogate_id,
             attachments=selected_attachments,
+            sender_user_id=session.user_id,
         )
         return SendEmailResponse(
             success=False,
@@ -198,19 +199,8 @@ async def send_surrogate_email(
             body=body,
             surrogate_id=surrogate_id,
             attachments=selected_attachments,
+            sender_user_id=session.user_id,
         )
-
-        activity_service.log_email_sent(
-            db=db,
-            surrogate_id=surrogate_id,
-            organization_id=session.org_id,
-            actor_user_id=session.user_id,
-            email_log_id=email_log.id,
-            subject=subject,
-            provider="resend",
-            attachments=selected_attachments,
-        )
-        db.commit()
 
         return SendEmailResponse(
             success=True,
@@ -236,17 +226,17 @@ async def send_surrogate_email(
     result = await gmail_service.send_email_logged(**gmail_kwargs)
 
     if result.get("success"):
-        activity_service.log_email_sent(
+        email_service.log_surrogate_email_send_success(
             db=db,
+            org_id=session.org_id,
             surrogate_id=surrogate_id,
-            organization_id=session.org_id,
-            actor_user_id=session.user_id,
             email_log_id=result.get("email_log_id"),
             subject=subject,
             provider="gmail",
+            template_id=data.template_id,
+            actor_user_id=session.user_id,
             attachments=selected_attachments,
         )
-        db.commit()
 
         return SendEmailResponse(
             success=True,

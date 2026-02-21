@@ -153,6 +153,106 @@ async def test_workflow_email_appends_personal_signature_for_personal_scope(
 
 
 @pytest.mark.asyncio
+async def test_workflow_email_logs_surrogate_activity_and_audit_after_success_with_system_actor_fallback(
+    db, test_org, test_user, monkeypatch
+):
+    from app.core.constants import SYSTEM_USER_ID
+    from app.db.enums import AuditEventType, JobType, SurrogateSource, SurrogateActivityType
+    from app.db.models import AuditLog, EmailTemplate, Job, SurrogateActivityLog
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import workflow_email_provider
+    from app.services import surrogate_service
+    from app.worker import process_workflow_email
+    from app.services import resend_email_service, resend_settings_service
+
+    surrogate = surrogate_service.create_surrogate(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        data=SurrogateCreate(
+            full_name="Workflow Surrogate",
+            email="workflow-surrogate@test.com",
+            source=SurrogateSource.MANUAL,
+        ),
+    )
+
+    template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        created_by_user_id=test_user.id,
+        name="Workflow Template",
+        subject="Follow up {{full_name}}",
+        body="<p>Body</p>",
+        scope="org",
+        owner_user_id=None,
+        is_active=True,
+    )
+    db.add(template)
+    db.commit()
+
+    monkeypatch.setattr(
+        workflow_email_provider,
+        "resolve_workflow_email_provider",
+        lambda **kwargs: (
+            "resend",
+            {"api_key_encrypted": "fake", "from_email": "no-reply@test.com"},
+        ),
+    )
+    monkeypatch.setattr(resend_settings_service, "decrypt_api_key", lambda _: "key")
+
+    async def fake_send_email_direct(**_kwargs):
+        return True, None, "msg-id"
+
+    monkeypatch.setattr(resend_email_service, "send_email_direct", fake_send_email_direct)
+
+    job = Job(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        job_type=JobType.WORKFLOW_EMAIL.value,
+        payload={
+            "template_id": str(template.id),
+            "recipient_email": "recipient@test.com",
+            "variables": {},
+            "workflow_scope": "org",
+            "surrogate_id": str(surrogate.id),
+        },
+    )
+    db.add(job)
+    db.commit()
+
+    await process_workflow_email(db, job)
+
+    activity = (
+        db.query(SurrogateActivityLog)
+        .filter(
+            SurrogateActivityLog.surrogate_id == surrogate.id,
+            SurrogateActivityLog.activity_type == SurrogateActivityType.EMAIL_SENT.value,
+        )
+        .order_by(SurrogateActivityLog.created_at.desc())
+        .first()
+    )
+    assert activity is not None
+    details = activity.details or {}
+    assert details.get("provider") == "resend"
+    assert details.get("template_id") == str(template.id)
+    assert details.get("subject", "").startswith("Follow up")
+
+    audit = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.organization_id == test_org.id,
+            AuditLog.event_type == AuditEventType.DATA_EMAIL_SENT.value,
+            AuditLog.target_type == "surrogate",
+            AuditLog.target_id == surrogate.id,
+        )
+        .order_by(AuditLog.created_at.desc())
+        .first()
+    )
+    assert audit is not None
+    assert audit.actor_user_id == SYSTEM_USER_ID
+
+
+@pytest.mark.asyncio
 async def test_workflow_email_rejects_platform_system_template(
     db, test_org, test_user, monkeypatch
 ):
