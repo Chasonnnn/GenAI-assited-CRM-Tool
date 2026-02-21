@@ -653,6 +653,40 @@ def approve_appointment(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/{appointment_id}/reschedule/slots", response_model=AvailableSlotsResponse)
+def get_reschedule_slots(
+    appointment_id: UUID,
+    date_start: date = Query(..., description="Start date (YYYY-MM-DD)"),
+    date_end: date = Query(None, description="End date (defaults to start date)"),
+    client_timezone: str | None = Query(None),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """Get available slots for rescheduling an appointment (staff action)."""
+    appt = appointment_service.get_appointment(db, appointment_id, session.org_id)
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    if appt.user_id != session.user_id and session.role not in ["admin", "developer"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    try:
+        slots, appt_type = appointment_service.get_reschedule_slots_for_appointment(
+            db=db,
+            appointment=appt,
+            date_start=date_start,
+            date_end=date_end,
+            client_timezone=client_timezone,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return AvailableSlotsResponse(
+        slots=[TimeSlotRead(start=s.start, end=s.end) for s in slots],
+        appointment_type=_type_to_read(appt_type) if appt_type else None,
+    )
+
+
 @router.post(
     "/{appointment_id}/reschedule",
     response_model=AppointmentRead,

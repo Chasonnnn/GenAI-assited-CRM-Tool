@@ -846,6 +846,48 @@ def get_available_slots(
     return slots
 
 
+def get_reschedule_slots_for_appointment(
+    db: Session,
+    appointment: Appointment,
+    date_start: date,
+    date_end: date | None = None,
+    client_timezone: str | None = None,
+) -> tuple[list[TimeSlot], AppointmentType | None]:
+    """Get available reschedule slots for an existing appointment."""
+    if not appointment.appointment_type_id:
+        raise ValueError("Appointment type not found")
+
+    if not date_end:
+        date_end = date_start
+
+    # Keep reschedule windows bounded to a practical range.
+    if (date_end - date_start).days > 14:
+        date_end = date_start + timedelta(days=14)
+
+    tz = client_timezone or appointment.client_timezone or "America/Los_Angeles"
+    _validate_timezone_name(tz, "client timezone")
+
+    query = SlotQuery(
+        user_id=appointment.user_id,
+        org_id=appointment.organization_id,
+        appointment_type_id=appointment.appointment_type_id,
+        date_start=date_start,
+        date_end=date_end,
+        client_timezone=tz,
+    )
+    slots = get_available_slots(
+        db,
+        query,
+        exclude_appointment_id=appointment.id,
+        duration_minutes=appointment.duration_minutes,
+        buffer_before_minutes=appointment.buffer_before_minutes,
+        buffer_after_minutes=appointment.buffer_after_minutes,
+    )
+
+    appt_type = get_appointment_type(db, appointment.appointment_type_id, appointment.organization_id)
+    return slots, appt_type
+
+
 def _build_day_slots(
     slot_date: date,
     start_time: time,
@@ -1602,7 +1644,18 @@ def list_appointments(
     When surrogate_id and/or intended_parent_id are provided, filters to appointments
     matching EITHER the surrogate_id OR the intended_parent_id (used for match-scoped views).
     """
-    if status in (None, AppointmentStatus.CONFIRMED.value):
+    if status in (
+        None,
+        AppointmentStatus.CONFIRMED.value,
+        AppointmentStatus.PENDING.value,
+    ):
+        appointment_integrations.backfill_confirmed_appointments_to_google(
+            db=db,
+            user_id=user_id,
+            org_id=org_id,
+            date_start=date_start,
+            date_end=date_end,
+        )
         appointment_integrations.sync_manual_google_events_for_appointments(
             db=db,
             user_id=user_id,

@@ -10,7 +10,7 @@
  * - Detail side panel
  */
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import {
     CheckIcon,
     XIcon,
@@ -41,6 +42,8 @@ import {
     useAppointments,
     useAppointment,
     useApproveAppointment,
+    useRescheduleSlots,
+    useRescheduleAppointment,
     useCancelAppointment,
 } from "@/lib/hooks/use-appointments"
 import type { AppointmentListItem } from "@/lib/api/appointments"
@@ -55,6 +58,8 @@ const STATUS_STYLES = {
     no_show: "bg-gray-500/10 text-gray-600 border-gray-500/20",
     expired: "bg-gray-500/10 text-gray-600 border-gray-500/20",
 }
+
+const RESCHEDULABLE_STATUSES = new Set(["pending", "confirmed"])
 
 // Meeting mode icons
 const MEETING_MODE_ICONS: Record<string, typeof VideoIcon> = {
@@ -200,9 +205,32 @@ function AppointmentDetailDialog({
 }) {
     const { data: appointment, isLoading, isError, refetch } = useAppointment(appointmentId || "")
     const approveMutation = useApproveAppointment()
+    const rescheduleMutation = useRescheduleAppointment()
     const cancelMutation = useCancelAppointment()
     const [cancelReason, setCancelReason] = useState("")
     const [showCancelForm, setShowCancelForm] = useState(false)
+    const [showRescheduleForm, setShowRescheduleForm] = useState(false)
+    const [rescheduleDate, setRescheduleDate] = useState("")
+    const [selectedSlotStart, setSelectedSlotStart] = useState<string | null>(null)
+    const [rescheduleError, setRescheduleError] = useState<string | null>(null)
+
+    const slotsQuery = useRescheduleSlots(
+        appointmentId || "",
+        rescheduleDate,
+        rescheduleDate,
+        appointment?.client_timezone,
+        showRescheduleForm && !!rescheduleDate,
+    )
+
+    useEffect(() => {
+        if (!open || !appointment) return
+        setCancelReason("")
+        setShowCancelForm(false)
+        setShowRescheduleForm(false)
+        setRescheduleError(null)
+        setRescheduleDate(format(parseISO(appointment.scheduled_start), "yyyy-MM-dd"))
+        setSelectedSlotStart(null)
+    }, [appointment, open])
 
     if (!appointmentId) return null
 
@@ -210,6 +238,31 @@ function AppointmentDetailDialog({
         approveMutation.mutate(appointmentId, {
             onSuccess: () => onOpenChange(false),
         })
+    }
+
+    const handleReschedule = () => {
+        if (!selectedSlotStart) {
+            setRescheduleError("Please choose an available time slot.")
+            return
+        }
+
+        setRescheduleError(null)
+        rescheduleMutation.mutate(
+            {
+                appointmentId,
+                scheduledStart: selectedSlotStart,
+            },
+            {
+                onSuccess: () => onOpenChange(false),
+                onError: (error) => {
+                    const message =
+                        error instanceof Error && error.message
+                            ? error.message
+                            : "Failed to reschedule appointment. Please try another time."
+                    setRescheduleError(message)
+                },
+            }
+        )
     }
 
     const handleCancel = () => {
@@ -254,6 +307,7 @@ function AppointmentDetailDialog({
     if (!appointment) return null
 
     const ModeIcon = MEETING_MODE_ICONS[appointment.meeting_mode as keyof typeof MEETING_MODE_ICONS] || VideoIcon
+    const isReschedulable = RESCHEDULABLE_STATUSES.has(appointment.status)
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -369,14 +423,106 @@ function AppointmentDetailDialog({
                             />
                         </div>
                     )}
+                    {showRescheduleForm && (
+                        <div className="border-t border-border pt-4 space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="reschedule-date">New Date</Label>
+                                <Input
+                                    id="reschedule-date"
+                                    type="date"
+                                    value={rescheduleDate}
+                                    onChange={(e) => {
+                                        setRescheduleDate(e.target.value)
+                                        setSelectedSlotStart(null)
+                                        if (rescheduleError) setRescheduleError(null)
+                                    }}
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Available Times</Label>
+                                {slotsQuery.isLoading ? (
+                                    <div className="py-2 flex items-center gap-2 text-sm text-muted-foreground">
+                                        <Loader2Icon className="size-4 animate-spin" />
+                                        Loading available slots...
+                                    </div>
+                                ) : slotsQuery.data?.slots?.length ? (
+                                    <div className="grid grid-cols-3 gap-2 max-h-44 overflow-y-auto">
+                                        {slotsQuery.data.slots.map((slot) => {
+                                            const selected = selectedSlotStart === slot.start
+                                            return (
+                                                <Button
+                                                    key={slot.start}
+                                                    variant={selected ? "default" : "outline"}
+                                                    size="sm"
+                                                    aria-label={`Reschedule slot ${slot.start}`}
+                                                    onClick={() => {
+                                                        setSelectedSlotStart(slot.start)
+                                                        if (rescheduleError) setRescheduleError(null)
+                                                    }}
+                                                    className="h-auto py-2"
+                                                >
+                                                    {format(parseISO(slot.start), "h:mm a")}
+                                                </Button>
+                                            )
+                                        })}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">
+                                        No available times for this date.
+                                    </p>
+                                )}
+                            </div>
+
+                            <p className="text-xs text-muted-foreground">
+                                Times shown in your local timezone.
+                            </p>
+                            {slotsQuery.isError && (
+                                <p className="text-sm text-destructive">
+                                    Failed to load availability. Try a different date.
+                                </p>
+                            )}
+                            {rescheduleError && (
+                                <p role="alert" className="text-sm text-destructive">
+                                    {rescheduleError}
+                                </p>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Actions */}
-                {appointment.status === "pending" && (
-                    <div className="flex justify-end gap-2 pt-4 border-t border-border">
-                        {showCancelForm ? (
+                {(appointment.status === "pending" || appointment.status === "confirmed") && (
+                    <div className="flex flex-wrap justify-end gap-2 pt-4 border-t border-border">
+                        {showRescheduleForm ? (
                             <>
-                                <Button variant="outline" onClick={() => setShowCancelForm(false)}>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setShowRescheduleForm(false)
+                                        setRescheduleError(null)
+                                    }}
+                                    disabled={rescheduleMutation.isPending}
+                                >
+                                    Back
+                                </Button>
+                                <Button
+                                    onClick={handleReschedule}
+                                    disabled={rescheduleMutation.isPending || !selectedSlotStart}
+                                >
+                                    {rescheduleMutation.isPending && (
+                                        <Loader2Icon className="size-4 mr-2 animate-spin" />
+                                    )}
+                                    Confirm Reschedule
+                                </Button>
+                            </>
+                        ) : showCancelForm ? (
+                            <>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setShowCancelForm(false)}
+                                    disabled={cancelMutation.isPending}
+                                >
                                     Back
                                 </Button>
                                 <Button
@@ -390,35 +536,44 @@ function AppointmentDetailDialog({
                             </>
                         ) : (
                             <>
+                                {isReschedulable && (
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            setShowCancelForm(false)
+                                            setRescheduleError(null)
+                                            setRescheduleDate(
+                                                format(parseISO(appointment.scheduled_start), "yyyy-MM-dd"),
+                                            )
+                                            setSelectedSlotStart(null)
+                                            setShowRescheduleForm(true)
+                                        }}
+                                    >
+                                        Reschedule Appointment
+                                    </Button>
+                                )}
                                 <Button
                                     variant="outline"
-                                    onClick={() => setShowCancelForm(true)}
+                                    onClick={() => {
+                                        setShowRescheduleForm(false)
+                                        setShowCancelForm(true)
+                                    }}
                                     className="text-destructive"
                                 >
-                                    Decline
+                                    {appointment.status === "pending" ? "Decline" : "Cancel Appointment"}
                                 </Button>
-                                <Button
-                                    onClick={handleApprove}
-                                    disabled={approveMutation.isPending}
-                                    className="bg-green-600 hover:bg-green-700"
-                                >
-                                    {approveMutation.isPending && <Loader2Icon className="size-4 mr-2 animate-spin" />}
-                                    Approve
-                                </Button>
+                                {appointment.status === "pending" && (
+                                    <Button
+                                        onClick={handleApprove}
+                                        disabled={approveMutation.isPending}
+                                        className="bg-green-600 hover:bg-green-700"
+                                    >
+                                        {approveMutation.isPending && <Loader2Icon className="size-4 mr-2 animate-spin" />}
+                                        Approve
+                                    </Button>
+                                )}
                             </>
                         )}
-                    </div>
-                )}
-
-                {appointment.status === "confirmed" && (
-                    <div className="flex justify-end gap-2 pt-4 border-t border-border">
-                        <Button
-                            variant="outline"
-                            onClick={() => setShowCancelForm(true)}
-                            className="text-destructive"
-                        >
-                            Cancel Appointment
-                        </Button>
                     </div>
                 )}
             </DialogContent>
@@ -532,26 +687,26 @@ function AppointmentsTabContent({
 
 export function AppointmentsList() {
     return (
-        <Tabs defaultValue="pending" className="w-full">
+        <Tabs defaultValue="confirmed" className="w-full">
             <TabsList>
-                <TabsTrigger value="pending">Pending</TabsTrigger>
                 <TabsTrigger value="confirmed">Upcoming</TabsTrigger>
+                <TabsTrigger value="pending">Pending</TabsTrigger>
                 <TabsTrigger value="completed">Past</TabsTrigger>
                 <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
                 <TabsTrigger value="expired">Expired</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="pending" className="mt-4">
-                <AppointmentsTabContent
-                    status="pending"
-                    emptyMessage="No pending requests. New booking requests will appear here."
-                />
-            </TabsContent>
-
             <TabsContent value="confirmed" className="mt-4">
                 <AppointmentsTabContent
                     status="confirmed"
                     emptyMessage="No upcoming appointments."
+                />
+            </TabsContent>
+
+            <TabsContent value="pending" className="mt-4">
+                <AppointmentsTabContent
+                    status="pending"
+                    emptyMessage="No pending requests. New booking requests will appear here."
                 />
             </TabsContent>
 

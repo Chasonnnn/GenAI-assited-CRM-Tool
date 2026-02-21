@@ -339,6 +339,20 @@ export function approveAppointment(appointmentId: string): Promise<Appointment> 
     return api.post<Appointment>(`/appointments/${appointmentId}/approve`);
 }
 
+export function getRescheduleSlots(
+    appointmentId: string,
+    dateStart: string,
+    dateEnd?: string,
+    clientTimezone?: string
+): Promise<AvailableSlotsResponse> {
+    const params = new URLSearchParams({ date_start: dateStart });
+    if (dateEnd) params.append('date_end', dateEnd);
+    if (clientTimezone) params.append('client_timezone', clientTimezone);
+    return api.get<AvailableSlotsResponse>(
+        `/appointments/${appointmentId}/reschedule/slots?${params}`
+    );
+}
+
 export function rescheduleAppointment(
     appointmentId: string,
     scheduledStart: string

@@ -3,6 +3,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import * as appointmentsApi from '../api/appointments';
 
 // =============================================================================
@@ -27,6 +28,17 @@ export const appointmentKeys = {
     }) => [...appointmentKeys.lists(), params] as const,
     details: () => [...appointmentKeys.all, 'detail'] as const,
     detail: (id: string) => [...appointmentKeys.details(), id] as const,
+    rescheduleSlots: (
+        appointmentId: string,
+        dateStart: string,
+        dateEnd?: string,
+        clientTimezone?: string,
+    ) =>
+        [
+            ...appointmentKeys.all,
+            'reschedule-slots',
+            { appointmentId, dateStart, dateEnd, clientTimezone },
+        ] as const,
 };
 
 // =============================================================================
@@ -193,6 +205,31 @@ export function useAppointment(appointmentId: string) {
     });
 }
 
+export function useRescheduleSlots(
+    appointmentId: string,
+    dateStart: string,
+    dateEnd?: string,
+    clientTimezone?: string,
+    enabled = true,
+) {
+    return useQuery({
+        queryKey: appointmentKeys.rescheduleSlots(
+            appointmentId,
+            dateStart,
+            dateEnd,
+            clientTimezone,
+        ),
+        queryFn: () =>
+            appointmentsApi.getRescheduleSlots(
+                appointmentId,
+                dateStart,
+                dateEnd,
+                clientTimezone,
+            ),
+        enabled: enabled && !!appointmentId && !!dateStart,
+    })
+}
+
 export function useApproveAppointment() {
     const queryClient = useQueryClient();
 
@@ -219,6 +256,13 @@ export function useRescheduleAppointment() {
         onSuccess: (updatedAppt) => {
             queryClient.setQueryData(appointmentKeys.detail(updatedAppt.id), updatedAppt);
             queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
+        },
+        onError: (error) => {
+            const message =
+                error instanceof Error && error.message
+                    ? error.message
+                    : 'Failed to reschedule appointment.';
+            toast.error(message);
         },
     });
 }

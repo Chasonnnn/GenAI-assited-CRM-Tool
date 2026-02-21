@@ -18,6 +18,8 @@ const mockUseRegenerateBookingLink = vi.fn()
 const mockUseAppointments = vi.fn()
 const mockUseAppointment = vi.fn()
 const mockUseApproveAppointment = vi.fn()
+const mockUseRescheduleAppointment = vi.fn()
+const mockUseRescheduleSlots = vi.fn()
 const mockUseCancelAppointment = vi.fn()
 const mockUsePublicBookingPage = vi.fn()
 const mockUseAvailableSlots = vi.fn()
@@ -83,10 +85,22 @@ vi.mock("@/components/ui/dialog", () => ({
 }))
 
 vi.mock("@/components/ui/tabs", () => ({
-    Tabs: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    Tabs: ({
+        children,
+        defaultValue,
+    }: PropsWithChildren<{ defaultValue?: string }>) => (
+        <div data-testid="tabs-root" data-default-value={defaultValue}>
+            {children}
+        </div>
+    ),
     TabsList: ({ children }: PropsWithChildren) => <div>{children}</div>,
-    TabsTrigger: ({ children }: PropsWithChildren) => (
-        <button type="button">{children}</button>
+    TabsTrigger: ({
+        children,
+        value,
+    }: PropsWithChildren<{ value?: string }>) => (
+        <button type="button" data-value={value}>
+            {children}
+        </button>
     ),
     TabsContent: ({ children }: PropsWithChildren) => <div>{children}</div>,
 }))
@@ -121,6 +135,17 @@ vi.mock("@/lib/hooks/use-appointments", () => ({
         mutate: mockUseApproveAppointment,
         isPending: false,
     }),
+    useRescheduleAppointment: () => ({
+        mutate: mockUseRescheduleAppointment,
+        isPending: false,
+    }),
+    useRescheduleSlots: (
+        appointmentId: string,
+        dateStart: string,
+        dateEnd?: string,
+        clientTimezone?: string,
+        enabled = true
+    ) => mockUseRescheduleSlots(appointmentId, dateStart, dateEnd, clientTimezone, enabled),
     useCancelAppointment: () => ({
         mutate: mockUseCancelAppointment,
         isPending: false,
@@ -153,6 +178,11 @@ describe("Appointments Google Meet UI", () => {
             isLoading: false,
         })
         mockUseAppointment.mockReturnValue({ data: null, isLoading: false })
+        mockUseRescheduleSlots.mockReturnValue({
+            data: { slots: [], appointment_type: null },
+            isLoading: false,
+            isError: false,
+        })
         mockUsePublicBookingPage.mockReturnValue({
             data: null,
             isLoading: false,
@@ -337,6 +367,288 @@ describe("Appointments Google Meet UI", () => {
         fireEvent.click(screen.getAllByText("Casey Client")[0])
 
         expect(screen.getByText(/Join Google Meet/i)).toBeInTheDocument()
+    })
+
+    it("shows reschedule action in appointment details", () => {
+        const scheduledStart = new Date("2026-02-23T20:00:00Z").toISOString()
+        const scheduledEnd = new Date("2026-02-23T20:30:00Z").toISOString()
+
+        mockUseAppointments.mockReturnValue({
+            data: {
+                items: [
+                    {
+                        id: "appt-reschedule",
+                        appointment_type_name: "Initial Interview",
+                        client_name: "Test Zhang",
+                        client_email: "chason1127@gmail.com",
+                        client_phone: "8052848667",
+                        client_timezone: "America/Los_Angeles",
+                        scheduled_start: scheduledStart,
+                        scheduled_end: scheduledEnd,
+                        duration_minutes: 30,
+                        meeting_mode: "google_meet",
+                        status: "confirmed",
+                        surrogate_id: null,
+                        surrogate_number: null,
+                        intended_parent_id: null,
+                        intended_parent_name: null,
+                        created_at: scheduledStart,
+                    },
+                ],
+                total: 1,
+                page: 1,
+                per_page: 50,
+                pages: 1,
+            },
+            isLoading: false,
+        })
+        mockUseAppointment.mockReturnValue({
+            data: {
+                id: "appt-reschedule",
+                user_id: "u1",
+                appointment_type_id: "type1",
+                appointment_type_name: "Initial Interview",
+                client_name: "Test Zhang",
+                client_email: "chason1127@gmail.com",
+                client_phone: "8052848667",
+                client_timezone: "America/Los_Angeles",
+                client_notes: "test",
+                scheduled_start: scheduledStart,
+                scheduled_end: scheduledEnd,
+                duration_minutes: 30,
+                meeting_mode: "google_meet",
+                status: "confirmed",
+                pending_expires_at: null,
+                approved_at: scheduledStart,
+                approved_by_user_id: "u1",
+                approved_by_name: "Test User",
+                cancelled_at: null,
+                cancelled_by_client: false,
+                cancellation_reason: null,
+                zoom_join_url: null,
+                google_event_id: "event-123",
+                google_meet_url: "https://meet.google.com/abc-defg-hij",
+                surrogate_id: null,
+                surrogate_number: null,
+                intended_parent_id: null,
+                intended_parent_name: null,
+                created_at: scheduledStart,
+                updated_at: scheduledStart,
+            },
+            isLoading: false,
+        })
+
+        render(<AppointmentsList />)
+        fireEvent.click(screen.getAllByText("Test Zhang")[0])
+
+        expect(screen.getByRole("button", { name: /reschedule appointment/i })).toBeInTheDocument()
+    })
+
+    it("submits reschedule mutation from appointment details", () => {
+        const scheduledStart = new Date("2026-02-23T20:00:00Z").toISOString()
+        const scheduledEnd = new Date("2026-02-23T20:30:00Z").toISOString()
+        const selectedSlotStart = "2026-02-24T17:15:00.000Z"
+        mockUseRescheduleSlots.mockReturnValue({
+            data: {
+                slots: [{ start: selectedSlotStart, end: "2026-02-24T17:45:00.000Z" }],
+                appointment_type: null,
+            },
+            isLoading: false,
+            isError: false,
+        })
+
+        mockUseAppointments.mockReturnValue({
+            data: {
+                items: [
+                    {
+                        id: "appt-reschedule-submit",
+                        appointment_type_name: "Initial Interview",
+                        client_name: "Test Zhang",
+                        client_email: "chason1127@gmail.com",
+                        client_phone: "8052848667",
+                        client_timezone: "America/Los_Angeles",
+                        scheduled_start: scheduledStart,
+                        scheduled_end: scheduledEnd,
+                        duration_minutes: 30,
+                        meeting_mode: "google_meet",
+                        status: "confirmed",
+                        surrogate_id: null,
+                        surrogate_number: null,
+                        intended_parent_id: null,
+                        intended_parent_name: null,
+                        created_at: scheduledStart,
+                    },
+                ],
+                total: 1,
+                page: 1,
+                per_page: 50,
+                pages: 1,
+            },
+            isLoading: false,
+        })
+        mockUseAppointment.mockReturnValue({
+            data: {
+                id: "appt-reschedule-submit",
+                user_id: "u1",
+                appointment_type_id: "type1",
+                appointment_type_name: "Initial Interview",
+                client_name: "Test Zhang",
+                client_email: "chason1127@gmail.com",
+                client_phone: "8052848667",
+                client_timezone: "America/Los_Angeles",
+                client_notes: "test",
+                scheduled_start: scheduledStart,
+                scheduled_end: scheduledEnd,
+                duration_minutes: 30,
+                meeting_mode: "google_meet",
+                status: "confirmed",
+                pending_expires_at: null,
+                approved_at: scheduledStart,
+                approved_by_user_id: "u1",
+                approved_by_name: "Test User",
+                cancelled_at: null,
+                cancelled_by_client: false,
+                cancellation_reason: null,
+                zoom_join_url: null,
+                google_event_id: "event-123",
+                google_meet_url: "https://meet.google.com/abc-defg-hij",
+                surrogate_id: null,
+                surrogate_number: null,
+                intended_parent_id: null,
+                intended_parent_name: null,
+                created_at: scheduledStart,
+                updated_at: scheduledStart,
+            },
+            isLoading: false,
+        })
+
+        render(<AppointmentsList />)
+        fireEvent.click(screen.getAllByText("Test Zhang")[0])
+
+        fireEvent.click(screen.getByRole("button", { name: /reschedule appointment/i }))
+        fireEvent.click(screen.getByRole("button", { name: `Reschedule slot ${selectedSlotStart}` }))
+        fireEvent.click(screen.getByRole("button", { name: /confirm reschedule/i }))
+
+        expect(mockUseRescheduleAppointment).toHaveBeenCalled()
+        const payload = mockUseRescheduleAppointment.mock.calls[0]?.[0]
+        expect(payload.appointmentId).toBe("appt-reschedule-submit")
+        expect(payload.scheduledStart).toBe(selectedSlotStart)
+    })
+
+    it("shows reschedule error message in appointment details", () => {
+        const scheduledStart = new Date("2026-02-23T20:00:00Z").toISOString()
+        const scheduledEnd = new Date("2026-02-23T20:30:00Z").toISOString()
+        const selectedSlotStart = "2026-02-24T17:15:00.000Z"
+        mockUseRescheduleSlots.mockReturnValue({
+            data: {
+                slots: [{ start: selectedSlotStart, end: "2026-02-24T17:45:00.000Z" }],
+                appointment_type: null,
+            },
+            isLoading: false,
+            isError: false,
+        })
+        mockUseRescheduleAppointment.mockImplementation((_: unknown, options?: {
+            onError?: (error: Error) => void
+        }) => {
+            options?.onError?.(new Error("Selected time is no longer available."))
+        })
+
+        mockUseAppointments.mockReturnValue({
+            data: {
+                items: [
+                    {
+                        id: "appt-reschedule-error",
+                        appointment_type_name: "Initial Interview",
+                        client_name: "Test Zhang",
+                        client_email: "chason1127@gmail.com",
+                        client_phone: "8052848667",
+                        client_timezone: "America/Los_Angeles",
+                        scheduled_start: scheduledStart,
+                        scheduled_end: scheduledEnd,
+                        duration_minutes: 30,
+                        meeting_mode: "google_meet",
+                        status: "confirmed",
+                        surrogate_id: null,
+                        surrogate_number: null,
+                        intended_parent_id: null,
+                        intended_parent_name: null,
+                        created_at: scheduledStart,
+                    },
+                ],
+                total: 1,
+                page: 1,
+                per_page: 50,
+                pages: 1,
+            },
+            isLoading: false,
+        })
+        mockUseAppointment.mockReturnValue({
+            data: {
+                id: "appt-reschedule-error",
+                user_id: "u1",
+                appointment_type_id: "type1",
+                appointment_type_name: "Initial Interview",
+                client_name: "Test Zhang",
+                client_email: "chason1127@gmail.com",
+                client_phone: "8052848667",
+                client_timezone: "America/Los_Angeles",
+                client_notes: "test",
+                scheduled_start: scheduledStart,
+                scheduled_end: scheduledEnd,
+                duration_minutes: 30,
+                meeting_mode: "google_meet",
+                status: "confirmed",
+                pending_expires_at: null,
+                approved_at: scheduledStart,
+                approved_by_user_id: "u1",
+                approved_by_name: "Test User",
+                cancelled_at: null,
+                cancelled_by_client: false,
+                cancellation_reason: null,
+                zoom_join_url: null,
+                google_event_id: "event-123",
+                google_meet_url: "https://meet.google.com/abc-defg-hij",
+                surrogate_id: null,
+                surrogate_number: null,
+                intended_parent_id: null,
+                intended_parent_name: null,
+                created_at: scheduledStart,
+                updated_at: scheduledStart,
+            },
+            isLoading: false,
+        })
+
+        render(<AppointmentsList />)
+        fireEvent.click(screen.getAllByText("Test Zhang")[0])
+
+        fireEvent.click(screen.getByRole("button", { name: /reschedule appointment/i }))
+        fireEvent.click(screen.getByRole("button", { name: `Reschedule slot ${selectedSlotStart}` }))
+        fireEvent.click(screen.getByRole("button", { name: /confirm reschedule/i }))
+
+        expect(screen.getByRole("alert")).toHaveTextContent("Selected time is no longer available.")
+    })
+
+    it("defaults appointments to upcoming tab and shows upcoming first", () => {
+        render(<AppointmentsList />)
+
+        const tabsRoot = screen.getByTestId("tabs-root")
+        expect(tabsRoot).toHaveAttribute("data-default-value", "confirmed")
+
+        const triggers = screen.getAllByRole("button").slice(0, 5)
+        expect(triggers.map((trigger) => trigger.textContent?.trim())).toEqual([
+            "Upcoming",
+            "Pending",
+            "Past",
+            "Cancelled",
+            "Expired",
+        ])
+        expect(triggers.map((trigger) => trigger.getAttribute("data-value"))).toEqual([
+            "confirmed",
+            "pending",
+            "completed",
+            "cancelled",
+            "expired",
+        ])
     })
 
     it("keeps public booking idempotency keys within 64 characters", async () => {
