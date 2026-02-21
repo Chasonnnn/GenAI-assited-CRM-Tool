@@ -51,7 +51,8 @@ const ENTITY_CONFIG = {
 
 export default function SearchPage() {
     const [query, setQuery] = useState("")
-    const debouncedQuery = useDebouncedValue(query, 300)
+    // Increased debounce to 500ms to reduce API calls
+    const debouncedQuery = useDebouncedValue(query, 500)
 
     const {
         data: results,
