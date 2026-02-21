@@ -120,11 +120,11 @@ def claim_surrogate(
 def update_surrogate(
     surrogate_id: UUID,
     data: SurrogateUpdate,
-    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["edit"])),
+    session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
     """Update surrogate fields."""
-    from app.services import pipeline_service, surrogate_status_service
+    from app.services import permission_service, pipeline_service, surrogate_status_service
 
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
     if not surrogate:
@@ -132,11 +132,28 @@ def update_surrogate(
 
     check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
-    if not can_modify_surrogate(surrogate, str(session.user_id), session.role):
+    update_data = data.model_dump(exclude_unset=True)
+    is_priority_only_update = bool(update_data) and set(update_data.keys()) <= {"is_priority"}
+
+    has_edit_permission = permission_service.check_permission(
+        db,
+        session.org_id,
+        session.user_id,
+        session.role.value,
+        POLICIES["surrogates"].actions["edit"].value,
+    )
+    if not is_priority_only_update and not has_edit_permission:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Missing permission: {POLICIES['surrogates'].actions['edit'].value}",
+        )
+
+    if not is_priority_only_update and not can_modify_surrogate(
+        surrogate, str(session.user_id), session.role
+    ):
         raise HTTPException(status_code=403, detail="Not authorized to update this surrogate")
 
     was_delivery_date_empty = surrogate.actual_delivery_date is None
-    update_data = data.model_dump(exclude_unset=True)
     is_setting_delivery_date = (
         "actual_delivery_date" in update_data
         and update_data["actual_delivery_date"] is not None
