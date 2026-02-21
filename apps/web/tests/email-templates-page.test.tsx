@@ -1,7 +1,13 @@
 import { describe, it, beforeEach, vi, expect } from "vitest"
-import { render, screen, fireEvent } from "@testing-library/react"
+import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 import * as React from "react"
 import EmailTemplatesPage from "../app/(app)/automation/email-templates/page"
+import type {
+    EmailTemplate,
+    EmailTemplateLibraryDetail,
+    EmailTemplateLibraryItem,
+    EmailTemplateListItem,
+} from "@/lib/api/email-templates"
 
 const mockUseAuth = vi.fn()
 const mockRichTextEditorProps = vi.fn()
@@ -18,7 +24,7 @@ const TEMPLATE_VARIABLES = [
     },
 ]
 
-const ORG_TEMPLATE = {
+const ORG_TEMPLATE: EmailTemplateListItem = {
     id: "tpl_org_1",
     name: "Org Template",
     subject: "Your Surrogacy Journey Starts with EWI Family Global",
@@ -30,9 +36,9 @@ const ORG_TEMPLATE = {
     is_system_template: false,
     created_at: FIXED_TIMESTAMP,
     updated_at: FIXED_TIMESTAMP,
-} as const
+}
 
-const PERSONAL_TEMPLATE = {
+const PERSONAL_TEMPLATE: EmailTemplateListItem = {
     id: "tpl_personal_1",
     name: "Personal Template",
     subject: "Hi {{full_name}}",
@@ -44,17 +50,17 @@ const PERSONAL_TEMPLATE = {
     is_system_template: false,
     created_at: FIXED_TIMESTAMP,
     updated_at: FIXED_TIMESTAMP,
-} as const
+}
 
-const OTHER_USER_PERSONAL_TEMPLATE = {
+const OTHER_USER_PERSONAL_TEMPLATE: EmailTemplateListItem = {
     ...PERSONAL_TEMPLATE,
     id: "tpl_personal_2",
     name: "Other User Personal Template",
     owner_user_id: "user_2",
     owner_name: "Maegan Fee",
-} as const
+}
 
-const TEMPLATE_DETAIL_BY_ID = {
+const TEMPLATE_DETAIL_BY_ID: Record<string, EmailTemplate> = {
     tpl_personal_1: {
         id: "tpl_personal_1",
         organization_id: "org_1",
@@ -91,24 +97,31 @@ const TEMPLATE_DETAIL_BY_ID = {
         created_at: FIXED_TIMESTAMP,
         updated_at: FIXED_TIMESTAMP,
     },
-} as const
+}
 
-const LIBRARY_TEMPLATE = {
+const LIBRARY_TEMPLATE: EmailTemplateLibraryItem = {
     id: "lib_tpl_1",
     name: "Library Template",
     subject: "Hello {{full_name}}",
+    from_email: null,
     category: null,
-} as const
+    published_at: null,
+    updated_at: FIXED_TIMESTAMP,
+}
 
-const LIBRARY_TEMPLATE_DETAIL = {
+const LIBRARY_TEMPLATE_DETAIL: EmailTemplateLibraryDetail = {
     id: "lib_tpl_1",
     name: "Library Template",
     subject: "Hello {{full_name}}",
+    from_email: null,
+    category: null,
+    published_at: null,
+    updated_at: FIXED_TIMESTAMP,
     body: "<p>Hi there</p>",
-} as const
+}
 
-let personalTemplatesFixture = [PERSONAL_TEMPLATE]
-let orgTemplatesFixture = [ORG_TEMPLATE]
+let personalTemplatesFixture: EmailTemplateListItem[] = [PERSONAL_TEMPLATE]
+let orgTemplatesFixture: EmailTemplateListItem[] = [ORG_TEMPLATE]
 
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => mockUseAuth(),
@@ -373,11 +386,14 @@ describe("EmailTemplatesPage", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "HTML" }))
 
-        const htmlTextarea = screen.getByLabelText("Email Body") as HTMLTextAreaElement
+        const htmlTextarea = (await screen.findByLabelText("Email Body")) as HTMLTextAreaElement
         fireEvent.change(htmlTextarea, { target: { value: "<p>Body</p>" } })
-        htmlTextarea.focus()
 
         fireEvent.click(screen.getByRole("button", { name: "Visual" }))
+        await waitFor(() => {
+            expect(screen.getByTestId("rich-text-editor")).toBeInTheDocument()
+        })
+
         fireEvent.click(screen.getByRole("button", { name: "Insert Variable" }))
         fireEvent.click(await screen.findByText("{{full_name}}"))
 
