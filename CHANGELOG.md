@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.88.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.87.0...surrogacy-crm-platform-v0.88.0) (2026-02-21)
+
+
+### Features
+
+* improve appointment rescheduling workflow and tab defaults ([952b561](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/952b56172f9548e8eba2e739a0e6b9bbb61be9ff))
+
+
+### Bug Fixes
+
+* add manual google calendar sync with integration diagnostics ([a0088be](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a0088be10da72689ad6e8d798a1854399789cbb2))
+* align app and browser notification icons ([4504e41](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4504e412e0a5f6828a60245af71e746bf7c39045))
+* coerce unknown task types to safe fallback ([857bba0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/857bba0b83273d04ebeab507d6df0a58fbfa2588))
+
 ## [0.87.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.86.1...surrogacy-crm-platform-v0.87.0) (2026-02-21)
 
 
