@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.87.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.86.1...surrogacy-crm-platform-v0.87.0) (2026-02-21)
+
+
+### Features
+
+* add combined surrogate export UI and print view ([5cabd3d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5cabd3d37abc88f8671953d0e04a0b0f95691794))
+* add combined surrogate packet export backend ([8f6eb6d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8f6eb6d0551b1799fa6ef047507fe75ce1d6439b))
+
+
+### Bug Fixes
+
+* **api:** allow priority-only surrogate updates without edit permission ([9f75198](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9f751984781166efb38206c1bf53a533d0b89889))
+* **api:** normalize bmi calculations and expose contact note previews ([8fbcac0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8fbcac01efa0edf2bd9137225af123e3ab7c05fe))
+* **api:** sync outbound surrogate email activity and audit logging ([f8bc247](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f8bc24763d74a2d866bb5d55032f60a8ea1f5a1e))
+* restore immediate Google sync in async workers ([9e71228](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9e712289fd8845c18a50ae51c12cf4614ba5e74e))
+* upgrade pypdf to 6.6.2 for security vulnerabilities ([f4a789d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f4a789dd71391a89d4f89b002ef65f1740a55e85))
+* **web:** resolve sidebar, template editor, and activity preview regressions ([0e2b47e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0e2b47e84e53ec656247d8ec67634316b27a5cc2))
+
+
+### Maintenance
+
+* **api:** apply ruff formatting drift fixes ([fdb34a6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fdb34a6bf94e63354bcd60d0867275274192c584))
+
 ## [0.86.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.86.0...surrogacy-crm-platform-v0.86.1) (2026-02-20)
 
 
