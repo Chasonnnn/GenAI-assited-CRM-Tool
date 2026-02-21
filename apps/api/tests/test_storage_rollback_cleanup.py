@@ -2,6 +2,7 @@ import io
 import os
 import uuid
 
+from PIL import Image
 from starlette.datastructures import UploadFile, Headers
 
 from app.core.config import settings
@@ -31,6 +32,13 @@ def _create_surrogate(db, org_id, stage_id, status_label):
     return surrogate
 
 
+def _create_valid_png() -> bytes:
+    img = Image.new("RGB", (1, 1), color="red")
+    f = io.BytesIO()
+    img.save(f, format="PNG")
+    return f.getvalue()
+
+
 def test_attachment_file_cleanup_on_rollback(
     db, test_org, test_user, default_stage, tmp_path, monkeypatch
 ):
@@ -39,7 +47,7 @@ def test_attachment_file_cleanup_on_rollback(
 
     surrogate = _create_surrogate(db, test_org.id, default_stage.id, default_stage.label)
 
-    file_obj = io.BytesIO(b"attachment-data")
+    file_obj = io.BytesIO(_create_valid_png())
     attachment = attachment_service.upload_attachment(
         db=db,
         org_id=test_org.id,
@@ -86,7 +94,7 @@ def test_form_submission_file_cleanup_on_rollback(
 
     upload = UploadFile(
         filename="upload.png",
-        file=io.BytesIO(b"submission-data"),
+        file=io.BytesIO(_create_valid_png()),
         headers=Headers({"content-type": "image/png"}),
     )
 
