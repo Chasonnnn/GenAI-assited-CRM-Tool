@@ -26,6 +26,22 @@ from app.utils.normalization import escape_like_string
 logger = logging.getLogger(__name__)
 
 
+def _coerce_task_type(value: str | None, *, task_id: UUID | None = None) -> TaskType:
+    """Coerce persisted task type values to known enums with a safe fallback."""
+    if not value:
+        return TaskType.OTHER
+    try:
+        return TaskType(value)
+    except ValueError:
+        logger.warning(
+            "Unknown task_type on task=%s value=%s; falling back to %s",
+            task_id,
+            value,
+            TaskType.OTHER.value,
+        )
+        return TaskType.OTHER
+
+
 def _sync_task_to_google_best_effort(db: Session, task: Task) -> None:
     """Best-effort outbound Google Tasks sync."""
     try:
@@ -463,7 +479,7 @@ def to_task_read(task: Task, context: dict[str, dict[UUID, str | None]]) -> Task
         created_by_name=created_by_name,
         title=task.title,
         description=task.description,
-        task_type=TaskType(task.task_type),
+        task_type=_coerce_task_type(task.task_type, task_id=task.id),
         due_date=task.due_date,
         due_time=task.due_time,
         duration_minutes=task.duration_minutes,
@@ -501,7 +517,7 @@ def to_task_list_item(
         surrogate_id=task.surrogate_id,
         surrogate_number=surrogate_number,
         title=task.title,
-        task_type=TaskType(task.task_type),
+        task_type=_coerce_task_type(task.task_type, task_id=task.id),
         owner_type=task.owner_type,
         owner_id=task.owner_id,
         owner_name=owner_name,

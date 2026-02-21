@@ -12,9 +12,9 @@ from pypdf import PdfReader, PdfWriter
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.encryption import hash_email
-from app.core.security import create_session_token
+from app.core.security import create_export_token, create_session_token
 from app.db.enums import FormStatus, FormSubmissionStatus, Role
-from app.db.models import Form, FormSubmission, Membership, Organization, Surrogate, User
+from app.db.models import Form, FormSubmission, Membership, Organization, Surrogate, Task, User
 from app.main import app
 from app.services import form_submission_service, pdf_export_service, session_service
 from app.utils.normalization import normalize_email
@@ -247,6 +247,47 @@ async def test_surrogate_export_with_submission_sets_header_true(
     assert response.headers["content-type"] == "application/pdf"
     assert response.headers.get("x-includes-application") == "true"
     assert response.content.startswith(b"%PDF")
+
+
+@pytest.mark.asyncio
+async def test_surrogate_export_view_handles_unknown_task_type(
+    client, db, test_org, test_user, default_stage
+):
+    surrogate = _create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        default_stage,
+        suffix=uuid.uuid4().hex[:8],
+    )
+
+    legacy_task = Task(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        surrogate_id=surrogate.id,
+        created_by_user_id=test_user.id,
+        owner_type="user",
+        owner_id=test_user.id,
+        title="Legacy intake follow-up",
+        task_type="legacy_manual",
+    )
+    db.add(legacy_task)
+    db.flush()
+
+    export_token = create_export_token(
+        org_id=test_org.id,
+        surrogate_id=surrogate.id,
+        purpose="case_details_export",
+    )
+    response = await client.get(
+        f"/surrogates/{surrogate.id}/export-view?export_token={export_token}"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["tasks"]) == 1
+    assert payload["tasks"][0]["id"] == str(legacy_task.id)
+    assert payload["tasks"][0]["task_type"] == "other"
 
 
 def test_merge_pdf_bytes_combines_pages_in_order():
