@@ -1,21 +1,26 @@
 """Form submission service for tokens, submissions, and review flows."""
 
 import logging
+import mimetypes
 import re
 import secrets
 import uuid
 import zipfile
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any
+from types import UnionType
+from typing import Any, Union, get_args, get_origin
 
 from fastapi import UploadFile
+from pydantic import EmailStr
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.enums import (
     AuditEventType,
+    FormLinkMode,
     FormStatus,
+    FormSubmissionMatchStatus,
     FormSubmissionStatus,
     JobType,
     SurrogateActivityType,
@@ -103,23 +108,83 @@ _MIME_TYPE_ALIASES: dict[str, str] = {
     # Non-standard but commonly seen in the wild.
     "image/jpg": "image/jpeg",
 }
-SURROGATE_FIELD_TYPES: dict[str, str] = {
-    "full_name": "str",
-    "email": "str",
-    "phone": "str",
-    "state": "str",
-    "date_of_birth": "date",
-    "race": "str",
-    "height_ft": "decimal",
-    "weight_lb": "int",
-    "is_age_eligible": "bool",
-    "is_citizen_or_pr": "bool",
-    "has_child": "bool",
-    "is_non_smoker": "bool",
-    "has_surrogate_experience": "bool",
-    "num_deliveries": "int",
-    "num_csections": "int",
-    "is_priority": "bool",
+_CUSTOM_TEXT_LIKE_MIME_TYPES = {
+    "application/json",
+    "application/xml",
+    "application/yaml",
+    "application/x-yaml",
+}
+
+
+def _unwrap_annotation(annotation: Any) -> Any:
+    origin = get_origin(annotation)
+    if origin is None:
+        return annotation
+    if origin in (UnionType, Union):
+        args = [arg for arg in get_args(annotation) if arg is not type(None)]
+        if len(args) == 1:
+            return _unwrap_annotation(args[0])
+        return annotation
+    origin_name = str(origin)
+    if "Annotated" in origin_name:
+        args = get_args(annotation)
+        if args:
+            return _unwrap_annotation(args[0])
+    return annotation
+
+
+def _surrogate_field_type_from_annotation(annotation: Any) -> str | None:
+    base = _unwrap_annotation(annotation)
+    if base is bool:
+        return "bool"
+    if base is int:
+        return "int"
+    if base is Decimal:
+        return "decimal"
+    if base is date:
+        return "date"
+    if base is EmailStr:
+        return "str"
+    if base is str:
+        return "str"
+    if isinstance(base, type):
+        if issubclass(base, bool):
+            return "bool"
+        if issubclass(base, int):
+            return "int"
+        if issubclass(base, Decimal):
+            return "decimal"
+        if issubclass(base, date):
+            return "date"
+        if issubclass(base, EmailStr):
+            return "str"
+        if issubclass(base, str):
+            return "str"
+    return None
+
+
+def _build_surrogate_field_types() -> dict[str, str]:
+    field_types: dict[str, str] = {}
+    for field_name, model_field in SurrogateUpdate.model_fields.items():
+        field_type = _surrogate_field_type_from_annotation(model_field.annotation)
+        if field_type:
+            field_types[field_name] = field_type
+    return field_types
+
+
+SURROGATE_FIELD_TYPES: dict[str, str] = _build_surrogate_field_types()
+CRITICAL_SURROGATE_FIELDS = frozenset({"full_name", "email"})
+_SURROGATE_FIELD_LABEL_OVERRIDES: dict[str, str] = {
+    "full_name": "Full Name",
+    "date_of_birth": "Date of Birth",
+    "height_ft": "Height (ft)",
+    "weight_lb": "Weight (lb)",
+    "weight_kg": "Weight (kg)",
+    "weight_lbs": "Weight (lbs)",
+    "is_age_eligible": "Age Eligible",
+    "is_citizen_or_pr": "US Citizen/PR",
+    "is_non_smoker": "Non-Smoker",
+    "num_csections": "Number of C-Sections",
 }
 
 logger = logging.getLogger(__name__)
@@ -148,6 +213,42 @@ def list_field_mappings(db: Session, form_id: uuid.UUID) -> list[FormFieldMappin
     )
 
 
+def _humanize_surrogate_field_name(field_name: str) -> str:
+    if field_name in _SURROGATE_FIELD_LABEL_OVERRIDES:
+        return _SURROGATE_FIELD_LABEL_OVERRIDES[field_name]
+    return field_name.replace("_", " ").title()
+
+
+def list_surrogate_mapping_options() -> list[dict[str, Any]]:
+    preferred_order = ("full_name", "email", "phone")
+    ordered_fields: list[str] = []
+    seen: set[str] = set()
+    for field in preferred_order:
+        if field in SURROGATE_FIELD_TYPES and field not in seen:
+            ordered_fields.append(field)
+            seen.add(field)
+    for field in sorted(SURROGATE_FIELD_TYPES.keys()):
+        if field not in seen:
+            ordered_fields.append(field)
+            seen.add(field)
+
+    return [
+        {
+            "value": field_name,
+            "label": _humanize_surrogate_field_name(field_name),
+            "is_critical": field_name in CRITICAL_SURROGATE_FIELDS,
+        }
+        for field_name in ordered_fields
+    ]
+
+
+def build_application_link(base_url: str | None, token: str) -> str:
+    cleaned_base = (base_url or "").strip().rstrip("/")
+    if not cleaned_base:
+        return f"/apply/{token}"
+    return f"{cleaned_base}/apply/{token}"
+
+
 def create_submission_token(
     db: Session,
     org_id: uuid.UUID,
@@ -158,14 +259,6 @@ def create_submission_token(
 ) -> FormSubmissionToken:
     if form.status != FormStatus.PUBLISHED.value:
         raise ValueError("Form must be published before sending")
-
-    existing = (
-        db.query(FormSubmission)
-        .filter(FormSubmission.form_id == form.id, FormSubmission.surrogate_id == surrogate.id)
-        .first()
-    )
-    if existing:
-        raise ValueError("Submission already exists for this surrogate")
 
     token = _generate_token(db)
     expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
@@ -228,14 +321,6 @@ def get_or_create_submission_token(
     if form.status != FormStatus.PUBLISHED.value:
         raise ValueError("Form must be published before sending")
 
-    existing_submission = (
-        db.query(FormSubmission)
-        .filter(FormSubmission.form_id == form.id, FormSubmission.surrogate_id == surrogate.id)
-        .first()
-    )
-    if existing_submission:
-        raise ValueError("Submission already exists for this surrogate")
-
     existing_token = get_latest_active_token_for_surrogate(
         db,
         org_id=org_id,
@@ -288,6 +373,20 @@ def get_token_row(db: Session, token: str) -> FormSubmissionToken | None:
     return db.query(FormSubmissionToken).filter(FormSubmissionToken.token == token).first()
 
 
+def get_token_by_id(
+    db: Session, *, org_id: uuid.UUID, form_id: uuid.UUID, token_id: uuid.UUID
+) -> FormSubmissionToken | None:
+    return (
+        db.query(FormSubmissionToken)
+        .filter(
+            FormSubmissionToken.organization_id == org_id,
+            FormSubmissionToken.form_id == form_id,
+            FormSubmissionToken.id == token_id,
+        )
+        .first()
+    )
+
+
 def create_submission(
     db: Session,
     token: FormSubmissionToken,
@@ -320,27 +419,56 @@ def create_submission(
         )
         .first()
     )
-    if existing:
-        raise ValueError("Submission already exists for this surrogate")
-
     upload_files = files or []
     validated_content_types = _validate_files(form, upload_files)
 
     mapping_snapshot = _snapshot_mappings(db, form.id)
+    now = datetime.now(timezone.utc)
 
-    submission = FormSubmission(
-        organization_id=form.organization_id,
-        form_id=form.id,
-        surrogate_id=token.surrogate_id,
-        token_id=token.id,
-        status=FormSubmissionStatus.PENDING_REVIEW.value,
-        answers_json=answers,
-        schema_snapshot=form.published_schema_json,
-        mapping_snapshot=mapping_snapshot,
-        submitted_at=datetime.now(timezone.utc),
-    )
-    db.add(submission)
-    db.flush()
+    if existing:
+        submission = existing
+        submission.token_id = token.id
+        submission.status = FormSubmissionStatus.PENDING_REVIEW.value
+        submission.source_mode = FormLinkMode.DEDICATED.value
+        submission.match_status = FormSubmissionMatchStatus.LINKED.value
+        submission.match_reason = "dedicated_token"
+        submission.matched_at = now
+        submission.answers_json = answers
+        submission.schema_snapshot = form.published_schema_json
+        submission.mapping_snapshot = mapping_snapshot
+        submission.submitted_at = now
+        submission.reviewed_at = None
+        submission.reviewed_by_user_id = None
+        submission.review_notes = None
+        submission.applied_at = None
+        db.query(FormSubmissionFile).filter(
+            FormSubmissionFile.submission_id == submission.id,
+            FormSubmissionFile.deleted_at.is_(None),
+        ).update(
+            {
+                FormSubmissionFile.deleted_at: now,
+                FormSubmissionFile.deleted_by_user_id: None,
+            },
+            synchronize_session=False,
+        )
+    else:
+        submission = FormSubmission(
+            organization_id=form.organization_id,
+            form_id=form.id,
+            surrogate_id=token.surrogate_id,
+            token_id=token.id,
+            source_mode=FormLinkMode.DEDICATED.value,
+            status=FormSubmissionStatus.PENDING_REVIEW.value,
+            match_status=FormSubmissionMatchStatus.LINKED.value,
+            match_reason="dedicated_token",
+            matched_at=now,
+            answers_json=answers,
+            schema_snapshot=form.published_schema_json,
+            mapping_snapshot=mapping_snapshot,
+            submitted_at=now,
+        )
+        db.add(submission)
+        db.flush()
 
     for idx, file in enumerate(upload_files):
         field_key = resolved_file_field_keys[idx] if resolved_file_field_keys else None
@@ -483,7 +611,13 @@ def create_submission(
 
 
 def list_form_submissions(
-    db: Session, org_id: uuid.UUID, form_id: uuid.UUID, status: str | None = None
+    db: Session,
+    org_id: uuid.UUID,
+    form_id: uuid.UUID,
+    status: str | None = None,
+    match_status: str | None = None,
+    source_mode: str | None = None,
+    limit: int | None = 200,
 ) -> list[FormSubmission]:
     query = db.query(FormSubmission).filter(
         FormSubmission.organization_id == org_id,
@@ -491,7 +625,14 @@ def list_form_submissions(
     )
     if status:
         query = query.filter(FormSubmission.status == status)
-    return query.order_by(FormSubmission.submitted_at.desc()).all()
+    if match_status:
+        query = query.filter(FormSubmission.match_status == match_status)
+    if source_mode:
+        query = query.filter(FormSubmission.source_mode == source_mode)
+    query = query.order_by(FormSubmission.submitted_at.desc())
+    if limit and limit > 0:
+        query = query.limit(limit)
+    return query.all()
 
 
 def get_submission_by_surrogate(
@@ -774,6 +915,8 @@ def approve_submission(
 ) -> FormSubmission:
     if submission.status != FormSubmissionStatus.PENDING_REVIEW.value:
         raise ValueError("Submission is not pending review")
+    if not submission.surrogate_id:
+        raise ValueError("Submission is not linked to a surrogate")
 
     surrogate = db.query(Surrogate).filter(Surrogate.id == submission.surrogate_id).first()
     if not surrogate:
@@ -914,7 +1057,7 @@ def update_submission_answers(
 
     flag_modified(submission, "answers_json")
 
-    if surrogate_updates:
+    if surrogate_updates and submission.surrogate_id:
         surrogate = db.query(Surrogate).filter(Surrogate.id == submission.surrogate_id).first()
         if surrogate:
             from app.services import surrogate_service
@@ -1266,6 +1409,75 @@ def _sniff_video_kind(file: UploadFile) -> str | None:
     return "mov" if major_brand == b"qt  " else "mp4"
 
 
+def _extension_mime_candidates(ext: str) -> tuple[str, ...]:
+    built_in = _FORM_UPLOAD_EXTENSION_TO_MIME_TYPES.get(ext)
+    if built_in:
+        return built_in
+
+    guessed, _ = mimetypes.guess_type(f"upload.{ext}")
+    if not guessed:
+        return ()
+    normalized = _MIME_TYPE_ALIASES.get(guessed.lower(), guessed.lower())
+    return (normalized,)
+
+
+def _validate_extension_signature(ext: str, head: bytes, file: UploadFile) -> None:
+    # Verify the actual file bytes match the extension (do NOT trust multipart Content-Type).
+    if ext == "pdf":
+        stripped = head.lstrip(b"\xef\xbb\xbf \t\r\n")
+        if not stripped.startswith(b"%PDF-"):
+            raise ValueError("File content does not match .pdf")
+        return
+    if ext == "png":
+        if not head.startswith(_PNG_SIGNATURE):
+            raise ValueError("File content does not match .png")
+        return
+    if ext in ("jpg", "jpeg"):
+        if not head.startswith(_JPEG_SIGNATURE_PREFIX):
+            raise ValueError("File content does not match .jpg/.jpeg")
+        return
+    if ext in ("doc", "xls"):
+        if not head.startswith(_OLE_SIGNATURE):
+            raise ValueError("File content does not match .doc/.xls")
+        return
+    if ext in ("docx", "xlsx"):
+        if not head.startswith(_ZIP_SIGNATURE_PREFIXES):
+            raise ValueError("File content does not match .docx/.xlsx")
+        if not _zip_contains(file, "[Content_Types].xml"):
+            raise ValueError("File content does not match .docx/.xlsx")
+        if ext == "docx" and not _zip_contains(file, "word/document.xml"):
+            raise ValueError("File content does not match .docx")
+        if ext == "xlsx" and not _zip_contains(file, "xl/workbook.xml"):
+            raise ValueError("File content does not match .xlsx")
+        return
+    if ext == "csv":
+        sample = _read_file_prefix(file, 4096)
+        if not _is_probably_text(sample):
+            raise ValueError("File content does not match .csv")
+        return
+    if ext in ("mp4", "mov"):
+        kind = _sniff_video_kind(file)
+        if kind != ext:
+            raise ValueError("File content does not match video type")
+        return
+
+
+def _validate_custom_extension_content(
+    ext: str,
+    candidates: tuple[str, ...],
+    file: UploadFile,
+) -> None:
+    # For text-like custom types, reject binary payloads.
+    # For other custom types, rely on extension policy + executable signature guard.
+    is_text_like = any(
+        mime.startswith("text/") or mime in _CUSTOM_TEXT_LIKE_MIME_TYPES for mime in candidates
+    )
+    if is_text_like:
+        sample = _read_file_prefix(file, 4096)
+        if not _is_probably_text(sample):
+            raise ValueError(f"File content does not match .{ext}")
+
+
 def _validate_file(form: Form, file: UploadFile) -> str:
     file.file.seek(0, 2)
     file_size = file.file.tell()
@@ -1286,8 +1498,7 @@ def _validate_file(form: Form, file: UploadFile) -> str:
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
     if ext in BLOCKED_EXTENSIONS:
         raise ValueError(f"File extension '.{ext}' not allowed")
-
-    if not ext or ext not in _FORM_UPLOAD_EXTENSION_TO_MIME_TYPES:
+    if not ext:
         raise ValueError("File type not allowed")
 
     # Determine allowed MIME patterns for the form. If unset/empty, use a safe default.
@@ -1306,43 +1517,17 @@ def _validate_file(form: Form, file: UploadFile) -> str:
     if head.startswith(_EXECUTABLE_SIGNATURE_PREFIXES):
         raise ValueError("Executable files are not allowed")
 
-    # Verify the actual file bytes match the extension (do NOT trust multipart Content-Type).
-    if ext == "pdf":
-        stripped = head.lstrip(b"\xef\xbb\xbf \t\r\n")
-        if not stripped.startswith(b"%PDF-"):
-            raise ValueError("File content does not match .pdf")
-    elif ext == "png":
-        if not head.startswith(_PNG_SIGNATURE):
-            raise ValueError("File content does not match .png")
-    elif ext in ("jpg", "jpeg"):
-        if not head.startswith(_JPEG_SIGNATURE_PREFIX):
-            raise ValueError("File content does not match .jpg/.jpeg")
-    elif ext in ("doc", "xls"):
-        if not head.startswith(_OLE_SIGNATURE):
-            raise ValueError("File content does not match .doc/.xls")
-    elif ext in ("docx", "xlsx"):
-        if not head.startswith(_ZIP_SIGNATURE_PREFIXES):
-            raise ValueError("File content does not match .docx/.xlsx")
-        if not _zip_contains(file, "[Content_Types].xml"):
-            raise ValueError("File content does not match .docx/.xlsx")
-        if ext == "docx" and not _zip_contains(file, "word/document.xml"):
-            raise ValueError("File content does not match .docx")
-        if ext == "xlsx" and not _zip_contains(file, "xl/workbook.xml"):
-            raise ValueError("File content does not match .xlsx")
-    elif ext == "csv":
-        sample = _read_file_prefix(file, 4096)
-        if not _is_probably_text(sample):
-            raise ValueError("File content does not match .csv")
-    elif ext in ("mp4", "mov"):
-        kind = _sniff_video_kind(file)
-        if kind != ext:
-            raise ValueError("File content does not match video type")
-    else:
+    candidates = _extension_mime_candidates(ext)
+    if not candidates:
         raise ValueError("File type not allowed")
+
+    if ext in _FORM_UPLOAD_EXTENSION_TO_MIME_TYPES:
+        _validate_extension_signature(ext, head, file)
+    else:
+        _validate_custom_extension_content(ext, candidates, file)
 
     # Choose a canonical MIME type for storage/auditing based on the extension, but only
     # if it is allowed by the form's configured allowed_mime_types.
-    candidates = _FORM_UPLOAD_EXTENSION_TO_MIME_TYPES[ext]
     for mime in candidates:
         if _mime_allowed(mime, allowed_patterns):
             return mime
@@ -1496,6 +1681,9 @@ def _resolve_file_field_keys(
         return [only_key for _ in files]
 
     if not provided_keys:
+        if len(files) == 1:
+            # Gracefully map a single upload to the first configured file field.
+            return [field_keys[0]]
         raise ValueError("file_field_keys required when multiple file fields are configured")
     if len(provided_keys) != len(files):
         raise ValueError("file_field_keys length must match files")

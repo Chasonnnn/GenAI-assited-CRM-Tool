@@ -1,5 +1,6 @@
 """Form builder and submission review endpoints."""
 
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, File, Form, UploadFile
@@ -19,15 +20,29 @@ from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.schemas.forms import (
     FormCreate,
+    FormDeliverySettings,
+    FormDeliverySettingsUpdate,
     FormDraftStatusRead,
     FormFieldMappingsUpdate,
+    FormIntakeLinkCreate,
+    FormIntakeLinkRead,
+    FormIntakeLinkUpdate,
+    FormSubmissionMatchResolveRequest,
+    FormSubmissionMatchResolveResponse,
     FormPublishResponse,
     FormRead,
+    FormMappingOption,
+    FormTokenSendRequest,
+    FormTokenSendResponse,
     FormSubmissionRead,
     FormSubmissionStatusUpdate,
     FormSummary,
     FormTokenRead,
     FormTokenRequest,
+    IntakeLeadPromoteRequest,
+    IntakeLeadPromoteResponse,
+    IntakeLeadRead,
+    MatchCandidateRead,
     FormUpdate,
     FormFieldMappingItem,
     FormSchema,
@@ -41,9 +56,12 @@ from app.schemas.platform_templates import (
     FormTemplateLibraryItem,
     FormTemplateLibraryDetail,
 )
+from app.utils.normalization import normalize_phone
 from app.services import (
     audit_service,
+    email_service,
     form_draft_service,
+    form_intake_service,
     form_service,
     form_submission_service,
     org_service,
@@ -92,6 +110,7 @@ def _form_read(form) -> FormRead:
         max_file_size_bytes=form.max_file_size_bytes,
         max_file_count=form.max_file_count,
         allowed_mime_types=form.allowed_mime_types,
+        default_application_email_template_id=form.default_application_email_template_id,
         created_at=form.created_at,
         updated_at=form.updated_at,
     )
@@ -109,6 +128,12 @@ def _submission_read(submission, files: list) -> FormSubmissionRead:
         review_notes=submission.review_notes,
         answers=submission.answers_json,
         schema_snapshot=submission.schema_snapshot,
+        source_mode=submission.source_mode,
+        intake_link_id=submission.intake_link_id,
+        intake_lead_id=submission.intake_lead_id,
+        match_status=submission.match_status,
+        match_reason=submission.match_reason,
+        matched_at=submission.matched_at,
         files=[
             FormSubmissionFileRead(
                 id=f.id,
@@ -121,6 +146,24 @@ def _submission_read(submission, files: list) -> FormSubmissionRead:
             )
             for f in files
         ],
+    )
+
+
+def _intake_link_read(link, intake_url: str | None = None) -> FormIntakeLinkRead:
+    return FormIntakeLinkRead(
+        id=link.id,
+        form_id=link.form_id,
+        slug=link.slug,
+        campaign_name=link.campaign_name,
+        event_name=link.event_name,
+        utm_defaults=link.utm_defaults,
+        is_active=link.is_active,
+        expires_at=link.expires_at,
+        max_submissions=link.max_submissions,
+        submissions_count=link.submissions_count,
+        intake_url=intake_url,
+        created_at=link.created_at,
+        updated_at=link.updated_at,
     )
 
 
@@ -312,8 +355,25 @@ def create_form(
         max_file_size_bytes=body.max_file_size_bytes,
         max_file_count=body.max_file_count,
         allowed_mime_types=body.allowed_mime_types,
+        default_application_email_template_id=body.default_application_email_template_id,
     )
     return _form_read(form)
+
+
+@router.get(
+    "/mapping-options",
+    response_model=list[FormMappingOption],
+    dependencies=[Depends(require_permission(POLICIES["forms"].default))],
+)
+def list_mapping_options():
+    return [
+        FormMappingOption(
+            value=option["value"],
+            label=option["label"],
+            is_critical=bool(option.get("is_critical", False)),
+        )
+        for option in form_submission_service.list_surrogate_mapping_options()
+    ]
 
 
 @router.get(
@@ -349,17 +409,22 @@ def update_form(
     form = form_service.get_form(db, session.org_id, form_id)
     if not form:
         raise HTTPException(status_code=404, detail="Form not found")
-    form = form_service.update_form(
-        db=db,
-        form=form,
-        user_id=session.user_id,
-        name=body.name,
-        description=body.description,
-        schema=body.form_schema.model_dump() if body.form_schema else None,
-        max_file_size_bytes=body.max_file_size_bytes,
-        max_file_count=body.max_file_count,
-        allowed_mime_types=body.allowed_mime_types,
-    )
+    update_kwargs = {
+        "db": db,
+        "form": form,
+        "user_id": session.user_id,
+        "name": body.name,
+        "description": body.description,
+        "schema": body.form_schema.model_dump() if body.form_schema else None,
+        "max_file_size_bytes": body.max_file_size_bytes,
+        "max_file_count": body.max_file_count,
+        "allowed_mime_types": body.allowed_mime_types,
+    }
+    if "default_application_email_template_id" in body.model_fields_set:
+        update_kwargs["default_application_email_template_id"] = (
+            body.default_application_email_template_id
+        )
+    form = form_service.update_form(**update_kwargs)
     return _form_read(form)
 
 
@@ -380,6 +445,51 @@ def delete_form(
         raise HTTPException(status_code=404, detail="Form not found")
     form_service.delete_form(db=db, form=form)
     return {"message": "Form deleted"}
+
+
+@router.patch(
+    "/{form_id}/delivery-settings",
+    response_model=FormDeliverySettings,
+    dependencies=[
+        Depends(require_permission(POLICIES["forms"].default)),
+        Depends(require_csrf_header),
+    ],
+)
+def update_form_delivery_settings(
+    form_id: UUID,
+    body: FormDeliverySettingsUpdate,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    form = form_service.get_form(db, session.org_id, form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    if (
+        body.default_application_email_template_id is not None
+        and not email_service.get_template(
+            db,
+            body.default_application_email_template_id,
+            session.org_id,
+        )
+    ):
+        raise HTTPException(status_code=404, detail="Email template not found")
+
+    form = form_service.update_form(
+        db=db,
+        form=form,
+        user_id=session.user_id,
+        name=None,
+        description=None,
+        schema=None,
+        max_file_size_bytes=None,
+        max_file_count=None,
+        allowed_mime_types=None,
+        default_application_email_template_id=body.default_application_email_template_id,
+    )
+    return FormDeliverySettings(
+        default_application_email_template_id=form.default_application_email_template_id
+    )
 
 
 @router.post(
@@ -537,7 +647,306 @@ def create_submission_token(
         detail = str(exc)
         status_code = 409 if "already exists" in detail else 400
         raise HTTPException(status_code=status_code, detail=detail) from exc
-    return FormTokenRead(token=token.token, expires_at=token.expires_at)
+    org = org_service.get_org_by_id(db, session.org_id)
+    application_url = form_submission_service.build_application_link(
+        org_service.get_org_portal_base_url(org),
+        token.token,
+    )
+    return FormTokenRead(
+        token_id=token.id,
+        token=token.token,
+        expires_at=token.expires_at,
+        application_url=application_url,
+    )
+
+
+@router.get(
+    "/{form_id}/intake-links",
+    response_model=list[FormIntakeLinkRead],
+    dependencies=[Depends(require_permission(POLICIES["forms"].default))],
+)
+def list_form_intake_links(
+    form_id: UUID,
+    include_inactive: bool = Query(False),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    form = form_service.get_form(db, session.org_id, form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    org = org_service.get_org_by_id(db, session.org_id)
+    base_url = org_service.get_org_portal_base_url(org)
+    links = form_intake_service.list_intake_links(
+        db,
+        org_id=session.org_id,
+        form_id=form.id,
+        include_inactive=include_inactive,
+    )
+    return [
+        _intake_link_read(
+            link,
+            intake_url=form_intake_service.build_shared_application_link(base_url, link.slug),
+        )
+        for link in links
+    ]
+
+
+@router.post(
+    "/{form_id}/intake-links",
+    response_model=FormIntakeLinkRead,
+    dependencies=[
+        Depends(require_permission(POLICIES["forms"].default)),
+        Depends(require_csrf_header),
+    ],
+)
+def create_form_intake_link(
+    form_id: UUID,
+    body: FormIntakeLinkCreate,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    if not settings.FORMS_SHARED_INTAKE:
+        raise HTTPException(status_code=404, detail="Shared intake is disabled")
+
+    form = form_service.get_form(db, session.org_id, form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    try:
+        link = form_intake_service.create_intake_link(
+            db=db,
+            org_id=session.org_id,
+            form=form,
+            user_id=session.user_id,
+            campaign_name=body.campaign_name,
+            event_name=body.event_name,
+            expires_at=body.expires_at,
+            max_submissions=body.max_submissions,
+            utm_defaults=body.utm_defaults,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    org = org_service.get_org_by_id(db, session.org_id)
+    base_url = org_service.get_org_portal_base_url(org)
+    return _intake_link_read(
+        link,
+        intake_url=form_intake_service.build_shared_application_link(base_url, link.slug),
+    )
+
+
+@router.patch(
+    "/intake-links/{link_id}",
+    response_model=FormIntakeLinkRead,
+    dependencies=[
+        Depends(require_permission(POLICIES["forms"].default)),
+        Depends(require_csrf_header),
+    ],
+)
+def update_form_intake_link(
+    link_id: UUID,
+    body: FormIntakeLinkUpdate,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    if not settings.FORMS_SHARED_INTAKE:
+        raise HTTPException(status_code=404, detail="Shared intake is disabled")
+
+    link = form_intake_service.get_intake_link(db, org_id=session.org_id, intake_link_id=link_id)
+    if not link:
+        raise HTTPException(status_code=404, detail="Intake link not found")
+
+    link = form_intake_service.update_intake_link(
+        db=db,
+        link=link,
+        campaign_name=body.campaign_name,
+        event_name=body.event_name,
+        expires_at=body.expires_at,
+        max_submissions=body.max_submissions,
+        utm_defaults=body.utm_defaults,
+        is_active=body.is_active,
+        fields_set=body.model_fields_set,
+    )
+    org = org_service.get_org_by_id(db, session.org_id)
+    base_url = org_service.get_org_portal_base_url(org)
+    return _intake_link_read(
+        link,
+        intake_url=form_intake_service.build_shared_application_link(base_url, link.slug),
+    )
+
+
+@router.post(
+    "/intake-links/{link_id}/rotate",
+    response_model=FormIntakeLinkRead,
+    dependencies=[
+        Depends(require_permission(POLICIES["forms"].default)),
+        Depends(require_csrf_header),
+    ],
+)
+def rotate_form_intake_link(
+    link_id: UUID,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    if not settings.FORMS_SHARED_INTAKE:
+        raise HTTPException(status_code=404, detail="Shared intake is disabled")
+
+    link = form_intake_service.get_intake_link(db, org_id=session.org_id, intake_link_id=link_id)
+    if not link:
+        raise HTTPException(status_code=404, detail="Intake link not found")
+
+    link = form_intake_service.rotate_intake_link(db=db, link=link)
+    org = org_service.get_org_by_id(db, session.org_id)
+    base_url = org_service.get_org_portal_base_url(org)
+    return _intake_link_read(
+        link,
+        intake_url=form_intake_service.build_shared_application_link(base_url, link.slug),
+    )
+
+
+@router.post(
+    "/{form_id}/tokens/{token_id}/send",
+    response_model=FormTokenSendResponse,
+    dependencies=[
+        Depends(require_permission(POLICIES["surrogates"].actions["edit"])),
+        Depends(require_csrf_header),
+    ],
+)
+def send_submission_token(
+    form_id: UUID,
+    token_id: UUID,
+    body: FormTokenSendRequest,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    form = form_service.get_form(db, session.org_id, form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    token = form_submission_service.get_token_by_id(
+        db,
+        org_id=session.org_id,
+        form_id=form.id,
+        token_id=token_id,
+    )
+    if not token:
+        raise HTTPException(status_code=404, detail="Token not found")
+
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, token.surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    if not surrogate.email:
+        raise HTTPException(status_code=400, detail="Surrogate has no email address")
+
+    valid_token = form_submission_service.get_valid_token(db, token.token)
+    if not valid_token:
+        raise HTTPException(status_code=409, detail="Token is no longer valid")
+
+    template_id = body.template_id or form.default_application_email_template_id
+    if not template_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No delivery template selected. Set a form default or pass template_id.",
+        )
+    template = email_service.get_template(db, template_id, session.org_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Email template not found")
+
+    normalized_surrogate_email = surrogate.email.strip().lower()
+    normalized_surrogate_phone: str | None = None
+    if surrogate.phone:
+        try:
+            normalized_surrogate_phone = normalize_phone(surrogate.phone)
+        except Exception:
+            normalized_surrogate_phone = surrogate.phone
+
+    if settings.FORMS_TOKEN_LOCK:
+        if token.locked_recipient_email and token.locked_recipient_email != normalized_surrogate_email:
+            raise HTTPException(
+                status_code=409,
+                detail="Token is locked to a different recipient email. Regenerate the token.",
+            )
+        if (
+            token.locked_recipient_phone
+            and normalized_surrogate_phone
+            and token.locked_recipient_phone != normalized_surrogate_phone
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Token is locked to a different recipient phone. Regenerate the token.",
+            )
+        if token.locked_recipient_email is None:
+            token.locked_recipient_email = normalized_surrogate_email
+        if token.locked_recipient_phone is None and normalized_surrogate_phone:
+            token.locked_recipient_phone = normalized_surrogate_phone
+
+    org = org_service.get_org_by_id(db, session.org_id)
+    application_url = form_submission_service.build_application_link(
+        org_service.get_org_portal_base_url(org),
+        token.token,
+    )
+    result = email_service.send_from_template(
+        db=db,
+        org_id=session.org_id,
+        template_id=template.id,
+        recipient_email=surrogate.email,
+        variables={"form_link": application_url},
+        surrogate_id=surrogate.id,
+        sender_user_id=session.user_id,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Email template not found")
+    email_log, _job = result
+    token.last_sent_at = datetime.now(timezone.utc)
+    token.last_sent_template_id = template.id
+    db.commit()
+
+    sent_at = token.last_sent_at or datetime.now(timezone.utc)
+    return FormTokenSendResponse(
+        token_id=token.id,
+        token=token.token,
+        template_id=template.id,
+        email_log_id=email_log.id,
+        sent_at=sent_at,
+        application_url=application_url,
+    )
+
+
+@router.get(
+    "/{form_id}/submissions",
+    response_model=list[FormSubmissionRead],
+    dependencies=[Depends(require_permission(POLICIES["forms"].default))],
+)
+def list_form_submissions(
+    form_id: UUID,
+    status: str | None = Query(default=None),
+    match_status: str | None = Query(default=None),
+    source_mode: str | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=1000),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    form = form_service.get_form(db, session.org_id, form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    submissions = form_submission_service.list_form_submissions(
+        db,
+        session.org_id,
+        form.id,
+        status=status,
+        match_status=match_status,
+        source_mode=source_mode,
+        limit=limit,
+    )
+    results: list[FormSubmissionRead] = []
+    for submission in submissions:
+        files = form_submission_service.list_submission_files(db, session.org_id, submission.id)
+        results.append(_submission_read(submission, files))
+    return results
 
 
 @router.get(
@@ -648,6 +1057,151 @@ def list_submissions(
     return output
 
 
+@router.get(
+    "/submissions/{submission_id}/match-candidates",
+    response_model=list[MatchCandidateRead],
+    dependencies=[Depends(require_permission(POLICIES["forms"].default))],
+)
+def list_submission_match_candidates(
+    submission_id: UUID,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    submission = form_submission_service.get_submission(db, session.org_id, submission_id)
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    candidates = form_intake_service.list_match_candidates(
+        db,
+        org_id=session.org_id,
+        submission_id=submission.id,
+    )
+    return [
+        MatchCandidateRead(
+            id=candidate.id,
+            submission_id=candidate.submission_id,
+            surrogate_id=candidate.surrogate_id,
+            reason=candidate.reason,
+            created_at=candidate.created_at,
+        )
+        for candidate in candidates
+    ]
+
+
+@router.post(
+    "/submissions/{submission_id}/match/resolve",
+    response_model=FormSubmissionMatchResolveResponse,
+    dependencies=[
+        Depends(require_permission(POLICIES["forms"].default)),
+        Depends(require_csrf_header),
+    ],
+)
+def resolve_submission_match(
+    submission_id: UUID,
+    body: FormSubmissionMatchResolveRequest,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    submission = form_submission_service.get_submission(db, session.org_id, submission_id)
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    if body.surrogate_id:
+        surrogate = surrogate_service.get_surrogate(db, session.org_id, body.surrogate_id)
+        if not surrogate:
+            raise HTTPException(status_code=404, detail="Surrogate not found")
+        check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    try:
+        submission, outcome = form_intake_service.resolve_submission_match(
+            db=db,
+            submission=submission,
+            surrogate_id=body.surrogate_id,
+            create_intake_lead=body.create_intake_lead,
+            reviewer_id=session.user_id,
+            review_notes=body.review_notes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    files = form_submission_service.list_submission_files(db, session.org_id, submission.id)
+    candidate_count = len(
+        form_intake_service.list_match_candidates(
+            db, org_id=session.org_id, submission_id=submission.id
+        )
+    )
+    return FormSubmissionMatchResolveResponse(
+        submission=_submission_read(submission, files),
+        outcome=outcome,
+        candidate_count=candidate_count,
+    )
+
+
+@router.get(
+    "/intake-leads/{lead_id}",
+    response_model=IntakeLeadRead,
+    dependencies=[Depends(require_permission(POLICIES["forms"].default))],
+)
+def get_intake_lead(
+    lead_id: UUID,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    lead = form_intake_service.get_intake_lead(db, org_id=session.org_id, lead_id=lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Intake lead not found")
+    return IntakeLeadRead(
+        id=lead.id,
+        form_id=lead.form_id,
+        intake_link_id=lead.intake_link_id,
+        full_name=lead.full_name,
+        email=lead.email,
+        phone=lead.phone,
+        date_of_birth=lead.date_of_birth.isoformat() if lead.date_of_birth else None,
+        status=lead.status,
+        promoted_surrogate_id=lead.promoted_surrogate_id,
+        created_at=lead.created_at,
+        updated_at=lead.updated_at,
+        promoted_at=lead.promoted_at,
+    )
+
+
+@router.post(
+    "/intake-leads/{lead_id}/promote",
+    response_model=IntakeLeadPromoteResponse,
+    dependencies=[
+        Depends(require_permission(POLICIES["surrogates"].actions["edit"])),
+        Depends(require_csrf_header),
+    ],
+)
+def promote_intake_lead(
+    lead_id: UUID,
+    body: IntakeLeadPromoteRequest,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    lead = form_intake_service.get_intake_lead(db, org_id=session.org_id, lead_id=lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Intake lead not found")
+
+    try:
+        surrogate, linked_submission_count = form_intake_service.promote_intake_lead(
+            db=db,
+            lead=lead,
+            user_id=session.user_id,
+            source=body.source,
+            is_priority=body.is_priority,
+            assign_to_user=body.assign_to_user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return IntakeLeadPromoteResponse(
+        intake_lead_id=lead.id,
+        surrogate_id=surrogate.id,
+        linked_submission_count=linked_submission_count,
+    )
+
+
 @router.post(
     "/submissions/{submission_id}/approve",
     response_model=FormSubmissionRead,
@@ -665,6 +1219,11 @@ def approve_submission(
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
+    if not submission.surrogate_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Submission is not linked to a surrogate. Resolve matching first.",
+        )
     surrogate = surrogate_service.get_surrogate(db, session.org_id, submission.surrogate_id)
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
@@ -699,6 +1258,11 @@ def reject_submission(
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
+    if not submission.surrogate_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Submission is not linked to a surrogate. Resolve matching first.",
+        )
     surrogate = surrogate_service.get_surrogate(db, session.org_id, submission.surrogate_id)
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
@@ -734,6 +1298,11 @@ def update_submission_answers(
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
+    if not submission.surrogate_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Submission is not linked to a surrogate. Resolve matching first.",
+        )
     surrogate = surrogate_service.get_surrogate(db, session.org_id, submission.surrogate_id)
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
@@ -769,6 +1338,11 @@ def download_submission_file(
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
+    if not submission.surrogate_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Submission is not linked to a surrogate. Resolve matching first.",
+        )
     surrogate = surrogate_service.get_surrogate(db, session.org_id, submission.surrogate_id)
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
@@ -838,6 +1412,11 @@ async def upload_submission_file(
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
+    if not submission.surrogate_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Submission is not linked to a surrogate. Resolve matching first.",
+        )
     surrogate = surrogate_service.get_surrogate(db, session.org_id, submission.surrogate_id)
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
@@ -883,6 +1462,11 @@ def delete_submission_file(
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
+    if not submission.surrogate_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Submission is not linked to a surrogate. Resolve matching first.",
+        )
     surrogate = surrogate_service.get_surrogate(db, session.org_id, submission.surrogate_id)
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
@@ -922,6 +1506,11 @@ def export_submission_pdf(
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
+    if not submission.surrogate_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Submission is not linked to a surrogate. Resolve matching first.",
+        )
     surrogate = surrogate_service.get_surrogate(db, session.org_id, submission.surrogate_id)
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")

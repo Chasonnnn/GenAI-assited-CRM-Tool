@@ -806,10 +806,9 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
         from app.services import org_service
 
         portal_base_url = org_service.get_org_portal_base_url(org)
-        form_link = (
-            f"{portal_base_url}/apply/{form_token.token}"
-            if portal_base_url
-            else f"/apply/{form_token.token}"
+        form_link = form_submission_service.build_application_link(
+            portal_base_url,
+            form_token.token,
         )
 
     booking_link_user_id: UUID | None = None
