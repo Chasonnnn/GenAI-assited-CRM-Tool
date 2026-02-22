@@ -693,8 +693,13 @@ def test_submission_requires_file_field_keys_when_multiple_file_fields(
         expires_in_days=7,
     )
 
-    upload = UploadFile(
-        filename="doc.csv",
+    upload_a = UploadFile(
+        filename="doc-a.csv",
+        file=BytesIO(b"test"),
+        headers=Headers({"content-type": "text/csv"}),
+    )
+    upload_b = UploadFile(
+        filename="doc-b.csv",
         file=BytesIO(b"test"),
         headers=Headers({"content-type": "text/csv"}),
     )
@@ -705,7 +710,7 @@ def test_submission_requires_file_field_keys_when_multiple_file_fields(
             token=token_record,
             form=form,
             answers={},
-            files=[upload],
+            files=[upload_a, upload_b],
         )
 
 
@@ -870,3 +875,42 @@ def test_submission_approval_uses_mapping_snapshot(db, test_org, test_user, defa
     db.refresh(surrogate)
     assert surrogate.full_name == "Jane Doe"
     assert surrogate.phone is None
+
+
+def test_resolve_file_field_keys_defaults_first_field_for_single_upload():
+    schema = form_submission_service.parse_schema(
+        {
+            "pages": [
+                {
+                    "title": "Uploads",
+                    "fields": [
+                        {
+                            "key": "supporting_docs",
+                            "label": "Supporting Documents",
+                            "type": "file",
+                            "required": False,
+                        },
+                        {
+                            "key": "insurance_docs",
+                            "label": "Insurance Documents",
+                            "type": "file",
+                            "required": False,
+                        },
+                    ],
+                }
+            ]
+        }
+    )
+    file_fields = form_submission_service._get_file_fields(schema)
+    upload = UploadFile(
+        filename="single.csv",
+        file=BytesIO(b"test"),
+        headers=Headers({"content-type": "text/csv"}),
+    )
+
+    resolved = form_submission_service._resolve_file_field_keys(
+        file_fields=file_fields,
+        files=[upload],
+        file_field_keys=None,
+    )
+    assert resolved == ["supporting_docs"]
