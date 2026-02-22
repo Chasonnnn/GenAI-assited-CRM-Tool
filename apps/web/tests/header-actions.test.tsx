@@ -4,7 +4,9 @@ import type { ReactNode } from "react"
 import { HeaderActions } from "@/components/surrogates/detail/SurrogateDetailLayout/HeaderActions"
 
 const mockUseAuth = vi.fn()
-const mockUseSurrogateDetailLayout = vi.fn()
+const mockUseSurrogateDetailData = vi.fn()
+const mockUseSurrogateDetailDialogs = vi.fn()
+const mockUseSurrogateDetailActions = vi.fn()
 const mockExportSurrogatePacketPdf = vi.fn()
 const mockToastSuccess = vi.fn()
 const mockToastError = vi.fn()
@@ -62,7 +64,9 @@ vi.mock("sonner", () => ({
 }))
 
 vi.mock("@/components/surrogates/detail/SurrogateDetailLayout/context", () => ({
-    useSurrogateDetailLayout: () => mockUseSurrogateDetailLayout(),
+    useSurrogateDetailData: () => mockUseSurrogateDetailData(),
+    useSurrogateDetailDialogs: () => mockUseSurrogateDetailDialogs(),
+    useSurrogateDetailActions: () => mockUseSurrogateDetailActions(),
 }))
 
 describe("HeaderActions", () => {
@@ -71,7 +75,7 @@ describe("HeaderActions", () => {
             user: { role: "admin", user_id: "user1" },
         })
 
-        mockUseSurrogateDetailLayout.mockReturnValue({
+        mockUseSurrogateDetailData.mockReturnValue({
             surrogate: {
                 id: "s1",
                 stage_id: "stage_new_unread",
@@ -97,6 +101,11 @@ describe("HeaderActions", () => {
             isInQueue: false,
             isOwnedByUser: true,
             zoomConnected: false,
+        })
+        mockUseSurrogateDetailDialogs.mockReturnValue({
+            openDialog: vi.fn(),
+        })
+        mockUseSurrogateDetailActions.mockReturnValue({
             claimSurrogate: vi.fn(),
             assignSurrogate: vi.fn(),
             archiveSurrogate: vi.fn(),
@@ -121,7 +130,7 @@ describe("HeaderActions", () => {
             user: { role: "intake_specialist", user_id: "intake-user-1" },
         })
 
-        mockUseSurrogateDetailLayout.mockReturnValue({
+        mockUseSurrogateDetailData.mockReturnValue({
             surrogate: {
                 id: "s1",
                 stage_id: "stage_new_unread",
@@ -140,20 +149,12 @@ describe("HeaderActions", () => {
             stageOptions: [{ slug: "contacted", stage_type: "intake", order: 2 }],
             queues: [],
             assignees: [],
-            openDialog: vi.fn(),
             canManageQueue: false,
             canClaimSurrogate: false,
             canChangeStage: true,
             isInQueue: false,
             isOwnedByUser: true,
             zoomConnected: false,
-            claimSurrogate: vi.fn(),
-            assignSurrogate: vi.fn(),
-            archiveSurrogate: vi.fn(),
-            restoreSurrogate: vi.fn(),
-            isClaimPending: false,
-            isAssignPending: false,
-            isReleasePending: false,
         })
 
         render(<HeaderActions />)

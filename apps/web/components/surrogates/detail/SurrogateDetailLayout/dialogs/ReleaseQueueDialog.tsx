@@ -3,18 +3,27 @@
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { useSurrogateDetailLayout } from "../context"
+import {
+    useSurrogateDetailActions,
+    useSurrogateDetailData,
+    useSurrogateDetailDialogs,
+    useSurrogateDetailQueue,
+} from "../context"
 
 export function ReleaseQueueDialog() {
+    const { queues } = useSurrogateDetailData()
     const {
         activeDialog,
         closeDialog,
-        queues,
+    } = useSurrogateDetailDialogs()
+    const {
         selectedQueueId,
         setSelectedQueueId,
+    } = useSurrogateDetailQueue()
+    const {
         releaseSurrogate,
         isReleasePending,
-    } = useSurrogateDetailLayout()
+    } = useSurrogateDetailActions()
 
     const isOpen = activeDialog.type === "release_queue"
 
