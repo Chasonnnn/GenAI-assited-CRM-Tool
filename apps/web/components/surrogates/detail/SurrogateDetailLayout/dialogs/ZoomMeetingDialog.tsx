@@ -6,23 +6,28 @@ import { DateTimePicker } from "@/components/ui/date-time-picker"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { VideoIcon } from "lucide-react"
-import { useSurrogateDetailLayout } from "../context"
+import {
+    useSurrogateDetailData,
+    useSurrogateDetailDialogs,
+    useSurrogateDetailZoom,
+} from "../context"
 
 export function ZoomMeetingDialog() {
     const {
         surrogate,
-        activeDialog,
-        closeDialog,
+        timezoneName,
+    } = useSurrogateDetailData()
+    const { activeDialog, closeDialog } = useSurrogateDetailDialogs()
+    const {
         zoomForm,
         setZoomTopic,
         setZoomDuration,
         setZoomStartAt,
         createZoomMeeting,
         sendZoomInvite,
-        timezoneName,
         isCreateZoomPending,
         isSendZoomInvitePending,
-    } = useSurrogateDetailLayout()
+    } = useSurrogateDetailZoom()
 
     const isOpen = activeDialog.type === "zoom_meeting"
 

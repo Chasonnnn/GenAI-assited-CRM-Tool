@@ -3,16 +3,15 @@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Loader2Icon, SaveIcon } from "lucide-react"
-import { useProfileCard } from "./context"
+import { useProfileCardActions, useProfileCardEdits, useProfileCardMode } from "./context"
 
 export function SaveBar() {
+    const { mode } = useProfileCardMode()
+    const { hasChanges, stagedChanges } = useProfileCardEdits()
     const {
-        mode,
-        hasChanges,
-        stagedChanges,
         saveChanges,
         isSaving,
-    } = useProfileCard()
+    } = useProfileCardActions()
 
     const isEditMode = mode.type === "edit"
 

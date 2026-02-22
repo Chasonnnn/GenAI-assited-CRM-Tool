@@ -30,6 +30,7 @@ FORM_LOGO_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024
 FORM_LOGO_ALLOWED_MIME_TYPES = {"image/png", "image/jpeg", "image/jpg"}
 FORM_LOGO_ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}
 LEGACY_PUBLIC_LOGO_PREFIX = "/forms/public/logos/"
+_UNSET = object()
 
 
 def list_forms(db: Session, org_id: uuid.UUID) -> list[Form]:
@@ -52,6 +53,7 @@ def create_form(
     max_file_size_bytes: int | None,
     max_file_count: int | None,
     allowed_mime_types: list[str] | None,
+    default_application_email_template_id: uuid.UUID | None = None,
 ) -> Form:
     max_size = (
         max_file_size_bytes if max_file_size_bytes is not None else DEFAULT_MAX_FILE_SIZE_BYTES
@@ -66,6 +68,7 @@ def create_form(
         max_file_size_bytes=max_size,
         max_file_count=max_count,
         allowed_mime_types=allowed_mime_types,
+        default_application_email_template_id=default_application_email_template_id,
         created_by_user_id=user_id,
         updated_by_user_id=user_id,
     )
@@ -85,6 +88,7 @@ def update_form(
     max_file_size_bytes: int | None,
     max_file_count: int | None,
     allowed_mime_types: list[str] | None,
+    default_application_email_template_id: uuid.UUID | None | object = _UNSET,
 ) -> Form:
     if name is not None:
         form.name = name
@@ -98,6 +102,8 @@ def update_form(
         form.max_file_count = max_file_count
     if allowed_mime_types is not None:
         form.allowed_mime_types = allowed_mime_types
+    if default_application_email_template_id is not _UNSET:
+        form.default_application_email_template_id = default_application_email_template_id
     form.updated_by_user_id = user_id
 
     db.commit()

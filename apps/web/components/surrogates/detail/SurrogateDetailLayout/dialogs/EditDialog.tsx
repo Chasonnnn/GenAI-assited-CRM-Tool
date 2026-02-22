@@ -5,10 +5,16 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useSurrogateDetailLayout } from "../context"
+import {
+    useSurrogateDetailActions,
+    useSurrogateDetailData,
+    useSurrogateDetailDialogs,
+} from "../context"
 
 export function EditDialog() {
-    const { surrogate, activeDialog, closeDialog, updateSurrogate, isUpdatePending } = useSurrogateDetailLayout()
+    const { surrogate } = useSurrogateDetailData()
+    const { activeDialog, closeDialog } = useSurrogateDetailDialogs()
+    const { updateSurrogate, isUpdatePending } = useSurrogateDetailActions()
 
     const isOpen = activeDialog.type === "edit_surrogate"
 

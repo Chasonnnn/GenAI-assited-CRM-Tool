@@ -8,18 +8,17 @@ import {
     DownloadIcon,
     EditIcon,
 } from "lucide-react"
-import { useProfileCard } from "./context"
+import { useProfileCardActions, useProfileCardMode } from "./context"
 
 export function Header() {
+    const { mode, enterEditMode } = useProfileCardMode()
     const {
-        mode,
-        enterEditMode,
         cancelAllChanges,
         syncProfile,
         exportProfile,
         isSyncing,
         isExporting,
-    } = useProfileCard()
+    } = useProfileCardActions()
 
     const isEditMode = mode.type === "edit"
 

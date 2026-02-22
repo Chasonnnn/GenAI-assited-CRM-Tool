@@ -9,8 +9,17 @@ import type {
     SurrogateListResponse,
     SurrogateRead,
     SurrogateSource,
+    SurrogateStatusChangePayload,
+    SurrogateStatusChangeResponse,
+    SurrogateStatusHistory,
 } from '../types/surrogate';
 import type { TaskListItem } from './tasks';
+
+export type {
+    SurrogateStatusChangePayload,
+    SurrogateStatusChangeResponse,
+    SurrogateStatusHistory,
+};
 
 // Query params for listing surrogates
 export interface SurrogateListParams {
@@ -47,21 +56,6 @@ export interface SurrogateStats {
 export interface SurrogateStatsParams {
     pipeline_id?: string;
     owner_id?: string;
-}
-
-// Status history entry
-export interface SurrogateStatusHistory {
-    id: string;
-    from_stage_id: string | null;
-    to_stage_id: string | null;
-    from_label_snapshot: string | null;
-    to_label_snapshot: string | null;
-    changed_by_user_id: string | null;
-    changed_by_name: string | null;
-    reason: string | null;
-    changed_at: string;
-    effective_at?: string | null;
-    recorded_at?: string | null;
 }
 
 // Create surrogate payload
@@ -164,23 +158,6 @@ export interface SurrogateUpdatePayload {
     actual_delivery_date?: string | null;
     delivery_baby_gender?: string | null;
     delivery_baby_weight?: string | null;
-}
-
-// Status change payload
-export interface SurrogateStatusChangePayload {
-    stage_id: string;
-    reason?: string;
-    effective_at?: string; // ISO datetime, optional (defaults to now)
-    delivery_baby_gender?: string | null;
-    delivery_baby_weight?: string | null;
-}
-
-// Status change response
-export interface SurrogateStatusChangeResponse {
-    status: 'applied' | 'pending_approval';
-    surrogate?: SurrogateRead | null;
-    request_id?: string | null;
-    message?: string | null;
 }
 
 // Assign surrogate payload

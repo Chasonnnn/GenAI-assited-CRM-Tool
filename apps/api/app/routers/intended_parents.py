@@ -14,11 +14,11 @@ from app.core.deps import (
 )
 from app.core.policies import POLICIES
 from app.db.enums import AuditEventType, IntendedParentStatus, EntityType, Role
+from app.schemas.auth import UserSession
 from app.schemas.intended_parent import (
     IntendedParentCreate,
     IntendedParentUpdate,
     IntendedParentRead,
-    IntendedParentListItem,
     IntendedParentStatusUpdate,
     IntendedParentStatusHistoryItem,
     IntendedParentStatusChangeResponse,
@@ -56,12 +56,13 @@ def list_intended_parents(
     sort_by: str | None = Query(None, description="Column to sort by"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort direction"),
     db: Session = Depends(get_db),
-    session: dict = Depends(get_current_session),
+    session: UserSession = Depends(get_current_session),
 ):
     """List intended parents with filters and pagination."""
-    items, total = ip_service.list_intended_parents(
-        db,
-        org_id=session.org_id,
+    return ip_service.list_intended_parents_for_session(
+        db=db,
+        request=request,
+        session=session,
         status=status,
         state=state,
         budget_min=budget_min,
@@ -76,47 +77,6 @@ def list_intended_parents(
         sort_by=sort_by,
         sort_order=sort_order,
     )
-    pages = (total + per_page - 1) // per_page  # ceiling division
-    from app.services import audit_service
-
-    q_type = None
-    if q:
-        if "@" in q:
-            q_type = "email"
-        else:
-            digit_count = sum(1 for ch in q if ch.isdigit())
-            q_type = "phone" if digit_count >= 7 else "text"
-
-    audit_service.log_phi_access(
-        db=db,
-        org_id=session.org_id,
-        user_id=session.user_id,
-        target_type="intended_parent_list",
-        target_id=None,
-        request=request,
-        details={
-            "count": len(items),
-            "page": page,
-            "per_page": per_page,
-            "include_archived": include_archived,
-            "status": status,
-            "state": state,
-            "owner_id": str(owner_id) if owner_id else None,
-            "budget_min": str(budget_min) if budget_min is not None else None,
-            "budget_max": str(budget_max) if budget_max is not None else None,
-            "created_after": created_after,
-            "created_before": created_before,
-            "q_type": q_type,
-        },
-    )
-    db.commit()
-    return {
-        "items": [IntendedParentListItem.model_validate(ip) for ip in items],
-        "total": total,
-        "page": page,
-        "per_page": per_page,
-        "pages": pages,
-    }
 
 
 @router.get("/stats", response_model=IntendedParentStats)

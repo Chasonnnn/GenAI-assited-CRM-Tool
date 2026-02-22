@@ -11,6 +11,7 @@ import logging
 from typing import TypedDict
 from uuid import UUID
 
+from fastapi import Request
 from sqlalchemy import and_, func, literal, or_, select, true, union_all
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -18,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import OwnerType, Role
 from app.db.models import Attachment, Surrogate, EntityNote, IntendedParent, PipelineStage
+from app.schemas.auth import UserSession
 from app.utils.normalization import escape_like_string, normalize_identifier, normalize_search_text
 
 
@@ -71,6 +73,21 @@ def _extract_hashes(query: str) -> tuple[str | None, str | None]:
         except (RuntimeError, ValueError):
             phone_hash = None
     return email_hash, phone_hash
+
+
+def normalize_entity_types(raw_types: str) -> list[str]:
+    """Parse and normalize entity type filters from querystring input."""
+    entity_types = [item.strip() for item in raw_types.split(",") if item.strip()]
+    valid_types = {"case", "surrogate", "note", "attachment", "intended_parent"}
+    entity_types = [item for item in entity_types if item in valid_types]
+    if not entity_types:
+        entity_types = ["surrogate", "note", "attachment", "intended_parent"]
+
+    # Backwards-compat: "case" is the legacy name for "surrogate".
+    normalized = ["surrogate" if item == "case" else item for item in entity_types]
+
+    # Preserve order and drop duplicates.
+    return list(dict.fromkeys(normalized))
 
 
 # =============================================================================
@@ -188,6 +205,58 @@ def global_search(
         total=len(results),
         results=results,
     )
+
+
+def global_search_for_session(
+    db: Session,
+    request: Request | None,
+    session: UserSession,
+    *,
+    q: str,
+    types: str,
+    limit: int,
+    offset: int,
+) -> SearchResponse:
+    """Orchestrate a global search for the current session and audit PHI access."""
+    from app.services import permission_service, phi_access_service
+
+    entity_types = normalize_entity_types(types)
+    effective_permissions = permission_service.get_effective_permissions(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        role=session.role.value,
+    )
+
+    results = global_search(
+        db=db,
+        org_id=session.org_id,
+        query=q,
+        user_id=session.user_id,
+        role=session.role.value,
+        permissions=effective_permissions,
+        entity_types=entity_types,
+        limit=limit,
+        offset=offset,
+    )
+
+    phi_access_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="global_search",
+        target_id=None,
+        request=request,
+        query=q,
+        details={
+            "query_length": len(q),
+            "types": entity_types,
+            "limit": limit,
+            "offset": offset,
+            "result_count": results["total"],
+        },
+    )
+    return results
 
 
 def _global_search_unified(

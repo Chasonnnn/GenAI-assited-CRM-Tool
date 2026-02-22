@@ -23,7 +23,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.db.enums import (
+    FormLinkMode,
     FormStatus,
+    FormSubmissionMatchStatus,
     FormSubmissionStatus,
 )
 
@@ -71,6 +73,11 @@ class Form(Base):
         Integer, default=10, server_default=text("10"), nullable=False
     )
     allowed_mime_types: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    default_application_email_template_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("email_templates.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -186,6 +193,14 @@ class FormSubmissionToken(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     revoked_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
+    locked_recipient_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    locked_recipient_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    last_sent_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
+    last_sent_template_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("email_templates.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(), server_default=text("now()"), nullable=False
     )
@@ -196,11 +211,18 @@ class FormSubmission(Base):
 
     __tablename__ = "form_submissions"
     __table_args__ = (
-        UniqueConstraint("form_id", "surrogate_id", name="uq_form_submission_surrogate"),
         Index("idx_form_submissions_org", "organization_id"),
         Index("idx_form_submissions_form", "form_id"),
         Index("idx_form_submissions_surrogate", "surrogate_id"),
         Index("idx_form_submissions_status", "status"),
+        Index("idx_form_submissions_match_status", "match_status"),
+        Index(
+            "uq_form_submission_surrogate_non_null",
+            "form_id",
+            "surrogate_id",
+            unique=True,
+            postgresql_where=text("surrogate_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -216,14 +238,36 @@ class FormSubmission(Base):
         ForeignKey("forms.id", ondelete="CASCADE"),
         nullable=False,
     )
-    surrogate_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="CASCADE"), nullable=False
+    surrogate_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="CASCADE"), nullable=True
     )
     token_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("form_submission_tokens.id", ondelete="SET NULL"),
         nullable=True,
     )
+    intake_link_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("form_intake_links.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    intake_lead_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("intake_leads.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    source_mode: Mapped[str] = mapped_column(
+        String(20),
+        server_default=text(f"'{FormLinkMode.DEDICATED.value}'"),
+        nullable=False,
+    )
+    match_status: Mapped[str] = mapped_column(
+        String(30),
+        server_default=text(f"'{FormSubmissionMatchStatus.LINKED.value}'"),
+        nullable=False,
+    )
+    match_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    matched_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
 
     status: Mapped[str] = mapped_column(
         String(20),
@@ -249,7 +293,7 @@ class FormSubmission(Base):
     )
 
     form: Mapped["Form"] = relationship()
-    surrogate: Mapped["Surrogate"] = relationship()
+    surrogate: Mapped["Surrogate | None"] = relationship()
 
 
 class FormSubmissionDraft(Base):

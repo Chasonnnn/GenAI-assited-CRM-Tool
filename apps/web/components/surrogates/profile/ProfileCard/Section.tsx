@@ -2,7 +2,7 @@
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react"
-import { useProfileCard } from "./context"
+import { useProfileCardSections } from "./context"
 
 interface SectionProps {
     index: number
@@ -11,7 +11,7 @@ interface SectionProps {
 }
 
 export function Section({ index, title, children }: SectionProps) {
-    const { sectionOpen, toggleSection } = useProfileCard()
+    const { sectionOpen, toggleSection } = useProfileCardSections()
     const isOpen = sectionOpen[index] ?? true
 
     return (

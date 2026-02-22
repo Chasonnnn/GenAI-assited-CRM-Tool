@@ -222,6 +222,15 @@ class Settings(BaseSettings):
     RATE_LIMIT_FAIL_OPEN: bool = True
     REDIS_REQUIRED: bool = False
 
+    # Forms intake rollout flags
+    FORMS_SHARED_INTAKE: bool = True
+    FORMS_AUTO_MATCH: bool = True
+    FORMS_TOKEN_LOCK: bool = True
+    FORMS_SHARED_DUPLICATE_WINDOW_SECONDS: int = 900
+    # Optional static token checked on shared-intake submit via X-Intake-Challenge.
+    # Leave empty to disable challenge verification.
+    FORMS_SHARED_CHALLENGE_SECRET: str = ""
+
     # Analytics caching
     ANALYTICS_CACHE_TTL_SECONDS: int = 300
 

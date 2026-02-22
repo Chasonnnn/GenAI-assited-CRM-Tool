@@ -73,8 +73,8 @@ export interface ZoomFormState {
     } | null
 }
 
-export interface SurrogateDetailLayoutContextValue {
-    // Data
+export interface SurrogateDetailDataContextValue {
+    // Core data
     surrogateId: string
     surrogate: SurrogateRead | null
     isLoading: boolean
@@ -94,30 +94,49 @@ export interface SurrogateDetailLayoutContextValue {
     canViewJourney: boolean
     canViewProfile: boolean
     timezoneName: string
+    navigateToList: () => void
 
-    // Tab state
+    // Permissions
+    canManageQueue: boolean
+    canClaimSurrogate: boolean
+    canChangeStage: boolean
+    isOwnedByCurrentUser: boolean
+    isInQueue: boolean
+    isOwnedByUser: boolean
+    zoomConnected: boolean
+}
+
+export interface SurrogateDetailTabsContextValue {
     currentTab: TabValue
     allowedTabs: TabValue[]
     setTab: (tab: TabValue) => void
+}
 
-    // Dialog state (consolidated)
+export interface SurrogateDetailDialogContextValue {
     activeDialog: ActiveDialog
     openDialog: (dialog: ActiveDialog) => void
     closeDialog: () => void
+}
 
-    // Release queue state
+export interface SurrogateDetailQueueContextValue {
     selectedQueueId: string
     setSelectedQueueId: (id: string) => void
+}
 
-    // Zoom form state
+export interface SurrogateDetailZoomContextValue {
     zoomForm: ZoomFormState
     setZoomTopic: (topic: string) => void
     setZoomDuration: (duration: number) => void
     setZoomStartAt: (date: Date | undefined) => void
     setZoomLastMeetingResult: (result: ZoomFormState["lastMeetingResult"]) => void
     zoomIdempotencyKeyRef: React.MutableRefObject<string | null>
+    createZoomMeeting: () => Promise<void>
+    sendZoomInvite: () => Promise<void>
+    isCreateZoomPending: boolean
+    isSendZoomInvitePending: boolean
+}
 
-    // Actions
+export interface SurrogateDetailActionsContextValue {
     changeStatus: (data: {
         stage_id: string
         reason?: string
@@ -131,17 +150,6 @@ export interface SurrogateDetailLayoutContextValue {
     releaseSurrogate: () => Promise<void>
     updateSurrogate: (data: Record<string, unknown>) => Promise<void>
     assignSurrogate: (ownerId: string | null) => Promise<void>
-    createZoomMeeting: () => Promise<void>
-    sendZoomInvite: () => Promise<void>
-
-    // Permissions
-    canManageQueue: boolean
-    canClaimSurrogate: boolean
-    canChangeStage: boolean
-    isOwnedByCurrentUser: boolean
-    isInQueue: boolean
-    isOwnedByUser: boolean
-    zoomConnected: boolean
 
     // Loading states
     isChangeStatusPending: boolean
@@ -151,25 +159,69 @@ export interface SurrogateDetailLayoutContextValue {
     isClaimPending: boolean
     isReleasePending: boolean
     isAssignPending: boolean
-    isCreateZoomPending: boolean
-    isSendZoomInvitePending: boolean
-
-    // Router
-    navigateToList: () => void
 }
+
+export type SurrogateDetailLayoutContextValue =
+    SurrogateDetailDataContextValue &
+    SurrogateDetailTabsContextValue &
+    SurrogateDetailDialogContextValue &
+    SurrogateDetailQueueContextValue &
+    SurrogateDetailZoomContextValue &
+    SurrogateDetailActionsContextValue
 
 // ============================================================================
 // Context
 // ============================================================================
 
-const SurrogateDetailLayoutContext = createContext<SurrogateDetailLayoutContextValue | null>(null)
+const SurrogateDetailDataContext = createContext<SurrogateDetailDataContextValue | null>(null)
+const SurrogateDetailTabsContext = createContext<SurrogateDetailTabsContextValue | null>(null)
+const SurrogateDetailDialogContext = createContext<SurrogateDetailDialogContextValue | null>(null)
+const SurrogateDetailQueueContext = createContext<SurrogateDetailQueueContextValue | null>(null)
+const SurrogateDetailZoomContext = createContext<SurrogateDetailZoomContextValue | null>(null)
+const SurrogateDetailActionsContext = createContext<SurrogateDetailActionsContextValue | null>(null)
 
-export function useSurrogateDetailLayout() {
-    const context = use(SurrogateDetailLayoutContext)
-    if (!context) {
-        throw new Error("useSurrogateDetailLayout must be used within a SurrogateDetailLayoutProvider")
+function useRequiredContext<T>(context: React.Context<T | null>, hookName: string): T {
+    const value = use(context)
+    if (!value) {
+        throw new Error(`${hookName} must be used within a SurrogateDetailLayoutProvider`)
     }
-    return context
+    return value
+}
+
+export function useSurrogateDetailData() {
+    return useRequiredContext(SurrogateDetailDataContext, "useSurrogateDetailData")
+}
+
+export function useSurrogateDetailTabs() {
+    return useRequiredContext(SurrogateDetailTabsContext, "useSurrogateDetailTabs")
+}
+
+export function useSurrogateDetailDialogs() {
+    return useRequiredContext(SurrogateDetailDialogContext, "useSurrogateDetailDialogs")
+}
+
+export function useSurrogateDetailQueue() {
+    return useRequiredContext(SurrogateDetailQueueContext, "useSurrogateDetailQueue")
+}
+
+export function useSurrogateDetailZoom() {
+    return useRequiredContext(SurrogateDetailZoomContext, "useSurrogateDetailZoom")
+}
+
+export function useSurrogateDetailActions() {
+    return useRequiredContext(SurrogateDetailActionsContext, "useSurrogateDetailActions")
+}
+
+// Legacy combined hook for compatibility with existing imports/tests.
+export function useSurrogateDetailLayout(): SurrogateDetailLayoutContextValue {
+    return {
+        ...useSurrogateDetailData(),
+        ...useSurrogateDetailTabs(),
+        ...useSurrogateDetailDialogs(),
+        ...useSurrogateDetailQueue(),
+        ...useSurrogateDetailZoom(),
+        ...useSurrogateDetailActions(),
+    }
 }
 
 // ============================================================================
@@ -551,7 +603,7 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
         router.push("/surrogates")
     }, [router])
 
-    const value: SurrogateDetailLayoutContextValue = useMemo(() => ({
+    const dataValue: SurrogateDetailDataContextValue = useMemo(() => ({
         surrogateId,
         surrogate: surrogateData || null,
         isLoading,
@@ -570,34 +622,7 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
         canViewJourney,
         canViewProfile,
         timezoneName,
-
-        currentTab,
-        allowedTabs,
-        setTab: handleTabChange,
-
-        activeDialog,
-        openDialog,
-        closeDialog,
-
-        selectedQueueId,
-        setSelectedQueueId,
-
-        zoomForm,
-        setZoomTopic,
-        setZoomDuration,
-        setZoomStartAt,
-        setZoomLastMeetingResult,
-        zoomIdempotencyKeyRef,
-
-        changeStatus,
-        archiveSurrogate,
-        restoreSurrogate,
-        claimSurrogate,
-        releaseSurrogate,
-        updateSurrogate,
-        assignSurrogate,
-        createZoomMeeting,
-        sendZoomInvite,
+        navigateToList,
 
         canManageQueue,
         canClaimSurrogate,
@@ -606,18 +631,6 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
         isInQueue,
         isOwnedByUser,
         zoomConnected,
-
-        isChangeStatusPending: changeStatusMutation.isPending,
-        isArchivePending: archiveMutation.isPending,
-        isRestorePending: restoreMutation.isPending,
-        isUpdatePending: updateSurrogateMutation.isPending,
-        isClaimPending: claimSurrogateMutation.isPending,
-        isReleasePending: releaseSurrogateMutation.isPending,
-        isAssignPending: assignSurrogateMutation.isPending,
-        isCreateZoomPending: createZoomMeetingMutation.isPending,
-        isSendZoomInvitePending: sendZoomInviteMutation.isPending,
-
-        navigateToList,
     }), [
         surrogateId,
         surrogateData,
@@ -636,28 +649,6 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
         canViewJourney,
         canViewProfile,
         timezoneName,
-        currentTab,
-        allowedTabs,
-        handleTabChange,
-        activeDialog,
-        openDialog,
-        closeDialog,
-        selectedQueueId,
-        zoomForm,
-        setZoomTopic,
-        setZoomDuration,
-        setZoomStartAt,
-        setZoomLastMeetingResult,
-        zoomIdempotencyKeyRef,
-        changeStatus,
-        archiveSurrogate,
-        restoreSurrogate,
-        claimSurrogate,
-        releaseSurrogate,
-        updateSurrogate,
-        assignSurrogate,
-        createZoomMeeting,
-        sendZoomInvite,
         canManageQueue,
         canClaimSurrogate,
         canChangeStage,
@@ -665,6 +656,73 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
         isInQueue,
         isOwnedByUser,
         zoomConnected,
+        navigateToList,
+    ])
+
+    const tabsValue: SurrogateDetailTabsContextValue = useMemo(() => ({
+        currentTab,
+        allowedTabs,
+        setTab: handleTabChange,
+    }), [currentTab, allowedTabs, handleTabChange])
+
+    const dialogValue: SurrogateDetailDialogContextValue = useMemo(() => ({
+        activeDialog,
+        openDialog,
+        closeDialog,
+    }), [activeDialog, openDialog, closeDialog])
+
+    const queueValue: SurrogateDetailQueueContextValue = useMemo(() => ({
+        selectedQueueId,
+        setSelectedQueueId,
+    }), [selectedQueueId])
+
+    const zoomValue: SurrogateDetailZoomContextValue = useMemo(() => ({
+        zoomForm,
+        setZoomTopic,
+        setZoomDuration,
+        setZoomStartAt,
+        setZoomLastMeetingResult,
+        zoomIdempotencyKeyRef,
+        createZoomMeeting,
+        sendZoomInvite,
+        isCreateZoomPending: createZoomMeetingMutation.isPending,
+        isSendZoomInvitePending: sendZoomInviteMutation.isPending,
+    }), [
+        zoomForm,
+        setZoomTopic,
+        setZoomDuration,
+        setZoomStartAt,
+        setZoomLastMeetingResult,
+        zoomIdempotencyKeyRef,
+        createZoomMeeting,
+        sendZoomInvite,
+        createZoomMeetingMutation.isPending,
+        sendZoomInviteMutation.isPending,
+    ])
+
+    const actionsValue: SurrogateDetailActionsContextValue = useMemo(() => ({
+        changeStatus,
+        archiveSurrogate,
+        restoreSurrogate,
+        claimSurrogate,
+        releaseSurrogate,
+        updateSurrogate,
+        assignSurrogate,
+        isChangeStatusPending: changeStatusMutation.isPending,
+        isArchivePending: archiveMutation.isPending,
+        isRestorePending: restoreMutation.isPending,
+        isUpdatePending: updateSurrogateMutation.isPending,
+        isClaimPending: claimSurrogateMutation.isPending,
+        isReleasePending: releaseSurrogateMutation.isPending,
+        isAssignPending: assignSurrogateMutation.isPending,
+    }), [
+        changeStatus,
+        archiveSurrogate,
+        restoreSurrogate,
+        claimSurrogate,
+        releaseSurrogate,
+        updateSurrogate,
+        assignSurrogate,
         changeStatusMutation.isPending,
         archiveMutation.isPending,
         restoreMutation.isPending,
@@ -672,14 +730,21 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
         claimSurrogateMutation.isPending,
         releaseSurrogateMutation.isPending,
         assignSurrogateMutation.isPending,
-        createZoomMeetingMutation.isPending,
-        sendZoomInviteMutation.isPending,
-        navigateToList,
     ])
 
     return (
-        <SurrogateDetailLayoutContext.Provider value={value}>
-            {children}
-        </SurrogateDetailLayoutContext.Provider>
+        <SurrogateDetailDataContext.Provider value={dataValue}>
+            <SurrogateDetailTabsContext.Provider value={tabsValue}>
+                <SurrogateDetailDialogContext.Provider value={dialogValue}>
+                    <SurrogateDetailQueueContext.Provider value={queueValue}>
+                        <SurrogateDetailZoomContext.Provider value={zoomValue}>
+                            <SurrogateDetailActionsContext.Provider value={actionsValue}>
+                                {children}
+                            </SurrogateDetailActionsContext.Provider>
+                        </SurrogateDetailZoomContext.Provider>
+                    </SurrogateDetailQueueContext.Provider>
+                </SurrogateDetailDialogContext.Provider>
+            </SurrogateDetailTabsContext.Provider>
+        </SurrogateDetailDataContext.Provider>
     )
 }

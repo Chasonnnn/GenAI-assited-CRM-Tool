@@ -16,12 +16,17 @@ from app.schemas.forms import (
     FormDraftPublicRead,
     FormDraftUpsertRequest,
     FormDraftWriteResponse,
+    FormIntakeDraftPublicRead,
+    FormIntakeDraftWriteResponse,
+    FormIntakePublicRead,
     FormPublicRead,
     FormSchema,
+    FormSubmissionSharedResponse,
     FormSubmissionPublicResponse,
 )
 from app.services import (
     form_draft_service,
+    form_intake_service,
     form_service,
     form_submission_service,
     media_service,
@@ -261,4 +266,195 @@ async def submit_public_form(
     return FormSubmissionPublicResponse(
         id=submission.id,
         status=submission.status,
+    )
+
+
+@router.get("/intake/{slug}", response_model=FormIntakePublicRead)
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
+def get_shared_public_form(request: Request, slug: str, db: Session = Depends(get_db)):
+    if not settings.FORMS_SHARED_INTAKE:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    intake_link = form_intake_service.get_active_intake_link_by_slug(db, slug)
+    if not intake_link:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    form = form_service.get_form(db, intake_link.organization_id, intake_link.form_id)
+    if not form or form.status != FormStatus.PUBLISHED.value:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    schema = _schema_or_none(form.published_schema_json)
+    if not schema:
+        raise HTTPException(status_code=404, detail="Form not found")
+    schema = form_service.normalize_form_schema_logo_url(schema, intake_link.organization_id)
+
+    return FormIntakePublicRead(
+        form_id=form.id,
+        intake_link_id=intake_link.id,
+        name=form.name,
+        description=form.description,
+        form_schema=schema,
+        max_file_size_bytes=form.max_file_size_bytes,
+        max_file_count=form.max_file_count,
+        allowed_mime_types=form.allowed_mime_types
+        or form_submission_service.DEFAULT_ALLOWED_FORM_UPLOAD_MIME_TYPES,
+        campaign_name=intake_link.campaign_name,
+        event_name=intake_link.event_name,
+    )
+
+
+@router.get("/intake/{slug}/draft/{draft_session_id}", response_model=FormIntakeDraftPublicRead)
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_DRAFTS}/minute")
+def get_shared_public_form_draft(
+    request: Request,
+    slug: str,
+    draft_session_id: str,
+    db: Session = Depends(get_db),
+):
+    if not settings.FORMS_SHARED_INTAKE:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    intake_link = form_intake_service.get_active_intake_link_by_slug(db, slug)
+    if not intake_link:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    draft = form_intake_service.get_shared_draft(
+        db=db,
+        link=intake_link,
+        draft_session_id=draft_session_id,
+    )
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    return FormIntakeDraftPublicRead(
+        answers=draft.answers_json or {},
+        started_at=draft.started_at,
+        updated_at=draft.updated_at,
+    )
+
+
+@router.put("/intake/{slug}/draft/{draft_session_id}", response_model=FormIntakeDraftWriteResponse)
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_DRAFTS}/minute")
+def upsert_shared_public_form_draft(
+    request: Request,
+    slug: str,
+    draft_session_id: str,
+    body: FormDraftUpsertRequest,
+    db: Session = Depends(get_db),
+):
+    if not settings.FORMS_SHARED_INTAKE:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    intake_link = form_intake_service.get_active_intake_link_by_slug(db, slug)
+    if not intake_link:
+        raise HTTPException(status_code=404, detail="Form not found")
+    form = form_service.get_form(db, intake_link.organization_id, intake_link.form_id)
+    if not form or form.status != FormStatus.PUBLISHED.value:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    try:
+        draft = form_intake_service.upsert_shared_draft(
+            db=db,
+            link=intake_link,
+            form=form,
+            draft_session_id=draft_session_id,
+            answers=body.answers,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return FormIntakeDraftWriteResponse(started_at=draft.started_at, updated_at=draft.updated_at)
+
+
+@router.delete("/intake/{slug}/draft/{draft_session_id}")
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_DRAFTS}/minute")
+def delete_shared_public_form_draft(
+    request: Request,
+    slug: str,
+    draft_session_id: str,
+    db: Session = Depends(get_db),
+):
+    if not settings.FORMS_SHARED_INTAKE:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    intake_link = form_intake_service.get_active_intake_link_by_slug(db, slug)
+    if not intake_link:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    deleted = form_intake_service.delete_shared_draft(
+        db=db,
+        link=intake_link,
+        draft_session_id=draft_session_id,
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    return Response(status_code=204)
+
+
+@router.post("/intake/{slug}/submit", response_model=FormSubmissionSharedResponse)
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_FORMS}/minute")
+async def submit_shared_public_form(
+    slug: str,
+    request: Request,
+    answers: str = Form(...),
+    files: list[UploadFile] | None = File(default=None),
+    file_field_keys: str | None = Form(default=None),
+    db: Session = Depends(get_db),
+):
+    if not settings.FORMS_SHARED_INTAKE:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    intake_link = form_intake_service.get_active_intake_link_by_slug(db, slug)
+    if not intake_link:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    form = form_service.get_form(db, intake_link.organization_id, intake_link.form_id)
+    if not form or form.status != FormStatus.PUBLISHED.value:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    try:
+        answers_data = json.loads(answers)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Invalid answers JSON") from exc
+
+    parsed_keys: list[str] | None = None
+    if file_field_keys:
+        try:
+            parsed = json.loads(file_field_keys)
+            if not isinstance(parsed, list) or not all(isinstance(k, str) for k in parsed):
+                raise ValueError("Invalid file_field_keys payload")
+            parsed_keys = parsed
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="Invalid file_field_keys payload") from exc
+
+    utm_fields = {
+        key: request.query_params.get(key)
+        for key in ("utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content")
+        if request.query_params.get(key)
+    }
+    source_metadata = {
+        "campaign_name": intake_link.campaign_name,
+        "event_name": intake_link.event_name,
+        "utm": {**(intake_link.utm_defaults or {}), **utm_fields},
+        "client_ip": request.client.host if request.client else None,
+        "user_agent": request.headers.get("user-agent"),
+    }
+    challenge_token = request.headers.get("x-intake-challenge")
+
+    try:
+        submission, outcome = form_intake_service.create_shared_submission(
+            db=db,
+            link=intake_link,
+            form=form,
+            answers=answers_data,
+            files=files or [],
+            file_field_keys=parsed_keys,
+            source_metadata=source_metadata,
+            challenge_token=challenge_token,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return FormSubmissionSharedResponse(
+        id=submission.id,
+        status=submission.status,
+        outcome=outcome,
+        surrogate_id=submission.surrogate_id,
+        intake_lead_id=submission.intake_lead_id,
     )

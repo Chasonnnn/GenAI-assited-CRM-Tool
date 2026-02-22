@@ -22,18 +22,16 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import COOKIE_NAME, get_current_session, get_db, require_csrf_header
-from app.core.csrf import CSRF_COOKIE_NAME, set_csrf_cookie
+from app.core.csrf import CSRF_COOKIE_NAME
 from app.core.rate_limit import limiter
 from app.core.security import (
     create_oauth_state_payload,
-    decode_session_token,
     generate_oauth_nonce,
     generate_oauth_state,
-    parse_oauth_state_payload,
-    verify_oauth_state,
 )
 from app.schemas.auth import MeResponse, SessionResponse, UserSession
 from app.services import (
+    auth_callback_service,
     media_service,
     org_service,
     storage_client,
@@ -43,21 +41,15 @@ from app.services import (
     user_service,
 )
 from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
-from app.services.auth_service import resolve_user_and_create_session
-from app.services.google_oauth import (
-    exchange_code_for_tokens,
-    validate_email_domain,
-    verify_id_token,
-)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-OAUTH_STATE_COOKIE = "oauth_state"
+OAUTH_STATE_COOKIE = auth_callback_service.OAUTH_STATE_COOKIE
 OAUTH_STATE_MAX_AGE = 300  # 5 minutes
 
 # Allowlist for return_to parameter (prevents open redirect)
-ALLOWED_RETURN_TO = {"app", "ops"}
+ALLOWED_RETURN_TO = auth_callback_service.ALLOWED_RETURN_TO
 
 
 # =============================================================================
@@ -149,150 +141,13 @@ async def google_callback(
     5. Find existing user or create from invite
     6. Set session cookie and redirect
     """
-    # Default return_to if we can't parse state
-    return_to = "app"
-
-    # Prepare error response (always cleans up state cookie)
-    error_response = RedirectResponse(
-        url=_get_error_redirect("auth_failed", return_to=return_to), status_code=302
+    return await auth_callback_service.handle_google_callback(
+        request=request,
+        db=db,
+        code=code,
+        state=state,
+        error=error,
     )
-    error_response.delete_cookie(OAUTH_STATE_COOKIE, path="/auth")
-
-    # Check for error from Google
-    if error:
-        error_response.headers["location"] = _get_error_redirect(
-            f"google_{error}", return_to=return_to
-        )
-        return error_response
-
-    if not code or not state:
-        error_response.headers["location"] = _get_error_redirect(
-            "missing_params", return_to=return_to
-        )
-        return error_response
-
-    # Get state cookie
-    state_cookie = request.cookies.get(OAUTH_STATE_COOKIE)
-    if not state_cookie:
-        error_response.headers["location"] = _get_error_redirect(
-            "state_expired", return_to=return_to
-        )
-        return error_response
-
-    # Parse and verify state
-    try:
-        stored_payload = parse_oauth_state_payload(state_cookie)
-        # Extract return_to from stored payload (strict allowlist)
-        return_to = stored_payload.get("return_to", "app")
-        if return_to not in ALLOWED_RETURN_TO:
-            return_to = "app"
-    except Exception:
-        error_response.headers["location"] = _get_error_redirect(
-            "invalid_state", return_to=return_to
-        )
-        return error_response
-
-    user_agent = request.headers.get("user-agent", "")
-    valid, _ = verify_oauth_state(stored_payload, state, user_agent)
-    if not valid:
-        error_response.headers["location"] = _get_error_redirect(
-            "state_mismatch", return_to=return_to
-        )
-        return error_response
-
-    # Exchange code for tokens
-    try:
-        tokens = await exchange_code_for_tokens(code)
-    except Exception:
-        error_response.headers["location"] = _get_error_redirect(
-            "token_exchange_failed", return_to=return_to
-        )
-        return error_response
-
-    # Verify ID token
-    try:
-        google_user = verify_id_token(tokens["id_token"], expected_nonce=stored_payload["nonce"])
-    except ValueError:
-        error_response.headers["location"] = _get_error_redirect(
-            "token_invalid", return_to=return_to
-        )
-        return error_response
-
-    # Validate domain restriction
-    try:
-        validate_email_domain(google_user.email)
-    except ValueError:
-        error_response.headers["location"] = _get_error_redirect(
-            "domain_not_allowed", return_to=return_to
-        )
-        return error_response
-
-    # Resolve user and create session (delegated to service layer)
-    session_token, error_code = resolve_user_and_create_session(db, google_user, request=request)
-
-    if error_code:
-        error_response.headers["location"] = _get_error_redirect(error_code, return_to=return_to)
-        return error_response
-
-    # Success! Set session cookie and redirect
-    base_url = None
-    mfa_pending = False
-    try:
-        payload = decode_session_token(session_token)
-        mfa_required = bool(payload.get("mfa_required", False))
-        mfa_verified = bool(payload.get("mfa_verified", False))
-        mfa_pending = mfa_required and not mfa_verified
-        if return_to == "ops":
-            if settings.is_dev and settings.FRONTEND_URL:
-                base_url = settings.FRONTEND_URL.rstrip("/")
-            else:
-                scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
-                base_url = f"{scheme}://ops.{settings.PLATFORM_BASE_DOMAIN}"
-        else:
-            org_id = payload.get("org_id")
-            if org_id:
-                org = org_service.get_org_by_id(db, UUIDType(str(org_id)))
-                base_url = org_service.get_org_portal_base_url(org)
-    except Exception:
-        base_url = None
-
-    success_response = RedirectResponse(
-        url=_get_success_redirect(base_url, return_to=return_to, mfa_pending=mfa_pending),
-        status_code=302,
-    )
-    success_response.delete_cookie(OAUTH_STATE_COOKIE, path="/auth")
-
-    # Preserve "return_to" across subdomains during MFA; cleared after MFA completes.
-    # Not sensitive; frontend may read it to route back to ops after verification.
-    success_response.set_cookie(
-        key="auth_return_to",
-        value=return_to,
-        domain=settings.COOKIE_DOMAIN or None,
-        max_age=600,  # 10 minutes
-        httponly=False,
-        samesite=settings.cookie_samesite,
-        secure=settings.cookie_secure,
-        path="/",
-    )
-
-    # Clear legacy host-only cookies before setting new domain cookies (migration safety)
-    if settings.COOKIE_DOMAIN:
-        success_response.delete_cookie(COOKIE_NAME, path="/")
-        success_response.delete_cookie(CSRF_COOKIE_NAME, path="/")
-
-    # Set session cookie with domain (for cross-subdomain sharing)
-    success_response.set_cookie(
-        key=COOKIE_NAME,
-        value=session_token,
-        domain=settings.COOKIE_DOMAIN or None,
-        max_age=settings.JWT_EXPIRES_HOURS * 3600,
-        httponly=True,
-        samesite=settings.cookie_samesite,
-        secure=settings.cookie_secure,
-        path="/",
-    )
-    set_csrf_cookie(success_response)
-    return success_response
 
 
 # =============================================================================

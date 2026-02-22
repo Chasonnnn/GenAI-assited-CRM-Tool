@@ -13,6 +13,17 @@ import {
     listFormMappings,
     setFormMappings,
     createFormToken,
+    createFormIntakeLink,
+    listFormIntakeLinks,
+    rotateFormIntakeLink,
+    sendFormToken,
+    updateFormDeliverySettings,
+    updateFormIntakeLink,
+    resolveSubmissionMatch,
+    listSubmissionMatchCandidates,
+    listFormSubmissions,
+    promoteIntakeLead,
+    getIntakeLead,
     getSurrogateSubmission,
     getSurrogateDraftStatus,
     approveSubmission,
@@ -28,6 +39,13 @@ import {
     type FormCreatePayload,
     type FormUpdatePayload,
     type FormFieldMappingItem,
+    type FormIntakeLinkCreatePayload,
+    type FormIntakeLinkUpdatePayload,
+    type FormDeliverySettings,
+    type ResolveSubmissionMatchPayload,
+    type PromoteIntakeLeadPayload,
+    type SubmissionAnswersUpdateResponse,
+    type ListFormSubmissionsParams,
 } from '@/lib/api/forms'
 import { ApiError } from '@/lib/api'
 
@@ -38,6 +56,12 @@ export const formKeys = {
     details: () => [...formKeys.all, 'detail'] as const,
     detail: (id: string) => [...formKeys.details(), id] as const,
     mappings: (formId: string) => [...formKeys.detail(formId), 'mappings'] as const,
+    intakeLinks: (formId: string) => [...formKeys.detail(formId), 'intake-links'] as const,
+    intakeLead: (leadId: string) => [...formKeys.all, 'intake-lead', leadId] as const,
+    submissionMatchCandidates: (submissionId: string) =>
+        [...formKeys.all, 'submission-match-candidates', submissionId] as const,
+    submissions: (formId: string, params?: ListFormSubmissionsParams) =>
+        [...formKeys.detail(formId), 'submissions', params ?? {}] as const,
     surrogateSubmission: (formId: string, surrogateId: string) =>
         [...formKeys.detail(formId), 'surrogate-submission', surrogateId] as const,
     surrogateDraftStatus: (formId: string, surrogateId: string) =>
@@ -148,10 +172,103 @@ export function useSurrogateFormSubmission(formId: string | null, surrogateId: s
     })
 }
 
+export function useFormSubmissions(formId: string | null, params: ListFormSubmissionsParams = {}) {
+    return useQuery({
+        queryKey: formId ? formKeys.submissions(formId, params) : ['forms', 'submissions', 'missing'],
+        queryFn: () => listFormSubmissions(formId!, params),
+        enabled: !!formId,
+    })
+}
+
 export function useCreateFormToken() {
     return useMutation({
         mutationFn: ({ formId, surrogateId, expiresInDays }: { formId: string; surrogateId: string; expiresInDays?: number }) =>
             createFormToken(formId, surrogateId, expiresInDays),
+    })
+}
+
+export function useSendFormToken() {
+    return useMutation({
+        mutationFn: ({
+            formId,
+            tokenId,
+            templateId,
+        }: {
+            formId: string
+            tokenId: string
+            templateId?: string | null
+        }) => sendFormToken(formId, tokenId, templateId),
+    })
+}
+
+export function useUpdateFormDeliverySettings() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({
+            formId,
+            payload,
+        }: {
+            formId: string
+            payload: FormDeliverySettings
+        }) => updateFormDeliverySettings(formId, payload),
+        onSuccess: (_settings, { formId }) => {
+            queryClient.invalidateQueries({ queryKey: formKeys.detail(formId) })
+        },
+    })
+}
+
+export function useFormIntakeLinks(formId: string | null, includeInactive = true) {
+    return useQuery({
+        queryKey: formId ? [...formKeys.intakeLinks(formId), includeInactive] : ['forms', 'intake-links', 'missing'],
+        queryFn: () => listFormIntakeLinks(formId!, includeInactive),
+        enabled: !!formId,
+    })
+}
+
+export function useCreateFormIntakeLink() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({
+            formId,
+            payload,
+        }: {
+            formId: string
+            payload: FormIntakeLinkCreatePayload
+        }) => createFormIntakeLink(formId, payload),
+        onSuccess: (_result, { formId }) => {
+            queryClient.invalidateQueries({ queryKey: formKeys.intakeLinks(formId) })
+        },
+    })
+}
+
+export function useUpdateFormIntakeLink() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({
+            linkId,
+            payload,
+        }: {
+            formId: string
+            linkId: string
+            payload: FormIntakeLinkUpdatePayload
+        }) => updateFormIntakeLink(linkId, payload),
+        onSuccess: (_result, { formId }) => {
+            queryClient.invalidateQueries({ queryKey: formKeys.intakeLinks(formId) })
+        },
+    })
+}
+
+export function useRotateFormIntakeLink() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({ linkId }: { formId: string; linkId: string }) => rotateFormIntakeLink(linkId),
+        onSuccess: (_result, { formId }) => {
+            queryClient.invalidateQueries({ queryKey: formKeys.intakeLinks(formId) })
+        },
     })
 }
 
@@ -180,6 +297,7 @@ export function useApproveFormSubmission() {
         mutationFn: ({ submissionId, reviewNotes }: { submissionId: string; reviewNotes?: string | null }) =>
             approveSubmission(submissionId, reviewNotes),
         onSuccess: (submission) => {
+            if (!submission.surrogate_id) return
             queryClient.invalidateQueries({
                 queryKey: formKeys.surrogateSubmission(submission.form_id, submission.surrogate_id),
             })
@@ -194,9 +312,62 @@ export function useRejectFormSubmission() {
         mutationFn: ({ submissionId, reviewNotes }: { submissionId: string; reviewNotes?: string | null }) =>
             rejectSubmission(submissionId, reviewNotes),
         onSuccess: (submission) => {
+            if (!submission.surrogate_id) return
             queryClient.invalidateQueries({
                 queryKey: formKeys.surrogateSubmission(submission.form_id, submission.surrogate_id),
             })
+        },
+    })
+}
+
+export function useSubmissionMatchCandidates(submissionId: string | null) {
+    return useQuery({
+        queryKey: submissionId ? formKeys.submissionMatchCandidates(submissionId) : ['forms', 'submission-match-candidates', 'missing'],
+        queryFn: () => listSubmissionMatchCandidates(submissionId!),
+        enabled: !!submissionId,
+    })
+}
+
+export function useResolveSubmissionMatch() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({
+            submissionId,
+            payload,
+        }: {
+            submissionId: string
+            payload: ResolveSubmissionMatchPayload
+        }) => resolveSubmissionMatch(submissionId, payload),
+        onSuccess: (result) => {
+            const submission = result.submission
+            if (submission.form_id && submission.surrogate_id) {
+                queryClient.invalidateQueries({
+                    queryKey: formKeys.surrogateSubmission(submission.form_id, submission.surrogate_id),
+                })
+            }
+            queryClient.invalidateQueries({
+                queryKey: formKeys.submissionMatchCandidates(submission.id),
+            })
+        },
+    })
+}
+
+export function useIntakeLead(leadId: string | null) {
+    return useQuery({
+        queryKey: leadId ? formKeys.intakeLead(leadId) : ['forms', 'intake-lead', 'missing'],
+        queryFn: () => getIntakeLead(leadId!),
+        enabled: !!leadId,
+    })
+}
+
+export function usePromoteIntakeLead() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ leadId, payload }: { leadId: string; payload?: PromoteIntakeLeadPayload }) =>
+            promoteIntakeLead(leadId, payload),
+        onSuccess: (result) => {
+            queryClient.invalidateQueries({ queryKey: formKeys.intakeLead(result.intake_lead_id) })
         },
     })
 }
@@ -221,7 +392,8 @@ export function useUpdateSubmissionAnswers() {
             const { updateSubmissionAnswers } = await import('@/lib/api/forms')
             return updateSubmissionAnswers(submissionId, updates)
         },
-        onSuccess: (result: { submission: { form_id: string; surrogate_id: string }; surrogate_updates: string[] }) => {
+        onSuccess: (result: SubmissionAnswersUpdateResponse) => {
+            if (!result.submission.surrogate_id) return
             queryClient.invalidateQueries({
                 queryKey: formKeys.surrogateSubmission(result.submission.form_id, result.submission.surrogate_id),
             })
@@ -243,13 +415,14 @@ export function useUploadSubmissionFile() {
             submissionId: string
             file: File
             formId: string
-            surrogateId: string
+            surrogateId?: string | null
             fieldKey?: string | null
         }) => {
             const { uploadSubmissionFile } = await import('@/lib/api/forms')
             return { result: await uploadSubmissionFile(submissionId, file, fieldKey), formId, surrogateId }
         },
         onSuccess: ({ formId, surrogateId }) => {
+            if (!surrogateId) return
             queryClient.invalidateQueries({
                 queryKey: formKeys.surrogateSubmission(formId, surrogateId),
             })
@@ -314,12 +487,13 @@ export function useDeleteSubmissionFile() {
             submissionId: string
             fileId: string
             formId: string
-            surrogateId: string
+            surrogateId?: string | null
         }) => {
             const { deleteSubmissionFile } = await import('@/lib/api/forms')
             return { result: await deleteSubmissionFile(submissionId, fileId), formId, surrogateId }
         },
         onSuccess: ({ formId, surrogateId }) => {
+            if (!surrogateId) return
             queryClient.invalidateQueries({
                 queryKey: formKeys.surrogateSubmission(formId, surrogateId),
             })

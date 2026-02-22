@@ -2,7 +2,7 @@
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Loader2Icon, FileTextIcon } from "lucide-react"
-import { ProfileCardProvider, useProfileCard } from "./context"
+import { ProfileCardProvider, useProfileCardData } from "./context"
 import { Header } from "./Header"
 import { Section } from "./Section"
 import { FieldRow } from "./FieldRow"
@@ -13,7 +13,7 @@ import { SaveBar } from "./SaveBar"
 // ============================================================================
 
 function ProfileCardContent() {
-    const { profile, isLoading, error } = useProfileCard()
+    const { profile, isLoading, error } = useProfileCardData()
 
     // Loading state
     if (isLoading) {
@@ -101,4 +101,20 @@ export function ProfileCard({ surrogateId }: ProfileCardProps) {
 }
 
 // Re-exports
-export { useProfileCard, type ProfileCardContextValue, type CardMode } from "./context"
+export {
+    useProfileCard,
+    useProfileCardData,
+    useProfileCardMode,
+    useProfileCardEdits,
+    useProfileCardSections,
+    useProfileCardActions,
+    type CardMode,
+} from "./context"
+export type {
+    ProfileCardContextValue,
+    ProfileCardDataContextValue,
+    ProfileCardModeContextValue,
+    ProfileCardEditsContextValue,
+    ProfileCardSectionsContextValue,
+    ProfileCardActionsContextValue,
+} from "./context"

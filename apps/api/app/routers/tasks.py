@@ -25,7 +25,7 @@ from app.schemas.task import (
     TaskUpdate,
     WorkflowApprovalResolve,
 )
-from app.services import task_service, ip_service
+from app.services import task_service
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
 router = APIRouter(dependencies=[Depends(require_permission(POLICIES["tasks"].default))])
@@ -70,28 +70,10 @@ def list_tasks(
     - my_tasks=true: Filter to tasks created by or owned by current user
     - If surrogate_id is specified, role-based access is checked
     """
-    # If filtering by surrogate_id (surrogate_id parameter), check access first
-    if surrogate_id:
-        from app.core.surrogate_access import check_surrogate_access
-        from app.services import surrogate_service
-
-        surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
-        if surrogate:
-            check_surrogate_access(
-                surrogate, session.role, session.user_id, db=db, org_id=session.org_id
-            )
-
-    # If filtering by intended_parent_id, verify existence
-    if intended_parent_id:
-        ip = ip_service.get_intended_parent(db, intended_parent_id, session.org_id)
-        if not ip:
-            raise HTTPException(status_code=404, detail="Intended parent not found")
-
-    tasks, total = task_service.list_tasks(
+    return task_service.list_tasks_for_session(
         db=db,
-        org_id=session.org_id,
-        user_role=session.role,
-        user_id=session.user_id,
+        request=request,
+        session=session,
         page=page,
         per_page=per_page,
         q=q,
@@ -104,56 +86,8 @@ def list_tasks(
         status=status,
         due_before=due_before,
         due_after=due_after,
-        my_tasks_user_id=session.user_id if my_tasks else None,
+        my_tasks=my_tasks,
         exclude_approvals=exclude_approvals,
-    )
-
-    pages = (total + per_page - 1) // per_page if per_page > 0 else 0
-
-    q_type = None
-    if q:
-        if "@" in q:
-            q_type = "email"
-        else:
-            digit_count = sum(1 for ch in q if ch.isdigit())
-            q_type = "phone" if digit_count >= 7 else "text"
-
-    from app.services import audit_service
-
-    audit_service.log_phi_access(
-        db=db,
-        org_id=session.org_id,
-        user_id=session.user_id,
-        target_type="task_list",
-        target_id=None,
-        request=request,
-        details={
-            "count": len(tasks),
-            "page": page,
-            "per_page": per_page,
-            "owner_id": str(owner_id) if owner_id else None,
-            "surrogate_id": str(surrogate_id) if surrogate_id else None,
-            "intended_parent_id": str(intended_parent_id) if intended_parent_id else None,
-            "pipeline_id": str(pipeline_id) if pipeline_id else None,
-            "is_completed": is_completed,
-            "task_type": task_type.value if task_type else None,
-            "status": status,
-            "due_before": due_before,
-            "due_after": due_after,
-            "my_tasks": my_tasks,
-            "exclude_approvals": exclude_approvals,
-            "q_type": q_type,
-        },
-    )
-    db.commit()
-
-    context = task_service.get_task_context(db, session.org_id, tasks)
-    return TaskListResponse(
-        items=[task_service.to_task_list_item(t, context) for t in tasks],
-        total=total,
-        page=page,
-        per_page=per_page,
-        pages=pages,
     )
 
 

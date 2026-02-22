@@ -77,3 +77,27 @@ def test_validate_file_rejects_exe_when_form_allowed_mime_types_is_none():
 
     with pytest.raises(ValueError):
         form_submission_service._validate_file(form, upload)
+
+
+def test_validate_file_accepts_plain_text_when_form_allows_text_plain():
+    form = _make_form(allowed_mime_types=["text/plain"])
+    upload = _make_upload(
+        filename="notes.txt",
+        content_type="text/plain",
+        data=b"intake notes for candidate",
+    )
+
+    content_type = form_submission_service._validate_file(form, upload)
+    assert content_type == "text/plain"
+
+
+def test_validate_file_accepts_custom_binary_type_when_allowed():
+    form = _make_form(allowed_mime_types=["image/gif"])
+    upload = _make_upload(
+        filename="profile.gif",
+        content_type="image/gif",
+        data=b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!",
+    )
+
+    content_type = form_submission_service._validate_file(form, upload)
+    assert content_type == "image/gif"

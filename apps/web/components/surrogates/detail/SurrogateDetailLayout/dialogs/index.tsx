@@ -4,7 +4,11 @@ import { EmailComposeDialog } from "@/components/email/EmailComposeDialog"
 import { ProposeMatchDialog } from "@/components/matches/ProposeMatchDialog"
 import { LogContactAttemptDialog } from "@/components/surrogates/LogContactAttemptDialog"
 import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
-import { useSurrogateDetailLayout } from "../context"
+import {
+    useSurrogateDetailActions,
+    useSurrogateDetailData,
+    useSurrogateDetailDialogs,
+} from "../context"
 import { EditDialog } from "./EditDialog"
 import { ReleaseQueueDialog } from "./ReleaseQueueDialog"
 import { ZoomMeetingDialog } from "./ZoomMeetingDialog"
@@ -12,13 +16,14 @@ import { ZoomMeetingDialog } from "./ZoomMeetingDialog"
 export function Dialogs() {
     const {
         surrogate,
-        activeDialog,
-        closeDialog,
         visibleStageOptions,
         statusLabel,
+    } = useSurrogateDetailData()
+    const { activeDialog, closeDialog } = useSurrogateDetailDialogs()
+    const {
         changeStatus,
         isChangeStatusPending,
-    } = useSurrogateDetailLayout()
+    } = useSurrogateDetailActions()
 
     if (!surrogate) return null
 

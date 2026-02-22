@@ -37,4 +37,12 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("const [state, dispatch] = useReducer")
         expect(source).toContain("function csvUploadReducer(")
     })
+
+    it("delegates match detail tab rendering to a dedicated component", () => {
+        const source = readSource("app/(app)/intended-parents/matches/[id]/page.tsx")
+
+        expect(source).toContain('import { MatchDetailOverviewTabs } from "./components/MatchDetailOverviewTabs"')
+        expect(source).toContain("<MatchDetailOverviewTabs")
+        expect(source).not.toContain('variant={activeTab === "notes" ? "secondary" : "ghost"}')
+    })
 })

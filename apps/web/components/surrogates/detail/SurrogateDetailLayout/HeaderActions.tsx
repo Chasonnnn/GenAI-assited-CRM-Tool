@@ -27,7 +27,11 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { toast } from "sonner"
 import { exportSurrogatePacketPdf } from "@/lib/api/surrogates"
-import { useSurrogateDetailLayout } from "./context"
+import {
+    useSurrogateDetailActions,
+    useSurrogateDetailData,
+    useSurrogateDetailDialogs,
+} from "./context"
 
 export function HeaderActions() {
     const { user } = useAuth()
@@ -36,13 +40,15 @@ export function HeaderActions() {
         stageById,
         queues,
         assignees,
-        openDialog,
         canManageQueue,
         canClaimSurrogate,
         canChangeStage,
         isInQueue,
         isOwnedByUser,
         zoomConnected,
+    } = useSurrogateDetailData()
+    const { openDialog } = useSurrogateDetailDialogs()
+    const {
         claimSurrogate,
         assignSurrogate,
         archiveSurrogate,
@@ -50,7 +56,7 @@ export function HeaderActions() {
         isClaimPending,
         isAssignPending,
         isReleasePending,
-    } = useSurrogateDetailLayout()
+    } = useSurrogateDetailActions()
     const [isExporting, setIsExporting] = React.useState(false)
 
     if (!surrogate) return null
