@@ -48,3 +48,16 @@ def test_alert_channel_locals_include_webhook() -> None:
     assert "monitoring_webhook_enabled" in content
     assert "/internal/alerts/gcp" in content
     assert "?auth_token=" not in content
+
+
+def test_ticketing_logging_metrics_and_alerts_are_configured() -> None:
+    content = _read("infra/terraform/monitoring.tf")
+    assert 'resource "google_logging_metric" "ticketing_outbound_failures"' in content
+    assert 'resource "google_logging_metric" "mailbox_ingestion_failures"' in content
+    assert "type=ticket_outbound_send" in content
+    assert (
+        "type=(mailbox_backfill|mailbox_history_sync|mailbox_watch_refresh|email_occurrence_fetch_raw|email_occurrence_parse|email_occurrence_stitch|ticket_apply_linking)"
+        in content
+    )
+    assert 'resource "google_monitoring_alert_policy" "ticketing_outbound_failures"' in content
+    assert 'resource "google_monitoring_alert_policy" "mailbox_ingestion_failures"' in content

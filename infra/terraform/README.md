@@ -132,6 +132,9 @@ Set `private_service_access_address`/`private_service_access_prefix_length` if y
 
 ## Monitoring + budget alerts
 Terraform creates alert policies for Cloud SQL CPU/memory/disk, Redis memory usage, and Cloud Run 5xx spikes.
+It also creates log-based metrics + alerts for ticketing worker failures:
+- `ticketing_outbound_failures`
+- `mailbox_ingestion_failures`
 Provide a Monitoring notification channel ID (Slack/email) via `alert_notification_channel_ids`.
 Create the Slack notification channel out-of-band so webhooks never enter Terraform state.
 
