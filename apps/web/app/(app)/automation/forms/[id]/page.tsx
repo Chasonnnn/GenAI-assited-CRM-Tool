@@ -40,26 +40,46 @@ import {
     Trash2Icon,
     CopyIcon,
     SmartphoneIcon,
+    QrCodeIcon,
+    RotateCcwIcon,
+    LinkIcon,
+    DownloadIcon,
 } from "lucide-react"
+import { QRCodeSVG } from "qrcode.react"
 import { toast } from "sonner"
 import {
     useCreateForm,
+    useCreateFormIntakeLink,
     useForm,
+    useFormIntakeLinks,
+    useFormSubmissions,
     useFormMappings,
     usePublishForm,
+    useResolveSubmissionMatch,
+    useRotateFormIntakeLink,
     useSetFormMappings,
+    useSubmissionMatchCandidates,
+    usePromoteIntakeLead,
+    useUpdateFormDeliverySettings,
+    useUpdateFormIntakeLink,
     useUpdateForm,
     useUploadFormLogo,
 } from "@/lib/hooks/use-forms"
+import { useFormMappingOptions } from "@/lib/hooks/use-form-mapping-options"
+import { useEmailTemplates } from "@/lib/hooks/use-email-templates"
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
 import { NotFoundState } from "@/components/not-found-state"
+import { DEFAULT_FORM_SURROGATE_FIELD_OPTIONS } from "@/lib/api/forms"
 import type {
     FieldType,
     FormSchema,
     FormFieldOption,
     FormRead,
+    FormSubmissionRead,
     FormCreatePayload,
     FormFieldValidation,
+    FormIntakeLinkRead,
+    FormSurrogateFieldOption,
 } from "@/lib/api/forms"
 import { useAuth } from "@/lib/auth-context"
 import { useOrgSignature } from "@/lib/hooks/use-signature"
@@ -90,26 +110,6 @@ const fieldTypes: { basic: FieldTypeOption[]; advanced: FieldTypeOption[] } = {
         { id: "repeatable_table", label: "Repeating Table", icon: ListIcon },
     ],
 }
-
-// Surrogate field mappings matching backend SURROGATE_FIELD_TYPES
-const surrogateFieldMappings = [
-    { value: "full_name", label: "Full Name" },
-    { value: "email", label: "Email" },
-    { value: "phone", label: "Phone" },
-    { value: "state", label: "State" },
-    { value: "date_of_birth", label: "Date of Birth" },
-    { value: "race", label: "Race" },
-    { value: "height_ft", label: "Height (ft)" },
-    { value: "weight_lb", label: "Weight (lb)" },
-    { value: "is_age_eligible", label: "Age Eligible" },
-    { value: "is_citizen_or_pr", label: "US Citizen/PR" },
-    { value: "has_child", label: "Has Child" },
-    { value: "is_non_smoker", label: "Non-Smoker" },
-    { value: "has_surrogate_experience", label: "Surrogate Experience" },
-    { value: "num_deliveries", label: "Number of Deliveries" },
-    { value: "num_csections", label: "Number of C-Sections" },
-    { value: "is_priority", label: "Priority" },
-]
 
 type FormField = {
     id: string
@@ -272,6 +272,45 @@ function buildMappings(pages: FormPage[]): { field_key: string; surrogate_field:
     )
 }
 
+function getMissingCriticalMappings(
+    pages: FormPage[],
+    mappingOptions: FormSurrogateFieldOption[],
+): FormSurrogateFieldOption[] {
+    const criticalFieldTypeHints: Record<string, FieldType[]> = {
+        full_name: ["text", "textarea"],
+        email: ["email"],
+        phone: ["phone"],
+    }
+    const hasCandidateField = (target: string) => {
+        const hintedTypes = criticalFieldTypeHints[target]
+        if (!hintedTypes || hintedTypes.length === 0) {
+            return true
+        }
+        return pages.some((page) =>
+            page.fields.some((field) => hintedTypes.includes(field.type)),
+        )
+    }
+
+    const mappedFields = new Set(buildMappings(pages).map((mapping) => mapping.surrogate_field))
+    const criticalMappings = mappingOptions.filter((option) => option.is_critical)
+    const criticalValues =
+        criticalMappings.length > 0
+            ? criticalMappings.map((option) => option.value)
+            : DEFAULT_FORM_SURROGATE_FIELD_OPTIONS.filter((option) => option.is_critical).map((option) => option.value)
+    const optionByValue = new Map(mappingOptions.map((option) => [option.value, option]))
+    const fallbackByValue = new Map(DEFAULT_FORM_SURROGATE_FIELD_OPTIONS.map((option) => [option.value, option]))
+
+    return criticalValues
+        .filter((value) => !mappedFields.has(value))
+        .filter((value) => hasCandidateField(value))
+        .map(
+            (value) =>
+                optionByValue.get(value) ??
+                fallbackByValue.get(value) ??
+                ({ value, label: value, is_critical: true } as FormSurrogateFieldOption),
+        )
+}
+
 const buildColumnId = () => {
     if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
         return crypto.randomUUID()
@@ -291,12 +330,38 @@ export default function FormBuilderPage() {
 
     const { data: formData, isLoading: isFormLoading } = useForm(formId)
     const { data: mappingData, isLoading: isMappingsLoading } = useFormMappings(formId)
+    const { data: mappingOptionsData } = useFormMappingOptions()
+    const { data: intakeLinks = [] } = useFormIntakeLinks(formId, true)
+    const { data: emailTemplates = [] } = useEmailTemplates({ activeOnly: true })
     const { data: orgSignature } = useOrgSignature()
     const createFormMutation = useCreateForm()
     const updateFormMutation = useUpdateForm()
     const publishFormMutation = usePublishForm()
     const setMappingsMutation = useSetFormMappings()
     const uploadLogoMutation = useUploadFormLogo()
+    const createIntakeLinkMutation = useCreateFormIntakeLink()
+    const updateIntakeLinkMutation = useUpdateFormIntakeLink()
+    const rotateIntakeLinkMutation = useRotateFormIntakeLink()
+    const updateDeliverySettingsMutation = useUpdateFormDeliverySettings()
+    const resolveSubmissionMatchMutation = useResolveSubmissionMatch()
+    const promoteIntakeLeadMutation = usePromoteIntakeLead()
+    const {
+        data: ambiguousSubmissions = [],
+        refetch: refetchAmbiguousSubmissions,
+    } = useFormSubmissions(formId, {
+        source_mode: "shared",
+        match_status: "ambiguous_review",
+        limit: 50,
+    })
+    const {
+        data: leadQueueSubmissions = [],
+        refetch: refetchLeadQueueSubmissions,
+    } = useFormSubmissions(formId, {
+        source_mode: "shared",
+        status: "pending_review",
+        match_status: "lead_created",
+        limit: 50,
+    })
 
     const logoInputRef = useRef<HTMLInputElement>(null)
     const lastSavedFingerprintRef = useRef<string>("")
@@ -314,6 +379,15 @@ export default function FormBuilderPage() {
     const [maxFileSizeMb, setMaxFileSizeMb] = useState(10)
     const [maxFileCount, setMaxFileCount] = useState(10)
     const [allowedMimeTypesText, setAllowedMimeTypesText] = useState("")
+    const [defaultTemplateId, setDefaultTemplateId] = useState("")
+    const [newCampaignName, setNewCampaignName] = useState("")
+    const [newEventName, setNewEventName] = useState("")
+    const [newMaxSubmissions, setNewMaxSubmissions] = useState("")
+    const [newExpiresAt, setNewExpiresAt] = useState("")
+    const [selectedQrLinkId, setSelectedQrLinkId] = useState<string | null>(null)
+    const [workspaceTab, setWorkspaceTab] = useState<"builder" | "submissions">("builder")
+    const [selectedQueueSubmissionId, setSelectedQueueSubmissionId] = useState<string | null>(null)
+    const [resolveReviewNotes, setResolveReviewNotes] = useState("")
     const [isPublished, setIsPublished] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [isPublishing, setIsPublishing] = useState(false)
@@ -323,12 +397,22 @@ export default function FormBuilderPage() {
     const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
     const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
 
+    const { data: selectedMatchCandidates = [], isLoading: isMatchCandidatesLoading } =
+        useSubmissionMatchCandidates(selectedQueueSubmissionId)
+
     const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || ""
     const orgId = user?.org_id || ""
     const orgLogoPath = orgId ? `/forms/public/${orgId}/signature-logo` : ""
     const orgLogoAvailable = Boolean(orgSignature?.signature_logo_url)
     const resolvedLogoUrl =
         logoUrl && logoUrl.startsWith("/") && apiBaseUrl ? `${apiBaseUrl}${logoUrl}` : logoUrl
+    const surrogateFieldMappings = useMemo(
+        () =>
+            mappingOptionsData && mappingOptionsData.length > 0
+                ? mappingOptionsData
+                : DEFAULT_FORM_SURROGATE_FIELD_OPTIONS,
+        [mappingOptionsData],
+    )
 
     // Page/field state
     const [pages, setPages] = useState<FormPage[]>([{ id: 1, name: "Page 1", fields: [] }])
@@ -364,6 +448,15 @@ export default function FormBuilderPage() {
         setMaxFileSizeMb(10)
         setMaxFileCount(10)
         setAllowedMimeTypesText("")
+        setDefaultTemplateId("")
+        setNewCampaignName("")
+        setNewEventName("")
+        setNewMaxSubmissions("")
+        setNewExpiresAt("")
+        setSelectedQrLinkId(null)
+        setWorkspaceTab("builder")
+        setSelectedQueueSubmissionId(null)
+        setResolveReviewNotes("")
     }, [formId])
 
     useEffect(() => {
@@ -371,6 +464,12 @@ export default function FormBuilderPage() {
             setHasHydrated(true)
         }
     }, [isNewForm])
+
+    useEffect(() => {
+        if (workspaceTab !== "submissions") {
+            setSelectedQueueSubmissionId(null)
+        }
+    }, [workspaceTab])
 
     useEffect(() => {
         if (isNewForm || !formData || isMappingsLoading || hasHydrated) return
@@ -389,6 +488,7 @@ export default function FormBuilderPage() {
         setMaxFileSizeMb(Math.max(1, Math.round((formData.max_file_size_bytes ?? 10485760) / (1024 * 1024))))
         setMaxFileCount(formData.max_file_count ?? 10)
         setAllowedMimeTypesText((formData.allowed_mime_types || []).join(", "))
+        setDefaultTemplateId(formData.default_application_email_template_id || "")
         setIsPublished(formData.status === "published")
         setPages(schema ? schemaToPages(schema, mappingMap) : [{ id: 1, name: "Page 1", fields: [] }])
         setActivePage(1)
@@ -426,6 +526,7 @@ export default function FormBuilderPage() {
             max_file_size_bytes: Math.max(1, Math.round(maxFileSizeMb * 1024 * 1024)),
             max_file_count: Math.max(0, Math.round(maxFileCount)),
             allowed_mime_types: allowedMimeTypes.length > 0 ? allowedMimeTypes : null,
+            default_application_email_template_id: defaultTemplateId || null,
         }
     }, [
         formName,
@@ -437,6 +538,7 @@ export default function FormBuilderPage() {
         maxFileSizeMb,
         maxFileCount,
         allowedMimeTypesText,
+        defaultTemplateId,
     ])
     const draftFingerprint = useMemo(() => JSON.stringify(draftPayload), [draftPayload])
     const debouncedPayload = useDebouncedValue(draftPayload, 1200)
@@ -989,6 +1091,33 @@ export default function FormBuilderPage() {
         }
     }
 
+    const handleDefaultTemplateSelection = async (nextTemplateId: string | null) => {
+        const normalizedTemplateId = nextTemplateId ?? ""
+        setDefaultTemplateId(normalizedTemplateId)
+        if (!formId) return
+        try {
+            await updateDeliverySettingsMutation.mutateAsync({
+                formId,
+                payload: {
+                    default_application_email_template_id: normalizedTemplateId || null,
+                },
+            })
+        } catch {
+            toast.error("Failed to update delivery template")
+        }
+    }
+
+    const hasMissingCriticalMappings = () => {
+        const missingCriticalMappings = getMissingCriticalMappings(pages, surrogateFieldMappings)
+        if (missingCriticalMappings.length === 0) {
+            return false
+        }
+
+        const missingLabels = missingCriticalMappings.map((mapping) => mapping.label).join(", ")
+        toast.error(`Map required surrogate fields before publishing: ${missingLabels}.`)
+        return true
+    }
+
     // Publish handler
     const handlePublish = () => {
         if (!formName.trim()) {
@@ -997,6 +1126,9 @@ export default function FormBuilderPage() {
         }
         if (pages.every((p) => p.fields.length === 0)) {
             toast.error("Add at least one field before publishing")
+            return
+        }
+        if (hasMissingCriticalMappings()) {
             return
         }
         setShowPublishDialog(true)
@@ -1042,6 +1174,10 @@ export default function FormBuilderPage() {
     }
 
     const confirmPublish = async () => {
+        if (hasMissingCriticalMappings()) {
+            return
+        }
+
         setIsPublishing(true)
         try {
             const savedForm = await persistForm(draftPayload)
@@ -1055,6 +1191,260 @@ export default function FormBuilderPage() {
             toast.error("Failed to publish form")
         } finally {
             setIsPublishing(false)
+        }
+    }
+
+    const sortedIntakeLinks = useMemo(
+        () =>
+            [...intakeLinks].sort((a, b) => {
+                const left = new Date(a.created_at).getTime()
+                const right = new Date(b.created_at).getTime()
+                return right - left
+            }),
+        [intakeLinks],
+    )
+
+    useEffect(() => {
+        if (sortedIntakeLinks.length === 0) {
+            setSelectedQrLinkId(null)
+            return
+        }
+        if (selectedQrLinkId && sortedIntakeLinks.some((link) => link.id === selectedQrLinkId)) {
+            return
+        }
+        setSelectedQrLinkId(sortedIntakeLinks[0]?.id || null)
+    }, [selectedQrLinkId, sortedIntakeLinks])
+
+    const selectedQrLink = useMemo(
+        () => sortedIntakeLinks.find((link) => link.id === selectedQrLinkId) || null,
+        [selectedQrLinkId, sortedIntakeLinks],
+    )
+
+    const handleCreateSharedLink = async () => {
+        if (!formId) {
+            toast.error("Save this form first before creating shared links.")
+            return
+        }
+        if (!isPublished) {
+            toast.error("Publish the form before creating shared links.")
+            return
+        }
+
+        const parsedMax = newMaxSubmissions.trim()
+            ? Number.parseInt(newMaxSubmissions.trim(), 10)
+            : null
+        if (parsedMax !== null && (Number.isNaN(parsedMax) || parsedMax <= 0)) {
+            toast.error("Max submissions must be a positive number.")
+            return
+        }
+
+        try {
+            const created = await createIntakeLinkMutation.mutateAsync({
+                formId,
+                payload: {
+                    campaign_name: newCampaignName.trim() || null,
+                    event_name: newEventName.trim() || null,
+                    max_submissions: parsedMax,
+                    expires_at: newExpiresAt ? new Date(newExpiresAt).toISOString() : null,
+                },
+            })
+            setSelectedQrLinkId(created.id)
+            setNewCampaignName("")
+            setNewEventName("")
+            setNewMaxSubmissions("")
+            setNewExpiresAt("")
+            toast.success("Shared intake link created")
+        } catch {
+            toast.error("Failed to create shared intake link")
+        }
+    }
+
+    const handleRotateSharedLink = async (linkId: string) => {
+        if (!formId) return
+        try {
+            await rotateIntakeLinkMutation.mutateAsync({ formId, linkId })
+            toast.success("Shared intake link rotated")
+        } catch {
+            toast.error("Failed to rotate link")
+        }
+    }
+
+    const handleToggleSharedLinkActive = async (link: FormIntakeLinkRead) => {
+        if (!formId) return
+        try {
+            await updateIntakeLinkMutation.mutateAsync({
+                formId,
+                linkId: link.id,
+                payload: { is_active: !link.is_active },
+            })
+            toast.success(link.is_active ? "Link disabled" : "Link enabled")
+        } catch {
+            toast.error("Failed to update link")
+        }
+    }
+
+    const handleCopySharedLink = async (link: FormIntakeLinkRead) => {
+        const url = link.intake_url?.trim()
+        if (!url) {
+            toast.error("No intake URL available")
+            return
+        }
+        try {
+            await navigator.clipboard.writeText(url)
+            toast.success("Shared link copied")
+        } catch {
+            toast.error("Failed to copy link")
+        }
+    }
+
+    const getQrSvgMarkup = () => {
+        const svg = document.querySelector("#shared-intake-qr svg")
+        if (!(svg instanceof SVGSVGElement)) {
+            toast.error("QR code not ready yet")
+            return null
+        }
+
+        let markup = new XMLSerializer().serializeToString(svg)
+        if (!markup.includes("xmlns=\"http://www.w3.org/2000/svg\"")) {
+            markup = markup.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"')
+        }
+        return markup
+    }
+
+    const buildQrFilename = (extension: "svg" | "png") => {
+        const baseRaw = selectedQrLink?.campaign_name || selectedQrLink?.event_name || selectedQrLink?.slug || "intake-link"
+        const base = baseRaw
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+        return `${base || "intake-link"}-qr.${extension}`
+    }
+
+    const downloadBlob = (blob: Blob, filename: string) => {
+        const downloadUrl = URL.createObjectURL(blob)
+        const anchor = document.createElement("a")
+        anchor.href = downloadUrl
+        anchor.download = filename
+        document.body.appendChild(anchor)
+        anchor.click()
+        anchor.remove()
+        URL.revokeObjectURL(downloadUrl)
+    }
+
+    const handleDownloadQrSvg = () => {
+        const markup = getQrSvgMarkup()
+        if (!markup) return
+
+        const blob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" })
+        downloadBlob(blob, buildQrFilename("svg"))
+    }
+
+    const handleDownloadQrPng = async () => {
+        const markup = getQrSvgMarkup()
+        if (!markup) return
+
+        const svgBlob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" })
+        const svgUrl = URL.createObjectURL(svgBlob)
+        try {
+            const image = new Image()
+            image.crossOrigin = "anonymous"
+
+            await new Promise<void>((resolve, reject) => {
+                image.onload = () => resolve()
+                image.onerror = () => reject(new Error("Failed to render QR image"))
+                image.src = svgUrl
+            })
+
+            const canvas = document.createElement("canvas")
+            canvas.width = image.width || 120
+            canvas.height = image.height || 120
+            const context = canvas.getContext("2d")
+            if (!context) {
+                toast.error("Could not prepare PNG download")
+                return
+            }
+            context.drawImage(image, 0, 0)
+
+            const blob = await new Promise<Blob | null>((resolve) =>
+                canvas.toBlob((result) => resolve(result), "image/png"),
+            )
+            if (!blob) {
+                toast.error("Could not generate PNG")
+                return
+            }
+            downloadBlob(blob, buildQrFilename("png"))
+        } catch {
+            toast.error("Failed to download PNG")
+        } finally {
+            URL.revokeObjectURL(svgUrl)
+        }
+    }
+
+    const readAnswerValue = (submission: FormSubmissionRead, keys: string[]) => {
+        for (const key of keys) {
+            const rawValue = submission.answers?.[key]
+            if (typeof rawValue === "string" && rawValue.trim()) {
+                return rawValue.trim()
+            }
+        }
+        return "—"
+    }
+
+    const refreshSubmissionQueues = async () => {
+        await Promise.all([refetchAmbiguousSubmissions(), refetchLeadQueueSubmissions()])
+    }
+
+    const handleResolveSubmissionToSurrogate = async (submissionId: string, surrogateId: string) => {
+        try {
+            await resolveSubmissionMatchMutation.mutateAsync({
+                submissionId,
+                payload: {
+                    surrogate_id: surrogateId,
+                    create_intake_lead: false,
+                    review_notes: resolveReviewNotes.trim() || null,
+                },
+            })
+            toast.success("Submission linked to surrogate")
+            setSelectedQueueSubmissionId(null)
+            setResolveReviewNotes("")
+            await refreshSubmissionQueues()
+        } catch {
+            toast.error("Failed to link submission")
+        }
+    }
+
+    const handleResolveSubmissionToLead = async (submissionId: string) => {
+        try {
+            await resolveSubmissionMatchMutation.mutateAsync({
+                submissionId,
+                payload: {
+                    create_intake_lead: true,
+                    review_notes: resolveReviewNotes.trim() || null,
+                },
+            })
+            toast.success("Submission moved to intake lead")
+            setSelectedQueueSubmissionId(null)
+            setResolveReviewNotes("")
+            await refreshSubmissionQueues()
+        } catch {
+            toast.error("Failed to move submission to intake lead")
+        }
+    }
+
+    const handlePromoteLeadFromSubmission = async (submission: FormSubmissionRead) => {
+        if (!submission.intake_lead_id) {
+            toast.error("No intake lead linked to this submission")
+            return
+        }
+        try {
+            await promoteIntakeLeadMutation.mutateAsync({
+                leadId: submission.intake_lead_id,
+                payload: {},
+            })
+            toast.success("Intake lead promoted to surrogate")
+            await refreshSubmissionQueues()
+        } catch {
+            toast.error("Failed to promote intake lead")
         }
     }
 
@@ -1185,8 +1575,44 @@ export default function FormBuilderPage() {
                 </div>
             </div>
 
-            {/* Page Tabs */}
             <div className="flex items-center gap-2 border-b border-stone-200 bg-white px-6 py-2 dark:border-stone-800 dark:bg-stone-900">
+                <button
+                    type="button"
+                    onClick={() => setWorkspaceTab("builder")}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                        workspaceTab === "builder"
+                            ? "bg-teal-500/10 text-teal-600 dark:bg-teal-500/20 dark:text-teal-400"
+                            : "text-stone-600 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800"
+                    }`}
+                >
+                    Builder
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setWorkspaceTab("submissions")}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                        workspaceTab === "submissions"
+                            ? "bg-teal-500/10 text-teal-600 dark:bg-teal-500/20 dark:text-teal-400"
+                            : "text-stone-600 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800"
+                    }`}
+                >
+                    Submissions
+                    {ambiguousSubmissions.length + leadQueueSubmissions.length > 0 && (
+                        <span className="ml-2 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-semibold text-white">
+                            {ambiguousSubmissions.length + leadQueueSubmissions.length}
+                        </span>
+                    )}
+                </button>
+            </div>
+
+            {/* Page Tabs */}
+            <div
+                className={
+                    workspaceTab === "builder"
+                        ? "flex items-center gap-2 border-b border-stone-200 bg-white px-6 py-2 dark:border-stone-800 dark:bg-stone-900"
+                        : "hidden"
+                }
+            >
                 {pages.map((page) => (
                     <button
                         key={page.id}
@@ -1219,7 +1645,7 @@ export default function FormBuilderPage() {
                 </Button>
             </div>
 
-            <div className="flex flex-1 overflow-hidden">
+            <div className={workspaceTab === "builder" ? "flex flex-1 overflow-hidden" : "hidden"}>
                 {/* Left Sidebar - Field Buttons */}
                 <div className="w-[200px] overflow-y-auto border-r border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900">
                     <div className="space-y-6">
@@ -1973,6 +2399,215 @@ export default function FormBuilderPage() {
                                     />
                                 </div>
 
+                                <div className="mt-6 space-y-4 rounded-lg border border-stone-200 p-4 dark:border-stone-800">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="text-sm font-semibold">Distribution</h4>
+                                        <Badge variant="outline">Dedicated + Shared</Badge>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="default-template">Default application email template</Label>
+                                        <Select
+                                            value={defaultTemplateId || "none"}
+                                            onValueChange={(value) =>
+                                                handleDefaultTemplateSelection(value === "none" ? "" : value)
+                                            }
+                                        >
+                                            <SelectTrigger id="default-template">
+                                                <SelectValue placeholder="Select template" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="none">No default template</SelectItem>
+                                                {emailTemplates.map((template) => (
+                                                    <SelectItem key={template.id} value={template.id}>
+                                                        {template.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <p className="text-xs text-stone-500">
+                                            Dedicated surrogate sends use this template by default. Users can override at send time.
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label>Create shared intake link</Label>
+                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                            <Input
+                                                value={newCampaignName}
+                                                onChange={(e) => setNewCampaignName(e.target.value)}
+                                                placeholder="Campaign name"
+                                            />
+                                            <Input
+                                                value={newEventName}
+                                                onChange={(e) => setNewEventName(e.target.value)}
+                                                placeholder="Event name"
+                                            />
+                                            <Input
+                                                value={newMaxSubmissions}
+                                                onChange={(e) => setNewMaxSubmissions(e.target.value)}
+                                                placeholder="Max submissions (optional)"
+                                                inputMode="numeric"
+                                            />
+                                            <Input
+                                                value={newExpiresAt}
+                                                onChange={(e) => setNewExpiresAt(e.target.value)}
+                                                type="datetime-local"
+                                                placeholder="Expires at (optional)"
+                                            />
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            className="w-full bg-transparent"
+                                            onClick={handleCreateSharedLink}
+                                            disabled={
+                                                createIntakeLinkMutation.isPending || !formId || !isPublished
+                                            }
+                                        >
+                                            {createIntakeLinkMutation.isPending && (
+                                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                            )}
+                                            <LinkIcon className="mr-2 size-4" />
+                                            Create Shared Link
+                                        </Button>
+                                        {!isPublished && (
+                                            <p className="text-xs text-amber-600">
+                                                Publish the form before creating shared links.
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <Label>Shared links</Label>
+                                            <span className="text-xs text-stone-500">
+                                                {sortedIntakeLinks.length} total
+                                            </span>
+                                        </div>
+                                        {sortedIntakeLinks.length === 0 ? (
+                                            <p className="text-xs text-stone-500">
+                                                No shared links yet. Create one for event intake and QR distribution.
+                                            </p>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {sortedIntakeLinks.map((link) => (
+                                                    <div
+                                                        key={link.id}
+                                                        className="rounded-md border border-stone-200 p-3 dark:border-stone-800"
+                                                    >
+                                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                                            <button
+                                                                type="button"
+                                                                className="text-left"
+                                                                onClick={() => setSelectedQrLinkId(link.id)}
+                                                            >
+                                                                <div className="text-sm font-medium">
+                                                                    {link.event_name || link.campaign_name || "Shared link"}
+                                                                </div>
+                                                                <div className="text-xs text-stone-500">
+                                                                    {link.intake_url || `/intake/${link.slug}`}
+                                                                </div>
+                                                            </button>
+                                                            <div className="flex items-center gap-2">
+                                                                <Badge
+                                                                    variant={link.is_active ? "default" : "secondary"}
+                                                                    className={link.is_active ? "bg-teal-500" : ""}
+                                                                >
+                                                                    {link.is_active ? "Active" : "Inactive"}
+                                                                </Badge>
+                                                                <Button
+                                                                    type="button"
+                                                                    size="icon"
+                                                                    variant="ghost"
+                                                                    onClick={() => handleCopySharedLink(link)}
+                                                                    title="Copy link"
+                                                                >
+                                                                    <CopyIcon className="size-4" />
+                                                                </Button>
+                                                                <Button
+                                                                    type="button"
+                                                                    size="icon"
+                                                                    variant="ghost"
+                                                                    onClick={() => handleToggleSharedLinkActive(link)}
+                                                                    title={link.is_active ? "Disable link" : "Enable link"}
+                                                                    disabled={updateIntakeLinkMutation.isPending}
+                                                                >
+                                                                    <SmartphoneIcon className="size-4" />
+                                                                </Button>
+                                                                <Button
+                                                                    type="button"
+                                                                    size="icon"
+                                                                    variant="ghost"
+                                                                    onClick={() => handleRotateSharedLink(link.id)}
+                                                                    title="Rotate slug"
+                                                                    disabled={rotateIntakeLinkMutation.isPending}
+                                                                >
+                                                                    <RotateCcwIcon className="size-4" />
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                        <div className="mt-2 text-xs text-stone-500">
+                                                            Submissions: {link.submissions_count}
+                                                            {link.max_submissions ? ` / ${link.max_submissions}` : ""}
+                                                            {link.expires_at
+                                                                ? ` · Expires ${new Date(link.expires_at).toLocaleString()}`
+                                                                : ""}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {selectedQrLink?.intake_url && (
+                                        <div className="space-y-2 rounded-md border border-stone-200 p-3 dark:border-stone-800">
+                                            <div className="flex items-center gap-2 text-sm font-medium">
+                                                <QrCodeIcon className="size-4" />
+                                                Event QR
+                                            </div>
+                                            <div className="flex items-center gap-4">
+                                                <div id="shared-intake-qr" className="rounded-md border border-stone-200 bg-white p-2">
+                                                    <QRCodeSVG value={selectedQrLink.intake_url} size={120} includeMargin />
+                                                </div>
+                                                <div className="space-y-2 text-xs text-stone-500">
+                                                    <div className="break-all">{selectedQrLink.intake_url}</div>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => handleCopySharedLink(selectedQrLink)}
+                                                        >
+                                                            <CopyIcon className="mr-2 size-3" />
+                                                            Copy URL
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={handleDownloadQrSvg}
+                                                        >
+                                                            <DownloadIcon className="mr-2 size-3" />
+                                                            Download SVG
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={handleDownloadQrPng}
+                                                        >
+                                                            <DownloadIcon className="mr-2 size-3" />
+                                                            Download PNG
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                </div>
+
                                 <div className="mt-6 space-y-3">
                                     <div className="flex items-center justify-between">
                                         <h4 className="text-sm font-semibold">Upload Rules</h4>
@@ -2023,6 +2658,216 @@ export default function FormBuilderPage() {
                                 </div>
                             </div>
                         </div>
+                    )}
+                </div>
+            </div>
+
+            <div className={workspaceTab === "submissions" ? "flex-1 overflow-y-auto p-6" : "hidden"}>
+                <div className="mx-auto max-w-6xl space-y-6">
+                    <div className="grid gap-3 sm:grid-cols-3">
+                        <Card>
+                            <CardContent className="space-y-1 p-4">
+                                <p className="text-xs uppercase tracking-wide text-stone-500">Ambiguous</p>
+                                <p className="text-2xl font-semibold">{ambiguousSubmissions.length}</p>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardContent className="space-y-1 p-4">
+                                <p className="text-xs uppercase tracking-wide text-stone-500">Lead Queue</p>
+                                <p className="text-2xl font-semibold">{leadQueueSubmissions.length}</p>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardContent className="space-y-1 p-4">
+                                <p className="text-xs uppercase tracking-wide text-stone-500">Pending Shared Total</p>
+                                <p className="text-2xl font-semibold">
+                                    {ambiguousSubmissions.length + leadQueueSubmissions.length}
+                                </p>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {!formId ? (
+                        <Card>
+                            <CardContent className="p-6 text-sm text-stone-600">
+                                Create and publish the form before reviewing submissions.
+                            </CardContent>
+                        </Card>
+                    ) : (
+                        <div className="grid gap-6 xl:grid-cols-2">
+                            <Card>
+                                <CardContent className="space-y-4 p-5">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-sm font-semibold">Ambiguous Match Queue</h3>
+                                        <Badge variant="outline">{ambiguousSubmissions.length}</Badge>
+                                    </div>
+                                    {ambiguousSubmissions.length === 0 ? (
+                                        <p className="text-sm text-stone-500">No ambiguous submissions.</p>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {ambiguousSubmissions.map((submission) => {
+                                                const fullName = readAnswerValue(submission, ["full_name", "name"])
+                                                const dateOfBirth = readAnswerValue(submission, ["date_of_birth", "dob"])
+                                                const phone = readAnswerValue(submission, [
+                                                    "phone",
+                                                    "phone_number",
+                                                    "mobile_phone",
+                                                ])
+                                                const email = readAnswerValue(submission, ["email", "email_address"])
+                                                const isSelected = selectedQueueSubmissionId === submission.id
+
+                                                return (
+                                                    <div
+                                                        key={submission.id}
+                                                        className="space-y-2 rounded-lg border border-stone-200 p-3 text-sm"
+                                                    >
+                                                        <div className="grid gap-1 sm:grid-cols-2">
+                                                            <div><span className="font-medium">Name:</span> {fullName}</div>
+                                                            <div><span className="font-medium">DOB:</span> {dateOfBirth}</div>
+                                                            <div><span className="font-medium">Phone:</span> {phone}</div>
+                                                            <div><span className="font-medium">Email:</span> {email}</div>
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant={isSelected ? "default" : "outline"}
+                                                                onClick={() =>
+                                                                    setSelectedQueueSubmissionId(
+                                                                        isSelected ? null : submission.id,
+                                                                    )
+                                                                }
+                                                            >
+                                                                {isSelected ? "Hide Candidates" : "Review Candidates"}
+                                                            </Button>
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="outline"
+                                                                disabled={resolveSubmissionMatchMutation.isPending}
+                                                                onClick={() => handleResolveSubmissionToLead(submission.id)}
+                                                            >
+                                                                Keep As Lead
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+
+                            <Card>
+                                <CardContent className="space-y-4 p-5">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-sm font-semibold">Lead Promotion Queue</h3>
+                                        <Badge variant="outline">{leadQueueSubmissions.length}</Badge>
+                                    </div>
+                                    {leadQueueSubmissions.length === 0 ? (
+                                        <p className="text-sm text-stone-500">No pending lead submissions.</p>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {leadQueueSubmissions.map((submission) => {
+                                                const fullName = readAnswerValue(submission, ["full_name", "name"])
+                                                const dateOfBirth = readAnswerValue(submission, ["date_of_birth", "dob"])
+                                                const phone = readAnswerValue(submission, [
+                                                    "phone",
+                                                    "phone_number",
+                                                    "mobile_phone",
+                                                ])
+                                                const email = readAnswerValue(submission, ["email", "email_address"])
+
+                                                return (
+                                                    <div
+                                                        key={submission.id}
+                                                        className="space-y-2 rounded-lg border border-stone-200 p-3 text-sm"
+                                                    >
+                                                        <div className="grid gap-1 sm:grid-cols-2">
+                                                            <div><span className="font-medium">Name:</span> {fullName}</div>
+                                                            <div><span className="font-medium">DOB:</span> {dateOfBirth}</div>
+                                                            <div><span className="font-medium">Phone:</span> {phone}</div>
+                                                            <div><span className="font-medium">Email:</span> {email}</div>
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="outline"
+                                                                disabled={
+                                                                    promoteIntakeLeadMutation.isPending ||
+                                                                    !submission.intake_lead_id
+                                                                }
+                                                                onClick={() => handlePromoteLeadFromSubmission(submission)}
+                                                            >
+                                                                Promote Lead
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </div>
+                    )}
+
+                    {selectedQueueSubmissionId && (
+                        <Card>
+                            <CardContent className="space-y-4 p-5">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-sm font-semibold">Match Candidates</h3>
+                                    <Badge variant="outline">{selectedMatchCandidates.length}</Badge>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="queue-review-notes-submissions">Reviewer notes</Label>
+                                    <Textarea
+                                        id="queue-review-notes-submissions"
+                                        rows={2}
+                                        value={resolveReviewNotes}
+                                        onChange={(event) => setResolveReviewNotes(event.target.value)}
+                                        placeholder="Why this match was resolved..."
+                                    />
+                                </div>
+
+                                {isMatchCandidatesLoading ? (
+                                    <p className="text-sm text-stone-500">Loading candidates...</p>
+                                ) : selectedMatchCandidates.length === 0 ? (
+                                    <p className="text-sm text-stone-500">No candidates found.</p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {selectedMatchCandidates.map((candidate) => (
+                                            <div
+                                                key={candidate.id}
+                                                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 p-3 text-sm"
+                                            >
+                                                <div className="space-y-1">
+                                                    <p className="font-mono text-xs text-stone-600">
+                                                        surrogate_id: {candidate.surrogate_id}
+                                                    </p>
+                                                    <p className="text-xs text-stone-500">{candidate.reason}</p>
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        handleResolveSubmissionToSurrogate(
+                                                            selectedQueueSubmissionId,
+                                                            candidate.surrogate_id,
+                                                        )
+                                                    }
+                                                    disabled={resolveSubmissionMatchMutation.isPending}
+                                                >
+                                                    Link Candidate
+                                                </Button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
                     )}
                 </div>
             </div>
