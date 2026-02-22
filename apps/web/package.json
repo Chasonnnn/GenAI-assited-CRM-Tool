@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "next dev",
     "gen:stages": "cd ../.. && python3 scripts/gen_stage_map.py",
-    "prebuild": "pnpm run gen:stages",
+    "gen:surrogate-contracts": "if [ -x ../api/.venv/bin/python ]; then cd ../api && .venv/bin/python ../../scripts/gen_surrogate_contracts.py; else echo 'Skipping surrogate contract generation (apps/api/.venv missing)'; fi",
+    "prebuild": "pnpm run gen:stages && pnpm run gen:surrogate-contracts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
