@@ -90,6 +90,7 @@ def save_integration(
     refresh_token: str | None = None,
     expires_in: int | None = None,
     account_email: str | None = None,
+    granted_scopes: list[str] | None = None,
 ) -> UserIntegration:
     """Save or update a user's integration tokens."""
     integration = get_user_integration(db, user_id, integration_type)
@@ -105,6 +106,8 @@ def save_integration(
         integration.token_expires_at = token_expires_at
         if account_email:
             integration.account_email = account_email
+        if granted_scopes is not None:
+            integration.granted_scopes = granted_scopes
         integration.updated_at = _now_utc()
     else:
         integration = UserIntegration(
@@ -114,6 +117,7 @@ def save_integration(
             refresh_token_encrypted=encrypt_token(refresh_token) if refresh_token else None,
             token_expires_at=token_expires_at,
             account_email=account_email,
+            granted_scopes=granted_scopes,
         )
         db.add(integration)
 
@@ -179,6 +183,7 @@ GMAIL_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GMAIL_TOKEN_URL = "https://oauth2.googleapis.com/token"  # nosec B105
 GMAIL_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 GMAIL_SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/userinfo.email",
 ]

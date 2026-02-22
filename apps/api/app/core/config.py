@@ -188,6 +188,10 @@ class Settings(BaseSettings):
 
     # Gmail OAuth (per-user, different from Google Login OAuth)
     GMAIL_REDIRECT_URI: str = ""
+    # Gmail push notifications (users.watch via Cloud Pub/Sub)
+    GMAIL_PUSH_TOPIC: str = ""  # projects/{project}/topics/{topic}
+    GMAIL_PUSH_LABEL_IDS: str = ""  # Optional comma-separated Gmail label IDs (e.g. INBOX,SENT)
+    GMAIL_PUSH_WEBHOOK_TOKEN: str = ""  # Optional token query param for /webhooks/google-gmail
     # Google Calendar OAuth (per-user, used for Meet + calendar sync)
     GOOGLE_CALENDAR_REDIRECT_URI: str = ""
     # Google Cloud OAuth (per-user, for Vertex AI setup)
