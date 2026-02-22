@@ -38,7 +38,7 @@ function getScanStatusBadge(status: string, quarantined: boolean) {
     if (quarantined) {
         return (
             <Badge variant="outline" className="text-yellow-600 border-yellow-300 bg-yellow-50">
-                <Clock className="size-3 mr-1" />
+                <Clock className="size-3 mr-1" aria-hidden="true" />
                 Scanning
             </Badge>
         )
@@ -48,28 +48,28 @@ function getScanStatusBadge(status: string, quarantined: boolean) {
         case "clean":
             return (
                 <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50">
-                    <CheckCircle2 className="size-3 mr-1" />
+                    <CheckCircle2 className="size-3 mr-1" aria-hidden="true" />
                     Clean
                 </Badge>
             )
         case "infected":
             return (
                 <Badge variant="destructive">
-                    <AlertTriangle className="size-3 mr-1" />
+                    <AlertTriangle className="size-3 mr-1" aria-hidden="true" />
                     Infected
                 </Badge>
             )
         case "error":
             return (
                 <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50">
-                    <AlertTriangle className="size-3 mr-1" />
+                    <AlertTriangle className="size-3 mr-1" aria-hidden="true" />
                     Scan Error
                 </Badge>
             )
         default:
             return (
                 <Badge variant="outline" className="text-yellow-600 border-yellow-300 bg-yellow-50">
-                    <Clock className="size-3 mr-1" />
+                    <Clock className="size-3 mr-1" aria-hidden="true" />
                     Pending
                 </Badge>
             )
@@ -152,7 +152,7 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
         <div className={cn("space-y-4", className)}>
             {/* Upload Zone */}
             <div
-                {...getRootProps()}
+                {...getRootProps({ "aria-label": "File upload zone", role: "button" })}
                 className={cn(
                     "border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors",
                     isDragActive
@@ -161,7 +161,7 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                 )}
             >
                 <input {...getInputProps()} />
-                <Upload className="size-8 mx-auto mb-2 text-muted-foreground" />
+                <Upload className="size-8 mx-auto mb-2 text-muted-foreground" aria-hidden="true" />
                 {isDragActive ? (
                     <p className="text-sm text-primary">Drop files here...</p>
                 ) : (
@@ -188,10 +188,10 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
             {/* Error */}
             {error && (
                 <div className="flex items-center gap-2 text-sm text-destructive">
-                    <AlertTriangle className="size-4" />
+                    <AlertTriangle className="size-4" aria-hidden="true" />
                     {error}
-                    <Button variant="ghost" size="sm" onClick={() => setError(null)}>
-                        <X className="size-4" />
+                    <Button variant="ghost" size="sm" onClick={() => setError(null)} aria-label="Dismiss error">
+                        <X className="size-4" aria-hidden="true" />
                     </Button>
                 </div>
             )}
@@ -202,13 +202,13 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                     <Loader2 className="size-6 animate-spin text-muted-foreground" />
                 </div>
             ) : attachments.length > 0 ? (
-                <div className="space-y-2">
+                <ul className="space-y-2">
                     {attachments.map((attachment: Attachment) => (
-                        <div
+                        <li
                             key={attachment.id}
                             className="flex items-center gap-3 p-3 rounded-lg border bg-card"
                         >
-                            <File className="size-5 text-muted-foreground shrink-0" />
+                            <File className="size-5 text-muted-foreground shrink-0" aria-hidden="true" />
 
                             <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium truncate">{attachment.filename}</p>
@@ -228,7 +228,7 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                                     title={attachment.quarantined ? "Pending virus scan" : "Download"}
                                     aria-label={`Download ${attachment.filename}`}
                                 >
-                                    <Download className="size-4" />
+                                    <Download className="size-4" aria-hidden="true" />
                                 </Button>
                                 <Button
                                     variant="ghost"
@@ -238,12 +238,12 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                                     className="text-destructive hover:text-destructive"
                                     aria-label={`Delete ${attachment.filename}`}
                                 >
-                                    <Trash2 className="size-4" />
+                                    <Trash2 className="size-4" aria-hidden="true" />
                                 </Button>
                             </div>
-                        </div>
+                        </li>
                     ))}
-                </div>
+                </ul>
             ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">
                     No attachments yet

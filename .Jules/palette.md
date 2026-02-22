@@ -9,3 +9,7 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+
+## 2025-05-21 - React Dropzone Accessibility
+**Learning:** `react-dropzone` renders a `div` by default, which lacks semantic meaning for screen readers even if it's focusable. To make it accessible as a clickable upload area, explicit `role="button"` and `aria-label` are necessary on the root element.
+**Action:** Always add `role="button"` and a descriptive `aria-label` to custom dropzone components using `react-dropzone`.
