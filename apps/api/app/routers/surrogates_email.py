@@ -323,6 +323,12 @@ def list_surrogate_email_contacts(
     session: UserSession = Depends(get_current_session),
 ) -> SurrogateEmailContactListResponse:
     """List surrogate contact emails (system + manual)."""
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+
     contacts = ticketing_service.list_surrogate_email_contacts(
         db,
         org_id=session.org_id,
@@ -360,6 +366,12 @@ def create_surrogate_email_contact(
     session: UserSession = Depends(get_current_session),
 ) -> SurrogateEmailContactRead:
     """Add manual surrogate email contact."""
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+
     contact = ticketing_service.create_surrogate_email_contact(
         db,
         org_id=session.org_id,
@@ -397,6 +409,12 @@ def patch_surrogate_email_contact(
     session: UserSession = Depends(get_current_session),
 ) -> SurrogateEmailContactRead:
     """Edit manual surrogate email contact."""
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+
     contact = ticketing_service.patch_surrogate_email_contact(
         db,
         org_id=session.org_id,
@@ -433,6 +451,12 @@ def delete_surrogate_email_contact(
     session: UserSession = Depends(get_current_session),
 ) -> dict[str, bool]:
     """Deactivate manual surrogate email contact."""
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+
     ticketing_service.deactivate_surrogate_email_contact(
         db,
         org_id=session.org_id,

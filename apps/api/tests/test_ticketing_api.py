@@ -152,6 +152,75 @@ async def test_surrogate_email_contact_crud(authed_client: AsyncClient, db, test
 
 
 @pytest.mark.asyncio
+async def test_surrogate_email_contact_list_enforces_surrogate_acl(db, test_org, test_user):
+    from httpx import ASGITransport, AsyncClient
+
+    from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
+    from app.core.deps import COOKIE_NAME, get_db
+    from app.core.security import create_session_token
+    from app.db.enums import Role
+    from app.db.models import Membership, User
+    from app.main import app
+    from app.services import session_service
+
+    surrogate = _create_surrogate(db, test_org, test_user, email="acl.contacts@example.com")
+
+    intake_user = User(
+        id=uuid.uuid4(),
+        email=f"intake-{uuid.uuid4().hex[:8]}@test.com",
+        display_name="Intake User",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(intake_user)
+    db.flush()
+    db.add(
+        Membership(
+            id=uuid.uuid4(),
+            user_id=intake_user.id,
+            organization_id=test_org.id,
+            role=Role.INTAKE_SPECIALIST,
+            is_active=True,
+        )
+    )
+    db.flush()
+
+    token = create_session_token(
+        user_id=intake_user.id,
+        org_id=test_org.id,
+        role=Role.INTAKE_SPECIALIST.value,
+        token_version=intake_user.token_version,
+        mfa_verified=True,
+        mfa_required=True,
+    )
+    session_service.create_session(
+        db=db,
+        user_id=intake_user.id,
+        org_id=test_org.id,
+        token=token,
+        request=None,
+    )
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    csrf_token = generate_csrf_token()
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="https://test",
+            cookies={COOKIE_NAME: token, CSRF_COOKIE_NAME: csrf_token},
+            headers={CSRF_HEADER: csrf_token},
+        ) as intake_client:
+            response = await intake_client.get(f"/surrogates/{surrogate.id}/email-contacts")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_internal_gmail_sync_scheduler_requires_secret(client: AsyncClient, monkeypatch):
     from app.core.config import settings
 
