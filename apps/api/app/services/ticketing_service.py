@@ -27,6 +27,7 @@ from app.core.encryption import hash_email
 from app.db.enums import (
     EmailDirection,
     EmailOccurrenceState,
+    JobStatus,
     LinkConfidence,
     MailboxKind,
     RecipientSource,
@@ -194,8 +195,31 @@ def _extract_rfc_ids(value: str | None) -> list[str]:
     return [v.strip() for v in _RFC_ID_RE.findall(value) if v.strip()]
 
 
-def _mailbox_sync_job_key(mailbox_id: UUID, job_type: JobType) -> str:
-    return f"{job_type.value}:{mailbox_id}"
+def _mailbox_sync_job_key(
+    mailbox_id: UUID, job_type: JobType, *, run_scope: str | None = None
+) -> str:
+    scope = run_scope or _now_utc().strftime("%Y%m%d%H%M%S%f")
+    return f"{job_type.value}:{mailbox_id}:{scope}"
+
+
+def _has_active_mailbox_job(
+    db: Session,
+    *,
+    org_id: UUID,
+    mailbox_id: UUID,
+    job_type: JobType,
+) -> bool:
+    return (
+        db.query(Job.id)
+        .filter(
+            Job.organization_id == org_id,
+            Job.job_type == job_type.value,
+            Job.payload["mailbox_id"].astext == str(mailbox_id),
+            Job.status.in_([JobStatus.PENDING.value, JobStatus.RUNNING.value]),
+        )
+        .first()
+        is not None
+    )
 
 
 def _enqueue_mailbox_job(
@@ -207,6 +231,14 @@ def _enqueue_mailbox_job(
     payload: dict,
     dedupe_suffix: str | None = None,
 ) -> UUID | None:
+    if _has_active_mailbox_job(
+        db,
+        org_id=org_id,
+        mailbox_id=mailbox_id,
+        job_type=job_type,
+    ):
+        return None
+
     idempotency_key = _mailbox_sync_job_key(mailbox_id, job_type)
     if dedupe_suffix:
         idempotency_key = f"{idempotency_key}:{dedupe_suffix}"
@@ -222,6 +254,13 @@ def _enqueue_mailbox_job(
         return job.id
     except IntegrityError:
         db.rollback()
+        if _has_active_mailbox_job(
+            db,
+            org_id=org_id,
+            mailbox_id=mailbox_id,
+            job_type=job_type,
+        ):
+            return None
         return None
 
 
@@ -2391,12 +2430,6 @@ def process_gmail_push_notification(
     jobs_created = 0
     duplicates = 0
     for mailbox in mailbox_rows:
-        idempotency_key = _mailbox_sync_job_key(mailbox.id, JobType.MAILBOX_HISTORY_SYNC)
-        existing = db.query(Job.id).filter(Job.idempotency_key == idempotency_key).first()
-        if existing:
-            duplicates += 1
-            continue
-
         job_id = _enqueue_mailbox_job(
             db,
             org_id=mailbox.organization_id,
