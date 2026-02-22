@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
+from fastapi import HTTPException, Request
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -18,7 +19,14 @@ from app.db.models import (
     WorkflowResumeJob,
 )
 from app.schemas.auth import UserSession
-from app.schemas.task import TaskCreate, TaskUpdate, TaskRead, TaskListItem, BulkCompleteResponse
+from app.schemas.task import (
+    BulkCompleteResponse,
+    TaskCreate,
+    TaskListItem,
+    TaskListResponse,
+    TaskRead,
+    TaskUpdate,
+)
 from app.services import membership_service, queue_service
 from app.utils.normalization import escape_like_string
 
@@ -708,6 +716,104 @@ def list_tasks(
     tasks = query.offset(offset).limit(per_page).all()
 
     return tasks, total
+
+
+def list_tasks_for_session(
+    db: Session,
+    request: Request | None,
+    session: UserSession,
+    *,
+    page: int = 1,
+    per_page: int = 20,
+    q: str | None = None,
+    owner_id: UUID | None = None,
+    surrogate_id: UUID | None = None,
+    intended_parent_id: UUID | None = None,
+    pipeline_id: UUID | None = None,
+    is_completed: bool | None = None,
+    task_type: TaskType | None = None,
+    status: str | None = None,
+    due_before: str | None = None,
+    due_after: str | None = None,
+    my_tasks: bool = False,
+    exclude_approvals: bool = False,
+) -> TaskListResponse:
+    """List tasks scoped to the current session with access checks and PHI auditing."""
+    from app.core.surrogate_access import check_surrogate_access
+    from app.services import ip_service, phi_access_service, surrogate_service
+
+    if surrogate_id:
+        surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+        if surrogate:
+            check_surrogate_access(
+                surrogate,
+                session.role,
+                session.user_id,
+                db=db,
+                org_id=session.org_id,
+            )
+
+    if intended_parent_id:
+        ip = ip_service.get_intended_parent(db, intended_parent_id, session.org_id)
+        if not ip:
+            raise HTTPException(status_code=404, detail="Intended parent not found")
+
+    tasks, total = list_tasks(
+        db=db,
+        org_id=session.org_id,
+        user_role=session.role,
+        user_id=session.user_id,
+        page=page,
+        per_page=per_page,
+        q=q,
+        owner_id=owner_id,
+        surrogate_id=surrogate_id,
+        intended_parent_id=intended_parent_id,
+        pipeline_id=pipeline_id,
+        is_completed=is_completed,
+        task_type=task_type,
+        status=status,
+        due_before=due_before,
+        due_after=due_after,
+        my_tasks_user_id=session.user_id if my_tasks else None,
+        exclude_approvals=exclude_approvals,
+    )
+
+    phi_access_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="task_list",
+        target_id=None,
+        request=request,
+        query=q,
+        details={
+            "count": len(tasks),
+            "page": page,
+            "per_page": per_page,
+            "owner_id": str(owner_id) if owner_id else None,
+            "surrogate_id": str(surrogate_id) if surrogate_id else None,
+            "intended_parent_id": str(intended_parent_id) if intended_parent_id else None,
+            "pipeline_id": str(pipeline_id) if pipeline_id else None,
+            "is_completed": is_completed,
+            "task_type": task_type.value if task_type else None,
+            "status": status,
+            "due_before": due_before,
+            "due_after": due_after,
+            "my_tasks": my_tasks,
+            "exclude_approvals": exclude_approvals,
+        },
+    )
+
+    pages = (total + per_page - 1) // per_page if per_page > 0 else 0
+    context = get_task_context(db, session.org_id, tasks)
+    return TaskListResponse(
+        items=[to_task_list_item(task, context) for task in tasks],
+        total=total,
+        page=page,
+        per_page=per_page,
+        pages=pages,
+    )
 
 
 def count_pending_tasks(db: Session, org_id: UUID) -> int:

@@ -6,12 +6,14 @@ from typing import TypedDict
 from uuid import UUID
 import logging
 
+from fastapi import Request
 from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import IntendedParentStatus
 from app.db.models import IntendedParent, IntendedParentStatusHistory
+from app.schemas.auth import UserSession
 from app.utils.normalization import (
     escape_like_string,
     extract_email_domain,
@@ -179,6 +181,80 @@ def list_intended_parents(
     items = query.offset(offset).limit(per_page).all()
 
     return items, total
+
+
+def list_intended_parents_for_session(
+    db: Session,
+    request: Request | None,
+    session: UserSession,
+    *,
+    status: list[str] | None = None,
+    state: str | None = None,
+    budget_min: Decimal | None = None,
+    budget_max: Decimal | None = None,
+    q: str | None = None,
+    owner_id: UUID | None = None,
+    include_archived: bool = False,
+    created_after: str | None = None,
+    created_before: str | None = None,
+    page: int = 1,
+    per_page: int = 20,
+    sort_by: str | None = None,
+    sort_order: str = "desc",
+) -> dict[str, object]:
+    """List intended parents scoped to the current session with PHI auditing."""
+    from app.schemas.intended_parent import IntendedParentListItem
+    from app.services import phi_access_service
+
+    items, total = list_intended_parents(
+        db,
+        org_id=session.org_id,
+        status=status,
+        state=state,
+        budget_min=budget_min,
+        budget_max=budget_max,
+        q=q,
+        owner_id=owner_id,
+        include_archived=include_archived,
+        created_after=created_after,
+        created_before=created_before,
+        page=page,
+        per_page=per_page,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+    pages = (total + per_page - 1) // per_page  # ceiling division
+
+    phi_access_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="intended_parent_list",
+        target_id=None,
+        request=request,
+        query=q,
+        details={
+            "count": len(items),
+            "page": page,
+            "per_page": per_page,
+            "include_archived": include_archived,
+            "status": status,
+            "state": state,
+            "owner_id": str(owner_id) if owner_id else None,
+            "budget_min": str(budget_min) if budget_min is not None else None,
+            "budget_max": str(budget_max) if budget_max is not None else None,
+            "created_after": created_after,
+            "created_before": created_before,
+        },
+    )
+
+    return {
+        "items": [IntendedParentListItem.model_validate(ip) for ip in items],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": pages,
+    }
 
 
 def get_intended_parent(db: Session, ip_id: UUID, org_id: UUID) -> IntendedParent | None:
