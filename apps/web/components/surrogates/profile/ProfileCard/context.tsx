@@ -31,19 +31,23 @@ export interface ProfileData {
     schema_snapshot: FormSchema | null
 }
 
-export interface ProfileCardContextValue {
+export interface ProfileCardDataContextValue {
     // Data
     surrogateId: string
     profile: ProfileData | null
     isLoading: boolean
     error: Error | null
+}
 
-    // Mode state (consolidated)
+export interface ProfileCardModeContextValue {
+    // Mode state
     mode: CardMode
     enterEditMode: () => void
     exitEditMode: () => void
     setEditingField: (fieldKey: string | null) => void
+}
 
+export interface ProfileCardEditsContextValue {
     // Field editing
     editedFields: JsonObject
     setFieldValue: (key: string, value: JsonValue) => void
@@ -58,18 +62,22 @@ export interface ProfileCardContextValue {
     // Staged changes from sync
     stagedChanges: StagedChange[]
 
+    // Derived state
+    hasChanges: boolean
+}
+
+export interface ProfileCardSectionsContextValue {
     // Section state
     sectionOpen: Record<number, boolean>
     toggleSection: (index: number) => void
+}
 
+export interface ProfileCardActionsContextValue {
     // Actions
     syncProfile: () => Promise<void>
     saveChanges: () => Promise<void>
     cancelAllChanges: () => void
     exportProfile: () => Promise<void>
-
-    // Derived state
-    hasChanges: boolean
 
     // Loading states
     isSyncing: boolean
@@ -77,18 +85,60 @@ export interface ProfileCardContextValue {
     isExporting: boolean
 }
 
+export type ProfileCardContextValue =
+    ProfileCardDataContextValue &
+    ProfileCardModeContextValue &
+    ProfileCardEditsContextValue &
+    ProfileCardSectionsContextValue &
+    ProfileCardActionsContextValue
+
 // ============================================================================
 // Context
 // ============================================================================
 
-const ProfileCardContext = createContext<ProfileCardContextValue | null>(null)
+const ProfileCardDataContext = createContext<ProfileCardDataContextValue | null>(null)
+const ProfileCardModeContext = createContext<ProfileCardModeContextValue | null>(null)
+const ProfileCardEditsContext = createContext<ProfileCardEditsContextValue | null>(null)
+const ProfileCardSectionsContext = createContext<ProfileCardSectionsContextValue | null>(null)
+const ProfileCardActionsContext = createContext<ProfileCardActionsContextValue | null>(null)
 
-export function useProfileCard() {
-    const context = use(ProfileCardContext)
-    if (!context) {
-        throw new Error("useProfileCard must be used within a ProfileCardProvider")
+function useRequiredContext<T>(context: React.Context<T | null>, hookName: string): T {
+    const value = use(context)
+    if (!value) {
+        throw new Error(`${hookName} must be used within a ProfileCardProvider`)
     }
-    return context
+    return value
+}
+
+export function useProfileCardData() {
+    return useRequiredContext(ProfileCardDataContext, "useProfileCardData")
+}
+
+export function useProfileCardMode() {
+    return useRequiredContext(ProfileCardModeContext, "useProfileCardMode")
+}
+
+export function useProfileCardEdits() {
+    return useRequiredContext(ProfileCardEditsContext, "useProfileCardEdits")
+}
+
+export function useProfileCardSections() {
+    return useRequiredContext(ProfileCardSectionsContext, "useProfileCardSections")
+}
+
+export function useProfileCardActions() {
+    return useRequiredContext(ProfileCardActionsContext, "useProfileCardActions")
+}
+
+// Legacy combined hook for compatibility with existing imports/tests.
+export function useProfileCard(): ProfileCardContextValue {
+    return {
+        ...useProfileCardData(),
+        ...useProfileCardMode(),
+        ...useProfileCardEdits(),
+        ...useProfileCardSections(),
+        ...useProfileCardActions(),
+    }
 }
 
 // ============================================================================
@@ -330,50 +380,43 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
         }
     }, [surrogateId])
 
-    const value: ProfileCardContextValue = useMemo(() => ({
+    const dataValue: ProfileCardDataContextValue = useMemo(() => ({
         surrogateId,
         profile,
         isLoading,
         error: error || null,
-
-        mode,
-        enterEditMode,
-        exitEditMode,
-        setEditingField,
-
-        editedFields,
-        setFieldValue,
-        cancelFieldEdit,
-
-        hiddenFields,
-        toggleHidden,
-        revealedFields,
-        toggleReveal,
-
-        stagedChanges,
-
-        sectionOpen,
-        toggleSection,
-
-        syncProfile,
-        saveChanges,
-        cancelAllChanges,
-        exportProfile,
-
-        hasChanges,
-
-        isSyncing: syncMutation.isPending,
-        isSaving: saveMutation.isPending || toggleHiddenMutation.isPending,
-        isExporting,
     }), [
         surrogateId,
         profile,
         isLoading,
         error,
+    ])
+
+    const modeValue: ProfileCardModeContextValue = useMemo(() => ({
         mode,
         enterEditMode,
         exitEditMode,
         setEditingField,
+    }), [
+        mode,
+        enterEditMode,
+        exitEditMode,
+        setEditingField,
+    ])
+
+    const editsValue: ProfileCardEditsContextValue = useMemo(() => ({
+        editedFields,
+        setFieldValue,
+        cancelFieldEdit,
+
+        hiddenFields,
+        toggleHidden,
+        revealedFields,
+        toggleReveal,
+
+        stagedChanges,
+        hasChanges,
+    }), [
         editedFields,
         setFieldValue,
         cancelFieldEdit,
@@ -382,13 +425,27 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
         revealedFields,
         toggleReveal,
         stagedChanges,
+        hasChanges,
+    ])
+
+    const sectionsValue: ProfileCardSectionsContextValue = useMemo(() => ({
         sectionOpen,
         toggleSection,
+    }), [sectionOpen, toggleSection])
+
+    const actionsValue: ProfileCardActionsContextValue = useMemo(() => ({
         syncProfile,
         saveChanges,
         cancelAllChanges,
         exportProfile,
-        hasChanges,
+        isSyncing: syncMutation.isPending,
+        isSaving: saveMutation.isPending || toggleHiddenMutation.isPending,
+        isExporting,
+    }), [
+        syncProfile,
+        saveChanges,
+        cancelAllChanges,
+        exportProfile,
         syncMutation.isPending,
         saveMutation.isPending,
         toggleHiddenMutation.isPending,
@@ -396,8 +453,16 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
     ])
 
     return (
-        <ProfileCardContext.Provider value={value}>
-            {children}
-        </ProfileCardContext.Provider>
+        <ProfileCardDataContext.Provider value={dataValue}>
+            <ProfileCardModeContext.Provider value={modeValue}>
+                <ProfileCardEditsContext.Provider value={editsValue}>
+                    <ProfileCardSectionsContext.Provider value={sectionsValue}>
+                        <ProfileCardActionsContext.Provider value={actionsValue}>
+                            {children}
+                        </ProfileCardActionsContext.Provider>
+                    </ProfileCardSectionsContext.Provider>
+                </ProfileCardEditsContext.Provider>
+            </ProfileCardModeContext.Provider>
+        </ProfileCardDataContext.Provider>
     )
 }

@@ -11,7 +11,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
-import { useProfileCard } from "./context"
+import { useProfileCardEdits, useProfileCardMode } from "./context"
 import type { FormSchema } from "@/lib/api/forms"
 
 interface FieldRowProps {
@@ -22,9 +22,8 @@ interface FieldRowProps {
 }
 
 export function FieldRow({ fieldKey, field, mergedValue, baseValue }: FieldRowProps) {
+    const { mode, setEditingField } = useProfileCardMode()
     const {
-        mode,
-        setEditingField,
         editedFields,
         setFieldValue,
         cancelFieldEdit,
@@ -33,7 +32,7 @@ export function FieldRow({ fieldKey, field, mergedValue, baseValue }: FieldRowPr
         revealedFields,
         toggleReveal,
         stagedChanges,
-    } = useProfileCard()
+    } = useProfileCardEdits()
 
     const isEditMode = mode.type === "edit"
     const editingField = mode.type === "edit" ? mode.editingField : null
