@@ -37,6 +37,14 @@ class JobType(str, Enum):
     GOOGLE_CALENDAR_WATCH_REFRESH = (
         "google_calendar_watch_refresh"  # Refresh Google Calendar push channels
     )
+    MAILBOX_BACKFILL = "mailbox_backfill"
+    MAILBOX_HISTORY_SYNC = "mailbox_history_sync"
+    MAILBOX_WATCH_REFRESH = "mailbox_watch_refresh"
+    EMAIL_OCCURRENCE_FETCH_RAW = "email_occurrence_fetch_raw"
+    EMAIL_OCCURRENCE_PARSE = "email_occurrence_parse"
+    EMAIL_OCCURRENCE_STITCH = "email_occurrence_stitch"
+    TICKET_APPLY_LINKING = "ticket_apply_linking"
+    TICKET_OUTBOUND_SEND = "ticket_outbound_send"
 
 
 class JobStatus(str, Enum):

@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.db.enums import JobType
 
@@ -53,3 +53,24 @@ class JobListItem(BaseModel):
     attempts: int
     created_at: datetime
     completed_at: datetime | None
+
+
+class JobReplayRequest(BaseModel):
+    """Single-job replay request."""
+
+    reason: str | None = None
+
+
+class JobReplayBulkRequest(BaseModel):
+    """Bulk replay request for failed jobs."""
+
+    job_type: JobType | None = None
+    limit: int = Field(default=50, ge=1, le=500)
+    reason: str | None = None
+
+
+class JobReplayBulkResponse(BaseModel):
+    """Bulk replay response summary."""
+
+    replayed: int
+    job_ids: list[UUID] = Field(default_factory=list)
