@@ -38,22 +38,26 @@ import {
     UploadIcon,
 } from "lucide-react"
 import { toast } from "sonner"
+import { ApiError } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
 import {
     useApproveFormSubmission,
     useSurrogateFormSubmission,
     useSurrogateFormDraftStatus,
     useCreateFormToken,
+    useSendFormToken,
     useRejectFormSubmission,
     useUpdateSubmissionAnswers,
     useUploadSubmissionFile,
     useDeleteSubmissionFile,
 } from "@/lib/hooks/use-forms"
+import { useEmailTemplates } from "@/lib/hooks/use-email-templates"
 import {
     exportSubmissionPdf,
     getSubmissionFileDownloadUrl,
     type FormSchema,
     type FormSummary,
+    type FormTokenRead,
 } from "@/lib/api/forms"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { cn } from "@/lib/utils"
@@ -65,6 +69,36 @@ interface SurrogateApplicationTabProps {
 }
 
 const EMPTY_PUBLISHED_FORMS: FormSummary[] = []
+const LINK_EXPIRATION_OPTIONS_DAYS = [7, 14, 30, 45, 60]
+
+function buildApplyLink(baseUrl: string, token: string): string {
+    const fallback = `/apply/${token}`
+    const trimmedBaseUrl = baseUrl.trim()
+    if (!trimmedBaseUrl) return fallback
+
+    try {
+        const normalizedBase = trimmedBaseUrl.endsWith("/") ? trimmedBaseUrl : `${trimmedBaseUrl}/`
+        return new URL(`apply/${token}`, normalizedBase).toString()
+    } catch {
+        return fallback
+    }
+}
+
+function resolveApplicationLink(baseUrl: string, tokenData: FormTokenRead): string {
+    const serverUrl = tokenData.application_url?.trim()
+    if (serverUrl) {
+        try {
+            const normalizedBase = baseUrl.trim()
+            if (normalizedBase) {
+                return new URL(serverUrl, normalizedBase.endsWith("/") ? normalizedBase : `${normalizedBase}/`).toString()
+            }
+            return new URL(serverUrl).toString()
+        } catch {
+            return serverUrl
+        }
+    }
+    return buildApplyLink(baseUrl, tokenData.token)
+}
 
 // Format file size for display
 function formatFileSize(bytes: number): string {
@@ -149,6 +183,8 @@ export function SurrogateApplicationTab({
     } = useSurrogateFormSubmission(effectiveFormId || null, surrogateId)
     const { data: draftStatus } = useSurrogateFormDraftStatus(effectiveFormId || null, surrogateId)
     const createTokenMutation = useCreateFormToken()
+    const sendTokenMutation = useSendFormToken()
+    const { data: emailTemplates = [] } = useEmailTemplates({ activeOnly: true })
     const approveMutation = useApproveFormSubmission()
     const rejectMutation = useRejectFormSubmission()
     const updateAnswersMutation = useUpdateSubmissionAnswers()
@@ -177,12 +213,17 @@ export function SurrogateApplicationTab({
     const [rejectReason, setRejectReason] = React.useState("")
     const [approveNotes, setApproveNotes] = React.useState("")
     const [formLinkCopied, setFormLinkCopied] = React.useState(false)
+    const [currentTokenId, setCurrentTokenId] = React.useState("")
     const [formLink, setFormLink] = React.useState("")
+    const [formLinkExpiresAt, setFormLinkExpiresAt] = React.useState("")
+    const [linkExpirationDays, setLinkExpirationDays] = React.useState(14)
+    const [selectedTemplateId, setSelectedTemplateId] = React.useState("")
 
     // Loading state for actions
     const [isApproving, setIsApproving] = React.useState(false)
     const [isRejecting, setIsRejecting] = React.useState(false)
     const [isGeneratingLink, setIsGeneratingLink] = React.useState(false)
+    const [isSendingLink, setIsSendingLink] = React.useState(false)
 
     React.useEffect(() => {
         if (!submission?.schema_snapshot?.pages) return
@@ -205,6 +246,12 @@ export function SurrogateApplicationTab({
             setUploadFieldKey("")
         }
     }, [submission?.schema_snapshot])
+
+    React.useEffect(() => {
+        if (selectedTemplateId) return
+        if (emailTemplates.length === 0) return
+        setSelectedTemplateId(emailTemplates[0]?.id || "")
+    }, [emailTemplates, selectedTemplateId])
 
     const copyFormLink = async () => {
         if (!formLink) {
@@ -260,19 +307,58 @@ export function SurrogateApplicationTab({
         }
         setIsGeneratingLink(true)
         try {
-            const token = await createTokenMutation.mutateAsync({
+            const tokenData = await createTokenMutation.mutateAsync({
                 formId: effectiveFormId,
                 surrogateId,
-                expiresInDays: 14,
+                expiresInDays: linkExpirationDays,
             })
-            const link = baseUrl ? `${baseUrl}/apply/${token.token}` : `/apply/${token.token}`
+            const link = resolveApplicationLink(baseUrl, tokenData)
+            setCurrentTokenId(tokenData.token_id)
             setFormLink(link)
+            setFormLinkExpiresAt(tokenData.expires_at)
             setFormLinkCopied(false)
             setSendFormModalOpen(true)
         } catch {
             toast.error("Failed to generate form link")
         } finally {
             setIsGeneratingLink(false)
+        }
+    }
+
+    const handleSendEmailLink = async () => {
+        if (!effectiveFormId || !currentTokenId) {
+            toast.error("Generate a form link first")
+            return
+        }
+        if (!selectedTemplateId) {
+            toast.error("Select an email template")
+            return
+        }
+        setIsSendingLink(true)
+        try {
+            const response = await sendTokenMutation.mutateAsync({
+                formId: effectiveFormId,
+                tokenId: currentTokenId,
+                templateId: selectedTemplateId,
+            })
+            const resolved = response.application_url?.trim()
+            if (resolved) {
+                setFormLink(resolveApplicationLink(baseUrl, {
+                    token_id: response.token_id,
+                    token: response.token,
+                    expires_at: formLinkExpiresAt || new Date().toISOString(),
+                    application_url: resolved,
+                }))
+            }
+            toast.success("Application link sent")
+        } catch (error) {
+            if (error instanceof ApiError && error.status === 409) {
+                toast.error(error.message || "Token is locked to a different recipient")
+            } else {
+                toast.error("Failed to send application link")
+            }
+        } finally {
+            setIsSendingLink(false)
         }
     }
 
@@ -339,6 +425,13 @@ export function SurrogateApplicationTab({
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file || !submission) return
+        if (!submission.surrogate_id) {
+            toast.error("Resolve submission match before uploading files.")
+            if (fileInputRef.current) {
+                fileInputRef.current.value = ""
+            }
+            return
+        }
 
         const fileFields = (submission.schema_snapshot?.pages || []).flatMap((page) =>
             page.fields.filter((field) => field.type === "file"),
@@ -371,6 +464,10 @@ export function SurrogateApplicationTab({
 
     const handleDeleteFile = async (fileId: string, filename: string) => {
         if (!submission) return
+        if (!submission.surrogate_id) {
+            toast.error("Resolve submission match before deleting files.")
+            return
+        }
 
         setDeletingFileId(fileId)
         try {
@@ -704,6 +801,31 @@ export function SurrogateApplicationTab({
                             No published forms available. Publish a form to generate a link.
                         </div>
                     )}
+                    {availableForms.length > 0 && (
+                        <div className="mb-4 w-full max-w-xs text-left">
+                            <Label htmlFor="form-link-expiration" className="mb-2 block text-xs font-medium text-muted-foreground">
+                                Link expiration
+                            </Label>
+                            <NativeSelect
+                                id="form-link-expiration"
+                                value={String(linkExpirationDays)}
+                                onChange={(e) => {
+                                    const parsedDays = Number.parseInt(e.target.value, 10)
+                                    setLinkExpirationDays(Number.isNaN(parsedDays) ? 14 : parsedDays)
+                                }}
+                                className="w-full"
+                            >
+                                {LINK_EXPIRATION_OPTIONS_DAYS.map((days) => (
+                                    <NativeSelectOption key={days} value={String(days)}>
+                                        {days} days
+                                    </NativeSelectOption>
+                                ))}
+                            </NativeSelect>
+                            <p className="mt-2 text-xs text-muted-foreground">
+                                Choose how long the application link remains active.
+                            </p>
+                        </div>
+                    )}
                     <Button
                         className="bg-teal-500 hover:bg-teal-600"
                         onClick={handleGenerateFormLink}
@@ -737,17 +859,50 @@ export function SurrogateApplicationTab({
                                         {formLink || `${baseUrl || ""}/apply/[token]`}
                                     </p>
                                 </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="application-template">Email template</Label>
+                                    <NativeSelect
+                                        id="application-template"
+                                        value={selectedTemplateId}
+                                        onChange={(e) => setSelectedTemplateId(e.target.value)}
+                                    >
+                                        <NativeSelectOption value="">Select template</NativeSelectOption>
+                                        {emailTemplates.map((template) => (
+                                            <NativeSelectOption key={template.id} value={template.id}>
+                                                {template.name}
+                                            </NativeSelectOption>
+                                        ))}
+                                    </NativeSelect>
+                                    <p className="text-xs text-muted-foreground">
+                                        Uses template variable <code>{"{{form_link}}"}</code> with this dedicated token.
+                                    </p>
+                                </div>
+                                {formLinkExpiresAt && (
+                                    <p className="text-sm text-muted-foreground">
+                                        Expires on <span className="font-medium text-foreground">{formatDateTime(formLinkExpiresAt)}</span>
+                                    </p>
+                                )}
                                 <div className="flex items-start gap-2 text-sm text-muted-foreground">
                                     <AlertTriangleIcon className="h-4 w-4 mt-0.5 shrink-0" />
                                     <p>
-                                        This link is unique to this surrogate and expires in 14 days. The candidate can reopen the link
-                                        while it is active.
+                                        This link is unique to this surrogate and expires after {linkExpirationDays} days. The candidate
+                                        can reopen the link while it is active.
                                     </p>
                                 </div>
                             </div>
                             <DialogFooter>
                                 <Button variant="outline" onClick={() => setSendFormModalOpen(false)}>
                                     Close
+                                </Button>
+                                <Button variant="outline" onClick={handleGenerateFormLink} disabled={isGeneratingLink || !effectiveFormId}>
+                                    {isGeneratingLink ? (
+                                        <>
+                                            <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
+                                            Regenerating...
+                                        </>
+                                    ) : (
+                                        "Regenerate Link"
+                                    )}
                                 </Button>
                                 <Button onClick={copyFormLink} disabled={!formLink}>
                                     {formLinkCopied ? (
@@ -759,6 +914,19 @@ export function SurrogateApplicationTab({
                                         <>
                                             <CopyIcon className="h-4 w-4 mr-2" />
                                             Copy Link
+                                        </>
+                                    )}
+                                </Button>
+                                <Button onClick={handleSendEmailLink} disabled={!formLink || !selectedTemplateId || isSendingLink}>
+                                    {isSendingLink ? (
+                                        <>
+                                            <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
+                                            Sending...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <SendIcon className="h-4 w-4 mr-2" />
+                                            Send Email
                                         </>
                                     )}
                                 </Button>
@@ -1045,43 +1213,50 @@ export function SurrogateApplicationTab({
                                 </CollapsibleTrigger>
 
                                 {isEditMode && fileFields.length > 0 && (
-                                    <div className="flex items-center gap-2">
-                                        {fileFields.length > 1 && (
-                                            <NativeSelect
-                                                value={uploadFieldKey}
-                                                onChange={(e) => setUploadFieldKey(e.target.value)}
-                                                size="sm"
-                                                className="h-8 text-xs"
-                                            >
-                                                <NativeSelectOption value="">Select field</NativeSelectOption>
-                                                {fileFields.map((field) => (
-                                                    <NativeSelectOption key={field.key} value={field.key}>
-                                                        {field.label}
-                                                    </NativeSelectOption>
-                                                ))}
-                                            </NativeSelect>
-                                        )}
-                                        <input
-                                            ref={fileInputRef}
-                                            type="file"
-                                            className="hidden"
-                                            onChange={handleFileUpload}
-                                            accept="*/*"
-                                        />
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="h-8 gap-1.5 text-xs border-dashed border-primary/50 text-primary hover:bg-primary/5 hover:border-primary"
-                                            onClick={() => fileInputRef.current?.click()}
-                                            disabled={uploadFileMutation.isPending || (fileFields.length > 1 && !uploadFieldKey)}
-                                        >
-                                            {uploadFileMutation.isPending ? (
-                                                <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
-                                            ) : (
-                                                <PlusIcon className="h-3.5 w-3.5" />
+                                    <div className="flex flex-col items-end gap-1.5">
+                                        <div className="flex items-center gap-2">
+                                            {fileFields.length > 1 && (
+                                                <NativeSelect
+                                                    value={uploadFieldKey}
+                                                    onChange={(e) => setUploadFieldKey(e.target.value)}
+                                                    size="sm"
+                                                    className="h-8 text-xs"
+                                                >
+                                                    <NativeSelectOption value="">Select field</NativeSelectOption>
+                                                    {fileFields.map((field) => (
+                                                        <NativeSelectOption key={field.key} value={field.key}>
+                                                            {field.label}
+                                                        </NativeSelectOption>
+                                                    ))}
+                                                </NativeSelect>
                                             )}
-                                            Upload File
-                                        </Button>
+                                            <input
+                                                ref={fileInputRef}
+                                                type="file"
+                                                className="hidden"
+                                                onChange={handleFileUpload}
+                                                accept="*/*"
+                                            />
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-8 gap-1.5 text-xs border-dashed border-primary/50 text-primary hover:bg-primary/5 hover:border-primary"
+                                                onClick={() => fileInputRef.current?.click()}
+                                                disabled={uploadFileMutation.isPending || (fileFields.length > 1 && !uploadFieldKey)}
+                                            >
+                                                {uploadFileMutation.isPending ? (
+                                                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                                                ) : (
+                                                    <PlusIcon className="h-3.5 w-3.5" />
+                                                )}
+                                                Upload File
+                                            </Button>
+                                        </div>
+                                        {fileFields.length > 1 && (
+                                            <p className="text-xs text-muted-foreground">
+                                                Choose a file field to enable upload.
+                                            </p>
+                                        )}
                                     </div>
                                 )}
                                 {isEditMode && fileFields.length === 0 && (
