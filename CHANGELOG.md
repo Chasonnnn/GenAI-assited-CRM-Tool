@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.89.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.88.0...surrogacy-crm-platform-v0.89.0) (2026-02-22)
+
+
+### Features
+
+* add dual-mode intake schema and migrations ([673a926](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/673a9263cd28e2d66ebd99b8b5f985e9c09b71ff))
+* add forms submissions workspace and shared intake page ([ec61dc5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ec61dc5a5a56478dcd65c29f121150152c4a23ce))
+* extend forms frontend API for intake links and queues ([263a26b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/263a26bdd7a75d995ea9aac0f9370938bce6ec7a))
+* implement dual-mode intake endpoints and matching services ([dd640f3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dd640f3ad9de176acd01e19eaeee2cc919fefd29))
+* improve dedicated surrogate application send workflow ([bb6ed16](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bb6ed168dff0d16dc00ba0fd3ce98f9d177b1b04))
+
+
+### Bug Fixes
+
+* Update pypdf to version 6.7.1 to address a CVE and add a test to enforce the minimum security-compliant version. ([b6d41ab](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b6d41ab0c7c9d47baf7d1eb712bc4780bc88d48c))
+
 ## [0.88.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.87.0...surrogacy-crm-platform-v0.88.0) (2026-02-21)
 
 
