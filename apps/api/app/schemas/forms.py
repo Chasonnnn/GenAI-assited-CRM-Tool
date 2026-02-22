@@ -98,6 +98,7 @@ class FormCreate(BaseModel):
     max_file_size_bytes: int | None = Field(None, ge=1)
     max_file_count: int | None = Field(None, ge=0, le=50)
     allowed_mime_types: list[str] | None = None
+    default_application_email_template_id: UUID | None = None
 
 
 class FormUpdate(BaseModel):
@@ -107,6 +108,7 @@ class FormUpdate(BaseModel):
     max_file_size_bytes: int | None = Field(None, ge=1)
     max_file_count: int | None = Field(None, ge=0, le=50)
     allowed_mime_types: list[str] | None = None
+    default_application_email_template_id: UUID | None = None
 
 
 class FormSummary(BaseModel):
@@ -124,6 +126,7 @@ class FormRead(FormSummary):
     max_file_size_bytes: int
     max_file_count: int
     allowed_mime_types: list[str] | None
+    default_application_email_template_id: UUID | None
 
 
 class FormPublishResponse(BaseModel):
@@ -143,8 +146,10 @@ class FormTokenRequest(BaseModel):
 
 
 class FormTokenRead(BaseModel):
+    token_id: UUID
     token: str
     expires_at: datetime
+    application_url: str | None = None
 
 
 class FormPublicRead(BaseModel):
@@ -188,7 +193,7 @@ class FormSubmissionFileDownloadResponse(BaseModel):
 class FormSubmissionRead(BaseModel):
     id: UUID
     form_id: UUID
-    surrogate_id: UUID
+    surrogate_id: UUID | None
     status: str
     submitted_at: datetime
     reviewed_at: datetime | None
@@ -196,12 +201,26 @@ class FormSubmissionRead(BaseModel):
     review_notes: str | None
     answers: dict[str, object]
     schema_snapshot: dict[str, object] | None
+    source_mode: str
+    intake_link_id: UUID | None
+    intake_lead_id: UUID | None
+    match_status: str
+    match_reason: str | None
+    matched_at: datetime | None
     files: list[FormSubmissionFileRead]
 
 
 class FormSubmissionPublicResponse(BaseModel):
     id: UUID
     status: str
+
+
+class FormDeliverySettings(BaseModel):
+    default_application_email_template_id: UUID | None = None
+
+
+class FormDeliverySettingsUpdate(BaseModel):
+    default_application_email_template_id: UUID | None = None
 
 
 class FormSubmissionStatusUpdate(BaseModel):
@@ -211,6 +230,12 @@ class FormSubmissionStatusUpdate(BaseModel):
 class FormFieldMappingItem(BaseModel):
     field_key: str = Field(..., min_length=1, max_length=100)
     surrogate_field: str = Field(..., min_length=1, max_length=100)
+
+
+class FormMappingOption(BaseModel):
+    value: str = Field(..., min_length=1, max_length=100)
+    label: str = Field(..., min_length=1, max_length=200)
+    is_critical: bool = False
 
 
 class FormFieldMappingsUpdate(BaseModel):
@@ -260,3 +285,132 @@ class FormDraftPublicRead(BaseModel):
 class FormDraftStatusRead(BaseModel):
     started_at: datetime | None
     updated_at: datetime
+
+
+FormLinkMode = Literal["dedicated", "shared"]
+SharedSubmissionOutcome = Literal["linked", "ambiguous_review", "lead_created"]
+
+
+class FormIntakeLinkCreate(BaseModel):
+    campaign_name: str | None = Field(None, max_length=255)
+    event_name: str | None = Field(None, max_length=255)
+    expires_at: datetime | None = None
+    max_submissions: int | None = Field(None, ge=1, le=100000)
+    utm_defaults: dict[str, str] | None = None
+
+
+class FormIntakeLinkUpdate(BaseModel):
+    campaign_name: str | None = Field(None, max_length=255)
+    event_name: str | None = Field(None, max_length=255)
+    expires_at: datetime | None = None
+    max_submissions: int | None = Field(None, ge=1, le=100000)
+    utm_defaults: dict[str, str] | None = None
+    is_active: bool | None = None
+
+
+class FormIntakeLinkRead(BaseModel):
+    id: UUID
+    form_id: UUID
+    slug: str
+    campaign_name: str | None
+    event_name: str | None
+    utm_defaults: dict[str, str] | None
+    is_active: bool
+    expires_at: datetime | None
+    max_submissions: int | None
+    submissions_count: int
+    intake_url: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class FormIntakePublicRead(BaseModel):
+    form_id: UUID
+    intake_link_id: UUID
+    name: str
+    description: str | None
+    form_schema: FormSchema
+    max_file_size_bytes: int
+    max_file_count: int
+    allowed_mime_types: list[str] | None
+    campaign_name: str | None
+    event_name: str | None
+
+
+class FormIntakeDraftPublicRead(BaseModel):
+    answers: dict[str, object]
+    started_at: datetime | None
+    updated_at: datetime
+
+
+class FormIntakeDraftWriteResponse(BaseModel):
+    started_at: datetime | None
+    updated_at: datetime
+
+
+class FormSubmissionSharedResponse(BaseModel):
+    id: UUID
+    status: str
+    outcome: SharedSubmissionOutcome
+    surrogate_id: UUID | None = None
+    intake_lead_id: UUID | None = None
+
+
+class MatchCandidateRead(BaseModel):
+    id: UUID
+    submission_id: UUID
+    surrogate_id: UUID
+    reason: str
+    created_at: datetime
+
+
+class FormSubmissionMatchResolveRequest(BaseModel):
+    surrogate_id: UUID | None = None
+    create_intake_lead: bool = False
+    review_notes: str | None = None
+
+
+class FormSubmissionMatchResolveResponse(BaseModel):
+    submission: FormSubmissionRead
+    outcome: SharedSubmissionOutcome
+    candidate_count: int
+
+
+class IntakeLeadRead(BaseModel):
+    id: UUID
+    form_id: UUID | None
+    intake_link_id: UUID | None
+    full_name: str
+    email: str | None
+    phone: str | None
+    date_of_birth: str | None
+    status: str
+    promoted_surrogate_id: UUID | None
+    created_at: datetime
+    updated_at: datetime
+    promoted_at: datetime | None
+
+
+class IntakeLeadPromoteRequest(BaseModel):
+    source: str | None = None
+    is_priority: bool = False
+    assign_to_user: bool | None = None
+
+
+class IntakeLeadPromoteResponse(BaseModel):
+    intake_lead_id: UUID
+    surrogate_id: UUID
+    linked_submission_count: int
+
+
+class FormTokenSendRequest(BaseModel):
+    template_id: UUID | None = None
+
+
+class FormTokenSendResponse(BaseModel):
+    token_id: UUID
+    token: str
+    template_id: UUID
+    email_log_id: UUID
+    sent_at: datetime
+    application_url: str | None = None

@@ -47,6 +47,12 @@ from app.db.models.forms import (
     FormSubmissionFile,
     FormSubmissionToken,
 )
+from app.db.models.form_intake import (
+    FormIntakeDraft,
+    FormIntakeLink,
+    FormSubmissionMatchCandidate,
+    IntakeLead,
+)
 from app.db.models.integration_health import IntegrationErrorRollup, IntegrationHealth, SystemAlert
 from app.db.models.integrations import (
     ResendSettings,
@@ -150,6 +156,9 @@ __all__ = [
     "Form",
     "FormFieldMapping",
     "FormLogo",
+    "FormIntakeDraft",
+    "FormIntakeLink",
+    "FormSubmissionMatchCandidate",
     "FormSubmissionDraft",
     "FormSubmission",
     "FormSubmissionFile",
@@ -164,6 +173,7 @@ __all__ = [
     "InterviewTranscriptVersion",
     "Job",
     "JourneyFeaturedImage",
+    "IntakeLead",
     "LegalHold",
     "Match",
     "MatchEvent",
