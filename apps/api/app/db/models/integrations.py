@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     ForeignKey,
     Index,
@@ -205,6 +206,14 @@ class UserIntegration(Base):
     google_calendar_watch_expires_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
+    granted_scopes: Mapped[list | None] = mapped_column(
+        JSONB, nullable=True
+    )  # OAuth scope list returned by provider
+    gmail_sent_last_history_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    gmail_sent_last_sync_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    gmail_sent_sync_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     # Version control
