@@ -16,7 +16,7 @@ from app.db.enums import (
     OwnerType,
     Role,
 )
-from app.db.models import Surrogate, SurrogateStatusHistory, User
+from app.db.models import Surrogate, SurrogateActivityLog, SurrogateStatusHistory, User
 from app.schemas.surrogate import SurrogateCreate, SurrogateUpdate
 from app.utils.normalization import (
     escape_like_string,
@@ -75,30 +75,6 @@ def _get_org_user(db: Session, org_id: UUID, user_id: UUID | None) -> User | Non
 
     membership = membership_service.get_membership_for_org(db, org_id, user_id)
     return membership.user if membership else None
-
-
-def get_last_activity_map(
-    db: Session, org_id: UUID, surrogate_ids: list[UUID]
-) -> dict[UUID, datetime]:
-    """Return last activity timestamps by surrogate id."""
-    if not surrogate_ids:
-        return {}
-
-    from app.db.models import SurrogateActivityLog
-
-    rows = (
-        db.query(
-            SurrogateActivityLog.surrogate_id,
-            func.max(SurrogateActivityLog.created_at),
-        )
-        .filter(
-            SurrogateActivityLog.organization_id == org_id,
-            SurrogateActivityLog.surrogate_id.in_(surrogate_ids),
-        )
-        .group_by(SurrogateActivityLog.surrogate_id)
-        .all()
-    )
-    return {row[0]: row[1] for row in rows}
 
 
 def create_surrogate(
@@ -835,7 +811,7 @@ def list_surrogates(
     sort_by: str | None = None,
     sort_order: str = "desc",
     include_total: bool = True,
-):
+) -> tuple[list[tuple[Surrogate, datetime | None]], int | None, str | None]:
     """
     List surrogates with filters and pagination.
 
@@ -852,7 +828,8 @@ def list_surrogates(
         include_total: Whether to include total count in response
 
     Returns:
-        (surrogates, total_count or None, next_cursor)
+        (items, total_count or None, next_cursor)
+        items is a list of tuples (Surrogate, last_activity_at)
     """
     import base64
     from app.db.enums import Role, OwnerType
@@ -978,11 +955,20 @@ def list_surrogates(
             filter_clauses.append(or_(*search_filters))
 
     base_query = db.query(Surrogate).filter(*filter_clauses)
+
+    # Correlated subquery for last activity timestamp (avoids N+1)
+    last_activity_subq = (
+        db.query(func.max(SurrogateActivityLog.created_at))
+        .filter(SurrogateActivityLog.surrogate_id == Surrogate.id)
+        .correlate(Surrogate)
+        .scalar_subquery()
+    )
+
     query = base_query.options(
         joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
         joinedload(Surrogate.owner_user).load_only(User.display_name),
         joinedload(Surrogate.owner_queue).load_only(Queue.name),
-    )
+    ).add_columns(last_activity_subq.label("last_activity_at"))
 
     # Dynamic sorting
     order_func = asc if sort_order == "asc" else desc
@@ -1027,17 +1013,18 @@ def list_surrogates(
     # Paginate
     next_cursor = None
     if cursor:
-        surrogates = query.limit(per_page).all()
+        items = query.limit(per_page).all()
     else:
         offset = (page - 1) * per_page
-        surrogates = query.offset(offset).limit(per_page).all()
+        items = query.offset(offset).limit(per_page).all()
 
     cursor_allowed = (sort_by in (None, "created_at")) and sort_order == "desc"
-    if cursor_allowed and surrogates and len(surrogates) == per_page:
-        last = surrogates[-1]
-        next_cursor = _encode_cursor(last.created_at, last.id)
+    if cursor_allowed and items and len(items) == per_page:
+        # items is list of (Surrogate, last_activity_at)
+        last_surrogate = items[-1][0]
+        next_cursor = _encode_cursor(last_surrogate.created_at, last_surrogate.id)
 
-    return surrogates, total, next_cursor
+    return items, total, next_cursor
 
 
 def list_claim_queue(

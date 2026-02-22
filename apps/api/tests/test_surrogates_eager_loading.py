@@ -124,7 +124,7 @@ def test_list_surrogates_eager_loads_in_single_statement(db, db_engine, test_org
         assert next_cursor is None or isinstance(next_cursor, str)
 
         # Touch the exact relationship fields the list serializer needs.
-        for surrogate in surrogates:
+        for surrogate, _last_activity in surrogates:
             assert surrogate.stage is not None
             _ = surrogate.stage.slug
             _ = surrogate.stage.stage_type
@@ -211,7 +211,7 @@ def test_list_surrogates_does_not_use_query_count(db, test_org, test_user, monke
 
     monkeypatch.setattr(Query, "count", _count_should_not_be_called)
 
-    surrogates, total, _ = surrogate_service.list_surrogates(
+    items, total, _ = surrogate_service.list_surrogates(
         db=db,
         org_id=test_org.id,
         page=1,
@@ -222,7 +222,7 @@ def test_list_surrogates_does_not_use_query_count(db, test_org, test_user, monke
     )
 
     assert total is not None
-    assert len(surrogates) >= 1
+    assert len(items) >= 1
 
 
 def test_list_surrogate_activity_does_not_use_query_count(db, test_org, test_user, monkeypatch):

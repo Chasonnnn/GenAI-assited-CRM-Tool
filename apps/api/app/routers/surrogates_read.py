@@ -148,7 +148,7 @@ def list_surrogates(
     include_total = include_total if include_total is not None else cursor is None
 
     try:
-        surrogates, total, next_cursor = surrogate_service.list_surrogates(
+        items, total, next_cursor = surrogate_service.list_surrogates(
             db=db,
             org_id=session.org_id,
             page=page,
@@ -191,7 +191,7 @@ def list_surrogates(
         target_id=None,
         request=request,
         details={
-            "count": len(surrogates),
+            "count": len(items),
             "page": page,
             "per_page": per_page,
             "include_archived": include_archived,
@@ -207,13 +207,10 @@ def list_surrogates(
     )
     db.commit()
 
-    surrogate_ids = [surrogate.id for surrogate in surrogates]
-    last_activity_map = surrogate_service.get_last_activity_map(db, session.org_id, surrogate_ids)
-
     return SurrogateListResponse(
         items=[
-            _surrogate_to_list_item(s, db, last_activity_at=last_activity_map.get(s.id))
-            for s in surrogates
+            _surrogate_to_list_item(s, db, last_activity_at=last_activity_at)
+            for s, last_activity_at in items
         ],
         total=total,
         page=page,
