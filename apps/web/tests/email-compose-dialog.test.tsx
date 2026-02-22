@@ -9,6 +9,7 @@ const mockUseSendSurrogateEmail = vi.fn()
 const mockUseSurrogateTemplateVariables = vi.fn()
 const mockUseSignaturePreview = vi.fn()
 const mockUseOrgSignaturePreview = vi.fn()
+const mockUploadFilesFromComposeDrop = vi.fn()
 let mockAttachmentSelectionState = {
     selectedAttachmentIds: [] as string[],
     hasBlockingAttachments: false,
@@ -146,16 +147,22 @@ vi.mock("@/lib/hooks/use-signature", () => ({
 }))
 
 vi.mock("@/components/email/EmailAttachmentsPanel", () => ({
-    EmailAttachmentsPanel: ({
-        onSelectionChange,
-    }: {
-        onSelectionChange: (state: typeof mockAttachmentSelectionState) => void
-    }) => {
+    EmailAttachmentsPanel: React.forwardRef(function MockEmailAttachmentsPanel(
+        {
+            onSelectionChange,
+        }: {
+            onSelectionChange: (state: typeof mockAttachmentSelectionState) => void
+        },
+        ref: React.ForwardedRef<{ uploadFiles: (files: File[]) => Promise<void> }>
+    ) {
+        React.useImperativeHandle(ref, () => ({
+            uploadFiles: mockUploadFilesFromComposeDrop,
+        }))
         React.useEffect(() => {
             onSelectionChange(mockAttachmentSelectionState)
         }, [onSelectionChange])
         return <div data-testid="email-attachments-panel" />
-    },
+    }),
 }))
 
 const baseSurrogateData = {
@@ -171,6 +178,8 @@ const baseSurrogateData = {
 describe("EmailComposeDialog", () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        mockUploadFilesFromComposeDrop.mockReset()
+        mockUploadFilesFromComposeDrop.mockResolvedValue(undefined)
         mockAttachmentSelectionState = {
             selectedAttachmentIds: [],
             hasBlockingAttachments: false,
@@ -726,5 +735,156 @@ describe("EmailComposeDialog", () => {
         await waitFor(() => {
             expect(screen.getByRole("button", { name: /send email/i })).toBeDisabled()
         })
+    })
+
+    it("uploads dropped files when dragging onto the preview message body", async () => {
+        const templateId = "tpl-body-drop-preview"
+
+        mockUseEmailTemplates.mockReturnValue({
+            data: [
+                {
+                    id: templateId,
+                    name: "Body Drop Template",
+                    subject: "Subject",
+                    from_email: null,
+                    is_active: true,
+                    scope: "org",
+                    owner_user_id: null,
+                    owner_name: null,
+                    is_system_template: false,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+            ],
+            isLoading: false,
+        })
+
+        mockUseEmailTemplate.mockImplementation((id: string | null) => {
+            if (id !== templateId) return { data: null, isLoading: false }
+            return {
+                data: {
+                    id: templateId,
+                    organization_id: "org-1",
+                    created_by_user_id: null,
+                    name: "Body Drop Template",
+                    subject: "Subject",
+                    from_email: null,
+                    body: "<p>Drop here.</p>",
+                    is_active: true,
+                    scope: "org",
+                    owner_user_id: null,
+                    owner_name: null,
+                    source_template_id: null,
+                    is_system_template: false,
+                    current_version: 1,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+                isLoading: false,
+            }
+        })
+
+        render(
+            <EmailComposeDialog
+                open
+                onOpenChange={vi.fn()}
+                surrogateData={baseSurrogateData}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "Body Drop Template" }))
+
+        const previewEditor = await screen.findByLabelText("Message preview editor")
+        const file = new File(["sample"], "contract.pdf", { type: "application/pdf" })
+        fireEvent.drop(previewEditor, {
+            dataTransfer: {
+                files: [file],
+                types: ["Files"],
+            },
+        })
+
+        await waitFor(() => {
+            expect(mockUploadFilesFromComposeDrop).toHaveBeenCalledTimes(1)
+        })
+        const droppedFiles = mockUploadFilesFromComposeDrop.mock.calls[0]?.[0] as File[]
+        expect(droppedFiles).toHaveLength(1)
+        expect(droppedFiles[0]?.name).toBe("contract.pdf")
+    })
+
+    it("uploads dropped files when dragging onto the HTML editor body", async () => {
+        const templateId = "tpl-body-drop-html"
+
+        mockUseEmailTemplates.mockReturnValue({
+            data: [
+                {
+                    id: templateId,
+                    name: "Body Drop HTML Template",
+                    subject: "Subject",
+                    from_email: null,
+                    is_active: true,
+                    scope: "org",
+                    owner_user_id: null,
+                    owner_name: null,
+                    is_system_template: false,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+            ],
+            isLoading: false,
+        })
+
+        mockUseEmailTemplate.mockImplementation((id: string | null) => {
+            if (id !== templateId) return { data: null, isLoading: false }
+            return {
+                data: {
+                    id: templateId,
+                    organization_id: "org-1",
+                    created_by_user_id: null,
+                    name: "Body Drop HTML Template",
+                    subject: "Subject",
+                    from_email: null,
+                    body: "<p>Drop here.</p>",
+                    is_active: true,
+                    scope: "org",
+                    owner_user_id: null,
+                    owner_name: null,
+                    source_template_id: null,
+                    is_system_template: false,
+                    current_version: 1,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+                isLoading: false,
+            }
+        })
+
+        render(
+            <EmailComposeDialog
+                open
+                onOpenChange={vi.fn()}
+                surrogateData={baseSurrogateData}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "Body Drop HTML Template" }))
+        fireEvent.click(await screen.findByRole("button", { name: /edit html/i }))
+
+        const htmlEditor = screen.getByPlaceholderText("Enter email message...")
+        const file = new File(["sample"], "worksheet.xlsx", {
+            type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        })
+        fireEvent.drop(htmlEditor, {
+            dataTransfer: {
+                files: [file],
+                types: ["Files"],
+            },
+        })
+
+        await waitFor(() => {
+            expect(mockUploadFilesFromComposeDrop).toHaveBeenCalledTimes(1)
+        })
+        const droppedFiles = mockUploadFilesFromComposeDrop.mock.calls[0]?.[0] as File[]
+        expect(droppedFiles).toHaveLength(1)
+        expect(droppedFiles[0]?.name).toBe("worksheet.xlsx")
     })
 })

@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button"
 import {
     Home,
+    Inbox,
     FolderOpen,
     Users,
     CheckSquare,
@@ -51,6 +52,11 @@ const navigation = [
         title: "Dashboard",
         url: "/dashboard",
         icon: Home,
+    },
+    {
+        title: "Tickets",
+        url: "/tickets",
+        icon: Inbox,
     },
     {
         title: "Surrogates",
@@ -123,6 +129,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
         [effectivePermissions?.permissions]
     )
     const canViewTeam = isDeveloper || permissionSet.has("manage_team")
+    const canViewTickets = isDeveloper || permissionSet.has("view_tickets")
     const canViewPipelines = isDeveloper || permissionSet.has("manage_pipelines")
     const canViewQueues = isDeveloper || permissionSet.has("manage_queues")
     const canViewCompliance = isDeveloper || permissionSet.has("manage_compliance")
@@ -136,9 +143,9 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const isMobile = useIsMobile()
 
     const navigationItems = React.useMemo(() => {
-        // Temporarily hide Unassigned Queue from the sidebar.
-        return navigation
-    }, [])
+        if (canViewTickets) return navigation
+        return navigation.filter((item) => item.url !== "/tickets")
+    }, [canViewTickets])
 
     const activeNavUrl = React.useMemo(() => {
         if (!pathname) return null
