@@ -183,6 +183,7 @@ def get_workflow_sli(
         "tasks": ["/tasks"],
         "dashboard": ["/dashboard", "/analytics"],
         "automation": ["/workflows", "/campaigns"],
+        "ticketing_email": ["/tickets", "/mailboxes", "/surrogates"],
     }
 
     results: list[WorkflowSliResponse] = []

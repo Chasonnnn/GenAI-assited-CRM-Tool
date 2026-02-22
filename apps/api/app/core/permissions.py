@@ -28,6 +28,7 @@ class PermissionCategory(str, Enum):
     NAVIGATION = "Navigation"
     SURROGATES = "Surrogates"
     INTENDED_PARENTS = "Intended Parents"
+    TICKETS = "Tickets"
     TASKS = "Tasks"
     APPOINTMENTS = "Appointments"
     TEAM = "Team"
@@ -61,6 +62,10 @@ class PermissionKey(str, Enum):
     TASKS_CREATE = "create_tasks"
     TASKS_EDIT = "edit_tasks"
     TASKS_DELETE = "delete_tasks"
+    TICKETS_VIEW = "view_tickets"
+    TICKETS_EDIT = "edit_tickets"
+    TICKETS_REPLY = "reply_tickets"
+    TICKETS_LINK_SURROGATES = "link_ticket_surrogates"
 
     APPOINTMENTS_MANAGE = "manage_appointments"
 
@@ -201,6 +206,30 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
     ),
     "delete_tasks": PermissionDef(
         "delete_tasks", "Delete Tasks", "Delete tasks", PermissionCategory.TASKS
+    ),
+    "view_tickets": PermissionDef(
+        "view_tickets",
+        "View Tickets",
+        "Access global inbox and ticket history",
+        PermissionCategory.TICKETS,
+    ),
+    "edit_tickets": PermissionDef(
+        "edit_tickets",
+        "Edit Tickets",
+        "Update ticket status, priority, and assignment",
+        PermissionCategory.TICKETS,
+    ),
+    "reply_tickets": PermissionDef(
+        "reply_tickets",
+        "Reply to Tickets",
+        "Send ticket replies and compose outbound ticket emails",
+        PermissionCategory.TICKETS,
+    ),
+    "link_ticket_surrogates": PermissionDef(
+        "link_ticket_surrogates",
+        "Link Ticket Surrogates",
+        "Resolve surrogate-link review and manage surrogate email contacts",
+        PermissionCategory.TICKETS,
     ),
     # Appointments
     "manage_appointments": PermissionDef(
@@ -414,6 +443,8 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "view_tasks",
         "create_tasks",
         "edit_tasks",
+        "view_tickets",
+        "reply_tickets",
         "view_email_templates",
         "manage_appointments",
         "use_ai_assistant",
@@ -440,6 +471,10 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "create_tasks",
         "edit_tasks",
         "delete_tasks",
+        "view_tickets",
+        "edit_tickets",
+        "reply_tickets",
+        "link_ticket_surrogates",
         "view_reports",
         "view_email_templates",
         "manage_appointments",
@@ -469,6 +504,10 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "create_tasks",
         "edit_tasks",
         "delete_tasks",
+        "view_tickets",
+        "edit_tickets",
+        "reply_tickets",
+        "link_ticket_surrogates",
         "manage_team",
         "view_roles",
         "view_audit_log",
