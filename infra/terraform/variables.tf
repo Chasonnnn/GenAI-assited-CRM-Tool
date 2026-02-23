@@ -298,7 +298,7 @@ variable "secret_replication_location" {
 }
 
 variable "storage_service_account_email" {
-  description = "Service account email for storage bucket access."
+  description = "Service account email to grant Storage Object Admin on attachment/export buckets (managed or pre-existing)."
   type        = string
   default     = ""
 }

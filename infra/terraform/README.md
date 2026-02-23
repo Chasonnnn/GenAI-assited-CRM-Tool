@@ -177,6 +177,14 @@ manage_storage_buckets = true
 storage_bucket_location = "us-central1"
 storage_service_account_email = "crm-storage-sa@your-project-id.iam.gserviceaccount.com"
 ```
+If buckets already exist and are managed outside Terraform, you can still let
+Terraform enforce bucket IAM bindings by setting only:
+```hcl
+manage_storage_buckets = false
+storage_service_account_email = "crm-storage-sa@your-project-id.iam.gserviceaccount.com"
+```
+Terraform will grant `roles/storage.objectAdmin` on `s3_bucket` and
+`export_s3_bucket` without recreating buckets.
 If buckets already exist, import them before apply:
 ```bash
 terraform import 'google_storage_bucket.attachments[0]' surrogacyforce-attachments-test

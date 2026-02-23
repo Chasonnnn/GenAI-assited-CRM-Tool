@@ -70,6 +70,8 @@ enable_domain_mapping = true
 # manage_storage_buckets = true
 # storage_bucket_location = "us-central1"
 # storage_service_account_email = "crm-storage-sa@your-project-id.iam.gserviceaccount.com"
+# For pre-existing buckets, keep manage_storage_buckets=false and still set:
+# storage_service_account_email = "crm-storage-sa@your-project-id.iam.gserviceaccount.com"
 
 # Private Service Access (optional override)
 # private_service_access_address = "10.10.0.0"
