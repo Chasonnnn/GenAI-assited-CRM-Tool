@@ -21,6 +21,7 @@ import {
     updateFormDeliverySettings,
     updateFormIntakeLink,
     resolveSubmissionMatch,
+    retrySubmissionMatch,
     listSubmissionMatchCandidates,
     listFormSubmissions,
     promoteIntakeLead,
@@ -44,6 +45,7 @@ import {
     type FormIntakeLinkUpdatePayload,
     type FormDeliverySettings,
     type ResolveSubmissionMatchPayload,
+    type RetrySubmissionMatchPayload,
     type PromoteIntakeLeadPayload,
     type SubmissionAnswersUpdateResponse,
     type ListFormSubmissionsParams,
@@ -365,6 +367,31 @@ export function useResolveSubmissionMatch() {
             submissionId: string
             payload: ResolveSubmissionMatchPayload
         }) => resolveSubmissionMatch(submissionId, payload),
+        onSuccess: (result) => {
+            const submission = result.submission
+            if (submission.form_id && submission.surrogate_id) {
+                queryClient.invalidateQueries({
+                    queryKey: formKeys.surrogateSubmission(submission.form_id, submission.surrogate_id),
+                })
+            }
+            queryClient.invalidateQueries({
+                queryKey: formKeys.submissionMatchCandidates(submission.id),
+            })
+        },
+    })
+}
+
+export function useRetrySubmissionMatch() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({
+            submissionId,
+            payload,
+        }: {
+            submissionId: string
+            payload: RetrySubmissionMatchPayload
+        }) => retrySubmissionMatch(submissionId, payload),
         onSuccess: (result) => {
             const submission = result.submission
             if (submission.form_id && submission.surrogate_id) {

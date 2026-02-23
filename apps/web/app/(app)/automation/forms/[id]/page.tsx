@@ -53,6 +53,7 @@ import {
     useFormSubmissions,
     useFormMappings,
     usePublishForm,
+    useRetrySubmissionMatch,
     useResolveSubmissionMatch,
     useSetFormMappings,
     useSetDefaultSurrogateApplicationForm,
@@ -343,6 +344,7 @@ export default function FormBuilderPage() {
     const uploadLogoMutation = useUploadFormLogo()
     const updateDeliverySettingsMutation = useUpdateFormDeliverySettings()
     const resolveSubmissionMatchMutation = useResolveSubmissionMatch()
+    const retrySubmissionMatchMutation = useRetrySubmissionMatch()
     const promoteIntakeLeadMutation = usePromoteIntakeLead()
     const {
         data: ambiguousSubmissions = [],
@@ -390,6 +392,7 @@ export default function FormBuilderPage() {
     const [workspaceTab, setWorkspaceTab] = useState<"builder" | "submissions">("builder")
     const [submissionHistoryFilter, setSubmissionHistoryFilter] = useState<"all" | "pending" | "processed">("all")
     const [selectedQueueSubmissionId, setSelectedQueueSubmissionId] = useState<string | null>(null)
+    const [manualSurrogateId, setManualSurrogateId] = useState("")
     const [resolveReviewNotes, setResolveReviewNotes] = useState("")
     const [showSharePrompt, setShowSharePrompt] = useState(false)
     const [pendingSharePrompt, setPendingSharePrompt] = useState(false)
@@ -473,8 +476,13 @@ export default function FormBuilderPage() {
     useEffect(() => {
         if (workspaceTab !== "submissions") {
             setSelectedQueueSubmissionId(null)
+            setManualSurrogateId("")
         }
     }, [workspaceTab])
+
+    useEffect(() => {
+        setManualSurrogateId("")
+    }, [selectedQueueSubmissionId])
 
     useEffect(() => {
         if (isNewForm || !formData || isMappingsLoading || hasHydrated) return
@@ -1480,6 +1488,47 @@ export default function FormBuilderPage() {
         } catch {
             toast.error("Failed to promote intake lead")
         }
+    }
+
+    const handleRetrySubmissionMatch = async (
+        submission: FormSubmissionRead,
+        options: {
+            unlinkSurrogate?: boolean
+            unlinkIntakeLead?: boolean
+            rerunAutoMatch?: boolean
+            createIntakeLeadIfUnmatched?: boolean
+        },
+        successMessage: string,
+    ) => {
+        try {
+            await retrySubmissionMatchMutation.mutateAsync({
+                submissionId: submission.id,
+                payload: {
+                    unlink_surrogate: options.unlinkSurrogate ?? true,
+                    unlink_intake_lead: options.unlinkIntakeLead ?? false,
+                    rerun_auto_match: options.rerunAutoMatch ?? true,
+                    create_intake_lead_if_unmatched: options.createIntakeLeadIfUnmatched ?? false,
+                    review_notes: resolveReviewNotes.trim() || null,
+                },
+            })
+            toast.success(successMessage)
+            setSelectedQueueSubmissionId(submission.id)
+            await refreshSubmissionQueues()
+        } catch {
+            toast.error("Failed to reprocess submission")
+        }
+    }
+
+    const handleLinkByManualSurrogateId = async () => {
+        const submissionId = selectedQueueSubmissionId
+        const surrogateId = manualSurrogateId.trim()
+        if (!submissionId) return
+        if (!surrogateId) {
+            toast.error("Enter a surrogate ID")
+            return
+        }
+        await handleResolveSubmissionToSurrogate(submissionId, surrogateId)
+        setManualSurrogateId("")
     }
 
     // Get selected field data
@@ -2887,6 +2936,7 @@ export default function FormBuilderPage() {
                                         const canReviewCandidates =
                                             submission.source_mode === "shared" &&
                                             submission.match_status === "ambiguous_review"
+                                        const canReprocess = submission.source_mode === "shared"
 
                                         return (
                                             <div
@@ -2929,8 +2979,8 @@ export default function FormBuilderPage() {
                                                         {submission.intake_lead_id ? submission.intake_lead_id : "—"}
                                                     </div>
                                                 </div>
-                                                {canReviewCandidates && (
-                                                    <div className="flex justify-end">
+                                                <div className="flex flex-wrap justify-end gap-2">
+                                                    {canReviewCandidates && (
                                                         <Button
                                                             type="button"
                                                             size="sm"
@@ -2941,8 +2991,74 @@ export default function FormBuilderPage() {
                                                         >
                                                             Review Candidates
                                                         </Button>
-                                                    </div>
-                                                )}
+                                                    )}
+                                                    {canReprocess && (
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            disabled={retrySubmissionMatchMutation.isPending}
+                                                            onClick={() =>
+                                                                handleRetrySubmissionMatch(
+                                                                    submission,
+                                                                    {
+                                                                        unlinkSurrogate: Boolean(
+                                                                            submission.surrogate_id,
+                                                                        ),
+                                                                        rerunAutoMatch: true,
+                                                                    },
+                                                                    "Auto-match re-run complete",
+                                                                )
+                                                            }
+                                                        >
+                                                            Re-run Auto-Match
+                                                        </Button>
+                                                    )}
+                                                    {submission.surrogate_id && (
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            disabled={retrySubmissionMatchMutation.isPending}
+                                                            onClick={() =>
+                                                                handleRetrySubmissionMatch(
+                                                                    submission,
+                                                                    {
+                                                                        unlinkSurrogate: true,
+                                                                        rerunAutoMatch: false,
+                                                                    },
+                                                                    "Submission unlinked. Select the correct surrogate.",
+                                                                )
+                                                            }
+                                                        >
+                                                            Unlink
+                                                        </Button>
+                                                    )}
+                                                    {submission.intake_lead_id && (
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            disabled={retrySubmissionMatchMutation.isPending}
+                                                            onClick={() =>
+                                                                handleRetrySubmissionMatch(
+                                                                    submission,
+                                                                    {
+                                                                        unlinkSurrogate: Boolean(
+                                                                            submission.surrogate_id,
+                                                                        ),
+                                                                        unlinkIntakeLead: true,
+                                                                        rerunAutoMatch: true,
+                                                                        createIntakeLeadIfUnmatched: true,
+                                                                    },
+                                                                    "Lead link reset and submission reprocessed",
+                                                                )
+                                                            }
+                                                        >
+                                                            Undo Lead + Reprocess
+                                                        </Button>
+                                                    )}
+                                                </div>
                                             </div>
                                         )
                                     })}
@@ -2968,6 +3084,26 @@ export default function FormBuilderPage() {
                                         onChange={(event) => setResolveReviewNotes(event.target.value)}
                                         placeholder="Why this match was resolved..."
                                     />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="manual-surrogate-id-submissions">Manual surrogate ID link</Label>
+                                    <div className="flex flex-wrap gap-2">
+                                        <Input
+                                            id="manual-surrogate-id-submissions"
+                                            value={manualSurrogateId}
+                                            onChange={(event) => setManualSurrogateId(event.target.value)}
+                                            placeholder="Paste surrogate UUID"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            disabled={resolveSubmissionMatchMutation.isPending}
+                                            onClick={() => void handleLinkByManualSurrogateId()}
+                                        >
+                                            Link Surrogate ID
+                                        </Button>
+                                    </div>
                                 </div>
 
                                 {isMatchCandidatesLoading ? (

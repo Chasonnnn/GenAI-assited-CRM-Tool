@@ -308,6 +308,14 @@ export interface ResolveSubmissionMatchPayload {
     review_notes?: string | null
 }
 
+export interface RetrySubmissionMatchPayload {
+    unlink_surrogate?: boolean
+    unlink_intake_lead?: boolean
+    rerun_auto_match?: boolean
+    create_intake_lead_if_unmatched?: boolean
+    review_notes?: string | null
+}
+
 export interface ResolveSubmissionMatchResponse {
     submission: FormSubmissionRead
     outcome: SharedSubmissionOutcome
@@ -743,6 +751,16 @@ export function resolveSubmissionMatch(
 ): Promise<ResolveSubmissionMatchResponse> {
     return api.post<ResolveSubmissionMatchResponse>(
         `/forms/submissions/${submissionId}/match/resolve`,
+        payload
+    )
+}
+
+export function retrySubmissionMatch(
+    submissionId: string,
+    payload: RetrySubmissionMatchPayload
+): Promise<ResolveSubmissionMatchResponse> {
+    return api.post<ResolveSubmissionMatchResponse>(
+        `/forms/submissions/${submissionId}/match/retry`,
         payload
     )
 }
