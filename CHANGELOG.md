@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.2...surrogacy-crm-platform-v0.90.3) (2026-02-23)
+
+
+### Features
+
+* open slot picker when drag-rescheduling appointments ([cf9513b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cf9513b0c50aaae4365e99f15fe461a3a77cb8e9))
+
+
+### Bug Fixes
+
+* return 503 for storage outages and refresh README ([830792b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/830792b7ac267d027fed2f8241f40d9ac6ce37d6))
+
 ## [0.90.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.1...surrogacy-crm-platform-v0.90.2) (2026-02-23)
 
 
