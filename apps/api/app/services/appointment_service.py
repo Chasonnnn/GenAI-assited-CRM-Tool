@@ -1430,9 +1430,18 @@ def reschedule_booking(
             .first()
         )
         appt_type_name = appt_type.name if appt_type else "Appointment"
-        appointment_integrations.create_google_meet_link(db, appointment, appt_type_name)
+        owner_context_message = (
+            "Google Meet link creation failed for appointment owner "
+            f"{appointment.user_id}. Please reconnect Google Calendar for appointment owner account."
+        )
+        try:
+            appointment_integrations.create_google_meet_link(db, appointment, appt_type_name)
+        except ValueError as exc:
+            raise ValueError(f"{owner_context_message} Root cause: {exc}") from exc
         if not appointment.google_event_id:
-            raise ValueError("Google Meet link creation failed. Please reconnect Google Calendar.")
+            raise ValueError(
+                f"{owner_context_message} Root cause: Google Meet link was not generated."
+            )
 
     # Rotate tokens after reschedule
     appointment.reschedule_token = generate_token()

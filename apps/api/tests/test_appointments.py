@@ -1468,6 +1468,45 @@ def test_reschedule_booking_google_meet_link_failure_raises(
         )
 
 
+def test_reschedule_booking_google_meet_link_failure_includes_owner_context(
+    db, test_org, test_user, appointment_type, availability_rules, monkeypatch
+):
+    """Reschedule failure should identify the appointment owner's integration context."""
+    from app.services import appointment_service, appointment_integrations
+
+    appointment_type.meeting_mode = MeetingMode.GOOGLE_MEET.value
+    db.flush()
+
+    target_date = _next_weekday(0)
+    local_start = datetime.combine(target_date, time(10, 0), tzinfo=ZoneInfo("America/New_York"))
+    scheduled_start = local_start.astimezone(timezone.utc)
+
+    appt = _make_pending_appointment(db, test_org, test_user, appointment_type, scheduled_start)
+    appt.status = AppointmentStatus.CONFIRMED.value
+    appt.google_event_id = None
+    appt.google_meet_url = None
+    db.flush()
+
+    def fake_create_google_meet_link(db, appointment, appt_type_name):
+        return None
+
+    monkeypatch.setattr(
+        appointment_integrations, "create_google_meet_link", fake_create_google_meet_link
+    )
+
+    new_start = scheduled_start + timedelta(days=1)
+    with pytest.raises(ValueError) as exc:
+        appointment_service.reschedule_booking(
+            db=db,
+            appointment=appt,
+            new_start=new_start,
+            by_client=False,
+        )
+
+    assert "appointment owner" in str(exc.value)
+    assert str(test_user.id) in str(exc.value)
+
+
 def test_approve_booking_fails_when_google_calendar_not_connected(
     db, test_org, test_user, appointment_type, availability_rules, monkeypatch
 ):
