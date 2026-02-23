@@ -41,6 +41,10 @@ class Organization(Base):
     __table_args__ = (
         Index("ix_organizations_deleted_at", "deleted_at"),
         Index("ix_organizations_purge_at", "purge_at"),
+        Index(
+            "idx_organizations_default_surrogate_application_form",
+            "default_surrogate_application_form_id",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
