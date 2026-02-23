@@ -382,14 +382,16 @@ Format: **MAJOR.MINOR.PATCH** (SemVer)
 | Part | Meaning |
 |------|---------|
 | MAJOR | Breaking changes (post-1.0) |
-| MINOR | All non-breaking changes (`feat`/`fix`/`chore`) |
-| PATCH | Reserved (not used by auto-release) |
+| MINOR | Non-breaking feature releases (`feat`) |
+| PATCH | Bug fixes/maintenance (`fix`/`chore`) and pre-1.0 feature releases |
 
 Pre-1.0 policy: stay in `0.x` even for breaking changes (Release Please uses `bump-minor-pre-major`).
-Auto-release policy: `feat`/`fix`/`chore` always bump **MINOR** (Release Please uses `versioning-strategy: always-bump-minor`).
+Auto-release policy:
+- Pre-1.0 (`0.x`): `feat`/`fix`/`chore` bump **PATCH** (Release Please uses `bump-patch-for-minor-pre-major: true`).
+- Post-1.0: `feat` bumps **MINOR** and `fix`/`chore` bump **PATCH**.
 
 Examples:
-- `0.16.0` → Pre-release, non-breaking release (feat/fix/chore)
+- `0.90.0` → `0.90.1` for pre-1.0 `feat`/`fix`/`chore`
 - `1.2.0` → Stable, non-breaking release (feat/fix/chore)
 - `2.0.0` → Stable, breaking release
 
