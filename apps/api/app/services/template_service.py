@@ -7,7 +7,8 @@ from sqlalchemy import or_, and_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.models import WorkflowTemplate, WorkflowTemplateTarget, AutomationWorkflow
+from app.db.enums import FormStatus
+from app.db.models import WorkflowTemplate, WorkflowTemplateTarget, AutomationWorkflow, Form
 
 
 def list_templates(
@@ -195,6 +196,37 @@ def use_template(
     if not template:
         raise ValueError("Template not found")
 
+    # Resolve dynamic trigger references (for example, form name -> form id).
+    trigger_config = dict(template.trigger_config or {})
+    if template.trigger_type in {"form_started", "form_submitted", "intake_lead_created"}:
+        form_name = trigger_config.get("form_name")
+        if isinstance(form_name, str):
+            normalized_form_name = form_name.strip()
+            if not normalized_form_name:
+                trigger_config.pop("form_name", None)
+            else:
+                matched_forms = (
+                    db.query(Form.id)
+                    .filter(
+                        Form.organization_id == org_id,
+                        Form.status == FormStatus.PUBLISHED.value,
+                        Form.name == normalized_form_name,
+                    )
+                    .limit(2)
+                    .all()
+                )
+                if not matched_forms:
+                    raise ValueError(
+                        f"Published form '{normalized_form_name}' not found in this organization"
+                    )
+                if len(matched_forms) > 1:
+                    raise ValueError(
+                        f"Multiple published forms named '{normalized_form_name}' found; "
+                        "set trigger form manually"
+                    )
+                trigger_config["form_id"] = str(matched_forms[0][0])
+                trigger_config.pop("form_name", None)
+
     # Apply action overrides if provided
     actions = template.actions.copy() if template.actions else []
     if action_overrides:
@@ -222,7 +254,7 @@ def use_template(
 
     workflow_service._validate_trigger_config(
         WorkflowTriggerType(template.trigger_type),
-        template.trigger_config or {},
+        trigger_config,
     )
     for action in actions:
         workflow_service._validate_action_config(
@@ -238,7 +270,7 @@ def use_template(
         description=workflow_description or template.description,
         icon=template.icon,
         trigger_type=template.trigger_type,
-        trigger_config=template.trigger_config,
+        trigger_config=trigger_config,
         conditions=template.conditions,
         condition_logic=template.condition_logic,
         actions=actions,

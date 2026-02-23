@@ -10,7 +10,7 @@ from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.security import create_session_token
 from app.db.enums import Role
-from app.db.models import Membership, User, WorkflowTemplate
+from app.db.models import Form, Membership, User, WorkflowTemplate
 from app.main import app
 from app.services import session_service
 
@@ -108,3 +108,59 @@ async def test_use_template_creates_personal_workflow(db, test_org):
         data = res.json()
         assert data["scope"] == "personal"
         assert data["owner_user_id"] == str(admin.id)
+
+
+@pytest.mark.asyncio
+async def test_use_template_resolves_form_name_trigger_config(db, test_org):
+    admin = create_user_with_role(db, test_org.id, Role.ADMIN)
+
+    published_form = Form(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name="Surrogate Full Application Form",
+        status="published",
+        schema_json={"pages": []},
+        published_schema_json={"pages": []},
+        created_by_user_id=admin.id,
+        updated_by_user_id=admin.id,
+    )
+    db.add(published_form)
+    db.flush()
+
+    template = WorkflowTemplate(
+        id=uuid.uuid4(),
+        name="Intake Match Flow",
+        description="Form-scoped intake workflow",
+        icon="template",
+        category="intake",
+        trigger_type="form_submitted",
+        trigger_config={"form_name": "Surrogate Full Application Form"},
+        conditions=[],
+        condition_logic="AND",
+        actions=[
+            {"action_type": "auto_match_submission", "requires_approval": True},
+            {"action_type": "create_intake_lead", "requires_approval": True},
+        ],
+        is_global=False,
+        organization_id=test_org.id,
+        created_by_user_id=admin.id,
+    )
+    db.add(template)
+    db.commit()
+
+    async with authed_client_for_user(db, test_org.id, admin, Role.ADMIN) as client:
+        res = await client.post(
+            f"/templates/{template.id}/use",
+            json={
+                "name": "Org Intake Workflow",
+                "description": "From template",
+                "is_enabled": False,
+                "scope": "org",
+            },
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["scope"] == "org"
+        assert data["trigger_type"] == "form_submitted"
+        assert data["trigger_config"]["form_id"] == str(published_form.id)
+        assert "form_name" not in data["trigger_config"]
