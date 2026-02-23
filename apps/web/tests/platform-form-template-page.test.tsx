@@ -7,8 +7,7 @@ const mockCreate = vi.fn()
 const mockPublish = vi.fn()
 const mockDelete = vi.fn()
 
-
-const mockTemplateData = {
+const buildTemplateData = () => ({
     id: "tpl_form_1",
     status: "draft",
     current_version: 1,
@@ -24,7 +23,9 @@ const mockTemplateData = {
     published: null,
     updated_at: new Date().toISOString(),
     created_at: new Date().toISOString(),
-}
+})
+
+let mockTemplateData = buildTemplateData()
 
 vi.mock("next/navigation", () => ({
     useParams: () => ({ id: "tpl_form_1" }),
@@ -52,7 +53,60 @@ describe("PlatformFormTemplatePage", () => {
         mockCreate.mockReset()
         mockPublish.mockReset()
         mockDelete.mockReset()
+        mockTemplateData = buildTemplateData()
         vi.useRealTimers()
+    })
+
+    it("does not autosave stale default schema during initial hydration", async () => {
+        mockTemplateData = {
+            ...buildTemplateData(),
+            draft: {
+                name: "Stored Surrogate Application Form",
+                description: "Intake form",
+                schema_json: {
+                    pages: [
+                        {
+                            title: "Page 1",
+                            fields: [
+                                {
+                                    key: "full_name",
+                                    label: "Full Name",
+                                    type: "text",
+                                    required: true,
+                                    options: null,
+                                    validation: null,
+                                    help_text: null,
+                                    show_if: null,
+                                    columns: null,
+                                    min_rows: null,
+                                    max_rows: null,
+                                },
+                            ],
+                        },
+                    ],
+                    public_title: null,
+                    logo_url: null,
+                    privacy_notice: null,
+                },
+                settings_json: {},
+            },
+        }
+        mockUpdate.mockResolvedValue({
+            ...mockTemplateData,
+            current_version: 2,
+            updated_at: new Date().toISOString(),
+        })
+
+        render(<PlatformFormTemplatePage />)
+
+        const nameInput = await screen.findByPlaceholderText("Form name...")
+        await waitFor(() => expect(nameInput).toHaveValue("Stored Surrogate Application Form"))
+
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 800))
+        })
+
+        expect(mockUpdate).not.toHaveBeenCalled()
     })
 
     it("uses the latest saved version for subsequent autosaves", async () => {

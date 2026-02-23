@@ -919,6 +919,7 @@ export default function FormBuilderPage() {
     useEffect(() => {
         if (!hasHydrated) return
         if (!formName.trim()) return
+        if (debouncedFingerprint !== draftFingerprint) return
         if (debouncedFingerprint === lastSavedFingerprintRef.current) return
         if (isSaving || isPublishing) return
 
@@ -941,6 +942,7 @@ export default function FormBuilderPage() {
     }, [
         hasHydrated,
         formName,
+        draftFingerprint,
         debouncedFingerprint,
         debouncedPayload,
         isSaving,
