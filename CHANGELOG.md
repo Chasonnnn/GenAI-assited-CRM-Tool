@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.3...surrogacy-crm-platform-v0.90.4) (2026-02-23)
+
+
+### Bug Fixes
+
+* add form submission correction actions and manual relink UI ([61b9a7f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/61b9a7fce3e6c36fffda69e1279a77dbade1266e))
+* add per-form submission history and approvals shortcut ([d4c6c62](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d4c6c62c83b6554b44baf14092888c69d56cb2ab))
+* add submission match retry flow with duplicate-safe lead reuse ([8511d43](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8511d4364b52871a5bef356ea3db394acc3f30b1))
+* improve form delivery card layout and add quick share actions ([4196144](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4196144d470c92020f0579aba59ccaf14b6f8b05))
+* resolve form-scoped workflow templates by published form name ([af672d6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/af672d645f58e8bef374656816761464449d4b62))
+* route form builder back navigation to forms list ([2980c58](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2980c58e1018f96e03659c5573c215d72b8dc3d3))
+* seed approval-gated intake auto-match workflow template ([fd9484c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fd9484c2fd4c5566fade4dbc6cedfea9e58b910c))
+* seed separate approval-gated intake workflow templates ([e216397](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e216397ad43d3bdf656d56b0ba1a363c77a0ee5a))
+* seed surrogate pre-screening questionnaire ops template ([98f0d97](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/98f0d97f192bcd14035bcd427726bb56b79c777b))
+* stabilize mobile public form input rendering ([55f520d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/55f520d1a3c79756a76af7ffac2369b0100f0e19))
+
+
+### Maintenance
+
+* harden terraform storage IAM handling ([e585e1a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e585e1a5340eb4f0c8e015abc08c8d177aa81a90))
+
 ## [0.90.3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.2...surrogacy-crm-platform-v0.90.3) (2026-02-23)
 
 
