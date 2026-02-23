@@ -1,7 +1,7 @@
 """add dual-mode intake links, leads, and submission matching
 
 Revision ID: 20260222_1800
-Revises: 20260222_1700
+Revises: 20260222_1705
 Create Date: 2026-02-22 18:00:00.000000
 """
 
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "20260222_1800"
-down_revision: str | Sequence[str] | None = "20260222_1700"
+down_revision: str | Sequence[str] | None = "20260222_1705"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
