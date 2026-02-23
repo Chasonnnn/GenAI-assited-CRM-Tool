@@ -947,7 +947,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                         value={typeof value === "string" ? value : ""}
                         onChange={(e) => updateField(field.key, e.target.value)}
                         placeholder={field.label}
-                        className="min-h-24 rounded-xl border-stone-200 bg-white"
+                        className="min-h-24 rounded-xl border-stone-200 bg-white shadow-none"
                     />
                     {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
                 </div>
@@ -973,7 +973,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                                 <Button
                                     variant="outline"
                                     className={cn(
-                                        "w-full h-11 justify-start rounded-xl border-stone-200 bg-white text-left font-normal",
+                                        "h-11 w-full justify-start rounded-xl border-stone-200 bg-white text-left font-normal shadow-none",
                                         !value && "text-stone-500",
                                     )}
                                 >
@@ -1206,7 +1206,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                                                             onChange={(e) =>
                                                                 updateRow(rowIndex, column.key, e.target.value)
                                                             }
-                                                            className="h-10 rounded-lg border-stone-200 bg-white"
+                                                            className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
                                                         />
                                                     )}
                                                 </div>
@@ -1253,7 +1253,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                     value={typeof value === "string" ? value : value ? String(value) : ""}
                     onChange={(e) => updateField(field.key, e.target.value)}
                     placeholder={field.label}
-                    className="h-11 rounded-xl border-stone-200 bg-white"
+                    className="h-11 rounded-xl border-stone-200 bg-white shadow-none"
                 />
                 {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
             </div>
@@ -1318,7 +1318,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-stone-50 via-stone-50 to-stone-100/70 pb-28">
+        <div className="min-h-screen bg-gradient-to-b from-stone-50 via-stone-50 to-stone-100/70 pb-28 [color-scheme:light]">
             <div className="h-0.5 w-full bg-primary/80" />
             {/* Header */}
             <header className="py-8 md:py-10">
