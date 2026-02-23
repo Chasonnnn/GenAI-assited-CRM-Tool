@@ -1,13 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { useDropzone } from "react-dropzone"
-import { AlertTriangleIcon, CheckCircle2Icon, ClockIcon, Loader2Icon, UploadIcon } from "lucide-react"
+import { AlertTriangleIcon, CheckCircle2Icon, ClockIcon, Loader2Icon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
-import { cn } from "@/lib/utils"
 import type { Attachment } from "@/lib/api/attachments"
 import { useAttachments, useUploadAttachment } from "@/lib/hooks/use-attachments"
 
@@ -37,6 +36,10 @@ export interface EmailAttachmentSelectionState {
 interface EmailAttachmentsPanelProps {
     surrogateId: string
     onSelectionChange: (state: EmailAttachmentSelectionState) => void
+}
+
+export interface EmailAttachmentsPanelHandle {
+    uploadFiles: (files: File[]) => Promise<void>
 }
 
 function formatFileSize(bytes: number): string {
@@ -72,9 +75,11 @@ function getScanBadge(attachment: Attachment) {
     )
 }
 
-export function EmailAttachmentsPanel({ surrogateId, onSelectionChange }: EmailAttachmentsPanelProps) {
+export const EmailAttachmentsPanel = React.forwardRef<EmailAttachmentsPanelHandle, EmailAttachmentsPanelProps>(
+function EmailAttachmentsPanel({ surrogateId, onSelectionChange }: EmailAttachmentsPanelProps, ref) {
     const { data: attachments = [], isLoading } = useAttachments(surrogateId)
     const uploadMutation = useUploadAttachment()
+    const fileInputRef = React.useRef<HTMLInputElement | null>(null)
 
     const [selectedAttachmentIds, setSelectedAttachmentIds] = React.useState<string[]>([])
     const [uploadError, setUploadError] = React.useState<string | null>(null)
@@ -140,12 +145,12 @@ export function EmailAttachmentsPanel({ surrogateId, onSelectionChange }: EmailA
         })
     }, [])
 
-    const onDrop = React.useCallback(
-        async (acceptedFiles: File[]) => {
+    const uploadFiles = React.useCallback(
+        async (incomingFiles: File[]) => {
             setUploadError(null)
             const uploadedIds: string[] = []
 
-            for (const file of acceptedFiles) {
+            for (const file of incomingFiles) {
                 const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
                 if (!ALLOWED_EXTENSIONS.includes(ext)) {
                     setUploadError(`File type .${ext || "unknown"} is not allowed.`)
@@ -171,41 +176,61 @@ export function EmailAttachmentsPanel({ surrogateId, onSelectionChange }: EmailA
         [surrogateId, uploadMutation]
     )
 
-    const { getRootProps, getInputProps, isDragActive } = useDropzone({
-        onDrop,
-        maxSize: MAX_UPLOAD_SIZE_BYTES,
-        accept: ACCEPTED_FILE_TYPES,
-    })
+    React.useImperativeHandle(
+        ref,
+        () => ({
+            uploadFiles,
+        }),
+        [uploadFiles]
+    )
+
+    const handlePickFiles = React.useCallback(() => {
+        fileInputRef.current?.click()
+    }, [])
+
+    const handleInputChange = React.useCallback(
+        (event: React.ChangeEvent<HTMLInputElement>) => {
+            const files = event.target.files ? Array.from(event.target.files) : []
+            if (files.length > 0) {
+                void uploadFiles(files)
+            }
+            event.target.value = ""
+        },
+        [uploadFiles]
+    )
 
     return (
         <div className="grid gap-3">
-            <div>
-                <Label>Attachments</Label>
-                <p className="text-xs text-muted-foreground mt-1">
-                    Drag and drop files like Gmail, or pick from existing surrogate attachments.
-                </p>
-            </div>
-
-            <div
-                {...getRootProps()}
-                className={cn(
-                    "rounded-lg border-2 border-dashed p-4 text-center transition-colors cursor-pointer",
-                    isDragActive
-                        ? "border-primary bg-primary/5"
-                        : "border-muted-foreground/25 hover:border-primary/50"
-                )}
-                aria-label="Attachment upload dropzone"
-            >
-                <input {...getInputProps()} />
-                <UploadIcon className="mx-auto mb-2 size-5 text-muted-foreground" />
-                {isDragActive ? (
-                    <p className="text-sm text-primary">Drop files to attach...</p>
-                ) : (
-                    <p className="text-sm text-muted-foreground">
-                        Drop files here or click to upload (PDF, image, Word, Excel; max 25 MB)
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <Label>Attachments</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                        Drag files into the message body, or pick files from your device.
                     </p>
-                )}
+                </div>
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePickFiles}
+                    disabled={uploadMutation.isPending}
+                >
+                    Attach files
+                </Button>
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    className="sr-only"
+                    onChange={handleInputChange}
+                    accept={Object.values(ACCEPTED_FILE_TYPES)
+                        .flat()
+                        .join(",")}
+                />
             </div>
+            <p className="text-xs text-muted-foreground">
+                Allowed: PDF, images, Word, and Excel files (max 25 MB each).
+            </p>
 
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span>{selectedAttachmentIds.length} selected</span>
@@ -267,3 +292,4 @@ export function EmailAttachmentsPanel({ surrogateId, onSelectionChange }: EmailA
         </div>
     )
 }
+)

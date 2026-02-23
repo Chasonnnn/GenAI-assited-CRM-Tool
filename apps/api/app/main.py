@@ -58,6 +58,7 @@ from app.routers import (
     invites,
     jobs,
     journey,
+    mailboxes,
     matches,
     meta_oauth,
     meta_forms,
@@ -78,6 +79,7 @@ from app.routers import (
     search,
     settings as settings_router,
     status_change_requests,
+    tickets,
     tasks,
     templates,
     tracking,
@@ -466,6 +468,7 @@ app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 
 # Internal endpoints (scheduled/cron jobs - protected by INTERNAL_SECRET)
 app.include_router(internal.router)
+app.include_router(mailboxes.internal_router)
 app.include_router(monitoring.router)
 
 # Analytics endpoints (admin dashboards)
@@ -485,6 +488,8 @@ app.include_router(dashboard.router)
 
 # User Integrations (Gmail, Zoom OAuth)
 app.include_router(integrations.router)
+app.include_router(mailboxes.router)
+app.include_router(tickets.router)
 
 # Meta OAuth Integration (Facebook Login for Business)
 app.include_router(meta_oauth.router)

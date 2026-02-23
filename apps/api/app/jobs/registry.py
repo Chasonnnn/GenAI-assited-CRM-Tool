@@ -20,6 +20,7 @@ from app.jobs.handlers import (
     notifications,
     orgs,
     reminders,
+    ticketing,
     webhooks,
     workflows,
     zapier,
@@ -56,6 +57,14 @@ JOB_HANDLERS: Mapping[str, JobHandler] = {
     JobType.GOOGLE_CALENDAR_SYNC.value: appointments.process_google_calendar_sync,
     JobType.GOOGLE_TASKS_SYNC.value: appointments.process_google_tasks_sync,
     JobType.GOOGLE_CALENDAR_WATCH_REFRESH.value: appointments.process_google_calendar_watch_refresh,
+    JobType.MAILBOX_BACKFILL.value: ticketing.process_mailbox_backfill,
+    JobType.MAILBOX_HISTORY_SYNC.value: ticketing.process_mailbox_history_sync,
+    JobType.MAILBOX_WATCH_REFRESH.value: ticketing.process_mailbox_watch_refresh,
+    JobType.EMAIL_OCCURRENCE_FETCH_RAW.value: ticketing.process_email_occurrence_fetch_raw,
+    JobType.EMAIL_OCCURRENCE_PARSE.value: ticketing.process_email_occurrence_parse,
+    JobType.EMAIL_OCCURRENCE_STITCH.value: ticketing.process_email_occurrence_stitch,
+    JobType.TICKET_APPLY_LINKING.value: ticketing.process_ticket_apply_linking,
+    JobType.TICKET_OUTBOUND_SEND.value: ticketing.process_ticket_outbound_send,
 }
 
 

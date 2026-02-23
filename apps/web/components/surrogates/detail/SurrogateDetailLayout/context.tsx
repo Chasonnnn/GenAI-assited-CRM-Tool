@@ -39,6 +39,7 @@ import type { Queue } from "@/lib/hooks/use-queues"
 
 export const TAB_VALUES = [
     "overview",
+    "emails",
     "notes",
     "tasks",
     "interviews",

@@ -227,6 +227,9 @@ async def gmail_callback(
         # Exchange code for tokens
         redirect_uri = settings.GMAIL_REDIRECT_URI
         tokens = await oauth_service.exchange_gmail_code(code, redirect_uri)
+        granted_scopes = [
+            scope.strip() for scope in str(tokens.get("scope", "")).split(" ") if scope.strip()
+        ] or None
 
         # Get user info
         user_info = await oauth_service.get_gmail_user_info(tokens["access_token"])
@@ -240,6 +243,7 @@ async def gmail_callback(
             refresh_token=tokens.get("refresh_token"),
             expires_in=tokens.get("expires_in"),
             account_email=user_info.get("email"),
+            granted_scopes=granted_scopes,
         )
 
         # Audit log (no secrets)
@@ -287,6 +291,12 @@ def gmail_connection_status(
 ) -> dict[str, Any]:
     """Check if current user has Gmail connected."""
     integration = oauth_service.get_user_integration(db, session.user_id, "gmail")
+    scopes = integration.granted_scopes if integration else []
+    scope_set = {scope for scope in scopes if isinstance(scope, str)}
+    inbound_ready = (
+        "https://www.googleapis.com/auth/gmail.readonly" in scope_set
+        or "https://www.googleapis.com/auth/gmail.modify" in scope_set
+    )
 
     return {
         "connected": integration is not None,
@@ -294,6 +304,8 @@ def gmail_connection_status(
         "expires_at": integration.token_expires_at.isoformat()
         if integration and integration.token_expires_at
         else None,
+        "granted_scopes": scopes,
+        "inbound_ready": inbound_ready if integration else False,
     }
 
 

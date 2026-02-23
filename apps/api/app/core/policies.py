@@ -67,6 +67,14 @@ POLICIES: dict[str, ResourcePolicy] = {
     "ops": ResourcePolicy(default=P.OPS_MANAGE, actions={}),
     "jobs": ResourcePolicy(default=P.JOBS_MANAGE, actions={}),
     "integrations": ResourcePolicy(default=P.INTEGRATIONS_MANAGE, actions={}),
+    "tickets": ResourcePolicy(
+        default=P.TICKETS_VIEW,
+        actions={
+            "edit": P.TICKETS_EDIT,
+            "reply": P.TICKETS_REPLY,
+            "link_surrogates": P.TICKETS_LINK_SURROGATES,
+        },
+    ),
     "meta_leads": ResourcePolicy(default=P.META_LEADS_MANAGE, actions={}),
     "org_settings": ResourcePolicy(default=P.ORG_MANAGE, actions={}),
     "forms": ResourcePolicy(default=P.FORMS_MANAGE, actions={}),

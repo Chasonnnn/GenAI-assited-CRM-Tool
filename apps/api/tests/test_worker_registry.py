@@ -31,6 +31,13 @@ def test_job_registry_resolves_google_tasks_sync_handler():
     assert callable(handler)
 
 
+def test_job_registry_resolves_ticket_outbound_send_handler():
+    from app.jobs.registry import resolve_job_handler
+
+    handler = resolve_job_handler(JobType.TICKET_OUTBOUND_SEND.value)
+    assert callable(handler)
+
+
 def test_job_registry_unknown_raises():
     from app.jobs.registry import resolve_job_handler
 

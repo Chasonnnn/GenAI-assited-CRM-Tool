@@ -34,6 +34,12 @@ from app.db.models import (
     AIActionApproval,
     AIUsageLog,
     AIEntitySummary,
+    Ticket,
+    TicketEvent,
+    TicketNote,
+    EmailMessage,
+    EmailMessageContent,
+    EmailMessageOccurrence,
 )
 from app.services import audit_service, job_service
 from app.utils.pagination import PaginationParams, paginate_query
@@ -579,27 +585,34 @@ def seed_default_retention_policies(
     org_id: UUID,
 ) -> list[DataRetentionPolicy]:
     """Create default retention policies for a new organization."""
-    default_entities = [
-        "surrogates",
-        "matches",
-        "tasks",
-        "entity_notes",
-        "surrogate_activity",
-        "ai_conversations",
-        "ai_messages",
-        "ai_action_approvals",
-        "ai_usage_log",
-        "ai_entity_summaries",
+    default_entities: list[tuple[str, int]] = [
+        ("surrogates", settings.DEFAULT_RETENTION_DAYS),
+        ("matches", settings.DEFAULT_RETENTION_DAYS),
+        ("tasks", settings.DEFAULT_RETENTION_DAYS),
+        ("entity_notes", settings.DEFAULT_RETENTION_DAYS),
+        ("surrogate_activity", settings.DEFAULT_RETENTION_DAYS),
+        ("ai_conversations", settings.DEFAULT_RETENTION_DAYS),
+        ("ai_messages", settings.DEFAULT_RETENTION_DAYS),
+        ("ai_action_approvals", settings.DEFAULT_RETENTION_DAYS),
+        ("ai_usage_log", settings.DEFAULT_RETENTION_DAYS),
+        ("ai_entity_summaries", settings.DEFAULT_RETENTION_DAYS),
+        # Ticketing/Gmail ingestion entities use 7-year retention by default.
+        ("tickets", 2557),
+        ("ticket_events", 2557),
+        ("ticket_notes", 2557),
+        ("email_messages", 2557),
+        ("email_message_contents", 2557),
+        ("email_message_occurrences", 2557),
     ]
     existing = {policy.entity_type for policy in list_retention_policies(db, org_id)}
     created: list[DataRetentionPolicy] = []
-    for entity_type in default_entities:
+    for entity_type, retention_days in default_entities:
         if entity_type in existing:
             continue
         policy = DataRetentionPolicy(
             organization_id=org_id,
             entity_type=entity_type,
-            retention_days=settings.DEFAULT_RETENTION_DAYS,
+            retention_days=retention_days,
             is_active=True,
             created_by_user_id=None,
         )
@@ -931,6 +944,97 @@ def _build_retention_query(
             )
         if entity_hold_ids.get("ai_entity_summary"):
             query = query.filter(~AIEntitySummary.id.in_(entity_hold_ids["ai_entity_summary"]))
+        return query
+    if entity_type == "tickets":
+        query = db.query(Ticket).filter(
+            Ticket.organization_id == org_id,
+            Ticket.updated_at < cutoff,
+        )
+        if surrogate_hold_ids:
+            query = query.filter(
+                or_(Ticket.surrogate_id.is_(None), ~Ticket.surrogate_id.in_(surrogate_hold_ids))
+            )
+        if entity_hold_ids.get("ticket"):
+            query = query.filter(~Ticket.id.in_(entity_hold_ids["ticket"]))
+        return query
+    if entity_type == "ticket_events":
+        query = (
+            db.query(TicketEvent)
+            .join(Ticket, Ticket.id == TicketEvent.ticket_id)
+            .filter(
+                TicketEvent.organization_id == org_id,
+                TicketEvent.created_at < cutoff,
+            )
+        )
+        if surrogate_hold_ids:
+            query = query.filter(
+                or_(Ticket.surrogate_id.is_(None), ~Ticket.surrogate_id.in_(surrogate_hold_ids))
+            )
+        if entity_hold_ids.get("ticket_event"):
+            query = query.filter(~TicketEvent.id.in_(entity_hold_ids["ticket_event"]))
+        return query
+    if entity_type == "ticket_notes":
+        query = (
+            db.query(TicketNote)
+            .join(Ticket, Ticket.id == TicketNote.ticket_id)
+            .filter(
+                TicketNote.organization_id == org_id,
+                TicketNote.created_at < cutoff,
+            )
+        )
+        if surrogate_hold_ids:
+            query = query.filter(
+                or_(Ticket.surrogate_id.is_(None), ~Ticket.surrogate_id.in_(surrogate_hold_ids))
+            )
+        if entity_hold_ids.get("ticket_note"):
+            query = query.filter(~TicketNote.id.in_(entity_hold_ids["ticket_note"]))
+        return query
+    if entity_type == "email_messages":
+        query = db.query(EmailMessage).filter(
+            EmailMessage.organization_id == org_id,
+            EmailMessage.created_at < cutoff,
+        )
+        if entity_hold_ids.get("email_message"):
+            query = query.filter(~EmailMessage.id.in_(entity_hold_ids["email_message"]))
+        return query
+    if entity_type == "email_message_contents":
+        query = (
+            db.query(EmailMessageContent)
+            .join(EmailMessage, EmailMessage.id == EmailMessageContent.message_id)
+            .filter(
+                EmailMessageContent.organization_id == org_id,
+                EmailMessageContent.parsed_at < cutoff,
+            )
+        )
+        if entity_hold_ids.get("email_message_content"):
+            query = query.filter(
+                ~EmailMessageContent.id.in_(entity_hold_ids["email_message_content"])
+            )
+        return query
+    if entity_type == "email_message_occurrences":
+        query = db.query(EmailMessageOccurrence).filter(
+            EmailMessageOccurrence.organization_id == org_id,
+            EmailMessageOccurrence.created_at < cutoff,
+        )
+        if surrogate_hold_ids:
+            held_ticket_ids = (
+                db.query(Ticket.id)
+                .filter(
+                    Ticket.organization_id == org_id,
+                    Ticket.surrogate_id.in_(surrogate_hold_ids),
+                )
+                .subquery()
+            )
+            query = query.filter(
+                or_(
+                    EmailMessageOccurrence.ticket_id.is_(None),
+                    ~EmailMessageOccurrence.ticket_id.in_(held_ticket_ids),
+                )
+            )
+        if entity_hold_ids.get("email_message_occurrence"):
+            query = query.filter(
+                ~EmailMessageOccurrence.id.in_(entity_hold_ids["email_message_occurrence"])
+            )
         return query
     raise ValueError(f"Unsupported retention entity type: {entity_type}")
 

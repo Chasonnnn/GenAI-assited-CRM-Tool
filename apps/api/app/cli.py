@@ -1,12 +1,13 @@
 """CLI tools for Surrogacy Force administration."""
 
 import click
+from uuid import UUID
 from sqlalchemy import func
 
-from app.db.enums import Role
+from app.db.enums import JobType, Role
 from app.db.models import Organization, OrgInvite, User, Membership
 from app.db.session import SessionLocal
-from app.services import org_service
+from app.services import job_service, org_service
 
 
 @click.group()
@@ -446,6 +447,70 @@ def backfill_permissions(dry_run: bool):
     except Exception as e:
         db.rollback()
         click.echo(f"[ERROR] Error: {e}")
+        raise
+    finally:
+        db.close()
+
+
+@cli.command("replay-failed-jobs")
+@click.option("--org-id", required=True, help="Organization UUID")
+@click.option(
+    "--job-type",
+    type=click.Choice([job.value for job in JobType]),
+    default=None,
+    help="Optional job type filter",
+)
+@click.option("--limit", default=100, show_default=True, help="Maximum jobs to replay")
+@click.option("--reason", default="cli_replay", show_default=True, help="Replay reason")
+@click.option("--dry-run", is_flag=True, help="Preview failed jobs without replaying")
+def replay_failed_jobs_cli(
+    org_id: str,
+    job_type: str | None,
+    limit: int,
+    reason: str,
+    dry_run: bool,
+):
+    """Replay failed jobs (DLQ) for an organization."""
+    db = SessionLocal()
+    try:
+        try:
+            org_uuid = UUID(org_id)
+        except ValueError:
+            click.echo(f"[ERROR] Invalid org UUID: {org_id}")
+            return
+
+        job_type_enum = JobType(job_type) if job_type else None
+        failed = job_service.list_dead_letter_jobs(
+            db,
+            org_id=org_uuid,
+            job_type=job_type_enum,
+            limit=limit,
+        )
+        if not failed:
+            click.echo("[OK] No failed jobs found")
+            return
+
+        click.echo(f"Found {len(failed)} failed job(s)")
+        for job in failed:
+            click.echo(
+                f"  - {job.id} type={job.job_type} attempts={job.attempts}/{job.max_attempts}"
+            )
+
+        if dry_run:
+            click.echo("[OK] Dry run complete (no jobs replayed)")
+            return
+
+        replayed = job_service.replay_failed_jobs(
+            db,
+            org_id=org_uuid,
+            job_type=job_type_enum,
+            limit=limit,
+            reason=reason,
+        )
+        click.echo(f"[OK] Replayed {len(replayed)} failed job(s)")
+    except Exception as exc:
+        db.rollback()
+        click.echo(f"[ERROR] Error: {exc}")
         raise
     finally:
         db.close()

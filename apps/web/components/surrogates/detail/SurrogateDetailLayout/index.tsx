@@ -82,6 +82,7 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
                 <Tabs value={currentTab} onValueChange={setTab} className="w-full">
                     <TabsList className="mb-4 overflow-x-auto print:hidden">
                         <TabsTrigger value="overview">Overview</TabsTrigger>
+                        <TabsTrigger value="emails">Emails</TabsTrigger>
                         <TabsTrigger value="notes">
                             Notes {noteCount > 0 && `(${noteCount})`}
                         </TabsTrigger>

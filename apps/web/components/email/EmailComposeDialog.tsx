@@ -26,7 +26,12 @@ import { normalizeTemplateHtml } from "@/lib/email-template-html"
 import { useEmailTemplates, useEmailTemplate } from "@/lib/hooks/use-email-templates"
 import { useSignaturePreview } from "@/lib/hooks/use-signature"
 import { useSendSurrogateEmail, useSurrogateTemplateVariables } from "@/lib/hooks/use-surrogates"
-import { EmailAttachmentsPanel, type EmailAttachmentSelectionState } from "@/components/email/EmailAttachmentsPanel"
+import {
+    EmailAttachmentsPanel,
+    type EmailAttachmentSelectionState,
+    type EmailAttachmentsPanelHandle,
+} from "@/components/email/EmailAttachmentsPanel"
+import { cn } from "@/lib/utils"
 
 type TemplatePreviewValue = string | number | boolean | null | undefined
 
@@ -56,6 +61,11 @@ const LEGACY_UNSUBSCRIBE_ANCHOR_RE =
     /<a\b[^>]*\bhref\s*=\s*(["'])\s*\{\{\s*unsubscribe_url\s*\}\}\s*\1[^>]*>[\s\S]*?<\/a>/gi
 const TEMPLATE_TOKEN_RE = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g
 
+function dataTransferHasFiles(dataTransfer: DataTransfer | null): boolean {
+    if (!dataTransfer) return false
+    return Array.from(dataTransfer.types ?? []).includes("Files")
+}
+
 function escapeHtml(raw: string): string {
     return raw
         .replace(/&/g, "&amp;")
@@ -84,6 +94,9 @@ export function EmailComposeDialog({
     const idempotencyKeyRef = React.useRef<string | null>(null)
     const hydratedTemplateIdRef = React.useRef<string | null>(null)
     const previewEditorRef = React.useRef<HTMLDivElement | null>(null)
+    const attachmentsPanelRef = React.useRef<EmailAttachmentsPanelHandle | null>(null)
+    const dragDepthRef = React.useRef(0)
+    const [isBodyDropActive, setIsBodyDropActive] = React.useState(false)
 
     // Fetch email templates list
     const { data: templates = [], isLoading: templatesLoading } = useEmailTemplates({ activeOnly: true })
@@ -130,6 +143,8 @@ export function EmailComposeDialog({
             setSubject("")
             setBody("")
             setIsPreview(true)
+            dragDepthRef.current = 0
+            setIsBodyDropActive(false)
             setAttachmentSelection({
                 selectedAttachmentIds: [],
                 hasBlockingAttachments: false,
@@ -353,6 +368,43 @@ export function EmailComposeDialog({
         "{{unsubscribe_url}}",
     ]
 
+    const handleBodyDragEnter = React.useCallback((event: React.DragEvent<HTMLElement>) => {
+        if (!dataTransferHasFiles(event.dataTransfer)) return
+        event.preventDefault()
+        dragDepthRef.current += 1
+        setIsBodyDropActive(true)
+    }, [])
+
+    const handleBodyDragOver = React.useCallback((event: React.DragEvent<HTMLElement>) => {
+        if (!dataTransferHasFiles(event.dataTransfer)) return
+        event.preventDefault()
+        event.dataTransfer.dropEffect = "copy"
+        if (!isBodyDropActive) {
+            setIsBodyDropActive(true)
+        }
+    }, [isBodyDropActive])
+
+    const handleBodyDragLeave = React.useCallback((event: React.DragEvent<HTMLElement>) => {
+        if (!dataTransferHasFiles(event.dataTransfer)) return
+        event.preventDefault()
+        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
+        if (dragDepthRef.current === 0) {
+            setIsBodyDropActive(false)
+        }
+    }, [])
+
+    const handleBodyDrop = React.useCallback(async (event: React.DragEvent<HTMLElement>) => {
+        if (!dataTransferHasFiles(event.dataTransfer)) return
+        event.preventDefault()
+        dragDepthRef.current = 0
+        setIsBodyDropActive(false)
+
+        const files = Array.from(event.dataTransfer.files ?? [])
+        if (files.length === 0) return
+
+        await attachmentsPanelRef.current?.uploadFiles(files)
+    }, [])
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -411,6 +463,7 @@ export function EmailComposeDialog({
                     </div>
 
                     <EmailAttachmentsPanel
+                        ref={attachmentsPanelRef}
                         surrogateId={surrogateData.id}
                         onSelectionChange={setAttachmentSelection}
                     />
@@ -432,7 +485,16 @@ export function EmailComposeDialog({
                     </div>
 
                     {/* Body with Preview Toggle */}
-                    <div className="grid gap-2">
+                    <div
+                        className={cn(
+                            "grid gap-2 rounded-lg transition-colors",
+                            isBodyDropActive && "ring-1 ring-primary/40 bg-primary/5 px-2 py-2"
+                        )}
+                        onDragEnter={handleBodyDragEnter}
+                        onDragOver={handleBodyDragOver}
+                        onDragLeave={handleBodyDragLeave}
+                        onDrop={handleBodyDrop}
+                    >
                         <div className="flex items-center justify-between">
                             <Label id="message-label" htmlFor={isPreview ? undefined : "body"}>
                                 Message
@@ -457,6 +519,12 @@ export function EmailComposeDialog({
                                 )}
                             </Button>
                         </div>
+
+                        {isBodyDropActive && (
+                            <p className="text-xs font-medium text-primary">
+                                Drop files to attach to this email.
+                            </p>
+                        )}
 
                         {isPreview && (
                             <div className="rounded-xl border border-input overflow-hidden">

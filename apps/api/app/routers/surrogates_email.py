@@ -10,10 +10,19 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_csrf_header
+from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
+from app.core.policies import POLICIES
 from app.core.surrogate_access import check_surrogate_access
 from app.schemas.auth import UserSession
-from app.services import surrogate_service
+from app.schemas.ticketing import (
+    SurrogateEmailContactCreateRequest,
+    SurrogateEmailContactListResponse,
+    SurrogateEmailContactPatchRequest,
+    SurrogateEmailContactRead,
+    SurrogateTicketEmailItem,
+    SurrogateTicketEmailListResponse,
+)
+from app.services import surrogate_service, ticketing_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -37,6 +46,7 @@ class SendEmailResponse(BaseModel):
     email_log_id: UUID | None = None
     message_id: str | None = None
     provider_used: str | None = None
+    ticket_id: UUID | None = None
     error: str | None = None
 
 
@@ -72,8 +82,12 @@ async def send_surrogate_email(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    """Send email to surrogate contact using template."""
-    from app.services import email_service, gmail_service, oauth_service
+    """Send email to surrogate contact using template.
+
+    Keeps legacy provider behavior (auto/gmail/resend) and writes ticketing
+    metadata on successful Gmail sends.
+    """
+    from app.services import email_composition_service, email_service, gmail_service, oauth_service, org_service
 
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
     if not surrogate:
@@ -106,12 +120,9 @@ async def send_surrogate_email(
 
     subject_template = data.subject if data.subject is not None else template.subject
     body_template = data.body if data.body is not None else template.body
-    from app.services import email_composition_service
 
     body_template = email_composition_service.strip_legacy_unsubscribe_placeholders(body_template)
     subject, body = email_service.render_template(subject_template, body_template, variables)
-
-    from app.services import org_service
 
     org = org_service.get_org_by_id(db, session.org_id)
     portal_base_url = org_service.get_org_portal_base_url(org)
@@ -144,7 +155,7 @@ async def send_surrogate_email(
             error="Email suppressed",
         )
 
-    provider = (data.provider or "auto").lower()
+    provider = (data.provider or "auto").strip().lower()
     if provider not in {"auto", "gmail", "resend"}:
         return SendEmailResponse(
             success=False,
@@ -180,17 +191,6 @@ async def send_surrogate_email(
             error="Resend not configured. Set RESEND_API_KEY for non-Gmail sends.",
         )
 
-    attachment_count = len(selected_attachments)
-    attachment_total_bytes = sum(
-        int(attachment.file_size or 0) for attachment in selected_attachments
-    )
-    logger.info(
-        "surrogate_send_email_attempt provider=%s attachments_count=%s attachments_total_bytes=%s",
-        resolved_provider,
-        attachment_count,
-        attachment_total_bytes,
-    )
-
     if resolved_provider == "resend":
         email_log, _job = email_service.send_email(
             db=db,
@@ -203,7 +203,6 @@ async def send_surrogate_email(
             attachments=selected_attachments,
             sender_user_id=session.user_id,
         )
-
         return SendEmailResponse(
             success=True,
             email_log_id=email_log.id,
@@ -227,27 +226,241 @@ async def send_surrogate_email(
 
     result = await gmail_service.send_email_logged(**gmail_kwargs)
 
-    if result.get("success"):
-        email_service.log_surrogate_email_send_success(
-            db=db,
-            org_id=session.org_id,
-            surrogate_id=surrogate_id,
+    if not result.get("success"):
+        return SendEmailResponse(
+            success=False,
             email_log_id=result.get("email_log_id"),
-            subject=subject,
-            provider="gmail",
-            template_id=data.template_id,
-            actor_user_id=session.user_id,
-            attachments=selected_attachments,
+            error=result.get("error"),
         )
 
-        return SendEmailResponse(
-            success=True,
-            email_log_id=result.get("email_log_id"),
-            message_id=result.get("message_id"),
-            provider_used="gmail",
-        )
-    return SendEmailResponse(
-        success=False,
+    email_service.log_surrogate_email_send_success(
+        db=db,
+        org_id=session.org_id,
+        surrogate_id=surrogate_id,
         email_log_id=result.get("email_log_id"),
-        error=result.get("error"),
+        subject=subject,
+        provider="gmail",
+        template_id=data.template_id,
+        actor_user_id=session.user_id,
+        attachments=selected_attachments,
     )
+
+    ticket_id: UUID | None = None
+    try:
+        ticket_id = ticketing_service.record_surrogate_outbound_gmail_send(
+            db=db,
+            org_id=session.org_id,
+            actor_user_id=session.user_id,
+            surrogate_id=surrogate_id,
+            to_email=surrogate.email,
+            subject=subject,
+            body_html=body,
+            gmail_message_id=result.get("message_id"),
+            gmail_thread_id=result.get("thread_id"),
+        )
+    except Exception:  # pragma: no cover - best-effort ticketing mirror
+        db.rollback()
+        logger.exception("Failed to mirror surrogate send-email into ticketing records")
+
+    return SendEmailResponse(
+        success=True,
+        email_log_id=result.get("email_log_id"),
+        message_id=result.get("message_id"),
+        provider_used="gmail",
+        ticket_id=ticket_id,
+    )
+
+
+@router.get(
+    "/{surrogate_id:uuid}/emails",
+    response_model=SurrogateTicketEmailListResponse,
+    dependencies=[Depends(require_permission(POLICIES["tickets"].default))],
+)
+def list_surrogate_emails(
+    surrogate_id: UUID,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+) -> SurrogateTicketEmailListResponse:
+    """List ticket/email history linked to a surrogate."""
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    tickets = ticketing_service.list_surrogate_ticket_emails(
+        db,
+        org_id=session.org_id,
+        surrogate_id=surrogate_id,
+    )
+    return SurrogateTicketEmailListResponse(
+        items=[
+            SurrogateTicketEmailItem(
+                id=ticket.id,
+                ticket_code=ticket.ticket_code,
+                subject=ticket.subject,
+                status=ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status),
+                priority=ticket.priority.value
+                if hasattr(ticket.priority, "value")
+                else str(ticket.priority),
+                requester_email=ticket.requester_email,
+                last_activity_at=ticket.last_activity_at,
+                created_at=ticket.created_at,
+            )
+            for ticket in tickets
+        ]
+    )
+
+
+@router.get(
+    "/{surrogate_id:uuid}/email-contacts",
+    response_model=SurrogateEmailContactListResponse,
+    dependencies=[Depends(require_permission(POLICIES["tickets"].default))],
+)
+def list_surrogate_email_contacts(
+    surrogate_id: UUID,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+) -> SurrogateEmailContactListResponse:
+    """List surrogate contact emails (system + manual)."""
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    contacts = ticketing_service.list_surrogate_email_contacts(
+        db,
+        org_id=session.org_id,
+        surrogate_id=surrogate_id,
+    )
+    return SurrogateEmailContactListResponse(
+        items=[
+            SurrogateEmailContactRead(
+                id=contact.id,
+                surrogate_id=contact.surrogate_id,
+                email=contact.email,
+                email_domain=contact.email_domain,
+                source=contact.source.value if hasattr(contact.source, "value") else str(contact.source),
+                label=contact.label,
+                contact_type=contact.contact_type,
+                is_active=contact.is_active,
+                created_by_user_id=contact.created_by_user_id,
+                created_at=contact.created_at,
+                updated_at=contact.updated_at,
+            )
+            for contact in contacts
+        ]
+    )
+
+
+@router.post(
+    "/{surrogate_id:uuid}/email-contacts",
+    response_model=SurrogateEmailContactRead,
+    dependencies=[Depends(require_csrf_header), Depends(require_permission(POLICIES["tickets"].actions["link_surrogates"]))],
+)
+def create_surrogate_email_contact(
+    surrogate_id: UUID,
+    data: SurrogateEmailContactCreateRequest,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+) -> SurrogateEmailContactRead:
+    """Add manual surrogate email contact."""
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    contact = ticketing_service.create_surrogate_email_contact(
+        db,
+        org_id=session.org_id,
+        surrogate_id=surrogate_id,
+        actor_user_id=session.user_id,
+        email=data.email,
+        label=data.label,
+        contact_type=data.contact_type,
+    )
+    return SurrogateEmailContactRead(
+        id=contact.id,
+        surrogate_id=contact.surrogate_id,
+        email=contact.email,
+        email_domain=contact.email_domain,
+        source=contact.source.value if hasattr(contact.source, "value") else str(contact.source),
+        label=contact.label,
+        contact_type=contact.contact_type,
+        is_active=contact.is_active,
+        created_by_user_id=contact.created_by_user_id,
+        created_at=contact.created_at,
+        updated_at=contact.updated_at,
+    )
+
+
+@router.patch(
+    "/{surrogate_id:uuid}/email-contacts/{contact_id:uuid}",
+    response_model=SurrogateEmailContactRead,
+    dependencies=[Depends(require_csrf_header), Depends(require_permission(POLICIES["tickets"].actions["link_surrogates"]))],
+)
+def patch_surrogate_email_contact(
+    surrogate_id: UUID,
+    contact_id: UUID,
+    data: SurrogateEmailContactPatchRequest,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+) -> SurrogateEmailContactRead:
+    """Edit manual surrogate email contact."""
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    contact = ticketing_service.patch_surrogate_email_contact(
+        db,
+        org_id=session.org_id,
+        surrogate_id=surrogate_id,
+        contact_id=contact_id,
+        email=data.email,
+        label=data.label,
+        contact_type=data.contact_type,
+        is_active=data.is_active,
+    )
+    return SurrogateEmailContactRead(
+        id=contact.id,
+        surrogate_id=contact.surrogate_id,
+        email=contact.email,
+        email_domain=contact.email_domain,
+        source=contact.source.value if hasattr(contact.source, "value") else str(contact.source),
+        label=contact.label,
+        contact_type=contact.contact_type,
+        is_active=contact.is_active,
+        created_by_user_id=contact.created_by_user_id,
+        created_at=contact.created_at,
+        updated_at=contact.updated_at,
+    )
+
+
+@router.delete(
+    "/{surrogate_id:uuid}/email-contacts/{contact_id:uuid}",
+    dependencies=[Depends(require_csrf_header), Depends(require_permission(POLICIES["tickets"].actions["link_surrogates"]))],
+)
+def delete_surrogate_email_contact(
+    surrogate_id: UUID,
+    contact_id: UUID,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+) -> dict[str, bool]:
+    """Deactivate manual surrogate email contact."""
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    ticketing_service.deactivate_surrogate_email_contact(
+        db,
+        org_id=session.org_id,
+        surrogate_id=surrogate_id,
+        contact_id=contact_id,
+    )
+    return {"success": True}

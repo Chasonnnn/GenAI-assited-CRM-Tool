@@ -129,6 +129,18 @@ def get_job(db: Session, job_id: UUID, org_id: UUID | None = None) -> Job | None
     return query.first()
 
 
+def get_job_by_idempotency_key(db: Session, *, org_id: UUID, idempotency_key: str) -> Job | None:
+    """Return a job by idempotency key within organization scope."""
+    return (
+        db.query(Job)
+        .filter(
+            Job.organization_id == org_id,
+            Job.idempotency_key == idempotency_key,
+        )
+        .first()
+    )
+
+
 def list_jobs(
     db: Session,
     org_id: UUID,
@@ -143,6 +155,23 @@ def list_jobs(
     if job_type:
         query = query.filter(Job.job_type == job_type.value)
     return query.order_by(Job.created_at.desc()).limit(limit).all()
+
+
+def list_dead_letter_jobs(
+    db: Session,
+    *,
+    org_id: UUID,
+    job_type: JobType | None = None,
+    limit: int = 100,
+) -> list[Job]:
+    """List failed (dead-letter) jobs for an organization."""
+    query = db.query(Job).filter(
+        Job.organization_id == org_id,
+        Job.status == JobStatus.FAILED.value,
+    )
+    if job_type:
+        query = query.filter(Job.job_type == job_type.value)
+    return query.order_by(Job.created_at.desc()).limit(max(1, min(limit, 500))).all()
 
 
 def mark_job_running(db: Session, job: Job) -> Job:
@@ -178,3 +207,84 @@ def mark_job_failed(db: Session, job: Job, error: str) -> Job:
     db.commit()
     db.refresh(job)
     return job
+
+
+def replay_failed_job(
+    db: Session,
+    *,
+    org_id: UUID,
+    job_id: UUID,
+    reason: str | None = None,
+    commit: bool = True,
+) -> Job:
+    """Reset a failed job back to pending for replay."""
+    job = (
+        db.query(Job)
+        .filter(
+            Job.id == job_id,
+            Job.organization_id == org_id,
+        )
+        .first()
+    )
+    if job is None:
+        raise ValueError("Job not found")
+    if job.status != JobStatus.FAILED.value:
+        raise ValueError("Only failed jobs can be replayed")
+
+    now = datetime.now(timezone.utc)
+    payload = dict(job.payload or {})
+    replay_meta = payload.get("_replay")
+    if not isinstance(replay_meta, dict):
+        replay_meta = {}
+    replay_count = int(replay_meta.get("count", 0) or 0) + 1
+    payload["_replay"] = {
+        "count": replay_count,
+        "reason": reason,
+        "replayed_at": now.isoformat(),
+    }
+    job.payload = payload
+
+    job.status = JobStatus.PENDING.value
+    job.run_at = now
+    job.attempts = 0
+    job.completed_at = None
+    job.last_error = None
+
+    if commit:
+        db.commit()
+        db.refresh(job)
+    else:
+        db.flush()
+    return job
+
+
+def replay_failed_jobs(
+    db: Session,
+    *,
+    org_id: UUID,
+    job_type: JobType | None = None,
+    limit: int = 100,
+    reason: str | None = None,
+) -> list[Job]:
+    """Replay a batch of failed jobs."""
+    jobs = list_dead_letter_jobs(
+        db,
+        org_id=org_id,
+        job_type=job_type,
+        limit=limit,
+    )
+    replayed: list[Job] = []
+    for job in jobs:
+        replayed.append(
+            replay_failed_job(
+                db,
+                org_id=org_id,
+                job_id=job.id,
+                reason=reason,
+                commit=False,
+            )
+        )
+    db.commit()
+    for job in replayed:
+        db.refresh(job)
+    return replayed

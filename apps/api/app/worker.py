@@ -72,6 +72,11 @@ GOOGLE_CALENDAR_SYNC_FALLBACK_ENABLED = _env_flag_enabled(
 GOOGLE_CALENDAR_SYNC_FALLBACK_INTERVAL_SECONDS = int(
     os.getenv("GOOGLE_CALENDAR_SYNC_FALLBACK_INTERVAL_SECONDS", "300")
 )
+GMAIL_SYNC_FALLBACK_ENABLED = _env_flag_enabled(
+    os.getenv("GMAIL_SYNC_FALLBACK_ENABLED"),
+    default=True,
+)
+GMAIL_SYNC_FALLBACK_INTERVAL_SECONDS = int(os.getenv("GMAIL_SYNC_FALLBACK_INTERVAL_SECONDS", "60"))
 
 
 def parse_worker_job_types(raw: str | None) -> list[str] | None:
@@ -134,6 +139,36 @@ def maybe_schedule_google_calendar_sync_jobs(
         counts["jobs_created"],
         counts["task_jobs_created"],
         counts["watch_jobs_created"],
+    )
+    return now
+
+
+def maybe_schedule_gmail_sync_jobs(
+    db,
+    *,
+    now: datetime,
+    last_run_at: datetime | None,
+) -> datetime | None:
+    """
+    Best-effort fallback scheduler for Gmail mailbox history sync jobs.
+
+    This keeps ticketing email ingestion running when external cron is not configured.
+    """
+    if not GMAIL_SYNC_FALLBACK_ENABLED:
+        return last_run_at
+
+    interval_seconds = max(1, GMAIL_SYNC_FALLBACK_INTERVAL_SECONDS)
+    if last_run_at and now < (last_run_at + timedelta(seconds=interval_seconds)):
+        return last_run_at
+
+    from app.services import ticketing_service
+
+    counts = ticketing_service.schedule_incremental_sync_jobs(db)
+    logger.info(
+        "Gmail sync fallback scheduled (mailboxes=%s jobs=%s watch_jobs=%s)",
+        counts["mailboxes_checked"],
+        counts["jobs_created"],
+        counts.get("watch_jobs_created", 0),
     )
     return now
 
@@ -210,6 +245,20 @@ def _resolve_integration_keys(db, job, integration_type) -> list[str]:
         else:
             keys.append("outbound")
 
+    elif integration_type == IntegrationType.WORKER:
+        mailbox_id = payload.get("mailbox_id")
+        if mailbox_id:
+            keys.append(f"mailbox:{mailbox_id}")
+        ticket_id = payload.get("ticket_id")
+        if ticket_id:
+            keys.append(f"ticket:{ticket_id}")
+        if payload.get("mode") == "reply":
+            keys.append("ticket_outbound_reply")
+        elif payload.get("mode") == "compose":
+            keys.append("ticket_outbound_compose")
+        if not keys:
+            keys.append(str(job.job_type))
+
     else:
         page_id = payload.get("page_id") or payload.get("meta_page_id")
         if page_id:
@@ -233,6 +282,14 @@ def _record_job_success(db, job) -> None:
         JobType.META_SPEND_SYNC.value: IntegrationType.META_SPEND,
         JobType.META_FORM_SYNC.value: IntegrationType.META_FORMS,
         JobType.ZAPIER_STAGE_EVENT.value: IntegrationType.ZAPIER,
+        JobType.MAILBOX_BACKFILL.value: IntegrationType.WORKER,
+        JobType.MAILBOX_HISTORY_SYNC.value: IntegrationType.WORKER,
+        JobType.MAILBOX_WATCH_REFRESH.value: IntegrationType.WORKER,
+        JobType.EMAIL_OCCURRENCE_FETCH_RAW.value: IntegrationType.WORKER,
+        JobType.EMAIL_OCCURRENCE_PARSE.value: IntegrationType.WORKER,
+        JobType.EMAIL_OCCURRENCE_STITCH.value: IntegrationType.WORKER,
+        JobType.TICKET_APPLY_LINKING.value: IntegrationType.WORKER,
+        JobType.TICKET_OUTBOUND_SEND.value: IntegrationType.WORKER,
     }
 
     integration_type = job_to_integration.get(job.job_type)
@@ -264,7 +321,7 @@ def _record_job_failure(db, job, error_msg: str, exception: Exception | None = N
     from app.db.enums import IntegrationType, AlertType, AlertSeverity
 
     if not job.organization_id:
-        return "sent"
+        return
 
     try:
         # Map job types to integration types (for health tracking)
@@ -276,6 +333,14 @@ def _record_job_failure(db, job, error_msg: str, exception: Exception | None = N
             JobType.META_SPEND_SYNC.value: IntegrationType.META_SPEND,
             JobType.META_FORM_SYNC.value: IntegrationType.META_FORMS,
             JobType.ZAPIER_STAGE_EVENT.value: IntegrationType.ZAPIER,
+            JobType.MAILBOX_BACKFILL.value: IntegrationType.WORKER,
+            JobType.MAILBOX_HISTORY_SYNC.value: IntegrationType.WORKER,
+            JobType.MAILBOX_WATCH_REFRESH.value: IntegrationType.WORKER,
+            JobType.EMAIL_OCCURRENCE_FETCH_RAW.value: IntegrationType.WORKER,
+            JobType.EMAIL_OCCURRENCE_PARSE.value: IntegrationType.WORKER,
+            JobType.EMAIL_OCCURRENCE_STITCH.value: IntegrationType.WORKER,
+            JobType.TICKET_APPLY_LINKING.value: IntegrationType.WORKER,
+            JobType.TICKET_OUTBOUND_SEND.value: IntegrationType.WORKER,
         }
 
         integration_keys: list[str] = []
@@ -311,10 +376,18 @@ def _record_job_failure(db, job, error_msg: str, exception: Exception | None = N
                 JobType.SEND_EMAIL.value: AlertType.EMAIL_SEND_FAILED,
                 JobType.CAMPAIGN_SEND.value: AlertType.EMAIL_SEND_FAILED,
                 JobType.WORKFLOW_EMAIL.value: AlertType.EMAIL_SEND_FAILED,
+                JobType.TICKET_OUTBOUND_SEND.value: AlertType.EMAIL_SEND_FAILED,
                 JobType.WEBHOOK_RETRY.value: AlertType.WEBHOOK_DELIVERY_FAILED,
                 JobType.AI_CHAT.value: AlertType.AI_PROVIDER_ERROR,
                 JobType.INTERVIEW_TRANSCRIPTION.value: AlertType.TRANSCRIPTION_FAILED,
                 JobType.ZAPIER_STAGE_EVENT.value: AlertType.WEBHOOK_DELIVERY_FAILED,
+                JobType.MAILBOX_BACKFILL.value: AlertType.INTEGRATION_API_ERROR,
+                JobType.MAILBOX_HISTORY_SYNC.value: AlertType.INTEGRATION_API_ERROR,
+                JobType.MAILBOX_WATCH_REFRESH.value: AlertType.INTEGRATION_API_ERROR,
+                JobType.EMAIL_OCCURRENCE_FETCH_RAW.value: AlertType.INTEGRATION_API_ERROR,
+                JobType.EMAIL_OCCURRENCE_PARSE.value: AlertType.INTEGRATION_API_ERROR,
+                JobType.EMAIL_OCCURRENCE_STITCH.value: AlertType.INTEGRATION_API_ERROR,
+                JobType.TICKET_APPLY_LINKING.value: AlertType.INTEGRATION_API_ERROR,
             }
             alert_type = alert_type_map.get(job.job_type, AlertType.WORKER_JOB_FAILED)
 
@@ -379,6 +452,7 @@ async def worker_loop() -> None:
 
     last_session_cleanup = datetime.min.replace(tzinfo=timezone.utc)
     last_google_sync_schedule: datetime | None = None
+    last_gmail_sync_schedule: datetime | None = None
 
     while True:
         with SessionLocal() as db:
@@ -392,6 +466,15 @@ async def worker_loop() -> None:
                     )
                 except Exception:
                     logger.exception("Google sync fallback scheduling failed")
+
+                try:
+                    last_gmail_sync_schedule = maybe_schedule_gmail_sync_jobs(
+                        db,
+                        now=now,
+                        last_run_at=last_gmail_sync_schedule,
+                    )
+                except Exception:
+                    logger.exception("Gmail sync fallback scheduling failed")
 
                 if now - last_session_cleanup >= timedelta(
                     seconds=SESSION_CLEANUP_INTERVAL_SECONDS
@@ -427,7 +510,12 @@ async def worker_loop() -> None:
                     except Exception as e:
                         error_msg = str(e)
                         job_service.mark_job_failed(db, job, error_msg)
-                        logger.error("Job %s failed: %s", job.id, type(e).__name__)
+                        logger.error(
+                            "Job %s failed (type=%s): %s",
+                            job.id,
+                            job.job_type,
+                            type(e).__name__,
+                        )
 
                         # Apply rate limit backoff for Meta throttling errors
                         if job.status == JobStatus.PENDING.value and _is_meta_rate_limit_error(
