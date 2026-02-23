@@ -190,7 +190,7 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                 <div className="flex items-center gap-2 text-sm text-destructive">
                     <AlertTriangle className="size-4" />
                     {error}
-                    <Button variant="ghost" size="sm" onClick={() => setError(null)}>
+                    <Button variant="ghost" size="sm" onClick={() => setError(null)} aria-label="Clear error">
                         <X className="size-4" />
                     </Button>
                 </div>
@@ -202,9 +202,9 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                     <Loader2 className="size-6 animate-spin text-muted-foreground" />
                 </div>
             ) : attachments.length > 0 ? (
-                <div className="space-y-2">
+                <ul className="space-y-2" role="list">
                     {attachments.map((attachment: Attachment) => (
-                        <div
+                        <li
                             key={attachment.id}
                             className="flex items-center gap-3 p-3 rounded-lg border bg-card"
                         >
@@ -241,9 +241,9 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                                     <Trash2 className="size-4" />
                                 </Button>
                             </div>
-                        </div>
+                        </li>
                     ))}
-                </div>
+                </ul>
             ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">
                     No attachments yet
