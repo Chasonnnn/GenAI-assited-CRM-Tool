@@ -464,6 +464,36 @@ async def test_platform_form_templates_delete(authed_client, db, test_user):
 
 
 @pytest.mark.asyncio
+async def test_seeded_surrogate_prescreening_template_visible_in_ops_forms(
+    authed_client, db, test_user
+):
+    test_user.is_platform_admin = True
+    db.commit()
+
+    resp = await authed_client.get("/platform/templates/forms")
+    assert resp.status_code == 200
+    templates = resp.json()
+
+    seeded = next(
+        (
+            item
+            for item in templates
+            if item["draft"]["name"] == "Surrogate Pre-Screening Questionnaire"
+        ),
+        None,
+    )
+    assert seeded is not None
+
+    schema = seeded["draft"].get("schema_json") or {}
+    field_keys = {
+        field["key"] for page in schema.get("pages", []) for field in page.get("fields", [])
+    }
+    assert "age_21_to_36" in field_keys
+    assert "has_raised_child" in field_keys
+    assert "government_assistance" in field_keys
+
+
+@pytest.mark.asyncio
 async def test_platform_workflow_templates_delete(authed_client, db, test_user):
     test_user.is_platform_admin = True
     db.commit()
