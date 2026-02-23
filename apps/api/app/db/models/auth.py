@@ -100,7 +100,7 @@ class Organization(Base):
     )
     default_surrogate_application_form_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("forms.id", ondelete="SET NULL"),
+        ForeignKey("forms.id", ondelete="SET NULL", use_alter=True),
         nullable=True,
     )
 
