@@ -24,6 +24,8 @@ from app.db.models import (
     Attachment,
     AutomationWorkflow,
     EntityNote,
+    FormSubmission,
+    IntakeLead,
     Match,
     Organization,
     Surrogate,
@@ -59,7 +61,7 @@ class WorkflowDomainAdapter(Protocol):
         action: dict,
         action_index: int,
         entity: Any,
-        surrogate: Surrogate,
+        surrogate: Surrogate | None,
         owner: User,
         triggered_by_user_id: UUID | None,
     ) -> Task | None: ...
@@ -89,11 +91,20 @@ class DefaultWorkflowDomainAdapter:
         WorkflowActionType.UPDATE_FIELD.value,
         WorkflowActionType.ADD_NOTE.value,
     }
+    INTAKE_LEAD_ONLY_ACTIONS = {"promote_intake_lead"}
+    FORM_SUBMISSION_ONLY_ACTIONS = {
+        WorkflowActionType.AUTO_MATCH_SUBMISSION.value,
+        WorkflowActionType.CREATE_INTAKE_LEAD.value,
+    }
 
     def get_entity(self, db: Session, entity_type: str, entity_id: UUID) -> Any:
         """Get entity by type and ID."""
         if entity_type == "surrogate":
             return db.query(Surrogate).filter(Surrogate.id == entity_id).first()
+        if entity_type == "form_submission":
+            return db.query(FormSubmission).filter(FormSubmission.id == entity_id).first()
+        if entity_type == "intake_lead":
+            return db.query(IntakeLead).filter(IntakeLead.id == entity_id).first()
         if entity_type == "task":
             return db.query(Task).filter(Task.id == entity_id).first()
         if entity_type == "match":
@@ -115,6 +126,14 @@ class DefaultWorkflowDomainAdapter:
         """Get the surrogate related to an entity."""
         if entity_type == "surrogate":
             return entity
+        if entity_type == "intake_lead":
+            promoted_surrogate_id = getattr(entity, "promoted_surrogate_id", None)
+            if not promoted_surrogate_id:
+                return None
+            query = db.query(Surrogate).filter(Surrogate.id == promoted_surrogate_id)
+            if hasattr(entity, "organization_id"):
+                query = query.filter(Surrogate.organization_id == entity.organization_id)
+            return query.first()
         if hasattr(entity, "surrogate_id") and entity.surrogate_id:
             query = db.query(Surrogate).filter(Surrogate.id == entity.surrogate_id)
             if hasattr(entity, "organization_id"):
@@ -130,7 +149,7 @@ class DefaultWorkflowDomainAdapter:
         action: dict,
         action_index: int,
         entity: Any,
-        surrogate: Surrogate,
+        surrogate: Surrogate | None,
         owner: User,
         triggered_by_user_id: UUID | None,
     ) -> Task | None:
@@ -140,7 +159,7 @@ class DefaultWorkflowDomainAdapter:
         Returns the task if created or already exists (idempotency).
         """
         # Get organization for timezone fallback
-        org = db.query(Organization).filter(Organization.id == surrogate.organization_id).first()
+        org = db.query(Organization).filter(Organization.id == execution.organization_id).first()
 
         # Build sanitized preview (no PII)
         preview = build_action_preview(db, action, entity)
@@ -159,7 +178,7 @@ class DefaultWorkflowDomainAdapter:
 
         task = Task(
             organization_id=execution.organization_id,
-            surrogate_id=surrogate.id,
+            surrogate_id=surrogate.id if surrogate else None,
             task_type=TaskType.WORKFLOW_APPROVAL.value,
             title=f"Approve: {preview}",
             description=f"Workflow '{workflow.name}' requires your approval to proceed.",
@@ -187,9 +206,9 @@ class DefaultWorkflowDomainAdapter:
                 db=db,
                 task_id=task.id,
                 task_title=task.title,
-                org_id=surrogate.organization_id,
+                org_id=execution.organization_id,
                 assignee_id=owner.id,
-                surrogate_number=surrogate.surrogate_number,
+                surrogate_number=surrogate.surrogate_number if surrogate else None,
             )
 
             return task
@@ -231,13 +250,13 @@ class DefaultWorkflowDomainAdapter:
 
         # Validate entity type for Surrogate-only actions, map tasks to surrogates when possible
         if action_type in self.SURROGATE_ONLY_ACTIONS:
-            if entity_type == "task":
+            if entity_type in {"task", "form_submission"}:
                 surrogate_id = getattr(entity, "surrogate_id", None)
                 if not surrogate_id:
                     return _with_action_type(
                         {
                             "success": False,
-                            "error": "Task is not linked to a surrogate",
+                            "error": f"{entity_type.replace('_', ' ').title()} is not linked to a surrogate",
                             "skipped": True,
                         }
                     )
@@ -246,7 +265,7 @@ class DefaultWorkflowDomainAdapter:
                     return _with_action_type(
                         {
                             "success": False,
-                            "error": "Surrogate not found for task",
+                            "error": f"Surrogate not found for {entity_type.replace('_', ' ')}",
                             "skipped": True,
                         }
                     )
@@ -258,6 +277,24 @@ class DefaultWorkflowDomainAdapter:
                         "skipped": True,
                     }
                 )
+
+        if action_type in self.INTAKE_LEAD_ONLY_ACTIONS and entity_type != "intake_lead":
+            return _with_action_type(
+                {
+                    "success": False,
+                    "error": f"Action '{action_type}' only supports intake_lead entities",
+                    "skipped": True,
+                }
+            )
+
+        if action_type in self.FORM_SUBMISSION_ONLY_ACTIONS and entity_type != "form_submission":
+            return _with_action_type(
+                {
+                    "success": False,
+                    "error": f"Action '{action_type}' only supports form_submission entities",
+                    "skipped": True,
+                }
+            )
 
         try:
             if action_type == WorkflowActionType.SEND_EMAIL.value:
@@ -288,6 +325,18 @@ class DefaultWorkflowDomainAdapter:
 
             if action_type == WorkflowActionType.ADD_NOTE.value:
                 result = self._action_add_note(db, action, action_entity)
+                return _with_action_type(result)
+
+            if action_type == "promote_intake_lead":
+                result = self._action_promote_intake_lead(db, action, entity)
+                return _with_action_type(result)
+
+            if action_type == WorkflowActionType.AUTO_MATCH_SUBMISSION.value:
+                result = self._action_auto_match_submission(db, entity)
+                return _with_action_type(result)
+
+            if action_type == WorkflowActionType.CREATE_INTAKE_LEAD.value:
+                result = self._action_create_intake_lead(db, action, entity)
                 return _with_action_type(result)
 
             return _with_action_type(
@@ -542,16 +591,28 @@ class DefaultWorkflowDomainAdapter:
         recipients = action.get("recipients", "owner")
 
         target = entity
+        target_entity_type = "surrogate"
+        if isinstance(entity, FormSubmission):
+            target_entity_type = "form_submission"
         if not hasattr(entity, "owner_type"):
             surrogate_id = getattr(entity, "surrogate_id", None)
             if surrogate_id:
                 target = db.query(Surrogate).filter(Surrogate.id == surrogate_id).first()
+                if target:
+                    target_entity_type = "surrogate"
+            elif isinstance(entity, IntakeLead):
+                target = entity
+                target_entity_type = "intake_lead"
         if not target or not hasattr(target, "organization_id"):
             return {"success": False, "error": "No related surrogate for notification recipients"}
 
         # Determine recipient user IDs
         user_ids = []
-        if recipients == "owner" and target.owner_type == OwnerType.USER.value:
+        if (
+            recipients == "owner"
+            and hasattr(target, "owner_type")
+            and target.owner_type == OwnerType.USER.value
+        ):
             user_ids = [target.owner_id]
         elif recipients == "creator":
             user_ids = [target.created_by_user_id] if target.created_by_user_id else []
@@ -578,14 +639,107 @@ class DefaultWorkflowDomainAdapter:
                 type=NotificationType.SURROGATE_STATUS_CHANGED,  # Generic type
                 title=title,
                 body=body if body else None,
-                entity_type="surrogate",
-                entity_id=target.id,
+                entity_type=target_entity_type,
+                entity_id=getattr(target, "id", None),
             )
 
         return {
             "success": True,
             "recipients_count": len(user_ids),
             "description": f"Sent notification to {len(user_ids)} user(s)",
+        }
+
+    def _action_promote_intake_lead(
+        self,
+        db: Session,
+        action: dict,
+        entity: IntakeLead,
+    ) -> dict:
+        """Promote an intake lead into a surrogate case."""
+        from app.services import form_intake_service
+
+        source = action.get("source")
+        if source is not None and not isinstance(source, str):
+            source = None
+
+        assign_to_user = action.get("assign_to_user")
+        if not isinstance(assign_to_user, bool):
+            assign_to_user = None
+
+        surrogate, linked_submission_count = form_intake_service.promote_intake_lead(
+            db=db,
+            lead=entity,
+            user_id=entity.created_by_user_id,
+            source=source,
+            is_priority=bool(action.get("is_priority", False)),
+            assign_to_user=assign_to_user,
+        )
+        return {
+            "success": True,
+            "description": "Promoted intake lead to surrogate",
+            "surrogate_id": str(surrogate.id),
+            "linked_submission_count": int(linked_submission_count),
+        }
+
+    def _action_auto_match_submission(
+        self,
+        db: Session,
+        entity: FormSubmission,
+    ) -> dict:
+        """Run deterministic matching for a shared form submission."""
+        from app.services import form_intake_service
+
+        submission, outcome = form_intake_service.auto_match_submission(
+            db=db,
+            submission=entity,
+        )
+        if outcome == "linked":
+            return {
+                "success": True,
+                "description": "Matched submission to existing surrogate",
+                "submission_id": str(submission.id),
+                "surrogate_id": str(submission.surrogate_id) if submission.surrogate_id else None,
+                "match_status": outcome,
+            }
+        return {
+            "success": True,
+            "description": "Submission requires review after auto-match",
+            "submission_id": str(submission.id),
+            "match_status": outcome,
+        }
+
+    def _action_create_intake_lead(
+        self,
+        db: Session,
+        action: dict,
+        entity: FormSubmission,
+    ) -> dict:
+        """Create an intake lead from a shared submission when no deterministic match exists."""
+        from app.services import form_intake_service
+
+        source = action.get("source")
+        if source is not None and not isinstance(source, str):
+            source = None
+
+        submission, lead = form_intake_service.create_intake_lead_for_submission(
+            db=db,
+            submission=entity,
+            user_id=None,
+            source=source,
+        )
+        if not lead:
+            return {
+                "success": True,
+                "description": "Skipped intake lead creation",
+                "submission_id": str(submission.id),
+                "match_status": submission.match_status,
+            }
+        return {
+            "success": True,
+            "description": "Created intake lead from submission",
+            "submission_id": str(submission.id),
+            "intake_lead_id": str(lead.id),
+            "match_status": submission.match_status,
         }
 
     def _action_update_field(

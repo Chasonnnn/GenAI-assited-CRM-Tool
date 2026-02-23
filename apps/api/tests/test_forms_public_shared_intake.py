@@ -10,7 +10,8 @@ import pytest
 
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import FormSubmissionMatchStatus
-from app.db.models import FormSubmission, IntakeLead, Surrogate
+from app.db.enums import IntakeLeadStatus
+from app.db.models import AutomationWorkflow, FormSubmission, IntakeLead, Surrogate, Task, WorkflowExecution
 from app.utils.normalization import normalize_email, normalize_name, normalize_phone, normalize_search_text
 
 
@@ -119,7 +120,13 @@ async def test_shared_draft_lifecycle(authed_client):
 
 
 @pytest.mark.asyncio
-async def test_shared_submit_no_match_creates_intake_lead(authed_client, db, test_org, test_user, default_stage):
+async def test_shared_submit_no_match_defaults_to_ambiguous_review_without_workflow_actions(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+    default_stage,
+):
     _form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
 
     payload = {
@@ -134,19 +141,25 @@ async def test_shared_submit_no_match_creates_intake_lead(authed_client, db, tes
     )
     assert submit_res.status_code == 200
     body = submit_res.json()
-    assert body["outcome"] == "lead_created"
+    assert body["outcome"] == "ambiguous_review"
     assert body["surrogate_id"] is None
-    assert body["intake_lead_id"] is not None
+    assert body["intake_lead_id"] is None
 
     submission = db.query(FormSubmission).filter(FormSubmission.id == body["id"]).first()
     assert submission is not None
     assert submission.source_mode == "shared"
-    assert submission.match_status == FormSubmissionMatchStatus.LEAD_CREATED.value
-    assert submission.intake_lead_id is not None
+    assert submission.match_status == FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
+    assert submission.intake_lead_id is None
 
-    lead = db.query(IntakeLead).filter(IntakeLead.id == submission.intake_lead_id).first()
-    assert lead is not None
-    assert lead.full_name == "No Match Candidate"
+    lead = (
+        db.query(IntakeLead)
+        .filter(
+            IntakeLead.organization_id == test_org.id,
+            IntakeLead.full_name == "No Match Candidate",
+        )
+        .first()
+    )
+    assert lead is None
 
 
 @pytest.mark.asyncio
@@ -157,7 +170,7 @@ async def test_shared_submit_exact_match_links_surrogate(
     test_user,
     default_stage,
 ):
-    _form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
 
     surrogate = _create_surrogate(
         db,
@@ -169,6 +182,23 @@ async def test_shared_submit_exact_match_links_surrogate(
         phone="+1 (555) 222-3333",
         date_of_birth="1991-07-10",
     )
+
+    workflow = AutomationWorkflow(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Auto match shared submit {uuid.uuid4().hex[:6]}",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": form_id},
+        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
+        condition_logic="AND",
+        actions=[{"action_type": "auto_match_submission"}],
+        is_enabled=True,
+        scope="org",
+        owner_user_id=None,
+        created_by_user_id=test_user.id,
+    )
+    db.add(workflow)
+    db.commit()
 
     submit_res = await authed_client.post(
         f"/forms/public/intake/{slug}/submit",
@@ -189,6 +219,83 @@ async def test_shared_submit_exact_match_links_surrogate(
     assert body["outcome"] == "linked"
     assert body["surrogate_id"] == str(surrogate.id)
     assert body["intake_lead_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_shared_submit_auto_match_requires_approval_without_surrogate_context(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+):
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+
+    workflow = AutomationWorkflow(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Approval gated auto-match {uuid.uuid4().hex[:6]}",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": form_id},
+        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
+        condition_logic="AND",
+        actions=[{"action_type": "auto_match_submission", "requires_approval": True}],
+        is_enabled=True,
+        scope="org",
+        owner_user_id=None,
+        created_by_user_id=test_user.id,
+    )
+    db.add(workflow)
+    db.commit()
+
+    submit_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "Needs Approval",
+                    "date_of_birth": "1993-04-12",
+                    "phone": "+1 (555) 111-2222",
+                    "email": "approval-needed@example.com",
+                }
+            )
+        },
+    )
+    assert submit_res.status_code == 200
+    submission_id = submit_res.json()["id"]
+
+    execution = (
+        db.query(WorkflowExecution)
+        .filter(
+            WorkflowExecution.organization_id == test_org.id,
+            WorkflowExecution.workflow_id == workflow.id,
+            WorkflowExecution.entity_id == uuid.UUID(submission_id),
+        )
+        .order_by(WorkflowExecution.executed_at.desc())
+        .first()
+    )
+    assert execution is not None
+    assert execution.status == "paused"
+
+    task = (
+        db.query(Task)
+        .filter(
+            Task.organization_id == test_org.id,
+            Task.workflow_execution_id == execution.id,
+            Task.task_type == "workflow_approval",
+        )
+        .first()
+    )
+    assert task is not None
+    assert task.owner_id == test_user.id
+    assert task.surrogate_id is None
+
+    resolve_res = await authed_client.post(
+        f"/tasks/{task.id}/resolve",
+        json={"decision": "approve"},
+    )
+    assert resolve_res.status_code == 200
+    db.refresh(task)
+    assert task.status == "completed"
 
 
 @pytest.mark.asyncio
@@ -221,6 +328,23 @@ async def test_shared_submit_ambiguous_then_manual_resolve(
         phone="+1 (555) 444-5555",
         date_of_birth="1990-01-01",
     )
+
+    workflow = AutomationWorkflow(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Ambiguous matcher {uuid.uuid4().hex[:6]}",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": form_id},
+        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
+        condition_logic="AND",
+        actions=[{"action_type": "auto_match_submission"}],
+        is_enabled=True,
+        scope="org",
+        owner_user_id=None,
+        created_by_user_id=test_user.id,
+    )
+    db.add(workflow)
+    db.commit()
 
     submit_res = await authed_client.post(
         f"/forms/public/intake/{slug}/submit",
@@ -281,7 +405,24 @@ async def test_promote_intake_lead_links_pending_submission(
     test_user,
     default_stage,
 ):
-    _form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+
+    workflow = AutomationWorkflow(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Create intake lead from form submit {uuid.uuid4().hex[:6]}",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": form_id},
+        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
+        condition_logic="AND",
+        actions=[{"action_type": "create_intake_lead"}],
+        is_enabled=True,
+        scope="org",
+        owner_user_id=None,
+        created_by_user_id=test_user.id,
+    )
+    db.add(workflow)
+    db.commit()
 
     submit_res = await authed_client.post(
         f"/forms/public/intake/{slug}/submit",
@@ -315,3 +456,85 @@ async def test_promote_intake_lead_links_pending_submission(
     assert submission is not None
     assert submission.surrogate_id is not None
     assert submission.match_status == FormSubmissionMatchStatus.LINKED.value
+
+
+@pytest.mark.asyncio
+async def test_shared_submit_no_match_workflow_can_auto_promote_to_surrogate(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+    default_stage,
+):
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+
+    create_lead_workflow = AutomationWorkflow(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Create lead from submit {uuid.uuid4().hex[:6]}",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": form_id},
+        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
+        condition_logic="AND",
+        actions=[
+            {
+                "action_type": "create_intake_lead",
+            }
+        ],
+        is_enabled=True,
+        scope="org",
+        owner_user_id=None,
+        created_by_user_id=test_user.id,
+    )
+    promote_workflow = AutomationWorkflow(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Auto promote intake {uuid.uuid4().hex[:6]}",
+        trigger_type="intake_lead_created",
+        trigger_config={"form_id": form_id},
+        conditions=[],
+        condition_logic="AND",
+        actions=[
+            {
+                "action_type": "promote_intake_lead",
+                "source": "manual",
+                "is_priority": True,
+            }
+        ],
+        is_enabled=True,
+        scope="org",
+        owner_user_id=None,
+        created_by_user_id=test_user.id,
+    )
+    db.add_all([create_lead_workflow, promote_workflow])
+    db.commit()
+
+    submit_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "Workflow Promote Candidate",
+                    "date_of_birth": "1992-05-08",
+                    "phone": "+1 (555) 121-3434",
+                    "email": "workflow-promote@example.com",
+                }
+            )
+        },
+    )
+    assert submit_res.status_code == 200
+    payload = submit_res.json()
+    assert payload["outcome"] == "linked"
+    assert payload["surrogate_id"] is not None
+    assert payload["intake_lead_id"] is not None
+
+    submission = db.query(FormSubmission).filter(FormSubmission.id == payload["id"]).first()
+    assert submission is not None
+    assert submission.surrogate_id is not None
+    assert submission.match_status == FormSubmissionMatchStatus.LINKED.value
+    assert submission.match_reason == "lead_promoted_to_surrogate"
+
+    lead = db.query(IntakeLead).filter(IntakeLead.id == submission.intake_lead_id).first()
+    assert lead is not None
+    assert lead.status == IntakeLeadStatus.PROMOTED.value
+    assert lead.promoted_surrogate_id == submission.surrogate_id

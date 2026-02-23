@@ -31,12 +31,16 @@ from app.schemas.workflow import (
     SurrogateUpdatedTriggerConfig,
     FormStartedTriggerConfig,
     FormSubmittedTriggerConfig,
+    IntakeLeadCreatedTriggerConfig,
     SendEmailActionConfig,
     CreateTaskActionConfig,
     AssignSurrogateActionConfig,
     SendNotificationActionConfig,
     UpdateFieldActionConfig,
     AddNoteActionConfig,
+    PromoteIntakeLeadActionConfig,
+    AutoMatchSubmissionActionConfig,
+    CreateIntakeLeadActionConfig,
 )
 from app.services import user_service
 from app.services.workflow_email_provider import validate_email_provider
@@ -53,7 +57,8 @@ TRIGGER_ENTITY_TYPES = {
     "surrogate_assigned": "surrogate",
     "surrogate_updated": "surrogate",
     "form_started": "surrogate",
-    "form_submitted": "surrogate",
+    "form_submitted": "form_submission",
+    "intake_lead_created": "intake_lead",
     "task_due": "task",
     "task_overdue": "task",
     "scheduled": "surrogate",
@@ -83,15 +88,17 @@ def create_workflow(
     # Validate trigger config
     _validate_trigger_config(data.trigger_type, data.trigger_config)
 
+    actions = _normalize_actions_for_trigger(data.trigger_type, data.actions)
+
     # Validate actions
-    for action in data.actions:
+    for action in actions:
         _validate_action_config(db, org_id, action, data.scope, user_id)
 
     # Determine owner_user_id based on scope
     owner_user_id = user_id if data.scope == "personal" else None
 
     # Validate email provider if there's a send_email action
-    if _has_send_email_action(data.actions):
+    if _has_send_email_action(actions):
         is_valid, error = validate_email_provider(db, data.scope, org_id, owner_user_id)
         if not is_valid:
             raise ValueError(error)
@@ -107,7 +114,7 @@ def create_workflow(
         trigger_config=data.trigger_config,
         conditions=[c.model_dump() for c in data.conditions],
         condition_logic=data.condition_logic,
-        actions=data.actions,
+        actions=actions,
         is_enabled=data.is_enabled,
         created_by_user_id=user_id,
         updated_by_user_id=user_id,
@@ -138,8 +145,11 @@ def update_workflow(
         )
         _validate_trigger_config(trigger_type, trigger_config)
 
+    normalized_actions = data.actions
+    effective_trigger_type = data.trigger_type or WorkflowTriggerType(workflow.trigger_type)
     if data.actions is not None:
-        for action in data.actions:
+        normalized_actions = _normalize_actions_for_trigger(effective_trigger_type, data.actions)
+        for action in normalized_actions:
             _validate_action_config(
                 db,
                 workflow.organization_id,
@@ -147,7 +157,7 @@ def update_workflow(
                 workflow.scope,
                 workflow.owner_user_id,
             )
-        if _has_send_email_action(data.actions):
+        if _has_send_email_action(normalized_actions):
             is_valid, error = validate_email_provider(
                 db,
                 workflow.scope,
@@ -172,8 +182,8 @@ def update_workflow(
         workflow.conditions = [c.model_dump() for c in data.conditions]
     if data.condition_logic is not None:
         workflow.condition_logic = data.condition_logic
-    if data.actions is not None:
-        workflow.actions = data.actions
+    if normalized_actions is not None:
+        workflow.actions = normalized_actions
     if data.is_enabled is not None:
         workflow.is_enabled = data.is_enabled
 
@@ -561,6 +571,11 @@ def get_workflow_options(
             "description": "When an applicant submits a form",
         },
         {
+            "value": "intake_lead_created",
+            "label": "Intake Lead Created",
+            "description": "When shared intake creates a provisional lead",
+        },
+        {
             "value": "task_due",
             "label": "Task Due",
             "description": "Before a task is due",
@@ -649,13 +664,44 @@ def get_workflow_options(
             "label": "Add Note",
             "description": "Add a note to the case",
         },
+        {
+            "value": "promote_intake_lead",
+            "label": "Promote Intake Lead",
+            "description": "Create surrogate case from intake lead",
+        },
+        {
+            "value": "auto_match_submission",
+            "label": "Auto-Match Submission",
+            "description": "Try deterministic match to an existing surrogate",
+        },
+        {
+            "value": "create_intake_lead",
+            "label": "Create Intake Lead",
+            "description": "Create provisional intake lead for unmatched submission",
+        },
     ]
 
-    action_values = [action["value"] for action in action_types]
+    surrogate_action_values = [
+        "send_email",
+        "create_task",
+        "assign_surrogate",
+        "send_notification",
+        "update_field",
+        "add_note",
+    ]
+    form_submission_action_values = [
+        "auto_match_submission",
+        "create_intake_lead",
+        *surrogate_action_values,
+    ]
     action_types_by_trigger: dict[str, list[str]] = {}
     for trigger, entity_type in TRIGGER_ENTITY_TYPES.items():
         if entity_type in ("surrogate", "task"):
-            action_types_by_trigger[trigger] = action_values
+            action_types_by_trigger[trigger] = surrogate_action_values
+        elif entity_type == "form_submission":
+            action_types_by_trigger[trigger] = form_submission_action_values
+        elif entity_type == "intake_lead":
+            action_types_by_trigger[trigger] = ["send_notification", "promote_intake_lead"]
         else:
             action_types_by_trigger[trigger] = ["send_notification"]
 
@@ -1079,6 +1125,32 @@ def to_workflow_list_item(
 # =============================================================================
 
 
+def _normalize_actions_for_trigger(
+    trigger_type: WorkflowTriggerType,
+    actions: list[dict],
+) -> list[dict]:
+    """Normalize workflow actions for trigger-specific rules."""
+    normalized = [dict(action) for action in actions]
+    if trigger_type != WorkflowTriggerType.FORM_SUBMITTED:
+        return normalized
+
+    auto_match_indices = [
+        idx for idx, action in enumerate(normalized) if action.get("action_type") == "auto_match_submission"
+    ]
+    create_lead_indices = [
+        idx for idx, action in enumerate(normalized) if action.get("action_type") == "create_intake_lead"
+    ]
+    if auto_match_indices and create_lead_indices:
+        first_match_idx = auto_match_indices[0]
+        first_create_idx = create_lead_indices[0]
+        if first_match_idx > first_create_idx:
+            raise ValueError(
+                "For form_submitted workflows, auto_match_submission must be placed before create_intake_lead"
+            )
+
+    return normalized
+
+
 def _validate_trigger_config(trigger_type: WorkflowTriggerType, config: dict) -> None:
     """Validate trigger config matches the trigger type schema."""
     validators = {
@@ -1089,6 +1161,7 @@ def _validate_trigger_config(trigger_type: WorkflowTriggerType, config: dict) ->
         WorkflowTriggerType.SURROGATE_UPDATED: SurrogateUpdatedTriggerConfig,
         WorkflowTriggerType.FORM_STARTED: FormStartedTriggerConfig,
         WorkflowTriggerType.FORM_SUBMITTED: FormSubmittedTriggerConfig,
+        WorkflowTriggerType.INTAKE_LEAD_CREATED: IntakeLeadCreatedTriggerConfig,
     }
 
     validator = validators.get(trigger_type)
@@ -1230,6 +1303,23 @@ def _validate_action_config(
 
     elif action_type == "add_note":
         AddNoteActionConfig.model_validate(action)
+
+    elif action_type == "promote_intake_lead":
+        PromoteIntakeLeadActionConfig.model_validate(action)
+        if workflow_scope == "personal":
+            raise ValueError("promote_intake_lead is only supported for org workflows")
+        if action.get("requires_approval") is True:
+            raise ValueError("promote_intake_lead does not support requires_approval")
+
+    elif action_type == "auto_match_submission":
+        AutoMatchSubmissionActionConfig.model_validate(action)
+        if workflow_scope == "personal":
+            raise ValueError("auto_match_submission is only supported for org workflows")
+
+    elif action_type == "create_intake_lead":
+        CreateIntakeLeadActionConfig.model_validate(action)
+        if workflow_scope == "personal":
+            raise ValueError("create_intake_lead is only supported for org workflows")
 
     else:
         raise ValueError(f"Unknown action type: {action_type}")

@@ -1070,7 +1070,8 @@ def resolve_workflow_approval(
     db.commit()
 
     # Log activity with latency metrics
-    _log_approval_activity(db, task, decision, user_id, now)
+    if task.surrogate_id:
+        _log_approval_activity(db, task, decision, user_id, now)
 
     logger.info(f"Workflow approval {task.id} resolved: {decision} by user {user_id}")
 

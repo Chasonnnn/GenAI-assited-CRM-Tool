@@ -9,9 +9,10 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.models import AutomationWorkflow, WorkflowExecution, User
+from app.db.models import AutomationWorkflow, Membership, User, WorkflowExecution
 from app.db.enums import (
     OwnerType,
+    Role,
     TaskStatus,
     WorkflowConditionOperator,
     WorkflowEventSource,
@@ -213,6 +214,12 @@ class WorkflowEngineCore:
                 return False
             return True
 
+        if trigger_type == WorkflowTriggerType.INTAKE_LEAD_CREATED:
+            form_id = config.get("form_id")
+            if form_id and str(event_data.get("form_id")) != str(form_id):
+                return False
+            return True
+
         # For surrogate_created, task_due, task_overdue, scheduled, inactivity
         # No trigger-level filtering needed (conditions handle it)
         return True
@@ -308,61 +315,15 @@ class WorkflowEngineCore:
         # (after conditions match to avoid false failures)
         # =====================================================================
         has_approval_actions = any(action.get("requires_approval") for action in workflow.actions)
-        surrogate = self.adapter.get_related_surrogate(db, entity_type, entity)
-        surrogate_owner = None
-
-        if surrogate:
-            requires_user_owner = has_approval_actions or workflow.scope == "personal"
-
-            # Only enforce user ownership for personal workflows and approval-gated workflows.
-            if requires_user_owner:
-                if surrogate.owner_type != OwnerType.USER.value or not surrogate.owner_id:
-                    execution = WorkflowExecution(
-                        organization_id=workflow.organization_id,
-                        workflow_id=workflow.id,
-                        event_id=event_id,
-                        depth=depth,
-                        event_source=source.value,
-                        entity_type=entity_type,
-                        entity_id=entity_id,
-                        trigger_event=event_data,
-                        dedupe_key=dedupe_key,
-                        matched_conditions=True,
-                        actions_executed=[],
-                        status=WorkflowExecutionStatus.FAILED.value,
-                        error_message="Workflow requires surrogate owner to be a user",
-                        duration_ms=int((time.time() - start_time) * 1000),
-                    )
-                    db.add(execution)
-                    db.commit()
-                    return execution
-
-                surrogate_owner = db.query(User).filter(User.id == surrogate.owner_id).first()
-                if not surrogate_owner:
-                    execution = WorkflowExecution(
-                        organization_id=workflow.organization_id,
-                        workflow_id=workflow.id,
-                        event_id=event_id,
-                        depth=depth,
-                        event_source=source.value,
-                        entity_type=entity_type,
-                        entity_id=entity_id,
-                        trigger_event=event_data,
-                        dedupe_key=dedupe_key,
-                        matched_conditions=True,
-                        actions_executed=[],
-                        status=WorkflowExecutionStatus.FAILED.value,
-                        error_message="Workflow requires surrogate owner but owner not found",
-                        duration_ms=int((time.time() - start_time) * 1000),
-                    )
-                    db.add(execution)
-                    db.commit()
-                    return execution
-            else:
-                # Best-effort owner resolution for org workflows (may be queue-owned).
-                if surrogate.owner_type == OwnerType.USER.value and surrogate.owner_id:
-                    surrogate_owner = db.query(User).filter(User.id == surrogate.owner_id).first()
-        elif has_approval_actions:
+        surrogate, approval_owner, approval_error = self._resolve_approval_context(
+            db=db,
+            workflow=workflow,
+            entity_type=entity_type,
+            entity=entity,
+            has_approval_actions=has_approval_actions,
+            triggered_by_user_id=event_data.get("triggered_by_user_id"),
+        )
+        if approval_error:
             execution = WorkflowExecution(
                 organization_id=workflow.organization_id,
                 workflow_id=workflow.id,
@@ -376,7 +337,7 @@ class WorkflowEngineCore:
                 matched_conditions=True,
                 actions_executed=[],
                 status=WorkflowExecutionStatus.FAILED.value,
-                error_message="Workflow requires approval but entity has no related surrogate",
+                error_message=approval_error,
                 duration_ms=int((time.time() - start_time) * 1000),
             )
             db.add(execution)
@@ -418,7 +379,7 @@ class WorkflowEngineCore:
                     action_index=idx,
                     entity=entity,
                     surrogate=surrogate,
-                    owner=surrogate_owner,
+                    owner=approval_owner,
                     triggered_by_user_id=event_data.get("triggered_by_user_id"),
                 )
 
@@ -587,26 +548,26 @@ class WorkflowEngineCore:
 
                 if next_action.get("requires_approval"):
                     # Need another approval - pause again
-                    surrogate = self.adapter.get_related_surrogate(
-                        db, execution.entity_type, entity
-                    )
-                    owner = (
-                        db.query(User).filter(User.id == surrogate.owner_id).first()
-                        if surrogate
-                        else None
+                    surrogate, owner, approval_error = self._resolve_approval_context(
+                        db=db,
+                        workflow=workflow,
+                        entity_type=execution.entity_type,
+                        entity=entity,
+                        has_approval_actions=True,
+                        triggered_by_user_id=task.workflow_triggered_by_user_id,
                     )
 
-                    if not surrogate or not owner:
+                    if approval_error or not owner:
                         action_results.append(
                             {
                                 "success": False,
                                 "action_type": next_action.get("action_type"),
-                                "error": "Surrogate or owner not found for approval",
+                                "error": approval_error or "Approver not found for approval",
                             }
                         )
                         execution.actions_executed = action_results
                         execution.status = WorkflowExecutionStatus.FAILED.value
-                        execution.error_message = "Workflow requires surrogate owner to be a user"
+                        execution.error_message = approval_error or "Approver not found for approval"
                         db.commit()
                         return
 
@@ -697,6 +658,99 @@ class WorkflowEngineCore:
             execution.status = WorkflowExecutionStatus.FAILED.value
             execution.error_message = f"Unexpected task status: {task.status}"
             db.commit()
+
+    def _load_active_org_user(
+        self,
+        db: Session,
+        *,
+        org_id: UUID,
+        user_id: UUID | None,
+    ) -> User | None:
+        if not user_id:
+            return None
+        return (
+            db.query(User)
+            .join(Membership, Membership.user_id == User.id)
+            .filter(
+                User.id == user_id,
+                User.is_active.is_(True),
+                Membership.organization_id == org_id,
+                Membership.is_active.is_(True),
+            )
+            .first()
+        )
+
+    def _resolve_approval_context(
+        self,
+        db: Session,
+        *,
+        workflow: AutomationWorkflow,
+        entity_type: str,
+        entity: Any,
+        has_approval_actions: bool,
+        triggered_by_user_id: UUID | None,
+    ) -> tuple[Any | None, User | None, str | None]:
+        """
+        Resolve related surrogate + approver for approval-gated actions.
+
+        Returns (surrogate, approver_user, error_message).
+        """
+        surrogate = self.adapter.get_related_surrogate(db, entity_type, entity)
+        approval_owner: User | None = None
+
+        if surrogate:
+            requires_user_owner = has_approval_actions or workflow.scope == "personal"
+            if requires_user_owner:
+                if surrogate.owner_type != OwnerType.USER.value or not surrogate.owner_id:
+                    return surrogate, None, "Workflow requires surrogate owner to be a user"
+                approval_owner = self._load_active_org_user(
+                    db,
+                    org_id=workflow.organization_id,
+                    user_id=surrogate.owner_id,
+                )
+                if not approval_owner:
+                    return surrogate, None, "Workflow requires surrogate owner but owner not found"
+            elif surrogate.owner_type == OwnerType.USER.value and surrogate.owner_id:
+                approval_owner = self._load_active_org_user(
+                    db,
+                    org_id=workflow.organization_id,
+                    user_id=surrogate.owner_id,
+                )
+            return surrogate, approval_owner, None
+
+        if not has_approval_actions:
+            return None, None, None
+
+        for candidate_id in (
+            triggered_by_user_id,
+            workflow.owner_user_id,
+            workflow.updated_by_user_id,
+            workflow.created_by_user_id,
+        ):
+            candidate = self._load_active_org_user(
+                db,
+                org_id=workflow.organization_id,
+                user_id=candidate_id,
+            )
+            if candidate:
+                return None, candidate, None
+
+        fallback_admin = (
+            db.query(User)
+            .join(Membership, Membership.user_id == User.id)
+            .filter(
+                Membership.organization_id == workflow.organization_id,
+                Membership.is_active.is_(True),
+                Membership.role.in_([Role.ADMIN.value, Role.DEVELOPER.value]),
+                User.is_active.is_(True),
+            )
+            .order_by(User.created_at.asc())
+            .first()
+        )
+        if fallback_admin:
+            return None, fallback_admin, None
+
+        return None, None, "Workflow requires approval but no approver could be resolved"
 
     def _get_dedupe_key(
         self,

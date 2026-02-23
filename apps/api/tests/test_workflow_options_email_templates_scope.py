@@ -129,11 +129,23 @@ async def test_workflow_options_filters_email_templates_by_scope(db, test_org):
     async with authed_client_for_user(db, test_org.id, user, Role.CASE_MANAGER) as client:
         res = await client.get("/workflows/options?workflow_scope=org")
         assert res.status_code == 200
-        names = {item["name"] for item in res.json()["email_templates"]}
+        org_payload = res.json()
+        names = {item["name"] for item in org_payload["email_templates"]}
         assert "Org Template" in names
         assert "My Personal" not in names
         assert "Other Personal" not in names
         assert "Organization Invite" not in names
+        assert "intake_lead_created" in {item["value"] for item in org_payload["trigger_types"]}
+        assert "promote_intake_lead" in {item["value"] for item in org_payload["action_types"]}
+        assert org_payload["action_types_by_trigger"]["intake_lead_created"] == [
+            "send_notification",
+            "promote_intake_lead",
+        ]
+        assert org_payload["trigger_entity_types"]["form_submitted"] == "form_submission"
+        assert org_payload["action_types_by_trigger"]["form_submitted"][:2] == [
+            "auto_match_submission",
+            "create_intake_lead",
+        ]
 
         res = await client.get("/workflows/options?workflow_scope=personal")
         assert res.status_code == 200

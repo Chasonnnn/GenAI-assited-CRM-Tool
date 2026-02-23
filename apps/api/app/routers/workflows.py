@@ -17,6 +17,8 @@ from app.db.enums import WorkflowTriggerType
 from app.services import (
     appointment_service,
     attachment_service,
+    form_submission_service,
+    form_intake_service,
     match_service,
     note_service,
     surrogate_service,
@@ -412,6 +414,16 @@ def test_workflow(
             entity = note_service.get_note(db, request.entity_id, session.org_id)
         elif entity_type == "document":
             entity = attachment_service.get_attachment(db, session.org_id, request.entity_id)
+        elif entity_type == "form_submission":
+            entity = form_submission_service.get_submission(
+                db,
+                org_id=session.org_id,
+                submission_id=request.entity_id,
+            )
+        elif entity_type == "intake_lead":
+            entity = form_intake_service.get_intake_lead(
+                db, org_id=session.org_id, lead_id=request.entity_id
+            )
         else:
             raise HTTPException(status_code=422, detail="Unsupported entity type for test")
 

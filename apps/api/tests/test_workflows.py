@@ -144,6 +144,77 @@ def test_workflow_service_create(db, test_org, test_user):
     # Note: is_enabled defaults to True per schema
 
 
+def test_workflow_service_form_submitted_enforces_auto_match_priority(db, test_org, test_user):
+    """form_submitted workflows must place auto_match before create_intake_lead."""
+    from app.services import workflow_service
+    from app.schemas.workflow import WorkflowCreate
+    from app.db.enums import WorkflowTriggerType
+
+    with pytest.raises(ValueError, match="auto_match_submission must be placed before create_intake_lead"):
+        workflow_service.create_workflow(
+            db,
+            test_org.id,
+            test_user.id,
+            WorkflowCreate(
+                name="Invalid form routing",
+                trigger_type=WorkflowTriggerType.FORM_SUBMITTED,
+                trigger_config={},
+                actions=[
+                    {"action_type": "create_intake_lead"},
+                    {"action_type": "auto_match_submission"},
+                ],
+            ),
+        )
+
+
+def test_workflow_service_auto_match_submission_org_scope_only(db, test_org, test_user):
+    """auto_match_submission is not allowed for personal workflows."""
+    from app.services import workflow_service
+    from app.schemas.workflow import WorkflowCreate
+    from app.db.enums import WorkflowTriggerType
+
+    with pytest.raises(ValueError, match="auto_match_submission is only supported for org workflows"):
+        workflow_service.create_workflow(
+            db,
+            test_org.id,
+            test_user.id,
+            WorkflowCreate(
+                name="Personal auto-match",
+                scope="personal",
+                trigger_type=WorkflowTriggerType.FORM_SUBMITTED,
+                trigger_config={},
+                actions=[{"action_type": "auto_match_submission"}],
+            ),
+        )
+
+
+def test_workflow_service_form_submission_actions_allow_requires_approval(db, test_org, test_user):
+    """form_submitted intake-routing actions can be approval-gated per step."""
+    from app.services import workflow_service
+    from app.schemas.workflow import WorkflowCreate
+    from app.db.enums import WorkflowTriggerType
+
+    workflow = workflow_service.create_workflow(
+        db,
+        test_org.id,
+        test_user.id,
+        WorkflowCreate(
+            name="Approval-gated intake routing",
+            trigger_type=WorkflowTriggerType.FORM_SUBMITTED,
+            trigger_config={},
+            actions=[
+                {"action_type": "auto_match_submission", "requires_approval": True},
+                {"action_type": "create_intake_lead", "requires_approval": True},
+            ],
+        ),
+    )
+
+    assert workflow.actions[0]["action_type"] == "auto_match_submission"
+    assert workflow.actions[0]["requires_approval"] is True
+    assert workflow.actions[1]["action_type"] == "create_intake_lead"
+    assert workflow.actions[1]["requires_approval"] is True
+
+
 def test_workflow_service_update(db, test_org, test_user, test_workflow):
     """Test workflow service update function."""
     from app.services import workflow_service

@@ -5,7 +5,15 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.models import Surrogate, Task, Match, Attachment, EntityNote, Appointment
+from app.db.models import (
+    Appointment,
+    Attachment,
+    EntityNote,
+    IntakeLead,
+    Match,
+    Surrogate,
+    Task,
+)
 from app.db.enums import WorkflowTriggerType, WorkflowEventSource, OwnerType
 from app.services.workflow_engine import engine
 
@@ -198,26 +206,57 @@ def trigger_form_started(
 
 def trigger_form_submitted(
     db: Session,
-    surrogate: Surrogate,
+    *,
+    org_id: UUID,
     form_id: UUID,
     submission_id: UUID,
     submitted_at: datetime | None,
+    surrogate_id: UUID | None = None,
+    source_mode: str | None = None,
+    entity_owner_id: UUID | None = None,
 ) -> None:
     """Trigger workflows when an applicant submits a form."""
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.FORM_SUBMITTED,
-        entity_type="surrogate",
-        entity_id=surrogate.id,
+        entity_type="form_submission",
+        entity_id=submission_id,
         event_data={
-            "surrogate_id": str(surrogate.id),
+            "surrogate_id": str(surrogate_id) if surrogate_id else None,
             "form_id": str(form_id),
             "submission_id": str(submission_id),
+            "source_mode": source_mode,
             "submitted_at": submitted_at.isoformat() if submitted_at else None,
         },
-        org_id=surrogate.organization_id,
+        org_id=org_id,
         source=WorkflowEventSource.SYSTEM,
-        entity_owner_id=_get_entity_owner_id(surrogate),
+        entity_owner_id=entity_owner_id,
+    )
+
+
+def trigger_intake_lead_created(
+    db: Session,
+    lead: IntakeLead,
+    *,
+    form_id: UUID | None,
+    submission_id: UUID | None,
+) -> None:
+    """Trigger workflows when shared intake creates a provisional lead."""
+    engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.INTAKE_LEAD_CREATED,
+        entity_type="intake_lead",
+        entity_id=lead.id,
+        event_data={
+            "intake_lead_id": str(lead.id),
+            "form_id": str(form_id) if form_id else None,
+            "intake_link_id": str(lead.intake_link_id) if lead.intake_link_id else None,
+            "submission_id": str(submission_id) if submission_id else None,
+            "status": lead.status,
+        },
+        org_id=lead.organization_id,
+        source=WorkflowEventSource.SYSTEM,
+        entity_owner_id=lead.created_by_user_id,
     )
 
 

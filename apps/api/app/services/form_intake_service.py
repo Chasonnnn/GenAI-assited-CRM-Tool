@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -33,6 +34,7 @@ from app.services import form_submission_service
 from app.utils.normalization import normalize_email, normalize_name, normalize_phone, normalize_search_text
 
 IDENTITY_SURROGATE_FIELDS = ("full_name", "date_of_birth", "phone", "email")
+logger = logging.getLogger(__name__)
 
 
 def build_shared_application_link(base_url: str | None, slug: str) -> str:
@@ -79,6 +81,41 @@ def create_intake_link(
     db.commit()
     db.refresh(record)
     return record
+
+
+def ensure_default_intake_link(
+    db: Session,
+    *,
+    org_id: uuid.UUID,
+    form: Form,
+    user_id: uuid.UUID | None,
+) -> FormIntakeLink:
+    """Ensure one active shared intake link exists for a published form."""
+    existing = (
+        db.query(FormIntakeLink)
+        .filter(
+            FormIntakeLink.organization_id == org_id,
+            FormIntakeLink.form_id == form.id,
+            FormIntakeLink.is_active.is_(True),
+        )
+        .order_by(FormIntakeLink.created_at.asc())
+        .first()
+    )
+    if existing:
+        return existing
+
+    default_campaign_name = (form.name or "").strip() or "Shared Intake"
+    return create_intake_link(
+        db,
+        org_id=org_id,
+        form=form,
+        user_id=user_id,
+        campaign_name=default_campaign_name,
+        event_name=None,
+        expires_at=None,
+        max_submissions=None,
+        utm_defaults=None,
+    )
 
 
 def list_intake_links(
@@ -348,6 +385,91 @@ def _create_intake_lead(
     return lead
 
 
+def _trigger_intake_lead_created_workflow(
+    db: Session,
+    *,
+    lead: IntakeLead,
+    form_id: uuid.UUID | None,
+    submission_id: uuid.UUID | None,
+) -> None:
+    try:
+        from app.services import workflow_triggers
+
+        workflow_triggers.trigger_intake_lead_created(
+            db,
+            lead,
+            form_id=form_id,
+            submission_id=submission_id,
+        )
+    except Exception:
+        logger.debug(
+            "trigger_intake_lead_created_failed",
+            exc_info=True,
+        )
+
+
+def _resolve_surrogate_owner_user_id(
+    db: Session,
+    *,
+    org_id: uuid.UUID,
+    surrogate_id: uuid.UUID | None,
+) -> uuid.UUID | None:
+    if not surrogate_id:
+        return None
+    surrogate = (
+        db.query(Surrogate)
+        .filter(
+            Surrogate.organization_id == org_id,
+            Surrogate.id == surrogate_id,
+        )
+        .first()
+    )
+    if not surrogate:
+        return None
+    if surrogate.owner_type == "user" and surrogate.owner_id:
+        return surrogate.owner_id
+    return None
+
+
+def _trigger_form_submitted_workflow(
+    db: Session,
+    *,
+    submission: FormSubmission,
+) -> None:
+    try:
+        from app.services import workflow_triggers
+
+        workflow_triggers.trigger_form_submitted(
+            db=db,
+            org_id=submission.organization_id,
+            form_id=submission.form_id,
+            submission_id=submission.id,
+            submitted_at=submission.submitted_at,
+            surrogate_id=submission.surrogate_id,
+            source_mode=submission.source_mode,
+            entity_owner_id=_resolve_surrogate_owner_user_id(
+                db,
+                org_id=submission.organization_id,
+                surrogate_id=submission.surrogate_id,
+            ),
+        )
+    except Exception:
+        logger.debug(
+            "trigger_form_submitted_failed",
+            exc_info=True,
+        )
+
+
+def _normalize_shared_outcome(match_status: str | None) -> str:
+    if match_status in {
+        FormSubmissionMatchStatus.LINKED.value,
+        FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value,
+        FormSubmissionMatchStatus.LEAD_CREATED.value,
+    }:
+        return match_status
+    return FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
+
+
 def _create_shared_submission(
     db: Session,
     *,
@@ -444,54 +566,82 @@ def create_shared_submission(
         mapping_lookup=mapping_lookup,
     ):
         raise ValueError("Duplicate submission detected. Please contact support if this is unexpected.")
+    submission = _create_shared_submission(
+        db,
+        form=form,
+        link=link,
+        answers=answers,
+        files=files or [],
+        file_field_keys=file_field_keys,
+        surrogate_id=None,
+        intake_lead_id=None,
+        match_status=FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value,
+        match_reason="workflow_pending",
+        matched_at=None,
+    )
+    db.commit()
+    db.refresh(submission)
+    _trigger_form_submitted_workflow(db, submission=submission)
+    db.refresh(submission)
+    return submission, _normalize_shared_outcome(submission.match_status)
 
-    auto_match_enabled = bool(settings.FORMS_AUTO_MATCH)
-    phone_matches: list[Surrogate] = []
+
+def auto_match_submission(
+    db: Session,
+    *,
+    submission: FormSubmission,
+) -> tuple[FormSubmission, str]:
+    """Apply deterministic matching rules for a shared submission."""
+    if submission.source_mode != FormLinkMode.SHARED.value:
+        outcome = submission.match_status or FormSubmissionMatchStatus.LINKED.value
+        return submission, _normalize_shared_outcome(outcome)
+
+    if submission.surrogate_id:
+        if submission.match_status != FormSubmissionMatchStatus.LINKED.value:
+            submission.match_status = FormSubmissionMatchStatus.LINKED.value
+            submission.match_reason = submission.match_reason or "already_linked"
+            submission.matched_at = submission.matched_at or datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(submission)
+        return submission, FormSubmissionMatchStatus.LINKED.value
+
+    # Keep workflow-driven leads stable; do not rematch after a lead is attached.
+    if submission.intake_lead_id:
+        return submission, FormSubmissionMatchStatus.LEAD_CREATED.value
+
+    answers = submission.answers_json if isinstance(submission.answers_json, dict) else {}
+    mapping_lookup = _build_form_mapping_lookup(db, submission.form_id)
+    identity = _extract_identity(answers=answers, mapping_lookup=mapping_lookup)
+
+    phone_matches = _match_rule_phone(db, org_id=submission.organization_id, identity=identity)
     email_matches: list[Surrogate] = []
-    if auto_match_enabled:
-        phone_matches = _match_rule_phone(db, org_id=link.organization_id, identity=identity)
-        if not phone_matches:
-            email_matches = _match_rule_email(db, org_id=link.organization_id, identity=identity)
+    if not phone_matches:
+        email_matches = _match_rule_email(db, org_id=submission.organization_id, identity=identity)
+
+    db.query(FormSubmissionMatchCandidate).filter(
+        FormSubmissionMatchCandidate.submission_id == submission.id
+    ).delete(synchronize_session=False)
 
     if len(phone_matches) == 1:
         matched = phone_matches[0]
-        submission = _create_shared_submission(
-            db,
-            form=form,
-            link=link,
-            answers=answers,
-            files=files or [],
-            file_field_keys=file_field_keys,
-            surrogate_id=matched.id,
-            intake_lead_id=None,
-            match_status=FormSubmissionMatchStatus.LINKED.value,
-            match_reason="phone_dob_name_exact",
-            matched_at=datetime.now(timezone.utc),
-        )
+        submission.surrogate_id = matched.id
+        submission.match_status = FormSubmissionMatchStatus.LINKED.value
+        submission.match_reason = "phone_dob_name_exact"
+        submission.matched_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(submission)
         return submission, FormSubmissionMatchStatus.LINKED.value
 
     if len(phone_matches) > 1 or len(email_matches) > 1:
         reason = "phone_dob_name_ambiguous" if len(phone_matches) > 1 else "email_dob_name_ambiguous"
-        submission = _create_shared_submission(
-            db,
-            form=form,
-            link=link,
-            answers=answers,
-            files=files or [],
-            file_field_keys=file_field_keys,
-            surrogate_id=None,
-            intake_lead_id=None,
-            match_status=FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value,
-            match_reason=reason,
-            matched_at=None,
-        )
-        candidates = phone_matches or email_matches
-        for surrogate in candidates:
+        submission.surrogate_id = None
+        submission.match_status = FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
+        submission.match_reason = reason
+        submission.matched_at = None
+        for surrogate in (phone_matches or email_matches):
             db.add(
                 FormSubmissionMatchCandidate(
-                    organization_id=link.organization_id,
+                    organization_id=submission.organization_id,
                     submission_id=submission.id,
                     surrogate_id=surrogate.id,
                     reason=reason,
@@ -503,48 +653,125 @@ def create_shared_submission(
 
     if len(email_matches) == 1:
         matched = email_matches[0]
-        submission = _create_shared_submission(
-            db,
-            form=form,
-            link=link,
-            answers=answers,
-            files=files or [],
-            file_field_keys=file_field_keys,
-            surrogate_id=matched.id,
-            intake_lead_id=None,
-            match_status=FormSubmissionMatchStatus.LINKED.value,
-            match_reason="email_dob_name_exact",
-            matched_at=datetime.now(timezone.utc),
-        )
+        submission.surrogate_id = matched.id
+        submission.match_status = FormSubmissionMatchStatus.LINKED.value
+        submission.match_reason = "email_dob_name_exact"
+        submission.matched_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(submission)
         return submission, FormSubmissionMatchStatus.LINKED.value
 
+    submission.surrogate_id = None
+    submission.match_status = FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
+    submission.match_reason = "no_deterministic_match"
+    submission.matched_at = None
+    db.commit()
+    db.refresh(submission)
+    return submission, FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
+
+
+def create_intake_lead_for_submission(
+    db: Session,
+    *,
+    submission: FormSubmission,
+    user_id: uuid.UUID | None,
+    source: str | None = None,
+    allow_ambiguous: bool = False,
+) -> tuple[FormSubmission, IntakeLead | None]:
+    """Create or attach an intake lead for a shared submission."""
+    if submission.source_mode != FormLinkMode.SHARED.value:
+        return submission, None
+    if submission.surrogate_id:
+        return submission, None
+
+    if not allow_ambiguous:
+        has_candidates = (
+            db.query(FormSubmissionMatchCandidate.id)
+            .filter(FormSubmissionMatchCandidate.submission_id == submission.id)
+            .first()
+            is not None
+        )
+        if has_candidates:
+            return submission, None
+
+    if submission.intake_lead_id:
+        lead = (
+            db.query(IntakeLead)
+            .filter(
+                IntakeLead.organization_id == submission.organization_id,
+                IntakeLead.id == submission.intake_lead_id,
+            )
+            .first()
+        )
+        if submission.match_status != FormSubmissionMatchStatus.LEAD_CREATED.value:
+            submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
+            submission.match_reason = "existing_lead_retained"
+            submission.matched_at = None
+            db.commit()
+            db.refresh(submission)
+        return submission, lead
+
+    form = (
+        db.query(Form)
+        .filter(
+            Form.organization_id == submission.organization_id,
+            Form.id == submission.form_id,
+        )
+        .first()
+    )
+    if not form:
+        raise ValueError("Form not found")
+
+    link = None
+    if submission.intake_link_id:
+        link = (
+            db.query(FormIntakeLink)
+            .filter(
+                FormIntakeLink.organization_id == submission.organization_id,
+                FormIntakeLink.id == submission.intake_link_id,
+            )
+            .first()
+        )
+
+    answers = submission.answers_json if isinstance(submission.answers_json, dict) else {}
+    mapping_lookup = _build_form_mapping_lookup(db, submission.form_id)
+    identity = _extract_identity(answers=answers, mapping_lookup=mapping_lookup)
+    metadata: dict[str, Any] = {"submission_id": str(submission.id)}
+    if source:
+        metadata["source"] = source
+    if link and link.campaign_name:
+        metadata["campaign_name"] = link.campaign_name
+    if link and link.event_name:
+        metadata["event_name"] = link.event_name
+
     lead = _create_intake_lead(
         db,
-        org_id=link.organization_id,
+        org_id=submission.organization_id,
         form=form,
         link=link,
         identity=identity,
-        source_metadata=source_metadata,
-        user_id=None,
+        source_metadata=metadata,
+        user_id=user_id,
     )
-    submission = _create_shared_submission(
-        db,
-        form=form,
-        link=link,
-        answers=answers,
-        files=files or [],
-        file_field_keys=file_field_keys,
-        surrogate_id=None,
-        intake_lead_id=lead.id,
-        match_status=FormSubmissionMatchStatus.LEAD_CREATED.value,
-        match_reason="no_deterministic_match",
-        matched_at=None,
-    )
+    submission.intake_lead_id = lead.id
+    submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
+    submission.match_reason = "workflow_lead_creation"
+    submission.matched_at = None
+    db.query(FormSubmissionMatchCandidate).filter(
+        FormSubmissionMatchCandidate.submission_id == submission.id
+    ).delete(synchronize_session=False)
     db.commit()
     db.refresh(submission)
-    return submission, FormSubmissionMatchStatus.LEAD_CREATED.value
+    db.refresh(lead)
+
+    _trigger_intake_lead_created_workflow(
+        db,
+        lead=lead,
+        form_id=form.id,
+        submission_id=submission.id,
+    )
+    db.refresh(submission)
+    return submission, lead
 
 
 def get_shared_draft(
@@ -697,38 +924,19 @@ def resolve_submission_match(
         db.refresh(submission)
         return submission, FormSubmissionMatchStatus.LEAD_CREATED.value
 
-    answers = submission.answers_json if isinstance(submission.answers_json, dict) else {}
-    mapping_lookup = _build_form_mapping_lookup(db, submission.form_id)
-    identity = _extract_identity(answers=answers, mapping_lookup=mapping_lookup)
-    link = db.query(FormIntakeLink).filter(FormIntakeLink.id == submission.intake_link_id).first()
-    form = db.query(Form).filter(Form.id == submission.form_id).first()
-    if not form:
-        raise ValueError("Form not found")
-
-    lead = _create_intake_lead(
-        db,
-        org_id=submission.organization_id,
-        form=form,
-        link=link,
-        identity=identity,
-        source_metadata={
-            "resolved_by_user_id": str(reviewer_id) if reviewer_id else None,
-            "review_notes": review_notes.strip() if review_notes else None,
-        },
+    submission, _ = create_intake_lead_for_submission(
+        db=db,
+        submission=submission,
         user_id=reviewer_id,
+        source="manual_review_resolution",
+        allow_ambiguous=True,
     )
-    submission.intake_lead_id = lead.id
-    submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
     submission.match_reason = "manual_lead_creation"
-    submission.matched_at = None
     if review_notes is not None:
         submission.review_notes = review_notes.strip() or None
-    db.query(FormSubmissionMatchCandidate).filter(
-        FormSubmissionMatchCandidate.submission_id == submission.id
-    ).delete(synchronize_session=False)
     db.commit()
     db.refresh(submission)
-    return submission, FormSubmissionMatchStatus.LEAD_CREATED.value
+    return submission, _normalize_shared_outcome(submission.match_status)
 
 
 def get_intake_lead(

@@ -12,6 +12,7 @@ class WorkflowTriggerType(str, Enum):
     SURROGATE_UPDATED = "surrogate_updated"
     FORM_STARTED = "form_started"
     FORM_SUBMITTED = "form_submitted"
+    INTAKE_LEAD_CREATED = "intake_lead_created"
     TASK_DUE = "task_due"
     TASK_OVERDUE = "task_overdue"
     SCHEDULED = "scheduled"
@@ -45,6 +46,8 @@ class WorkflowActionType(str, Enum):
     SEND_NOTIFICATION = "send_notification"
     UPDATE_FIELD = "update_field"
     ADD_NOTE = "add_note"
+    AUTO_MATCH_SUBMISSION = "auto_match_submission"
+    CREATE_INTAKE_LEAD = "create_intake_lead"
 
 
 class WorkflowConditionOperator(str, Enum):

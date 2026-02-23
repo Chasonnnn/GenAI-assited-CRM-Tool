@@ -114,6 +114,7 @@ AVAILABLE_TRIGGERS = {
     "status_changed": "When a surrogate status changes (use conditions for specific statuses)",
     "form_started": "When an applicant starts a form draft (trigger_config.form_id required)",
     "form_submitted": "When an applicant submits a form (trigger_config.form_id required)",
+    "intake_lead_created": "When shared intake creates a new provisional lead (trigger_config.form_id required)",
     "inactivity": "When a surrogate has no activity for a period (trigger_config.days required)",
     "scheduled": "On a schedule (trigger_config.cron required)",
     "match_proposed": "When a match is proposed",
@@ -153,6 +154,21 @@ AVAILABLE_ACTIONS = {
         "description": "Send an in-app notification",
         "required_fields": ["title"],
         "optional_fields": ["body", "recipients", "user_id"],
+    },
+    "promote_intake_lead": {
+        "description": "Promote intake lead into a surrogate case",
+        "required_fields": [],
+        "optional_fields": ["source", "is_priority", "assign_to_user"],
+    },
+    "auto_match_submission": {
+        "description": "Deterministically match a form submission to an existing surrogate",
+        "required_fields": [],
+        "optional_fields": [],
+    },
+    "create_intake_lead": {
+        "description": "Create an intake lead from an unmatched form submission",
+        "required_fields": [],
+        "optional_fields": ["source"],
     },
 }
 

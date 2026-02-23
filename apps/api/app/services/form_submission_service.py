@@ -19,10 +19,12 @@ from app.core.config import settings
 from app.db.enums import (
     AuditEventType,
     FormLinkMode,
+    FormPurpose,
     FormStatus,
     FormSubmissionMatchStatus,
     FormSubmissionStatus,
     JobType,
+    OwnerType,
     SurrogateActivityType,
 )
 from app.db.models import (
@@ -249,6 +251,21 @@ def build_application_link(base_url: str | None, token: str) -> str:
     return f"{cleaned_base}/apply/{token}"
 
 
+def assert_dedicated_form_purpose(
+    form: Form,
+    *,
+    allow_purpose_override: bool = False,
+) -> None:
+    if form.purpose == FormPurpose.SURROGATE_APPLICATION.value:
+        return
+    if allow_purpose_override:
+        return
+    raise ValueError(
+        "Dedicated surrogate sends require purpose=surrogate_application. "
+        "Set allow_purpose_override=true to intentionally send a different form."
+    )
+
+
 def create_submission_token(
     db: Session,
     org_id: uuid.UUID,
@@ -256,7 +273,10 @@ def create_submission_token(
     surrogate: Surrogate,
     user_id: uuid.UUID | None,
     expires_in_days: int,
+    *,
+    allow_purpose_override: bool = False,
 ) -> FormSubmissionToken:
+    assert_dedicated_form_purpose(form, allow_purpose_override=allow_purpose_override)
     if form.status != FormStatus.PUBLISHED.value:
         raise ValueError("Form must be published before sending")
 
@@ -316,8 +336,10 @@ def get_or_create_submission_token(
     user_id: uuid.UUID | None,
     expires_in_days: int,
     *,
+    allow_purpose_override: bool = False,
     commit: bool = True,
 ) -> FormSubmissionToken:
+    assert_dedicated_form_purpose(form, allow_purpose_override=allow_purpose_override)
     if form.status != FormStatus.PUBLISHED.value:
         raise ValueError("Form must be published before sending")
 
@@ -526,10 +548,17 @@ def create_submission(
 
             workflow_triggers.trigger_form_submitted(
                 db=db,
-                surrogate=surrogate,
+                org_id=surrogate.organization_id,
                 form_id=form.id,
                 submission_id=submission.id,
                 submitted_at=submission.submitted_at,
+                surrogate_id=surrogate.id,
+                source_mode=FormLinkMode.DEDICATED.value,
+                entity_owner_id=(
+                    surrogate.owner_id
+                    if surrogate.owner_type == OwnerType.USER.value and surrogate.owner_id
+                    else None
+                ),
             )
         except Exception:
             logger.debug(

@@ -28,6 +28,10 @@ ALLOWED_CONDITION_FIELDS = {
     # Owner fields
     "owner_type",
     "owner_id",
+    "form_id",
+    "status",
+    "source_mode",
+    "match_status",
     # Contact fields
     "email",
     "phone",
@@ -153,7 +157,13 @@ class FormStartedTriggerConfig(BaseModel):
 class FormSubmittedTriggerConfig(BaseModel):
     """Config for form_submitted trigger."""
 
-    form_id: UUID
+    form_id: UUID | None = None
+
+
+class IntakeLeadCreatedTriggerConfig(BaseModel):
+    """Config for intake_lead_created trigger."""
+
+    form_id: UUID | None = None
 
 
 # =============================================================================
@@ -220,6 +230,28 @@ class AddNoteActionConfig(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
 
 
+class PromoteIntakeLeadActionConfig(BaseModel):
+    """Config for promote_intake_lead action."""
+
+    action_type: Literal["promote_intake_lead"] = "promote_intake_lead"
+    source: str | None = None
+    is_priority: bool = False
+    assign_to_user: bool | None = None
+
+
+class AutoMatchSubmissionActionConfig(BaseModel):
+    """Config for auto_match_submission action."""
+
+    action_type: Literal["auto_match_submission"] = "auto_match_submission"
+
+
+class CreateIntakeLeadActionConfig(BaseModel):
+    """Config for create_intake_lead action."""
+
+    action_type: Literal["create_intake_lead"] = "create_intake_lead"
+    source: str | None = None
+
+
 # Union of all action configs
 ActionConfig = (
     SendEmailActionConfig
@@ -228,6 +260,9 @@ ActionConfig = (
     | SendNotificationActionConfig
     | UpdateFieldActionConfig
     | AddNoteActionConfig
+    | PromoteIntakeLeadActionConfig
+    | AutoMatchSubmissionActionConfig
+    | CreateIntakeLeadActionConfig
 )
 
 
