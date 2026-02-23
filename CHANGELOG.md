@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.89.0...surrogacy-crm-platform-v0.90.0) (2026-02-23)
+
+
+### Features
+
+* gmail journal ticketing ([b34d7af](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b34d7afef26216f1425b421e472874a636522c0a))
+
+
+### Bug Fixes
+
+* enforce surrogate ACL on email contact routes ([8633663](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8633663b8e5d6af6831650643500ec1f7bc0b9d3))
+* make mailbox sync idempotency run-scoped ([f700bb8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f700bb8f46650e03f03ddc6bf04550d23444629f))
+* resolve duplicate alembic revision 20260222_1700 ([d2693c0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d2693c06a05a69aee9b23c71f282845157508d4a))
+
+
+### Maintenance
+
+* merge main and resolve db model export conflict ([d65fcb3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d65fcb3a9ce02f6e1b0c02675d8d76d93f1fa74d))
+
 ## [0.89.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.88.0...surrogacy-crm-platform-v0.89.0) (2026-02-22)
 
 
