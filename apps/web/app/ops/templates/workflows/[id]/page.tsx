@@ -57,6 +57,7 @@ const triggerLabels: Record<string, string> = {
     surrogate_updated: "Field Updated",
     form_started: "Form Started",
     form_submitted: "Application Submitted",
+    intake_lead_created: "Intake Lead Created",
     task_due: "Task Due",
     task_overdue: "Task Overdue",
     scheduled: "Scheduled",
@@ -85,7 +86,10 @@ const conditionFieldLabels: Record<string, string> = {
     email: "Email",
     phone: "Phone",
     owner_type: "Owner Type",
+    form_id: "Form",
     created_at: "Created At",
+    source_mode: "Submission Source",
+    match_status: "Match Status",
     date_of_birth: "Date of Birth",
     age: "Age",
     bmi: "BMI",
@@ -126,6 +130,8 @@ const MULTISELECT_FIELDS = new Set([
     "owner_type",
     "state",
     "source",
+    "source_mode",
+    "match_status",
 ])
 
 const SOURCE_OPTIONS: SelectOption[] = [
@@ -135,6 +141,17 @@ const SOURCE_OPTIONS: SelectOption[] = [
     { value: "referral", label: "Referral" },
     { value: "import", label: "Import" },
     { value: "agency", label: "Agency" },
+]
+
+const FORM_SOURCE_MODE_OPTIONS: SelectOption[] = [
+    { value: "dedicated", label: "Dedicated Link" },
+    { value: "shared", label: "Shared Link" },
+]
+
+const FORM_MATCH_STATUS_OPTIONS: SelectOption[] = [
+    { value: "linked", label: "Linked" },
+    { value: "ambiguous_review", label: "Ambiguous Review" },
+    { value: "lead_created", label: "Lead Created" },
 ]
 
 const OWNER_TYPE_OPTIONS: SelectOption[] = [
@@ -152,6 +169,7 @@ const FALLBACK_TRIGGER_TYPES = [
     { value: "surrogate_updated", label: "Surrogate Updated", description: "When specific fields change" },
     { value: "form_started", label: "Form Started", description: "When a form draft is started" },
     { value: "form_submitted", label: "Application Submitted", description: "When a form is submitted" },
+    { value: "intake_lead_created", label: "Intake Lead Created", description: "When a lead is created from shared intake" },
     { value: "task_due", label: "Task Due", description: "Before a task is due" },
     { value: "task_overdue", label: "Task Overdue", description: "When a task becomes overdue" },
     { value: "scheduled", label: "Scheduled", description: "On a recurring schedule" },
@@ -172,6 +190,9 @@ const FALLBACK_ACTION_TYPES = [
     { value: "send_notification", label: "Send Notification", description: "Send in-app notification" },
     { value: "update_field", label: "Update Field", description: "Update a case field" },
     { value: "add_note", label: "Add Note", description: "Add a note to the case" },
+    { value: "promote_intake_lead", label: "Promote Intake Lead", description: "Promote lead into surrogate case" },
+    { value: "auto_match_submission", label: "Auto-Match Submission", description: "Deterministically match submission" },
+    { value: "create_intake_lead", label: "Create Intake Lead", description: "Create lead for unmatched submission" },
 ]
 
 const FALLBACK_OPERATORS = [
@@ -509,6 +530,9 @@ export default function PlatformWorkflowTemplatePage() {
             if (triggerType === "form_submitted") {
                 if (typeof next.form_id !== "string") next.form_id = ""
             }
+            if (triggerType === "intake_lead_created") {
+                if (typeof next.form_id !== "string") next.form_id = ""
+            }
             return next
         })
     }, [triggerType])
@@ -580,6 +604,24 @@ export default function PlatformWorkflowTemplatePage() {
         setActions(actions.map((action, i) => (i === index ? mergeActionConfig(action, updates) : action)))
     }
 
+    const applySharedIntakeSample = () => {
+        setName("Shared Intake Routing: Match Then Lead")
+        setDescription(
+            "When a shared application is submitted, auto-match to an existing surrogate first; if no deterministic match exists, create an intake lead."
+        )
+        setIcon("activity")
+        setCategory("intake")
+        setTriggerType("form_submitted")
+        setTriggerConfig({})
+        setConditions([{ field: "source_mode", operator: "equals", value: "shared" }])
+        setConditionLogic("AND")
+        setActions([
+            { action_type: "auto_match_submission" },
+            { action_type: "create_intake_lead", source: "shared_form_workflow" },
+        ])
+        toast.success("Loaded sample workflow template")
+    }
+
     const getConditionOptions = (field: string): SelectOption[] | null => {
         if (field === "stage_id") return stageIdOptions
         if (field === "status_label") return stageLabelOptions
@@ -587,6 +629,8 @@ export default function PlatformWorkflowTemplatePage() {
         if (field === "owner_id") return ownerOptions
         if (field === "state") return stateOptions
         if (field === "source") return SOURCE_OPTIONS
+        if (field === "source_mode") return FORM_SOURCE_MODE_OPTIONS
+        if (field === "match_status") return FORM_MATCH_STATUS_OPTIONS
         return null
     }
 
@@ -707,10 +751,6 @@ export default function PlatformWorkflowTemplatePage() {
             const formId = triggerConfig.form_id
             if (!formId || typeof formId !== "string") return "Select a form."
         }
-        if (triggerType === "form_submitted") {
-            const formId = triggerConfig.form_id
-            if (!formId || typeof formId !== "string") return "Select a form."
-        }
         if (triggerType === "scheduled") {
             const cron = triggerConfig.cron
             if (!cron || typeof cron !== "string") return "Cron schedule is required."
@@ -772,6 +812,17 @@ export default function PlatformWorkflowTemplatePage() {
         const triggerError = getTriggerValidationError()
         if (triggerError) return triggerError
         if (actions.length === 0) return "Add at least one action."
+        if (triggerType === "form_submitted") {
+            const autoMatchIndex = actions.findIndex(
+                (action) => action.action_type === "auto_match_submission"
+            )
+            const createLeadIndex = actions.findIndex(
+                (action) => action.action_type === "create_intake_lead"
+            )
+            if (autoMatchIndex >= 0 && createLeadIndex >= 0 && autoMatchIndex > createLeadIndex) {
+                return "Place Auto-Match Submission before Create Intake Lead for form-submitted templates."
+            }
+        }
         for (const action of actions) {
             const error = getActionValidationError(action)
             if (error) return error
@@ -811,6 +862,9 @@ export default function PlatformWorkflowTemplatePage() {
             if (typeof next.form_id !== "string" || !next.form_id) delete next.form_id
         }
         if (triggerType === "form_submitted") {
+            if (typeof next.form_id !== "string" || !next.form_id) delete next.form_id
+        }
+        if (triggerType === "intake_lead_created") {
             if (typeof next.form_id !== "string" || !next.form_id) delete next.form_id
         }
         return next
@@ -1016,6 +1070,11 @@ export default function PlatformWorkflowTemplatePage() {
                             <CardDescription>Define name, category, and icon for the template.</CardDescription>
                         </CardHeader>
                         <CardContent className="grid gap-4 md:grid-cols-2">
+                            <div className="md:col-span-2">
+                                <Button type="button" variant="outline" size="sm" onClick={applySharedIntakeSample}>
+                                    Load Shared Intake Sample
+                                </Button>
+                            </div>
                             <div className="space-y-2 md:col-span-2">
                                 <Label>Description</Label>
                                 <Textarea
@@ -1192,21 +1251,27 @@ export default function PlatformWorkflowTemplatePage() {
 
                             {triggerType === "form_submitted" && (
                                 <div>
-                                    <Label>Form *</Label>
+                                    <Label>Form (optional)</Label>
                                     <Select
                                         value={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
-                                        onValueChange={(value) => value && setTriggerConfig({ ...triggerConfig, form_id: value })}
+                                        onValueChange={(value) =>
+                                            setTriggerConfig({
+                                                ...triggerConfig,
+                                                form_id: value === "__any_form__" ? "" : value,
+                                            })
+                                        }
                                     >
                                         <SelectTrigger className="mt-1.5">
-                                            <SelectValue placeholder="Select form">
+                                            <SelectValue placeholder="Any published form">
                                                 {(value: string | null) => {
-                                                    if (!value) return "Select form"
+                                                    if (!value) return "Any published form"
                                                     const form = formOptions.find((option) => option.value === value)
                                                     return form?.label ?? value
                                                 }}
                                             </SelectValue>
                                         </SelectTrigger>
                                         <SelectContent>
+                                            <SelectItem value="__any_form__">Any published form</SelectItem>
                                             {formOptions.map((form) => (
                                                 <SelectItem key={form.value} value={form.value}>
                                                     {form.label}
@@ -1217,6 +1282,44 @@ export default function PlatformWorkflowTemplatePage() {
                                     {formOptions.length === 0 && (
                                         <p className="mt-2 text-xs text-muted-foreground">
                                             Publish a form to use this trigger.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            {triggerType === "intake_lead_created" && (
+                                <div>
+                                    <Label>Form (optional)</Label>
+                                    <Select
+                                        value={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
+                                        onValueChange={(value) =>
+                                            setTriggerConfig({
+                                                ...triggerConfig,
+                                                form_id: value === "__any_form__" ? "" : value,
+                                            })
+                                        }
+                                    >
+                                        <SelectTrigger className="mt-1.5">
+                                            <SelectValue placeholder="Any published form">
+                                                {(value: string | null) => {
+                                                    if (!value) return "Any published form"
+                                                    const form = formOptions.find((option) => option.value === value)
+                                                    return form?.label ?? value
+                                                }}
+                                            </SelectValue>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="__any_form__">Any published form</SelectItem>
+                                            {formOptions.map((form) => (
+                                                <SelectItem key={form.value} value={form.value}>
+                                                    {form.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    {formOptions.length === 0 && (
+                                        <p className="mt-2 text-xs text-muted-foreground">
+                                            Leave blank to apply to all forms in target orgs.
                                         </p>
                                     )}
                                 </div>
@@ -1816,8 +1919,56 @@ export default function PlatformWorkflowTemplatePage() {
                                                     />
                                                 </div>
                                             )}
+                                            {action.action_type === "auto_match_submission" && (
+                                                <p className="rounded-md border p-3 text-sm text-muted-foreground">
+                                                    Runs deterministic matching using name + DOB + phone/email and updates the
+                                                    submission to linked or ambiguous review.
+                                                </p>
+                                            )}
 
-                                            {action.action_type && (
+                                            {action.action_type === "create_intake_lead" && (
+                                                <div className="space-y-2">
+                                                    <Label>Source (optional)</Label>
+                                                    <Input
+                                                        placeholder="shared_form_workflow"
+                                                        value={typeof action.source === "string" ? action.source : ""}
+                                                        onChange={(event) => updateAction(index, { source: event.target.value })}
+                                                    />
+                                                </div>
+                                            )}
+
+                                            {action.action_type === "promote_intake_lead" && (
+                                                <div className="space-y-3">
+                                                    <Input
+                                                        placeholder="Source (optional)"
+                                                        value={typeof action.source === "string" ? action.source : ""}
+                                                        onChange={(event) => updateAction(index, { source: event.target.value })}
+                                                    />
+                                                    <div className="flex items-center justify-between rounded-md border p-3">
+                                                        <div className="text-sm">Mark as priority</div>
+                                                        <Switch
+                                                            checked={typeof action.is_priority === "boolean" ? action.is_priority : false}
+                                                            onCheckedChange={(checked) =>
+                                                                updateAction(index, { is_priority: checked })
+                                                            }
+                                                        />
+                                                    </div>
+                                                    <div className="flex items-center justify-between rounded-md border p-3">
+                                                        <div className="text-sm">Assign to workflow owner if available</div>
+                                                        <Switch
+                                                            checked={typeof action.assign_to_user === "boolean" ? action.assign_to_user : false}
+                                                            onCheckedChange={(checked) =>
+                                                                updateAction(index, { assign_to_user: checked })
+                                                            }
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {action.action_type &&
+                                                !["promote_intake_lead"].includes(
+                                                    action.action_type
+                                                ) && (
                                                 <div className="flex items-center justify-between pt-2 border-t mt-2">
                                                     <div className="flex flex-col">
                                                         <Label className="text-sm font-medium">

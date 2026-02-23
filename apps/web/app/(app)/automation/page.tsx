@@ -93,6 +93,7 @@ const triggerIcons: Record<string, React.ElementType> = {
     surrogate_updated: FileTextIcon,
     form_started: FileTextIcon,
     form_submitted: FileTextIcon,
+    intake_lead_created: FileTextIcon,
     task_due: ClockIcon,
     task_overdue: AlertCircleIcon,
     scheduled: CalendarIcon,
@@ -113,6 +114,7 @@ const triggerLabels: Record<string, string> = {
     surrogate_updated: "Field Updated",
     form_started: "Form Started",
     form_submitted: "Application Submitted",
+    intake_lead_created: "Intake Lead Created",
     task_due: "Task Due",
     task_overdue: "Task Overdue",
     scheduled: "Scheduled",
@@ -140,6 +142,10 @@ const conditionFieldLabels: Record<string, string> = {
     email: "Email",
     phone: "Phone",
     owner_type: "Owner Type",
+    form_id: "Form",
+    status: "Status",
+    source_mode: "Submission Source",
+    match_status: "Match Status",
     created_at: "Created At",
     date_of_birth: "Date of Birth",
     age: "Age",
@@ -183,6 +189,8 @@ const MULTISELECT_FIELDS = new Set([
     "owner_type",
     "state",
     "source",
+    "source_mode",
+    "match_status",
 ])
 
 const SOURCE_OPTIONS: SelectOption[] = [
@@ -194,6 +202,17 @@ const SOURCE_OPTIONS: SelectOption[] = [
     { value: "agency", label: "Agency" },
 ]
 
+const FORM_SOURCE_MODE_OPTIONS: SelectOption[] = [
+    { value: "dedicated", label: "Dedicated Link" },
+    { value: "shared", label: "Shared Link" },
+]
+
+const FORM_MATCH_STATUS_OPTIONS: SelectOption[] = [
+    { value: "linked", label: "Linked" },
+    { value: "ambiguous_review", label: "Ambiguous Review" },
+    { value: "lead_created", label: "Lead Created" },
+]
+
 const OWNER_TYPE_OPTIONS: SelectOption[] = [
     { value: "user", label: "User" },
     { value: "queue", label: "Queue" },
@@ -201,6 +220,8 @@ const OWNER_TYPE_OPTIONS: SelectOption[] = [
 
 const ENTITY_LABELS: Record<string, string> = {
     surrogate: "Surrogate ID",
+    form_submission: "Form Submission ID",
+    intake_lead: "Intake Lead ID",
     task: "Task ID",
     match: "Match ID",
     appointment: "Appointment ID",
@@ -210,6 +231,8 @@ const ENTITY_LABELS: Record<string, string> = {
 
 const ENTITY_PLURALS: Record<string, string> = {
     surrogate: "surrogates",
+    form_submission: "form submissions",
+    intake_lead: "intake leads",
     task: "tasks",
     match: "matches",
     appointment: "appointments",
@@ -548,6 +571,12 @@ async function fetchTestEntities(
             )
         )
     }
+    if (entityType === "intake_lead") {
+        return []
+    }
+    if (entityType === "form_submission") {
+        return []
+    }
     return []
 }
 
@@ -797,6 +826,17 @@ export default function AutomationPage() {
 
     const getActionsValidationError = (): string | null => {
         if (actions.length === 0) return "Add at least one action."
+        if (triggerType === "form_submitted") {
+            const autoMatchIndex = actions.findIndex(
+                (action) => action.action_type === "auto_match_submission"
+            )
+            const createLeadIndex = actions.findIndex(
+                (action) => action.action_type === "create_intake_lead"
+            )
+            if (autoMatchIndex >= 0 && createLeadIndex >= 0 && autoMatchIndex > createLeadIndex) {
+                return "Place Auto-Match Submission before Create Intake Lead for form-submitted workflows."
+            }
+        }
         for (const action of actions) {
             const error = getActionValidationError(action)
             if (error) return error
@@ -811,6 +851,8 @@ export default function AutomationPage() {
         if (field === "owner_id") return ownerOptions
         if (field === "state") return stateOptions
         if (field === "source") return SOURCE_OPTIONS
+        if (field === "source_mode") return FORM_SOURCE_MODE_OPTIONS
+        if (field === "match_status") return FORM_MATCH_STATUS_OPTIONS
         return null
     }
 
@@ -946,6 +988,10 @@ export default function AutomationPage() {
             if (!formId || typeof formId !== "string") return "Select a form."
         }
         if (triggerType === "form_submitted") {
+            const formId = triggerConfig.form_id
+            if (!formId || typeof formId !== "string") return "Select a form."
+        }
+        if (triggerType === "intake_lead_created") {
             const formId = triggerConfig.form_id
             if (!formId || typeof formId !== "string") return "Select a form."
         }
@@ -1112,6 +1158,9 @@ export default function AutomationPage() {
             if (triggerType === "form_submitted") {
                 if (typeof next.form_id !== "string") next.form_id = ""
             }
+            if (triggerType === "intake_lead_created") {
+                if (typeof next.form_id !== "string") next.form_id = ""
+            }
             if (triggerType === "surrogate_updated") {
                 if (!Array.isArray(next.fields)) next.fields = []
             }
@@ -1164,6 +1213,9 @@ export default function AutomationPage() {
                 if (typeof next.form_id !== "string" || !next.form_id) delete next.form_id
             }
             if (triggerType === "form_submitted") {
+                if (typeof next.form_id !== "string" || !next.form_id) delete next.form_id
+            }
+            if (triggerType === "intake_lead_created") {
                 if (typeof next.form_id !== "string" || !next.form_id) delete next.form_id
             }
             if (triggerType === "surrogate_updated") {
@@ -1779,6 +1831,39 @@ export default function AutomationPage() {
                                         )}
                                     </div>
                                 )}
+                                {triggerType === "intake_lead_created" && (
+                                    <div>
+                                        <Label>Form *</Label>
+                                        <Select
+                                            value={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
+                                            onValueChange={(value) =>
+                                                setTriggerConfig({ ...triggerConfig, form_id: value })
+                                            }
+                                        >
+                                            <SelectTrigger className="mt-1.5">
+                                                <SelectValue placeholder="Select form">
+                                                    {(value: string | null) => {
+                                                        if (!value) return "Select form"
+                                                        const form = formOptions.find((option) => option.value === value)
+                                                        return form?.label ?? value
+                                                    }}
+                                                </SelectValue>
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {formOptions.map((form) => (
+                                                    <SelectItem key={form.value} value={form.value}>
+                                                        {form.label}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {formOptions.length === 0 && (
+                                            <p className="mt-2 text-xs text-muted-foreground">
+                                                Publish a form to use this trigger.
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
                                 {triggerType === "task_due" && (
                                     <div>
                                         <Label>Hours Before Due *</Label>
@@ -2307,8 +2392,57 @@ export default function AutomationPage() {
                                                         rows={2}
                                                     />
                                                 )}
+                                                {action.action_type === "auto_match_submission" && (
+                                                    <p className="rounded-md border p-3 text-sm text-muted-foreground">
+                                                        Runs deterministic matching using name + DOB + phone/email and updates the
+                                                        submission to linked or ambiguous review.
+                                                    </p>
+                                                )}
+                                                {action.action_type === "create_intake_lead" && (
+                                                    <div className="space-y-2">
+                                                        <Input
+                                                            placeholder="Source (optional, e.g. event_qr)"
+                                                            value={typeof action.source === "string" ? action.source : ""}
+                                                            onChange={(e) => updateAction(index, { source: e.target.value })}
+                                                        />
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Skips automatically if the submission is already linked or has ambiguous
+                                                            match candidates.
+                                                        </p>
+                                                    </div>
+                                                )}
+                                                {action.action_type === "promote_intake_lead" && (
+                                                    <div className="space-y-3">
+                                                        <Input
+                                                            placeholder="Source (optional, e.g. manual)"
+                                                            value={typeof action.source === "string" ? action.source : ""}
+                                                            onChange={(e) => updateAction(index, { source: e.target.value })}
+                                                        />
+                                                        <div className="flex items-center justify-between rounded-md border p-3">
+                                                            <div className="text-sm">Mark as priority</div>
+                                                            <Switch
+                                                                checked={typeof action.is_priority === "boolean" ? action.is_priority : false}
+                                                                onCheckedChange={(checked) =>
+                                                                    updateAction(index, { is_priority: checked })
+                                                                }
+                                                            />
+                                                        </div>
+                                                        <div className="flex items-center justify-between rounded-md border p-3">
+                                                            <div className="text-sm">Assign to workflow owner if available</div>
+                                                            <Switch
+                                                                checked={typeof action.assign_to_user === "boolean" ? action.assign_to_user : false}
+                                                                onCheckedChange={(checked) =>
+                                                                    updateAction(index, { assign_to_user: checked })
+                                                                }
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
                                                 {/* Requires Approval Toggle */}
-                                                {action.action_type && (
+                                                {action.action_type &&
+                                                    !["promote_intake_lead"].includes(
+                                                        action.action_type
+                                                    ) && (
                                                     <div className="flex items-center justify-between pt-2 border-t mt-2">
                                                         <div className="flex flex-col">
                                                             <Label htmlFor={`approval-${action.clientId}`} className="text-sm font-medium">
