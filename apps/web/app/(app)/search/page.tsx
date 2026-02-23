@@ -51,7 +51,7 @@ const ENTITY_CONFIG = {
 
 export default function SearchPage() {
     const [query, setQuery] = useState("")
-    const debouncedQuery = useDebouncedValue(query, 300)
+    const debouncedQuery = useDebouncedValue(query, 400)
 
     const {
         data: results,

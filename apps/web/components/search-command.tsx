@@ -49,7 +49,7 @@ interface SearchCommandDialogProps {
 export function SearchCommandDialog({ open, onOpenChange }: SearchCommandDialogProps) {
     const router = useRouter()
     const [query, setQuery] = useState("")
-    const debouncedQuery = useDebouncedValue(query, 200)
+    const debouncedQuery = useDebouncedValue(query, 400)
 
     const {
         data: results,
