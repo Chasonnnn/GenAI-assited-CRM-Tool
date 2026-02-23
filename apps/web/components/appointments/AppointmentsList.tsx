@@ -194,14 +194,18 @@ function AppointmentCard({
 // Appointment Detail Dialog
 // =============================================================================
 
-function AppointmentDetailDialog({
+export function AppointmentDetailDialog({
     appointmentId,
     open,
     onOpenChange,
+    initialRescheduleDate = null,
+    startInRescheduleMode = false,
 }: {
     appointmentId: string | null
     open: boolean
     onOpenChange: (open: boolean) => void
+    initialRescheduleDate?: string | null
+    startInRescheduleMode?: boolean
 }) {
     const { data: appointment, isLoading, isError, refetch } = useAppointment(appointmentId || "")
     const approveMutation = useApproveAppointment()
@@ -224,13 +228,17 @@ function AppointmentDetailDialog({
 
     useEffect(() => {
         if (!open || !appointment) return
+        const canStartInRescheduleMode =
+            startInRescheduleMode && RESCHEDULABLE_STATUSES.has(appointment.status)
+        const defaultRescheduleDate = format(parseISO(appointment.scheduled_start), "yyyy-MM-dd")
+
         setCancelReason("")
         setShowCancelForm(false)
-        setShowRescheduleForm(false)
+        setShowRescheduleForm(canStartInRescheduleMode)
         setRescheduleError(null)
-        setRescheduleDate(format(parseISO(appointment.scheduled_start), "yyyy-MM-dd"))
+        setRescheduleDate(initialRescheduleDate || defaultRescheduleDate)
         setSelectedSlotStart(null)
-    }, [appointment, open])
+    }, [appointment, open, initialRescheduleDate, startInRescheduleMode])
 
     if (!appointmentId) return null
 
