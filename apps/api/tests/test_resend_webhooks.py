@@ -108,6 +108,44 @@ class TestResendWebhookSignature:
         is_valid = _verify_svix_signature(body, headers, secret)
         assert is_valid is False
 
+    def test_verify_svix_signature_invalid_base64_fails(self):
+        """
+        Ensure that invalid base64 secrets (which decode to empty/None)
+        fail verification instead of falling back to raw bytes.
+        """
+        from app.services.webhooks.resend import _verify_svix_signature
+
+        def _generate_signature_raw_bytes(body: bytes, secret_content: str, timestamp: str) -> str:
+            msg_id = str(uuid.uuid4())
+            signed_payload = f"{msg_id}.{timestamp}.{body.decode('utf-8')}"
+            secret_bytes = secret_content.encode("utf-8")
+            signature = hmac.new(
+                secret_bytes,
+                signed_payload.encode("utf-8"),
+                hashlib.sha256,
+            ).digest()
+            signature_b64 = base64.b64encode(signature).decode("utf-8")
+            return msg_id, f"v1,{signature_b64}"
+
+        body = b'{"type": "security_test"}'
+        secret = "whsec_!!!!"  # Invalid base64 chars that python strips/ignores leading to empty
+        timestamp = str(int(time.time()))
+
+        # Generate signature using the RAW content "!!!!"
+        # This mimics the insecure fallback we removed.
+        msg_id, signature = _generate_signature_raw_bytes(body, secret[6:], timestamp)
+
+        headers = {
+            "svix-id": msg_id,
+            "svix-timestamp": timestamp,
+            "svix-signature": signature,
+        }
+
+        # Verification must fail because the code should reject the invalid base64 secret
+        # instead of trying to verify with "!!!!"
+        is_valid = _verify_svix_signature(body, headers, secret)
+        assert is_valid is False
+
 
 class TestResendWebhookHandler:
     """Test webhook event processing."""

@@ -68,7 +68,10 @@ def _verify_svix_signature(
                 secret_bytes = decoded
                 break
         if secret_bytes is None:
-            secret_bytes = secret.encode("utf-8")
+            # If the secret claims to be a whsec_ (base64) but fails to decode,
+            # we must reject it rather than falling back to using the raw bytes.
+            logger.error("Resend webhook secret starts with whsec_ but is not valid base64")
+            return False
     else:
         secret_bytes = secret.encode("utf-8")
 
