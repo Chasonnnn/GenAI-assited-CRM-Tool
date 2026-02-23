@@ -504,24 +504,25 @@ async def test_seeded_intake_auto_match_workflow_visible_in_ops_templates(
     assert resp.status_code == 200
     templates = resp.json()
 
-    seeded = next(
-        (
-            item
-            for item in templates
-            if item["draft"]["name"] == "Application Intake: Auto-Match then Create Lead (Approval)"
-        ),
-        None,
-    )
-    assert seeded is not None
-    assert seeded["status"] == "draft"
-    assert seeded["draft"]["trigger_type"] == "form_submitted"
+    by_name = {item["draft"]["name"]: item for item in templates}
+    expected = {
+        "Full Application: Auto-Match then Create Lead (Approval)": "Surrogate Full Application Form",
+        "Pre-Screening: Auto-Match then Create Lead (Approval)": "Surrogate Pre-Screening Questionnaire",
+    }
 
-    actions = seeded["draft"].get("actions", [])
-    assert len(actions) == 2
-    assert actions[0]["action_type"] == "auto_match_submission"
-    assert actions[0]["requires_approval"] is True
-    assert actions[1]["action_type"] == "create_intake_lead"
-    assert actions[1]["requires_approval"] is True
+    for template_name, form_name in expected.items():
+        seeded = by_name.get(template_name)
+        assert seeded is not None
+        assert seeded["status"] == "draft"
+        assert seeded["draft"]["trigger_type"] == "form_submitted"
+        assert seeded["draft"].get("trigger_config", {}).get("form_name") == form_name
+
+        actions = seeded["draft"].get("actions", [])
+        assert len(actions) == 2
+        assert actions[0]["action_type"] == "auto_match_submission"
+        assert actions[0]["requires_approval"] is True
+        assert actions[1]["action_type"] == "create_intake_lead"
+        assert actions[1]["requires_approval"] is True
 
 
 @pytest.mark.asyncio
