@@ -2416,31 +2416,37 @@ export default function FormBuilderPage() {
                                         </p>
                                     </div>
                                     <div className="space-y-2 rounded-md border border-stone-200 p-3 dark:border-stone-800">
-                                        <div className="flex items-center justify-between gap-3">
-                                            <div>
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2">
                                                 <p className="text-sm font-medium">Default case-send form</p>
-                                                <p className="text-xs text-stone-500">
-                                                    Exactly one published surrogate application form can be the default for case sends.
-                                                </p>
-                                            </div>
-                                            <Button
-                                                type="button"
-                                                variant={isDefaultSurrogateApplication ? "secondary" : "outline"}
-                                                size="sm"
-                                                onClick={handleSetDefaultSurrogateApplication}
-                                                disabled={
-                                                    isDefaultSurrogateApplication ||
-                                                    setDefaultSurrogateApplicationMutation.isPending ||
-                                                    !isPublished ||
-                                                    formPurpose !== "surrogate_application"
-                                                }
-                                            >
-                                                {setDefaultSurrogateApplicationMutation.isPending && (
-                                                    <Loader2Icon className="mr-2 size-3 animate-spin" />
+                                                {isDefaultSurrogateApplication && (
+                                                    <Badge variant="secondary" className="text-[11px]">
+                                                        Active
+                                                    </Badge>
                                                 )}
-                                                {isDefaultSurrogateApplication ? "Default Active" : "Set as Default"}
-                                            </Button>
+                                            </div>
+                                            <p className="text-xs text-stone-500">
+                                                Exactly one published surrogate application form can be the default for case sends.
+                                            </p>
                                         </div>
+                                        <Button
+                                            type="button"
+                                            variant={isDefaultSurrogateApplication ? "secondary" : "outline"}
+                                            size="sm"
+                                            className="w-full justify-center sm:w-auto"
+                                            onClick={handleSetDefaultSurrogateApplication}
+                                            disabled={
+                                                isDefaultSurrogateApplication ||
+                                                setDefaultSurrogateApplicationMutation.isPending ||
+                                                !isPublished ||
+                                                formPurpose !== "surrogate_application"
+                                            }
+                                        >
+                                            {setDefaultSurrogateApplicationMutation.isPending && (
+                                                <Loader2Icon className="mr-2 size-3 animate-spin" />
+                                            )}
+                                            {isDefaultSurrogateApplication ? "Default Active" : "Set as Default"}
+                                        </Button>
                                         {formPurpose !== "surrogate_application" && (
                                             <p className="text-xs text-amber-600">
                                                 Change purpose to <code>surrogate_application</code> to set as default.

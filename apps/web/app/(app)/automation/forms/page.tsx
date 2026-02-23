@@ -39,9 +39,13 @@ import {
     Trash2Icon,
     Loader2Icon,
     ArrowLeftIcon,
+    LinkIcon,
+    QrCodeIcon,
 } from "lucide-react"
+import { QRCodeSVG } from "qrcode.react"
 import { toast } from "sonner"
 import { ApiError } from "@/lib/api"
+import { listFormIntakeLinks, type FormIntakeLinkRead } from "@/lib/api/forms"
 import {
     useForms,
     useCreateForm,
@@ -83,6 +87,10 @@ export default function FormsListPage() {
     const [applyingTemplateId, setApplyingTemplateId] = useState<string | null>(null)
     const [formToDelete, setFormToDelete] = useState<{ id: string; name: string } | null>(null)
     const [templateToDelete, setTemplateToDelete] = useState<{ id: string; name: string } | null>(null)
+    const [shareTargetForm, setShareTargetForm] = useState<{ id: string; name: string } | null>(null)
+    const [shareLink, setShareLink] = useState<FormIntakeLinkRead | null>(null)
+    const [isPreparingShare, setIsPreparingShare] = useState(false)
+    const [isShareActionPending, setIsShareActionPending] = useState(false)
 
     const handleCreate = async () => {
         if (!formName.trim()) return
@@ -168,6 +176,145 @@ export default function FormsListPage() {
                 return "Archived"
             default:
                 return status
+        }
+    }
+
+    const pickShareLink = (links: FormIntakeLinkRead[]): FormIntakeLinkRead | null => {
+        return (
+            links.find((link) => link.is_active && Boolean(link.intake_url)) ||
+            links.find((link) => Boolean(link.intake_url)) ||
+            null
+        )
+    }
+
+    const resetSharePrompt = () => {
+        setShareTargetForm(null)
+        setShareLink(null)
+        setIsPreparingShare(false)
+        setIsShareActionPending(false)
+    }
+
+    const handleOpenSharePrompt = async (form: { id: string; name: string; status: string }) => {
+        if (form.status !== "published") {
+            toast.error("Publish this form before sharing.")
+            return
+        }
+
+        setShareTargetForm({ id: form.id, name: form.name })
+        setShareLink(null)
+        setIsPreparingShare(true)
+
+        try {
+            const links = await listFormIntakeLinks(form.id, true)
+            const selected = pickShareLink(links)
+            if (!selected?.intake_url) {
+                toast.error("No shared link is available yet for this form.")
+                return
+            }
+            setShareLink(selected)
+        } catch (error) {
+            const message =
+                error instanceof ApiError
+                    ? error.message
+                    : "Failed to prepare share link. Please try again."
+            toast.error(message)
+        } finally {
+            setIsPreparingShare(false)
+        }
+    }
+
+    const handleCopyShareLink = async () => {
+        if (!shareLink?.intake_url) return
+        setIsShareActionPending(true)
+        try {
+            await navigator.clipboard.writeText(shareLink.intake_url)
+            toast.success("Application link copied")
+            resetSharePrompt()
+        } catch {
+            toast.error("Failed to copy link")
+        } finally {
+            setIsShareActionPending(false)
+        }
+    }
+
+    const getShareQrSvgMarkup = () => {
+        const svg = document.querySelector("#forms-share-qr svg")
+        if (!(svg instanceof SVGSVGElement)) {
+            toast.error("QR code is not ready yet")
+            return null
+        }
+
+        let markup = new XMLSerializer().serializeToString(svg)
+        if (!markup.includes("xmlns=\"http://www.w3.org/2000/svg\"")) {
+            markup = markup.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"')
+        }
+        return markup
+    }
+
+    const buildShareQrFilename = () => {
+        const baseRaw =
+            shareLink?.event_name || shareLink?.campaign_name || shareTargetForm?.name || "application-link"
+        const base = baseRaw
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+        return `${base || "application-link"}-qr.png`
+    }
+
+    const downloadBlob = (blob: Blob, filename: string) => {
+        const downloadUrl = URL.createObjectURL(blob)
+        const anchor = document.createElement("a")
+        anchor.href = downloadUrl
+        anchor.download = filename
+        document.body.appendChild(anchor)
+        anchor.click()
+        anchor.remove()
+        URL.revokeObjectURL(downloadUrl)
+    }
+
+    const handleDownloadQrCode = async () => {
+        const markup = getShareQrSvgMarkup()
+        if (!markup) return
+
+        setIsShareActionPending(true)
+        const svgBlob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" })
+        const svgUrl = URL.createObjectURL(svgBlob)
+        try {
+            const image = new Image()
+            image.crossOrigin = "anonymous"
+
+            await new Promise<void>((resolve, reject) => {
+                image.onload = () => resolve()
+                image.onerror = () => reject(new Error("Failed to render QR image"))
+                image.src = svgUrl
+            })
+
+            const canvas = document.createElement("canvas")
+            canvas.width = image.width || 120
+            canvas.height = image.height || 120
+            const context = canvas.getContext("2d")
+            if (!context) {
+                toast.error("Could not prepare QR download")
+                return
+            }
+            context.drawImage(image, 0, 0)
+
+            const blob = await new Promise<Blob | null>((resolve) =>
+                canvas.toBlob((result) => resolve(result), "image/png"),
+            )
+            if (!blob) {
+                toast.error("Could not generate QR code")
+                return
+            }
+
+            downloadBlob(blob, buildShareQrFilename())
+            toast.success("QR code downloaded")
+            resetSharePrompt()
+        } catch {
+            toast.error("Failed to download QR code")
+        } finally {
+            URL.revokeObjectURL(svgUrl)
+            setIsShareActionPending(false)
         }
     }
 
@@ -285,6 +432,16 @@ export default function FormsListPage() {
                                                                 >
                                                                     <EditIcon className="mr-2 size-4" />
                                                                     Edit
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem
+                                                                    disabled={form.status !== "published"}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        void handleOpenSharePrompt(form)
+                                                                    }}
+                                                                >
+                                                                    <LinkIcon className="mr-2 size-4" />
+                                                                    Share
                                                                 </DropdownMenuItem>
                                                                 <DropdownMenuItem
                                                                     className="text-destructive focus:text-destructive"
@@ -523,6 +680,69 @@ export default function FormsListPage() {
                             )}
                             Remove
                         </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={!!shareTargetForm} onOpenChange={(open) => !open && resetSharePrompt()}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Share Application Form</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Choose how you want to share{" "}
+                            <span className="font-medium text-foreground">{shareTargetForm?.name}</span>.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+
+                    {isPreparingShare ? (
+                        <div className="flex items-center gap-2 rounded-md border border-stone-200 bg-stone-50 p-3 text-sm text-stone-600">
+                            <Loader2Icon className="size-4 animate-spin" />
+                            Preparing link and QR code...
+                        </div>
+                    ) : shareLink?.intake_url ? (
+                        <div className="space-y-3 rounded-md border border-stone-200 bg-stone-50 p-3">
+                            <div className="break-all text-xs text-stone-600">{shareLink.intake_url}</div>
+                            <div className="inline-flex rounded-md border border-stone-200 bg-white p-2">
+                                <div id="forms-share-qr">
+                                    <QRCodeSVG value={shareLink.intake_url} size={120} includeMargin />
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+                            No share link is ready yet. Open this form and publish it first.
+                        </div>
+                    )}
+
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isPreparingShare || isShareActionPending}>
+                            Cancel
+                        </AlertDialogCancel>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={!shareLink || isPreparingShare || isShareActionPending}
+                            onClick={() => void handleCopyShareLink()}
+                        >
+                            {isShareActionPending ? (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            ) : (
+                                <LinkIcon className="mr-2 size-4" />
+                            )}
+                            Copy Link
+                        </Button>
+                        <Button
+                            type="button"
+                            disabled={!shareLink || isPreparingShare || isShareActionPending}
+                            onClick={() => void handleDownloadQrCode()}
+                        >
+                            {isShareActionPending ? (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            ) : (
+                                <QrCodeIcon className="mr-2 size-4" />
+                            )}
+                            Download QR Code
+                        </Button>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
