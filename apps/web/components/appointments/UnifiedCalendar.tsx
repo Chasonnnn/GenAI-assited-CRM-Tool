@@ -42,10 +42,11 @@ import {
     LinkIcon,
     XIcon,
 } from "lucide-react"
-import { useRescheduleAppointment, useUpdateAppointmentLink } from "@/lib/hooks/use-appointments"
+import { useUpdateAppointmentLink } from "@/lib/hooks/use-appointments"
 import { useUnifiedCalendarData } from "@/lib/hooks/use-unified-calendar-data"
 import { useSurrogates } from "@/lib/hooks/use-surrogates"
 import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
+import { AppointmentDetailDialog as AppointmentManagementDialog } from "@/components/appointments/AppointmentsList"
 import type { AppointmentListItem, GoogleCalendarEvent } from "@/lib/api/appointments"
 import type { TaskListItem } from "@/lib/api/tasks"
 import Link from "@/components/app-link"
@@ -1026,13 +1027,13 @@ export function UnifiedCalendar({
     const [viewType, setViewType] = useState<ViewType>("month")
     const [selectedAppointment, setSelectedAppointment] = useState<AppointmentListItem | null>(null)
     const [dialogOpen, setDialogOpen] = useState(false)
+    const [dragRescheduleDialogOpen, setDragRescheduleDialogOpen] = useState(false)
+    const [dragRescheduleAppointmentId, setDragRescheduleAppointmentId] = useState<string | null>(null)
+    const [dragRescheduleDateSeed, setDragRescheduleDateSeed] = useState<string | null>(null)
 
     // Drag and drop state
     const [draggedAppointment, setDraggedAppointment] = useState<AppointmentListItem | null>(null)
     const [dragOverDate, setDragOverDate] = useState<string | null>(null)
-
-    // Reschedule mutation
-    const rescheduleMutation = useRescheduleAppointment()
 
     // Fetch appointments for current view range
     const dateRange = useMemo(() => {
@@ -1100,9 +1101,9 @@ export function UnifiedCalendar({
 
         if (!draggedAppointment) return
 
-        // Calculate new scheduled start by preserving the original time
+        // Keep same-day drops as no-op.
         const originalStart = parseISO(draggedAppointment.scheduled_start)
-        const newStart = new Date(
+        const targetDate = new Date(
             date.getFullYear(),
             date.getMonth(),
             date.getDate(),
@@ -1112,21 +1113,17 @@ export function UnifiedCalendar({
             0
         )
 
-        // Don't reschedule if same day
-        if (isSameDay(originalStart, newStart)) {
+        if (isSameDay(originalStart, targetDate)) {
             setDraggedAppointment(null)
             return
         }
 
-        rescheduleMutation.mutate({
-            appointmentId: draggedAppointment.id,
-            scheduledStart: newStart.toISOString(),
-        }, {
-            onSettled: () => {
-                setDraggedAppointment(null)
-            }
-        })
-    }, [draggedAppointment, rescheduleMutation])
+        // Open the existing appointment management dialog in reschedule mode.
+        setDragRescheduleAppointmentId(draggedAppointment.id)
+        setDragRescheduleDateSeed(format(targetDate, "yyyy-MM-dd"))
+        setDragRescheduleDialogOpen(true)
+        setDraggedAppointment(null)
+    }, [draggedAppointment])
 
     return (
         <Card>
@@ -1251,7 +1248,7 @@ export function UnifiedCalendar({
                     </div>
                     {includeAppointments && (
                         <span className="text-xs text-muted-foreground ml-auto">
-                            💡 Drag pending/confirmed appointments to reschedule
+                            💡 Drag pending/confirmed appointments to open reschedule picker
                         </span>
                     )}
                 </div>
@@ -1262,6 +1259,20 @@ export function UnifiedCalendar({
                     appointment={selectedAppointment}
                     open={dialogOpen}
                     onOpenChange={setDialogOpen}
+                />
+            )}
+            {includeAppointments && (
+                <AppointmentManagementDialog
+                    appointmentId={dragRescheduleAppointmentId}
+                    open={dragRescheduleDialogOpen}
+                    onOpenChange={(open) => {
+                        setDragRescheduleDialogOpen(open)
+                        if (!open) {
+                            setDragRescheduleDateSeed(null)
+                        }
+                    }}
+                    initialRescheduleDate={dragRescheduleDateSeed}
+                    startInRescheduleMode={!!dragRescheduleDateSeed}
                 />
             )}
         </Card>
