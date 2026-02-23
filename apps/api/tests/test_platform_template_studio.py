@@ -494,6 +494,37 @@ async def test_seeded_surrogate_prescreening_template_visible_in_ops_forms(
 
 
 @pytest.mark.asyncio
+async def test_seeded_intake_auto_match_workflow_visible_in_ops_templates(
+    authed_client, db, test_user
+):
+    test_user.is_platform_admin = True
+    db.commit()
+
+    resp = await authed_client.get("/platform/templates/workflows")
+    assert resp.status_code == 200
+    templates = resp.json()
+
+    seeded = next(
+        (
+            item
+            for item in templates
+            if item["draft"]["name"] == "Application Intake: Auto-Match then Create Lead (Approval)"
+        ),
+        None,
+    )
+    assert seeded is not None
+    assert seeded["status"] == "draft"
+    assert seeded["draft"]["trigger_type"] == "form_submitted"
+
+    actions = seeded["draft"].get("actions", [])
+    assert len(actions) == 2
+    assert actions[0]["action_type"] == "auto_match_submission"
+    assert actions[0]["requires_approval"] is True
+    assert actions[1]["action_type"] == "create_intake_lead"
+    assert actions[1]["requires_approval"] is True
+
+
+@pytest.mark.asyncio
 async def test_platform_workflow_templates_delete(authed_client, db, test_user):
     test_user.is_platform_admin = True
     db.commit()
