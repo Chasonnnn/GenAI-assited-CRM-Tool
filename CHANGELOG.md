@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.0...surrogacy-crm-platform-v0.90.1) (2026-02-23)
+
+
+### Bug Fixes
+
+* gate ticketing UI to developers and harden intake migration ([6a549ef](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6a549ef7644fede4d342912d75a42e4dcb3dc2fb))
+
 ## [0.90.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.89.0...surrogacy-crm-platform-v0.90.0) (2026-02-23)
 
 
