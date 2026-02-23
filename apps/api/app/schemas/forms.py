@@ -22,6 +22,7 @@ FieldType = Literal[
     "address",
     "repeatable_table",
 ]
+FormPurpose = Literal["surrogate_application", "event_intake", "other"]
 
 
 class FormFieldOption(BaseModel):
@@ -94,6 +95,7 @@ class FormSchema(BaseModel):
 class FormCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=150)
     description: str | None = None
+    purpose: FormPurpose = "surrogate_application"
     form_schema: FormSchema | None = None
     max_file_size_bytes: int | None = Field(None, ge=1)
     max_file_count: int | None = Field(None, ge=0, le=50)
@@ -104,6 +106,7 @@ class FormCreate(BaseModel):
 class FormUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=150)
     description: str | None = None
+    purpose: FormPurpose | None = None
     form_schema: FormSchema | None = None
     max_file_size_bytes: int | None = Field(None, ge=1)
     max_file_count: int | None = Field(None, ge=0, le=50)
@@ -115,6 +118,8 @@ class FormSummary(BaseModel):
     id: UUID
     name: str
     status: str
+    purpose: FormPurpose
+    is_default_surrogate_application: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -143,6 +148,7 @@ class FormTokenCreate(BaseModel):
 class FormTokenRequest(BaseModel):
     surrogate_id: UUID
     expires_in_days: int = Field(14, ge=1, le=60)
+    allow_purpose_override: bool = False
 
 
 class FormTokenRead(BaseModel):
@@ -405,6 +411,7 @@ class IntakeLeadPromoteResponse(BaseModel):
 
 class FormTokenSendRequest(BaseModel):
     template_id: UUID | None = None
+    allow_purpose_override: bool = False
 
 
 class FormTokenSendResponse(BaseModel):

@@ -6,7 +6,7 @@ import uuid
 import pytest
 
 from app.core.encryption import hash_email
-from app.db.models import EmailTemplate, FormSubmission, Surrogate
+from app.db.models import EmailTemplate, FormIntakeLink, FormSubmission, Surrogate
 from app.utils.normalization import normalize_email
 
 
@@ -123,6 +123,61 @@ async def test_form_submission_approval_updates_surrogate(
     db.refresh(surrogate)
     assert surrogate.full_name == "Jane Doe"
     assert str(surrogate.date_of_birth) == "1990-01-01"
+
+
+@pytest.mark.asyncio
+async def test_publish_form_auto_generates_default_shared_intake_link(
+    authed_client, db, test_org
+):
+    schema = {
+        "pages": [
+            {
+                "title": "Basics",
+                "fields": [
+                    {
+                        "key": "full_name",
+                        "label": "Full Name",
+                        "type": "text",
+                        "required": True,
+                    }
+                ],
+            }
+        ]
+    }
+
+    create_res = await authed_client.post(
+        "/forms",
+        json={
+            "name": "Auto Share Form",
+            "description": "Auto shared link test",
+            "form_schema": schema,
+        },
+    )
+    assert create_res.status_code == 200
+    form_id = create_res.json()["id"]
+    form_uuid = uuid.UUID(form_id)
+
+    publish_res = await authed_client.post(f"/forms/{form_id}/publish")
+    assert publish_res.status_code == 200
+
+    links = (
+        db.query(FormIntakeLink)
+        .filter(
+            FormIntakeLink.organization_id == test_org.id,
+            FormIntakeLink.form_id == form_uuid,
+        )
+        .all()
+    )
+    assert len(links) == 1
+    assert links[0].is_active is True
+    assert links[0].slug
+
+    list_res = await authed_client.get(f"/forms/{form_id}/intake-links")
+    assert list_res.status_code == 200
+    payload = list_res.json()
+    assert len(payload) == 1
+    assert payload[0]["slug"] == links[0].slug
+    assert payload[0]["intake_url"].endswith(f"/intake/{links[0].slug}")
 
 
 @pytest.mark.asyncio
@@ -581,3 +636,170 @@ async def test_form_mapping_options_include_extended_fields(authed_client):
     assert full_name_option["is_critical"] is True
     assert email_option is not None
     assert email_option["is_critical"] is True
+
+
+@pytest.mark.asyncio
+async def test_dedicated_token_creation_requires_surrogate_application_purpose(
+    authed_client, db, test_org, test_user, default_stage
+):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+    schema = {
+        "pages": [
+            {"title": "Basics", "fields": [{"key": "full_name", "label": "Full Name", "type": "text"}]}
+        ]
+    }
+
+    create_res = await authed_client.post(
+        "/forms",
+        json={
+            "name": "Event Intake Form",
+            "purpose": "event_intake",
+            "form_schema": schema,
+        },
+    )
+    assert create_res.status_code == 200
+    form_id = create_res.json()["id"]
+
+    publish_res = await authed_client.post(f"/forms/{form_id}/publish")
+    assert publish_res.status_code == 200
+
+    denied_res = await authed_client.post(
+        f"/forms/{form_id}/tokens",
+        json={"surrogate_id": str(surrogate.id), "expires_in_days": 7},
+    )
+    assert denied_res.status_code == 400
+    assert "purpose=surrogate_application" in denied_res.json()["detail"]
+
+    override_res = await authed_client.post(
+        f"/forms/{form_id}/tokens",
+        json={
+            "surrogate_id": str(surrogate.id),
+            "expires_in_days": 7,
+            "allow_purpose_override": True,
+        },
+    )
+    assert override_res.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_send_token_requires_purpose_override_for_non_application_form(
+    authed_client, db, test_org, test_user, default_stage
+):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+    schema = {
+        "pages": [
+            {"title": "Basics", "fields": [{"key": "full_name", "label": "Full Name", "type": "text"}]}
+        ]
+    }
+
+    create_res = await authed_client.post(
+        "/forms",
+        json={
+            "name": "Event Send Form",
+            "purpose": "event_intake",
+            "form_schema": schema,
+        },
+    )
+    assert create_res.status_code == 200
+    form_id = create_res.json()["id"]
+
+    publish_res = await authed_client.post(f"/forms/{form_id}/publish")
+    assert publish_res.status_code == 200
+
+    token_res = await authed_client.post(
+        f"/forms/{form_id}/tokens",
+        json={
+            "surrogate_id": str(surrogate.id),
+            "expires_in_days": 7,
+            "allow_purpose_override": True,
+        },
+    )
+    assert token_res.status_code == 200
+    token_id = token_res.json()["token_id"]
+
+    template = EmailTemplate(
+        organization_id=test_org.id,
+        created_by_user_id=test_user.id,
+        name=f"Event Template {uuid.uuid4().hex[:6]}",
+        subject="Complete your application",
+        body="Click {{form_link}}",
+        scope="org",
+        is_active=True,
+    )
+    db.add(template)
+    db.commit()
+
+    send_denied_res = await authed_client.post(
+        f"/forms/{form_id}/tokens/{token_id}/send",
+        json={"template_id": str(template.id)},
+    )
+    assert send_denied_res.status_code == 400
+    assert "purpose=surrogate_application" in send_denied_res.json()["detail"]
+
+    send_override_res = await authed_client.post(
+        f"/forms/{form_id}/tokens/{token_id}/send",
+        json={"template_id": str(template.id), "allow_purpose_override": True},
+    )
+    assert send_override_res.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_default_surrogate_application_form_reconciles_on_purpose_change(
+    authed_client,
+):
+    schema = {
+        "pages": [
+            {"title": "Basics", "fields": [{"key": "full_name", "label": "Full Name", "type": "text"}]}
+        ]
+    }
+
+    form_a_res = await authed_client.post(
+        "/forms",
+        json={"name": "Default A", "purpose": "surrogate_application", "form_schema": schema},
+    )
+    assert form_a_res.status_code == 200
+    form_a_id = form_a_res.json()["id"]
+    assert form_a_res.json()["is_default_surrogate_application"] is False
+
+    form_b_res = await authed_client.post(
+        "/forms",
+        json={"name": "Default B", "purpose": "surrogate_application", "form_schema": schema},
+    )
+    assert form_b_res.status_code == 200
+    form_b_id = form_b_res.json()["id"]
+
+    publish_a = await authed_client.post(f"/forms/{form_a_id}/publish")
+    assert publish_a.status_code == 200
+    publish_b = await authed_client.post(f"/forms/{form_b_id}/publish")
+    assert publish_b.status_code == 200
+
+    list_res = await authed_client.get("/forms")
+    assert list_res.status_code == 200
+    by_id = {form["id"]: form for form in list_res.json()}
+    assert by_id[form_a_id]["is_default_surrogate_application"] is True
+    assert by_id[form_b_id]["is_default_surrogate_application"] is False
+
+    set_default_res = await authed_client.post(
+        f"/forms/{form_b_id}/set-default-surrogate-application"
+    )
+    assert set_default_res.status_code == 200
+    assert set_default_res.json()["is_default_surrogate_application"] is True
+
+    after_set_list_res = await authed_client.get("/forms")
+    assert after_set_list_res.status_code == 200
+    by_id = {form["id"]: form for form in after_set_list_res.json()}
+    assert by_id[form_a_id]["is_default_surrogate_application"] is False
+    assert by_id[form_b_id]["is_default_surrogate_application"] is True
+
+    demote_res = await authed_client.patch(
+        f"/forms/{form_b_id}",
+        json={"purpose": "event_intake"},
+    )
+    assert demote_res.status_code == 200
+    assert demote_res.json()["purpose"] == "event_intake"
+
+    after_demote_list_res = await authed_client.get("/forms")
+    assert after_demote_list_res.status_code == 200
+    by_id = {form["id"]: form for form in after_demote_list_res.json()}
+    assert by_id[form_a_id]["is_default_surrogate_application"] is True
+    assert by_id[form_b_id]["is_default_surrogate_application"] is False

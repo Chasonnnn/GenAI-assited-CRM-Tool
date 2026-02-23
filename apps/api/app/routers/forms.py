@@ -80,17 +80,19 @@ def _schema_or_none(schema_json: dict | None) -> FormSchema | None:
         return None
 
 
-def _form_summary(form) -> FormSummary:
+def _form_summary(form, *, default_form_id: UUID | None = None) -> FormSummary:
     return FormSummary(
         id=form.id,
         name=form.name,
         status=form.status,
+        purpose=form.purpose,
+        is_default_surrogate_application=bool(default_form_id and form.id == default_form_id),
         created_at=form.created_at,
         updated_at=form.updated_at,
     )
 
 
-def _form_read(form) -> FormRead:
+def _form_read(form, *, default_form_id: UUID | None = None) -> FormRead:
     schema = _schema_or_none(form.schema_json)
     published_schema = _schema_or_none(form.published_schema_json)
     if schema:
@@ -104,6 +106,8 @@ def _form_read(form) -> FormRead:
         id=form.id,
         name=form.name,
         status=form.status,
+        purpose=form.purpose,
+        is_default_surrogate_application=bool(default_form_id and form.id == default_form_id),
         description=form.description,
         form_schema=schema,
         published_schema=published_schema,
@@ -182,7 +186,12 @@ def list_forms(
     db: Session = Depends(get_db),
 ):
     forms = form_service.list_forms(db, session.org_id)
-    return [_form_summary(form) for form in forms]
+    default_form_id = form_service.ensure_default_surrogate_application_form(
+        db,
+        session.org_id,
+        commit=False,
+    )
+    return [_form_summary(form, default_form_id=default_form_id) for form in forms]
 
 
 # =============================================================================
@@ -329,7 +338,8 @@ def use_form_template(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-    return _form_read(form)
+    default_form_id = form_service.ensure_default_surrogate_application_form(db, session.org_id)
+    return _form_read(form, default_form_id=default_form_id)
 
 
 @router.post(
@@ -351,13 +361,15 @@ def create_form(
         user_id=session.user_id,
         name=body.name,
         description=body.description,
+        purpose=body.purpose,
         schema=body.form_schema.model_dump() if body.form_schema else None,
         max_file_size_bytes=body.max_file_size_bytes,
         max_file_count=body.max_file_count,
         allowed_mime_types=body.allowed_mime_types,
         default_application_email_template_id=body.default_application_email_template_id,
     )
-    return _form_read(form)
+    default_form_id = form_service.ensure_default_surrogate_application_form(db, session.org_id)
+    return _form_read(form, default_form_id=default_form_id)
 
 
 @router.get(
@@ -389,7 +401,12 @@ def get_form(
     form = form_service.get_form(db, session.org_id, form_id)
     if not form:
         raise HTTPException(status_code=404, detail="Form not found")
-    return _form_read(form)
+    default_form_id = form_service.ensure_default_surrogate_application_form(
+        db,
+        session.org_id,
+        commit=False,
+    )
+    return _form_read(form, default_form_id=default_form_id)
 
 
 @router.patch(
@@ -415,6 +432,7 @@ def update_form(
         "user_id": session.user_id,
         "name": body.name,
         "description": body.description,
+        "purpose": body.purpose,
         "schema": body.form_schema.model_dump() if body.form_schema else None,
         "max_file_size_bytes": body.max_file_size_bytes,
         "max_file_count": body.max_file_count,
@@ -425,7 +443,8 @@ def update_form(
             body.default_application_email_template_id
         )
     form = form_service.update_form(**update_kwargs)
-    return _form_read(form)
+    default_form_id = form_service.ensure_default_surrogate_application_form(db, session.org_id)
+    return _form_read(form, default_form_id=default_form_id)
 
 
 @router.delete(
@@ -445,6 +464,32 @@ def delete_form(
         raise HTTPException(status_code=404, detail="Form not found")
     form_service.delete_form(db=db, form=form)
     return {"message": "Form deleted"}
+
+
+@router.post(
+    "/{form_id}/set-default-surrogate-application",
+    response_model=FormRead,
+    dependencies=[
+        Depends(require_permission(POLICIES["forms"].default)),
+        Depends(require_csrf_header),
+    ],
+)
+def set_default_surrogate_application_form(
+    form_id: UUID,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    try:
+        form = form_service.set_default_surrogate_application_form(
+            db=db,
+            org_id=session.org_id,
+            form_id=form_id,
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = 404 if "not found" in detail.lower() else 400
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+    return _form_read(form, default_form_id=form.id)
 
 
 @router.patch(
@@ -481,6 +526,7 @@ def update_form_delivery_settings(
         user_id=session.user_id,
         name=None,
         description=None,
+        purpose=None,
         schema=None,
         max_file_size_bytes=None,
         max_file_count=None,
@@ -543,6 +589,13 @@ def publish_form(
         raise HTTPException(status_code=404, detail="Form not found")
     try:
         form = form_service.publish_form(db, form, session.user_id)
+        if settings.FORMS_SHARED_INTAKE:
+            form_intake_service.ensure_default_intake_link(
+                db,
+                org_id=session.org_id,
+                form=form,
+                user_id=session.user_id,
+            )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return FormPublishResponse(
@@ -642,6 +695,7 @@ def create_submission_token(
             surrogate=surrogate,
             user_id=session.user_id,
             expires_in_days=body.expires_in_days,
+            allow_purpose_override=body.allow_purpose_override,
         )
     except ValueError as exc:
         detail = str(exc)
@@ -683,6 +737,19 @@ def list_form_intake_links(
         form_id=form.id,
         include_inactive=include_inactive,
     )
+    if settings.FORMS_SHARED_INTAKE and form.status == "published" and len(links) == 0:
+        form_intake_service.ensure_default_intake_link(
+            db,
+            org_id=session.org_id,
+            form=form,
+            user_id=session.user_id,
+        )
+        links = form_intake_service.list_intake_links(
+            db,
+            org_id=session.org_id,
+            form_id=form.id,
+            include_inactive=include_inactive,
+        )
     return [
         _intake_link_read(
             link,
@@ -844,6 +911,14 @@ def send_submission_token(
     valid_token = form_submission_service.get_valid_token(db, token.token)
     if not valid_token:
         raise HTTPException(status_code=409, detail="Token is no longer valid")
+
+    try:
+        form_submission_service.assert_dedicated_form_purpose(
+            form,
+            allow_purpose_override=body.allow_purpose_override,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     template_id = body.template_id or form.default_application_email_template_id
     if not template_id:

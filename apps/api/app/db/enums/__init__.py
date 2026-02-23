@@ -20,6 +20,7 @@ from app.db.enums.defaults import (
 from app.db.enums.email import EmailStatus, SuppressionReason
 from app.db.enums.entities import EntityType
 from app.db.enums.forms import (
+    FormPurpose,
     FormStatus,
     FormSubmissionStatus,
     FormLinkMode,
@@ -104,6 +105,7 @@ __all__ = [
     "EntityType",
     "EmailDirection",
     "EmailOccurrenceState",
+    "FormPurpose",
     "FormStatus",
     "FormSubmissionStatus",
     "FormLinkMode",

@@ -8,8 +8,8 @@ from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.enums import FormStatus
-from app.db.models import Form, FormFieldMapping, FormLogo
+from app.db.enums import FormPurpose, FormStatus
+from app.db.models import Form, FormFieldMapping, FormLogo, Organization
 from app.schemas.forms import FormSchema
 from app.services.attachment_service import (
     _get_local_storage_path,
@@ -53,6 +53,7 @@ def create_form(
     max_file_size_bytes: int | None,
     max_file_count: int | None,
     allowed_mime_types: list[str] | None,
+    purpose: str = FormPurpose.SURROGATE_APPLICATION.value,
     default_application_email_template_id: uuid.UUID | None = None,
 ) -> Form:
     max_size = (
@@ -63,6 +64,7 @@ def create_form(
         organization_id=org_id,
         name=name,
         description=description,
+        purpose=purpose,
         schema_json=schema,
         status=FormStatus.DRAFT.value,
         max_file_size_bytes=max_size,
@@ -84,6 +86,7 @@ def update_form(
     user_id: uuid.UUID,
     name: str | None,
     description: str | None,
+    purpose: str | None,
     schema: dict | None,
     max_file_size_bytes: int | None,
     max_file_count: int | None,
@@ -94,6 +97,8 @@ def update_form(
         form.name = name
     if description is not None:
         form.description = description
+    if purpose is not None:
+        form.purpose = purpose
     if schema is not None:
         form.schema_json = schema
     if max_file_size_bytes is not None:
@@ -199,7 +204,90 @@ def publish_form(db: Session, form: Form, user_id: uuid.UUID) -> Form:
     form.status = FormStatus.PUBLISHED.value
     form.updated_by_user_id = user_id
     db.commit()
+    ensure_default_surrogate_application_form(db, form.organization_id)
     db.refresh(form)
+    return form
+
+
+def _get_org(db: Session, org_id: uuid.UUID) -> Organization | None:
+    return db.query(Organization).filter(Organization.id == org_id).first()
+
+
+def ensure_default_surrogate_application_form(
+    db: Session,
+    org_id: uuid.UUID,
+    *,
+    commit: bool = True,
+) -> uuid.UUID | None:
+    """
+    Ensure org default points to one published surrogate application form, if available.
+
+    Returns the default form ID after reconciliation.
+    """
+    org = _get_org(db, org_id)
+    if not org:
+        return None
+
+    candidates = (
+        db.query(Form)
+        .filter(
+            Form.organization_id == org_id,
+            Form.status == FormStatus.PUBLISHED.value,
+            Form.purpose == FormPurpose.SURROGATE_APPLICATION.value,
+        )
+        .order_by(Form.updated_at.desc(), Form.created_at.desc())
+        .all()
+    )
+    candidate_ids = {candidate.id for candidate in candidates}
+
+    next_default: uuid.UUID | None
+    if not candidates:
+        next_default = None
+    elif org.default_surrogate_application_form_id in candidate_ids:
+        next_default = org.default_surrogate_application_form_id
+    else:
+        next_default = candidates[0].id
+
+    if org.default_surrogate_application_form_id == next_default:
+        return next_default
+
+    org.default_surrogate_application_form_id = next_default
+    if commit:
+        db.commit()
+    else:
+        db.flush()
+    return next_default
+
+
+def get_default_surrogate_application_form(
+    db: Session, org_id: uuid.UUID
+) -> Form | None:
+    default_form_id = ensure_default_surrogate_application_form(db, org_id, commit=False)
+    if not default_form_id:
+        return None
+    return get_form(db, org_id, default_form_id)
+
+
+def set_default_surrogate_application_form(
+    db: Session,
+    org_id: uuid.UUID,
+    form_id: uuid.UUID,
+) -> Form:
+    form = get_form(db, org_id, form_id)
+    if not form:
+        raise ValueError("Form not found")
+    if form.status != FormStatus.PUBLISHED.value:
+        raise ValueError("Default surrogate application form must be published")
+    if form.purpose != FormPurpose.SURROGATE_APPLICATION.value:
+        raise ValueError("Default surrogate application form must have purpose=surrogate_application")
+
+    org = _get_org(db, org_id)
+    if not org:
+        raise ValueError("Organization not found")
+
+    if org.default_surrogate_application_form_id != form.id:
+        org.default_surrogate_application_form_id = form.id
+        db.commit()
     return form
 
 
@@ -248,5 +336,7 @@ def set_field_mappings(
 
 def delete_form(db: Session, form: Form) -> None:
     """Permanently delete a form and all related records (via FK cascades)."""
+    org_id = form.organization_id
     db.delete(form)
     db.commit()
+    ensure_default_surrogate_application_form(db, org_id)

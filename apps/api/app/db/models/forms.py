@@ -24,6 +24,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from app.db.enums import (
     FormLinkMode,
+    FormPurpose,
     FormStatus,
     FormSubmissionMatchStatus,
     FormSubmissionStatus,
@@ -40,6 +41,7 @@ class Form(Base):
     __table_args__ = (
         Index("idx_forms_org", "organization_id"),
         Index("idx_forms_org_status", "organization_id", "status"),
+        Index("idx_forms_org_purpose_status", "organization_id", "purpose", "status"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -55,6 +57,11 @@ class Form(Base):
     status: Mapped[str] = mapped_column(
         String(20),
         server_default=text(f"'{FormStatus.DRAFT.value}'"),
+        nullable=False,
+    )
+    purpose: Mapped[str] = mapped_column(
+        String(40),
+        server_default=text(f"'{FormPurpose.SURROGATE_APPLICATION.value}'"),
         nullable=False,
     )
 
@@ -96,7 +103,7 @@ class Form(Base):
         nullable=False,
     )
 
-    organization: Mapped["Organization"] = relationship()
+    organization: Mapped["Organization"] = relationship(foreign_keys=[organization_id])
 
 
 class FormLogo(Base):

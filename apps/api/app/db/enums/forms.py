@@ -11,6 +11,14 @@ class FormStatus(str, Enum):
     ARCHIVED = "archived"
 
 
+class FormPurpose(str, Enum):
+    """Business intent of a form."""
+
+    SURROGATE_APPLICATION = "surrogate_application"
+    EVENT_INTAKE = "event_intake"
+    OTHER = "other"
+
+
 class FormSubmissionStatus(str, Enum):
     """Status of a submitted form response."""
 

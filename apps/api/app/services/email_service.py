@@ -743,7 +743,7 @@ def render_template(
 
 def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dict[str, str]:
     """Build flat template variables for a surrogate context."""
-    from app.db.enums import FormStatus
+    from app.db.enums import FormPurpose, FormStatus
     from app.db.enums import OwnerType
     from app.db.models import BookingLink, Form, Organization, Queue, User
     from app.services import media_service
@@ -775,18 +775,26 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
     form_link = ""
     appointment_link = ""
     from app.services import form_submission_service
+    from app.services import form_service
 
+    default_application_form = form_service.get_default_surrogate_application_form(
+        db, surrogate.organization_id
+    )
+    default_form_id = default_application_form.id if default_application_form else None
     form_token = form_submission_service.get_latest_active_token_for_surrogate(
         db,
         org_id=surrogate.organization_id,
         surrogate_id=surrogate.id,
+        form_id=default_form_id,
     )
     if not form_token:
         latest_published_form = (
-            db.query(Form)
+            default_application_form
+            or db.query(Form)
             .filter(
                 Form.organization_id == surrogate.organization_id,
                 Form.status == FormStatus.PUBLISHED.value,
+                Form.purpose == FormPurpose.SURROGATE_APPLICATION.value,
             )
             .order_by(Form.updated_at.desc(), Form.created_at.desc())
             .first()
@@ -799,6 +807,7 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
                 surrogate=surrogate,
                 user_id=surrogate.created_by_user_id,
                 expires_in_days=form_submission_service.DEFAULT_TOKEN_EXPIRES_IN_DAYS,
+                allow_purpose_override=False,
                 commit=False,
             )
 

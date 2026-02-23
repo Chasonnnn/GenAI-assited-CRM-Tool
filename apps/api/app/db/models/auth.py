@@ -26,7 +26,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
-    from app.db.models import Surrogate
+    from app.db.models import Form, Surrogate
 
 
 class Organization(Base):
@@ -94,6 +94,11 @@ class Organization(Base):
     signature_disclaimer: Mapped[str | None] = mapped_column(
         Text, nullable=True, comment="Optional compliance footer for email signatures"
     )
+    default_surrogate_application_form_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("forms.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     # Relationships
     memberships: Mapped[list["Membership"]] = relationship(
@@ -104,6 +109,9 @@ class Organization(Base):
     )
     surrogates: Mapped[list["Surrogate"]] = relationship(
         back_populates="organization", cascade="all, delete-orphan"
+    )
+    default_surrogate_application_form: Mapped["Form | None"] = relationship(
+        foreign_keys=[default_surrogate_application_form_id]
     )
 
 
