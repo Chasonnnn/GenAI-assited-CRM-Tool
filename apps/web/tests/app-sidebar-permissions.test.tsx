@@ -139,6 +139,61 @@ describe("AppSidebar permission visibility", () => {
         })
     })
 
+    it("hides Tickets for non-developers even when view_tickets permission exists", async () => {
+        mockUseAuth.mockReturnValue({
+            user: {
+                user_id: "user-1",
+                role: "admin",
+                display_name: "Admin User",
+                email: "admin@test.com",
+                org_name: "Org",
+                org_display_name: "Org",
+                ai_enabled: false,
+            },
+        })
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["view_tickets", "manage_team"] },
+        })
+
+        render(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        await waitFor(() => {
+            expect(screen.getByText("Dashboard")).toBeInTheDocument()
+        })
+        expect(screen.queryByText("Tickets")).not.toBeInTheDocument()
+    })
+
+    it("shows Tickets for developer role", async () => {
+        mockUseAuth.mockReturnValue({
+            user: {
+                user_id: "user-dev",
+                role: "developer",
+                display_name: "Dev User",
+                email: "dev@test.com",
+                org_name: "Org",
+                org_display_name: "Org",
+                ai_enabled: false,
+            },
+        })
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: [] },
+        })
+
+        render(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        await waitFor(() => {
+            expect(screen.getByText("Tickets")).toBeInTheDocument()
+        })
+    })
+
     it("shows Integrations settings for case managers without manage_integrations permission", async () => {
         mockUseAuth.mockReturnValue({
             user: {

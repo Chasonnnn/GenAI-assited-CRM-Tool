@@ -3,13 +3,16 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { toast } from 'sonner'
+import { ShieldAlertIcon } from 'lucide-react'
 
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { useAuth } from '@/lib/auth-context'
 import { getTicketAttachmentDownloadUrl } from '@/lib/api/tickets'
 import type { TicketPriority, TicketStatus } from '@/lib/api/tickets'
 import {
@@ -26,6 +29,8 @@ const PRIORITY_OPTIONS = ['low', 'normal', 'high', 'urgent'] as const
 export default function TicketDetailPage() {
     const params = useParams<{ ticketId: string }>()
     const ticketId = params.ticketId
+    const { user } = useAuth()
+    const isDeveloper = user?.role === 'developer'
 
     const { data, isLoading } = useTicket(ticketId)
 
@@ -135,6 +140,19 @@ export default function TicketDetailPage() {
             const message = error instanceof Error ? error.message : 'Failed to get attachment URL'
             toast.error(message)
         }
+    }
+
+    if (!isDeveloper) {
+        return (
+            <div className="p-4 md:p-6">
+                <Alert variant="destructive">
+                    <ShieldAlertIcon className="size-4" aria-hidden="true" />
+                    <AlertDescription>
+                        Tickets are temporarily available to developers only.
+                    </AlertDescription>
+                </Alert>
+            </div>
+        )
     }
 
     if (isLoading) {

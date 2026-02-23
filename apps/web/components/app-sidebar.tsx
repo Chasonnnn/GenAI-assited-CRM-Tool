@@ -129,7 +129,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
         [effectivePermissions?.permissions]
     )
     const canViewTeam = isDeveloper || permissionSet.has("manage_team")
-    const canViewTickets = isDeveloper || permissionSet.has("view_tickets")
+    const canViewTickets = isDeveloper
     const canViewPipelines = isDeveloper || permissionSet.has("manage_pipelines")
     const canViewQueues = isDeveloper || permissionSet.has("manage_queues")
     const canViewCompliance = isDeveloper || permissionSet.has("manage_compliance")

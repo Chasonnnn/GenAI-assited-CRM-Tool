@@ -4,13 +4,16 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { ShieldAlertIcon } from 'lucide-react'
 
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { useAuth } from '@/lib/auth-context'
 import { useComposeTicket, useTickets } from '@/lib/hooks/use-tickets'
 import type { TicketListParams, TicketPriority, TicketStatus } from '@/lib/api/tickets'
 
@@ -21,6 +24,8 @@ type TicketPriorityFilter = TicketPriority | 'all'
 
 export default function TicketsPage() {
     const router = useRouter()
+    const { user } = useAuth()
+    const isDeveloper = user?.role === 'developer'
 
     const [statusFilter, setStatusFilter] = useState<TicketStatusFilter>('all')
     const [priorityFilter, setPriorityFilter] = useState<TicketPriorityFilter>('all')
@@ -46,6 +51,19 @@ export default function TicketsPage() {
 
     const { data, isLoading } = useTickets(filters)
     const composeMutation = useComposeTicket()
+
+    if (!isDeveloper) {
+        return (
+            <div className="p-4 md:p-6">
+                <Alert variant="destructive">
+                    <ShieldAlertIcon className="size-4" aria-hidden="true" />
+                    <AlertDescription>
+                        Tickets are temporarily available to developers only.
+                    </AlertDescription>
+                </Alert>
+            </div>
+        )
+    }
 
     const handleCompose = async () => {
         const to = composeTo.trim()
