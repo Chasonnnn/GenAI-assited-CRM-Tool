@@ -10,8 +10,15 @@ export default function SurrogateApplicationPage() {
     const id = params?.id
     const { data: forms } = useForms()
     const publishedForms = (forms || []).filter((form) => form.status === "published")
-    const defaultFormId =
-        publishedForms.length === 1 ? publishedForms[0]?.id ?? null : null
+    const defaultApplicationForm =
+        publishedForms.find(
+            (form) =>
+                form.is_default_surrogate_application &&
+                (form.purpose ?? "surrogate_application") === "surrogate_application",
+        ) ??
+        publishedForms.find((form) => (form.purpose ?? "surrogate_application") === "surrogate_application") ??
+        null
+    const defaultFormId = defaultApplicationForm?.id ?? null
 
     if (!id) {
         return null

@@ -85,6 +85,7 @@ describe("SurrogateApplicationTab", () => {
                 formId: "form-1",
                 surrogateId: "surrogate-1",
                 expiresInDays: 30,
+                allowPurposeOverride: false,
             }),
         )
 

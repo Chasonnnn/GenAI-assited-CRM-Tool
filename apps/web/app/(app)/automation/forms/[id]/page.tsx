@@ -41,7 +41,6 @@ import {
     CopyIcon,
     SmartphoneIcon,
     QrCodeIcon,
-    RotateCcwIcon,
     LinkIcon,
     DownloadIcon,
 } from "lucide-react"
@@ -49,19 +48,17 @@ import { QRCodeSVG } from "qrcode.react"
 import { toast } from "sonner"
 import {
     useCreateForm,
-    useCreateFormIntakeLink,
     useForm,
     useFormIntakeLinks,
     useFormSubmissions,
     useFormMappings,
     usePublishForm,
     useResolveSubmissionMatch,
-    useRotateFormIntakeLink,
     useSetFormMappings,
+    useSetDefaultSurrogateApplicationForm,
     useSubmissionMatchCandidates,
     usePromoteIntakeLead,
     useUpdateFormDeliverySettings,
-    useUpdateFormIntakeLink,
     useUpdateForm,
     useUploadFormLogo,
 } from "@/lib/hooks/use-forms"
@@ -74,6 +71,7 @@ import type {
     FieldType,
     FormSchema,
     FormFieldOption,
+    FormPurpose,
     FormRead,
     FormSubmissionRead,
     FormCreatePayload,
@@ -331,17 +329,18 @@ export default function FormBuilderPage() {
     const { data: formData, isLoading: isFormLoading } = useForm(formId)
     const { data: mappingData, isLoading: isMappingsLoading } = useFormMappings(formId)
     const { data: mappingOptionsData } = useFormMappingOptions()
-    const { data: intakeLinks = [] } = useFormIntakeLinks(formId, true)
+    const {
+        data: intakeLinks = [],
+        refetch: refetchIntakeLinks,
+    } = useFormIntakeLinks(formId, true)
     const { data: emailTemplates = [] } = useEmailTemplates({ activeOnly: true })
     const { data: orgSignature } = useOrgSignature()
     const createFormMutation = useCreateForm()
     const updateFormMutation = useUpdateForm()
     const publishFormMutation = usePublishForm()
     const setMappingsMutation = useSetFormMappings()
+    const setDefaultSurrogateApplicationMutation = useSetDefaultSurrogateApplicationForm()
     const uploadLogoMutation = useUploadFormLogo()
-    const createIntakeLinkMutation = useCreateFormIntakeLink()
-    const updateIntakeLinkMutation = useUpdateFormIntakeLink()
-    const rotateIntakeLinkMutation = useRotateFormIntakeLink()
     const updateDeliverySettingsMutation = useUpdateFormDeliverySettings()
     const resolveSubmissionMatchMutation = useResolveSubmissionMatch()
     const promoteIntakeLeadMutation = usePromoteIntakeLead()
@@ -373,6 +372,7 @@ export default function FormBuilderPage() {
     // Form state
     const [formName, setFormName] = useState(isNewForm ? "" : "Surrogate Application Form")
     const [formDescription, setFormDescription] = useState("")
+    const [formPurpose, setFormPurpose] = useState<FormPurpose>("surrogate_application")
     const [publicTitle, setPublicTitle] = useState("")
     const [logoUrl, setLogoUrl] = useState("")
     const [privacyNotice, setPrivacyNotice] = useState("")
@@ -380,14 +380,11 @@ export default function FormBuilderPage() {
     const [maxFileCount, setMaxFileCount] = useState(10)
     const [allowedMimeTypesText, setAllowedMimeTypesText] = useState("")
     const [defaultTemplateId, setDefaultTemplateId] = useState("")
-    const [newCampaignName, setNewCampaignName] = useState("")
-    const [newEventName, setNewEventName] = useState("")
-    const [newMaxSubmissions, setNewMaxSubmissions] = useState("")
-    const [newExpiresAt, setNewExpiresAt] = useState("")
-    const [selectedQrLinkId, setSelectedQrLinkId] = useState<string | null>(null)
     const [workspaceTab, setWorkspaceTab] = useState<"builder" | "submissions">("builder")
     const [selectedQueueSubmissionId, setSelectedQueueSubmissionId] = useState<string | null>(null)
     const [resolveReviewNotes, setResolveReviewNotes] = useState("")
+    const [showSharePrompt, setShowSharePrompt] = useState(false)
+    const [pendingSharePrompt, setPendingSharePrompt] = useState(false)
     const [isPublished, setIsPublished] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [isPublishing, setIsPublishing] = useState(false)
@@ -404,6 +401,7 @@ export default function FormBuilderPage() {
     const orgId = user?.org_id || ""
     const orgLogoPath = orgId ? `/forms/public/${orgId}/signature-logo` : ""
     const orgLogoAvailable = Boolean(orgSignature?.signature_logo_url)
+    const isDefaultSurrogateApplication = Boolean(formData?.is_default_surrogate_application)
     const resolvedLogoUrl =
         logoUrl && logoUrl.startsWith("/") && apiBaseUrl ? `${apiBaseUrl}${logoUrl}` : logoUrl
     const surrogateFieldMappings = useMemo(
@@ -449,14 +447,12 @@ export default function FormBuilderPage() {
         setMaxFileCount(10)
         setAllowedMimeTypesText("")
         setDefaultTemplateId("")
-        setNewCampaignName("")
-        setNewEventName("")
-        setNewMaxSubmissions("")
-        setNewExpiresAt("")
-        setSelectedQrLinkId(null)
+        setFormPurpose("surrogate_application")
         setWorkspaceTab("builder")
         setSelectedQueueSubmissionId(null)
         setResolveReviewNotes("")
+        setShowSharePrompt(false)
+        setPendingSharePrompt(false)
     }, [formId])
 
     useEffect(() => {
@@ -481,6 +477,7 @@ export default function FormBuilderPage() {
 
         setFormName(formData.name)
         setFormDescription(formData.description || "")
+        setFormPurpose(formData.purpose || "surrogate_application")
         const metadata = schemaToMetadata(schema || undefined)
         setPublicTitle(metadata.publicTitle)
         setLogoUrl(metadata.logoUrl)
@@ -518,6 +515,7 @@ export default function FormBuilderPage() {
         return {
             name: formName.trim(),
             description: formDescription.trim() || null,
+            purpose: formPurpose,
             form_schema: buildFormSchema(pages, {
                 publicTitle,
                 logoUrl,
@@ -531,6 +529,7 @@ export default function FormBuilderPage() {
     }, [
         formName,
         formDescription,
+        formPurpose,
         pages,
         publicTitle,
         logoUrl,
@@ -1031,6 +1030,7 @@ export default function FormBuilderPage() {
     useEffect(() => {
         if (!hasHydrated) return
         if (!formName.trim()) return
+        if (debouncedFingerprint !== draftFingerprint) return
         if (debouncedFingerprint === lastSavedFingerprintRef.current) return
         if (isSaving || isPublishing) return
         if (
@@ -1060,6 +1060,7 @@ export default function FormBuilderPage() {
     }, [
         hasHydrated,
         formName,
+        draftFingerprint,
         debouncedFingerprint,
         debouncedPayload,
         isSaving,
@@ -1104,6 +1105,27 @@ export default function FormBuilderPage() {
             })
         } catch {
             toast.error("Failed to update delivery template")
+        }
+    }
+
+    const handleSetDefaultSurrogateApplication = async () => {
+        if (!formId) {
+            toast.error("Save the form first")
+            return
+        }
+        if (formPurpose !== "surrogate_application") {
+            toast.error("Only surrogate application forms can be set as default")
+            return
+        }
+        if (!isPublished) {
+            toast.error("Publish this form before setting it as default")
+            return
+        }
+        try {
+            await setDefaultSurrogateApplicationMutation.mutateAsync(formId)
+            toast.success("Set as default surrogate application form")
+        } catch {
+            toast.error("Failed to set default form")
         }
     }
 
@@ -1184,6 +1206,11 @@ export default function FormBuilderPage() {
             markSaved(draftFingerprint, savedForm)
             await publishFormMutation.mutateAsync(savedForm.id)
             setIsPublished(true)
+            setPendingSharePrompt(true)
+            const intakeLinkResult = await refetchIntakeLinks()
+            if ((intakeLinkResult.data || []).length === 0) {
+                setPendingSharePrompt(false)
+            }
             setShowPublishDialog(false)
             toast.success("Form published")
         } catch {
@@ -1204,84 +1231,14 @@ export default function FormBuilderPage() {
         [intakeLinks],
     )
 
+    const selectedQrLink = sortedIntakeLinks.find((link) => link.is_active) || sortedIntakeLinks[0] || null
+
     useEffect(() => {
-        if (sortedIntakeLinks.length === 0) {
-            setSelectedQrLinkId(null)
-            return
-        }
-        if (selectedQrLinkId && sortedIntakeLinks.some((link) => link.id === selectedQrLinkId)) {
-            return
-        }
-        setSelectedQrLinkId(sortedIntakeLinks[0]?.id || null)
-    }, [selectedQrLinkId, sortedIntakeLinks])
-
-    const selectedQrLink = useMemo(
-        () => sortedIntakeLinks.find((link) => link.id === selectedQrLinkId) || null,
-        [selectedQrLinkId, sortedIntakeLinks],
-    )
-
-    const handleCreateSharedLink = async () => {
-        if (!formId) {
-            toast.error("Save this form first before creating shared links.")
-            return
-        }
-        if (!isPublished) {
-            toast.error("Publish the form before creating shared links.")
-            return
-        }
-
-        const parsedMax = newMaxSubmissions.trim()
-            ? Number.parseInt(newMaxSubmissions.trim(), 10)
-            : null
-        if (parsedMax !== null && (Number.isNaN(parsedMax) || parsedMax <= 0)) {
-            toast.error("Max submissions must be a positive number.")
-            return
-        }
-
-        try {
-            const created = await createIntakeLinkMutation.mutateAsync({
-                formId,
-                payload: {
-                    campaign_name: newCampaignName.trim() || null,
-                    event_name: newEventName.trim() || null,
-                    max_submissions: parsedMax,
-                    expires_at: newExpiresAt ? new Date(newExpiresAt).toISOString() : null,
-                },
-            })
-            setSelectedQrLinkId(created.id)
-            setNewCampaignName("")
-            setNewEventName("")
-            setNewMaxSubmissions("")
-            setNewExpiresAt("")
-            toast.success("Shared intake link created")
-        } catch {
-            toast.error("Failed to create shared intake link")
-        }
-    }
-
-    const handleRotateSharedLink = async (linkId: string) => {
-        if (!formId) return
-        try {
-            await rotateIntakeLinkMutation.mutateAsync({ formId, linkId })
-            toast.success("Shared intake link rotated")
-        } catch {
-            toast.error("Failed to rotate link")
-        }
-    }
-
-    const handleToggleSharedLinkActive = async (link: FormIntakeLinkRead) => {
-        if (!formId) return
-        try {
-            await updateIntakeLinkMutation.mutateAsync({
-                formId,
-                linkId: link.id,
-                payload: { is_active: !link.is_active },
-            })
-            toast.success(link.is_active ? "Link disabled" : "Link enabled")
-        } catch {
-            toast.error("Failed to update link")
-        }
-    }
+        if (!pendingSharePrompt) return
+        if (sortedIntakeLinks.length === 0) return
+        setShowSharePrompt(true)
+        setPendingSharePrompt(false)
+    }, [pendingSharePrompt, sortedIntakeLinks])
 
     const handleCopySharedLink = async (link: FormIntakeLinkRead) => {
         const url = link.intake_url?.trim()
@@ -2309,6 +2266,31 @@ export default function FormBuilderPage() {
                                     />
                                 </div>
 
+                                <div className="mt-4 space-y-2">
+                                    <Label htmlFor="form-purpose">Form Purpose</Label>
+                                    <Select
+                                        value={formPurpose}
+                                        onValueChange={(value) =>
+                                            setFormPurpose(value as FormPurpose)
+                                        }
+                                    >
+                                        <SelectTrigger id="form-purpose">
+                                            <SelectValue placeholder="Select purpose" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="surrogate_application">
+                                                Surrogate Application
+                                            </SelectItem>
+                                            <SelectItem value="event_intake">Event Intake</SelectItem>
+                                            <SelectItem value="other">Other</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-stone-500">
+                                        Dedicated case sends default to forms with purpose
+                                        <code className="ml-1">surrogate_application</code>.
+                                    </p>
+                                </div>
+
                                 {/* Public Title */}
                                 <div className="mt-4 space-y-2">
                                     <Label htmlFor="public-title">Public Title</Label>
@@ -2401,10 +2383,14 @@ export default function FormBuilderPage() {
 
                                 <div className="mt-6 space-y-4 rounded-lg border border-stone-200 p-4 dark:border-stone-800">
                                     <div className="flex items-center justify-between">
-                                        <h4 className="text-sm font-semibold">Distribution</h4>
-                                        <Badge variant="outline">Dedicated + Shared</Badge>
+                                        <h4 className="text-sm font-semibold">Dedicated Delivery</h4>
+                                        <div className="flex items-center gap-2">
+                                            {isDefaultSurrogateApplication && (
+                                                <Badge variant="secondary">Default</Badge>
+                                            )}
+                                            <Badge variant="outline">Per-surrogate</Badge>
+                                        </div>
                                     </div>
-
                                     <div className="space-y-2">
                                         <Label htmlFor="default-template">Default application email template</Label>
                                         <Select
@@ -2426,186 +2412,117 @@ export default function FormBuilderPage() {
                                             </SelectContent>
                                         </Select>
                                         <p className="text-xs text-stone-500">
-                                            Dedicated surrogate sends use this template by default. Users can override at send time.
+                                            One-click surrogate sends use this template by default.
                                         </p>
                                     </div>
-
-                                    <div className="space-y-2">
-                                        <Label>Create shared intake link</Label>
-                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                            <Input
-                                                value={newCampaignName}
-                                                onChange={(e) => setNewCampaignName(e.target.value)}
-                                                placeholder="Campaign name"
-                                            />
-                                            <Input
-                                                value={newEventName}
-                                                onChange={(e) => setNewEventName(e.target.value)}
-                                                placeholder="Event name"
-                                            />
-                                            <Input
-                                                value={newMaxSubmissions}
-                                                onChange={(e) => setNewMaxSubmissions(e.target.value)}
-                                                placeholder="Max submissions (optional)"
-                                                inputMode="numeric"
-                                            />
-                                            <Input
-                                                value={newExpiresAt}
-                                                onChange={(e) => setNewExpiresAt(e.target.value)}
-                                                type="datetime-local"
-                                                placeholder="Expires at (optional)"
-                                            />
+                                    <div className="space-y-2 rounded-md border border-stone-200 p-3 dark:border-stone-800">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div>
+                                                <p className="text-sm font-medium">Default case-send form</p>
+                                                <p className="text-xs text-stone-500">
+                                                    Exactly one published surrogate application form can be the default for case sends.
+                                                </p>
+                                            </div>
+                                            <Button
+                                                type="button"
+                                                variant={isDefaultSurrogateApplication ? "secondary" : "outline"}
+                                                size="sm"
+                                                onClick={handleSetDefaultSurrogateApplication}
+                                                disabled={
+                                                    isDefaultSurrogateApplication ||
+                                                    setDefaultSurrogateApplicationMutation.isPending ||
+                                                    !isPublished ||
+                                                    formPurpose !== "surrogate_application"
+                                                }
+                                            >
+                                                {setDefaultSurrogateApplicationMutation.isPending && (
+                                                    <Loader2Icon className="mr-2 size-3 animate-spin" />
+                                                )}
+                                                {isDefaultSurrogateApplication ? "Default Active" : "Set as Default"}
+                                            </Button>
                                         </div>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            className="w-full bg-transparent"
-                                            onClick={handleCreateSharedLink}
-                                            disabled={
-                                                createIntakeLinkMutation.isPending || !formId || !isPublished
-                                            }
-                                        >
-                                            {createIntakeLinkMutation.isPending && (
-                                                <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                            )}
-                                            <LinkIcon className="mr-2 size-4" />
-                                            Create Shared Link
-                                        </Button>
+                                        {formPurpose !== "surrogate_application" && (
+                                            <p className="text-xs text-amber-600">
+                                                Change purpose to <code>surrogate_application</code> to set as default.
+                                            </p>
+                                        )}
                                         {!isPublished && (
                                             <p className="text-xs text-amber-600">
-                                                Publish the form before creating shared links.
+                                                Publish this form before setting it as default.
                                             </p>
                                         )}
                                     </div>
+                                </div>
 
-                                    <div className="space-y-3">
-                                        <div className="flex items-center justify-between">
-                                            <Label>Shared links</Label>
-                                            <span className="text-xs text-stone-500">
-                                                {sortedIntakeLinks.length} total
-                                            </span>
+                                <div className="mt-4 space-y-3 rounded-lg border border-stone-200 p-4 dark:border-stone-800">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2 text-sm font-semibold">
+                                            <QrCodeIcon className="size-4" />
+                                            Share & QR
                                         </div>
-                                        {sortedIntakeLinks.length === 0 ? (
-                                            <p className="text-xs text-stone-500">
-                                                No shared links yet. Create one for event intake and QR distribution.
-                                            </p>
-                                        ) : (
-                                            <div className="space-y-2">
-                                                {sortedIntakeLinks.map((link) => (
-                                                    <div
-                                                        key={link.id}
-                                                        className="rounded-md border border-stone-200 p-3 dark:border-stone-800"
-                                                    >
-                                                        <div className="flex flex-wrap items-center justify-between gap-2">
-                                                            <button
-                                                                type="button"
-                                                                className="text-left"
-                                                                onClick={() => setSelectedQrLinkId(link.id)}
-                                                            >
-                                                                <div className="text-sm font-medium">
-                                                                    {link.event_name || link.campaign_name || "Shared link"}
-                                                                </div>
-                                                                <div className="text-xs text-stone-500">
-                                                                    {link.intake_url || `/intake/${link.slug}`}
-                                                                </div>
-                                                            </button>
-                                                            <div className="flex items-center gap-2">
-                                                                <Badge
-                                                                    variant={link.is_active ? "default" : "secondary"}
-                                                                    className={link.is_active ? "bg-teal-500" : ""}
-                                                                >
-                                                                    {link.is_active ? "Active" : "Inactive"}
-                                                                </Badge>
-                                                                <Button
-                                                                    type="button"
-                                                                    size="icon"
-                                                                    variant="ghost"
-                                                                    onClick={() => handleCopySharedLink(link)}
-                                                                    title="Copy link"
-                                                                >
-                                                                    <CopyIcon className="size-4" />
-                                                                </Button>
-                                                                <Button
-                                                                    type="button"
-                                                                    size="icon"
-                                                                    variant="ghost"
-                                                                    onClick={() => handleToggleSharedLinkActive(link)}
-                                                                    title={link.is_active ? "Disable link" : "Enable link"}
-                                                                    disabled={updateIntakeLinkMutation.isPending}
-                                                                >
-                                                                    <SmartphoneIcon className="size-4" />
-                                                                </Button>
-                                                                <Button
-                                                                    type="button"
-                                                                    size="icon"
-                                                                    variant="ghost"
-                                                                    onClick={() => handleRotateSharedLink(link.id)}
-                                                                    title="Rotate slug"
-                                                                    disabled={rotateIntakeLinkMutation.isPending}
-                                                                >
-                                                                    <RotateCcwIcon className="size-4" />
-                                                                </Button>
-                                                            </div>
-                                                        </div>
-                                                        <div className="mt-2 text-xs text-stone-500">
-                                                            Submissions: {link.submissions_count}
-                                                            {link.max_submissions ? ` / ${link.max_submissions}` : ""}
-                                                            {link.expires_at
-                                                                ? ` · Expires ${new Date(link.expires_at).toLocaleString()}`
-                                                                : ""}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
+                                        <Badge variant="outline">Auto-generated</Badge>
                                     </div>
+                                    <p className="text-xs text-stone-500">
+                                        Publishing creates a primary shared application link automatically. Share it directly or
+                                        download QR for events.
+                                    </p>
 
-                                    {selectedQrLink?.intake_url && (
+                                    {!isPublished ? (
+                                        <p className="text-xs text-amber-600">
+                                            Publish this form to generate the share link and QR code.
+                                        </p>
+                                    ) : !selectedQrLink?.intake_url ? (
+                                        <p className="text-xs text-stone-500">
+                                            Preparing shared link...
+                                        </p>
+                                    ) : (
                                         <div className="space-y-2 rounded-md border border-stone-200 p-3 dark:border-stone-800">
-                                            <div className="flex items-center gap-2 text-sm font-medium">
-                                                <QrCodeIcon className="size-4" />
-                                                Event QR
+                                            <div className="break-all text-xs text-stone-600">{selectedQrLink.intake_url}</div>
+                                            <div className="flex flex-wrap gap-2">
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => setShowSharePrompt(true)}
+                                                >
+                                                    <LinkIcon className="mr-2 size-3" />
+                                                    Share
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => handleCopySharedLink(selectedQrLink)}
+                                                >
+                                                    <CopyIcon className="mr-2 size-3" />
+                                                    Copy URL
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={handleDownloadQrSvg}
+                                                >
+                                                    <DownloadIcon className="mr-2 size-3" />
+                                                    Download SVG
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={handleDownloadQrPng}
+                                                >
+                                                    <DownloadIcon className="mr-2 size-3" />
+                                                    Download PNG
+                                                </Button>
                                             </div>
-                                            <div className="flex items-center gap-4">
-                                                <div id="shared-intake-qr" className="rounded-md border border-stone-200 bg-white p-2">
+                                            <div className="inline-flex rounded-md border border-stone-200 bg-white p-2">
+                                                <div id="shared-intake-qr">
                                                     <QRCodeSVG value={selectedQrLink.intake_url} size={120} includeMargin />
-                                                </div>
-                                                <div className="space-y-2 text-xs text-stone-500">
-                                                    <div className="break-all">{selectedQrLink.intake_url}</div>
-                                                    <div className="flex flex-wrap gap-2">
-                                                        <Button
-                                                            type="button"
-                                                            size="sm"
-                                                            variant="outline"
-                                                            onClick={() => handleCopySharedLink(selectedQrLink)}
-                                                        >
-                                                            <CopyIcon className="mr-2 size-3" />
-                                                            Copy URL
-                                                        </Button>
-                                                        <Button
-                                                            type="button"
-                                                            size="sm"
-                                                            variant="outline"
-                                                            onClick={handleDownloadQrSvg}
-                                                        >
-                                                            <DownloadIcon className="mr-2 size-3" />
-                                                            Download SVG
-                                                        </Button>
-                                                        <Button
-                                                            type="button"
-                                                            size="sm"
-                                                            variant="outline"
-                                                            onClick={handleDownloadQrPng}
-                                                        >
-                                                            <DownloadIcon className="mr-2 size-3" />
-                                                            Download PNG
-                                                        </Button>
-                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
                                     )}
-
                                 </div>
 
                                 <div className="mt-6 space-y-3">
@@ -2871,6 +2788,70 @@ export default function FormBuilderPage() {
                     )}
                 </div>
             </div>
+
+            <AlertDialog open={showSharePrompt} onOpenChange={setShowSharePrompt}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Share Application Intake</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Choose how you want to distribute this published application form.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    {selectedQrLink?.intake_url ? (
+                        <div className="space-y-2 rounded-md border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600 dark:border-stone-800 dark:bg-stone-900/40">
+                            <div className="font-medium text-stone-900 dark:text-stone-100">
+                                {selectedQrLink.event_name || selectedQrLink.campaign_name || "Shared intake link"}
+                            </div>
+                            <div className="break-all">{selectedQrLink.intake_url}</div>
+                        </div>
+                    ) : (
+                        <p className="text-sm text-stone-500">
+                            No shared intake link is available yet.
+                        </p>
+                    )}
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Close</AlertDialogCancel>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={!selectedQrLink}
+                            onClick={async () => {
+                                if (!selectedQrLink) return
+                                await handleCopySharedLink(selectedQrLink)
+                                setShowSharePrompt(false)
+                            }}
+                        >
+                            <LinkIcon className="mr-2 size-4" />
+                            Copy Link
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={!selectedQrLink}
+                            onClick={() => {
+                                if (!selectedQrLink) return
+                                handleDownloadQrSvg()
+                                setShowSharePrompt(false)
+                            }}
+                        >
+                            <DownloadIcon className="mr-2 size-4" />
+                            QR (SVG)
+                        </Button>
+                        <Button
+                            type="button"
+                            disabled={!selectedQrLink}
+                            onClick={() => {
+                                if (!selectedQrLink) return
+                                void handleDownloadQrPng()
+                                setShowSharePrompt(false)
+                            }}
+                        >
+                            <QrCodeIcon className="mr-2 size-4" />
+                            QR (PNG)
+                        </Button>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             {/* Publish Confirmation Dialog */}
             <AlertDialog open={showPublishDialog} onOpenChange={setShowPublishDialog}>

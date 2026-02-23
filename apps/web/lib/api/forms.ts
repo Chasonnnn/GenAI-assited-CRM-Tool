@@ -7,6 +7,7 @@ import { getCsrfHeaders } from '@/lib/csrf'
 import type { JsonObject } from '../types/json'
 
 export type FormStatus = 'draft' | 'published' | 'archived'
+export type FormPurpose = 'surrogate_application' | 'event_intake' | 'other'
 export type FormSubmissionStatus = 'pending_review' | 'approved' | 'rejected'
 export type FormLinkMode = 'dedicated' | 'shared'
 export type SharedSubmissionOutcome = 'linked' | 'ambiguous_review' | 'lead_created'
@@ -94,6 +95,8 @@ export interface FormSummary {
     id: string
     name: string
     status: FormStatus
+    purpose?: FormPurpose
+    is_default_surrogate_application?: boolean
     created_at: string
     updated_at: string
 }
@@ -111,6 +114,7 @@ export interface FormRead extends FormSummary {
 export interface FormCreatePayload {
     name: string
     description?: string | null
+    purpose?: FormPurpose
     form_schema?: FormSchema | null
     max_file_size_bytes?: number | null
     max_file_count?: number | null
@@ -121,6 +125,7 @@ export interface FormCreatePayload {
 export interface FormUpdatePayload {
     name?: string | null
     description?: string | null
+    purpose?: FormPurpose | null
     form_schema?: FormSchema | null
     max_file_size_bytes?: number | null
     max_file_count?: number | null
@@ -496,10 +501,16 @@ export function deleteFormTemplate(templateId: string): Promise<void> {
     return api.delete<void>(`/forms/templates/${templateId}`)
 }
 
-export function createFormToken(formId: string, surrogateId: string, expiresInDays?: number): Promise<FormTokenRead> {
+export function createFormToken(
+    formId: string,
+    surrogateId: string,
+    expiresInDays?: number,
+    allowPurposeOverride?: boolean,
+): Promise<FormTokenRead> {
     return api.post<FormTokenRead>(`/forms/${formId}/tokens`, {
         surrogate_id: surrogateId,
         expires_in_days: expiresInDays,
+        allow_purpose_override: allowPurposeOverride ?? false,
     })
 }
 
@@ -507,10 +518,16 @@ export function sendFormToken(
     formId: string,
     tokenId: string,
     templateId?: string | null,
+    allowPurposeOverride?: boolean,
 ): Promise<FormTokenSendResponse> {
     return api.post<FormTokenSendResponse>(`/forms/${formId}/tokens/${tokenId}/send`, {
         template_id: templateId ?? null,
+        allow_purpose_override: allowPurposeOverride ?? false,
     })
+}
+
+export function setDefaultSurrogateApplicationForm(formId: string): Promise<FormRead> {
+    return api.post<FormRead>(`/forms/${formId}/set-default-surrogate-application`, {})
 }
 
 export function updateFormDeliverySettings(

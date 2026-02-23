@@ -168,13 +168,30 @@ export function SurrogateApplicationTab({
         }
     }, [user?.org_portal_base_url])
 
-    const [selectedFormId, setSelectedFormId] = React.useState<string>(formId || "")
+    const [selectedFormId, setSelectedFormId] = React.useState<string>("")
+    const [useAdvancedOverride, setUseAdvancedOverride] = React.useState(false)
+    const [confirmOverride, setConfirmOverride] = React.useState(false)
 
     React.useEffect(() => {
-        setSelectedFormId(formId || "")
-    }, [formId])
+        if (!useAdvancedOverride) {
+            setSelectedFormId("")
+            setConfirmOverride(false)
+            return
+        }
+        if (selectedFormId && publishedForms.some((form) => form.id === selectedFormId)) return
+        const fallback =
+            publishedForms.find((form) => form.id !== formId)?.id ||
+            publishedForms[0]?.id ||
+            ""
+        setSelectedFormId(fallback)
+    }, [formId, publishedForms, selectedFormId, useAdvancedOverride])
 
-    const effectiveFormId = selectedFormId || formId || ""
+    const effectiveFormId = useAdvancedOverride ? selectedFormId : formId || ""
+    const selectedFormMeta =
+        publishedForms.find((form) => form.id === effectiveFormId) || null
+    const requiresPurposeOverride =
+        selectedFormMeta !== null &&
+        (selectedFormMeta.purpose ?? "surrogate_application") !== "surrogate_application"
 
     const {
         data: submission,
@@ -302,7 +319,11 @@ export function SurrogateApplicationTab({
 
     const handleGenerateFormLink = async () => {
         if (!effectiveFormId) {
-            toast.error("Select a published form first")
+            toast.error("No default application form is configured")
+            return
+        }
+        if (useAdvancedOverride && !confirmOverride) {
+            toast.error("Confirm advanced override before sending")
             return
         }
         setIsGeneratingLink(true)
@@ -311,6 +332,7 @@ export function SurrogateApplicationTab({
                 formId: effectiveFormId,
                 surrogateId,
                 expiresInDays: linkExpirationDays,
+                allowPurposeOverride: requiresPurposeOverride,
             })
             const link = resolveApplicationLink(baseUrl, tokenData)
             setCurrentTokenId(tokenData.token_id)
@@ -340,6 +362,7 @@ export function SurrogateApplicationTab({
                 formId: effectiveFormId,
                 tokenId: currentTokenId,
                 templateId: selectedTemplateId,
+                allowPurposeOverride: requiresPurposeOverride,
             })
             const resolved = response.application_url?.trim()
             if (resolved) {
@@ -736,11 +759,16 @@ export function SurrogateApplicationTab({
     // Empty state - no submission
     if (!submission) {
         const availableForms = publishedForms
-        const hasMultipleForms = availableForms.length > 1
-        const hasSingleForm = availableForms.length === 1
+        const defaultForm = availableForms.find((form) => form.id === formId) || null
         const selectedForm =
             availableForms.find((form) => form.id === effectiveFormId) ??
-            (hasSingleForm ? availableForms[0] ?? null : null)
+            defaultForm
+        const hasExplicitOverride =
+            useAdvancedOverride &&
+            selectedFormId.length > 0 &&
+            selectedFormId !== (formId || "")
+        const canSendLink =
+            Boolean(effectiveFormId) && (!hasExplicitOverride || confirmOverride)
         return (
             <Card>
                 <CardContent className="flex flex-col items-center justify-center py-16 text-center">
@@ -763,37 +791,89 @@ export function SurrogateApplicationTab({
                             </div>
                         </div>
                     )}
-                    {hasMultipleForms && (
-                        <div className="mb-4 w-full max-w-xs">
-                            <Label className="mb-2 block text-xs font-medium text-muted-foreground">
-                                Select form
-                            </Label>
-                            <NativeSelect
-                                value={selectedFormId}
-                                onChange={(e) => setSelectedFormId(e.target.value)}
-                                className="w-full"
-                            >
-                                <NativeSelectOption value="">Choose a form</NativeSelectOption>
-                                {availableForms.map((form) => (
-                                    <NativeSelectOption key={form.id} value={form.id}>
-                                        {form.name}
-                                    </NativeSelectOption>
-                                ))}
-                            </NativeSelect>
-                            {!effectiveFormId && (
-                                <p className="mt-2 text-xs text-muted-foreground">
-                                    Select a published form to send.
-                                </p>
-                            )}
-                        </div>
-                    )}
-                    {hasSingleForm && selectedForm && (
+                    {defaultForm && !useAdvancedOverride && (
                         <div className="mb-4 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
-                            <span className="text-muted-foreground">Form selected:</span>
-                            <span className="font-medium text-foreground">{selectedForm.name}</span>
+                            <span className="text-muted-foreground">Default form:</span>
+                            <span className="font-medium text-foreground">{defaultForm.name}</span>
                             <Badge variant="secondary" className="text-xs">
                                 Published
                             </Badge>
+                        </div>
+                    )}
+                    {availableForms.length > 0 && (
+                        <div className="mb-4 w-full max-w-xs rounded-lg border px-3 py-3 text-left">
+                            <div className="mb-2 flex items-center justify-between">
+                                <span className="text-xs font-medium text-muted-foreground">Advanced override</span>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                        const next = !useAdvancedOverride
+                                        setUseAdvancedOverride(next)
+                                        if (!next) {
+                                            setConfirmOverride(false)
+                                        } else {
+                                            setSelectedFormId(
+                                                selectedFormId ||
+                                                    availableForms.find((form) => form.id !== (formId || ""))?.id ||
+                                                    "",
+                                            )
+                                        }
+                                    }}
+                                >
+                                    {useAdvancedOverride
+                                        ? defaultForm
+                                            ? "Use default"
+                                            : "Close override"
+                                        : "Use different form"}
+                                </Button>
+                            </div>
+                            {useAdvancedOverride && (
+                                <div className="space-y-3">
+                                    <NativeSelect
+                                        value={selectedFormId}
+                                        onChange={(e) => {
+                                            setSelectedFormId(e.target.value)
+                                            setConfirmOverride(false)
+                                        }}
+                                        className="w-full"
+                                    >
+                                        <NativeSelectOption value="">Choose a form</NativeSelectOption>
+                                        {availableForms.map((form) => (
+                                            <NativeSelectOption key={form.id} value={form.id}>
+                                                {form.name}
+                                            </NativeSelectOption>
+                                        ))}
+                                    </NativeSelect>
+                                    {selectedForm && (
+                                        <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+                                            You are overriding the default form.
+                                            {requiresPurposeOverride && (
+                                                <span className="block mt-1">
+                                                    This form is not marked as <code>surrogate_application</code>.
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
+                                    {hasExplicitOverride && (
+                                        <label className="flex items-start gap-2 text-xs">
+                                            <Checkbox
+                                                checked={confirmOverride}
+                                                onCheckedChange={(checked) => setConfirmOverride(checked === true)}
+                                            />
+                                            <span>
+                                                I confirm I want to send a non-default form for this surrogate.
+                                            </span>
+                                        </label>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    {!defaultForm && availableForms.length > 0 && (
+                        <div className="mb-4 text-xs text-amber-700">
+                            No default surrogate application form is configured. Set one in Form Builder.
                         </div>
                     )}
                     {availableForms.length === 0 && (
@@ -829,7 +909,7 @@ export function SurrogateApplicationTab({
                     <Button
                         className="bg-teal-500 hover:bg-teal-600"
                         onClick={handleGenerateFormLink}
-                        disabled={isGeneratingLink || !effectiveFormId}
+                        disabled={isGeneratingLink || !canSendLink}
                     >
                         {isGeneratingLink ? (
                             <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
@@ -852,6 +932,11 @@ export function SurrogateApplicationTab({
                                 {selectedForm && (
                                     <div className="text-sm text-muted-foreground">
                                         Form: <span className="font-medium text-foreground">{selectedForm.name}</span>
+                                    </div>
+                                )}
+                                {hasExplicitOverride && (
+                                    <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+                                        Advanced override is active for this send.
                                     </div>
                                 )}
                                 <div className="rounded-lg border p-4 bg-muted/50">

@@ -17,6 +17,7 @@ import {
     listFormIntakeLinks,
     rotateFormIntakeLink,
     sendFormToken,
+    setDefaultSurrogateApplicationForm,
     updateFormDeliverySettings,
     updateFormIntakeLink,
     resolveSubmissionMatch,
@@ -130,6 +131,7 @@ export function usePublishForm() {
         onSuccess: (_result, formId) => {
             queryClient.invalidateQueries({ queryKey: formKeys.detail(formId) })
             queryClient.invalidateQueries({ queryKey: formKeys.lists() })
+            queryClient.invalidateQueries({ queryKey: formKeys.intakeLinks(formId) })
         },
     })
 }
@@ -182,8 +184,18 @@ export function useFormSubmissions(formId: string | null, params: ListFormSubmis
 
 export function useCreateFormToken() {
     return useMutation({
-        mutationFn: ({ formId, surrogateId, expiresInDays }: { formId: string; surrogateId: string; expiresInDays?: number }) =>
-            createFormToken(formId, surrogateId, expiresInDays),
+        mutationFn: ({
+            formId,
+            surrogateId,
+            expiresInDays,
+            allowPurposeOverride,
+        }: {
+            formId: string
+            surrogateId: string
+            expiresInDays?: number
+            allowPurposeOverride?: boolean
+        }) =>
+            createFormToken(formId, surrogateId, expiresInDays, allowPurposeOverride),
     })
 }
 
@@ -193,11 +205,25 @@ export function useSendFormToken() {
             formId,
             tokenId,
             templateId,
+            allowPurposeOverride,
         }: {
             formId: string
             tokenId: string
             templateId?: string | null
-        }) => sendFormToken(formId, tokenId, templateId),
+            allowPurposeOverride?: boolean
+        }) => sendFormToken(formId, tokenId, templateId, allowPurposeOverride),
+    })
+}
+
+export function useSetDefaultSurrogateApplicationForm() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (formId: string) => setDefaultSurrogateApplicationForm(formId),
+        onSuccess: (form) => {
+            queryClient.invalidateQueries({ queryKey: formKeys.lists() })
+            queryClient.setQueryData(formKeys.detail(form.id), form)
+        },
     })
 }
 
