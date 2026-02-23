@@ -87,5 +87,5 @@ async def test_upload_attachment_returns_clean_error_on_storage_failure(
         files={"file": ("fail.pdf", b"%PDF-1.4", "application/pdf")},
     )
 
-    assert response.status_code == 500
+    assert response.status_code == 503
     assert response.json()["detail"] == "Failed to store attachment. Please try again."

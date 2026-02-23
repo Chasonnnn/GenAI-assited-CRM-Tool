@@ -13,7 +13,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session
@@ -155,7 +155,10 @@ def create_interview(
         db.commit()
         return interview_service.to_interview_read(db, interview)
     except attachment_service.AttachmentStorageError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

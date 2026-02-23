@@ -3,7 +3,7 @@
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Request
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -142,7 +142,10 @@ async def upload_attachment(
             created_at=attachment.created_at.isoformat(),
         )
     except attachment_service.AttachmentStorageError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -314,7 +317,10 @@ async def upload_ip_attachment(
             created_at=attachment.created_at.isoformat(),
         )
     except attachment_service.AttachmentStorageError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

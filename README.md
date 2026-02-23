@@ -1,6 +1,6 @@
 # Surrogacy Force Platform
 
-**Version:** 0.41.0 | **Last Updated:** January 28, 2026
+**Version:** 0.90.2 | **Last Updated:** February 23, 2026
 
 A modern, multi-tenant platform for surrogacy agencies. Manage surrogates from intake through delivery with configurable workflows, matching, automation, and full auditability.
 
@@ -13,7 +13,10 @@ A modern, multi-tenant platform for surrogacy agencies. Manage surrogates from i
 - Tasks, notes, attachments, and notifications
 - Calendar, booking links, and appointment workflows
 - Queue management, bulk operations, and filter persistence
-- Automation workflows and email campaigns
+- Automation workflows, email campaigns, and approval flows
+- AI assistant with action proposals and execution approvals
+- Ticketing inbox with Gmail journal sync, compose, and replies
+- Ops console for agencies, templates, and integration alerts
 - Integrations: Google OAuth, Google Calendar, Gmail, Zoom, Meta Lead Ads
 
 ---
@@ -25,11 +28,16 @@ A modern, multi-tenant platform for surrogacy agencies. Manage surrogates from i
 - Match lifecycle tracking with approvals and coordination
 - Tasks, notes, and attachments tied to records with audit trails
 - Queue-based assignment with claim and release to balance workload
+- Ticket inbox linked to surrogate records for inbound and outbound conversations
 
 ### Automation and Campaigns
 - Workflow engine with event triggers, conditions, and approvals
 - Campaigns with recipient segmentation and suppression lists
 - Email templates with variable rendering and delivery logging
+
+### AI and Inbox
+- AI assistant with chat history, suggested actions, and approval gates
+- Gmail journal ingestion with ticket threading, surrogate linking, and reply flows
 
 ### Scheduling
 - Appointment types, availability rules, and public booking links
@@ -37,7 +45,7 @@ A modern, multi-tenant platform for surrogacy agencies. Manage surrogates from i
 
 ### Integrations
 - Google OAuth SSO and per-user integrations
-- Google Calendar sync and Gmail send
+- Google Calendar sync and Gmail journal inbox (send/compose/reply)
 - Zoom meeting creation and updates
 - Meta Lead Ads import with optional CAPI feedback
 
@@ -142,7 +150,17 @@ uv run -- uvicorn app.main:app --reload --port 8000
 
 API: `http://localhost:8000` | Docs: `http://localhost:8000/docs`
 
-### 3) Setup Frontend
+### 3) Run Background Worker
+
+```bash
+cd apps/api
+uv run -- python -m app.worker
+```
+
+Run this in a second terminal while developing features that use queued/background jobs
+(for example Gmail sync/ticketing, campaign sends, AI jobs, and scheduled automations).
+
+### 4) Setup Frontend
 
 ```bash
 cd apps/web
