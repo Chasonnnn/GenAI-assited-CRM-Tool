@@ -398,6 +398,192 @@ async def test_shared_submit_ambiguous_then_manual_resolve(
 
 
 @pytest.mark.asyncio
+async def test_shared_submission_retry_allows_unlink_and_relink(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+    default_stage,
+):
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+
+    surrogate_a = _create_surrogate(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        stage=default_stage,
+        full_name="Retry Person",
+        email="retry-a@example.com",
+        phone="+1 (555) 200-3000",
+        date_of_birth="1991-02-03",
+    )
+    surrogate_b = _create_surrogate(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        stage=default_stage,
+        full_name="Correct Person",
+        email="retry-b@example.com",
+        phone="+1 (555) 777-3000",
+        date_of_birth="1992-03-04",
+    )
+
+    workflow = AutomationWorkflow(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Retry matcher {uuid.uuid4().hex[:6]}",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": form_id},
+        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
+        condition_logic="AND",
+        actions=[{"action_type": "auto_match_submission"}],
+        is_enabled=True,
+        scope="org",
+        owner_user_id=None,
+        created_by_user_id=test_user.id,
+    )
+    db.add(workflow)
+    db.commit()
+
+    submit_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "Retry Person",
+                    "date_of_birth": "1991-02-03",
+                    "phone": "+1 (555) 200-3000",
+                    "email": "retry-a@example.com",
+                }
+            )
+        },
+    )
+    assert submit_res.status_code == 200
+    payload = submit_res.json()
+    assert payload["outcome"] == "linked"
+    assert payload["surrogate_id"] == str(surrogate_a.id)
+
+    submission_id = payload["id"]
+    retry_res = await authed_client.post(
+        f"/forms/submissions/{submission_id}/match/retry",
+        json={
+            "unlink_surrogate": True,
+            "unlink_intake_lead": False,
+            "rerun_auto_match": False,
+            "create_intake_lead_if_unmatched": False,
+            "review_notes": "Reset incorrect auto-link",
+        },
+    )
+    assert retry_res.status_code == 200
+    retry_payload = retry_res.json()
+    assert retry_payload["outcome"] == "ambiguous_review"
+    assert retry_payload["submission"]["surrogate_id"] is None
+    assert retry_payload["submission"]["review_notes"] == "Reset incorrect auto-link"
+
+    relink_res = await authed_client.post(
+        f"/forms/submissions/{submission_id}/match/resolve",
+        json={
+            "surrogate_id": str(surrogate_b.id),
+            "create_intake_lead": False,
+            "review_notes": "Corrected to surrogate B",
+        },
+    )
+    assert relink_res.status_code == 200
+    relink_payload = relink_res.json()
+    assert relink_payload["outcome"] == "linked"
+    assert relink_payload["submission"]["surrogate_id"] == str(surrogate_b.id)
+
+
+@pytest.mark.asyncio
+async def test_shared_submission_retry_reuses_existing_lead_without_duplicates(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+    default_stage,
+):
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+
+    workflow = AutomationWorkflow(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Retry lead workflow {uuid.uuid4().hex[:6]}",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": form_id},
+        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
+        condition_logic="AND",
+        actions=[{"action_type": "create_intake_lead"}],
+        is_enabled=True,
+        scope="org",
+        owner_user_id=None,
+        created_by_user_id=test_user.id,
+    )
+    db.add(workflow)
+    db.commit()
+
+    submit_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "Lead Retry Candidate",
+                    "date_of_birth": "1995-06-07",
+                    "phone": "+1 (555) 812-3411",
+                    "email": "lead-retry@example.com",
+                }
+            )
+        },
+    )
+    assert submit_res.status_code == 200
+    payload = submit_res.json()
+    assert payload["outcome"] == "lead_created"
+    assert payload["intake_lead_id"] is not None
+
+    submission_id = payload["id"]
+    original_lead_id = payload["intake_lead_id"]
+
+    retry_reuse_res = await authed_client.post(
+        f"/forms/submissions/{submission_id}/match/retry",
+        json={
+            "unlink_surrogate": False,
+            "unlink_intake_lead": True,
+            "rerun_auto_match": True,
+            "create_intake_lead_if_unmatched": True,
+            "review_notes": "Re-run lead flow",
+        },
+    )
+    assert retry_reuse_res.status_code == 200
+    retry_reuse_payload = retry_reuse_res.json()
+    assert retry_reuse_payload["outcome"] == "lead_created"
+    assert retry_reuse_payload["submission"]["intake_lead_id"] == original_lead_id
+
+    lead_count = (
+        db.query(IntakeLead)
+        .filter(
+            IntakeLead.organization_id == test_org.id,
+            IntakeLead.full_name == normalize_name("Lead Retry Candidate"),
+        )
+        .count()
+    )
+    assert lead_count == 1
+
+    retry_clear_res = await authed_client.post(
+        f"/forms/submissions/{submission_id}/match/retry",
+        json={
+            "unlink_surrogate": False,
+            "unlink_intake_lead": True,
+            "rerun_auto_match": True,
+            "create_intake_lead_if_unmatched": False,
+            "review_notes": "Undo lead link",
+        },
+    )
+    assert retry_clear_res.status_code == 200
+    retry_clear_payload = retry_clear_res.json()
+    assert retry_clear_payload["outcome"] == "ambiguous_review"
+    assert retry_clear_payload["submission"]["intake_lead_id"] is None
+
+
+@pytest.mark.asyncio
 async def test_promote_intake_lead_links_pending_submission(
     authed_client,
     db,

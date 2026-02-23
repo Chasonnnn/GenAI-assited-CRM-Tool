@@ -939,6 +939,107 @@ def resolve_submission_match(
     return submission, _normalize_shared_outcome(submission.match_status)
 
 
+def retry_submission_match(
+    db: Session,
+    *,
+    submission: FormSubmission,
+    unlink_surrogate: bool,
+    unlink_intake_lead: bool,
+    rerun_auto_match: bool,
+    create_intake_lead_if_unmatched: bool,
+    reviewer_id: uuid.UUID | None,
+    review_notes: str | None = None,
+) -> tuple[FormSubmission, str]:
+    """Reset and optionally reprocess matching for a shared submission."""
+    if submission.source_mode != FormLinkMode.SHARED.value:
+        raise ValueError("Only shared submissions can be reprocessed")
+    if submission.status != FormSubmissionStatus.PENDING_REVIEW.value:
+        raise ValueError("Only pending_review submissions can be reprocessed")
+
+    previous_lead: IntakeLead | None = None
+    if submission.intake_lead_id:
+        previous_lead = (
+            db.query(IntakeLead)
+            .filter(
+                IntakeLead.organization_id == submission.organization_id,
+                IntakeLead.id == submission.intake_lead_id,
+            )
+            .first()
+        )
+
+    if unlink_surrogate:
+        submission.surrogate_id = None
+    if unlink_intake_lead:
+        submission.intake_lead_id = None
+
+    db.query(FormSubmissionMatchCandidate).filter(
+        FormSubmissionMatchCandidate.submission_id == submission.id
+    ).delete(synchronize_session=False)
+
+    submission.match_status = FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
+    submission.match_reason = "manual_retry_reset"
+    submission.matched_at = None
+    if review_notes is not None:
+        submission.review_notes = review_notes.strip() or None
+    db.commit()
+    db.refresh(submission)
+
+    outcome = FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
+    if rerun_auto_match:
+        submission, outcome = auto_match_submission(db=db, submission=submission)
+
+    if (
+        create_intake_lead_if_unmatched
+        and outcome == FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
+        and not submission.surrogate_id
+        and not submission.intake_lead_id
+    ):
+        if (
+            previous_lead
+            and previous_lead.status == IntakeLeadStatus.PROMOTED.value
+            and previous_lead.promoted_surrogate_id
+        ):
+            submission.match_reason = "manual_retry_requires_manual_link"
+            if review_notes is not None:
+                submission.review_notes = review_notes.strip() or None
+            db.commit()
+            db.refresh(submission)
+            outcome = FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
+        elif (
+            previous_lead
+            and previous_lead.status == IntakeLeadStatus.PENDING_REVIEW.value
+            and not previous_lead.promoted_surrogate_id
+        ):
+            submission.intake_lead_id = previous_lead.id
+            submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
+            submission.match_reason = "existing_lead_relinked"
+            submission.matched_at = None
+            if review_notes is not None:
+                submission.review_notes = review_notes.strip() or None
+            db.query(FormSubmissionMatchCandidate).filter(
+                FormSubmissionMatchCandidate.submission_id == submission.id
+            ).delete(synchronize_session=False)
+            db.commit()
+            db.refresh(submission)
+            outcome = FormSubmissionMatchStatus.LEAD_CREATED.value
+        else:
+            submission, _ = create_intake_lead_for_submission(
+                db=db,
+                submission=submission,
+                user_id=reviewer_id,
+                source="manual_retry_resolution",
+                allow_ambiguous=False,
+            )
+            submission.match_reason = "manual_retry_lead_creation"
+            if review_notes is not None:
+                submission.review_notes = review_notes.strip() or None
+            db.commit()
+            db.refresh(submission)
+            outcome = _normalize_shared_outcome(submission.match_status)
+
+    return submission, outcome
+
+
 def get_intake_lead(
     db: Session,
     *,

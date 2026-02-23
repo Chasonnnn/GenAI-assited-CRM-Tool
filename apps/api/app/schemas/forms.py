@@ -376,6 +376,14 @@ class FormSubmissionMatchResolveRequest(BaseModel):
     review_notes: str | None = None
 
 
+class FormSubmissionMatchRetryRequest(BaseModel):
+    unlink_surrogate: bool = True
+    unlink_intake_lead: bool = False
+    rerun_auto_match: bool = True
+    create_intake_lead_if_unmatched: bool = False
+    review_notes: str | None = None
+
+
 class FormSubmissionMatchResolveResponse(BaseModel):
     submission: FormSubmissionRead
     outcome: SharedSubmissionOutcome

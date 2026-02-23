@@ -27,6 +27,7 @@ from app.schemas.forms import (
     FormIntakeLinkCreate,
     FormIntakeLinkRead,
     FormIntakeLinkUpdate,
+    FormSubmissionMatchRetryRequest,
     FormSubmissionMatchResolveRequest,
     FormSubmissionMatchResolveResponse,
     FormPublishResponse,
@@ -1192,6 +1193,51 @@ def resolve_submission_match(
             submission=submission,
             surrogate_id=body.surrogate_id,
             create_intake_lead=body.create_intake_lead,
+            reviewer_id=session.user_id,
+            review_notes=body.review_notes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    files = form_submission_service.list_submission_files(db, session.org_id, submission.id)
+    candidate_count = len(
+        form_intake_service.list_match_candidates(
+            db, org_id=session.org_id, submission_id=submission.id
+        )
+    )
+    return FormSubmissionMatchResolveResponse(
+        submission=_submission_read(submission, files),
+        outcome=outcome,
+        candidate_count=candidate_count,
+    )
+
+
+@router.post(
+    "/submissions/{submission_id}/match/retry",
+    response_model=FormSubmissionMatchResolveResponse,
+    dependencies=[
+        Depends(require_permission(POLICIES["forms"].default)),
+        Depends(require_csrf_header),
+    ],
+)
+def retry_submission_match(
+    submission_id: UUID,
+    body: FormSubmissionMatchRetryRequest,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    submission = form_submission_service.get_submission(db, session.org_id, submission_id)
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    try:
+        submission, outcome = form_intake_service.retry_submission_match(
+            db=db,
+            submission=submission,
+            unlink_surrogate=body.unlink_surrogate,
+            unlink_intake_lead=body.unlink_intake_lead,
+            rerun_auto_match=body.rerun_auto_match,
+            create_intake_lead_if_unmatched=body.create_intake_lead_if_unmatched,
             reviewer_id=session.user_id,
             review_notes=body.review_notes,
         )
