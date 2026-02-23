@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.1...surrogacy-crm-platform-v0.90.2) (2026-02-23)
+
+
+### Bug Fixes
+
+* add intake routing actions to workflow builders ([bbd4559](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bbd455998007354a709995456a6c12d08e168093))
+* align pre-1.0 release versioning with patch policy ([e868c59](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e868c59ca81a6510314b2e849405e9415b3f06d3))
+* break org-form-email template fk cycle in metadata ([d088fd1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d088fd135ace85c025e809ed542941d8002da6e1))
+* declare default surrogate application index in org model ([21697a7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/21697a7f1ba8ca6a2901f4d5ae0a0a30795716ce))
+* enforce default surrogate application form guardrails ([766ff0e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/766ff0e08332ce073d988816e6e9b1fbb05dcc69))
+* include owner context in google meet reschedule failures ([c5eaf41](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c5eaf4131e481fd6b3e96e7e7de30e0cedb286f9))
+* prevent stale autosave during form template hydration ([9c084fd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9c084fd1c601fe5b275f0f56f00ac43eede6e086))
+* route intake submissions through workflow-driven matching ([6b14f8b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6b14f8b64206fe024a9f3f3f5eb829611dd56543))
+* streamline application sharing with auto QR and default sends ([f60e574](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f60e574f994165d1838a1fedc84ab2bc0bec8f1e))
+
 ## [0.90.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.0...surrogacy-crm-platform-v0.90.1) (2026-02-23)
 
 
