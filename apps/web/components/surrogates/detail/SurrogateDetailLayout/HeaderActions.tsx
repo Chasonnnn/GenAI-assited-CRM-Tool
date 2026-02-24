@@ -22,6 +22,7 @@ import {
     PhoneIcon,
     VideoIcon,
     DownloadIcon,
+    CalendarIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
@@ -70,6 +71,7 @@ export function HeaderActions() {
         (isAssignee || canManageQueue) &&
         isIntakeStage &&
         !surrogate.is_archived
+    const canLogInterviewOutcome = canLogContact
 
     // Determine if propose match button should be shown
     const isReadyToMatchStage = currentStage?.slug === "ready_to_match"
@@ -123,6 +125,18 @@ export function HeaderActions() {
                 >
                     <PhoneIcon className="size-4" />
                     Log Contact
+                </Button>
+            )}
+
+            {canLogInterviewOutcome && (
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openDialog({ type: "log_interview_outcome" })}
+                    className="gap-2"
+                >
+                    <CalendarIcon className="size-4" />
+                    Log Interview Outcome
                 </Button>
             )}
 

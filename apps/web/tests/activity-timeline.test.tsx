@@ -253,6 +253,41 @@ describe('ActivityTimeline', () => {
         expect(screen.getByText(/left voicemail and asked for callback/i)).toBeInTheDocument()
     })
 
+    it('shows interview outcome preview details', () => {
+        const stages = [makeStage({ id: 's1', label: 'New Unread', order: 1 })]
+
+        mockUseSurrogateHistory.mockReturnValue({
+            data: [makeHistory({ id: 'h1', to_stage_id: 's1' })],
+        })
+
+        const activities = [
+            makeActivity({
+                id: 'a1',
+                activity_type: 'interview_outcome_logged',
+                details: {
+                    outcome: 'no_show',
+                    occurred_at: '2024-02-02T12:00:00.000Z',
+                    notes: 'Asked to reschedule next week',
+                },
+                created_at: '2024-02-02T12:05:00.000Z',
+            }),
+        ]
+
+        render(
+            <ActivityTimeline
+                surrogateId="surr1"
+                currentStageId="s1"
+                stages={stages}
+                activities={activities}
+                tasks={[]}
+            />
+        )
+
+        expect(screen.getByText(/interview outcome/i)).toBeInTheDocument()
+        expect(screen.getByText(/no show/i)).toBeInTheDocument()
+        expect(screen.getByText(/asked to reschedule next week/i)).toBeInTheDocument()
+    })
+
     it('separates overdue tasks from upcoming tasks', () => {
         const stages = [makeStage({ id: 's1', label: 'New Unread', order: 1 })]
 

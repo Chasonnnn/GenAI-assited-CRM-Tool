@@ -47,6 +47,7 @@ import { useUnifiedCalendarData } from "@/lib/hooks/use-unified-calendar-data"
 import { useSurrogates } from "@/lib/hooks/use-surrogates"
 import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
 import { AppointmentDetailDialog as AppointmentManagementDialog } from "@/components/appointments/AppointmentsList"
+import { LogInterviewOutcomeDialog } from "@/components/surrogates/LogInterviewOutcomeDialog"
 import type { AppointmentListItem, GoogleCalendarEvent } from "@/lib/api/appointments"
 import type { TaskListItem } from "@/lib/api/tasks"
 import Link from "@/components/app-link"
@@ -291,6 +292,7 @@ function AppointmentDetailDialog({
     const [showLinkSection, setShowLinkSection] = useState(false)
     const [selectedSurrogateId, setSelectedSurrogateId] = useState<string | null>(null)
     const [selectedIpId, setSelectedIpId] = useState<string | null>(null)
+    const [logOutcomeOpen, setLogOutcomeOpen] = useState(false)
 
     const updateLinkMutation = useUpdateAppointmentLink()
 
@@ -307,6 +309,7 @@ function AppointmentDetailDialog({
             setSelectedSurrogateId(appointment.surrogate_id)
             setSelectedIpId(appointment.intended_parent_id)
             setShowLinkSection(false)
+            setLogOutcomeOpen(false)
         }
     }, [appointment, open])
 
@@ -563,8 +566,34 @@ function AppointmentDetailDialog({
                                 </div>
                             </div>
                         )}
+
+                        <div className="mt-3 space-y-1">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setLogOutcomeOpen(true)}
+                                disabled={!appointment.surrogate_id}
+                            >
+                                Log Interview Outcome
+                            </Button>
+                            {!appointment.surrogate_id && (
+                                <p className="text-xs text-muted-foreground">Link surrogate first</p>
+                            )}
+                        </div>
                     </div>
                 </div>
+
+                {logOutcomeOpen && (
+                    <LogInterviewOutcomeDialog
+                        open
+                        onOpenChange={setLogOutcomeOpen}
+                        surrogateId={appointment.surrogate_id}
+                        surrogateName={
+                            appointment.surrogate_number ? `Surrogate #${appointment.surrogate_number}` : "surrogate"
+                        }
+                        appointmentId={appointment.id}
+                    />
+                )}
             </DialogContent>
         </Dialog>
     )

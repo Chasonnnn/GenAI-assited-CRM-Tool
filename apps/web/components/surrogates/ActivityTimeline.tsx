@@ -16,6 +16,7 @@ import {
     EditIcon,
     FlagIcon,
     UserPlusIcon,
+    CalendarIcon,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -83,6 +84,12 @@ const ACTIVITY_TYPE_CONFIG: Record<string, ActivityTypeConfig> = {
     // Actual backend types
     email_sent: { icon: MailIcon, color: "bg-cyan-500", bgColor: "bg-cyan-100 dark:bg-cyan-900/30", label: "Email sent" },
     contact_attempt: { icon: PhoneIcon, color: "bg-cyan-500", bgColor: "bg-cyan-100 dark:bg-cyan-900/30", label: "Contact attempt" },
+    interview_outcome_logged: {
+        icon: CalendarIcon,
+        color: "bg-sky-500",
+        bgColor: "bg-sky-100 dark:bg-sky-900/30",
+        label: "Interview outcome",
+    },
     note_added: { icon: FileTextIcon, color: "bg-blue-500", bgColor: "bg-blue-100 dark:bg-blue-900/30", label: "Note" },
     note_deleted: { icon: FileTextIcon, color: "bg-blue-400", bgColor: "bg-blue-100 dark:bg-blue-900/30", label: "Note deleted" },
     task_created: { icon: PlusCircleIcon, color: "bg-green-500", bgColor: "bg-green-100 dark:bg-green-900/30", label: "Task created" },
@@ -142,6 +149,47 @@ function getActivityPreview(activity: SurrogateActivity): string {
             ]
                 .filter(Boolean)
                 .join(" • ")
+        case "interview_outcome_logged":
+            {
+                const rawOutcome =
+                    typeof details.outcome === "string"
+                        ? details.outcome.replace(/_/g, " ")
+                        : ""
+
+                const formatTimestamp = (value: unknown): string | null => {
+                    if (typeof value !== "string") return null
+                    const date = new Date(value)
+                    if (Number.isNaN(date.getTime())) return null
+                    return new Intl.DateTimeFormat(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                    }).format(date)
+                }
+
+                const occurredAt = formatTimestamp(details.occurred_at)
+                const scheduledStart = formatTimestamp(details.scheduled_start)
+                const scheduledEnd = formatTimestamp(details.scheduled_end)
+                const appointmentContext =
+                    scheduledStart && scheduledEnd
+                        ? `Appointment: ${scheduledStart} - ${scheduledEnd}`
+                        : scheduledStart
+                            ? `Appointment: ${scheduledStart}`
+                            : details.appointment_id
+                                ? "Appointment linked"
+                                : ""
+
+                return [
+                    rawOutcome ? `Outcome: ${rawOutcome}` : "",
+                    occurredAt ? `Occurred: ${occurredAt}` : "",
+                    appointmentContext,
+                    (details.notes as string | undefined) || "",
+                ]
+                    .filter(Boolean)
+                    .join(" • ")
+            }
         case "attachment_added":
             return (details.filename as string) || "File uploaded"
         case "attachment_deleted":

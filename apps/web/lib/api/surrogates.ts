@@ -575,6 +575,29 @@ export async function exportSurrogatePacketPdf(
 }
 
 // =============================================================================
+// Interview Outcome Tracking
+// =============================================================================
+
+export type InterviewOutcome = 'completed' | 'no_show' | 'rescheduled' | 'cancelled';
+
+export interface InterviewOutcomeCreatePayload {
+    outcome: InterviewOutcome;
+    occurred_at?: string | null; // ISO datetime, defaults to now
+    notes?: string | null;
+    appointment_id?: string | null;
+}
+
+/**
+ * Log an interview outcome for a surrogate.
+ */
+export function logInterviewOutcome(
+    surrogateId: string,
+    data: InterviewOutcomeCreatePayload
+): Promise<SurrogateActivity> {
+    return api.post<SurrogateActivity>(`/surrogates/${surrogateId}/interview-outcomes`, data);
+}
+
+// =============================================================================
 // Contact Attempts Tracking
 // =============================================================================
 

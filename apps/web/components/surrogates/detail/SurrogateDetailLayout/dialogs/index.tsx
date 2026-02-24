@@ -3,6 +3,7 @@
 import { EmailComposeDialog } from "@/components/email/EmailComposeDialog"
 import { ProposeMatchDialog } from "@/components/matches/ProposeMatchDialog"
 import { LogContactAttemptDialog } from "@/components/surrogates/LogContactAttemptDialog"
+import { LogInterviewOutcomeDialog } from "@/components/surrogates/LogInterviewOutcomeDialog"
 import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
 import {
     useSurrogateDetailActions,
@@ -61,6 +62,15 @@ export function Dialogs() {
                 surrogateId={surrogate.id}
                 surrogateName={surrogate.full_name}
             />
+
+            {activeDialog.type === "log_interview_outcome" && (
+                <LogInterviewOutcomeDialog
+                    open
+                    onOpenChange={(open) => !open && closeDialog()}
+                    surrogateId={surrogate.id}
+                    surrogateName={surrogate.full_name}
+                />
+            )}
 
             <ChangeStageModal
                 open={activeDialog.type === "change_stage"}

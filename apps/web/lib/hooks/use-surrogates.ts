@@ -17,6 +17,7 @@ export const surrogateKeys = {
         [...surrogateKeys.unassignedQueue(), params] as const,
     details: () => [...surrogateKeys.all, 'detail'] as const,
     detail: (id: string) => [...surrogateKeys.details(), id] as const,
+    activity: (id: string) => [...surrogateKeys.detail(id), 'activity'] as const,
     templateVariables: (id: string) => [...surrogateKeys.detail(id), 'template-variables'] as const,
     history: (id: string) => [...surrogateKeys.detail(id), 'history'] as const,
     massEditOptions: () => [...surrogateKeys.all, 'mass-edit-options'] as const,
@@ -188,7 +189,7 @@ export function useSendSurrogateEmail() {
             return result;
         },
         onSuccess: (_, { surrogateId }) => {
-            queryClient.invalidateQueries({ queryKey: [...surrogateKeys.detail(surrogateId), 'activity'] });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
         },
     });
 }
@@ -313,9 +314,34 @@ export function useApplySurrogateMassEditStage() {
  */
 export function useSurrogateActivity(surrogateId: string, page: number = 1, perPage: number = 20) {
     return useQuery({
-        queryKey: [...surrogateKeys.detail(surrogateId), 'activity', { page, perPage }],
+        queryKey: [...surrogateKeys.activity(surrogateId), { page, perPage }],
         queryFn: () => surrogatesApi.getSurrogateActivity(surrogateId, page, perPage),
         enabled: !!surrogateId,
+    });
+}
+
+// =============================================================================
+// Interview Outcome Tracking Hooks
+// =============================================================================
+
+/**
+ * Log a structured interview outcome for a surrogate.
+ */
+export function useLogInterviewOutcome() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({
+            surrogateId,
+            data,
+        }: {
+            surrogateId: string;
+            data: surrogatesApi.InterviewOutcomeCreatePayload;
+        }) => surrogatesApi.logInterviewOutcome(surrogateId, data),
+        onSuccess: (_, { surrogateId }) => {
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
+        },
     });
 }
 
@@ -353,7 +379,7 @@ export function useCreateContactAttempt() {
             // Invalidate surrogate detail (contact_status may have changed)
             queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
             // Invalidate activity log (new activity entry)
-            queryClient.invalidateQueries({ queryKey: [...surrogateKeys.detail(surrogateId), 'activity'] });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
             // Invalidate surrogate lists (status may have changed)
             queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
         },

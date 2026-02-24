@@ -59,6 +59,7 @@ export type ActiveDialog =
     | { type: "email" }
     | { type: "propose_match" }
     | { type: "log_contact" }
+    | { type: "log_interview_outcome" }
     | { type: "change_stage" }
 
 export interface ZoomFormState {
