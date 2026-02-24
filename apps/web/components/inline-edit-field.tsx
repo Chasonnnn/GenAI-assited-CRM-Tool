@@ -32,6 +32,7 @@ export function InlineEditField({
     const [isSaving, setIsSaving] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
     const inputRef = React.useRef<HTMLInputElement>(null)
+    const containerRef = React.useRef<HTMLDivElement>(null)
 
     // Reset edit value when prop value changes
     React.useEffect(() => {
@@ -93,31 +94,59 @@ export function InlineEditField({
             handleCancel()
         }
     }
+
+    const handleTriggerKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            handleStartEdit()
+        }
+    }
+
+    const handleBlur = (e: React.FocusEvent) => {
+        // If related target (where focus went) is inside our container, don't save yet
+        if (
+            containerRef.current &&
+            e.relatedTarget instanceof Node &&
+            containerRef.current.contains(e.relatedTarget)
+        ) {
+            return
+        }
+
+        // Otherwise (clicked outside or tabbed away), try to save
+        if (isEditing && !isSaving) {
+             handleSave()
+        }
+    }
+
     const fieldLabel = label?.trim() || (placeholder && placeholder !== "-" ? placeholder : "field")
 
     if (!isEditing) {
         return (
             <div
                 className={cn(
-                    "group flex items-center gap-1 cursor-pointer rounded px-1 -mx-1 hover:bg-muted/50 transition-colors",
+                    "group flex items-center gap-1 cursor-pointer rounded px-1 -mx-1 hover:bg-muted/50 transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                     displayClassName
                 )}
                 onClick={handleStartEdit}
                 role="button"
                 tabIndex={0}
-                onKeyDown={(e) => e.key === "Enter" && handleStartEdit()}
+                onKeyDown={handleTriggerKeyDown}
                 aria-label={`Edit ${fieldLabel}`}
             >
                 <span className={cn("text-sm", !value && "text-muted-foreground", className)}>
                     {value || placeholder}
                 </span>
-                <PencilIcon className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                <PencilIcon className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity" />
             </div>
         )
     }
 
     return (
-        <div className="flex items-center gap-1">
+        <div
+            className="flex items-center gap-1"
+            ref={containerRef}
+            onBlur={handleBlur}
+        >
             <div className="flex-1">
                 <Input
                     ref={inputRef}
@@ -125,12 +154,6 @@ export function InlineEditField({
                     value={editValue}
                     onChange={(e) => setEditValue(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    onBlur={() => {
-                        // Delay to allow button clicks
-                        setTimeout(() => {
-                            if (isEditing && !isSaving) handleSave()
-                        }, 200)
-                    }}
                     className={cn("h-7 text-sm", error && "border-destructive")}
                     disabled={isSaving}
                     aria-label={fieldLabel}

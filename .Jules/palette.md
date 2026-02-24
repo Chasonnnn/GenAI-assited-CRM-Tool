@@ -9,3 +9,7 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+
+## 2025-05-20 - Inline Edit Field Interaction
+**Learning:** `onBlur` auto-save logic often breaks keyboard accessibility if it fires before the user can activate a "Cancel" button. Checking `relatedTarget` against a container ref is robust for distinguishing "tab to Cancel" (stay in component) vs "tab outside" (save).
+**Action:** Use `relatedTarget` and container refs for "click outside" logic in interactive components, and always verify keyboard navigation (Tab/Space) support.
