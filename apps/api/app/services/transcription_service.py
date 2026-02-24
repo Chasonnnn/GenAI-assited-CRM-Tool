@@ -17,6 +17,7 @@ from app.db.models import (
     SurrogateInterview,
     InterviewAttachment,
 )
+from app.db.enums import AlertSeverity, AlertType
 from app.services import interview_service, storage_client
 from app.services.ai_settings_service import (
     get_ai_settings,
@@ -437,19 +438,14 @@ def _create_transcription_alert(
     db: Session, org_id: UUID, error_msg: str, error_class: str
 ) -> None:
     """Create system alert for transcription failure."""
-    try:
-        from app.services import alert_service
-        from app.db.enums import AlertType, AlertSeverity
+    from app.services import alert_service
 
-        alert_service.create_or_update_alert(
-            db=db,
-            org_id=org_id,
-            alert_type=AlertType.TRANSCRIPTION_FAILED,
-            severity=AlertSeverity.ERROR,
-            title="Interview transcription failed",
-            message=error_msg[:500],
-            integration_key="openai_whisper",
-            error_class=error_class,
-        )
-    except Exception as alert_err:
-        logger.warning(f"Failed to create transcription alert: {alert_err}")
+    alert_service.record_alert_isolated(
+        org_id=org_id,
+        alert_type=AlertType.TRANSCRIPTION_FAILED,
+        severity=AlertSeverity.ERROR,
+        title="Interview transcription failed",
+        message=error_msg[:500],
+        integration_key="openai_whisper",
+        error_class=error_class,
+    )

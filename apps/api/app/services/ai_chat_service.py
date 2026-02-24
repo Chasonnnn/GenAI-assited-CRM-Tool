@@ -26,7 +26,7 @@ from app.db.models import (
     Task,
     UserIntegration,
 )
-from app.db.enums import TaskType
+from app.db.enums import AlertSeverity, AlertType, TaskType
 from app.services.ai_provider import ChatMessage, ChatResponse, AIProvider
 from app.services import ai_settings_service
 from app.services.ai_prompt_registry import get_prompt
@@ -767,23 +767,17 @@ async def chat_async(
         return
     except Exception as e:
         logger.exception(f"AI provider error: {e}")
-        # Create system alert for AI provider error
-        try:
-            from app.services import alert_service
-            from app.db.enums import AlertType, AlertSeverity
+        from app.services import alert_service
 
-            alert_service.create_or_update_alert(
-                db=db,
-                org_id=organization_id,
-                alert_type=AlertType.AI_PROVIDER_ERROR,
-                severity=AlertSeverity.ERROR,
-                title="AI provider error",
-                message=str(e)[:500],
-                integration_key="ai_chat",
-                error_class=type(e).__name__,
-            )
-        except Exception as alert_err:
-            logger.warning(f"Failed to create AI provider alert: {alert_err}")
+        alert_service.record_alert_isolated(
+            org_id=organization_id,
+            alert_type=AlertType.AI_PROVIDER_ERROR,
+            severity=AlertSeverity.ERROR,
+            title="AI provider error",
+            message=str(e)[:500],
+            integration_key="ai_chat",
+            error_class=type(e).__name__,
+        )
         return _empty_ai_response(f"AI error: {str(e)}")
 
     # Parse actions from response
@@ -918,23 +912,17 @@ async def stream_chat_async(
                     model_name = chunk.model
     except Exception as e:
         logger.exception(f"AI provider error: {e}")
-        # Create system alert for AI provider error
-        try:
-            from app.services import alert_service
-            from app.db.enums import AlertType, AlertSeverity
+        from app.services import alert_service
 
-            alert_service.create_or_update_alert(
-                db=db,
-                org_id=organization_id,
-                alert_type=AlertType.AI_PROVIDER_ERROR,
-                severity=AlertSeverity.ERROR,
-                title="AI provider error",
-                message=str(e)[:500],
-                integration_key="ai_chat",
-                error_class=type(e).__name__,
-            )
-        except Exception as alert_err:
-            logger.warning(f"Failed to create AI provider alert: {alert_err}")
+        alert_service.record_alert_isolated(
+            org_id=organization_id,
+            alert_type=AlertType.AI_PROVIDER_ERROR,
+            severity=AlertSeverity.ERROR,
+            title="AI provider error",
+            message=str(e)[:500],
+            integration_key="ai_chat",
+            error_class=type(e).__name__,
+        )
         yield {"type": "error", "data": {"message": f"AI error: {str(e)}"}}
         return
 

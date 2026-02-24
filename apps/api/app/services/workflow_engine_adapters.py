@@ -345,25 +345,20 @@ class DefaultWorkflowDomainAdapter:
 
         except Exception as e:
             logger.exception(f"Action {action_type} failed: {e}")
-            # Create system alert for workflow action failure
-            try:
-                from app.services import alert_service
-                from app.db.enums import AlertSeverity, AlertType
+            from app.services import alert_service
+            from app.db.enums import AlertSeverity, AlertType
 
-                org_id = getattr(entity, "organization_id", None)
-                if org_id:
-                    alert_service.create_or_update_alert(
-                        db=db,
-                        org_id=org_id,
-                        alert_type=AlertType.WORKFLOW_EXECUTION_FAILED,
-                        severity=AlertSeverity.ERROR,
-                        title=f"Workflow action '{action_type}' failed",
-                        message=str(e)[:500],
-                        integration_key="workflow_engine",
-                        error_class=type(e).__name__,
-                    )
-            except Exception as alert_err:
-                logger.warning(f"Failed to create workflow alert: {alert_err}")
+            org_id = getattr(entity, "organization_id", None)
+            if org_id:
+                alert_service.record_alert_isolated(
+                    org_id=org_id,
+                    alert_type=AlertType.WORKFLOW_EXECUTION_FAILED,
+                    severity=AlertSeverity.ERROR,
+                    title=f"Workflow action '{action_type}' failed",
+                    message=str(e)[:500],
+                    integration_key="workflow_engine",
+                    error_class=type(e).__name__,
+                )
             return _with_action_type({"success": False, "error": str(e)})
 
     # =========================================================================

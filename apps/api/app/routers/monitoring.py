@@ -154,7 +154,7 @@ def receive_gcp_alert(
     if incident.state and incident.state.lower() == "closed":
         alert.status = AlertStatus.RESOLVED.value
         alert.resolved_at = _parse_ts(incident.ended_at) or datetime.now(timezone.utc)
-        db.commit()
+    db.commit()
 
     logger.info(
         "gcp_alert_ingested",

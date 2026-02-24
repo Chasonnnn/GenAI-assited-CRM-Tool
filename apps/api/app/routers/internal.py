@@ -118,6 +118,7 @@ def check_meta_tokens(x_internal_secret: str = Header(...)):
                     message=f"Token expired on {mapping.token_expires_at.strftime('%Y-%m-%d')}. Lead syncing is disabled.",
                     integration_key=mapping.page_id,
                 )
+                db.commit()
                 alerts_created += 1
 
             # Check if expiring soon
@@ -148,6 +149,7 @@ def check_meta_tokens(x_internal_secret: str = Header(...)):
                     message=f"Token for page {mapping.page_name or mapping.page_id} expires on {mapping.token_expires_at.strftime('%Y-%m-%d')}. Refresh to avoid disruption.",
                     integration_key=mapping.page_id,
                 )
+                db.commit()
                 alerts_created += 1
 
         # Check OAuth connection tokens for expiry
@@ -190,6 +192,7 @@ def check_meta_tokens(x_internal_secret: str = Header(...)):
                     integration_key=connection_key,
                     details={"connection_id": connection_key},
                 )
+                db.commit()
                 oauth_alerts_created += 1
 
             elif token_expires < expiry_threshold:
@@ -219,6 +222,7 @@ def check_meta_tokens(x_internal_secret: str = Header(...)):
                     integration_key=connection_key,
                     details={"connection_id": connection_key},
                 )
+                db.commit()
                 oauth_alerts_created += 1
 
     return TokenCheckResponse(

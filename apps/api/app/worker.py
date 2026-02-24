@@ -394,8 +394,7 @@ def _record_job_failure(db, job, error_msg: str, exception: Exception | None = N
             # Use actual exception class name for fingerprinting
             error_class = type(exception).__name__ if exception else "UnknownError"
 
-            alert_service.create_or_update_alert(
-                db=db,
+            alert_service.record_alert_isolated(
                 org_id=job.organization_id,
                 alert_type=alert_type,
                 severity=AlertSeverity.ERROR,

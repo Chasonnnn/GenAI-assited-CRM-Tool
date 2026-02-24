@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.async_utils import run_async
+from app.db.enums import AlertSeverity, AlertType
 from app.db.models import UserIntegration
 from app.types import JsonObject
 
@@ -517,7 +518,6 @@ def _create_token_refresh_alert(
     try:
         from app.db.models import Membership
         from app.services import alert_service
-        from app.db.enums import AlertType, AlertSeverity
 
         # Get user's org_id
         membership = (
@@ -528,8 +528,7 @@ def _create_token_refresh_alert(
         if not membership:
             return
 
-        alert_service.create_or_update_alert(
-            db=db,
+        alert_service.record_alert_isolated(
             org_id=membership.organization_id,
             alert_type=AlertType.OAUTH_TOKEN_REFRESH_FAILED,
             severity=AlertSeverity.CRITICAL,
@@ -538,5 +537,11 @@ def _create_token_refresh_alert(
             integration_key=integration_type,
             error_class="TokenRefreshError",
         )
-    except Exception as alert_err:
-        logger.warning(f"Failed to create token refresh alert: {alert_err}")
+    except Exception:
+        logger.exception(
+            "Failed to prepare token refresh alert",
+            extra={
+                "user_id": str(user_id),
+                "integration_type": integration_type,
+            },
+        )

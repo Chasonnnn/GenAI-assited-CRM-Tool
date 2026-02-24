@@ -5,14 +5,20 @@ Manages deduplicated, actionable alerts with fingerprinting.
 """
 
 import hashlib
+import logging
 from datetime import datetime, timezone, timedelta
 from uuid import UUID
 
-from sqlalchemy import text
+from sqlalchemy import case, text
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.db.models import SystemAlert
 from app.db.enums import AlertType, AlertSeverity, AlertStatus
+from app.db.session import SessionLocal
+
+
+logger = logging.getLogger(__name__)
 
 
 def fingerprint(
@@ -47,57 +53,123 @@ def create_or_update_alert(
 
     Updates: last_seen_at, occurrence_count, message, details
     Reopens resolved/snoozed alerts if they recur.
+
+    Transaction-bound: caller controls commit/rollback.
     """
     dedupe_key = fingerprint(alert_type, integration_key, error_class, http_status)
     now = datetime.now(timezone.utc)
 
-    # Try to find existing alert
-    existing = (
-        db.query(SystemAlert)
-        .filter(
-            SystemAlert.organization_id == org_id,
-            SystemAlert.dedupe_key == dedupe_key,
+    reopen_condition = (
+        (SystemAlert.status == AlertStatus.RESOLVED.value)
+        | (
+            (SystemAlert.status == AlertStatus.SNOOZED.value)
+            & SystemAlert.snoozed_until.is_not(None)
+            & (SystemAlert.snoozed_until < now)
         )
-        .first()
     )
 
-    if existing:
-        # Update existing alert
-        existing.last_seen_at = now
-        existing.occurrence_count += 1
-        existing.message = message
-        if details:
-            existing.details = details
+    update_values: dict[str, object] = {
+        "last_seen_at": now,
+        "occurrence_count": SystemAlert.occurrence_count + 1,
+        "message": message,
+        "status": case(
+            (reopen_condition, AlertStatus.OPEN.value),
+            else_=SystemAlert.status,
+        ),
+        "snoozed_until": case(
+            (reopen_condition, None),
+            else_=SystemAlert.snoozed_until,
+        ),
+        "resolved_at": case(
+            (reopen_condition, None),
+            else_=SystemAlert.resolved_at,
+        ),
+        "resolved_by_user_id": case(
+            (reopen_condition, None),
+            else_=SystemAlert.resolved_by_user_id,
+        ),
+    }
+    if details is not None:
+        update_values["details"] = details
 
-        # Reopen if resolved/snoozed and recurring
-        if existing.status in (AlertStatus.RESOLVED.value, AlertStatus.SNOOZED.value):
-            # Check if snooze expired
-            if existing.snoozed_until and now > existing.snoozed_until:
-                existing.status = AlertStatus.OPEN.value
-                existing.snoozed_until = None
-            elif existing.status == AlertStatus.RESOLVED.value:
-                existing.status = AlertStatus.OPEN.value
-
-        db.commit()
-        db.refresh(existing)
-        return existing
-
-    # Create new alert
-    alert = SystemAlert(
-        organization_id=org_id,
-        dedupe_key=dedupe_key,
-        integration_key=integration_key,
-        alert_type=alert_type.value,
-        severity=severity.value,
-        status=AlertStatus.OPEN.value,
-        title=title[:255],
-        message=message,
-        details=details,
+    stmt = (
+        insert(SystemAlert)
+        .values(
+            organization_id=org_id,
+            dedupe_key=dedupe_key,
+            integration_key=integration_key,
+            alert_type=alert_type.value,
+            severity=severity.value,
+            status=AlertStatus.OPEN.value,
+            first_seen_at=now,
+            last_seen_at=now,
+            occurrence_count=1,
+            title=title[:255],
+            message=message,
+            details=details,
+        )
+        .on_conflict_do_update(
+            constraint="uq_system_alerts_dedupe",
+            set_=update_values,
+        )
+        .returning(SystemAlert.id)
     )
-    db.add(alert)
-    db.commit()
-    db.refresh(alert)
+
+    alert_id = db.execute(stmt).scalar_one()
+    alert = db.get(SystemAlert, alert_id)
+    if alert is None:  # pragma: no cover - defensive guard
+        raise RuntimeError("Failed to load upserted alert")
     return alert
+
+
+def record_alert_isolated(
+    *,
+    org_id: UUID,
+    alert_type: AlertType,
+    severity: AlertSeverity,
+    title: str,
+    message: str | None = None,
+    integration_key: str | None = None,
+    error_class: str | None = None,
+    http_status: int | None = None,
+    details: dict | None = None,
+) -> SystemAlert | None:
+    """
+    Persist a system alert in an isolated DB session.
+
+    Use this from exception/failure paths where the parent transaction might roll back.
+    """
+    db = SessionLocal()
+    try:
+        alert = create_or_update_alert(
+            db=db,
+            org_id=org_id,
+            alert_type=alert_type,
+            severity=severity,
+            title=title,
+            message=message,
+            integration_key=integration_key,
+            error_class=error_class,
+            http_status=http_status,
+            details=details,
+        )
+        db.commit()
+        return alert
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Failed to persist system alert",
+            extra={
+                "org_id": str(org_id),
+                "alert_type": alert_type.value,
+                "integration_key": integration_key,
+                "error_class": error_class,
+                "http_status": http_status,
+            },
+        )
+        return None
+    finally:
+        db.close()
 
 
 def list_alerts(

@@ -20,6 +20,7 @@ from app.db.models import (
     Pipeline,
     PipelineStage,
 )
+from app.db.enums import AlertSeverity, AlertType
 from app.services import ai_settings_service, workflow_service
 from app.services.ai_prompt_registry import get_prompt
 from app.services.ai_response_validation import parse_json_object, validate_model
@@ -33,22 +34,17 @@ def _create_workflow_generation_alert(
     db: Session, org_id: UUID, error_msg: str, error_class: str
 ) -> None:
     """Create system alert for workflow generation failure."""
-    try:
-        from app.services import alert_service
-        from app.db.enums import AlertType, AlertSeverity
+    from app.services import alert_service
 
-        alert_service.create_or_update_alert(
-            db=db,
-            org_id=org_id,
-            alert_type=AlertType.AI_PROVIDER_ERROR,
-            severity=AlertSeverity.ERROR,
-            title="AI workflow generation failed",
-            message=error_msg[:500],
-            integration_key="ai_workflow",
-            error_class=error_class,
-        )
-    except Exception as alert_err:
-        logger.warning(f"Failed to create workflow generation alert: {alert_err}")
+    alert_service.record_alert_isolated(
+        org_id=org_id,
+        alert_type=AlertType.AI_PROVIDER_ERROR,
+        severity=AlertSeverity.ERROR,
+        title="AI workflow generation failed",
+        message=error_msg[:500],
+        integration_key="ai_workflow",
+        error_class=error_class,
+    )
 
 
 # =============================================================================

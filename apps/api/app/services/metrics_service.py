@@ -4,6 +4,7 @@ Request metrics service.
 Records API request metrics using DB upserts for multi-replica safety.
 """
 
+import logging
 from datetime import datetime, timezone, timedelta
 from uuid import UUID
 
@@ -12,6 +13,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert
 
 from app.db.models import RequestMetricsRollup
+
+logger = logging.getLogger(__name__)
 
 
 def get_minute_bucket(dt: datetime | None = None) -> datetime:
@@ -80,9 +83,10 @@ def record_request(
     try:
         db.execute(stmt)
         db.commit()
-    except Exception:
+    except Exception as exc:
         # Best effort - don't fail requests on metrics errors
         db.rollback()
+        logger.warning("Failed to record request metrics: %s", exc)
 
 
 def get_request_metrics(

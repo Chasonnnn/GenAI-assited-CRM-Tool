@@ -148,24 +148,17 @@ def _record_api_error_alert(
     if request_id:
         details["request_id"] = request_id
 
-    db = SessionLocal()
-    try:
-        alert_service.create_or_update_alert(
-            db=db,
-            org_id=org_id,
-            alert_type=AlertType.API_ERROR,
-            severity=AlertSeverity.ERROR,
-            title=f"API error {status_code}: {request.method} {route_path}",
-            message="Unhandled server error",
-            integration_key=route_path,
-            error_class=error_class,
-            http_status=status_code,
-            details=details,
-        )
-    except Exception:
-        logging.exception("Failed to record system alert for API error")
-    finally:
-        db.close()
+    alert_service.record_alert_isolated(
+        org_id=org_id,
+        alert_type=AlertType.API_ERROR,
+        severity=AlertSeverity.ERROR,
+        title=f"API error {status_code}: {request.method} {route_path}",
+        message="Unhandled server error",
+        integration_key=route_path,
+        error_class=error_class,
+        http_status=status_code,
+        details=details,
+    )
 
 
 # ============================================================================
@@ -238,6 +231,16 @@ async def gcp_error_reporting_middleware(request, call_next):
     try:
         response = await call_next(request)
         if response.status_code >= 500:
+            session = getattr(request.state, "user_session", None)
+            context = build_log_context(
+                user_id=str(session.user_id) if session else None,
+                org_id=str(session.org_id) if session else None,
+                request_id=request.headers.get("x-request-id"),
+                route=request.url.path,
+                method=request.method,
+            )
+            context["status_code"] = response.status_code
+            logging.error("HTTP 5xx response", extra=context)
             _record_api_error_alert(
                 request,
                 response.status_code,
