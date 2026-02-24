@@ -75,7 +75,16 @@ describe("Ops agencies data loading", () => {
 
         const searchInput = screen.getByPlaceholderText("Search by name or slug...")
         fireEvent.change(searchInput, { target: { value: "a" } })
+
+        // Wait for debounce
+        await new Promise((resolve) => setTimeout(resolve, 600))
+
+        await waitFor(() => expect(requests.length).toBe(2))
+
         fireEvent.change(searchInput, { target: { value: "ab" } })
+
+        // Wait for debounce
+        await new Promise((resolve) => setTimeout(resolve, 600))
 
         await waitFor(() => expect(requests.length).toBe(3))
 

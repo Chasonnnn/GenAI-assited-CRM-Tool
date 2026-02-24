@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select';
 import { Building2, Plus, Search, ChevronRight, Loader2, Users } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { useDebouncedValue } from '@/lib/hooks/use-debounced-value';
 
 const STATUS_BADGE_VARIANTS: Record<string, string> = {
     active: 'bg-green-500/10 text-green-600 border-green-500/20',
@@ -44,6 +45,8 @@ export default function AgenciesPage() {
     const [total, setTotal] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
     const [search, setSearch] = useState('');
+    // ⚡ Bolt: Debounce search to reduce API calls (500ms delay)
+    const debouncedSearch = useDebouncedValue(search, 500);
     const [statusFilter, setStatusFilter] = useState<string>('');
 
     useEffect(() => {
@@ -53,7 +56,7 @@ export default function AgenciesPage() {
             setIsLoading(true);
             try {
                 const data = await listOrganizations({
-                    ...(search ? { search } : {}),
+                    ...(debouncedSearch ? { search: debouncedSearch } : {}),
                     ...(statusFilter ? { status: statusFilter } : {}),
                 });
                 if (!isCurrent) return;
@@ -74,7 +77,7 @@ export default function AgenciesPage() {
         return () => {
             isCurrent = false;
         };
-    }, [search, statusFilter]);
+    }, [debouncedSearch, statusFilter]);
 
     return (
         <div className="p-6 space-y-6">
