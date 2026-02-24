@@ -30,13 +30,17 @@ import { getNotificationHref } from "@/lib/utils/notification-routing"
 
 export function NotificationBell() {
     const router = useRouter()
-    const { data: countData, isLoading: isCountLoading } = useUnreadCount()
-    const { data: notificationsData, isLoading: isNotificationsLoading } = useNotifications({ limit: 10 })
-    const markRead = useMarkRead()
-    const markAllRead = useMarkAllRead()
 
     // Real-time WebSocket connection
-    const { lastNotification, unreadCount: wsUnreadCount } = useNotificationSocket()
+    const { isConnected, lastNotification, unreadCount: wsUnreadCount } = useNotificationSocket()
+
+    const { data: countData, isLoading: isCountLoading } = useUnreadCount()
+    const { data: notificationsData, isLoading: isNotificationsLoading } = useNotifications({
+        limit: 10,
+        refetch_interval_ms: isConnected ? false : 30_000,
+    })
+    const markRead = useMarkRead()
+    const markAllRead = useMarkAllRead()
 
     // Browser notifications
     const { permission, showNotification } = useBrowserNotifications()
@@ -65,7 +69,7 @@ export function NotificationBell() {
     }, [lastNotification, permission, showNotification])
 
     // Prefer WebSocket count when connected, fall back to polling
-    const unreadCount = wsUnreadCount ?? countData?.count ?? 0
+    const unreadCount = isConnected && wsUnreadCount !== null ? wsUnreadCount : (countData?.count ?? 0)
     const notifications = notificationsData?.items ?? []
     const triggerLabel =
         unreadCount > 0

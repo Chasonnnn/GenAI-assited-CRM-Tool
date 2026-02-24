@@ -21,6 +21,7 @@ import {
     ChevronUpIcon,
 } from "lucide-react"
 import { useNotifications, useMarkRead, useMarkAllRead } from "@/lib/hooks/use-notifications"
+import { useNotificationSocket } from "@/lib/hooks/use-notification-socket"
 import { useTasks } from "@/lib/hooks/use-tasks"
 import type { Notification } from "@/lib/api/notifications"
 import { getNotificationHref } from "@/lib/utils/notification-routing"
@@ -43,6 +44,8 @@ const TYPE_GROUPS: Record<string, string[]> = {
         "task_assigned",
         "task_due_soon",
         "task_overdue",
+        "workflow_approval_expired",
+        "workflow_notification",
         "workflow_approval_requested",
         "status_change_requested",
         "status_change_approved",
@@ -58,7 +61,7 @@ function getNotificationIcon(type: string) {
     if (type.startsWith("attachment")) return FileTextIcon
     if (
         type.startsWith("task") ||
-        type.startsWith("workflow_approval") ||
+        type.startsWith("workflow_") ||
         type.startsWith("status_change_")
     ) {
         return CheckSquareIcon
@@ -71,12 +74,14 @@ export default function NotificationsPage() {
     const router = useRouter()
     const [typeFilter, setTypeFilter] = useState("all")
     const [isOverdueOpen, setIsOverdueOpen] = useState(true)
+    const { isConnected } = useNotificationSocket()
 
     // Get notification types for filter
     const notificationTypes = typeFilter !== "all" ? TYPE_GROUPS[typeFilter] : undefined
 
     const { data: notificationsData, isLoading, isError: notificationsError } = useNotifications({
         limit: 50,
+        refetch_interval_ms: isConnected ? false : 30_000,
         ...(notificationTypes ? { notification_types: notificationTypes } : {}),
     })
     const markRead = useMarkRead()

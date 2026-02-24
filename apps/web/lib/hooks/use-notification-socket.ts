@@ -110,6 +110,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
 
             ws.onclose = () => {
                 setIsConnected(false)
+                setUnreadCount(null)
                 if (pingInterval.current) {
                     clearInterval(pingInterval.current)
                     pingInterval.current = null

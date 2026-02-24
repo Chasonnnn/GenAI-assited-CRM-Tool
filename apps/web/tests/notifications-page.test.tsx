@@ -12,6 +12,7 @@ const mockUseNotifications = vi.fn()
 const mockMarkRead = vi.fn()
 const mockMarkAllRead = vi.fn()
 const mockUseTasks = vi.fn()
+const mockUseNotificationSocket = vi.fn()
 
 vi.mock('@/lib/hooks/use-notifications', () => ({
     useNotifications: (params: unknown) => mockUseNotifications(params),
@@ -23,8 +24,17 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
     useTasks: (params: unknown) => mockUseTasks(params),
 }))
 
+vi.mock('@/lib/hooks/use-notification-socket', () => ({
+    useNotificationSocket: () => mockUseNotificationSocket(),
+}))
+
 describe('NotificationsPage', () => {
     beforeEach(() => {
+        mockUseNotificationSocket.mockReturnValue({
+            isConnected: false,
+            lastNotification: null,
+            unreadCount: null,
+        })
         mockUseNotifications.mockReturnValue({
             data: {
                 unread_count: 2,
@@ -117,6 +127,20 @@ describe('NotificationsPage', () => {
         // Initial call should have no filter
         expect(mockUseNotifications).toHaveBeenCalledWith(
             expect.objectContaining({ limit: 50 })
+        )
+    })
+
+    it("enables polling fallback when websocket is disconnected", () => {
+        mockUseNotificationSocket.mockReturnValue({
+            isConnected: false,
+            lastNotification: null,
+            unreadCount: null,
+        })
+
+        render(<NotificationsPage />)
+
+        expect(mockUseNotifications).toHaveBeenCalledWith(
+            expect.objectContaining({ limit: 50, refetch_interval_ms: 30_000 })
         )
     })
 

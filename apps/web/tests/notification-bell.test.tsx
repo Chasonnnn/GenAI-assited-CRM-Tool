@@ -65,6 +65,7 @@ describe("NotificationBell", () => {
         mockMarkReadMutate.mockReset()
         mockMarkAllReadMutate.mockReset()
         mockUseNotificationSocket.mockReturnValue({
+            isConnected: false,
             lastNotification: null,
             unreadCount: null,
         })
@@ -126,5 +127,18 @@ describe("NotificationBell", () => {
         render(<NotificationBell />)
 
         expect(screen.getByText("Unread")).toBeInTheDocument()
+    })
+
+    it("falls back to polling unread count when websocket is disconnected", () => {
+        mockUseUnreadCount.mockReturnValue({ data: { count: 3 }, isLoading: false })
+        mockUseNotificationSocket.mockReturnValue({
+            isConnected: false,
+            lastNotification: null,
+            unreadCount: 99,
+        })
+
+        render(<NotificationBell />)
+
+        expect(screen.getByRole("button", { name: "Notifications (3 unread)" })).toBeInTheDocument()
     })
 })

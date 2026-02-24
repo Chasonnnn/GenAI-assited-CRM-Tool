@@ -14,10 +14,17 @@ import {
     type NotificationSettings,
 } from '../api/notifications'
 
+type NotificationListQueryOptions = {
+    unread_only?: boolean
+    limit?: number
+    notification_types?: string[]
+    refetch_interval_ms?: number | false
+}
+
 // Query keys
 export const notificationKeys = {
     all: ['notifications'] as const,
-    list: (options?: { unread_only?: boolean }) =>
+    list: (options?: NotificationListQueryOptions) =>
         [...notificationKeys.all, 'list', options] as const,
     count: () => [...notificationKeys.all, 'count'] as const,
     settings: () => [...notificationKeys.all, 'settings'] as const,
@@ -25,11 +32,14 @@ export const notificationKeys = {
 
 // Hooks
 
-export function useNotifications(options?: { unread_only?: boolean; limit?: number; notification_types?: string[] }) {
+export function useNotifications(options?: NotificationListQueryOptions) {
+    const { refetch_interval_ms = false, ...apiOptions } = options ?? {}
+
     return useQuery<NotificationListResponse>({
         queryKey: notificationKeys.list(options),
-        queryFn: () => getNotifications(options),
+        queryFn: () => getNotifications(apiOptions),
         staleTime: 30 * 1000, // 30 seconds
+        refetchInterval: refetch_interval_ms,
     })
 }
 
