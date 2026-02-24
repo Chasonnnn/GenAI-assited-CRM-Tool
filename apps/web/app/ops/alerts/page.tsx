@@ -40,13 +40,13 @@ const SEVERITY_CONFIG: Record<string, SeverityConfig> = {
         color: 'border-yellow-200 bg-yellow-50 dark:border-yellow-900/50 dark:bg-yellow-950/30',
         badge: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
     },
-    info: DEFAULT_SEVERITY_CONFIG,
 };
 
 const STATUS_BADGE: Record<string, string> = {
     open: 'bg-red-500/10 text-red-600 border-red-500/20',
     acknowledged: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
     resolved: 'bg-green-500/10 text-green-600 border-green-500/20',
+    snoozed: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
 };
 
 export default function GlobalAlertsPage() {
@@ -143,6 +143,7 @@ export default function GlobalAlertsPage() {
                         <SelectItem value="open">Open</SelectItem>
                         <SelectItem value="acknowledged">Acknowledged</SelectItem>
                         <SelectItem value="resolved">Resolved</SelectItem>
+                        <SelectItem value="snoozed">Snoozed</SelectItem>
                     </SelectContent>
                 </Select>
 
@@ -155,7 +156,6 @@ export default function GlobalAlertsPage() {
                         <SelectItem value="critical">Critical</SelectItem>
                         <SelectItem value="error">Error</SelectItem>
                         <SelectItem value="warn">Warning</SelectItem>
-                        <SelectItem value="info">Info</SelectItem>
                     </SelectContent>
                 </Select>
             </div>

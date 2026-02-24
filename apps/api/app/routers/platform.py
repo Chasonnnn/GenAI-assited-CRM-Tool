@@ -9,6 +9,7 @@ import logging
 import mimetypes
 import os
 import uuid as uuid_lib
+from typing import Literal
 from uuid import UUID
 
 from fastapi import (
@@ -1582,9 +1583,11 @@ def get_org_admin_actions(
 
 @router.get("/alerts")
 def list_alerts(
-    status: str | None = Query(None, description="Filter by status (open, acknowledged, resolved)"),
-    severity: str | None = Query(
-        None, description="Filter by severity (critical, error, warn, info)"
+    status: Literal["open", "acknowledged", "resolved", "snoozed"] | None = Query(
+        None, description="Filter by status (open, acknowledged, resolved, snoozed)"
+    ),
+    severity: Literal["critical", "error", "warn"] | None = Query(
+        None, description="Filter by severity (critical, error, warn)"
     ),
     org_id: UUID | None = Query(None, description="Filter by organization"),
     limit: int = Query(50, ge=1, le=200),

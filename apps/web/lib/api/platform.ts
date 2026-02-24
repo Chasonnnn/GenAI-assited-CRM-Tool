@@ -206,8 +206,8 @@ export interface PlatformAlert {
     organization_id: string;
     org_name: string;
     alert_type: string;
-    severity: 'critical' | 'error' | 'warn' | 'info';
-    status: 'open' | 'acknowledged' | 'resolved';
+    severity: 'critical' | 'error' | 'warn';
+    status: 'open' | 'acknowledged' | 'resolved' | 'snoozed';
     title: string;
     message?: string | undefined;
     occurrence_count: number;
