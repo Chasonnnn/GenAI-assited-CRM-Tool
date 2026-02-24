@@ -147,6 +147,12 @@ export default function PlatformEmailTemplatePage() {
                     return "https://app.surrogacyforce.com/apply/EXAMPLE_TOKEN"
                 case "appointment_link":
                     return "https://app.surrogacyforce.com/book/EXAMPLE_APPOINTMENT_SLUG"
+                case "appointment_manage_url":
+                    return "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/manage/EXAMPLE_TOKEN"
+                case "appointment_reschedule_url":
+                    return "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/reschedule/EXAMPLE_TOKEN"
+                case "appointment_cancel_url":
+                    return "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/cancel/EXAMPLE_TOKEN"
                 case "appointment_date":
                     return "2026-01-01"
                 case "appointment_time":

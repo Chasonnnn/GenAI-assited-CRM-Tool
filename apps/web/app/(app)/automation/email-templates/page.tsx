@@ -703,6 +703,12 @@ export default function EmailTemplatesPage() {
                     return "https://app.surrogacyforce.com/apply/EXAMPLE_TOKEN"
                 case "appointment_link":
                     return "https://app.surrogacyforce.com/book/EXAMPLE_APPOINTMENT_SLUG"
+                case "appointment_manage_url":
+                    return "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/manage/EXAMPLE_TOKEN"
+                case "appointment_reschedule_url":
+                    return "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/reschedule/EXAMPLE_TOKEN"
+                case "appointment_cancel_url":
+                    return "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/cancel/EXAMPLE_TOKEN"
                 case "appointment_date":
                     return "2026-01-01"
                 case "appointment_time":
@@ -1024,6 +1030,18 @@ export default function EmailTemplatesPage() {
                 .replace(/\{\{owner_name\}\}/g, "Sara Manager")
                 .replace(/\{\{form_link\}\}/g, "https://app.surrogacyforce.com/apply/EXAMPLE_TOKEN")
                 .replace(/\{\{appointment_link\}\}/g, "https://app.surrogacyforce.com/book/EXAMPLE_APPOINTMENT_SLUG")
+                .replace(
+                    /\{\{appointment_manage_url\}\}/g,
+                    "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/manage/EXAMPLE_TOKEN"
+                )
+                .replace(
+                    /\{\{appointment_reschedule_url\}\}/g,
+                    "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/reschedule/EXAMPLE_TOKEN"
+                )
+                .replace(
+                    /\{\{appointment_cancel_url\}\}/g,
+                    "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/cancel/EXAMPLE_TOKEN"
+                )
                 .replace(/\{\{org_name\}\}/g, signatureData?.org_signature_company_name || "ABC Surrogacy")
                 .replace(/\{\{appointment_date\}\}/g, "January 15, 2025")
                 .replace(/\{\{appointment_time\}\}/g, "2:00 PM PST")
