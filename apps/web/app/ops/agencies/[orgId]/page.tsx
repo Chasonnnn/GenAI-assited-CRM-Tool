@@ -31,6 +31,7 @@ import {
     type PlatformAlert,
     type PlatformEmailStatus,
 } from '@/lib/api/platform';
+import { getErrorMessage } from '@/lib/error-utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -49,13 +50,6 @@ import {
 } from '@/components/ops/agencies/agency-constants';
 import { ChevronRight, Globe, Copy, Loader2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-
-const resolveErrorMessage = (error: unknown, fallback: string) => {
-    if (error instanceof Error && error.message) {
-        return error.message;
-    }
-    return fallback;
-};
 
 
 function CopyButton({ value, label }: { value: string; label: string }) {
@@ -221,7 +215,7 @@ export default function AgencyDetailPage() {
             toast.success('Organization scheduled for deletion');
         } catch (error) {
             console.error('Failed to delete organization:', error);
-            toast.error(resolveErrorMessage(error, 'Failed to delete organization'));
+            toast.error(getErrorMessage(error, 'Failed to delete organization'));
         } finally {
             setDeleteSubmitting(false);
         }
@@ -236,7 +230,7 @@ export default function AgencyDetailPage() {
             toast.success('Organization restored');
         } catch (error) {
             console.error('Failed to restore organization:', error);
-            toast.error(resolveErrorMessage(error, 'Failed to restore organization'));
+            toast.error(getErrorMessage(error, 'Failed to restore organization'));
         } finally {
             setRestoreSubmitting(false);
         }
@@ -255,7 +249,7 @@ export default function AgencyDetailPage() {
             router.push('/ops/agencies');
         } catch (error) {
             console.error('Failed to purge organization:', error);
-            toast.error(resolveErrorMessage(error, 'Failed to delete organization'));
+            toast.error(getErrorMessage(error, 'Failed to delete organization'));
         } finally {
             setPurgeSubmitting(false);
         }
@@ -268,8 +262,9 @@ export default function AgencyDetailPage() {
             setSubscription(updated);
             setNotesDraft(updated.notes ?? '');
             toast.success('Subscription extended by 30 days');
-        } catch {
-            toast.error('Failed to extend subscription');
+        } catch (error) {
+            console.error('Failed to extend subscription:', error);
+            toast.error(getErrorMessage(error, 'Failed to extend subscription'));
         }
     };
 
@@ -280,7 +275,7 @@ export default function AgencyDetailPage() {
             toast.success(`MFA reset for ${member.email}`);
         } catch (error) {
             console.error('Failed to reset MFA:', error);
-            toast.error('Failed to reset MFA');
+            toast.error(getErrorMessage(error, 'Failed to reset MFA'));
         } finally {
             setMfaResetting(null);
         }
@@ -293,8 +288,9 @@ export default function AgencyDetailPage() {
             setSubscription(updated);
             setNotesDraft(updated.notes ?? '');
             toast.success(`Auto-renew ${value ? 'enabled' : 'disabled'}`);
-        } catch {
-            toast.error('Failed to update auto-renew setting');
+        } catch (error) {
+            console.error('Failed to update auto-renew setting:', error);
+            toast.error(getErrorMessage(error, 'Failed to update auto-renew setting'));
         }
     };
 
@@ -306,8 +302,9 @@ export default function AgencyDetailPage() {
             setSubscription(updated);
             setNotesDraft(updated.notes ?? '');
             toast.success('Subscription notes updated');
-        } catch {
-            toast.error('Failed to update subscription notes');
+        } catch (error) {
+            console.error('Failed to update subscription notes:', error);
+            toast.error(getErrorMessage(error, 'Failed to update subscription notes'));
         } finally {
             setNotesSaving(false);
         }
@@ -320,8 +317,9 @@ export default function AgencyDetailPage() {
                 prev.map((m) => (m.id === memberId ? { ...m, is_active: false } : m))
             );
             toast.success('Member deactivated');
-        } catch {
-            toast.error('Failed to deactivate member');
+        } catch (error) {
+            console.error('Failed to deactivate member:', error);
+            toast.error(getErrorMessage(error, 'Failed to deactivate member'));
         }
     };
 
@@ -332,8 +330,9 @@ export default function AgencyDetailPage() {
                 prev.map((i) => (i.id === inviteId ? { ...i, status: 'revoked' } : i))
             );
             toast.success('Invite revoked');
-        } catch {
-            toast.error('Failed to revoke invite');
+        } catch (error) {
+            console.error('Failed to revoke invite:', error);
+            toast.error(getErrorMessage(error, 'Failed to revoke invite'));
         }
     };
 
@@ -346,7 +345,7 @@ export default function AgencyDetailPage() {
             toast.success('Invite resent');
         } catch (error) {
             console.error('Failed to resend invite:', error);
-            toast.error(resolveErrorMessage(error, 'Failed to resend invite'));
+            toast.error(getErrorMessage(error, 'Failed to resend invite'));
         } finally {
             setInviteResending(null);
         }
@@ -369,7 +368,7 @@ export default function AgencyDetailPage() {
             setInviteForm({ email: '', role: INVITE_ROLE_OPTIONS[0] });
             toast.success('Invite created');
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Failed to create invite';
+            const message = getErrorMessage(error, 'Failed to create invite');
             setInviteError(message);
         } finally {
             setInviteSubmitting(false);
@@ -386,8 +385,9 @@ export default function AgencyDetailPage() {
                 )
             );
             toast.success('Alert acknowledged');
-        } catch {
-            toast.error('Failed to acknowledge alert');
+        } catch (error) {
+            console.error('Failed to acknowledge alert:', error);
+            toast.error(getErrorMessage(error, 'Failed to acknowledge alert'));
         } finally {
             setAlertsUpdating(null);
         }
@@ -405,8 +405,9 @@ export default function AgencyDetailPage() {
                 )
             );
             toast.success('Alert resolved');
-        } catch {
-            toast.error('Failed to resolve alert');
+        } catch (error) {
+            console.error('Failed to resolve alert:', error);
+            toast.error(getErrorMessage(error, 'Failed to resolve alert'));
         } finally {
             setAlertsUpdating(null);
         }

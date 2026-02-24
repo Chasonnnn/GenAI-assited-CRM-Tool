@@ -3,7 +3,9 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import * as opsApi from '../api/ops';
+import { getErrorMessage } from '../error-utils';
 import type { AlertsListParams } from '../api/ops';
 
 // Query keys
@@ -60,6 +62,9 @@ export function useResolveAlert() {
             queryClient.invalidateQueries({ queryKey: [...opsKeys.all, 'alerts'] });
             queryClient.invalidateQueries({ queryKey: opsKeys.alertsSummary() });
         },
+        onError: (error) => {
+            toast.error(getErrorMessage(error, 'Failed to resolve alert'));
+        },
     });
 }
 
@@ -77,6 +82,9 @@ export function useAcknowledgeAlert() {
             // Acknowledge changes status, affecting summary counts
             queryClient.invalidateQueries({ queryKey: opsKeys.alertsSummary() });
         },
+        onError: (error) => {
+            toast.error(getErrorMessage(error, 'Failed to acknowledge alert'));
+        },
     });
 }
 
@@ -93,6 +101,9 @@ export function useSnoozeAlert() {
             // Use prefix matching to invalidate all alert queries regardless of params
             queryClient.invalidateQueries({ queryKey: [...opsKeys.all, 'alerts'] });
             queryClient.invalidateQueries({ queryKey: opsKeys.alertsSummary() });
+        },
+        onError: (error) => {
+            toast.error(getErrorMessage(error, 'Failed to snooze alert'));
         },
     });
 }
