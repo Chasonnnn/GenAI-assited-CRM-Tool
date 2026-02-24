@@ -294,6 +294,7 @@ def download_audit_export(
         user_id=session.user_id,
         export_job_id=job.id,
     )
+    db.commit()
 
     if settings.EXPORT_STORAGE_BACKEND == "s3":
         url = compliance_service.generate_s3_download_url(job.file_path)

@@ -452,6 +452,7 @@ async def google_calendar_callback(
             },
             request=request,
         )
+        db.commit()
 
         success = RedirectResponse(
             f"{base_url}/settings/integrations?success=google_calendar",
@@ -716,6 +717,7 @@ async def gcp_callback(
             },
             request=request,
         )
+        db.commit()
 
         success = RedirectResponse(
             f"{base_url}/settings/integrations?success=gcp",

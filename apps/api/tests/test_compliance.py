@@ -23,6 +23,10 @@ from app.utils.pagination import PaginationParams
 from app.utils.normalization import normalize_email
 
 
+def _pending_audit_logs(db) -> list[AuditLog]:
+    return [obj for obj in db.new if isinstance(obj, AuditLog)]
+
+
 def _create_audit_log(db, org_id, user_id, **overrides):
     log = AuditLog(
         organization_id=org_id,
@@ -456,3 +460,84 @@ def test_rate_limit_exceeded(db, test_org, test_user, export_settings):
             redact_mode="redacted",
             acknowledgment=None,
         )
+
+
+def test_create_export_job_commits_audit_log(db, test_org, test_user, export_settings):
+    start_date = datetime.now(timezone.utc) - timedelta(days=1)
+    end_date = datetime.now(timezone.utc) + timedelta(days=1)
+
+    compliance_service.create_export_job(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        export_type="audit",
+        start_date=start_date,
+        end_date=end_date,
+        file_format="csv",
+        redact_mode="redacted",
+        acknowledgment=None,
+    )
+
+    assert _pending_audit_logs(db) == []
+
+
+def test_upsert_retention_policy_commits_audit_log(db, test_org, test_user):
+    compliance_service.upsert_retention_policy(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        entity_type="tasks",
+        retention_days=30,
+        is_active=True,
+    )
+
+    assert _pending_audit_logs(db) == []
+
+
+def test_create_legal_hold_commits_audit_log(db, test_org, test_user):
+    compliance_service.create_legal_hold(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        entity_type=None,
+        entity_id=None,
+        reason="test hold",
+    )
+
+    assert _pending_audit_logs(db) == []
+
+
+def test_release_legal_hold_commits_audit_log(db, test_org, test_user):
+    from app.db.models import LegalHold
+
+    hold = LegalHold(
+        organization_id=test_org.id,
+        entity_type=None,
+        entity_id=None,
+        reason="manual hold",
+        created_by_user_id=test_user.id,
+    )
+    db.add(hold)
+    db.commit()
+    db.refresh(hold)
+
+    released = compliance_service.release_legal_hold(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        hold_id=hold.id,
+    )
+    assert released is not None
+
+    assert _pending_audit_logs(db) == []
+
+
+def test_execute_purge_commits_audit_log(db, test_org, test_user):
+    results = compliance_service.execute_purge(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+    )
+
+    assert results == []
+    assert _pending_audit_logs(db) == []

@@ -430,6 +430,7 @@ def create_export_job(
         redact_mode=redact_mode,
         file_format=file_format,
     )
+    db.commit()
 
     return job
 
@@ -667,6 +668,7 @@ def upsert_retention_policy(
         retention_days=retention_days,
         is_active=is_active,
     )
+    db.commit()
     return policy
 
 
@@ -711,6 +713,7 @@ def create_legal_hold(
         entity_id=entity_id,
         reason=reason,
     )
+    db.commit()
     return hold
 
 
@@ -744,6 +747,7 @@ def release_legal_hold(
         entity_type=hold.entity_type,
         entity_id=hold.entity_id,
     )
+    db.commit()
     return hold
 
 
@@ -1081,4 +1085,5 @@ def execute_purge(db: Session, org_id: UUID, user_id: UUID | None) -> list[Purge
         user_id=user_id,
         results=results,
     )
+    db.commit()
     return results

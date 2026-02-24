@@ -10,6 +10,8 @@ from zoneinfo import ZoneInfo
 import pytest
 from httpx import AsyncClient
 
+from app.db.enums import AuditEventType
+from app.db.models import AuditLog
 from app.core.encryption import hash_email
 from app.utils.normalization import normalize_email
 
@@ -260,6 +262,19 @@ async def test_google_calendar_callback_happy_path_saves_integration(
     assert watch_calls == [test_auth.user.id]
     assert appointment_sync_calls == [(test_auth.user.id, test_auth.org.id)]
     assert task_sync_calls == [(test_auth.user.id, test_auth.org.id)]
+
+    audit = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.organization_id == test_auth.org.id,
+            AuditLog.event_type == AuditEventType.INTEGRATION_CONNECTED.value,
+            AuditLog.actor_user_id == test_auth.user.id,
+            AuditLog.details["integration_type"].astext == "google_calendar",
+        )
+        .order_by(AuditLog.created_at.desc())
+        .first()
+    )
+    assert audit is not None
 
 
 @pytest.mark.asyncio
@@ -1093,6 +1108,19 @@ async def test_gcp_callback_happy_path_saves_integration(
     )
     assert integration is not None
     assert integration.account_email == "gcpuser@test.com"
+
+    audit = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.organization_id == test_auth.org.id,
+            AuditLog.event_type == AuditEventType.INTEGRATION_CONNECTED.value,
+            AuditLog.actor_user_id == test_auth.user.id,
+            AuditLog.details["integration_type"].astext == "gcp",
+        )
+        .order_by(AuditLog.created_at.desc())
+        .first()
+    )
+    assert audit is not None
 
 
 @pytest.mark.asyncio
