@@ -28,11 +28,25 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { toast } from "sonner"
 import { exportSurrogatePacketPdf } from "@/lib/api/surrogates"
+import { DEFAULT_STAGE_ORDER } from "@/lib/constants/stages.generated"
 import {
     useSurrogateDetailActions,
     useSurrogateDetailData,
     useSurrogateDetailDialogs,
 } from "./context"
+
+const STAGE_INDEX_BY_SLUG = new Map(
+    DEFAULT_STAGE_ORDER.map((slug, index) => [slug, index])
+)
+
+const CONTACTED_STAGE_INDEX = STAGE_INDEX_BY_SLUG.get("contacted") ?? -1
+const INTERVIEW_SCHEDULED_STAGE_INDEX = STAGE_INDEX_BY_SLUG.get("interview_scheduled") ?? -1
+
+function getStageIndex(slug?: string | null): number | null {
+    if (!slug) return null
+    const index = STAGE_INDEX_BY_SLUG.get(slug)
+    return typeof index === "number" ? index : null
+}
 
 export function HeaderActions() {
     const { user } = useAuth()
@@ -65,13 +79,23 @@ export function HeaderActions() {
     // Determine if log contact button should be shown
     const currentStage = stageById.get(surrogate.stage_id)
     const isIntakeStage = currentStage?.stage_type === "intake"
+    const currentStageSlug = currentStage?.slug ?? surrogate.stage_slug
+    const currentStageIndex = getStageIndex(currentStageSlug)
+    const isAtOrBeforeContacted =
+        currentStageIndex !== null && CONTACTED_STAGE_INDEX >= 0
+            ? currentStageIndex <= CONTACTED_STAGE_INDEX
+            : isIntakeStage
+    const isAtOrAfterInterviewScheduled =
+        currentStageIndex !== null && INTERVIEW_SCHEDULED_STAGE_INDEX >= 0
+            ? currentStageIndex >= INTERVIEW_SCHEDULED_STAGE_INDEX
+            : false
     const isAssignee = !!(user?.user_id && surrogate.owner_id === user.user_id)
-    const canLogContact =
+    const canLogInteraction =
         surrogate.owner_type === "user" &&
         (isAssignee || canManageQueue) &&
-        isIntakeStage &&
         !surrogate.is_archived
-    const canLogInterviewOutcome = canLogContact
+    const canLogContact = canLogInteraction && isAtOrBeforeContacted
+    const canLogInterviewOutcome = canLogInteraction && isAtOrAfterInterviewScheduled
 
     // Determine if propose match button should be shown
     const isReadyToMatchStage = currentStage?.slug === "ready_to_match"

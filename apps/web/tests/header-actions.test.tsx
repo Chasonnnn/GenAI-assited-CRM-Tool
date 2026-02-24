@@ -161,6 +161,117 @@ describe("HeaderActions", () => {
         expect(screen.getByRole("button", { name: /log contact/i })).toBeInTheDocument()
     })
 
+    it("hides Log Contact once surrogate is past contacted", () => {
+        mockUseAuth.mockReturnValue({
+            user: { role: "intake_specialist", user_id: "intake-user-1" },
+        })
+
+        mockUseSurrogateDetailData.mockReturnValue({
+            surrogate: {
+                id: "s1",
+                stage_id: "stage_qualified",
+                owner_type: "user",
+                owner_id: "intake-user-1",
+                is_archived: false,
+                surrogate_number: "S123",
+                full_name: "Jane Doe",
+                stage_slug: "qualified",
+            },
+            stageById: new Map([
+                [
+                    "stage_qualified",
+                    { slug: "qualified", stage_type: "intake", order: 3 },
+                ],
+            ]),
+            stageOptions: [],
+            queues: [],
+            assignees: [],
+            canManageQueue: false,
+            canClaimSurrogate: false,
+            canChangeStage: true,
+            isInQueue: false,
+            isOwnedByUser: true,
+            zoomConnected: false,
+        })
+
+        render(<HeaderActions />)
+        expect(screen.queryByRole("button", { name: /log contact/i })).not.toBeInTheDocument()
+    })
+
+    it("hides Log Interview Outcome before interview scheduled", () => {
+        mockUseAuth.mockReturnValue({
+            user: { role: "intake_specialist", user_id: "intake-user-1" },
+        })
+
+        mockUseSurrogateDetailData.mockReturnValue({
+            surrogate: {
+                id: "s1",
+                stage_id: "stage_contacted",
+                owner_type: "user",
+                owner_id: "intake-user-1",
+                is_archived: false,
+                surrogate_number: "S123",
+                full_name: "Jane Doe",
+                stage_slug: "contacted",
+            },
+            stageById: new Map([
+                [
+                    "stage_contacted",
+                    { slug: "contacted", stage_type: "intake", order: 2 },
+                ],
+            ]),
+            stageOptions: [],
+            queues: [],
+            assignees: [],
+            canManageQueue: false,
+            canClaimSurrogate: false,
+            canChangeStage: true,
+            isInQueue: false,
+            isOwnedByUser: true,
+            zoomConnected: false,
+        })
+
+        render(<HeaderActions />)
+        expect(screen.queryByRole("button", { name: /log interview outcome/i })).not.toBeInTheDocument()
+    })
+
+    it("shows Log Interview Outcome at interview scheduled", () => {
+        mockUseAuth.mockReturnValue({
+            user: { role: "intake_specialist", user_id: "intake-user-1" },
+        })
+
+        mockUseSurrogateDetailData.mockReturnValue({
+            surrogate: {
+                id: "s1",
+                stage_id: "stage_interview_scheduled",
+                owner_type: "user",
+                owner_id: "intake-user-1",
+                is_archived: false,
+                surrogate_number: "S123",
+                full_name: "Jane Doe",
+                stage_slug: "interview_scheduled",
+            },
+            stageById: new Map([
+                [
+                    "stage_interview_scheduled",
+                    { slug: "interview_scheduled", stage_type: "intake", order: 5 },
+                ],
+            ]),
+            stageOptions: [],
+            queues: [],
+            assignees: [],
+            canManageQueue: false,
+            canClaimSurrogate: false,
+            canChangeStage: true,
+            isInQueue: false,
+            isOwnedByUser: true,
+            zoomConnected: false,
+        })
+
+        render(<HeaderActions />)
+        expect(screen.getByRole("button", { name: /log interview outcome/i })).toBeInTheDocument()
+    })
+
     it("disables export action while request is in progress", async () => {
         let resolveExport: ((value: { includesApplication: boolean }) => void) | null = null
         mockExportSurrogatePacketPdf.mockReturnValue(
