@@ -1611,6 +1611,50 @@ def get_appointment_by_token(
     else:
         return None
 
+    return _validate_self_service_appointment_state(db, appt, now)
+
+
+def get_appointment_by_manage_token(
+    db: Session,
+    org_id: UUID,
+    token: str,
+) -> Appointment | None:
+    """Get appointment by either self-service token (reschedule/cancel)."""
+    now = datetime.now(timezone.utc)
+    appt = (
+        db.query(Appointment)
+        .filter(
+            Appointment.organization_id == org_id,
+            or_(Appointment.reschedule_token == token, Appointment.cancel_token == token),
+        )
+        .first()
+    )
+    if not appt:
+        return None
+
+    # Token-specific expiry checks
+    if (
+        appt.reschedule_token == token
+        and appt.reschedule_token_expires_at
+        and appt.reschedule_token_expires_at <= now
+    ):
+        return None
+    if (
+        appt.cancel_token == token
+        and appt.cancel_token_expires_at
+        and appt.cancel_token_expires_at <= now
+    ):
+        return None
+
+    return _validate_self_service_appointment_state(db, appt, now)
+
+
+def _validate_self_service_appointment_state(
+    db: Session,
+    appt: Appointment,
+    now: datetime,
+) -> Appointment | None:
+    """Validate appointment state for all self-service token flows."""
     if appt.status in [
         AppointmentStatus.CANCELLED.value,
         AppointmentStatus.COMPLETED.value,

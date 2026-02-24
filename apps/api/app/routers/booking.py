@@ -88,6 +88,7 @@ def _appointment_to_public_read(appt, db: Session) -> dict:
         "dial_in_number": appt.dial_in_number,
         "status": appt.status,
         "client_timezone": appt.client_timezone,
+        "cancellation_reason": appt.cancellation_reason,
         "zoom_join_url": appt.zoom_join_url if appt.status == "confirmed" else None,
         "google_meet_url": appt.google_meet_url if appt.status == "confirmed" else None,
     }
@@ -271,6 +272,93 @@ def create_booking(
 # =============================================================================
 # Self-Service (Token-based)
 # =============================================================================
+
+
+@router.get("/self-service/{org_id}/manage/{token}")
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
+def get_appointment_for_manage(
+    request: Request,
+    org_id: UUID,
+    token: str,
+    db: Session = Depends(get_db),
+):
+    """Get appointment details for unified self-service manage page."""
+    appt = appointment_service.get_appointment_by_manage_token(db, org_id, token)
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    return _appointment_to_public_read(appt, db)
+
+
+@router.post("/self-service/{org_id}/manage/{token}/reschedule")
+@limiter.limit("10/minute")
+def reschedule_by_manage_token(
+    org_id: UUID,
+    token: str,
+    data: AppointmentReschedule,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Reschedule from the unified self-service manage flow."""
+    appt = appointment_service.get_appointment_by_manage_token(db, org_id, token)
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    if not appt.reschedule_token:
+        raise HTTPException(status_code=400, detail="Reschedule link is unavailable")
+
+    try:
+        old_start = appt.scheduled_start
+        appt = appointment_service.reschedule_booking(
+            db=db,
+            appointment=appt,
+            new_start=data.scheduled_start,
+            by_client=True,
+            token=appt.reschedule_token,
+        )
+
+        org = org_service.get_org_by_id(db, appt.organization_id)
+        base_url = org_service.get_org_portal_base_url(org)
+        appointment_email_service.send_rescheduled(db, appt, old_start, base_url)
+
+        return _appointment_to_public_read(appt, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/self-service/{org_id}/manage/{token}/cancel")
+@limiter.limit("10/minute")
+def cancel_by_manage_token(
+    org_id: UUID,
+    token: str,
+    data: AppointmentCancel,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Cancel from the unified self-service manage flow."""
+    appt = appointment_service.get_appointment_by_manage_token(db, org_id, token)
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    if not appt.cancel_token:
+        raise HTTPException(status_code=400, detail="Cancel link is unavailable")
+
+    try:
+        appt = appointment_service.cancel_booking(
+            db=db,
+            appointment=appt,
+            reason=data.reason,
+            by_client=True,
+            token=appt.cancel_token,
+        )
+
+        org = org_service.get_org_by_id(db, appt.organization_id)
+        base_url = org_service.get_org_portal_base_url(org)
+        appointment_email_service.send_cancelled(db, appt, base_url)
+
+        return _appointment_to_public_read(appt, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/self-service/{org_id}/reschedule/{token}")

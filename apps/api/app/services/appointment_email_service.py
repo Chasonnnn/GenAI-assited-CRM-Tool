@@ -112,8 +112,7 @@ DEFAULT_TEMPLATES: dict[AppointmentEmailType, dict[str, str]] = {
         </div>
         
         <div style="margin: 25px 0; text-align: center;">
-            <a href="{{reschedule_url}}" style="display: inline-block; padding: 12px 24px; background: #6366f1; color: white; text-decoration: none; border-radius: 8px; margin-right: 10px; font-weight: 500;">Reschedule</a>
-            <a href="{{cancel_url}}" style="display: inline-block; padding: 12px 24px; background: #f3f4f6; color: #374151; text-decoration: none; border-radius: 8px; font-weight: 500;">Cancel</a>
+            <a href="{{manage_url}}" style="display: inline-block; padding: 12px 24px; background: #6366f1; color: white; text-decoration: none; border-radius: 8px; font-weight: 500;">Manage Appointment</a>
         </div>
         
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
@@ -167,8 +166,7 @@ DEFAULT_TEMPLATES: dict[AppointmentEmailType, dict[str, str]] = {
         </div>
         
         <div style="margin: 25px 0; text-align: center;">
-            <a href="{{reschedule_url}}" style="display: inline-block; padding: 12px 24px; background: #6366f1; color: white; text-decoration: none; border-radius: 8px; margin-right: 10px; font-weight: 500;">Reschedule Again</a>
-            <a href="{{cancel_url}}" style="display: inline-block; padding: 12px 24px; background: #f3f4f6; color: #374151; text-decoration: none; border-radius: 8px; font-weight: 500;">Cancel</a>
+            <a href="{{manage_url}}" style="display: inline-block; padding: 12px 24px; background: #6366f1; color: white; text-decoration: none; border-radius: 8px; font-weight: 500;">Manage Appointment</a>
         </div>
         
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
@@ -247,8 +245,7 @@ DEFAULT_TEMPLATES: dict[AppointmentEmailType, dict[str, str]] = {
         </div>
         
         <div style="margin: 25px 0; text-align: center;">
-            <a href="{{reschedule_url}}" style="display: inline-block; padding: 12px 24px; background: #6366f1; color: white; text-decoration: none; border-radius: 8px; margin-right: 10px; font-weight: 500;">Reschedule</a>
-            <a href="{{cancel_url}}" style="display: inline-block; padding: 12px 24px; background: #f3f4f6; color: #374151; text-decoration: none; border-radius: 8px; font-weight: 500;">Cancel</a>
+            <a href="{{manage_url}}" style="display: inline-block; padding: 12px 24px; background: #6366f1; color: white; text-decoration: none; border-radius: 8px; font-weight: 500;">Manage Appointment</a>
         </div>
         
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
@@ -299,6 +296,23 @@ def build_appointment_variables(
     else:
         scheduled_start_local = None
 
+    manage_token = appointment.reschedule_token or appointment.cancel_token
+    manage_url = (
+        f"{base_url}/book/self-service/{appointment.organization_id}/manage/{manage_token}"
+        if manage_token
+        else ""
+    )
+    reschedule_url = (
+        f"{base_url}/book/self-service/{appointment.organization_id}/reschedule/{appointment.reschedule_token}"
+        if appointment.reschedule_token
+        else manage_url
+    )
+    cancel_url = (
+        f"{base_url}/book/self-service/{appointment.organization_id}/cancel/{appointment.cancel_token}"
+        if appointment.cancel_token
+        else manage_url
+    )
+
     variables = {
         # Client info
         "client_name": appointment.client_name or "",
@@ -327,17 +341,13 @@ def build_appointment_variables(
         "org_name": org_service.get_org_display_name(org) if org else "",
         "org_logo_url": (media_service.get_signed_media_url(org.signature_logo_url) if org else "")
         or "",
-        # Links - use correct self-service paths (frontend routes)
-        "reschedule_url": (
-            f"{base_url}/book/self-service/{appointment.organization_id}/reschedule/{appointment.reschedule_token}"
-        )
-        if appointment.reschedule_token
-        else "",
-        "cancel_url": (
-            f"{base_url}/book/self-service/{appointment.organization_id}/cancel/{appointment.cancel_token}"
-        )
-        if appointment.cancel_token
-        else "",
+        # Links - unified manage URL plus direct links for compatibility templates.
+        "manage_url": manage_url,
+        "reschedule_url": reschedule_url,
+        "cancel_url": cancel_url,
+        "appointment_manage_url": manage_url,
+        "appointment_reschedule_url": reschedule_url,
+        "appointment_cancel_url": cancel_url,
         # Meeting links (if available)
         "zoom_join_url": appointment.zoom_join_url or "",
         "zoom_meeting_id": appointment.zoom_meeting_id or "",

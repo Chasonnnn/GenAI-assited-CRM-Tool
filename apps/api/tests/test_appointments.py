@@ -592,6 +592,251 @@ async def test_reschedule_slots_use_appointment_duration(
 
 
 @pytest.mark.asyncio
+async def test_manage_endpoint_returns_public_appointment_view(
+    client,
+    db,
+    test_org,
+    test_user,
+    appointment_type,
+):
+    """Manage endpoint should return appointment details for a valid token."""
+    local_start = datetime.combine(
+        _next_weekday(0), time(10, 0), tzinfo=ZoneInfo("America/New_York")
+    )
+    scheduled_start = local_start.astimezone(timezone.utc)
+
+    appt = Appointment(
+        id=uuid4(),
+        organization_id=test_org.id,
+        user_id=test_user.id,
+        appointment_type_id=appointment_type.id,
+        client_name="Manage Client",
+        client_email="manage@example.com",
+        client_phone="555-123-0000",
+        client_timezone="America/New_York",
+        scheduled_start=scheduled_start,
+        scheduled_end=scheduled_start + timedelta(minutes=30),
+        duration_minutes=30,
+        buffer_before_minutes=0,
+        buffer_after_minutes=0,
+        meeting_mode=appointment_type.meeting_mode,
+        status=AppointmentStatus.CONFIRMED.value,
+        reschedule_token=f"reschedule-{uuid4().hex}",
+        cancel_token=f"cancel-{uuid4().hex}",
+        reschedule_token_expires_at=scheduled_start + timedelta(days=30),
+        cancel_token_expires_at=scheduled_start + timedelta(days=30),
+    )
+    db.add(appt)
+    db.flush()
+
+    response = await client.get(f"/book/self-service/{test_org.id}/manage/{appt.reschedule_token}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == str(appt.id)
+    assert data["client_email"] == "manage@example.com"
+
+
+@pytest.mark.asyncio
+async def test_manage_reschedule_by_token(
+    client,
+    db,
+    test_org,
+    test_user,
+    appointment_type,
+    availability_rules,
+):
+    """Manage reschedule endpoint should reschedule using a valid manage token."""
+    from app.services.appointment_service import SlotQuery, get_available_slots
+
+    target_date = _next_weekday(0)
+    query = SlotQuery(
+        user_id=test_user.id,
+        org_id=test_org.id,
+        appointment_type_id=appointment_type.id,
+        date_start=target_date,
+        date_end=target_date,
+        client_timezone="America/New_York",
+    )
+    slots = get_available_slots(db, query)
+    if len(slots) < 2:
+        pytest.skip("Not enough available slots for reschedule test")
+
+    initial_slot = slots[0]
+    replacement_slot = slots[1]
+
+    appt = Appointment(
+        id=uuid4(),
+        organization_id=test_org.id,
+        user_id=test_user.id,
+        appointment_type_id=appointment_type.id,
+        client_name="Manage Reschedule",
+        client_email="manage-reschedule@example.com",
+        client_phone="555-223-0000",
+        client_timezone="America/New_York",
+        scheduled_start=initial_slot.start,
+        scheduled_end=initial_slot.end,
+        duration_minutes=30,
+        buffer_before_minutes=0,
+        buffer_after_minutes=0,
+        meeting_mode=appointment_type.meeting_mode,
+        status=AppointmentStatus.CONFIRMED.value,
+        reschedule_token=f"reschedule-{uuid4().hex}",
+        cancel_token=f"cancel-{uuid4().hex}",
+        reschedule_token_expires_at=initial_slot.end + timedelta(days=30),
+        cancel_token_expires_at=initial_slot.end + timedelta(days=30),
+    )
+    db.add(appt)
+    db.flush()
+
+    response = await client.post(
+        f"/book/self-service/{test_org.id}/manage/{appt.reschedule_token}/reschedule",
+        json={"scheduled_start": replacement_slot.start.isoformat()},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["scheduled_start"] == replacement_slot.start.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_manage_cancel_by_token(
+    client,
+    db,
+    test_org,
+    test_user,
+    appointment_type,
+):
+    """Manage cancel endpoint should cancel using a valid manage token."""
+    local_start = datetime.combine(
+        _next_weekday(0), time(10, 0), tzinfo=ZoneInfo("America/New_York")
+    )
+    scheduled_start = local_start.astimezone(timezone.utc)
+
+    appt = Appointment(
+        id=uuid4(),
+        organization_id=test_org.id,
+        user_id=test_user.id,
+        appointment_type_id=appointment_type.id,
+        client_name="Manage Cancel",
+        client_email="manage-cancel@example.com",
+        client_phone="555-323-0000",
+        client_timezone="America/New_York",
+        scheduled_start=scheduled_start,
+        scheduled_end=scheduled_start + timedelta(minutes=30),
+        duration_minutes=30,
+        buffer_before_minutes=0,
+        buffer_after_minutes=0,
+        meeting_mode=appointment_type.meeting_mode,
+        status=AppointmentStatus.CONFIRMED.value,
+        reschedule_token=f"reschedule-{uuid4().hex}",
+        cancel_token=f"cancel-{uuid4().hex}",
+        reschedule_token_expires_at=scheduled_start + timedelta(days=30),
+        cancel_token_expires_at=scheduled_start + timedelta(days=30),
+    )
+    db.add(appt)
+    db.flush()
+
+    response = await client.post(
+        f"/book/self-service/{test_org.id}/manage/{appt.reschedule_token}/cancel",
+        json={"reason": "Need to cancel"},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["status"] == AppointmentStatus.CANCELLED.value
+    assert data["cancellation_reason"] == "Need to cancel"
+
+
+@pytest.mark.asyncio
+async def test_manage_endpoint_rejects_invalid_token(client, test_org):
+    """Invalid manage tokens should return not found."""
+    response = await client.get(f"/book/self-service/{test_org.id}/manage/not-a-real-token")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_manage_endpoint_rejects_expired_token(
+    client,
+    db,
+    test_org,
+    test_user,
+    appointment_type,
+):
+    """Expired manage tokens should return not found."""
+    local_start = datetime.combine(
+        _next_weekday(0), time(10, 0), tzinfo=ZoneInfo("America/New_York")
+    )
+    scheduled_start = local_start.astimezone(timezone.utc)
+
+    appt = Appointment(
+        id=uuid4(),
+        organization_id=test_org.id,
+        user_id=test_user.id,
+        appointment_type_id=appointment_type.id,
+        client_name="Manage Expired",
+        client_email="manage-expired@example.com",
+        client_phone="555-423-0000",
+        client_timezone="America/New_York",
+        scheduled_start=scheduled_start,
+        scheduled_end=scheduled_start + timedelta(minutes=30),
+        duration_minutes=30,
+        buffer_before_minutes=0,
+        buffer_after_minutes=0,
+        meeting_mode=appointment_type.meeting_mode,
+        status=AppointmentStatus.CONFIRMED.value,
+        reschedule_token=f"reschedule-{uuid4().hex}",
+        cancel_token=f"cancel-{uuid4().hex}",
+        reschedule_token_expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+        cancel_token_expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+    )
+    db.add(appt)
+    db.flush()
+
+    response = await client.get(f"/book/self-service/{test_org.id}/manage/{appt.reschedule_token}")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_manage_endpoint_scoped_to_org(
+    client,
+    db,
+    test_org,
+    test_user,
+    appointment_type,
+):
+    """Manage token lookup should be scoped to organization ID."""
+    local_start = datetime.combine(
+        _next_weekday(0), time(10, 0), tzinfo=ZoneInfo("America/New_York")
+    )
+    scheduled_start = local_start.astimezone(timezone.utc)
+
+    appt = Appointment(
+        id=uuid4(),
+        organization_id=test_org.id,
+        user_id=test_user.id,
+        appointment_type_id=appointment_type.id,
+        client_name="Manage Scoped",
+        client_email="manage-scoped@example.com",
+        client_phone="555-523-0000",
+        client_timezone="America/New_York",
+        scheduled_start=scheduled_start,
+        scheduled_end=scheduled_start + timedelta(minutes=30),
+        duration_minutes=30,
+        buffer_before_minutes=0,
+        buffer_after_minutes=0,
+        meeting_mode=appointment_type.meeting_mode,
+        status=AppointmentStatus.CONFIRMED.value,
+        reschedule_token=f"reschedule-{uuid4().hex}",
+        cancel_token=f"cancel-{uuid4().hex}",
+        reschedule_token_expires_at=scheduled_start + timedelta(days=30),
+        cancel_token_expires_at=scheduled_start + timedelta(days=30),
+    )
+    db.add(appt)
+    db.flush()
+
+    response = await client.get(f"/book/self-service/{uuid4()}/manage/{appt.reschedule_token}")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_public_booking_accepts_long_idempotency_key(
     client,
     db,
@@ -939,8 +1184,12 @@ class TestEmailTemplates:
             "staff_name",
             "staff_email",
             "org_name",
+            "manage_url",
             "reschedule_url",
             "cancel_url",
+            "appointment_manage_url",
+            "appointment_reschedule_url",
+            "appointment_cancel_url",
             "booking_url",
             "zoom_join_url",
             "zoom_meeting_id",
