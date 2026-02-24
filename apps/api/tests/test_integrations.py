@@ -629,8 +629,12 @@ async def test_staff_reschedule_slots_endpoint_returns_slots_for_owned_appointme
     )
     db.flush()
 
-    target_date = date(2026, 2, 23)  # Monday
-    scheduled_start = datetime(2026, 2, 23, 20, 0, tzinfo=timezone.utc)  # 12:00 PT
+    today = datetime.now(timezone.utc).date()
+    # Next Monday (at least 7 days out to ensure future date)
+    days_until_monday = (0 - today.weekday() + 7) % 7
+    target_date = today + timedelta(days=days_until_monday + 7)
+    scheduled_start = datetime.combine(target_date, time(20, 0), tzinfo=timezone.utc)
+
     appointment = Appointment(
         organization_id=test_auth.org.id,
         user_id=test_auth.user.id,
@@ -705,7 +709,12 @@ async def test_staff_reschedule_endpoint_accepts_valid_available_slot(
     )
     db.flush()
 
-    scheduled_start = datetime(2026, 2, 23, 20, 0, tzinfo=timezone.utc)  # 12:00 PT
+    today = datetime.now(timezone.utc).date()
+    # Next Monday (at least 7 days out to ensure future date)
+    days_until_monday = (0 - today.weekday() + 7) % 7
+    target_date = today + timedelta(days=days_until_monday + 7)
+    scheduled_start = datetime.combine(target_date, time(20, 0), tzinfo=timezone.utc)
+
     appointment = Appointment(
         organization_id=test_auth.org.id,
         user_id=test_auth.user.id,
@@ -739,20 +748,21 @@ async def test_staff_reschedule_endpoint_accepts_valid_available_slot(
         lambda db, appt, old_start, base_url: None,
     )
 
+    new_scheduled_start = datetime.combine(target_date, time(18, 0), tzinfo=timezone.utc)
+    new_scheduled_start_iso = new_scheduled_start.strftime("%Y-%m-%dT%H:%M:%SZ")
+
     response = await authed_client.post(
         f"/appointments/{appointment.id}/reschedule",
-        json={"scheduled_start": "2026-02-23T18:00:00Z"},  # 10:00 PT
+        json={"scheduled_start": new_scheduled_start_iso},  # 10:00 PT
     )
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["id"] == str(appointment.id)
-    assert payload["scheduled_start"] in {
-        "2026-02-23T18:00:00Z",
-        "2026-02-23T18:00:00+00:00",
-    }
+    # The ISO string might use Z or +00:00 suffix
+    assert payload["scheduled_start"].replace("+00:00", "Z") == new_scheduled_start_iso
 
     db.refresh(appointment)
-    assert appointment.scheduled_start == datetime(2026, 2, 23, 18, 0, tzinfo=timezone.utc)
+    assert appointment.scheduled_start == new_scheduled_start
 
 
 @pytest.mark.asyncio
