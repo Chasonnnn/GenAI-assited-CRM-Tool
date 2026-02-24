@@ -66,7 +66,13 @@ def _get_surrogate_with_access(
         raise HTTPException(status_code=404, detail="Surrogate not found")
 
     check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
-    if require_write and not can_modify_surrogate(surrogate, session.user_id, session.role):
+    if require_write and not can_modify_surrogate(
+        surrogate,
+        session.user_id,
+        session.role,
+        db=db,
+        org_id=session.org_id,
+    ):
         raise HTTPException(status_code=403, detail="Not authorized to modify this surrogate")
 
     return surrogate

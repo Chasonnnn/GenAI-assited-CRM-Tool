@@ -17,7 +17,8 @@ from app.db.enums import (
     Role,
 )
 from app.db.models import Surrogate, SurrogateStatusHistory, User
-from app.schemas.surrogate import SurrogateCreate, SurrogateUpdate
+from app.schemas.auth import UserSession
+from app.schemas.surrogate import InterviewOutcomeCreate, SurrogateCreate, SurrogateUpdate
 from app.utils.normalization import (
     escape_like_string,
     extract_email_domain,
@@ -831,8 +832,8 @@ def list_surrogates(
         (surrogates, total_count or None, next_cursor)
     """
     import base64
-    from app.db.enums import Role, OwnerType
-    from app.db.models import PipelineStage, Queue, SurrogateActivityLog
+    from app.db.enums import Role, OwnerType, SurrogateStatus
+    from app.db.models import PipelineStage, Queue, SurrogateActivityLog, SurrogateStatusHistory
     from datetime import datetime
     from sqlalchemy import asc, desc
 
@@ -865,9 +866,19 @@ def list_surrogates(
             )
             .scalar_subquery()
         )
-        filter_clauses.append(
-            or_(Surrogate.stage_id.is_(None), ~Surrogate.stage_id.in_(excluded_stage_ids))
-        )
+        owner_clause = None
+        if user_id:
+            owner_clause = (
+                (Surrogate.owner_type == OwnerType.USER.value)
+                & (Surrogate.owner_id == user_id)
+            )
+        stage_clause_args = [
+            Surrogate.stage_id.is_(None),
+            ~Surrogate.stage_id.in_(excluded_stage_ids),
+        ]
+        if owner_clause is not None:
+            stage_clause_args.append(owner_clause)
+        filter_clauses.append(or_(*stage_clause_args))
 
     # Owner-type filter
     if owner_type:
@@ -884,11 +895,21 @@ def list_surrogates(
 
     # Role-based visibility filter (ownership-based)
     if role_filter == Role.INTAKE_SPECIALIST.value or role_filter == Role.INTAKE_SPECIALIST:
-        # Intake specialists only see their owned surrogates.
+        # Intake specialists see owned surrogates + surrogates they moved to approved.
         if user_id:
-            filter_clauses.append(
+            owned_clause = (
                 (Surrogate.owner_type == OwnerType.USER.value) & (Surrogate.owner_id == user_id)
             )
+            followed_ids = (
+                select(SurrogateStatusHistory.surrogate_id)
+                .join(PipelineStage, SurrogateStatusHistory.to_stage_id == PipelineStage.id)
+                .where(
+                    SurrogateStatusHistory.organization_id == org_id,
+                    SurrogateStatusHistory.changed_by_user_id == user_id,
+                    PipelineStage.slug == SurrogateStatus.APPROVED.value,
+                )
+            )
+            filter_clauses.append(or_(owned_clause, Surrogate.id.in_(followed_ids)))
         else:
             # No user_id → no owned surrogates
             filter_clauses.append(Surrogate.id.is_(None))
@@ -1395,3 +1416,62 @@ def list_surrogate_activity(
         )
 
     return items, total
+
+
+def log_interview_outcome(
+    db: Session,
+    surrogate: Surrogate,
+    data: InterviewOutcomeCreate,
+    user: UserSession,
+) -> tuple[dict, str | None]:
+    """Log an interview outcome activity for a surrogate."""
+    from app.services import activity_service, appointment_service
+
+    occurred_at = data.occurred_at or datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+    if occurred_at > now:
+        raise ValueError("Cannot log future outcomes")
+
+    appointment = None
+    if data.appointment_id:
+        appointment = appointment_service.get_appointment(db, data.appointment_id, user.org_id)
+        if not appointment:
+            raise ValueError("Appointment not found")
+        if appointment.surrogate_id != surrogate.id:
+            raise ValueError("Appointment is not linked to this surrogate")
+
+    details: dict[str, str | None] = {
+        "outcome": data.outcome,
+        "occurred_at": occurred_at.isoformat(),
+        "appointment_id": str(data.appointment_id) if data.appointment_id else None,
+        "logged_from": "appointment_detail" if data.appointment_id else "surrogate_detail",
+    }
+    if data.notes:
+        details["notes"] = data.notes
+    if appointment:
+        details["scheduled_start"] = (
+            appointment.scheduled_start.isoformat() if appointment.scheduled_start else None
+        )
+        details["scheduled_end"] = (
+            appointment.scheduled_end.isoformat() if appointment.scheduled_end else None
+        )
+
+    activity = activity_service.log_activity(
+        db=db,
+        surrogate_id=surrogate.id,
+        organization_id=user.org_id,
+        activity_type=SurrogateActivityType.INTERVIEW_OUTCOME_LOGGED,
+        actor_user_id=user.user_id,
+        details=details,
+    )
+
+    actor_name = db.query(User.display_name).filter(User.id == user.user_id).scalar()
+    payload = {
+        "id": activity.id,
+        "activity_type": activity.activity_type,
+        "actor_user_id": activity.actor_user_id,
+        "actor_name": actor_name,
+        "details": activity.details,
+        "created_at": activity.created_at,
+    }
+    return payload, actor_name

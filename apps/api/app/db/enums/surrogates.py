@@ -120,6 +120,7 @@ class SurrogateActivityType(str, Enum):
     PROFILE_EDITED = "profile_edited"
     PROFILE_HIDDEN = "profile_hidden"
     CONTACT_ATTEMPT = "contact_attempt"  # Contact attempt logged
+    INTERVIEW_OUTCOME_LOGGED = "interview_outcome_logged"  # Interview outcome recorded
     WORKFLOW_APPROVAL_RESOLVED = (
         "workflow_approval_resolved"  # Workflow approval approved/denied/expired
     )

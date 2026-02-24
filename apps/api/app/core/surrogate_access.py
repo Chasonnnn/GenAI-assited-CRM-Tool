@@ -12,7 +12,7 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.db.enums import Role, OwnerType
+from app.db.enums import OwnerType, Role, SurrogateStatus
 from app.db.models import Surrogate
 
 
@@ -88,6 +88,13 @@ def _check_post_approval_access(
     if not stage or stage.stage_type != "post_approval":
         return
 
+    # Owners can always view their own surrogates even after post-approval
+    if (
+        surrogate.owner_type == OwnerType.USER.value
+        and surrogate.owner_id == user_id
+    ):
+        return
+
     # Check permission
     if not permission_service.check_permission(
         db, org_id, user_id, role_str, "view_post_approval_surrogates"
@@ -113,7 +120,7 @@ def _check_owner_based_access(
         if role_str == Role.CASE_MANAGER.value:
             return  # Case managers can see queue items
         if role_str == Role.INTAKE_SPECIALIST.value:
-            # Intake can only see surrogates in the system Unassigned queue.
+            # Intake can see the system Unassigned queue and surrogates they follow.
             if not db or not org_id:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -123,6 +130,8 @@ def _check_owner_based_access(
 
             default_queue = queue_service.get_or_create_default_queue(db, org_id)
             if default_queue and surrogate.owner_id == default_queue.id:
+                return
+            if _intake_has_follow_access(db, surrogate, org_id, user_id):
                 return
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -140,20 +149,55 @@ def _check_owner_based_access(
         if role_str == Role.CASE_MANAGER.value:
             return
 
-        # Intake specialists can only see their own surrogates
+        # Intake specialists can see their own surrogates and surrogates they follow.
         if role_str == Role.INTAKE_SPECIALIST.value:
-            if not user_id or surrogate.owner_id != user_id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You don't have access to this surrogate",
-                )
-            return
+            if user_id and surrogate.owner_id == user_id:
+                return
+            if db and org_id and _intake_has_follow_access(db, surrogate, org_id, user_id):
+                return
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have access to this surrogate",
+            )
+
+
+def _intake_has_follow_access(
+    db: Session,
+    surrogate: Surrogate,
+    org_id: UUID,
+    user_id: UUID | None,
+) -> bool:
+    """
+    Allow intake to follow surrogates they moved to `approved`.
+
+    Uses status history instead of activity log JSON to stay robust across ownership transfers.
+    """
+    if not (db and user_id):
+        return False
+
+    from app.db.models import PipelineStage, SurrogateStatusHistory
+
+    approved_by_user = (
+        db.query(SurrogateStatusHistory.id)
+        .join(PipelineStage, SurrogateStatusHistory.to_stage_id == PipelineStage.id)
+        .filter(
+            SurrogateStatusHistory.surrogate_id == surrogate.id,
+            SurrogateStatusHistory.organization_id == org_id,
+            SurrogateStatusHistory.changed_by_user_id == user_id,
+            PipelineStage.slug == SurrogateStatus.APPROVED.value,
+        )
+        .first()
+    )
+    return approved_by_user is not None
 
 
 def can_modify_surrogate(
     surrogate: Surrogate,
     user_id: UUID | str,
     user_role: Role | str,
+    *,
+    db: Session | None = None,
+    org_id: UUID | None = None,
 ) -> bool:
     """
     Check if user can modify this surrogate.
@@ -162,7 +206,7 @@ def can_modify_surrogate(
     - Manager+ can always modify
     - Owner can modify
     - Case managers can modify any non-archived surrogate
-    - Intake specialists can only modify their own non-handed-off surrogates
+    - Intake specialists can modify their own surrogates and surrogates they follow
 
     Returns:
         True if user can modify, False otherwise
@@ -189,6 +233,8 @@ def can_modify_surrogate(
 
     # Intake specialists: only their own, and not handed off
     if role_str == Role.INTAKE_SPECIALIST.value:
+        if db and org_id and _intake_has_follow_access(db, surrogate, org_id, user_uuid):
+            return True
         return surrogate.owner_type == OwnerType.USER.value and surrogate.owner_id == user_uuid
 
     return False

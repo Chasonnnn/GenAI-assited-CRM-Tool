@@ -141,3 +141,34 @@ async def test_intake_can_change_to_terminal_stages(db, test_org, terminal_slug)
         detail = await client.get(f"/surrogates/{surrogate_id}")
         assert detail.status_code == 200, detail.text
         assert detail.json()["stage_id"] == str(terminal_stage_id)
+
+
+@pytest.mark.asyncio
+async def test_intake_can_follow_after_approving_case(db, test_org):
+    approved_stage_id = _get_stage_id(db, test_org.id, "approved")
+
+    async with _client_for_role(db, test_org.id, Role.INTAKE_SPECIALIST) as (_, client):
+        surrogate_id = await _create_surrogate(client, "Intake Follow")
+
+        to_approved = await client.patch(
+            f"/surrogates/{surrogate_id}/status",
+            json={"stage_id": str(approved_stage_id)},
+        )
+        assert to_approved.status_code == 200, to_approved.text
+        assert to_approved.json()["status"] == "applied"
+
+        detail = await client.get(f"/surrogates/{surrogate_id}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["id"] == surrogate_id
+
+        listed = await client.get("/surrogates", params={"per_page": 100})
+        assert listed.status_code == 200, listed.text
+        assert any(item["id"] == surrogate_id for item in listed.json()["items"])
+
+        updated_name = "Intake Follow Updated"
+        updated = await client.patch(
+            f"/surrogates/{surrogate_id}",
+            json={"full_name": updated_name},
+        )
+        assert updated.status_code == 200, updated.text
+        assert updated.json()["full_name"] == updated_name

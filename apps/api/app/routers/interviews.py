@@ -88,9 +88,15 @@ def _check_interview_access(
     return interview, surrogate
 
 
-def _check_can_modify_interview(surrogate, session: UserSession):
+def _check_can_modify_interview(surrogate, session: UserSession, db: Session):
     """Check if user can create/edit interviews on this surrogate."""
-    if not can_modify_surrogate(surrogate, session.user_id, session.role):
+    if not can_modify_surrogate(
+        surrogate,
+        session.user_id,
+        session.role,
+        db=db,
+        org_id=session.org_id,
+    ):
         raise HTTPException(
             status_code=403, detail="You don't have permission to modify this surrogate"
         )
@@ -142,7 +148,7 @@ def create_interview(
         raise HTTPException(status_code=404, detail="Surrogate not found")
 
     check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
-    _check_can_modify_interview(surrogate, session)
+    _check_can_modify_interview(surrogate, session, db)
 
     try:
         interview = interview_service.create_interview(
@@ -187,7 +193,7 @@ def update_interview(
 ):
     """Update an interview (with auto-versioning for transcript changes)."""
     interview, case = _check_interview_access(db, session.org_id, interview_id, session)
-    _check_can_modify_interview(case, session)
+    _check_can_modify_interview(case, session, db)
 
     try:
         interview = interview_service.update_interview(

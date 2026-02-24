@@ -575,6 +575,28 @@ class SurrogateActivityResponse(BaseModel):
 
 
 # =============================================================================
+# Interview Outcome Tracking
+# =============================================================================
+
+
+class InterviewOutcomeCreate(BaseModel):
+    """Request schema for logging an interview outcome."""
+
+    outcome: str
+    occurred_at: datetime | None = None
+    notes: str | None = Field(None, max_length=5000)
+    appointment_id: UUID | None = None
+
+    @field_validator("outcome")
+    @classmethod
+    def validate_outcome(cls, v: str) -> str:
+        valid_outcomes = {"completed", "no_show", "rescheduled", "cancelled"}
+        if v not in valid_outcomes:
+            raise ValueError(f"Invalid outcome: {v}")
+        return v
+
+
+# =============================================================================
 # Contact Attempts Tracking
 # =============================================================================
 
