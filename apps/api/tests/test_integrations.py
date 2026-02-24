@@ -629,8 +629,9 @@ async def test_staff_reschedule_slots_endpoint_returns_slots_for_owned_appointme
     )
     db.flush()
 
-    target_date = date(2026, 2, 23)  # Monday
-    scheduled_start = datetime(2026, 2, 23, 20, 0, tzinfo=timezone.utc)  # 12:00 PT
+    target_date = date(2026, 3, 2)  # Monday
+    scheduled_start = datetime(2026, 3, 2, 20, 0, tzinfo=timezone.utc)  # 12:00 PT
+    scheduled_start = datetime(2026, 3, 2, 20, 0, tzinfo=timezone.utc)  # 12:00 PT
     appointment = Appointment(
         organization_id=test_auth.org.id,
         user_id=test_auth.user.id,
@@ -741,18 +742,18 @@ async def test_staff_reschedule_endpoint_accepts_valid_available_slot(
 
     response = await authed_client.post(
         f"/appointments/{appointment.id}/reschedule",
-        json={"scheduled_start": "2026-02-23T18:00:00Z"},  # 10:00 PT
+        json={"scheduled_start": "2026-03-02T18:00:00Z"},  # 10:00 PT
     )
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["id"] == str(appointment.id)
     assert payload["scheduled_start"] in {
-        "2026-02-23T18:00:00Z",
-        "2026-02-23T18:00:00+00:00",
+        "2026-03-02T18:00:00Z",
+        "2026-03-02T18:00:00+00:00",
     }
 
     db.refresh(appointment)
-    assert appointment.scheduled_start == datetime(2026, 2, 23, 18, 0, tzinfo=timezone.utc)
+    assert appointment.scheduled_start == datetime(2026, 3, 2, 18, 0, tzinfo=timezone.utc)
 
 
 @pytest.mark.asyncio
