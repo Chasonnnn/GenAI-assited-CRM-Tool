@@ -36,7 +36,6 @@ class MatchCreate(BaseModel):
 
     surrogate_id: UUID
     intended_parent_id: UUID
-    compatibility_score: float | None = Field(None, ge=0, le=100)
     notes: str | None = None
 
 
@@ -48,7 +47,6 @@ class MatchRead(BaseModel):
     surrogate_id: str
     intended_parent_id: str
     status: str
-    compatibility_score: float | None
     proposed_by_user_id: str | None
     proposed_at: str
     reviewed_by_user_id: str | None
@@ -80,7 +78,6 @@ class MatchListItem(BaseModel):
     ip_name: str | None
     ip_number: str | None = None
     status: str
-    compatibility_score: float | None
     proposed_at: str
     # Surrogate stage info for status sync
     surrogate_stage_id: str | None = None
@@ -154,7 +151,6 @@ def _match_to_read(match: Any, db: Session, org_id: str | None = None) -> MatchR
         surrogate_id=str(match.surrogate_id),
         intended_parent_id=str(match.intended_parent_id),
         status=match.status,
-        compatibility_score=float(match.compatibility_score) if match.compatibility_score else None,
         proposed_by_user_id=str(match.proposed_by_user_id) if match.proposed_by_user_id else None,
         proposed_at=match.proposed_at.isoformat() if match.proposed_at else None,
         reviewed_by_user_id=str(match.reviewed_by_user_id) if match.reviewed_by_user_id else None,
@@ -185,7 +181,6 @@ def _match_to_list_item(match: Any, surrogate: Any | None, ip: Any | None) -> Ma
         ip_name=ip.full_name if ip else None,
         ip_number=ip.intended_parent_number if ip else None,
         status=match.status,
-        compatibility_score=float(match.compatibility_score) if match.compatibility_score else None,
         proposed_at=match.proposed_at.isoformat() if match.proposed_at else "",
         surrogate_stage_id=str(surrogate.stage.id) if surrogate and surrogate.stage else None,
         surrogate_stage_slug=surrogate.stage.slug if surrogate and surrogate.stage else None,
@@ -257,7 +252,6 @@ def create_match(
         surrogate_id=data.surrogate_id,
         intended_parent_id=data.intended_parent_id,
         proposed_by_user_id=session.user_id,
-        compatibility_score=data.compatibility_score,
         notes=data.notes,
     )
 

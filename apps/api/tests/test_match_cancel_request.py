@@ -50,6 +50,30 @@ async def _create_accepted_match(authed_client) -> dict:
 
 
 @pytest.mark.asyncio
+async def test_create_match_response_excludes_compatibility_score(authed_client):
+    surrogate = await _create_surrogate(authed_client)
+    intended_parent = await _create_intended_parent(authed_client)
+
+    response = await authed_client.post(
+        "/matches/",
+        json={
+            "surrogate_id": surrogate["id"],
+            "intended_parent_id": intended_parent["id"],
+            "compatibility_score": 88,
+        },
+    )
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert "compatibility_score" not in payload
+
+    list_response = await authed_client.get("/matches/")
+    assert list_response.status_code == 200, list_response.text
+    items = list_response.json()["items"]
+    assert items
+    assert "compatibility_score" not in items[0]
+
+
+@pytest.mark.asyncio
 async def test_match_cancel_request_creates_pending_request(authed_client, db, test_auth):
     match = await _create_accepted_match(authed_client)
 

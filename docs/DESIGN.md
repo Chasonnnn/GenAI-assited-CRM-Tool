@@ -530,7 +530,6 @@ match_number         VARCHAR(10) NOT NULL  -- M10001+
 surrogate_id         UUID NOT NULL → surrogates.id
 intended_parent_id   UUID NOT NULL → intended_parents.id
 status               VARCHAR(50) NOT NULL  -- proposed, reviewing, accepted, rejected, cancelled
-compatibility_score  INTEGER  -- 0-100 percentage
 proposed_at          TIMESTAMP NOT NULL
 proposed_by_user_id  UUID → users.id
 accepted_at          TIMESTAMP

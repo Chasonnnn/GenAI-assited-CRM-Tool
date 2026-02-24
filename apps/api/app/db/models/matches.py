@@ -6,12 +6,10 @@ from typing import TYPE_CHECKING
 
 import uuid
 from datetime import date, datetime
-from decimal import Decimal
 
 from sqlalchemy import (
     ForeignKey,
     Index,
-    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -82,10 +80,6 @@ class Match(Base):
 
     # Status workflow: proposed → reviewing → accepted/rejected/cancelled
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="proposed")
-    compatibility_score: Mapped[Decimal | None] = mapped_column(
-        Numeric(5, 2),  # 0.00 to 100.00
-        nullable=True,
-    )
 
     # Who proposed and when
     proposed_by_user_id: Mapped[uuid.UUID] = mapped_column(

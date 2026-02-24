@@ -172,7 +172,6 @@ def list_matches(
     sortable_columns = {
         "match_number": Match.match_number,
         "status": Match.status,
-        "compatibility_score": Match.compatibility_score,
         "proposed_at": Match.proposed_at,
         "created_at": Match.created_at,
     }
@@ -345,7 +344,6 @@ def create_match(
         surrogate_id=surrogate_id,
         intended_parent_id=intended_parent_id,
         status=MatchStatus.PROPOSED.value,
-        compatibility_score=compatibility_score,
         proposed_by_user_id=proposed_by_user_id,
         notes=clean_notes,
     )
@@ -361,7 +359,6 @@ def create_match(
         details={
             "match_id": str(match.id),
             "intended_parent_id": str(intended_parent_id),
-            "compatibility_score": compatibility_score,
         },
     )
 
