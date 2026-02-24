@@ -1,5 +1,6 @@
 """Tests for request metrics rollups and AI conversation constraints."""
 
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -76,3 +77,27 @@ def test_ai_conversation_unique_constraint(db, test_org, test_user):
     with pytest.raises(IntegrityError):
         db.commit()
     db.rollback()
+
+
+def test_record_request_logs_warning_on_persist_failure(db, caplog, monkeypatch):
+    """Metrics persistence failures should be logged for observability."""
+
+    def _fail_execute(*_args, **_kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(db, "execute", _fail_execute)
+    caplog.set_level(logging.WARNING)
+
+    metrics_service.record_request(
+        db=db,
+        route="/tests/metrics-failure",
+        method="GET",
+        status_code=200,
+        duration_ms=12,
+        org_id=None,
+    )
+
+    warning_messages = [
+        record.message for record in caplog.records if "Failed to record request metrics" in record.message
+    ]
+    assert warning_messages == ["Failed to record request metrics: boom"]
