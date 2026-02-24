@@ -22,6 +22,7 @@ from app.db.enums import (
 )
 from app.services import (
     alert_service,
+    contact_reminder_service,
     job_service,
     meta_admin_service,
     meta_oauth_service,
@@ -399,6 +400,13 @@ class TaskNotificationsResponse(BaseModel):
     notifications_created: int
 
 
+class ContactRemindersResponse(BaseModel):
+    orgs_processed: int
+    total_surrogates_checked: int
+    total_notifications_created: int
+    errors: list[dict]
+
+
 @router.post("/task-notifications", response_model=TaskNotificationsResponse)
 def task_notifications_sweep(x_internal_secret: str = Header(...)):
     """
@@ -478,6 +486,22 @@ def task_notifications_sweep(x_internal_secret: str = Header(...)):
         tasks_overdue=tasks_overdue,
         notifications_created=notifications_created,
     )
+
+
+@router.post("/contact-reminders", response_model=ContactRemindersResponse)
+def contact_reminders_sweep(x_internal_secret: str = Header(...)):
+    """
+    Daily sweep for contact reminder notifications.
+
+    Called by external cron (daily recommended).
+    Creates contact follow-up reminders for surrogate owners.
+    """
+    verify_internal_secret(x_internal_secret)
+
+    with SessionLocal() as db:
+        results = contact_reminder_service.process_contact_reminder_jobs(db)
+
+    return ContactRemindersResponse(**results)
 
 
 # =============================================================================

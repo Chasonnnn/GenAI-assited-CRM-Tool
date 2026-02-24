@@ -66,7 +66,7 @@ async def process_interview_transcription(db, job) -> None:
             type=NotificationType.INTERVIEW_TRANSCRIPTION_COMPLETED,
             title="Interview transcription ready",
             body=f"Transcription completed for interview on {interview_date}.",
-            entity_type="case",
+            entity_type="surrogate",
             entity_id=link.interview.surrogate_id,
             dedupe_key=f"interview_transcription_completed:{job.id}",
             dedupe_window_hours=None,
