@@ -5,12 +5,20 @@ import uuid
 from datetime import date, datetime, time, timedelta, timezone
 from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, urlparse
+from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import AsyncClient
 
 from app.core.encryption import hash_email
 from app.utils.normalization import normalize_email
+
+
+def _next_weekday_local(current_date: date, weekday: int) -> date:
+    delta = (weekday - current_date.weekday()) % 7
+    if delta == 0:
+        delta = 7
+    return current_date + timedelta(days=delta)
 
 
 @pytest.mark.asyncio
@@ -629,8 +637,11 @@ async def test_staff_reschedule_slots_endpoint_returns_slots_for_owned_appointme
     )
     db.flush()
 
-    target_date = date(2026, 2, 23)  # Monday
-    scheduled_start = datetime(2026, 2, 23, 20, 0, tzinfo=timezone.utc)  # 12:00 PT
+    client_tz = ZoneInfo(timezone_name)
+    target_date = _next_weekday_local(datetime.now(client_tz).date(), 0)  # Next Monday
+    scheduled_start = datetime.combine(target_date, time(12, 0), tzinfo=client_tz).astimezone(
+        timezone.utc
+    )
     appointment = Appointment(
         organization_id=test_auth.org.id,
         user_id=test_auth.user.id,
@@ -705,7 +716,11 @@ async def test_staff_reschedule_endpoint_accepts_valid_available_slot(
     )
     db.flush()
 
-    scheduled_start = datetime(2026, 2, 23, 20, 0, tzinfo=timezone.utc)  # 12:00 PT
+    client_tz = ZoneInfo(timezone_name)
+    target_date = _next_weekday_local(datetime.now(client_tz).date(), 0)  # Next Monday
+    scheduled_start = datetime.combine(target_date, time(12, 0), tzinfo=client_tz).astimezone(
+        timezone.utc
+    )
     appointment = Appointment(
         organization_id=test_auth.org.id,
         user_id=test_auth.user.id,
@@ -739,20 +754,23 @@ async def test_staff_reschedule_endpoint_accepts_valid_available_slot(
         lambda db, appt, old_start, base_url: None,
     )
 
+    requested_start = datetime.combine(target_date, time(10, 0), tzinfo=client_tz).astimezone(
+        timezone.utc
+    )
     response = await authed_client.post(
         f"/appointments/{appointment.id}/reschedule",
-        json={"scheduled_start": "2026-02-23T18:00:00Z"},  # 10:00 PT
+        json={"scheduled_start": requested_start.isoformat()},
     )
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["id"] == str(appointment.id)
     assert payload["scheduled_start"] in {
-        "2026-02-23T18:00:00Z",
-        "2026-02-23T18:00:00+00:00",
+        requested_start.isoformat().replace("+00:00", "Z"),
+        requested_start.isoformat(),
     }
 
     db.refresh(appointment)
-    assert appointment.scheduled_start == datetime(2026, 2, 23, 18, 0, tzinfo=timezone.utc)
+    assert appointment.scheduled_start == requested_start
 
 
 @pytest.mark.asyncio
