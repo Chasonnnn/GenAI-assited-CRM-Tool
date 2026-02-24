@@ -108,6 +108,34 @@ class TestResendWebhookSignature:
         is_valid = _verify_svix_signature(body, headers, secret)
         assert is_valid is False
 
+    def test_verify_svix_signature_rejects_malformed_whsec_secret(self):
+        from app.services.webhooks.resend import _verify_svix_signature
+
+        body = b'{"type": "email.delivered", "data": {}}'
+        malformed_secret = "whsec_invalid@secret!!"
+        timestamp = str(int(time.time()))
+        msg_id = str(uuid.uuid4())
+
+        # Signature generated with raw malformed secret bytes (legacy/fail-open behavior).
+        signed_payload = f"{msg_id}.{timestamp}.{body.decode('utf-8')}"
+        raw_secret_bytes = malformed_secret.removeprefix("whsec_").encode("utf-8")
+        signature = base64.b64encode(
+            hmac.new(
+                raw_secret_bytes,
+                signed_payload.encode("utf-8"),
+                hashlib.sha256,
+            ).digest()
+        ).decode("utf-8")
+
+        headers = {
+            "svix-id": msg_id,
+            "svix-timestamp": timestamp,
+            "svix-signature": f"v1,{signature}",
+        }
+
+        is_valid = _verify_svix_signature(body, headers, malformed_secret)
+        assert is_valid is False
+
 
 class TestResendWebhookHandler:
     """Test webhook event processing."""
