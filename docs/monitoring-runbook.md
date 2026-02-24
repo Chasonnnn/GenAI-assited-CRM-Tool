@@ -44,6 +44,25 @@ This runbook documents GCP Monitoring setup and alert routing verification for n
    - Webhook URL: `https://<api-base>/internal/alerts/gcp`
    - Header: `X-Internal-Secret: <INTERNAL_SECRET>`
 
+## Scheduled Notification Sweeps (External Cron)
+Use external schedulers (Cloud Scheduler, GitHub Actions, etc.) to call internal endpoints with:
+- Header: `X-Internal-Secret: <INTERNAL_SECRET>`
+
+Recommended cadence:
+- `POST /internal/scheduled/task-notifications`: Daily
+- `POST /internal/scheduled/contact-reminders`: Daily
+- `POST /internal/scheduled/workflow-sweep`: Every 5 minutes
+- `POST /internal/scheduled/workflow-approval-expiry`: Every 5 minutes
+
+Example:
+```bash
+curl -X POST "https://<api-base>/internal/scheduled/task-notifications" \
+  -H "X-Internal-Secret: <INTERNAL_SECRET>"
+
+curl -X POST "https://<api-base>/internal/scheduled/contact-reminders" \
+  -H "X-Internal-Secret: <INTERNAL_SECRET>"
+```
+
 ## Alert Routing Verification (Required)
 1. Create a temporary alert policy with a low threshold (example: 5xx > 1 in 5 minutes).
 2. Trigger the alert using a controlled failure (staging only).
