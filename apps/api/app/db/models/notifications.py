@@ -110,6 +110,15 @@ class UserNotificationSettings(Base):
     contact_reminder: Mapped[bool] = mapped_column(
         default=True, server_default=text("true")
     )  # Contact attempt reminders
+    status_change_decisions: Mapped[bool] = mapped_column(
+        default=True, server_default=text("true")
+    )  # Approval/rejection outcomes
+    approval_timeouts: Mapped[bool] = mapped_column(
+        default=True, server_default=text("true")
+    )  # Expired approval tasks
+    security_alerts: Mapped[bool] = mapped_column(
+        default=True, server_default=text("true")
+    )  # Security-relevant notifications
 
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), onupdate=text("now()"), nullable=False

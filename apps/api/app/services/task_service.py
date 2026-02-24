@@ -1231,16 +1231,19 @@ def expire_approval_task(
     from app.services import notification_facade
     from app.db.enums import NotificationType
 
-    notification_facade.create_notification(
-        db=db,
-        org_id=task.organization_id,
-        user_id=task.owner_id,
-        type=NotificationType.TASK_OVERDUE,
-        title="Workflow Approval Expired",
-        body=f"Approval task timed out: {task.title}",
-        entity_type="task",
-        entity_id=task.id,
-    )
+    if notification_facade.should_notify(db, task.owner_id, task.organization_id, "approval_timeouts"):
+        notification_facade.create_notification(
+            db=db,
+            org_id=task.organization_id,
+            user_id=task.owner_id,
+            type=NotificationType.WORKFLOW_APPROVAL_EXPIRED,
+            title="Workflow Approval Expired",
+            body=f"Approval task timed out: {task.title}",
+            entity_type="task",
+            entity_id=task.id,
+            dedupe_key=f"workflow_approval_expired:{task.id}",
+            dedupe_window_hours=None,
+        )
 
     logger.info(f"Expired approval task {task.id}")
 

@@ -64,6 +64,9 @@ def get_user_settings(
             "task_reminders": settings.task_reminders,
             "appointments": settings.appointments,
             "contact_reminder": settings.contact_reminder,
+            "status_change_decisions": settings.status_change_decisions,
+            "approval_timeouts": settings.approval_timeouts,
+            "security_alerts": settings.security_alerts,
         }
 
     # Defaults (all ON)
@@ -76,6 +79,9 @@ def get_user_settings(
         "task_reminders": True,
         "appointments": True,
         "contact_reminder": True,
+        "status_change_decisions": True,
+        "approval_timeouts": True,
+        "security_alerts": True,
     }
 
 
@@ -123,6 +129,9 @@ def update_user_settings(
         "task_reminders": settings.task_reminders,
         "appointments": settings.appointments,
         "contact_reminder": settings.contact_reminder,
+        "status_change_decisions": settings.status_change_decisions,
+        "approval_timeouts": settings.approval_timeouts,
+        "security_alerts": settings.security_alerts,
     }
 
 
@@ -658,7 +667,7 @@ def notify_status_change_request_resolved(
     if not request.requested_by_user_id:
         return
     if not should_notify(
-        db, request.requested_by_user_id, surrogate.organization_id, "workflow_approvals"
+        db, request.requested_by_user_id, surrogate.organization_id, "status_change_decisions"
     ):
         return
 
@@ -697,7 +706,7 @@ def notify_ip_status_change_request_resolved(
     if not request.requested_by_user_id:
         return
     if not should_notify(
-        db, request.requested_by_user_id, intended_parent.organization_id, "workflow_approvals"
+        db, request.requested_by_user_id, intended_parent.organization_id, "status_change_decisions"
     ):
         return
 
@@ -739,7 +748,7 @@ def notify_match_cancel_request_resolved(
     if not request.requested_by_user_id:
         return
     if not should_notify(
-        db, request.requested_by_user_id, match.organization_id, "workflow_approvals"
+        db, request.requested_by_user_id, match.organization_id, "status_change_decisions"
     ):
         return
 
@@ -1080,6 +1089,10 @@ def notify_attachment_infected(
 ) -> None:
     """Notify uploader when an attachment fails virus scan."""
     if not attachment.uploaded_by_user_id:
+        return
+    if not should_notify(
+        db, attachment.uploaded_by_user_id, attachment.organization_id, "security_alerts"
+    ):
         return
 
     surrogate_id = attachment.surrogate_id

@@ -609,6 +609,9 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
             task_reminders=settings_data.get("task_reminders", True),
             appointments=settings_data.get("appointments", True),
             contact_reminder=settings_data.get("contact_reminder", True),
+            status_change_decisions=settings_data.get("status_change_decisions", True),
+            approval_timeouts=settings_data.get("approval_timeouts", True),
+            security_alerts=settings_data.get("security_alerts", True),
             updated_at=_parse_datetime(settings_data.get("updated_at"))
             or datetime.now(timezone.utc),
         )

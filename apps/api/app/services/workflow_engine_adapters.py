@@ -636,7 +636,7 @@ class DefaultWorkflowDomainAdapter:
                 db=db,
                 org_id=target.organization_id,
                 user_id=user_id,
-                type=NotificationType.SURROGATE_STATUS_CHANGED,  # Generic type
+                type=NotificationType.WORKFLOW_NOTIFICATION,
                 title=title,
                 body=body if body else None,
                 entity_type=target_entity_type,

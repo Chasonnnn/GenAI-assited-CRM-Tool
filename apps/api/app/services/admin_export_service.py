@@ -797,6 +797,9 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "task_reminders": settings_row.task_reminders,
             "appointments": settings_row.appointments,
             "contact_reminder": settings_row.contact_reminder,
+            "status_change_decisions": settings_row.status_change_decisions,
+            "approval_timeouts": settings_row.approval_timeouts,
+            "security_alerts": settings_row.security_alerts,
             "updated_at": settings_row.updated_at,
         }
         for settings_row, user in notification_settings
