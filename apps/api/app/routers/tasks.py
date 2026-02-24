@@ -14,7 +14,7 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
-from app.db.enums import TaskType
+from app.db.enums import AuditEventType, TaskType
 from app.schemas.auth import UserSession
 from app.schemas.task import (
     BulkCompleteResponse,
@@ -25,7 +25,7 @@ from app.schemas.task import (
     TaskUpdate,
     WorkflowApprovalResolve,
 )
-from app.services import task_service
+from app.services import audit_service, task_service
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
 router = APIRouter(dependencies=[Depends(require_permission(POLICIES["tasks"].default))])
@@ -98,6 +98,7 @@ def list_tasks(
     dependencies=[Depends(require_csrf_header)],
 )
 def create_task(
+    request: Request,
     data: TaskCreate,
     session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["create"])),
     db: Session = Depends(get_db),
@@ -136,6 +137,23 @@ def create_task(
         data=data,
         emit_events=True,
     )
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.TASK_CREATED,
+        actor_user_id=session.user_id,
+        target_type="task",
+        target_id=task.id,
+        details={
+            "task_type": task.task_type,
+            "owner_type": task.owner_type,
+            "owner_id": str(task.owner_id),
+            "surrogate_id": str(task.surrogate_id) if task.surrogate_id else None,
+            "intended_parent_id": str(task.intended_parent_id) if task.intended_parent_id else None,
+        },
+        request=request,
+    )
+    db.commit()
     context = task_service.get_task_context(db, session.org_id, [task])
     return task_service.to_task_read(task, context)
 
@@ -178,6 +196,7 @@ def get_task(
 
 @router.patch("/{task_id}", response_model=TaskRead, dependencies=[Depends(require_csrf_header)])
 def update_task(
+    request: Request,
     task_id: UUID,
     data: TaskUpdate,
     session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["edit"])),
@@ -211,6 +230,18 @@ def update_task(
             raise HTTPException(status_code=400, detail=str(e))
 
     task = task_service.update_task(db, task, data, actor_user_id=session.user_id)
+    updated_fields = data.model_dump(exclude_unset=True)
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.TASK_UPDATED,
+        actor_user_id=session.user_id,
+        target_type="task",
+        target_id=task.id,
+        details={"updated_fields": sorted(updated_fields.keys())},
+        request=request,
+    )
+    db.commit()
     context = task_service.get_task_context(db, session.org_id, [task])
     return task_service.to_task_read(task, context)
 
@@ -221,6 +252,7 @@ def update_task(
     dependencies=[Depends(require_csrf_header)],
 )
 def complete_task(
+    request: Request,
     task_id: UUID,
     session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["edit"])),
     db: Session = Depends(get_db),
@@ -249,6 +281,17 @@ def complete_task(
         )
 
     task = task_service.complete_task(db, task, session.user_id, emit_events=True)
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.TASK_COMPLETED,
+        actor_user_id=session.user_id,
+        target_type="task",
+        target_id=task.id,
+        details={"task_type": task.task_type},
+        request=request,
+    )
+    db.commit()
     context = task_service.get_task_context(db, session.org_id, [task])
     return task_service.to_task_read(task, context)
 
@@ -259,6 +302,7 @@ def complete_task(
     dependencies=[Depends(require_csrf_header)],
 )
 def uncomplete_task(
+    request: Request,
     task_id: UUID,
     session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["edit"])),
     db: Session = Depends(get_db),
@@ -283,6 +327,17 @@ def uncomplete_task(
         )
 
     task = task_service.uncomplete_task(db, task, emit_events=True)
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.TASK_UNCOMPLETED,
+        actor_user_id=session.user_id,
+        target_type="task",
+        target_id=task.id,
+        details={"task_type": task.task_type},
+        request=request,
+    )
+    db.commit()
     context = task_service.get_task_context(db, session.org_id, [task])
     return task_service.to_task_read(task, context)
 
@@ -293,6 +348,7 @@ def uncomplete_task(
     dependencies=[Depends(require_csrf_header)],
 )
 def bulk_complete_tasks(
+    request: Request,
     data: BulkTaskComplete,
     session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["edit"])),
     db: Session = Depends(get_db),
@@ -305,7 +361,22 @@ def bulk_complete_tasks(
 
     Requires: creator, owner, or admin+ for each task
     """
-    return task_service.bulk_complete_tasks(db, session, data.task_ids)
+    result = task_service.bulk_complete_tasks(db, session, data.task_ids)
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.TASK_BULK_COMPLETED,
+        actor_user_id=session.user_id,
+        target_type="task",
+        details={
+            "requested_count": len(data.task_ids),
+            "completed_count": result.completed,
+            "failed_count": len(result.failed),
+        },
+        request=request,
+    )
+    db.commit()
+    return result
 
 
 @router.delete("/{task_id}", status_code=204, dependencies=[Depends(require_csrf_header)])
@@ -343,29 +414,26 @@ def delete_task(
             task_id=task.id,
             title=task.title,
         )
-    else:
-        from app.db.enums import AuditEventType
-        from app.services import audit_service
 
-        audit_service.log_event(
-            db=db,
-            org_id=session.org_id,
-            event_type=AuditEventType.TASK_DELETED,
-            actor_user_id=session.user_id,
-            target_type="task",
-            target_id=task.id,
-            details={
-                "task_type": task.task_type,
-                "intended_parent_id": str(task.intended_parent_id)
-                if task.intended_parent_id
-                else None,
-                "owner_id": str(task.owner_id),
-                "owner_type": task.owner_type,
-            },
-            request=request,
-        )
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.TASK_DELETED,
+        actor_user_id=session.user_id,
+        target_type="task",
+        target_id=task.id,
+        details={
+            "task_type": task.task_type,
+            "surrogate_id": str(task.surrogate_id) if task.surrogate_id else None,
+            "intended_parent_id": str(task.intended_parent_id) if task.intended_parent_id else None,
+            "owner_id": str(task.owner_id),
+            "owner_type": task.owner_type,
+        },
+        request=request,
+    )
 
     task_service.delete_task(db, task, emit_events=True)
+    db.commit()
     return None
 
 
@@ -375,6 +443,7 @@ def delete_task(
     dependencies=[Depends(require_csrf_header)],
 )
 def resolve_workflow_approval(
+    request: Request,
     task_id: UUID,
     data: WorkflowApprovalResolve,
     session: UserSession = Depends(get_current_session),
@@ -411,6 +480,18 @@ def resolve_workflow_approval(
             raise HTTPException(status_code=400, detail=str(e))
         else:
             raise HTTPException(status_code=400, detail=str(e))
+
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.TASK_RESOLVED,
+        actor_user_id=session.user_id,
+        target_type="task",
+        target_id=task.id,
+        details={"decision": data.decision},
+        request=request,
+    )
+    db.commit()
 
     context = task_service.get_task_context(db, session.org_id, [task])
     return task_service.to_task_read(task, context)

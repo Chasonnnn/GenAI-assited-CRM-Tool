@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import asc, desc, func, and_, or_, text
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.enums import MatchStatus, IntendedParentStatus, SurrogateActivityType
+from app.db.enums import AuditEventType, MatchStatus, IntendedParentStatus, SurrogateActivityType
 from app.db.models import (
     Surrogate,
     IntendedParent,
@@ -334,7 +334,7 @@ def create_match(
     notes: str | None = None,
 ) -> Match:
     """Create a proposed match and log activity."""
-    from app.services import activity_service, note_service
+    from app.services import activity_service, audit_service, note_service
 
     clean_notes = note_service.sanitize_html(notes) if notes else None
 
@@ -358,6 +358,19 @@ def create_match(
         actor_user_id=proposed_by_user_id,
         details={
             "match_id": str(match.id),
+            "intended_parent_id": str(intended_parent_id),
+        },
+    )
+
+    audit_service.log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.MATCH_PROPOSED,
+        actor_user_id=proposed_by_user_id,
+        target_type="match",
+        target_id=match.id,
+        details={
+            "surrogate_id": str(surrogate_id),
             "intended_parent_id": str(intended_parent_id),
         },
     )
@@ -416,6 +429,7 @@ def accept_match(
 
     from app.services import (
         activity_service,
+        audit_service,
         dashboard_events,
         note_service,
         pipeline_service,
@@ -489,6 +503,20 @@ def accept_match(
         },
     )
 
+    audit_service.log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.MATCH_ACCEPTED,
+        actor_user_id=actor_user_id,
+        target_type="match",
+        target_id=match.id,
+        details={
+            "surrogate_id": str(match.surrogate_id),
+            "intended_parent_id": str(match.intended_parent_id),
+            "cancelled_matches": len(other_matches),
+        },
+    )
+
     try:
         db.commit()
     except IntegrityError:
@@ -513,7 +541,7 @@ def reject_match(
     if match.status not in [MatchStatus.PROPOSED.value, MatchStatus.REVIEWING.value]:
         raise ValueError(f"Cannot reject match with status: {match.status}")
 
-    from app.services import activity_service, note_service
+    from app.services import activity_service, audit_service, note_service
 
     match.status = MatchStatus.REJECTED.value
     match.reviewed_by_user_id = actor_user_id
@@ -534,6 +562,20 @@ def reject_match(
             "match_id": str(match.id),
             "intended_parent_id": str(match.intended_parent_id),
             "rejection_reason": rejection_reason,
+        },
+    )
+
+    audit_service.log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.MATCH_REJECTED,
+        actor_user_id=actor_user_id,
+        target_type="match",
+        target_id=match.id,
+        details={
+            "surrogate_id": str(match.surrogate_id),
+            "intended_parent_id": str(match.intended_parent_id),
+            "rejection_reason_provided": bool(rejection_reason),
         },
     )
 
@@ -619,7 +661,7 @@ def cancel_match(
     if match.status not in [MatchStatus.PROPOSED.value, MatchStatus.REVIEWING.value]:
         raise ValueError(f"Cannot cancel match with status: {match.status}")
 
-    from app.services import activity_service
+    from app.services import activity_service, audit_service
 
     match.status = MatchStatus.CANCELLED.value
     match.updated_at = datetime.now(timezone.utc)
@@ -632,6 +674,19 @@ def cancel_match(
         actor_user_id=actor_user_id,
         details={
             "match_id": str(match.id),
+            "intended_parent_id": str(match.intended_parent_id),
+        },
+    )
+
+    audit_service.log_event(
+        db=db,
+        org_id=org_id,
+        event_type=AuditEventType.MATCH_CANCELLED,
+        actor_user_id=actor_user_id,
+        target_type="match",
+        target_id=match.id,
+        details={
+            "surrogate_id": str(match.surrogate_id),
             "intended_parent_id": str(match.intended_parent_id),
         },
     )

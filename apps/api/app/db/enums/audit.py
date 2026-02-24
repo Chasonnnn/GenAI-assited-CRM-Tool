@@ -70,6 +70,35 @@ class AuditEventType(str, Enum):
     USER_ROLE_CHANGED = "user_role_changed"
     USER_DEACTIVATED = "user_deactivated"
 
+    # Core CRM writes (semantic mutation events)
+    SURROGATE_CREATED = "surrogate_created"
+    SURROGATE_UPDATED = "surrogate_updated"
+    SURROGATE_ARCHIVED = "surrogate_archived"
+    SURROGATE_RESTORED = "surrogate_restored"
+    SURROGATE_DELETED = "surrogate_deleted"
+    SURROGATE_CLAIMED = "surrogate_claimed"
+    SURROGATE_ASSIGNED = "surrogate_assigned"
+    SURROGATE_BULK_ASSIGNED = "surrogate_bulk_assigned"
+
+    INTENDED_PARENT_CREATED = "intended_parent_created"
+    INTENDED_PARENT_UPDATED = "intended_parent_updated"
+    INTENDED_PARENT_STATUS_CHANGED = "intended_parent_status_changed"
+    INTENDED_PARENT_ARCHIVED = "intended_parent_archived"
+    INTENDED_PARENT_RESTORED = "intended_parent_restored"
+    INTENDED_PARENT_DELETED = "intended_parent_deleted"
+
+    TASK_CREATED = "task_created"
+    TASK_UPDATED = "task_updated"
+    TASK_COMPLETED = "task_completed"
+    TASK_UNCOMPLETED = "task_uncompleted"
+    TASK_BULK_COMPLETED = "task_bulk_completed"
+    TASK_RESOLVED = "task_resolved"
+
+    MATCH_PROPOSED = "match_proposed"
+    MATCH_ACCEPTED = "match_accepted"
+    MATCH_REJECTED = "match_rejected"
+    MATCH_CANCELLED = "match_cancelled"
+
     # Attachments
     ATTACHMENT_UPLOADED = "attachment_uploaded"
     ATTACHMENT_DOWNLOADED = "attachment_downloaded"
@@ -83,3 +112,6 @@ class AuditEventType(str, Enum):
 
     # Tasks
     TASK_DELETED = "task_deleted"
+
+    # Generic fallback for authenticated mutation requests not explicitly instrumented
+    API_MUTATION_FALLBACK = "api_mutation_fallback"

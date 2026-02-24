@@ -25,7 +25,7 @@ from app.schemas.intended_parent import (
     IntendedParentStats,
 )
 from app.schemas.entity_note import EntityNoteCreate, EntityNoteRead, EntityNoteListItem
-from app.services import ip_service, note_service, user_service
+from app.services import audit_service, ip_service, note_service, user_service
 from app.utils.normalization import normalize_email
 
 router = APIRouter(
@@ -100,6 +100,7 @@ def get_stats(
     dependencies=[Depends(require_csrf_header)],
 )
 def create_intended_parent(
+    request: Request,
     data: IntendedParentCreate,
     db: Session = Depends(get_db),
     session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
@@ -126,6 +127,21 @@ def create_intended_parent(
         owner_type=data.owner_type,
         owner_id=data.owner_id,
     )
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.INTENDED_PARENT_CREATED,
+        actor_user_id=session.user_id,
+        target_type="intended_parent",
+        target_id=ip.id,
+        details={
+            "owner_type": ip.owner_type,
+            "owner_id": str(ip.owner_id) if ip.owner_id else None,
+            "status": ip.status,
+        },
+        request=request,
+    )
+    db.commit()
     return ip
 
 
@@ -159,6 +175,7 @@ def get_intended_parent(
     dependencies=[Depends(require_csrf_header)],
 )
 def update_intended_parent(
+    request: Request,
     ip_id: UUID,
     data: IntendedParentUpdate,
     db: Session = Depends(get_db),
@@ -193,6 +210,18 @@ def update_intended_parent(
         owner_type=data.owner_type,
         owner_id=data.owner_id,
     )
+    update_fields = data.model_dump(exclude_unset=True)
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.INTENDED_PARENT_UPDATED,
+        actor_user_id=session.user_id,
+        target_type="intended_parent",
+        target_id=updated.id,
+        details={"updated_fields": sorted(update_fields.keys())},
+        request=request,
+    )
+    db.commit()
     return updated
 
 
@@ -207,6 +236,7 @@ def update_intended_parent(
     dependencies=[Depends(require_csrf_header)],
 )
 def update_status(
+    request: Request,
     ip_id: UUID,
     data: IntendedParentStatusUpdate,
     db: Session = Depends(get_db),
@@ -233,6 +263,7 @@ def update_status(
             status_code=400, detail="Cannot change status of archived intended parent"
         )
 
+    previous_status = ip.status
     try:
         result = ip_service.change_status(
             db=db,
@@ -244,6 +275,23 @@ def update_status(
         )
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
+
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.INTENDED_PARENT_STATUS_CHANGED,
+        actor_user_id=session.user_id,
+        target_type="intended_parent",
+        target_id=ip.id,
+        details={
+            "from_status": previous_status,
+            "requested_status": data.status,
+            "result": result["status"],
+            "request_id": str(result.get("request_id")) if result.get("request_id") else None,
+        },
+        request=request,
+    )
+    db.commit()
 
     ip_read = (
         IntendedParentRead.model_validate(result["intended_parent"])
@@ -264,6 +312,7 @@ def update_status(
     dependencies=[Depends(require_csrf_header)],
 )
 def archive_intended_parent(
+    request: Request,
     ip_id: UUID,
     db: Session = Depends(get_db),
     session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
@@ -275,7 +324,19 @@ def archive_intended_parent(
     if ip.is_archived:
         raise HTTPException(status_code=400, detail="Already archived")
 
-    return ip_service.archive_intended_parent(db, ip, session.user_id)
+    archived = ip_service.archive_intended_parent(db, ip, session.user_id)
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.INTENDED_PARENT_ARCHIVED,
+        actor_user_id=session.user_id,
+        target_type="intended_parent",
+        target_id=archived.id,
+        details={"status": archived.status},
+        request=request,
+    )
+    db.commit()
+    return archived
 
 
 @router.post(
@@ -284,6 +345,7 @@ def archive_intended_parent(
     dependencies=[Depends(require_csrf_header)],
 )
 def restore_intended_parent(
+    request: Request,
     ip_id: UUID,
     db: Session = Depends(get_db),
     session=Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
@@ -303,7 +365,19 @@ def restore_intended_parent(
             detail=f"Cannot restore: another active intended parent with email '{ip.email}' already exists",
         )
 
-    return ip_service.restore_intended_parent(db, ip, session.user_id)
+    restored = ip_service.restore_intended_parent(db, ip, session.user_id)
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.INTENDED_PARENT_RESTORED,
+        actor_user_id=session.user_id,
+        target_type="intended_parent",
+        target_id=restored.id,
+        details={"status": restored.status},
+        request=request,
+    )
+    db.commit()
+    return restored
 
 
 @router.delete(
@@ -312,6 +386,7 @@ def restore_intended_parent(
     dependencies=[Depends(require_csrf_header)],
 )
 def delete_intended_parent(
+    request: Request,
     ip_id: UUID,
     db: Session = Depends(get_db),
     session=Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
@@ -324,6 +399,16 @@ def delete_intended_parent(
         raise HTTPException(status_code=400, detail="Must archive before deleting")
 
     ip_service.delete_intended_parent(db, ip)
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.INTENDED_PARENT_DELETED,
+        actor_user_id=session.user_id,
+        target_type="intended_parent",
+        target_id=ip_id,
+        request=request,
+    )
+    db.commit()
 
 
 # =============================================================================

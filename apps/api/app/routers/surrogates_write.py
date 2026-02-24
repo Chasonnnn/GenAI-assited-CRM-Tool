@@ -2,13 +2,13 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
 from app.core.policies import POLICIES
 from app.core.surrogate_access import can_modify_surrogate, check_surrogate_access
-from app.db.enums import OwnerType, Role
+from app.db.enums import AuditEventType, OwnerType, Role
 from app.schemas.auth import UserSession
 from app.schemas.surrogate import (
     BulkAssign,
@@ -19,7 +19,7 @@ from app.schemas.surrogate import (
     SurrogateRead,
     SurrogateUpdate,
 )
-from app.services import membership_service, queue_service, surrogate_service
+from app.services import audit_service, membership_service, queue_service, surrogate_service
 
 from .surrogates_shared import _surrogate_to_read
 
@@ -27,6 +27,7 @@ router = APIRouter()
 
 
 def create_surrogate(
+    request: Request,
     data: SurrogateCreate,
     session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["edit"])),
     db: Session = Depends(get_db),
@@ -47,6 +48,22 @@ def create_surrogate(
             )
         raise
 
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.SURROGATE_CREATED,
+        actor_user_id=session.user_id,
+        target_type="surrogate",
+        target_id=surrogate.id,
+        details={
+            "source": surrogate.source,
+            "owner_type": surrogate.owner_type,
+            "owner_id": str(surrogate.owner_id) if surrogate.owner_id else None,
+        },
+        request=request,
+    )
+    db.commit()
+
     return _surrogate_to_read(surrogate, db)
 
 
@@ -56,6 +73,7 @@ def create_surrogate(
     dependencies=[Depends(require_csrf_header)],
 )
 def claim_surrogate(
+    request: Request,
     surrogate_id: UUID,
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
@@ -99,6 +117,19 @@ def claim_surrogate(
             claimer_user_id=session.user_id,
             allowed_queue_ids=allowed_queue_ids,
         )
+        audit_service.log_event(
+            db=db,
+            org_id=session.org_id,
+            event_type=AuditEventType.SURROGATE_CLAIMED,
+            actor_user_id=session.user_id,
+            target_type="surrogate",
+            target_id=surrogate.id,
+            details={
+                "owner_type": surrogate.owner_type,
+                "owner_id": str(surrogate.owner_id) if surrogate.owner_id else None,
+            },
+            request=request,
+        )
         db.commit()
         return {"message": "Surrogate claimed", "surrogate_id": str(surrogate.id)}
     except SurrogateNotFoundError:
@@ -120,6 +151,7 @@ def claim_surrogate(
     dependencies=[Depends(require_csrf_header)],
 )
 def update_surrogate(
+    request: Request,
     surrogate_id: UUID,
     data: SurrogateUpdate,
     session: UserSession = Depends(get_current_session),
@@ -209,6 +241,21 @@ def update_surrogate(
                 except ValueError:
                     pass
 
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.SURROGATE_UPDATED,
+        actor_user_id=session.user_id,
+        target_type="surrogate",
+        target_id=surrogate.id,
+        details={
+            "updated_fields": sorted(update_data.keys()),
+            "priority_only": is_priority_only_update,
+        },
+        request=request,
+    )
+    db.commit()
+
     return _surrogate_to_read(surrogate, db)
 
 
@@ -257,6 +304,7 @@ def log_interview_outcome(
     dependencies=[Depends(require_csrf_header)],
 )
 def assign_surrogate(
+    request: Request,
     surrogate_id: UUID,
     data: SurrogateAssign,
     session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["assign"])),
@@ -281,11 +329,26 @@ def assign_surrogate(
     surrogate = surrogate_service.assign_surrogate(
         db, surrogate, data.owner_type, data.owner_id, session.user_id
     )
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.SURROGATE_ASSIGNED,
+        actor_user_id=session.user_id,
+        target_type="surrogate",
+        target_id=surrogate.id,
+        details={
+            "owner_type": surrogate.owner_type,
+            "owner_id": str(surrogate.owner_id) if surrogate.owner_id else None,
+        },
+        request=request,
+    )
+    db.commit()
     return _surrogate_to_read(surrogate, db)
 
 
 @router.post("/bulk-assign", dependencies=[Depends(require_csrf_header)])
 def bulk_assign_surrogates(
+    request: Request,
     data: BulkAssign,
     session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["assign"])),
     db: Session = Depends(get_db),
@@ -320,6 +383,25 @@ def bulk_assign_surrogates(
         except Exception as e:
             results["failed"].append({"surrogate_id": str(s_id), "reason": str(e)})
 
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.SURROGATE_BULK_ASSIGNED,
+        actor_user_id=session.user_id,
+        target_type="surrogate",
+        details={
+            "requested_count": len(data.surrogate_ids),
+            "assigned_count": results["assigned"],
+            "failed_count": len(results["failed"]),
+            "owner_type": data.owner_type.value
+            if hasattr(data.owner_type, "value")
+            else str(data.owner_type),
+            "owner_id": str(data.owner_id),
+        },
+        request=request,
+    )
+    db.commit()
+
     return results
 
 
@@ -329,6 +411,7 @@ def bulk_assign_surrogates(
     dependencies=[Depends(require_csrf_header)],
 )
 def archive_surrogate(
+    request: Request,
     surrogate_id: UUID,
     session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["archive"])),
     db: Session = Depends(get_db),
@@ -341,6 +424,16 @@ def archive_surrogate(
     surrogate = surrogate_service.archive_surrogate(
         db, surrogate, session.user_id, emit_events=True
     )
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.SURROGATE_ARCHIVED,
+        actor_user_id=session.user_id,
+        target_type="surrogate",
+        target_id=surrogate.id,
+        request=request,
+    )
+    db.commit()
     return _surrogate_to_read(surrogate, db)
 
 
@@ -350,6 +443,7 @@ def archive_surrogate(
     dependencies=[Depends(require_csrf_header)],
 )
 def restore_surrogate(
+    request: Request,
     surrogate_id: UUID,
     session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["archive"])),
     db: Session = Depends(get_db),
@@ -365,6 +459,17 @@ def restore_surrogate(
     if error:
         raise HTTPException(status_code=409, detail=error)
 
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.SURROGATE_RESTORED,
+        actor_user_id=session.user_id,
+        target_type="surrogate",
+        target_id=surrogate.id,
+        request=request,
+    )
+    db.commit()
+
     return _surrogate_to_read(surrogate, db)
 
 
@@ -374,6 +479,7 @@ def restore_surrogate(
     dependencies=[Depends(require_csrf_header)],
 )
 def delete_surrogate(
+    request: Request,
     surrogate_id: UUID,
     session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["delete"])),
     db: Session = Depends(get_db),
@@ -389,4 +495,14 @@ def delete_surrogate(
         )
 
     surrogate_service.hard_delete_surrogate(db, surrogate, emit_events=True)
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.SURROGATE_DELETED,
+        actor_user_id=session.user_id,
+        target_type="surrogate",
+        target_id=surrogate_id,
+        request=request,
+    )
+    db.commit()
     return None
