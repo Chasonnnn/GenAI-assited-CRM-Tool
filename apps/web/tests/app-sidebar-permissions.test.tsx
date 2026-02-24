@@ -121,6 +121,7 @@ describe("AppSidebar permission visibility", () => {
             expect(screen.getByText("General")).toBeInTheDocument()
         })
         expect(screen.queryByText("Team")).not.toBeInTheDocument()
+        expect(screen.getByText("Audit Log")).toBeInTheDocument()
     })
 
     it("shows Team settings when manage_team permission exists", async () => {

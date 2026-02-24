@@ -9,7 +9,7 @@ import {
     getMember,
     updateMember,
     removeMember,
-    getEffectivePermissions,
+    getMyEffectivePermissions,
     getRoles,
     getRoleDetail,
     updateRolePermissions,
@@ -78,8 +78,8 @@ export function useRemoveMember() {
 
 export function useEffectivePermissions(userId: string | null) {
     return useQuery({
-        queryKey: KEYS.effective(userId || ""),
-        queryFn: () => getEffectivePermissions(userId!),
+        queryKey: KEYS.effective("me"),
+        queryFn: getMyEffectivePermissions,
         enabled: !!userId,
     })
 }

@@ -121,3 +121,20 @@ async def test_permission_guard_blocks_revoked(
         response = await client.request(method, path)
     app.dependency_overrides.clear()
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_effective_permissions_me_does_not_require_team_manage(
+    db,
+    test_org,
+):
+    client = await _client_with_revoked_permission(db, test_org, P.TEAM_MANAGE)
+    async with client:
+        response = await client.get("/settings/permissions/effective/me")
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["user_id"]
+    assert payload["role"] == Role.ADMIN.value
+    assert isinstance(payload["permissions"], list)

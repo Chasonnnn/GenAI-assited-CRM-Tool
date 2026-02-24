@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_csrf_header, require_permission
+from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
 from app.core.policies import POLICIES
 from app.core.permissions import (
     PERMISSION_REGISTRY,
@@ -134,6 +134,40 @@ class EffectivePermissions(BaseModel):
     role: str
     permissions: list[str]
     overrides: list[OverrideRead]
+
+
+def _build_effective_permissions_response(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    role: str,
+) -> EffectivePermissions:
+    effective = permission_service.get_effective_permissions(
+        db,
+        org_id,
+        user_id,
+        role,
+    )
+    overrides = permission_service.get_user_overrides(db, org_id, user_id)
+    override_list = [
+        OverrideRead(
+            permission=o.permission,
+            override_type=o.override_type,
+            label=PERMISSION_REGISTRY[o.permission].label
+            if o.permission in PERMISSION_REGISTRY
+            else o.permission,
+            category=PERMISSION_REGISTRY[o.permission].category
+            if o.permission in PERMISSION_REGISTRY
+            else "Unknown",
+        )
+        for o in overrides
+    ]
+    return EffectivePermissions(
+        user_id=user_id,
+        role=role,
+        permissions=sorted(effective),
+        overrides=override_list,
+    )
 
 
 # =============================================================================
@@ -424,6 +458,24 @@ def remove_member(
     return {"removed": True, "user_id": str(user.id)}
 
 
+@router.get("/effective/me", response_model=EffectivePermissions)
+def get_my_effective_permissions(
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(get_current_session),
+):
+    """Get effective permissions for the current authenticated user."""
+    membership = permission_service.get_membership_for_user(db, session.org_id, session.user_id)
+    if not membership:
+        raise HTTPException(404, "User not found in organization")
+
+    return _build_effective_permissions_response(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        role=membership.role,
+    )
+
+
 @router.get("/effective/{user_id}", response_model=EffectivePermissions)
 def get_effective_permissions(
     user_id: UUID,
@@ -442,30 +494,11 @@ def get_effective_permissions(
     if not membership:
         raise HTTPException(404, "User not found in organization")
 
-    effective = permission_service.get_effective_permissions(
-        db, session.org_id, user_id, membership.role
-    )
-
-    overrides = permission_service.get_user_overrides(db, session.org_id, user_id)
-    override_list = [
-        OverrideRead(
-            permission=o.permission,
-            override_type=o.override_type,
-            label=PERMISSION_REGISTRY[o.permission].label
-            if o.permission in PERMISSION_REGISTRY
-            else o.permission,
-            category=PERMISSION_REGISTRY[o.permission].category
-            if o.permission in PERMISSION_REGISTRY
-            else "Unknown",
-        )
-        for o in overrides
-    ]
-
-    return EffectivePermissions(
+    return _build_effective_permissions_response(
+        db=db,
+        org_id=session.org_id,
         user_id=user_id,
         role=membership.role,
-        permissions=sorted(effective),
-        overrides=override_list,
     )
 
 

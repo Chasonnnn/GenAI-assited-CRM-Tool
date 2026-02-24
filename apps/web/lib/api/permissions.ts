@@ -95,6 +95,10 @@ export async function getEffectivePermissions(userId: string): Promise<Effective
     return api.get<EffectivePermissions>(`/settings/permissions/effective/${userId}`)
 }
 
+export async function getMyEffectivePermissions(): Promise<EffectivePermissions> {
+    return api.get<EffectivePermissions>("/settings/permissions/effective/me")
+}
+
 export async function getRoles(): Promise<RoleSummary[]> {
     return api.get<RoleSummary[]>("/settings/permissions/roles")
 }
