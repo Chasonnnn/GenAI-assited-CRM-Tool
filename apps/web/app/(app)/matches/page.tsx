@@ -74,13 +74,6 @@ function MatchRow({ match }: { match: MatchListItem }) {
             <TableCell>
                 <StatusBadge status={status} />
             </TableCell>
-            <TableCell>
-                {match.compatibility_score !== null ? (
-                    <span className="font-medium">{match.compatibility_score.toFixed(0)}%</span>
-                ) : (
-                    <span className="text-muted-foreground">—</span>
-                )}
-            </TableCell>
             <TableCell className="text-muted-foreground text-sm">
                 {formatDistanceToNow(new Date(match.proposed_at), { addSuffix: true })}
             </TableCell>
@@ -311,7 +304,6 @@ function MatchTable({ status, search }: { status?: MatchStatus; search?: string 
                     <TableHead>Surrogate</TableHead>
                     <TableHead>Intended Parent</TableHead>
                     <TableHead>Stage</TableHead>
-                    <TableHead>Score</TableHead>
                     <TableHead>Proposed</TableHead>
                     <TableHead>Action</TableHead>
                 </TableRow>

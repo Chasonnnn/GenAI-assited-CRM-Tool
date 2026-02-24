@@ -11,7 +11,6 @@ import api from './index'
 export interface MatchCreate {
     surrogate_id: string
     intended_parent_id: string
-    compatibility_score?: number
     notes?: string
 }
 
@@ -21,7 +20,6 @@ export interface MatchRead {
     surrogate_id: string
     intended_parent_id: string
     status: string
-    compatibility_score: number | null
     proposed_by_user_id: string | null
     proposed_at: string
     reviewed_by_user_id: string | null
@@ -50,7 +48,6 @@ export interface MatchListItem {
     ip_name: string | null
     ip_number: string | null
     status: string
-    compatibility_score: number | null
     proposed_at: string
     // Surrogate stage info for status sync
     surrogate_stage_id: string | null

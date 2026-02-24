@@ -285,7 +285,6 @@ export default function MatchesPage() {
                                         <TableHead>Surrogate</TableHead>
                                         <TableHead>Surrogate #</TableHead>
                                         <TableHead>Intended Parents</TableHead>
-                                        <TableHead>Compatibility</TableHead>
                                         <TableHead>Match Stage</TableHead>
                                         <TableHead>Surrogate Stage</TableHead>
                                         <TableHead>Proposed</TableHead>
@@ -320,11 +319,6 @@ export default function MatchesPage() {
                                                 >
                                                     {match.ip_name || "—"}
                                                 </Link>
-                                            </TableCell>
-                                            <TableCell>
-                                                {match.compatibility_score !== null
-                                                    ? `${match.compatibility_score}%`
-                                                    : "—"}
                                             </TableCell>
                                             <TableCell>
                                                 {(() => {

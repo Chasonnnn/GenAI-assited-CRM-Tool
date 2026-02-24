@@ -45,7 +45,6 @@ describe('MatchesPage', () => {
                 ip_id: 'ip1',
                 ip_name: 'John Smith',
                 status: 'proposed' as const,
-                compatibility_score: 85,
                 proposed_at: '2024-01-15T10:00:00Z',
                 proposed_by_user_id: 'user1',
                 proposed_by_name: 'Admin User',
@@ -59,7 +58,6 @@ describe('MatchesPage', () => {
                 ip_id: 'ip2',
                 ip_name: 'Bob Williams',
                 status: 'accepted' as const,
-                compatibility_score: 92,
                 proposed_at: '2024-01-10T14:00:00Z',
                 proposed_by_user_id: 'user1',
                 proposed_by_name: 'Admin User',
@@ -101,7 +99,7 @@ describe('MatchesPage', () => {
         expect(screen.getByText('Surrogate')).toBeInTheDocument()
         expect(screen.getByText('Surrogate #')).toBeInTheDocument()
         expect(screen.getByText('Intended Parents')).toBeInTheDocument()
-        expect(screen.getByText('Compatibility')).toBeInTheDocument()
+        expect(screen.queryByText('Compatibility')).not.toBeInTheDocument()
         expect(screen.getByText('Match Stage')).toBeInTheDocument()
         expect(screen.getByText('Surrogate Stage')).toBeInTheDocument()
 
@@ -109,12 +107,10 @@ describe('MatchesPage', () => {
         expect(screen.getByText('Jane Doe')).toBeInTheDocument()
         expect(screen.getByText('S10001')).toBeInTheDocument()
         expect(screen.getByText('John Smith')).toBeInTheDocument()
-        expect(screen.getByText('85%')).toBeInTheDocument()
 
         expect(screen.getByText('Mary Johnson')).toBeInTheDocument()
         expect(screen.getByText('S10002')).toBeInTheDocument()
         expect(screen.getByText('Bob Williams')).toBeInTheDocument()
-        expect(screen.getByText('92%')).toBeInTheDocument()
     })
 
     it('shows loading state', () => {

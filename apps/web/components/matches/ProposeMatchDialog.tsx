@@ -4,7 +4,6 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -29,7 +28,6 @@ export function ProposeMatchDialog({
     onSuccess,
 }: ProposeMatchDialogProps) {
     const [selectedIpId, setSelectedIpId] = useState<string>("")
-    const [compatibilityScore, setCompatibilityScore] = useState<string>("")
     const [notes, setNotes] = useState("")
     const [error, setError] = useState<string | null>(null)
 
@@ -44,13 +42,11 @@ export function ProposeMatchDialog({
             await createMatch.mutateAsync({
                 surrogate_id: surrogateId,
                 intended_parent_id: selectedIpId,
-                ...(compatibilityScore ? { compatibility_score: parseFloat(compatibilityScore) } : {}),
                 ...(notes.trim() ? { notes: notes.trim() } : {}),
             })
             toast.success("Match proposed successfully!")
             onOpenChange(false)
             setSelectedIpId("")
-            setCompatibilityScore("")
             setNotes("")
             onSuccess?.()
         } catch (e: unknown) {
@@ -62,7 +58,6 @@ export function ProposeMatchDialog({
     const handleClose = () => {
         onOpenChange(false)
         setSelectedIpId("")
-        setCompatibilityScore("")
         setNotes("")
     }
 
@@ -110,20 +105,6 @@ export function ProposeMatchDialog({
                                 </SelectContent>
                             </Select>
                         )}
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label htmlFor="score">Compatibility Score (optional)</Label>
-                        <Input
-                            id="score"
-                            type="number"
-                            min="0"
-                            max="100"
-                            placeholder="0-100"
-                            value={compatibilityScore}
-                            onChange={(e) => setCompatibilityScore(e.target.value)}
-                        />
-                        <p className="text-xs text-muted-foreground">Enter a score between 0-100 if applicable</p>
                     </div>
 
                     <div className="space-y-2">
