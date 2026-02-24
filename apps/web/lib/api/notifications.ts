@@ -30,6 +30,10 @@ export interface NotificationSettings {
     workflow_approvals: boolean
     task_reminders: boolean
     appointments: boolean
+    contact_reminder: boolean
+    status_change_decisions: boolean
+    approval_timeouts: boolean
+    security_alerts: boolean
 }
 
 // API Functions

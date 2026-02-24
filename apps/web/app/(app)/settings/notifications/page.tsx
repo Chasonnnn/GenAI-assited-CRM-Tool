@@ -190,14 +190,38 @@ function NotificationsSettingsCard() {
             title: "Appointments",
             description: "Reminders for upcoming appointments",
         },
+        {
+            key: "contact_reminder",
+            icon: RefreshCw,
+            title: "Contact Reminders",
+            description: "Follow-up reminders for assigned surrogates",
+        },
+        {
+            key: "status_change_decisions",
+            icon: ListChecks,
+            title: "Status Change Decisions",
+            description: "When status change requests are approved or rejected",
+        },
+        {
+            key: "approval_timeouts",
+            icon: AlertTriangle,
+            title: "Approval Timeouts",
+            description: "When workflow approvals expire before action is taken",
+        },
+        {
+            key: "security_alerts",
+            icon: AlertTriangle,
+            title: "Security Alerts",
+            description: "Security-relevant alerts such as quarantined attachments",
+        },
     ]
 
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Email Notifications</CardTitle>
+                <CardTitle>In-app Notifications</CardTitle>
                 <CardDescription>
-                    Choose which notifications you want to receive via email at {user?.email}
+                    Choose which updates appear in-app for {user?.email}
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

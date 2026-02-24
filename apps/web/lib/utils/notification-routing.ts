@@ -4,6 +4,7 @@ type NotificationRouteInput = Pick<Notification, "type" | "entity_type" | "entit
 
 const APPROVAL_NOTIFICATION_TYPES = new Set([
     "workflow_approval_requested",
+    "workflow_approval_expired",
     "status_change_requested",
 ])
 
@@ -31,7 +32,7 @@ export function getNotificationHref(notification: NotificationRouteInput): strin
         return buildTasksHref(taskFocus)
     }
 
-    if (notification.entity_type === "surrogate" && notification.entity_id) {
+    if ((notification.entity_type === "surrogate" || notification.entity_type === "case") && notification.entity_id) {
         return `/surrogates/${notification.entity_id}`
     }
     if (notification.entity_type === "intended_parent" && notification.entity_id) {
