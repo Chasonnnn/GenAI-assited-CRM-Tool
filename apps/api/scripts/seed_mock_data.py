@@ -1,28 +1,43 @@
 """
-Seed script to create 40 mock surrogates and 40 mock intended parents with complete data.
+Seed script to create high-volume mock data for local testing.
 Run with: python -m scripts.seed_mock_data
 """
 
+import json
 import os
 import random
-import hashlib
 import re
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
+from app.core.encryption import hash_email, hash_phone
+from sqlalchemy import func
 from app.db.session import SessionLocal
 from app.db.models import (
+    EntityNote,
+    IntendedParentStatusHistory,
+    Match,
+    Membership,
     Organization,
-    User,
-    Surrogate,
-    IntendedParent,
     PipelineStage,
+    IntendedParent,
+    Surrogate,
+    SurrogateActivityLog,
+    SurrogateContactAttempt,
     SurrogateStatusHistory,
+    User,
 )
-from app.db.enums import IntendedParentStatus, SurrogateSource
-from app.services import pipeline_service
-from app.services import template_seeder
+from app.db.enums import (
+    ContactMethod,
+    ContactOutcome,
+    IntendedParentStatus,
+    MatchStatus,
+    Role,
+    SurrogateActivityType,
+    SurrogateSource,
+)
+from app.services import dev_service, match_service, pipeline_service, template_seeder
 
 # Sample data pools
 FIRST_NAMES_FEMALE = [
@@ -264,6 +279,45 @@ PREGNANCY_STAGE_SLUGS = {
     "delivered",
 }
 
+STAGE_WEIGHTS_BY_SLUG = {
+    "new_unread": 8,
+    "contacted": 6,
+    "qualified": 6,
+    "application_submitted": 5,
+    "interview_scheduled": 4,
+    "under_review": 4,
+    "approved": 4,
+    "ready_to_match": 5,
+    "matched": 4,
+    "medical_clearance_passed": 3,
+    "legal_clearance_passed": 3,
+    "transfer_cycle": 2,
+    "second_hcg_confirmed": 2,
+    "heartbeat_confirmed": 2,
+    "ob_care_established": 1,
+    "anatomy_scanned": 1,
+    "delivered": 1,
+    "lost": 1,
+    "disqualified": 1,
+}
+
+SUPPORTED_ACTIVITY_MODES = {"rich_core"}
+SUPPORTED_MATCH_MODES = {"balanced"}
+IP_STATUS_FLOW = [
+    IntendedParentStatus.NEW.value,
+    IntendedParentStatus.READY_TO_MATCH.value,
+    IntendedParentStatus.MATCHED.value,
+    IntendedParentStatus.DELIVERED.value,
+]
+MATCH_STATUS_FLOW = [
+    MatchStatus.PROPOSED.value,
+    MatchStatus.REVIEWING.value,
+    MatchStatus.ACCEPTED.value,
+    MatchStatus.REJECTED.value,
+    MatchStatus.CANCELLED.value,
+]
+MATCH_ACCEPTABLE_SURROGATE_STAGES = {"approved", "ready_to_match"}
+
 
 def mask_email(email: str) -> str:
     """Mask email to avoid logging raw PII."""
@@ -273,11 +327,6 @@ def mask_email(email: str) -> str:
     if len(local) <= 2:
         return f"{local[0]}***@{domain}"
     return f"{local[0]}***{local[-1]}@{domain}"
-
-
-def hash_pii(value: str) -> str:
-    """Create a hash for PII fields."""
-    return hashlib.sha256(value.encode()).hexdigest()[:64]
 
 
 def random_phone() -> str:
@@ -334,7 +383,7 @@ def _next_number(values: list[str], prefix: str, fallback: int) -> int:
     return max(numbers, default=fallback - 1) + 1
 
 
-def get_next_surrogate_number(db, org_id: uuid4) -> int:
+def get_next_surrogate_number(db, org_id: UUID) -> int:
     """Get next surrogate number for the org."""
     values = [
         row[0]
@@ -345,7 +394,7 @@ def get_next_surrogate_number(db, org_id: uuid4) -> int:
     return _next_number(values, "S", 10001)
 
 
-def get_next_intended_parent_number(db, org_id: uuid4) -> int:
+def get_next_intended_parent_number(db, org_id: UUID) -> int:
     """Get next intended parent number for the org."""
     values = [
         row[0]
@@ -356,34 +405,38 @@ def get_next_intended_parent_number(db, org_id: uuid4) -> int:
     return _next_number(values, "I", 10001)
 
 
-def pick_stage(stages: list[PipelineStage]) -> PipelineStage:
-    """Pick a stage using weighted distribution."""
-    weights_by_slug = {
-        "new_unread": 8,
-        "contacted": 6,
-        "qualified": 6,
-        "application_submitted": 5,
-        "interview_scheduled": 4,
-        "under_review": 4,
-        "approved": 4,
-        "ready_to_match": 5,
-        "matched": 4,
-        "medical_clearance_passed": 3,
-        "legal_clearance_passed": 3,
-        "transfer_cycle": 2,
-        "second_hcg_confirmed": 2,
-        "heartbeat_confirmed": 2,
-        "ob_care_established": 1,
-        "anatomy_scanned": 1,
-        "delivered": 1,
-        "lost": 1,
-        "disqualified": 1,
-    }
-    weights = [
-        weights_by_slug.get(stage.slug, 2 if stage.stage_type != "terminal" else 1)
-        for stage in stages
-    ]
-    return random.choices(stages, weights=weights, k=1)[0]
+def _repeat_balanced(items: list[str], count: int) -> list[str]:
+    if count <= 0:
+        return []
+    result = []
+    while len(result) < count:
+        result.extend(items)
+    result = result[:count]
+    random.shuffle(result)
+    return result
+
+
+def _weighted_stage_targets(stages: list[PipelineStage], count: int) -> list[PipelineStage]:
+    if count <= 0:
+        return []
+
+    targets: list[PipelineStage] = []
+    if count >= len(stages):
+        targets.extend(stages)
+        remaining = count - len(stages)
+    else:
+        targets.extend(random.sample(stages, count))
+        remaining = 0
+
+    if remaining > 0:
+        weights = [
+            STAGE_WEIGHTS_BY_SLUG.get(stage.slug, 2 if stage.stage_type != "terminal" else 1)
+            for stage in stages
+        ]
+        targets.extend(random.choices(stages, weights=weights, k=remaining))
+
+    random.shuffle(targets)
+    return targets
 
 
 def build_stage_path(
@@ -402,9 +455,9 @@ def build_stage_path(
 
 def create_status_history(
     db,
-    org_id: uuid4,
-    owner_id: uuid4,
-    surrogate_id: uuid4,
+    org_id: UUID,
+    owner_id: UUID,
+    surrogate_id: UUID,
     stage_path: list[PipelineStage],
     created_at: datetime,
 ) -> dict[str, datetime]:
@@ -439,21 +492,186 @@ def create_status_history(
     return contact_times
 
 
+def _strip_html(value: str) -> str:
+    return re.sub(r"<[^>]*>", "", value).strip()
+
+
+def _pick_owner(users_by_role: dict[str, User], fallback_user: User | None) -> User:
+    weighted_roles = [
+        (Role.INTAKE_SPECIALIST.value, 45),
+        (Role.CASE_MANAGER.value, 30),
+        (Role.ADMIN.value, 15),
+        (Role.DEVELOPER.value, 10),
+    ]
+    users = []
+    weights = []
+    for role_value, weight in weighted_roles:
+        user = users_by_role.get(role_value)
+        if user:
+            users.append(user)
+            weights.append(weight)
+    if users:
+        return random.choices(users, weights=weights, k=1)[0]
+
+    if users_by_role:
+        return random.choice(list(users_by_role.values()))
+
+    if fallback_user:
+        return fallback_user
+
+    raise ValueError("No owner user available for seeding")
+
+
+def _log_surrogate_activity(
+    db,
+    *,
+    surrogate: Surrogate,
+    actor_user: User,
+    created_at: datetime,
+    assigned_at: datetime | None,
+    contacted_at: datetime | None,
+    is_reached: bool,
+    activity_mode: str,
+) -> None:
+    if activity_mode not in SUPPORTED_ACTIVITY_MODES:
+        raise ValueError(
+            f"Unsupported SEED_ACTIVITY_MODE={activity_mode}. "
+            f"Supported: {sorted(SUPPORTED_ACTIVITY_MODES)}"
+        )
+
+    now = datetime.now(timezone.utc)
+    created_event_time = min(created_at + timedelta(minutes=5), now)
+
+    db.add(
+        SurrogateActivityLog(
+            surrogate_id=surrogate.id,
+            organization_id=surrogate.organization_id,
+            activity_type=SurrogateActivityType.SURROGATE_CREATED.value,
+            actor_user_id=actor_user.id,
+            details={"source": surrogate.source},
+            created_at=created_event_time,
+        )
+    )
+
+    if assigned_at:
+        db.add(
+            SurrogateActivityLog(
+                surrogate_id=surrogate.id,
+                organization_id=surrogate.organization_id,
+                activity_type=SurrogateActivityType.ASSIGNED.value,
+                actor_user_id=actor_user.id,
+                details={"to_user_id": str(surrogate.owner_id)},
+                created_at=min(max(assigned_at, created_event_time), now),
+            )
+        )
+
+    note_time = min(created_event_time + timedelta(days=random.randint(1, 7)), now)
+    note = EntityNote(
+        organization_id=surrogate.organization_id,
+        entity_type="surrogate",
+        entity_id=surrogate.id,
+        author_id=actor_user.id,
+        content=f"<p>Seed note for {surrogate.surrogate_number}: profile reviewed.</p>",
+        created_at=note_time,
+    )
+    db.add(note)
+    db.flush()
+    db.add(
+        SurrogateActivityLog(
+            surrogate_id=surrogate.id,
+            organization_id=surrogate.organization_id,
+            activity_type=SurrogateActivityType.NOTE_ADDED.value,
+            actor_user_id=actor_user.id,
+            details={
+                "note_id": str(note.id),
+                "preview": _strip_html(note.content)[:120],
+            },
+            created_at=note_time,
+        )
+    )
+
+    info_edit_time = min(note_time + timedelta(hours=random.randint(2, 24)), now)
+    db.add(
+        SurrogateActivityLog(
+            surrogate_id=surrogate.id,
+            organization_id=surrogate.organization_id,
+            activity_type=SurrogateActivityType.INFO_EDITED.value,
+            actor_user_id=actor_user.id,
+            details={"changes": {"state": "[redacted]", "phone": "[redacted]"}},
+            created_at=info_edit_time,
+        )
+    )
+
+    if surrogate.is_priority:
+        db.add(
+            SurrogateActivityLog(
+                surrogate_id=surrogate.id,
+                organization_id=surrogate.organization_id,
+                activity_type=SurrogateActivityType.PRIORITY_CHANGED.value,
+                actor_user_id=actor_user.id,
+                details={"is_priority": True},
+                created_at=min(info_edit_time + timedelta(minutes=15), now),
+            )
+        )
+
+    if is_reached:
+        attempted_at = contacted_at or assigned_at or created_event_time
+        attempted_at = min(attempted_at, now)
+
+        db.add(
+            SurrogateContactAttempt(
+                surrogate_id=surrogate.id,
+                organization_id=surrogate.organization_id,
+                attempted_by_user_id=actor_user.id,
+                contact_methods=[ContactMethod.PHONE.value],
+                outcome=ContactOutcome.REACHED.value,
+                notes="Reached during seeded follow-up",
+                attempted_at=attempted_at,
+                surrogate_owner_id_at_attempt=surrogate.owner_id,
+            )
+        )
+        db.add(
+            SurrogateActivityLog(
+                surrogate_id=surrogate.id,
+                organization_id=surrogate.organization_id,
+                activity_type=SurrogateActivityType.CONTACT_ATTEMPT.value,
+                actor_user_id=actor_user.id,
+                details={
+                    "contact_methods": [ContactMethod.PHONE.value],
+                    "outcome": ContactOutcome.REACHED.value,
+                    "note_preview": "Reached during seeded follow-up",
+                    "attempted_at": attempted_at.isoformat(),
+                },
+                created_at=attempted_at,
+            )
+        )
+
+
 def create_surrogates(
     db,
-    org_id: uuid4,
-    owner_id: uuid4,
+    org_id: UUID,
+    owner_id: UUID,
     stages_sorted: list[PipelineStage],
     count: int = 40,
-):
-    """Create mock surrogates with complete data."""
+    users_by_role: dict[str, User] | None = None,
+    activity_mode: str = "rich_core",
+) -> list[Surrogate]:
+    """Create mock surrogates with status history and rich activity logs."""
     print(f"Creating {count} surrogates...")
+
+    if count <= 0:
+        return []
+
+    users_by_role = users_by_role or {}
+    fallback_user = db.query(User).filter(User.id == owner_id).first()
 
     next_number = get_next_surrogate_number(db, org_id)
     stage_by_slug = {stage.slug: stage for stage in stages_sorted}
     contacted_stage = stage_by_slug.get("contacted")
+    targets = _weighted_stage_targets(stages_sorted, count)
+    created_surrogates: list[Surrogate] = []
 
-    for i in range(count):
+    for i, stage in enumerate(targets):
         first = random.choice(FIRST_NAMES_FEMALE)
         last = random.choice(LAST_NAMES)
         full_name = f"{first} {last}"
@@ -461,13 +679,13 @@ def create_surrogates(
         phone = random_phone()
         dob = random_date_of_birth(21, 36)
         state = random.choice(STATES)
+        owner_user = _pick_owner(users_by_role, fallback_user)
 
         # Address components for clinics/hospitals
         clinic_addr = random_address()
         monitoring_addr = random_address()
         ob_addr = random_address()
         hospital_addr = random_address()
-        stage = pick_stage(stages_sorted)
         created_min = 10 + stage.order * 5
         created_max = created_min + 120
         created_at = datetime.now(timezone.utc) - timedelta(
@@ -483,15 +701,13 @@ def create_surrogates(
         contact_times = create_status_history(
             db=db,
             org_id=org_id,
-            owner_id=owner_id,
+            owner_id=owner_user.id,
             surrogate_id=surrogate_id,
             stage_path=stage_path,
             created_at=created_at,
         )
 
-        is_reached = False
-        if contacted_stage:
-            is_reached = stage.order >= contacted_stage.order
+        is_reached = bool(contacted_stage and stage.order >= contacted_stage.order)
 
         last_contacted_at = contact_times.get("last_stage_at") if is_reached else None
         contacted_at = contact_times.get("contacted_at")
@@ -529,8 +745,8 @@ def create_surrogates(
             source=random.choice(SURROGATE_SOURCES),
             is_priority=random.random() < 0.2,  # 20% priority
             owner_type="user",
-            owner_id=owner_id,
-            created_by_user_id=owner_id,
+            owner_id=owner_user.id,
+            created_by_user_id=owner_user.id,
             meta_ad_external_id=meta_ad,
             meta_form_id=meta_form,
             meta_campaign_external_id=meta_campaign,
@@ -538,9 +754,9 @@ def create_surrogates(
             # Contact info
             full_name=full_name,
             email=email,
-            email_hash=hash_pii(email.lower()),
+            email_hash=hash_email(email),
             phone=phone,
-            phone_hash=hash_pii(phone),
+            phone_hash=hash_phone(phone),
             state=state,
             # Demographics
             date_of_birth=dob,
@@ -617,17 +833,92 @@ def create_surrogates(
         )
 
         db.add(surrogate)
+        db.flush()
+        _log_surrogate_activity(
+            db,
+            surrogate=surrogate,
+            actor_user=owner_user,
+            created_at=created_at,
+            assigned_at=assigned_at,
+            contacted_at=contacted_at,
+            is_reached=is_reached,
+            activity_mode=activity_mode,
+        )
+        created_surrogates.append(surrogate)
 
     db.commit()
     print(f"Created {count} surrogates")
+    return created_surrogates
 
 
-def create_intended_parents(db, org_id: uuid4, owner_id: uuid4, count: int = 40):
-    """Create mock intended parents with complete data."""
+def _build_ip_targets(count: int) -> list[str]:
+    if count <= 0:
+        return []
+    if count >= len(IP_STATUS_FLOW):
+        targets = IP_STATUS_FLOW.copy()
+        remaining = count - len(IP_STATUS_FLOW)
+        targets.extend(random.choices(IP_STATUS_FLOW, weights=[4, 3, 2, 1], k=remaining))
+        random.shuffle(targets)
+        return targets
+    return random.sample(IP_STATUS_FLOW, count)
+
+
+def _build_ip_status_path(target_status: str) -> list[str]:
+    idx = IP_STATUS_FLOW.index(target_status)
+    return IP_STATUS_FLOW[: idx + 1]
+
+
+def _create_ip_status_history(
+    db,
+    *,
+    intended_parent: IntendedParent,
+    actor_user_id: UUID,
+    created_at: datetime,
+    target_status: str,
+) -> None:
+    now = datetime.now(timezone.utc)
+    path = _build_ip_status_path(target_status)
+    previous = None
+    cursor = created_at + timedelta(days=random.randint(0, 2))
+
+    for status in path:
+        effective_at = min(cursor, now)
+        recorded_at = min(effective_at + timedelta(minutes=random.randint(5, 120)), now)
+        db.add(
+            IntendedParentStatusHistory(
+                intended_parent_id=intended_parent.id,
+                changed_by_user_id=actor_user_id,
+                old_status=previous,
+                new_status=status,
+                reason="Seeded status progression",
+                changed_at=effective_at,
+                effective_at=effective_at,
+                recorded_at=recorded_at,
+            )
+        )
+        previous = status
+        cursor = min(effective_at + timedelta(days=random.randint(7, 45)), now)
+
+
+def create_intended_parents(
+    db,
+    org_id: UUID,
+    owner_id: UUID,
+    count: int = 40,
+    users_by_role: dict[str, User] | None = None,
+) -> list[IntendedParent]:
+    """Create mock intended parents with complete data and status history."""
     print(f"Creating {count} intended parents...")
 
+    if count <= 0:
+        return []
+
+    users_by_role = users_by_role or {}
+    fallback_user = db.query(User).filter(User.id == owner_id).first()
+    targets = _build_ip_targets(count)
     next_number = get_next_intended_parent_number(db, org_id)
-    for i in range(count):
+    created_ips: list[IntendedParent] = []
+    for i, target_status in enumerate(targets):
         # Create couples - both partners' names
         first1 = random.choice(FIRST_NAMES_FEMALE + PARTNER_NAMES_MALE)
         first2 = random.choice(FIRST_NAMES_FEMALE + PARTNER_NAMES_MALE)
@@ -637,6 +928,8 @@ def create_intended_parents(db, org_id: uuid4, owner_id: uuid4, count: int = 40)
         email = random_email(first1, last, i + 100)
         phone = random_phone()
         state = random.choice(STATES)
+        owner_user = _pick_owner(users_by_role, fallback_user)
+        created_at = datetime.now(timezone.utc) - timedelta(days=random.randint(5, 540))
 
         intended_parent = IntendedParent(
             id=uuid4(),
@@ -645,9 +938,9 @@ def create_intended_parents(db, org_id: uuid4, owner_id: uuid4, count: int = 40)
             # Contact info
             full_name=full_name,
             email=email,
-            email_hash=hash_pii(email.lower()),
+            email_hash=hash_email(email),
             phone=phone,
-            phone_hash=hash_pii(phone),
+            phone_hash=hash_phone(phone),
             state=state,
             # Budget (varies from $80K to $200K)
             budget=Decimal(str(random.randint(80000, 200000))),
@@ -656,20 +949,344 @@ def create_intended_parents(db, org_id: uuid4, owner_id: uuid4, count: int = 40)
             + f"Looking to start journey {random.choice(['immediately', 'within 3 months', 'within 6 months'])}. "
             + f"Preference for {random.choice(['experienced', 'first-time', 'no preference'])} surrogate.",
             # Status & workflow
-            status=random.choice(IP_STATUSES),
+            status=target_status,
             owner_type="user",
-            owner_id=owner_id,
+            owner_id=owner_user.id,
             # Activity tracking
             last_activity=datetime.now(timezone.utc) - timedelta(days=random.randint(0, 30)),
             # Timestamps
-            created_at=datetime.now(timezone.utc) - timedelta(days=random.randint(5, 540)),
+            created_at=created_at,
             updated_at=datetime.now(timezone.utc),
         )
 
         db.add(intended_parent)
+        db.flush()
+        _create_ip_status_history(
+            db,
+            intended_parent=intended_parent,
+            actor_user_id=owner_user.id,
+            created_at=created_at,
+            target_status=target_status,
+        )
+        created_ips.append(intended_parent)
 
     db.commit()
     print(f"Created {count} intended parents")
+    return created_ips
+
+
+def _pick_actor(
+    users_by_role: dict[str, User],
+    preferred_roles: list[str],
+    fallback: User | None = None,
+) -> User:
+    for role in preferred_roles:
+        user = users_by_role.get(role)
+        if user:
+            return user
+    if users_by_role:
+        return next(iter(users_by_role.values()))
+    if fallback:
+        return fallback
+    raise ValueError("No actor user available")
+
+
+def _build_match_targets(count: int, mode: str) -> list[str]:
+    if mode not in SUPPORTED_MATCH_MODES:
+        raise ValueError(
+            f"Unsupported SEED_MATCH_MODE={mode}. Supported: {sorted(SUPPORTED_MATCH_MODES)}"
+        )
+    return _repeat_balanced(MATCH_STATUS_FLOW, count)
+
+
+def create_matches(
+    db,
+    *,
+    org_id: UUID,
+    users_by_role: dict[str, User],
+    count: int = 20,
+    mode: str = "balanced",
+) -> list[Match]:
+    """Create matches across balanced statuses for testing."""
+    print(f"Creating {count} matches with mode={mode}...")
+
+    if count <= 0:
+        return []
+
+    surrogate_rows = (
+        db.query(Surrogate, PipelineStage.slug)
+        .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
+        .filter(
+            Surrogate.organization_id == org_id,
+            Surrogate.is_archived.is_(False),
+        )
+        .all()
+    )
+    ips = (
+        db.query(IntendedParent)
+        .filter(
+            IntendedParent.organization_id == org_id,
+            IntendedParent.is_archived.is_(False),
+        )
+        .all()
+    )
+    if not surrogate_rows or not ips:
+        print("Skipping matches (requires seeded surrogates and intended parents).")
+        return []
+
+    general_surrogates = [s for s, slug in surrogate_rows if slug not in TERMINAL_STAGE_SLUGS]
+    accepted_surrogates = [
+        s for s, slug in surrogate_rows if slug in MATCH_ACCEPTABLE_SURROGATE_STAGES
+    ]
+    if not accepted_surrogates:
+        accepted_surrogates = general_surrogates
+
+    proposer = _pick_actor(
+        users_by_role,
+        [Role.CASE_MANAGER.value, Role.ADMIN.value, Role.DEVELOPER.value],
+    )
+    reviewer = _pick_actor(
+        users_by_role,
+        [Role.ADMIN.value, Role.DEVELOPER.value, Role.CASE_MANAGER.value],
+        fallback=proposer,
+    )
+    decider = _pick_actor(
+        users_by_role,
+        [Role.DEVELOPER.value, Role.ADMIN.value, Role.CASE_MANAGER.value],
+        fallback=proposer,
+    )
+    if reviewer.id == proposer.id:
+        for user in users_by_role.values():
+            if user.id != proposer.id:
+                reviewer = user
+                break
+
+    targets = _build_match_targets(count, mode=mode)
+    used_pairs: set[tuple[UUID, UUID]] = set()
+    used_accepted_surrogates: set[UUID] = set()
+    created_matches: list[Match] = []
+
+    for target_status in targets:
+        created = False
+        for _ in range(120):
+            pool = accepted_surrogates if target_status == MatchStatus.ACCEPTED.value else general_surrogates
+            if target_status == MatchStatus.ACCEPTED.value:
+                pool = [s for s in pool if s.id not in used_accepted_surrogates]
+            if not pool:
+                break
+
+            surrogate = random.choice(pool)
+            intended_parent = random.choice(ips)
+            pair = (surrogate.id, intended_parent.id)
+            if pair in used_pairs:
+                continue
+            used_pairs.add(pair)
+
+            existing = match_service.get_existing_match(
+                db,
+                org_id=org_id,
+                surrogate_id=surrogate.id,
+                intended_parent_id=intended_parent.id,
+            )
+            if existing:
+                continue
+
+            match = match_service.create_match(
+                db=db,
+                org_id=org_id,
+                surrogate_id=surrogate.id,
+                intended_parent_id=intended_parent.id,
+                proposed_by_user_id=proposer.id,
+                compatibility_score=round(random.uniform(60, 99), 2),
+                notes=f"Seed {target_status} scenario",
+            )
+
+            if target_status == MatchStatus.PROPOSED.value:
+                created_matches.append(match)
+                created = True
+                break
+
+            if target_status == MatchStatus.REVIEWING.value:
+                match = match_service.mark_match_reviewing_if_needed(
+                    db=db,
+                    match=match,
+                    actor_user_id=reviewer.id,
+                    org_id=org_id,
+                )
+                created_matches.append(match)
+                created = True
+                break
+
+            if target_status == MatchStatus.ACCEPTED.value:
+                try:
+                    match = match_service.accept_match(
+                        db=db,
+                        match=match,
+                        actor_user_id=decider.id,
+                        actor_role=Role.DEVELOPER.value,
+                        org_id=org_id,
+                        notes="Seed accepted match",
+                    )
+                except ValueError:
+                    try:
+                        match_service.cancel_match(
+                            db=db,
+                            match=match,
+                            actor_user_id=decider.id,
+                            org_id=org_id,
+                        )
+                    except Exception:
+                        pass
+                    continue
+                used_accepted_surrogates.add(surrogate.id)
+                created_matches.append(match)
+                created = True
+                break
+
+            if target_status == MatchStatus.REJECTED.value:
+                if reviewer.id != proposer.id and random.random() < 0.6:
+                    match = match_service.mark_match_reviewing_if_needed(
+                        db=db,
+                        match=match,
+                        actor_user_id=reviewer.id,
+                        org_id=org_id,
+                    )
+                match = match_service.reject_match(
+                    db=db,
+                    match=match,
+                    actor_user_id=decider.id,
+                    org_id=org_id,
+                    rejection_reason="Seed rejection for test coverage",
+                    notes="Seed rejected scenario",
+                )
+                created_matches.append(match)
+                created = True
+                break
+
+            if target_status == MatchStatus.CANCELLED.value:
+                if reviewer.id != proposer.id and random.random() < 0.6:
+                    match = match_service.mark_match_reviewing_if_needed(
+                        db=db,
+                        match=match,
+                        actor_user_id=reviewer.id,
+                        org_id=org_id,
+                    )
+                match_service.cancel_match(
+                    db=db,
+                    match=match,
+                    actor_user_id=decider.id,
+                    org_id=org_id,
+                )
+                db.refresh(match)
+                created_matches.append(match)
+                created = True
+                break
+
+        if not created:
+            print(f"  - skipped one {target_status} match (candidate constraints)")
+
+    print(f"Created {len(created_matches)} matches")
+    return created_matches
+
+
+def _load_users_by_role(db, org_id: UUID) -> dict[str, User]:
+    rows = (
+        db.query(Membership.role, User)
+        .join(User, Membership.user_id == User.id)
+        .filter(
+            Membership.organization_id == org_id,
+            Membership.is_active.is_(True),
+        )
+        .all()
+    )
+    users_by_role: dict[str, User] = {}
+    for role_value, user in rows:
+        users_by_role.setdefault(role_value, user)
+    return users_by_role
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer, got: {raw}") from exc
+
+
+def _build_summary(db, org_id: UUID, users_by_role: dict[str, User]) -> dict:
+    stage_rows = (
+        db.query(PipelineStage.slug, func.count(Surrogate.id))
+        .join(Surrogate, Surrogate.stage_id == PipelineStage.id)
+        .filter(Surrogate.organization_id == org_id)
+        .group_by(PipelineStage.slug)
+        .all()
+    )
+    ip_rows = (
+        db.query(IntendedParent.status, func.count(IntendedParent.id))
+        .filter(IntendedParent.organization_id == org_id)
+        .group_by(IntendedParent.status)
+        .all()
+    )
+    match_rows = (
+        db.query(Match.status, func.count(Match.id))
+        .filter(Match.organization_id == org_id)
+        .group_by(Match.status)
+        .all()
+    )
+    login_ids = {
+        user.email: str(user.id)
+        for user in sorted(users_by_role.values(), key=lambda item: item.email.lower())
+    }
+    return {
+        "org_id": str(org_id),
+        "surrogates_total": int(
+            db.query(func.count(Surrogate.id)).filter(Surrogate.organization_id == org_id).scalar() or 0
+        ),
+        "surrogate_status_history_total": int(
+            db.query(func.count(SurrogateStatusHistory.id))
+            .filter(SurrogateStatusHistory.organization_id == org_id)
+            .scalar()
+            or 0
+        ),
+        "surrogate_activity_total": int(
+            db.query(func.count(SurrogateActivityLog.id))
+            .filter(SurrogateActivityLog.organization_id == org_id)
+            .scalar()
+            or 0
+        ),
+        "intended_parents_total": int(
+            db.query(func.count(IntendedParent.id))
+            .filter(IntendedParent.organization_id == org_id)
+            .scalar()
+            or 0
+        ),
+        "matches_total": int(
+            db.query(func.count(Match.id)).filter(Match.organization_id == org_id).scalar() or 0
+        ),
+        "surrogate_stage_counts": {slug: int(count) for slug, count in stage_rows},
+        "intended_parent_status_counts": {status: int(count) for status, count in ip_rows},
+        "match_status_counts": {status: int(count) for status, count in match_rows},
+        "login_as_user_ids": login_ids,
+    }
+
+
+def _ensure_context(db, org_slug: str | None) -> tuple[Organization, dict[str, User]]:
+    if org_slug:
+        org = db.query(Organization).filter(Organization.slug == org_slug).first()
+        if not org:
+            raise ValueError(f"Organization not found for slug: {org_slug}")
+    else:
+        seed_info = dev_service.seed_test_data(db)
+        org = db.query(Organization).filter(Organization.id == UUID(seed_info["org_id"])).first()
+        if not org:
+            raise ValueError("Failed to resolve seeded test organization")
+
+    users_by_role = _load_users_by_role(db, org.id)
+    if not users_by_role:
+        raise ValueError("No active users found for organization")
+    return org, users_by_role
 
 
 def main():
@@ -679,31 +1296,21 @@ def main():
     db = SessionLocal()
 
     try:
-        # Get organization (prefer explicit slug if provided)
+        seed_random = _env_int("SEED_RANDOM_SEED", 20260224)
+        random.seed(seed_random)
+
         org_slug = os.getenv("SEED_ORG_SLUG")
-        if org_slug:
-            org = db.query(Organization).filter(Organization.slug == org_slug).first()
-        else:
-            org = db.query(Organization).first()
-        if not org:
-            print("ERROR: No organization found. Run create-org first.")
-            return
-
+        org, users_by_role = _ensure_context(db, org_slug)
         print(f"Using organization: {org.name} ({org.id})")
+        print(f"Seed random: {seed_random}")
 
-        # Get user (owner for all records)
-        user = db.query(User).filter(User.email != "system@internal").first()
-        if not user:
-            user = db.query(User).first()
-        if not user:
-            print("ERROR: No user found.")
-            return
+        actor = _pick_actor(
+            users_by_role,
+            [Role.DEVELOPER.value, Role.ADMIN.value, Role.CASE_MANAGER.value],
+        )
+        print(f"Using actor: {mask_email(actor.email)} ({actor.id})")
 
-        print(f"Using user as owner: {mask_email(user.email)} ({user.id})")
-
-        # Get the default pipeline stage for surrogates
-        pipeline = pipeline_service.get_or_create_default_pipeline(db, org.id, user.id)
-
+        pipeline = pipeline_service.get_or_create_default_pipeline(db, org.id, actor.id)
         print(f"Using pipeline: {pipeline.name}")
 
         stages_sorted = (
@@ -719,13 +1326,11 @@ def main():
 
         print(f"Using pipeline stages: {len(stages_sorted)}")
 
-        # Seed system templates & workflows (idempotent)
-        template_result = template_seeder.seed_all(db, org.id, user.id)
+        template_result = template_seeder.seed_all(db, org.id, actor.id)
         print(
             f"Seeded templates: {template_result['templates_created']}, workflows: {template_result['workflows_created']}"
         )
 
-        # Seed signature defaults for org and user
         org.signature_company_name = org.name
         org.signature_address = "123 Market St, Austin, TX"
         org.signature_phone = "+1 (512) 555-0199"
@@ -738,25 +1343,64 @@ def main():
             {"platform": "linkedin", "url": "https://linkedin.com/company/surrogacy-crm"},
             {"platform": "instagram", "url": "https://instagram.com/surrogacy-crm"},
         ]
-        user.signature_name = user.display_name
-        user.signature_title = "Case Manager"
-        user.signature_phone = "+1 (512) 555-0142"
-        user.signature_linkedin = "https://linkedin.com/in/case-manager"
-        user.signature_twitter = "https://twitter.com/surrogacycrm"
+        actor.signature_name = actor.display_name
+        actor.signature_title = "Case Manager"
+        actor.signature_phone = "+1 (512) 555-0142"
+        actor.signature_linkedin = "https://linkedin.com/in/case-manager"
+        actor.signature_twitter = "https://twitter.com/surrogacycrm"
 
         db.commit()
 
-        # Create mock data
-        surrogate_count = int(os.getenv("SEED_SURROGATES", "40"))
-        intended_parent_count = int(os.getenv("SEED_INTENDED_PARENTS", "40"))
-        create_surrogates(db, org.id, user.id, stages_sorted, count=surrogate_count)
-        if intended_parent_count > 0:
-            create_intended_parents(db, org.id, user.id, count=intended_parent_count)
+        surrogate_count = _env_int("SEED_SURROGATES", 500)
+        intended_parent_count = _env_int("SEED_INTENDED_PARENTS", 10)
+        default_match_count = max(10, min(40, max(1, intended_parent_count) * 3))
+        match_count = _env_int("SEED_MATCH_COUNT", default_match_count)
+        match_mode = os.getenv("SEED_MATCH_MODE", "balanced")
+        activity_mode = os.getenv("SEED_ACTIVITY_MODE", "rich_core")
 
-        print("\nMock data seeded successfully!")
-        print(f"  - {surrogate_count} surrogates created")
+        print(
+            "Config:",
+            json.dumps(
+                {
+                    "SEED_SURROGATES": surrogate_count,
+                    "SEED_INTENDED_PARENTS": intended_parent_count,
+                    "SEED_MATCH_MODE": match_mode,
+                    "SEED_MATCH_COUNT": match_count,
+                    "SEED_ACTIVITY_MODE": activity_mode,
+                },
+                sort_keys=True,
+            ),
+        )
+
+        create_surrogates(
+            db,
+            org.id,
+            actor.id,
+            stages_sorted,
+            count=surrogate_count,
+            users_by_role=users_by_role,
+            activity_mode=activity_mode,
+        )
         if intended_parent_count > 0:
-            print(f"  - {intended_parent_count} intended parents created")
+            create_intended_parents(
+                db,
+                org.id,
+                actor.id,
+                count=intended_parent_count,
+                users_by_role=users_by_role,
+            )
+        if match_count > 0 and intended_parent_count > 0:
+            create_matches(
+                db=db,
+                org_id=org.id,
+                users_by_role=users_by_role,
+                count=match_count,
+                mode=match_mode,
+            )
+
+        summary = _build_summary(db, org.id, users_by_role)
+        print("\nMock data seeded successfully!")
+        print("SEED_SUMMARY " + json.dumps(summary, sort_keys=True))
 
     except Exception as e:
         print(f"ERROR: {e}")

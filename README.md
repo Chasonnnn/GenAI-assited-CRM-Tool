@@ -240,7 +240,27 @@ uv run -m alembic upgrade head
 # 3) Seed test org and users
 curl -s -X POST http://localhost:8000/dev/seed \
   -H "X-Dev-Secret: $DEV_SECRET"
+
+# 4) High-volume fixture seed (deterministic by default)
+SEED_RANDOM_SEED=20260224 \
+SEED_SURROGATES=500 \
+SEED_INTENDED_PARENTS=10 \
+SEED_MATCH_MODE=balanced \
+SEED_MATCH_COUNT=30 \
+SEED_ACTIVITY_MODE=rich_core \
+uv run -m scripts.seed_mock_data
 ```
+
+`/dev/seed` now returns one user per role:
+- `admin@test.com`
+- `intake@test.com`
+- `specialist@test.com` (case manager)
+- `developer@test.com`
+
+`seed_mock_data` prints a machine-readable `SEED_SUMMARY {...}` payload that includes:
+- stage/status/match counts
+- activity/history totals
+- `login_as_user_ids` for browser `POST /dev/login-as/<user_id>`
 
 ### Required Encryption Keys
 
