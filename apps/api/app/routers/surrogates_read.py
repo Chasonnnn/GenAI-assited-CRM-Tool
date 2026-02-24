@@ -207,12 +207,9 @@ def list_surrogates(
     )
     db.commit()
 
-    surrogate_ids = [surrogate.id for surrogate in surrogates]
-    last_activity_map = surrogate_service.get_last_activity_map(db, session.org_id, surrogate_ids)
-
     return SurrogateListResponse(
         items=[
-            _surrogate_to_list_item(s, db, last_activity_at=last_activity_map.get(s.id))
+            _surrogate_to_list_item(s, db, last_activity_at=getattr(s, "last_activity_at", None))
             for s in surrogates
         ],
         total=total,

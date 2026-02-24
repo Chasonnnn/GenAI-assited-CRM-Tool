@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
+import pytest
 from sqlalchemy import event
 from sqlalchemy.orm import Query, joinedload
 
@@ -128,6 +129,7 @@ def test_list_surrogates_eager_loads_in_single_statement(db, db_engine, test_org
             assert surrogate.stage is not None
             _ = surrogate.stage.slug
             _ = surrogate.stage.stage_type
+            assert hasattr(surrogate, "last_activity_at")
 
             if surrogate.owner_type == "user":
                 assert surrogate.owner_user is not None
@@ -137,6 +139,34 @@ def test_list_surrogates_eager_loads_in_single_statement(db, db_engine, test_org
                 _ = surrogate.owner_queue.name
 
     assert counter["n"] == 1, "\n".join(counter["statements"])
+
+
+@pytest.mark.asyncio
+async def test_list_surrogates_endpoint_uses_single_statement_for_data_fetch(
+    db, db_engine, test_org, test_user, authed_client, monkeypatch
+):
+    from app.services import audit_service, permission_service
+
+    pipeline_service.get_or_create_default_pipeline(db, test_org.id, test_user.id)
+    surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(
+            full_name="Endpoint Statement Count",
+            email=f"endpoint-statement-{uuid4().hex[:8]}@example.com",
+        ),
+    )
+
+    monkeypatch.setattr(permission_service, "check_permission", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(audit_service, "log_phi_access", lambda *_args, **_kwargs: None)
+
+    with _count_sql_statements(db_engine) as counter:
+        response = await authed_client.get("/surrogates", params={"include_total": "false"})
+
+    assert response.status_code == 200, response.text
+    assert counter["n"] == 7, "\n".join(counter["statements"])
+    assert not any("surrogate_activity_log" in stmt for stmt in counter["statements"])
 
 
 def test_list_claim_queue_eager_loads_in_few_statements(db, db_engine, test_org, test_user):

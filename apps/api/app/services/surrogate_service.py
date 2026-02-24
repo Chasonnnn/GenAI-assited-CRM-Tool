@@ -77,30 +77,6 @@ def _get_org_user(db: Session, org_id: UUID, user_id: UUID | None) -> User | Non
     return membership.user if membership else None
 
 
-def get_last_activity_map(
-    db: Session, org_id: UUID, surrogate_ids: list[UUID]
-) -> dict[UUID, datetime]:
-    """Return last activity timestamps by surrogate id."""
-    if not surrogate_ids:
-        return {}
-
-    from app.db.models import SurrogateActivityLog
-
-    rows = (
-        db.query(
-            SurrogateActivityLog.surrogate_id,
-            func.max(SurrogateActivityLog.created_at),
-        )
-        .filter(
-            SurrogateActivityLog.organization_id == org_id,
-            SurrogateActivityLog.surrogate_id.in_(surrogate_ids),
-        )
-        .group_by(SurrogateActivityLog.surrogate_id)
-        .all()
-    )
-    return {row[0]: row[1] for row in rows}
-
-
 def create_surrogate(
     db: Session,
     org_id: UUID,
@@ -856,7 +832,7 @@ def list_surrogates(
     """
     import base64
     from app.db.enums import Role, OwnerType
-    from app.db.models import PipelineStage, Queue
+    from app.db.models import PipelineStage, Queue, SurrogateActivityLog
     from datetime import datetime
     from sqlalchemy import asc, desc
 
@@ -978,11 +954,21 @@ def list_surrogates(
             filter_clauses.append(or_(*search_filters))
 
     base_query = db.query(Surrogate).filter(*filter_clauses)
+    last_activity_subquery = (
+        select(func.max(SurrogateActivityLog.created_at))
+        .where(
+            SurrogateActivityLog.organization_id == org_id,
+            SurrogateActivityLog.surrogate_id == Surrogate.id,
+        )
+        .correlate(Surrogate)
+        .scalar_subquery()
+    )
+
     query = base_query.options(
         joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
         joinedload(Surrogate.owner_user).load_only(User.display_name),
         joinedload(Surrogate.owner_queue).load_only(Queue.name),
-    )
+    ).add_columns(last_activity_subquery.label("last_activity_at"))
 
     # Dynamic sorting
     order_func = asc if sort_order == "asc" else desc
@@ -1027,10 +1013,15 @@ def list_surrogates(
     # Paginate
     next_cursor = None
     if cursor:
-        surrogates = query.limit(per_page).all()
+        rows = query.limit(per_page).all()
     else:
         offset = (page - 1) * per_page
-        surrogates = query.offset(offset).limit(per_page).all()
+        rows = query.offset(offset).limit(per_page).all()
+
+    surrogates: list[Surrogate] = []
+    for surrogate, last_activity_at in rows:
+        surrogate.last_activity_at = last_activity_at
+        surrogates.append(surrogate)
 
     cursor_allowed = (sort_by in (None, "created_at")) and sort_order == "desc"
     if cursor_allowed and surrogates and len(surrogates) == per_page:
