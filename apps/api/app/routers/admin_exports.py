@@ -200,7 +200,7 @@ def download_export(
     audit_service.log_event(
         db=db,
         org_id=session.org_id,
-        event_type=EXPORT_EVENT_MAP.get(export_type, AuditEventType.DATA_EXPORT_CASES),
+        event_type=EXPORT_EVENT_MAP.get(export_type, AuditEventType.DATA_EXPORT_SURROGATES),
         actor_user_id=session.user_id,
         details={"export": export_type, "stage": "downloaded"},
     )

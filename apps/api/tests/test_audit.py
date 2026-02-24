@@ -1,5 +1,9 @@
 """Tests for Audit Log system - Unit tests only."""
 
+from pathlib import Path
+import re
+
+from app.db.enums import AuditEventType
 from app.services import audit_service
 from app.services import version_service
 
@@ -74,3 +78,19 @@ def test_canonical_json_empty_dict():
     """canonical_json should handle empty dict."""
     result = audit_service.canonical_json({})
     assert result == "{}"
+
+
+def test_audit_event_type_references_are_defined():
+    """All AuditEventType references in app code should map to defined enum members."""
+    app_root = Path(__file__).resolve().parents[1] / "app"
+    enum_members = {member.name for member in AuditEventType}
+    pattern = re.compile(r"AuditEventType\.([A-Z0-9_]+)")
+
+    missing: dict[str, list[str]] = {}
+    for file_path in app_root.rglob("*.py"):
+        text = file_path.read_text(encoding="utf-8")
+        for match in pattern.findall(text):
+            if match not in enum_members:
+                missing.setdefault(match, []).append(str(file_path))
+
+    assert not missing, f"Undefined AuditEventType references found: {missing}"

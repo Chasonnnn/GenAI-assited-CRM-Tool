@@ -117,7 +117,7 @@ def _validate_request_host(request: Request, org_slug: str) -> None:
     raise HTTPException(status_code=403, detail="Session invalid for this domain")
 
 
-def get_db() -> Generator[Session, None, None]:
+def get_db(request: Request = None) -> Generator[Session, None, None]:
     """
     Database session dependency.
 
@@ -125,6 +125,8 @@ def get_db() -> Generator[Session, None, None]:
     """
     db = SessionLocal()
     try:
+        if request is not None:
+            request.state.request_db = db
         yield db
     finally:
         db.close()
@@ -196,6 +198,8 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
     cached = getattr(request.state, "user_session", None)
     if cached:
         return cached
+
+    request.state.request_db = db
 
     # Import here to avoid circular imports
     from app.db.models import Membership, Organization

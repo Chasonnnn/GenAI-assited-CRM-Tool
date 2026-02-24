@@ -18,6 +18,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.request_audit_context import mark_explicit_event_emitted
 from app.db.enums import AuditEventType
 from app.db.models import AuditLog, User
 from app.types import JsonObject
@@ -110,6 +111,8 @@ def log_event(
         The created audit log entry with computed hash chain
     """
     from app.services import version_service
+
+    mark_explicit_event_emitted()
 
     # Get previous hash for chain
     prev_hash = version_service.get_last_audit_hash(db, org_id)
@@ -638,7 +641,7 @@ def log_data_export(
 ) -> AuditLog:
     """Log data export."""
     event_type = (
-        AuditEventType.DATA_EXPORT_CASES
+        AuditEventType.DATA_EXPORT_SURROGATES
         if export_type == "cases"
         else AuditEventType.DATA_EXPORT_ANALYTICS
     )

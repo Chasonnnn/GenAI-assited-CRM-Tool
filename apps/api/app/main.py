@@ -21,12 +21,17 @@ from app.core.csrf import CSRF_HEADER, CSRF_COOKIE_NAME, set_csrf_cookie, valida
 from app.core.gcp_monitoring import report_exception, setup_gcp_monitoring
 from app.core import migrations as db_migrations
 from app.core.protobuf_guard import apply_protobuf_json_depth_guard
+from app.core.request_audit_context import (
+    explicit_event_emitted,
+    reset_request_audit_context,
+    start_request_audit_context,
+)
 from app.core.structured_logging import build_log_context
 from app.core.rate_limit import limiter
 from app.core.redis_client import get_redis_url, get_sync_redis_client
 from app.core.telemetry import configure_telemetry
 from app.db.session import SessionLocal, engine
-from app.db.enums import AlertSeverity, AlertType
+from app.db.enums import AlertSeverity, AlertType, AuditEventType
 from app.routers import (
     admin_exports,
     admin_imports,
@@ -297,6 +302,78 @@ def _record_metrics(request: Request, status_code: int, duration_ms: int) -> Non
         db.close()
 
 
+def _is_mutation_method(method: str) -> bool:
+    return method in {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _to_outcome_class(status_code: int) -> str:
+    if status_code >= 500:
+        return "server_error"
+    if status_code >= 400:
+        return "client_error"
+    return "success"
+
+
+def _emit_mutation_fallback_audit(request: Request, status_code: int | None) -> None:
+    if status_code is None:
+        return
+
+    session = getattr(request.state, "user_session", None)
+    if not session:
+        return
+    if explicit_event_emitted():
+        return
+
+    route = request.scope.get("route")
+    route_template = getattr(route, "path", request.url.path)
+    details = {
+        "method": request.method,
+        "path": request.url.path,
+        "route_template": route_template,
+        "status_code": status_code,
+        "outcome_class": _to_outcome_class(status_code),
+        "has_query_params": bool(request.query_params),
+    }
+
+    db = SessionLocal()
+    try:
+        from app.services import audit_service
+
+        audit_service.log_event(
+            db=db,
+            org_id=session.org_id,
+            event_type=AuditEventType.API_MUTATION_FALLBACK,
+            actor_user_id=session.user_id,
+            target_type="api_route",
+            details=details,
+            request=request,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        request_db = getattr(request.state, "request_db", None)
+        if request_db is not None:
+            try:
+                from app.services import audit_service
+
+                audit_service.log_event(
+                    db=request_db,
+                    org_id=session.org_id,
+                    event_type=AuditEventType.API_MUTATION_FALLBACK,
+                    actor_user_id=session.user_id,
+                    target_type="api_route",
+                    details=details,
+                    request=request,
+                )
+                request_db.commit()
+                return
+            except Exception:
+                pass
+        logging.exception("Mutation fallback audit logging failed")
+    finally:
+        db.close()
+
+
 @app.middleware("http")
 async def metrics_middleware(request: Request, call_next):
     start = perf_counter()
@@ -318,6 +395,33 @@ async def metrics_middleware(request: Request, call_next):
     duration_ms = int((perf_counter() - start) * 1000)
     _record_metrics(request, response.status_code, duration_ms)
     return response
+
+
+@app.middleware("http")
+async def mutation_audit_fallback_middleware(request: Request, call_next):
+    if not _is_mutation_method(request.method):
+        return await call_next(request)
+
+    context_token = start_request_audit_context()
+    status_code: int | None = None
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    except HTTPException as exc:
+        status_code = exc.status_code
+        raise
+    except RateLimitExceeded:
+        status_code = status.HTTP_429_TOO_MANY_REQUESTS
+        raise
+    except Exception:
+        status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        raise
+    finally:
+        try:
+            _emit_mutation_fallback_audit(request, status_code)
+        finally:
+            reset_request_audit_context(context_token)
 
 
 # Enforce CSRF on state-changing requests when session cookie is present.
