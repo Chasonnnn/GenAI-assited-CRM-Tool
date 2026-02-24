@@ -238,6 +238,7 @@ export interface PublicAppointmentView {
     dial_in_number: string | null;
     status: string;
     client_timezone: string;
+    cancellation_reason?: string | null;
     zoom_join_url: string | null;
     google_meet_url: string | null;
 }
@@ -478,6 +479,29 @@ export function rescheduleByToken(
     );
 }
 
+export function getAppointmentForManage(
+    orgId: string,
+    token: string
+): Promise<PublicAppointmentView> {
+    return publicRequest<PublicAppointmentView>(
+        `/book/self-service/${orgId}/manage/${token}`
+    );
+}
+
+export function rescheduleByManageToken(
+    orgId: string,
+    token: string,
+    scheduledStart: string
+): Promise<PublicAppointmentView> {
+    return publicRequest<PublicAppointmentView>(
+        `/book/self-service/${orgId}/manage/${token}/reschedule`,
+        {
+            method: 'POST',
+            body: JSON.stringify({ scheduled_start: scheduledStart }),
+        }
+    );
+}
+
 export function getAppointmentForCancel(
     orgId: string,
     token: string
@@ -494,6 +518,20 @@ export function cancelByToken(
 ): Promise<PublicAppointmentView> {
     return publicRequest<PublicAppointmentView>(
         `/book/self-service/${orgId}/cancel/${token}`,
+        {
+            method: 'POST',
+            body: JSON.stringify({ reason }),
+        }
+    );
+}
+
+export function cancelByManageToken(
+    orgId: string,
+    token: string,
+    reason?: string
+): Promise<PublicAppointmentView> {
+    return publicRequest<PublicAppointmentView>(
+        `/book/self-service/${orgId}/manage/${token}/cancel`,
         {
             method: 'POST',
             body: JSON.stringify({ reason }),

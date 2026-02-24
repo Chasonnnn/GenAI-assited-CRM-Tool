@@ -322,6 +322,8 @@ export const bookingKeys = {
             'slots',
             { slug, typeId, dateStart, dateEnd, clientTimezone },
         ] as const,
+    manage: (orgId: string, token: string) =>
+        [...bookingKeys.all, 'manage', { orgId, token }] as const,
 };
 
 export function usePublicBookingPage(publicSlug: string, enabled = true) {
@@ -370,6 +372,42 @@ export function useCreateBooking() {
             data: appointmentsApi.BookingCreate;
         }) => appointmentsApi.createBooking(publicSlug, data),
     });
+}
+
+export function useAppointmentForManage(orgId: string, token: string, enabled = true) {
+    return useQuery({
+        queryKey: bookingKeys.manage(orgId, token),
+        queryFn: () => appointmentsApi.getAppointmentForManage(orgId, token),
+        enabled: enabled && !!orgId && !!token,
+    })
+}
+
+export function useRescheduleByManageToken() {
+    return useMutation({
+        mutationFn: ({
+            orgId,
+            token,
+            scheduledStart,
+        }: {
+            orgId: string;
+            token: string;
+            scheduledStart: string;
+        }) => appointmentsApi.rescheduleByManageToken(orgId, token, scheduledStart),
+    })
+}
+
+export function useCancelByManageToken() {
+    return useMutation({
+        mutationFn: ({
+            orgId,
+            token,
+            reason,
+        }: {
+            orgId: string;
+            token: string;
+            reason?: string;
+        }) => appointmentsApi.cancelByManageToken(orgId, token, reason),
+    })
 }
 
 export const bookingPreviewKeys = {
