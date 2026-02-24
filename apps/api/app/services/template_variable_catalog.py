@@ -95,6 +95,24 @@ def list_org_email_template_variables() -> list[TemplateVariableDefinition]:
             category="Case",
             value_type="url",
         ),
+        TemplateVariableDefinition(
+            name="appointment_manage_url",
+            description="Recipient self-service manage appointment link",
+            category="Appointment",
+            value_type="url",
+        ),
+        TemplateVariableDefinition(
+            name="appointment_reschedule_url",
+            description="Recipient self-service reschedule link",
+            category="Appointment",
+            value_type="url",
+        ),
+        TemplateVariableDefinition(
+            name="appointment_cancel_url",
+            description="Recipient self-service cancel link",
+            category="Appointment",
+            value_type="url",
+        ),
         # Organization
         TemplateVariableDefinition(
             name="org_name",

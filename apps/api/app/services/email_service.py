@@ -9,6 +9,7 @@ import re
 from datetime import datetime, timezone
 from typing import TypedDict
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -774,6 +775,12 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
 
     form_link = ""
     appointment_link = ""
+    appointment_manage_url = ""
+    appointment_reschedule_url = ""
+    appointment_cancel_url = ""
+    appointment_date = ""
+    appointment_time = ""
+    appointment_location = ""
     from app.services import form_submission_service
     from app.services import form_service
 
@@ -853,6 +860,65 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
                 else f"/book/{booking_link.public_slug}"
             )
 
+    # Best-effort appointment context for workflow/campaign templates.
+    from app.db.models import Appointment
+
+    upcoming_appointment = (
+        db.query(Appointment)
+        .filter(
+            Appointment.organization_id == surrogate.organization_id,
+            Appointment.surrogate_id == surrogate.id,
+            Appointment.status.in_(
+                [
+                    "pending",
+                    "confirmed",
+                ]
+            ),
+            Appointment.scheduled_start >= datetime.now(timezone.utc),
+        )
+        .order_by(Appointment.scheduled_start.asc())
+        .first()
+    )
+    if upcoming_appointment:
+        from app.services import org_service
+
+        portal_base_url = org_service.get_org_portal_base_url(org)
+        manage_token = upcoming_appointment.reschedule_token or upcoming_appointment.cancel_token
+        if manage_token:
+            appointment_manage_url = (
+                f"{portal_base_url}/book/self-service/{surrogate.organization_id}/manage/{manage_token}"
+                if portal_base_url
+                else f"/book/self-service/{surrogate.organization_id}/manage/{manage_token}"
+            )
+        if upcoming_appointment.reschedule_token:
+            appointment_reschedule_url = (
+                f"{portal_base_url}/book/self-service/{surrogate.organization_id}/reschedule/{upcoming_appointment.reschedule_token}"
+                if portal_base_url
+                else f"/book/self-service/{surrogate.organization_id}/reschedule/{upcoming_appointment.reschedule_token}"
+            )
+        if upcoming_appointment.cancel_token:
+            appointment_cancel_url = (
+                f"{portal_base_url}/book/self-service/{surrogate.organization_id}/cancel/{upcoming_appointment.cancel_token}"
+                if portal_base_url
+                else f"/book/self-service/{surrogate.organization_id}/cancel/{upcoming_appointment.cancel_token}"
+            )
+
+        tz_name = upcoming_appointment.client_timezone or (org.timezone if org else "America/Los_Angeles")
+        try:
+            local_tz = ZoneInfo(tz_name)
+        except Exception:
+            local_tz = ZoneInfo("America/Los_Angeles")
+        local_start = upcoming_appointment.scheduled_start.astimezone(local_tz)
+        appointment_date = local_start.strftime("%A, %B %d, %Y")
+        appointment_time = local_start.strftime("%I:%M %p %Z")
+        appointment_location = (
+            upcoming_appointment.meeting_location
+            or upcoming_appointment.dial_in_number
+            or upcoming_appointment.zoom_join_url
+            or upcoming_appointment.google_meet_url
+            or "To be confirmed"
+        )
+
     return {
         "first_name": first_name,
         "full_name": full_name,
@@ -864,6 +930,12 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
         "owner_name": owner_name,
         "form_link": form_link,
         "appointment_link": appointment_link,
+        "appointment_manage_url": appointment_manage_url,
+        "appointment_reschedule_url": appointment_reschedule_url,
+        "appointment_cancel_url": appointment_cancel_url,
+        "appointment_date": appointment_date,
+        "appointment_time": appointment_time,
+        "appointment_location": appointment_location,
         "org_name": org.name if org else "",
         "org_logo_url": org_logo_url or "",
         "unsubscribe_url": unsubscribe_url,

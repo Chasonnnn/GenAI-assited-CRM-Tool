@@ -14,6 +14,9 @@ async def test_org_email_template_variables_endpoint(authed_client):
     assert "state" in names
     assert "form_link" in names
     assert "appointment_link" in names
+    assert "appointment_manage_url" in names
+    assert "appointment_reschedule_url" in names
+    assert "appointment_cancel_url" in names
     assert "unsubscribe_url" in names
 
 
@@ -42,6 +45,9 @@ async def test_platform_email_template_variables_endpoint_platform_admin(
     assert "state" in names
     assert "form_link" in names
     assert "appointment_link" in names
+    assert "appointment_manage_url" in names
+    assert "appointment_reschedule_url" in names
+    assert "appointment_cancel_url" in names
     assert "unsubscribe_url" in names
 
 

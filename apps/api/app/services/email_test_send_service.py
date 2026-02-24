@@ -46,6 +46,9 @@ def build_sample_variables(
     unsubscribe_url = ""
     form_link = ""
     appointment_link = ""
+    appointment_manage_url = ""
+    appointment_reschedule_url = ""
+    appointment_cancel_url = ""
     if (to_email or "").strip():
         from app.services import unsubscribe_service, org_service
 
@@ -64,6 +67,21 @@ def build_sample_variables(
             if portal_base_url
             else "/book/EXAMPLE_APPOINTMENT_SLUG"
         )
+        appointment_manage_url = (
+            f"{portal_base_url}/book/self-service/EXAMPLE_ORG/manage/EXAMPLE_TOKEN"
+            if portal_base_url
+            else "/book/self-service/EXAMPLE_ORG/manage/EXAMPLE_TOKEN"
+        )
+        appointment_reschedule_url = (
+            f"{portal_base_url}/book/self-service/EXAMPLE_ORG/reschedule/EXAMPLE_TOKEN"
+            if portal_base_url
+            else "/book/self-service/EXAMPLE_ORG/reschedule/EXAMPLE_TOKEN"
+        )
+        appointment_cancel_url = (
+            f"{portal_base_url}/book/self-service/EXAMPLE_ORG/cancel/EXAMPLE_TOKEN"
+            if portal_base_url
+            else "/book/self-service/EXAMPLE_ORG/cancel/EXAMPLE_TOKEN"
+        )
 
     return {
         # Recipient
@@ -79,6 +97,9 @@ def build_sample_variables(
         "owner_name": actor_display_name or "Case Manager",
         "form_link": form_link,
         "appointment_link": appointment_link,
+        "appointment_manage_url": appointment_manage_url,
+        "appointment_reschedule_url": appointment_reschedule_url,
+        "appointment_cancel_url": appointment_cancel_url,
         # Organization
         "org_name": org_name,
         "org_logo_url": org_logo_url,
