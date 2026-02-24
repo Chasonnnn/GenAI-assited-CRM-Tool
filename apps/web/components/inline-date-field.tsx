@@ -93,6 +93,14 @@ export function InlineDateField({
         }
     }
 
+    const handleDisplayKeyDown = (e: React.KeyboardEvent) => {
+        if (disabled) return
+        if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+            e.preventDefault()
+            handleStartEdit()
+        }
+    }
+
     // Format display value
     const displayValue = React.useMemo(() => {
         if (!value) return null
@@ -119,13 +127,17 @@ export function InlineDateField({
                 onClick={handleStartEdit}
                 role="button"
                 tabIndex={disabled ? -1 : 0}
-                onKeyDown={(e) => !disabled && e.key === "Enter" && handleStartEdit()}
+                onKeyDown={handleDisplayKeyDown}
+                aria-label={disabled ? label : `Edit ${label}`}
             >
                 <span className={cn("text-sm", !displayValue && "text-muted-foreground", className)}>
                     {displayValue || placeholder}
                 </span>
                 {!disabled && (
-                    <PencilIcon className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <PencilIcon
+                        className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                        aria-hidden="true"
+                    />
                 )}
             </div>
         )
