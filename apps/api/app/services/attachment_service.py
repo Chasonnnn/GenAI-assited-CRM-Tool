@@ -210,39 +210,41 @@ def strip_exif_data(file: BinaryIO, content_type: str) -> BinaryIO:
     """
     Strip EXIF metadata from image files for privacy.
 
-    Returns the same file object if not an image or if stripping fails.
+    Returns the same file object if not an image.
+    Raises ValueError when image processing fails to ensure uploads fail closed.
     """
     if content_type not in ("image/jpeg", "image/png"):
         return file
 
     try:
-        from PIL import Image
         from io import BytesIO
+        from PIL import Image, UnidentifiedImageError
 
         file.seek(0)
         img = Image.open(file)
+        img.load()
 
-        # Create new image without EXIF
-        data = list(img.getdata())
-        img_no_exif = Image.new(img.mode, img.size)
-        img_no_exif.putdata(data)
+        img_format = "JPEG" if content_type == "image/jpeg" else "PNG"
+        # JPEG does not support alpha/palette modes; normalize to RGB before encoding.
+        if img_format == "JPEG" and img.mode not in {"RGB", "L", "CMYK", "YCbCr"}:
+            img = img.convert("RGB")
 
         # Save to new buffer
         output = BytesIO()
-        img_format = "JPEG" if content_type == "image/jpeg" else "PNG"
-        img_no_exif.save(output, format=img_format, quality=95)
+        if img_format == "JPEG":
+            img.save(output, format=img_format, quality=95)
+        else:
+            img.save(output, format=img_format)
         output.seek(0)
 
         return output
 
-    except ImportError:
-        # Pillow not installed, skip stripping
-        file.seek(0)
-        return file
-    except Exception:
-        # Failed to process, return original
-        file.seek(0)
-        return file
+    except ImportError as exc:
+        raise ValueError("Image processing is unavailable") from exc
+    except UnidentifiedImageError as exc:
+        raise ValueError("Invalid image file") from exc
+    except Exception as exc:
+        raise ValueError("Failed to sanitize image file") from exc
 
 
 def generate_signed_url(storage_key: str, expires_in_seconds: int | None = None) -> str:

@@ -13,6 +13,14 @@ from app.services.form_submission_service import _store_submission_file
 from app.utils.normalization import normalize_email
 
 
+def _make_png_bytes() -> bytes:
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (4, 4), color=(10, 120, 220)).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
 def _create_surrogate(db, org_id, stage_id, status_label):
     email = f"test-{uuid.uuid4().hex[:8]}@example.com"
     surrogate = Surrogate(
@@ -39,7 +47,7 @@ def test_attachment_file_cleanup_on_rollback(
 
     surrogate = _create_surrogate(db, test_org.id, default_stage.id, default_stage.label)
 
-    file_obj = io.BytesIO(b"attachment-data")
+    file_obj = io.BytesIO(_make_png_bytes())
     attachment = attachment_service.upload_attachment(
         db=db,
         org_id=test_org.id,
@@ -86,7 +94,7 @@ def test_form_submission_file_cleanup_on_rollback(
 
     upload = UploadFile(
         filename="upload.png",
-        file=io.BytesIO(b"submission-data"),
+        file=io.BytesIO(_make_png_bytes()),
         headers=Headers({"content-type": "image/png"}),
     )
 
