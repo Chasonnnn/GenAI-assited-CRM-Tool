@@ -13,7 +13,12 @@ import {
     CommandList,
 } from "@/components/ui/command"
 import { FileText, Paperclip, Users, Loader2 } from "lucide-react"
-import { globalSearch, type SearchResult, type SearchResponse } from "@/lib/api/search"
+import {
+    createEmptySearchResponse,
+    globalSearch,
+    type SearchResult,
+    type SearchResponse,
+} from "@/lib/api/search"
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
 
 const ENTITY_CONFIG = {
@@ -49,16 +54,18 @@ interface SearchCommandDialogProps {
 export function SearchCommandDialog({ open, onOpenChange }: SearchCommandDialogProps) {
     const router = useRouter()
     const [query, setQuery] = useState("")
-    const debouncedQuery = useDebouncedValue(query, 200)
+    const debouncedQuery = useDebouncedValue(query, 400)
 
     const {
-        data: results,
+        data: results = createEmptySearchResponse(debouncedQuery),
         isLoading,
     } = useQuery<SearchResponse>({
         queryKey: ["search-command", debouncedQuery],
         queryFn: () => globalSearch({ q: debouncedQuery, limit: 10 }),
         enabled: open && debouncedQuery.length >= 2,
         staleTime: 30000,
+        placeholderData: (previousData) =>
+            previousData ?? createEmptySearchResponse(debouncedQuery),
     })
 
     // Reset query when dialog closes

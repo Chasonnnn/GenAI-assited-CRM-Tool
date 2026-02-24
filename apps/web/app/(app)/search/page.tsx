@@ -16,7 +16,12 @@ import {
     AlertCircle,
     ArrowRight,
 } from "lucide-react"
-import { globalSearch, type SearchResult, type SearchResponse } from "@/lib/api/search"
+import {
+    createEmptySearchResponse,
+    globalSearch,
+    type SearchResult,
+    type SearchResponse,
+} from "@/lib/api/search"
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
 import { sanitizeHtml } from "@/lib/utils/sanitize"
 
@@ -51,10 +56,10 @@ const ENTITY_CONFIG = {
 
 export default function SearchPage() {
     const [query, setQuery] = useState("")
-    const debouncedQuery = useDebouncedValue(query, 300)
+    const debouncedQuery = useDebouncedValue(query, 400)
 
     const {
-        data: results,
+        data: results = createEmptySearchResponse(debouncedQuery),
         isLoading,
         isError,
     } = useQuery<SearchResponse>({
@@ -62,6 +67,8 @@ export default function SearchPage() {
         queryFn: () => globalSearch({ q: debouncedQuery, limit: 50 }),
         enabled: debouncedQuery.length >= 2,
         staleTime: 30000,
+        placeholderData: (previousData) =>
+            previousData ?? createEmptySearchResponse(debouncedQuery),
     })
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {

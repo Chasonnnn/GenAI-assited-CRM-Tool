@@ -20,6 +20,14 @@ export interface SearchResponse {
     results: SearchResult[]
 }
 
+export function createEmptySearchResponse(query = ""): SearchResponse {
+    return {
+        query,
+        total: 0,
+        results: [],
+    }
+}
+
 export interface SearchParams {
     q: string
     types?: string
