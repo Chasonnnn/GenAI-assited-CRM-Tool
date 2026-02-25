@@ -83,6 +83,7 @@ interface ActivityTypeConfig {
 const ACTIVITY_TYPE_CONFIG: Record<string, ActivityTypeConfig> = {
     // Actual backend types
     email_sent: { icon: MailIcon, color: "bg-cyan-500", bgColor: "bg-cyan-100 dark:bg-cyan-900/30", label: "Email sent" },
+    email_bounced: { icon: MailIcon, color: "bg-red-500", bgColor: "bg-red-100 dark:bg-red-900/30", label: "Email bounced" },
     contact_attempt: { icon: PhoneIcon, color: "bg-cyan-500", bgColor: "bg-cyan-100 dark:bg-cyan-900/30", label: "Contact attempt" },
     interview_outcome_logged: {
         icon: CalendarIcon,
@@ -138,6 +139,21 @@ function getActivityPreview(activity: SurrogateActivity): string {
                         ? `Attachment: ${attachments[0].filename}`
                         : `${attachments.length} attachments`
                 return [basePreview, attachmentSummary].filter(Boolean).join(" • ")
+            }
+        case "email_bounced":
+            {
+                const subject = details.subject as string | undefined
+                const reason = details.reason as string | undefined
+                const bounceType = details.bounce_type as string | undefined
+                const provider = details.provider as string | undefined
+                return [
+                    subject ? `Subject: ${subject}` : undefined,
+                    reason ? `Reason: ${reason}` : "Email bounced",
+                    bounceType ? `${bounceType} bounce` : undefined,
+                    provider ? `via ${provider}` : undefined,
+                ]
+                    .filter(Boolean)
+                    .join(" • ")
             }
         case "contact_attempt":
             return [

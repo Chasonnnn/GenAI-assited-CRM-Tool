@@ -219,6 +219,43 @@ describe('ActivityTimeline', () => {
         expect(screen.getByText(/via gmail/i)).toBeInTheDocument()
     })
 
+    it('shows bounced email preview details', () => {
+        const stages = [makeStage({ id: 's1', label: 'New Unread', order: 1 })]
+
+        mockUseSurrogateHistory.mockReturnValue({
+            data: [makeHistory({ id: 'h1', to_stage_id: 's1' })],
+        })
+
+        const activities = [
+            makeActivity({
+                id: 'a1',
+                activity_type: 'email_bounced',
+                details: {
+                    subject: 'Welcome to EWI',
+                    reason: 'bounced',
+                    bounce_type: 'hard',
+                    provider: 'resend',
+                },
+                created_at: '2024-02-02T00:00:00.000Z',
+            }),
+        ]
+
+        render(
+            <ActivityTimeline
+                surrogateId="surr1"
+                currentStageId="s1"
+                stages={stages}
+                activities={activities}
+                tasks={[]}
+            />
+        )
+
+        expect(screen.getByText(/subject: welcome to ewi/i)).toBeInTheDocument()
+        expect(screen.getByText(/reason: bounced/i)).toBeInTheDocument()
+        expect(screen.getByText(/hard bounce/i)).toBeInTheDocument()
+        expect(screen.getByText(/via resend/i)).toBeInTheDocument()
+    })
+
     it('shows contact note preview in activity tracker entries', () => {
         const stages = [makeStage({ id: 's1', label: 'New Unread', order: 1 })]
 

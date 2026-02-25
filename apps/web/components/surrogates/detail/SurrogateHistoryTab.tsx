@@ -32,6 +32,7 @@ function formatActivityType(type: string): string {
         note_deleted: "Note Deleted",
         attachment_added: "Attachment Uploaded",
         attachment_deleted: "Attachment Deleted",
+        email_bounced: "Email Bounced",
         task_created: "Task Created",
         task_deleted: "Task Deleted",
         contact_attempt: "Contact Attempt",
@@ -118,6 +119,14 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
             const templateId = details.template_id ? `template ${String(details.template_id)}` : ""
             const parts = [subject, provider, templateId].filter(Boolean)
             return parts.length > 0 ? withAiPrefix(parts.join(" • ")) : withAiPrefix("Email sent")
+        }
+        case "email_bounced": {
+            const subject = details.subject ? `Subject: ${String(details.subject)}` : ""
+            const provider = details.provider ? `via ${String(details.provider)}` : ""
+            const reason = details.reason ? `Reason: ${String(details.reason)}` : "Email bounced"
+            const bounceType = details.bounce_type ? `${String(details.bounce_type)} bounce` : ""
+            const parts = [subject, reason, bounceType, provider].filter(Boolean)
+            return withAiPrefix(parts.join(" • "))
         }
         case "contact_attempt": {
             const methods = Array.isArray(details.contact_methods)

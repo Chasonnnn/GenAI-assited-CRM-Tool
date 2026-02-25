@@ -57,4 +57,32 @@ describe("SurrogateHistoryTab", () => {
         expect(screen.getByText(/phone: no answer/i)).toBeInTheDocument()
         expect(screen.getByText(/left voicemail requesting callback/i)).toBeInTheDocument()
     })
+
+    it("renders email bounced activity details", () => {
+        render(
+            <SurrogateHistoryTab
+                activities={[
+                    {
+                        id: "a3",
+                        activity_type: "email_bounced",
+                        actor_name: "System",
+                        created_at: "2024-01-03T00:00:00Z",
+                        details: {
+                            subject: "Welcome to EWI",
+                            reason: "bounced",
+                            bounce_type: "hard",
+                            provider: "resend",
+                        },
+                    },
+                ]}
+                formatDateTime={formatDateTime}
+            />
+        )
+
+        expect(screen.getByText("Email Bounced")).toBeInTheDocument()
+        expect(screen.getByText(/subject: welcome to ewi/i)).toBeInTheDocument()
+        expect(screen.getByText(/reason: bounced/i)).toBeInTheDocument()
+        expect(screen.getByText(/hard bounce/i)).toBeInTheDocument()
+        expect(screen.getByText(/via resend/i)).toBeInTheDocument()
+    })
 })
