@@ -974,21 +974,12 @@ def list_surrogates(
             filter_clauses.append(or_(*search_filters))
 
     base_query = db.query(Surrogate).filter(*filter_clauses)
-    last_activity_subquery = (
-        select(func.max(SurrogateActivityLog.created_at))
-        .where(
-            SurrogateActivityLog.organization_id == org_id,
-            SurrogateActivityLog.surrogate_id == Surrogate.id,
-        )
-        .correlate(Surrogate)
-        .scalar_subquery()
-    )
 
     query = base_query.options(
         joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
         joinedload(Surrogate.owner_user).load_only(User.display_name),
         joinedload(Surrogate.owner_queue).load_only(Queue.name),
-    ).add_columns(last_activity_subquery.label("last_activity_at"))
+    )
 
     # Dynamic sorting
     order_func = asc if sort_order == "asc" else desc
@@ -1038,10 +1029,27 @@ def list_surrogates(
         offset = (page - 1) * per_page
         rows = query.offset(offset).limit(per_page).all()
 
-    surrogates: list[Surrogate] = []
-    for surrogate, last_activity_at in rows:
-        surrogate.last_activity_at = last_activity_at
-        surrogates.append(surrogate)
+    surrogates: list[Surrogate] = rows
+
+    # Fetch last activity separately (avoids N+1 correlated subquery)
+    if surrogates:
+        surrogate_ids = [s.id for s in surrogates]
+        latest_activity_rows = (
+            db.query(
+                SurrogateActivityLog.surrogate_id,
+                func.max(SurrogateActivityLog.created_at),
+            )
+            .filter(
+                SurrogateActivityLog.organization_id == org_id,
+                SurrogateActivityLog.surrogate_id.in_(surrogate_ids),
+            )
+            .group_by(SurrogateActivityLog.surrogate_id)
+            .all()
+        )
+        activity_map = {row[0]: row[1] for row in latest_activity_rows}
+
+        for s in surrogates:
+            s.last_activity_at = activity_map.get(s.id)
 
     cursor_allowed = (sort_by in (None, "created_at")) and sort_order == "desc"
     if cursor_allowed and surrogates and len(surrogates) == per_page:
