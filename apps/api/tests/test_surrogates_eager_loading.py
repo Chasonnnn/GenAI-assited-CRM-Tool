@@ -340,7 +340,18 @@ def test_list_surrogate_activity_includes_queue_names(db, test_org, test_user):
 
     assert total >= 1
     assert len(items) >= 1
-    assert items[0]["details"]["to_queue_name"] == queue.name
+    queue_activity = next(
+        (
+            item
+            for item in items
+            if item["activity_type"] == "surrogate_assigned_to_queue"
+            and isinstance(item["details"], dict)
+            and item["details"].get("to_queue_id") == str(queue.id)
+        ),
+        None,
+    )
+    assert queue_activity is not None
+    assert queue_activity["details"]["to_queue_name"] == queue.name
 
 
 def test_list_surrogate_activity_includes_template_name(db, test_org, test_user):
@@ -391,7 +402,18 @@ def test_list_surrogate_activity_includes_template_name(db, test_org, test_user)
 
     assert total >= 1
     assert len(items) >= 1
-    assert items[0]["details"]["template_name"] == template.name
+    email_activity = next(
+        (
+            item
+            for item in items
+            if item["activity_type"] == "email_sent"
+            and isinstance(item["details"], dict)
+            and item["details"].get("template_id") == str(template.id)
+        ),
+        None,
+    )
+    assert email_activity is not None
+    assert email_activity["details"]["template_name"] == template.name
 
 
 def test_list_assignees_selects_only_required_columns():
