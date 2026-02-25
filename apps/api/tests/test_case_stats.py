@@ -261,11 +261,11 @@ class TestCaseStats:
         assert stats["week_change_pct"] == 80.0
 
     def test_new_leads_24h_count(self, db, test_org, cases_for_stats):
-        """New leads count includes only unreached leads from last 24h."""
+        """New leads count includes all leads created in the last 24h window."""
         stats = surrogate_service.get_surrogate_stats(db, test_org.id)
 
-        # 2 unreached leads in last 24h (reached lead excluded)
-        assert stats["new_leads_24h"] == 2
+        # 3 leads created in last 24h (2 unreached + 1 reached)
+        assert stats["new_leads_24h"] == 3
 
     def test_new_leads_prev_24h_count(self, db, test_org, cases_for_stats):
         """Previous 24h window count is accurate."""
@@ -278,9 +278,9 @@ class TestCaseStats:
         """24h-over-24h percentage is calculated correctly."""
         stats = surrogate_service.get_surrogate_stats(db, test_org.id)
 
-        # new_leads_24h=2, new_leads_prev_24h=3
-        # Change = ((2 - 3) / 3) * 100 = -33.3%
-        assert stats["new_leads_change_pct"] == -33.3
+        # new_leads_24h=3, new_leads_prev_24h=3
+        # Change = ((3 - 3) / 3) * 100 = 0%
+        assert stats["new_leads_change_pct"] == 0.0
 
     def test_empty_org_returns_zeros(self, db):
         """Empty org returns zero values with 0.0 for percentages."""

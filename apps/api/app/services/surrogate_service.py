@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import (
-    ContactStatus,
     SurrogateActivityType,
     SurrogateSource,
     OwnerType,
@@ -1267,10 +1266,7 @@ def get_surrogate_stats(
             func.sum(
                 case(
                     (
-                        and_(
-                            Surrogate.contact_status == ContactStatus.UNREACHED.value,
-                            Surrogate.created_at >= last_24h,
-                        ),
+                        Surrogate.created_at >= last_24h,
                         1,
                     ),
                     else_=0,
@@ -1283,7 +1279,6 @@ def get_surrogate_stats(
                 case(
                     (
                         and_(
-                            Surrogate.contact_status == ContactStatus.UNREACHED.value,
                             Surrogate.created_at >= prev_24h,
                             Surrogate.created_at < last_24h,
                         ),
@@ -1376,7 +1371,7 @@ def list_surrogate_activity(
     per_page: int,
 ) -> tuple[list[dict], int]:
     """List activity log items for a case."""
-    from app.db.models import SurrogateActivityLog, User
+    from app.db.models import EmailTemplate, Queue, SurrogateActivityLog, User
 
     filters = [
         SurrogateActivityLog.surrogate_id == surrogate_id,
@@ -1401,16 +1396,98 @@ def list_surrogate_activity(
         .all()
     )
 
+    queue_ids: set[UUID] = set()
+    template_ids: set[UUID] = set()
+    for row in rows:
+        details = row.SurrogateActivityLog.details
+        if not isinstance(details, dict):
+            continue
+
+        for key in ("to_queue_id", "from_queue_id"):
+            queue_id = details.get(key)
+            if not queue_id:
+                continue
+            try:
+                queue_ids.add(UUID(str(queue_id)))
+            except (TypeError, ValueError):
+                continue
+
+        if details.get("from_owner_type") == OwnerType.QUEUE.value:
+            from_owner_id = details.get("from_owner_id")
+            if from_owner_id:
+                try:
+                    queue_ids.add(UUID(str(from_owner_id)))
+                except (TypeError, ValueError):
+                    pass
+
+        template_id = details.get("template_id")
+        if template_id:
+            try:
+                template_ids.add(UUID(str(template_id)))
+            except (TypeError, ValueError):
+                pass
+
+    queue_name_by_id: dict[str, str] = {}
+    if queue_ids:
+        queue_rows = (
+            db.query(Queue.id, Queue.name)
+            .filter(
+                Queue.organization_id == org_id,
+                Queue.id.in_(queue_ids),
+            )
+            .all()
+        )
+        queue_name_by_id = {str(queue_id): name for queue_id, name in queue_rows}
+
+    template_name_by_id: dict[str, str] = {}
+    if template_ids:
+        template_rows = (
+            db.query(EmailTemplate.id, EmailTemplate.name)
+            .filter(
+                EmailTemplate.organization_id == org_id,
+                EmailTemplate.id.in_(template_ids),
+            )
+            .all()
+        )
+        template_name_by_id = {str(template_id): name for template_id, name in template_rows}
+
     items = []
     for row in rows:
         activity = row.SurrogateActivityLog
+        details = activity.details
+        if isinstance(details, dict):
+            details = dict(details)
+
+            to_queue_id = details.get("to_queue_id")
+            to_queue_name = queue_name_by_id.get(str(to_queue_id)) if to_queue_id else None
+            if to_queue_name:
+                details["to_queue_name"] = to_queue_name
+
+            from_queue_id = details.get("from_queue_id")
+            from_queue_name = queue_name_by_id.get(str(from_queue_id)) if from_queue_id else None
+            if from_queue_name:
+                details["from_queue_name"] = from_queue_name
+
+            if details.get("from_owner_type") == OwnerType.QUEUE.value:
+                from_owner_id = details.get("from_owner_id")
+                from_owner_queue_name = (
+                    queue_name_by_id.get(str(from_owner_id)) if from_owner_id else None
+                )
+                if from_owner_queue_name:
+                    details["from_queue_name"] = from_owner_queue_name
+
+            template_id = details.get("template_id")
+            template_name = template_name_by_id.get(str(template_id)) if template_id else None
+            if template_name:
+                details["template_name"] = template_name
+
         items.append(
             {
                 "id": activity.id,
                 "activity_type": activity.activity_type,
                 "actor_user_id": activity.actor_user_id,
                 "actor_name": row.actor_name,
-                "details": activity.details,
+                "details": details,
                 "created_at": activity.created_at,
             }
         )

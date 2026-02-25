@@ -31,9 +31,13 @@ def _sanitize_preview(html: str, max_chars: int = 120) -> str:
     return text[:max_chars] + ("..." if len(text) > max_chars else "")
 
 
-def _redact_changes(changes: dict[str, any]) -> dict[str, str]:
-    """Redact all change values to avoid logging raw PII."""
-    return {field: REDACTED_VALUE for field in changes.keys()}
+def _redact_changes(changes: dict[str, any]) -> dict[str, object]:
+    """Redact change values except display-safe anthropometric fields."""
+    display_safe_fields = {"height_ft", "weight_lb"}
+    return {
+        field: value if field in display_safe_fields else REDACTED_VALUE
+        for field, value in changes.items()
+    }
 
 
 def log_activity(
@@ -255,6 +259,20 @@ def log_email_sent(
     attachments: list[object] | None = None,
 ) -> SurrogateActivityLog:
     """Log email sent with idempotency keyed by email_log_id."""
+    template_name: str | None = None
+    if template_id:
+        from app.db.models import EmailTemplate
+
+        template = (
+            db.query(EmailTemplate.name)
+            .filter(
+                EmailTemplate.id == template_id,
+                EmailTemplate.organization_id == organization_id,
+            )
+            .first()
+        )
+        template_name = template[0] if template else None
+
     existing = (
         db.query(SurrogateActivityLog)
         .filter(
@@ -288,6 +306,7 @@ def log_email_sent(
         details={
             "email_log_id": str(email_log_id),
             "template_id": str(template_id) if template_id else None,
+            "template_name": template_name,
             "subject": (subject or "").strip()[:200],
             "provider": provider,
             "attachments": attachment_details,

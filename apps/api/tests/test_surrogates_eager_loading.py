@@ -9,7 +9,7 @@ from sqlalchemy import event
 from sqlalchemy.orm import Query, joinedload
 
 from app.db.enums import Role
-from app.db.models import Surrogate, SurrogateActivityLog
+from app.db.models import EmailTemplate, Queue, Surrogate, SurrogateActivityLog
 from app.routers.surrogates_shared import _surrogate_to_read
 from app.schemas.surrogate import SurrogateCreate
 from app.services import pipeline_service, queue_service, surrogate_service
@@ -298,6 +298,100 @@ def test_list_surrogate_activity_does_not_use_query_count(db, test_org, test_use
 
     assert total >= 1
     assert len(items) >= 1
+
+
+def test_list_surrogate_activity_includes_queue_names(db, test_org, test_user):
+    surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(
+            full_name="Activity Queue Name",
+            email=f"activity-queue-name-{uuid4().hex[:8]}@example.com",
+        ),
+    )
+
+    queue = Queue(
+        organization_id=test_org.id,
+        name=f"Escalations {uuid4().hex[:6]}",
+        is_active=True,
+    )
+    db.add(queue)
+    db.flush()
+
+    db.add(
+        SurrogateActivityLog(
+            surrogate_id=surrogate.id,
+            organization_id=test_org.id,
+            activity_type="surrogate_assigned_to_queue",
+            actor_user_id=test_user.id,
+            details={"to_queue_id": str(queue.id)},
+        )
+    )
+    db.flush()
+
+    items, total = surrogate_service.list_surrogate_activity(
+        db=db,
+        org_id=test_org.id,
+        surrogate_id=surrogate.id,
+        page=1,
+        per_page=20,
+    )
+
+    assert total >= 1
+    assert len(items) >= 1
+    assert items[0]["details"]["to_queue_name"] == queue.name
+
+
+def test_list_surrogate_activity_includes_template_name(db, test_org, test_user):
+    surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(
+            full_name="Activity Template Name",
+            email=f"activity-template-name-{uuid4().hex[:8]}@example.com",
+        ),
+    )
+
+    template = EmailTemplate(
+        organization_id=test_org.id,
+        created_by_user_id=test_user.id,
+        name=f"Welcome {uuid4().hex[:6]}",
+        subject="Welcome",
+        body="<p>Hello</p>",
+        scope="org",
+        is_active=True,
+    )
+    db.add(template)
+    db.flush()
+
+    db.add(
+        SurrogateActivityLog(
+            surrogate_id=surrogate.id,
+            organization_id=test_org.id,
+            activity_type="email_sent",
+            actor_user_id=test_user.id,
+            details={
+                "template_id": str(template.id),
+                "subject": "Welcome subject",
+                "provider": "resend",
+            },
+        )
+    )
+    db.flush()
+
+    items, total = surrogate_service.list_surrogate_activity(
+        db=db,
+        org_id=test_org.id,
+        surrogate_id=surrogate.id,
+        page=1,
+        per_page=20,
+    )
+
+    assert total >= 1
+    assert len(items) >= 1
+    assert items[0]["details"]["template_name"] == template.name
 
 
 def test_list_assignees_selects_only_required_columns():

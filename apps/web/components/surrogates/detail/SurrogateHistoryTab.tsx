@@ -1,6 +1,7 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { formatHeight } from "@/components/surrogates/detail/surrogate-detail-utils"
 
 type SurrogateActivityEntry = {
     id: string
@@ -45,6 +46,43 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
+function formatInfoEditedFieldLabel(field: string): string {
+    if (field === "height_ft") return "height"
+    if (field === "weight_lb") return "weight"
+    return field.replace(/_/g, " ")
+}
+
+function formatInfoEditedValue(field: string, value: unknown): string {
+    if (field === "height_ft") {
+        return formatHeight(value as number | string | null | undefined)
+    }
+
+    if (field === "weight_lb") {
+        if (typeof value === "number" && Number.isFinite(value)) return `${value} lb`
+        if (typeof value === "string") {
+            const trimmed = value.trim()
+            const numeric = Number(trimmed)
+            if (trimmed !== "" && Number.isFinite(numeric)) return `${numeric} lb`
+        }
+    }
+
+    return String(value)
+}
+
+function getQueueName(
+    details: Record<string, unknown>,
+    nameKey: "to_queue_name" | "from_queue_name",
+    idKey: "to_queue_id" | "from_queue_id"
+): string {
+    if (typeof details[nameKey] === "string") {
+        const queueName = details[nameKey].trim()
+        if (queueName) return queueName
+    }
+
+    if (details[idKey]) return `Queue ${String(details[idKey])}`
+    return "queue"
+}
+
 function formatActivityDetails(type: string, details: Record<string, unknown>): string {
     const aiPrefix = details?.source === "ai" ? "AI-generated" : ""
     const withAiPrefix = (detail: string) => (aiPrefix ? `${aiPrefix} · ${detail}` : detail)
@@ -58,7 +96,13 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
         case "info_edited":
             if (isRecord(details.changes)) {
                 const changes = Object.entries(details.changes)
-                    .map(([field, value]) => `${field.replace(/_/g, " ")}: ${String(value)}`)
+                    .map(
+                        ([field, value]) =>
+                            `${formatInfoEditedFieldLabel(field)}: ${formatInfoEditedValue(
+                                field,
+                                value
+                            )}`
+                    )
                     .join(", ")
                 return aiPrefix ? withAiPrefix(changes) : changes
             }
@@ -72,17 +116,15 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
         case "unassigned":
             return aiPrefix ? withAiPrefix("Removed assignment") : "Removed assignment"
         case "surrogate_assigned_to_queue": {
-            const toQueue = details.to_queue_id ? `Queue ${String(details.to_queue_id)}` : "queue"
+            const toQueue = getQueueName(details, "to_queue_name", "to_queue_id")
             return withAiPrefix(`Assigned to ${toQueue}`)
         }
         case "surrogate_claimed": {
-            const fromQueue = details.from_queue_id
-                ? `Queue ${String(details.from_queue_id)}`
-                : "queue"
+            const fromQueue = getQueueName(details, "from_queue_name", "from_queue_id")
             return withAiPrefix(`Claimed from ${fromQueue}`)
         }
         case "surrogate_released": {
-            const toQueue = details.to_queue_id ? `Queue ${String(details.to_queue_id)}` : "queue"
+            const toQueue = getQueueName(details, "to_queue_name", "to_queue_id")
             return withAiPrefix(`Released to ${toQueue}`)
         }
         case "priority_changed":
@@ -116,8 +158,14 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
         case "email_sent": {
             const subject = details.subject ? `Subject: ${String(details.subject)}` : ""
             const provider = details.provider ? `via ${String(details.provider)}` : ""
-            const templateId = details.template_id ? `template ${String(details.template_id)}` : ""
-            const parts = [subject, provider, templateId].filter(Boolean)
+            const templateName =
+                typeof details.template_name === "string" ? details.template_name.trim() : ""
+            const templateDetail = templateName
+                ? `template ${templateName}`
+                : details.template_id
+                  ? "template"
+                  : ""
+            const parts = [subject, provider, templateDetail].filter(Boolean)
             return parts.length > 0 ? withAiPrefix(parts.join(" • ")) : withAiPrefix("Email sent")
         }
         case "email_bounced": {

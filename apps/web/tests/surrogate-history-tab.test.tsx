@@ -85,4 +85,81 @@ describe("SurrogateHistoryTab", () => {
         expect(screen.getByText(/hard bounce/i)).toBeInTheDocument()
         expect(screen.getByText(/via resend/i)).toBeInTheDocument()
     })
+
+    it("renders email template name instead of template uuid", () => {
+        render(
+            <SurrogateHistoryTab
+                activities={[
+                    {
+                        id: "a-email-template-name",
+                        activity_type: "email_sent",
+                        actor_name: "System",
+                        created_at: "2024-01-04T00:00:00Z",
+                        details: {
+                            subject: "Welcome",
+                            provider: "resend",
+                            template_id: "392d2938-69a0-4840-8e4e-acd84e6064d1",
+                            template_name: "New Lead Welcome",
+                        },
+                    },
+                ]}
+                formatDateTime={formatDateTime}
+            />
+        )
+
+        expect(screen.getByText(/template new lead welcome/i)).toBeInTheDocument()
+        expect(
+            screen.queryByText(/392d2938-69a0-4840-8e4e-acd84e6064d1/i)
+        ).not.toBeInTheDocument()
+    })
+
+    it("renders queue names in queue activity details", () => {
+        render(
+            <SurrogateHistoryTab
+                activities={[
+                    {
+                        id: "a4",
+                        activity_type: "surrogate_assigned_to_queue",
+                        actor_name: "Niki",
+                        created_at: "2024-01-04T00:00:00Z",
+                        details: {
+                            to_queue_id: "cd46256e-59b2-49a8-8a38-60672137289c",
+                            to_queue_name: "Unassigned",
+                        },
+                    },
+                ]}
+                formatDateTime={formatDateTime}
+            />
+        )
+
+        expect(screen.getByText(/assigned to unassigned/i)).toBeInTheDocument()
+        expect(
+            screen.queryByText(/cd46256e-59b2-49a8-8a38-60672137289c/i)
+        ).not.toBeInTheDocument()
+    })
+
+    it("formats edited height and weight like overview", () => {
+        render(
+            <SurrogateHistoryTab
+                activities={[
+                    {
+                        id: "a5",
+                        activity_type: "info_edited",
+                        actor_name: "Janet",
+                        created_at: "2024-01-05T00:00:00Z",
+                        details: {
+                            changes: {
+                                height_ft: 5.6,
+                                weight_lb: 142,
+                            },
+                        },
+                    },
+                ]}
+                formatDateTime={formatDateTime}
+            />
+        )
+
+        expect(screen.getByText(/height: 5 ft 7 in/i)).toBeInTheDocument()
+        expect(screen.getByText(/weight: 142 lb/i)).toBeInTheDocument()
+    })
 })
