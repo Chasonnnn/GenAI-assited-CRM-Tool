@@ -2,6 +2,49 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.4...surrogacy-crm-platform-v0.90.5) (2026-02-25)
+
+
+### Features
+
+* add important in-app notification settings and routing ([02e83a5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/02e83a58b5ce81205eb058dde2f11563151e9c6c))
+* add important notification controls and workflow types ([01a4466](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/01a4466f8932e584820acded81a6410b67c3f261))
+* add self effective permissions endpoint for audit visibility ([4e260f8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4e260f86ab2cd7594038b3c419e992011cf495a6))
+* add self-service URL samples in email template previews ([a0e0ac9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a0e0ac9a1b4b4e8753194a401b91535bec43b800))
+* add semantic audit events for core crm write flows ([40dbd57](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/40dbd57aa5c87694ac1ade10109b3693a56cfdde))
+* add unified recipient manage appointment page ([29c021f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/29c021fc66caf0d8bc11c56e6f2db2f6985edc29))
+* add unified self-service manage appointment flow ([ac9e716](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ac9e716d2acd4cfcb520c9482c9843c3511e8306))
+* **api:** add interview outcomes logging and intake follow access ([886272b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/886272b70e54ba62015f23811706b74e18a3a127))
+* expand mock data seeding scenarios and summary output ([b1943dc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b1943dca07b227bf5590a59892cc5491713cf0e3))
+* expose appointment self-service template variables ([65a1072](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/65a1072a762cf2af933fee7d8172d2287fce8b05))
+* improve workflow execution entity readability ([06d5a2f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/06d5a2f71167c78e5f008a00dca7b0610ff1aab8))
+* show bounced email details in surrogate activity ([5a37d45](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5a37d45559945026e4e1d218001e78a02e61f6fb))
+* **web:** add interview outcome dialog and activity timeline support ([2365ee9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2365ee922736a4fe971bbf03fcf3b04f07b0e3ef))
+
+
+### Bug Fixes
+
+* add mutation fallback logging and audit enum consistency ([6b4c5ba](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6b4c5ba161ffe20c1e4aea4109b44ce527b38c7a))
+* align platform alert filters with supported enums ([e7a4373](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e7a43735169177ceb92625da4410862203b3cc7a))
+* align queued reminder handlers and contact reminder scheduling ([f881c1f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f881c1f63da68ca8bad58c5e0c8b40da359c5c83))
+* **api:** drop match compatibility score field ([ba66b56](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ba66b564277dd42b7edbd360ab8c51f95f545fa8))
+* enforce fail-closed image sanitization ([42a50e3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/42a50e3a0bb992a7bcc86fdfb8facc182425417e))
+* fail closed on malformed resend webhook secrets ([28c76e8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/28c76e83747556240fa3e3791cfaec59191b6727))
+* gate surrogate header actions by stage progression ([37afbcb](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/37afbcbc9f2a6cf1375cfb74afa1ba0f35d9d01a))
+* harden notification websocket polling fallback ([7a290f8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7a290f886e77e662b0f09a19f6f786069f09f786))
+* improve inline and upload accessibility behavior ([0cfd01d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0cfd01dc1aee1b0511344912c99fbde141a6a055))
+* improve ops error message handling ([21b8aca](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/21b8aca529531461f5034de293ed00153e74a223))
+* isolate and harden system alert persistence ([c3ac17c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c3ac17cda8a4d46c5b81b35c39e8ca2abbed1f4d))
+* make dev seed idempotent with role-complete users ([031c561](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/031c56110ff97a653e35dc6e103e057eead97b40))
+* make reschedule integration tests date-stable ([1926da9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1926da9b07731fb44367de861e7b0c94528642a9))
+* pass db to interview modification guard ([20273d8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/20273d870f1e22da0fcaa84a12af32496b6be506))
+* persist audit logs in compliance and integration flows ([8e8f5ae](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8e8f5aefa2aaae37a9fd3f9ec7d4fa8fa2aaf251))
+* reconcile workflow status with resend delivery failures ([4ea78d7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4ea78d74b801a5d0f8f7812cb2249ce1b2fb0826))
+* remove extra surrogate last-activity query ([e6789f9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e6789f914ef87c40866f2d8ff0b5487a6eb5c075))
+* stabilize search results while typing ([fe91370](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fe913709de1a876ef9b65e9655d5020491d1b855))
+* switch compose attachments to drag-and-drop only ([9569ae9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9569ae94ce63f1090a903c8741f327a1a2d6fb68))
+* **web:** remove match compatibility UI and client fields ([b35820b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b35820b14b376dad78f0163ac8b13923b97f5613))
+
 ## [0.90.4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.3...surrogacy-crm-platform-v0.90.4) (2026-02-23)
 
 
