@@ -89,6 +89,7 @@ export interface AIConversation {
 export interface ChatRequest {
     entity_type?: 'surrogate' | 'global' | 'task' | null;  // null/undefined = global mode
     entity_id?: string | null;
+    conversation_id?: string | null;
     message: string;
 }
 

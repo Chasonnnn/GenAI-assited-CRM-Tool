@@ -38,6 +38,7 @@ class ChatRequest(BaseModel):
 
     entity_type: str | None = Field(None, pattern="^(case|surrogate|task|global)$")
     entity_id: uuid.UUID | None = None
+    conversation_id: uuid.UUID | None = None
     message: str = Field(..., min_length=1, max_length=10000)
 
 
@@ -151,6 +152,7 @@ def chat(
         entity_id,
         body.message,
         user_integrations,
+        conversation_id=body.conversation_id,
     )
 
     return ChatResponseModel(
@@ -194,6 +196,7 @@ async def chat_stream(
                     entity_id=entity_id,
                     message=message,
                     user_integrations=user_integrations,
+                    conversation_id=body.conversation_id,
                 )
                 iterator = event_stream.__aiter__()
                 heartbeat_interval = 5.0

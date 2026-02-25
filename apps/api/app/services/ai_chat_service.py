@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone, date
 
 import nh3
-from sqlalchemy.exc import IntegrityError
+import sqlalchemy as sa
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import (
@@ -337,6 +337,14 @@ def _resolve_entity_types(entity_type: str) -> list[str]:
     return [normalized]
 
 
+def _has_single_conversation_constraint(db: Session) -> bool:
+    inspector = sa.inspect(db.get_bind())
+    return any(
+        constraint.get("name") == "uq_ai_conversations_user_entity"
+        for constraint in inspector.get_unique_constraints("ai_conversations")
+    )
+
+
 # ============================================================================
 # Core Chat Functions
 # ============================================================================
@@ -348,23 +356,45 @@ def get_or_create_conversation(
     user_id: uuid.UUID,
     entity_type: str,
     entity_id: uuid.UUID,
+    conversation_id: uuid.UUID | None = None,
 ) -> AIConversation:
-    """Get or create a conversation for a user and entity."""
+    """Load an existing conversation or create a new one for the requested context."""
     normalized_entity_type = _normalize_entity_type(entity_type)
-    entity_types = _resolve_entity_types(entity_type)
-    conversation = (
-        db.query(AIConversation)
-        .filter(
-            AIConversation.organization_id == organization_id,
-            AIConversation.user_id == user_id,
-            AIConversation.entity_type.in_(entity_types),
-            AIConversation.entity_id == entity_id,
-        )
-        .first()
-    )
+    entity_types = _resolve_entity_types(normalized_entity_type)
 
-    if conversation:
+    if conversation_id:
+        conversation = (
+            db.query(AIConversation)
+            .filter(
+                AIConversation.id == conversation_id,
+                AIConversation.organization_id == organization_id,
+                AIConversation.user_id == user_id,
+            )
+            .first()
+        )
+        if not conversation:
+            raise ValueError("Conversation not found.")
+        if (
+            conversation.entity_type not in entity_types
+            or conversation.entity_id != entity_id
+        ):
+            raise ValueError("Conversation does not match the requested context.")
         return conversation
+
+    if _has_single_conversation_constraint(db):
+        existing = (
+            db.query(AIConversation)
+            .filter(
+                AIConversation.organization_id == organization_id,
+                AIConversation.user_id == user_id,
+                AIConversation.entity_type.in_(entity_types),
+                AIConversation.entity_id == entity_id,
+            )
+            .order_by(AIConversation.updated_at.desc())
+            .first()
+        )
+        if existing:
+            return existing
 
     conversation = AIConversation(
         organization_id=organization_id,
@@ -375,18 +405,28 @@ def get_or_create_conversation(
     db.add(conversation)
     try:
         db.commit()
-    except IntegrityError:
+    except Exception as exc:
+        # Backward-compatible fallback while older DBs still enforce one conversation per
+        # user/entity via uq_ai_conversations_user_entity.
         db.rollback()
-        conversation = (
-            db.query(AIConversation)
-            .filter(
-                AIConversation.organization_id == organization_id,
-                AIConversation.user_id == user_id,
-                AIConversation.entity_type == entity_type,
-                AIConversation.entity_id == entity_id,
+        if "uq_ai_conversations_user_entity" not in str(exc):
+            raise
+        try:
+            db.expunge(conversation)
+        except Exception:
+            pass
+        with db.no_autoflush:
+            conversation = (
+                db.query(AIConversation)
+                .filter(
+                    AIConversation.organization_id == organization_id,
+                    AIConversation.user_id == user_id,
+                    AIConversation.entity_type.in_(entity_types),
+                    AIConversation.entity_id == entity_id,
+                )
+                .order_by(AIConversation.updated_at.desc())
+                .first()
             )
-            .first()
-        )
         if conversation:
             return conversation
         raise
@@ -579,6 +619,7 @@ def _prepare_chat_context(
     entity_id: uuid.UUID,
     message: str,
     user_integrations: list[str] | None = None,
+    conversation_id: uuid.UUID | None = None,
 ) -> tuple[ChatPreparation | None, JsonObject | None]:
     if user_integrations is None:
         user_integrations = get_user_integrations(db, user_id)
@@ -611,9 +652,17 @@ def _prepare_chat_context(
     normalized_entity_type = _normalize_entity_type(entity_type)
 
     # Get or create conversation
-    conversation = get_or_create_conversation(
-        db, organization_id, user_id, normalized_entity_type, entity_id
-    )
+    try:
+        conversation = get_or_create_conversation(
+            db,
+            organization_id,
+            user_id,
+            normalized_entity_type,
+            entity_id,
+            conversation_id=conversation_id,
+        )
+    except ValueError as exc:
+        return None, _empty_ai_response(str(exc))
 
     # Load context based on entity type
     surrogate = None
@@ -737,6 +786,7 @@ async def chat_async(
     entity_id: uuid.UUID,
     message: str,
     user_integrations: list[str] | None = None,
+    conversation_id: uuid.UUID | None = None,
 ) -> JsonObject:
     """Process a chat message and return AI response.
 
@@ -755,6 +805,7 @@ async def chat_async(
         entity_id=entity_id,
         message=message,
         user_integrations=user_integrations,
+        conversation_id=conversation_id,
     )
     if error:
         return error
@@ -875,6 +926,7 @@ async def stream_chat_async(
     entity_id: uuid.UUID,
     message: str,
     user_integrations: list[str] | None = None,
+    conversation_id: uuid.UUID | None = None,
 ) -> AsyncIterator[dict[str, JsonObject]]:
     """Stream a chat response as incremental events."""
     preparation, error = _prepare_chat_context(
@@ -885,6 +937,7 @@ async def stream_chat_async(
         entity_id=entity_id,
         message=message,
         user_integrations=user_integrations,
+        conversation_id=conversation_id,
     )
     if error:
         yield {"type": "error", "data": {"message": error["content"]}}
@@ -1035,6 +1088,7 @@ def chat(
     entity_id: uuid.UUID,
     message: str,
     user_integrations: list[str] | None = None,
+    conversation_id: uuid.UUID | None = None,
 ) -> JsonObject:
     """Synchronous wrapper for chat_async (used by API routes)."""
     return run_async(
@@ -1046,6 +1100,7 @@ def chat(
             entity_id=entity_id,
             message=message,
             user_integrations=user_integrations,
+            conversation_id=conversation_id,
         )
     )
 

@@ -87,7 +87,7 @@ class AIConversation(Base):
     """
     AI conversation thread.
 
-    Each user has their own conversation per entity (case).
+    Users can have multiple conversations per entity context.
     Developers can view all conversations for audit purposes.
     """
 
@@ -119,13 +119,6 @@ class AIConversation(Base):
     __table_args__ = (
         Index("ix_ai_conversations_entity", "organization_id", "entity_type", "entity_id"),
         Index("ix_ai_conversations_user", "user_id", "entity_type", "entity_id"),
-        UniqueConstraint(
-            "organization_id",
-            "user_id",
-            "entity_type",
-            "entity_id",
-            name="uq_ai_conversations_user_entity",
-        ),
     )
 
 

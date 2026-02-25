@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SendIcon, SparklesIcon, FileTextIcon, UserIcon, CalendarIcon, ClockIcon, BotIcon, Loader2Icon, AlertCircleIcon, CheckIcon, XIcon, StopCircleIcon } from "lucide-react"
 import { useState, useRef, useEffect, useMemo, useCallback } from "react"
-import { useStreamChatMessage, useAISettings, useApproveAction, useRejectAction, useConversation } from "@/lib/hooks/use-ai"
+import { useStreamChatMessage, useAISettings, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
@@ -41,6 +41,7 @@ interface ChatSession {
     updatedAt: string
     entityType: "surrogate" | "global"
     entityId: string | null
+    conversationId: string | null
     messages: Message[]
 }
 
@@ -107,6 +108,8 @@ function safeParseHistory(raw: string | null): ChatSession[] {
                 const entityType: "surrogate" | "global" =
                     entry.entityType === "surrogate" ? "surrogate" : "global"
                 const entityId = typeof entry.entityId === "string" ? entry.entityId : null
+                const conversationId =
+                    typeof entry.conversationId === "string" ? entry.conversationId : null
                 const rawMessages = Array.isArray(entry.messages)
                     ? (entry.messages as unknown[])
                     : []
@@ -148,6 +151,7 @@ function safeParseHistory(raw: string | null): ChatSession[] {
                     updatedAt,
                     entityType,
                     entityId,
+                    conversationId,
                     messages,
                 }
             })
@@ -189,15 +193,6 @@ export default function AIAssistantPage() {
     const streamMessage = useStreamChatMessage()
     const approveAction = useApproveAction()
     const rejectAction = useRejectAction()
-    const conversationQuery = useConversation(
-        selectedSurrogateId ? "surrogate" : null,
-        selectedSurrogateId || null,
-        { enabled: true }
-    )
-    const {
-        data: conversation,
-        isFetching: conversationFetching,
-    } = conversationQuery
 
     const quickActions = [
         { icon: FileTextIcon, label: "Summarize this surrogate", color: "text-blue-500" },
@@ -214,21 +209,6 @@ export default function AIAssistantPage() {
     ]
     const surrogatesErrorMessage = surrogatesErrorData instanceof Error ? surrogatesErrorData.message : ""
     const aiSettingsErrorMessage = aiSettingsErrorData instanceof Error ? aiSettingsErrorData.message : ""
-    const conversationMessages = useMemo(() => {
-        if (!conversation?.messages?.length) {
-            return []
-        }
-        return conversation.messages.map((msg) => ({
-            id: msg.id,
-            role: msg.role,
-            content: msg.content,
-            timestamp: msg.created_at
-                ? new Date(msg.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
-                : new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-            ...(msg.proposed_actions ? { proposed_actions: msg.proposed_actions } : {}),
-            status: "done" as const,
-        }))
-    }, [conversation])
 
     const buildWelcomeMessage = useCallback(() => ({
         id: "welcome",
@@ -286,8 +266,15 @@ export default function AIAssistantPage() {
     )
 
     const updateSessionMessages = useCallback(
-        (sessionId: string, sessionMessages: Message[], context: { entityType: "surrogate" | "global"; entityId: string | null }) => {
+        (
+            sessionId: string,
+            sessionMessages: Message[],
+            context: { entityType: "surrogate" | "global"; entityId: string | null },
+            options?: { conversationId?: string | null }
+        ) => {
             const normalized = normalizeMessagesForSession(sessionMessages)
+            const existing = chatHistory.find((session) => session.id === sessionId)
+            const conversationId = options?.conversationId ?? existing?.conversationId ?? null
             const session: ChatSession = {
                 id: sessionId,
                 label: buildSessionLabel(context.entityType, context.entityId),
@@ -295,11 +282,12 @@ export default function AIAssistantPage() {
                 updatedAt: new Date().toISOString(),
                 entityType: context.entityType,
                 entityId: context.entityId,
+                conversationId,
                 messages: normalized,
             }
             upsertSession(session)
         },
-        [buildSessionLabel, derivePreview, upsertSession]
+        [buildSessionLabel, chatHistory, derivePreview, upsertSession]
     )
 
     const clearChatHistory = useCallback(() => {
@@ -313,11 +301,13 @@ export default function AIAssistantPage() {
     }, [buildWelcomeMessage])
 
     const historyLoadedRef = useRef(false)
+    const initialSessionCreatedRef = useRef(false)
 
     useEffect(() => {
         if (typeof window === "undefined") return
         if (!user?.user_id) {
             historyLoadedRef.current = false
+            initialSessionCreatedRef.current = false
             clearChatHistory()
             return
         }
@@ -325,23 +315,37 @@ export default function AIAssistantPage() {
         if (storedUserId && storedUserId !== user.user_id) {
             clearChatHistory()
             historyLoadedRef.current = false
+            initialSessionCreatedRef.current = false
         }
         if (!historyLoadedRef.current) {
             const storedHistory = safeParseHistory(sessionStorage.getItem(CHAT_HISTORY_KEY))
             setChatHistory(storedHistory)
-            const [mostRecent] = storedHistory
-            if (mostRecent) {
-                setActiveSessionId(mostRecent.id)
-                if (mostRecent.entityType === "surrogate" && mostRecent.entityId) {
-                    setSelectedSurrogateId(mostRecent.entityId)
-                } else {
-                    setSelectedSurrogateId("")
-                }
-            }
+            setSelectedSurrogateId("")
+            setActiveSessionId(null)
+            setMessages([buildWelcomeMessage()])
             historyLoadedRef.current = true
         }
         sessionStorage.setItem(CHAT_HISTORY_USER_KEY, user.user_id)
-    }, [user?.user_id, clearChatHistory])
+    }, [user?.user_id, clearChatHistory, buildWelcomeMessage])
+
+    useEffect(() => {
+        if (!user?.user_id || !historyLoadedRef.current || initialSessionCreatedRef.current) return
+        initialSessionCreatedRef.current = true
+        const sessionId = `session-${Date.now()}`
+        upsertSession({
+            id: sessionId,
+            label: buildSessionLabel("global", null),
+            preview: "",
+            updatedAt: new Date().toISOString(),
+            entityType: "global",
+            entityId: null,
+            conversationId: null,
+            messages: [],
+        })
+        setSelectedSurrogateId("")
+        setActiveSessionId(sessionId)
+        setMessages([buildWelcomeMessage()])
+    }, [user?.user_id, upsertSession, buildSessionLabel, buildWelcomeMessage])
 
     const currentSession = useMemo(
         () => chatHistory.find((session) => session.id === activeSessionId) || null,
@@ -357,18 +361,8 @@ export default function AIAssistantPage() {
             setMessages(sessionMessages)
             return
         }
-        if (!conversationFetching && conversationMessages.length > 0) {
-            setMessages(conversationMessages)
-            return
-        }
         setMessages([buildWelcomeMessage()])
-    }, [
-        currentSession,
-        conversationMessages,
-        conversationFetching,
-        isStreaming,
-        buildWelcomeMessage,
-    ])
+    }, [currentSession, isStreaming, buildWelcomeMessage])
 
     // Scroll to bottom when messages change
     useEffect(() => {
@@ -399,13 +393,6 @@ export default function AIAssistantPage() {
             if (active && active.entityType === context.entityType && active.entityId === context.entityId) {
                 return active.id
             }
-            const existing = chatHistory.find(
-                (session) => session.entityType === context.entityType && session.entityId === context.entityId
-            )
-            if (existing) {
-                setActiveSessionId(existing.id)
-                return existing.id
-            }
 
             const sessionId = `session-${Date.now()}`
             upsertSession({
@@ -415,6 +402,7 @@ export default function AIAssistantPage() {
                 updatedAt: new Date().toISOString(),
                 entityType: context.entityType,
                 entityId: context.entityId,
+                conversationId: null,
                 messages: [],
             })
             setActiveSessionId(sessionId)
@@ -432,11 +420,12 @@ export default function AIAssistantPage() {
             id: string,
             updater: (msg: Message) => Message,
             sessionId: string,
-            context: { entityType: "surrogate" | "global"; entityId: string | null }
+            context: { entityType: "surrogate" | "global"; entityId: string | null },
+            options?: { conversationId?: string | null }
         ) => {
             setMessages((prev) => {
                 const next = prev.map((msg) => (msg.id === id ? updater(msg) : msg))
-                updateSessionMessages(sessionId, next, context)
+                updateSessionMessages(sessionId, next, context, options)
                 return next
             })
         },
@@ -469,6 +458,7 @@ export default function AIAssistantPage() {
             updatedAt: new Date().toISOString(),
             entityType: context.entityType,
             entityId: context.entityId,
+            conversationId: null,
             messages: [],
         })
         setActiveSessionId(sessionId)
@@ -512,6 +502,8 @@ export default function AIAssistantPage() {
             ? { entityType: "surrogate" as const, entityId: selectedSurrogateId }
             : { entityType: "global" as const, entityId: null }
         const sessionId = ensureSessionId(context)
+        const sessionConversationId =
+            chatHistory.find((session) => session.id === sessionId)?.conversationId ?? null
 
         const timestamp = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
         const userMessage: Message = {
@@ -545,16 +537,24 @@ export default function AIAssistantPage() {
         setIsStreaming(true)
 
         try {
-            await streamMessage(
+            const request =
                 context.entityType === "surrogate" && context.entityId
                     ? {
-                        entity_type: "surrogate",
+                        entity_type: "surrogate" as const,
                         entity_id: context.entityId,
                         message: trimmedMessage,
+                        ...(sessionConversationId
+                            ? { conversation_id: sessionConversationId }
+                            : {}),
                     }
                     : {
                         message: trimmedMessage,
-                    },
+                        ...(sessionConversationId
+                            ? { conversation_id: sessionConversationId }
+                            : {}),
+                    }
+            await streamMessage(
+                request,
                 (event) => {
                     if (event.type === 'start') {
                         updateMessageById(assistantId, (msg) => ({
@@ -586,7 +586,8 @@ export default function AIAssistantPage() {
                                 timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
                             }),
                             sessionId,
-                            context
+                            context,
+                            { conversationId: event.data.conversation_id ?? null }
                         )
                         return
                     }
@@ -697,28 +698,9 @@ export default function AIAssistantPage() {
     const handleSurrogateChange = useCallback((value?: string | null) => {
         const nextId = value ?? ""
         setSelectedSurrogateId(nextId)
-        if (!nextId) {
-            const globalSession = chatHistory.find((session) => session.entityType === "global")
-            if (globalSession) {
-                setActiveSessionId(globalSession.id)
-                setMessages(globalSession.messages.length ? globalSession.messages : [buildWelcomeMessage()])
-                return
-            }
-            setActiveSessionId(null)
-            setMessages([buildWelcomeMessage()])
-            return
-        }
-        const session = chatHistory.find(
-            (item) => item.entityType === "surrogate" && item.entityId === nextId
-        )
-        if (session) {
-            setActiveSessionId(session.id)
-            setMessages(session.messages.length ? session.messages : [buildWelcomeMessage()])
-            return
-        }
         setActiveSessionId(null)
         setMessages([buildWelcomeMessage()])
-    }, [chatHistory, buildWelcomeMessage])
+    }, [buildWelcomeMessage])
 
     const selectedSurrogate = surrogates?.find(surrogate => surrogate.id === selectedSurrogateId)
     const isAIEnabled = aiSettings?.is_enabled
