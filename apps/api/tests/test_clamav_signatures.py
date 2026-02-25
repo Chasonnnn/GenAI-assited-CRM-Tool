@@ -52,3 +52,29 @@ def test_ensure_signatures_runs_freshclam_when_allowed(monkeypatch, tmp_path):
     clamav_signature_service.ensure_signatures()
 
     assert called["freshclam"] is True
+
+
+def test_upload_archive_uses_put_object(monkeypatch, tmp_path):
+    sig_dir = tmp_path / "clamav"
+    sig_dir.mkdir()
+    (sig_dir / "main.cvd").write_bytes(b"main-signature")
+    (sig_dir / "daily.cvd").write_bytes(b"daily-signature")
+
+    captured: dict[str, object] = {}
+
+    class StubClient:
+        def put_object(self, **kwargs):  # noqa: ANN003 - boto style kwargs
+            body = kwargs["Body"]
+            captured["BodyBytes"] = body.read()
+            captured["Bucket"] = kwargs["Bucket"]
+            captured["Key"] = kwargs["Key"]
+            captured["ContentType"] = kwargs.get("ContentType")
+
+    monkeypatch.setattr(storage_client, "get_s3_client", lambda: StubClient())
+
+    clamav_signature_service._upload_archive("test-bucket", "clamav/signatures.tar.gz", str(sig_dir))
+
+    assert captured["Bucket"] == "test-bucket"
+    assert captured["Key"] == "clamav/signatures.tar.gz"
+    assert captured["ContentType"] == "application/gzip"
+    assert captured["BodyBytes"]

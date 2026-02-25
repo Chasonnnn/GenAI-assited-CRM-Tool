@@ -113,7 +113,15 @@ def _upload_archive(bucket: str, key: str, sig_dir: str) -> None:
         with tarfile.open(archive_path, "w:gz") as tar:
             for path in files:
                 tar.add(path, arcname=os.path.basename(path))
-        client.upload_file(archive_path, bucket, key)
+        # Use single-part upload to avoid multipart signature incompatibilities
+        # on some S3-compatible endpoints (e.g., UploadPart SignatureDoesNotMatch).
+        with open(archive_path, "rb") as archive_file:
+            client.put_object(
+                Bucket=bucket,
+                Key=key,
+                Body=archive_file,
+                ContentType="application/gzip",
+            )
 
 
 def ensure_signatures(max_age_hours: int | None = None) -> None:

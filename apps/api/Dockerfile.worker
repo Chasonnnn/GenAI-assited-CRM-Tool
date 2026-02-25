@@ -54,6 +54,12 @@ RUN useradd --create-home --shell /bin/bash appuser
 RUN mkdir -p /var/lib/clamav /var/log/clamav && \
     chown -R appuser:appuser /var/lib/clamav /var/log/clamav
 
+# freshclam in this container does not run clamd; drop NotifyClamd to avoid
+# noisy "Can't find or parse /etc/clamav/clamd.conf" errors.
+RUN if [ -f /etc/clamav/freshclam.conf ]; then \
+      sed -i '/^NotifyClamd[[:space:]]\+/d' /etc/clamav/freshclam.conf; \
+    fi
+
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
