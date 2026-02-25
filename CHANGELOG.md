@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.6...surrogacy-crm-platform-v0.90.7) (2026-02-25)
+
+
+### Features
+
+* default ai assistant to fresh chat sessions ([b4a30e2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b4a30e268157bde721433960c5fbb54cca1aa9db))
+
+
+### Bug Fixes
+
+* enforce global-only mode in ai assistant ([a61765f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a61765f478a6652ac67f6b790ea803f4e53fc97f))
+
 ## [0.90.6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.5...surrogacy-crm-platform-v0.90.6) (2026-02-25)
 
 
