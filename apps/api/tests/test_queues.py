@@ -117,3 +117,28 @@ async def test_queue_assign_claim_release_flow(authed_client):
     data = after_release.json()
     assert data["owner_type"] == "queue"
     assert data["owner_id"] == queue_b["id"]
+
+
+@pytest.mark.asyncio
+async def test_queue_members_endpoints_return_user_display_name(authed_client, test_auth):
+    create_resp = await authed_client.post(
+        "/queues",
+        json={"name": f"Queue Members {uuid.uuid4().hex[:6]}", "description": ""},
+    )
+    assert create_resp.status_code == 201, create_resp.text
+    queue_id = create_resp.json()["id"]
+
+    add_member_resp = await authed_client.post(
+        f"/queues/{queue_id}/members",
+        json={"user_id": str(test_auth.user.id)},
+    )
+    assert add_member_resp.status_code == 201, add_member_resp.text
+    assert add_member_resp.json()["user_name"] == test_auth.user.display_name
+
+    list_members_resp = await authed_client.get(f"/queues/{queue_id}/members")
+    assert list_members_resp.status_code == 200, list_members_resp.text
+
+    members = list_members_resp.json()
+    assert len(members) == 1
+    assert members[0]["user_id"] == str(test_auth.user.id)
+    assert members[0]["user_name"] == test_auth.user.display_name

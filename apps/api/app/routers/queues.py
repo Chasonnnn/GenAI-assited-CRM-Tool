@@ -301,7 +301,7 @@ def list_queue_members(
             id=m.id,
             queue_id=m.queue_id,
             user_id=m.user_id,
-            user_name=m.user.full_name if m.user else None,
+            user_name=_user_display_name(m.user),
             user_email=m.user.email if m.user else None,
             created_at=m.created_at.isoformat() if m.created_at else None,
         )
@@ -343,7 +343,7 @@ def add_queue_member(
         id=member.id,
         queue_id=member.queue_id,
         user_id=member.user_id,
-        user_name=user.full_name,
+        user_name=_user_display_name(user),
         user_email=user.email,
         created_at=member.created_at.isoformat() if member.created_at else None,
     )
@@ -383,3 +383,10 @@ def _queue_to_response(queue) -> QueueResponse:
         is_active=queue.is_active,
         member_ids=[m.user_id for m in queue.members] if hasattr(queue, "members") else [],
     )
+
+
+def _user_display_name(user) -> str | None:
+    """Return a user display label compatible with current and legacy user models."""
+    if not user:
+        return None
+    return getattr(user, "display_name", None) or getattr(user, "full_name", None)
