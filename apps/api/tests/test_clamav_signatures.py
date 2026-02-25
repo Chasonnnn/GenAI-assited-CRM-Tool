@@ -81,3 +81,40 @@ def test_upload_archive_uses_put_object_with_static_body(monkeypatch, tmp_path):
     assert captured["ContentType"] == "application/gzip"
     assert captured["ContentLength"] == len(captured["BodyBytes"])
     assert captured["BodyBytes"]
+
+
+def test_upload_archive_retries_with_auto_region_on_signature_mismatch(monkeypatch, tmp_path):
+    sig_dir = tmp_path / "clamav"
+    sig_dir.mkdir()
+    (sig_dir / "main.cvd").write_bytes(b"main-signature")
+
+    calls: list[str | None] = []
+    captured: dict[str, object] = {}
+
+    class FailingClient:
+        def put_object(self, **_kwargs):  # noqa: ANN003 - boto style kwargs
+            raise ClientError({"Error": {"Code": "SignatureDoesNotMatch"}}, "PutObject")
+
+    class SuccessClient:
+        def put_object(self, **kwargs):  # noqa: ANN003 - boto style kwargs
+            calls.append("put")
+            captured["Bucket"] = kwargs["Bucket"]
+            captured["Key"] = kwargs["Key"]
+
+    def _fake_client(*, region=None, endpoint_url=None):  # noqa: ANN001, ARG001
+        calls.append(region)
+        if region == "auto":
+            return SuccessClient()
+        return FailingClient()
+
+    monkeypatch.setattr(storage_client, "get_s3_client", _fake_client)
+
+    clamav_signature_service._upload_archive_with_signature_retry(
+        "test-bucket", "clamav/signatures.tar.gz", str(sig_dir)
+    )
+
+    assert calls[0] is None
+    assert calls[1] == "auto"
+    assert calls[-1] == "put"
+    assert captured["Bucket"] == "test-bucket"
+    assert captured["Key"] == "clamav/signatures.tar.gz"

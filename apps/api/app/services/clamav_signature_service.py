@@ -126,6 +126,42 @@ def _upload_archive(bucket: str, key: str, sig_dir: str) -> None:
         )
 
 
+def _upload_archive_with_signature_retry(bucket: str, key: str, sig_dir: str) -> None:
+    try:
+        _upload_archive(bucket, key, sig_dir)
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code")
+        if code != "SignatureDoesNotMatch":
+            raise
+        logger.warning(
+            "ClamAV signature upload failed with SignatureDoesNotMatch; retrying with region=auto"
+        )
+        _upload_archive_with_region(bucket, key, sig_dir, region="auto")
+
+
+def _upload_archive_with_region(bucket: str, key: str, sig_dir: str, region: str) -> None:
+    files = _local_signature_files(sig_dir)
+    if not files:
+        logger.warning("No ClamAV signature files found to upload")
+        return
+
+    client = storage_client.get_s3_client(region=region)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        archive_path = os.path.join(tmpdir, ARCHIVE_NAME)
+        with tarfile.open(archive_path, "w:gz") as tar:
+            for path in files:
+                tar.add(path, arcname=os.path.basename(path))
+        with open(archive_path, "rb") as archive_file:
+            archive_bytes = archive_file.read()
+        client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=archive_bytes,
+            ContentLength=len(archive_bytes),
+            ContentType="application/gzip",
+        )
+
+
 def ensure_signatures(max_age_hours: int | None = None) -> None:
     """Ensure ClamAV signatures exist and are reasonably fresh."""
     sig_dir = _signature_dir()
@@ -198,5 +234,5 @@ def update_signatures() -> None:
         return
 
     key = _archive_key()
-    _upload_archive(bucket, key, sig_dir)
+    _upload_archive_with_signature_retry(bucket, key, sig_dir)
     logger.info("Uploaded ClamAV signatures to %s/%s", bucket, key)
