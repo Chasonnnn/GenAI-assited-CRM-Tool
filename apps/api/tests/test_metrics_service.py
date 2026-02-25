@@ -119,6 +119,8 @@ def test_record_request_logs_warning_on_persist_failure(db, caplog, monkeypatch)
     )
 
     warning_messages = [
-        record.message for record in caplog.records if "Failed to record request metrics" in record.message
+        record.message
+        for record in caplog.records
+        if "Failed to record request metrics" in record.message
     ]
     assert warning_messages == ["Failed to record request metrics: boom"]

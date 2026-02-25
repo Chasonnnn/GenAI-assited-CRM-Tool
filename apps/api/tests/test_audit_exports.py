@@ -67,7 +67,9 @@ async def test_download_audit_export_commits_audit_log(authed_client, db, test_a
             lambda _file_path: "https://example.com/download.csv",
         )
 
-        response = await authed_client.get(f"/audit/exports/{job.id}/download", follow_redirects=False)
+        response = await authed_client.get(
+            f"/audit/exports/{job.id}/download", follow_redirects=False
+        )
         assert response.status_code == 307
 
         event = (

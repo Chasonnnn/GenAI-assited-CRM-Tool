@@ -1,6 +1,8 @@
 """Attachment service for file uploads with security features."""
 
+import csv
 import hashlib
+import io
 import logging
 import os
 import shutil
@@ -82,6 +84,8 @@ _EXECUTABLE_SIGNATURE_PREFIXES = (
     b"\xca\xfe\xba\xbe",  # Mach-O fat
     b"\xbe\xba\xfe\xca",  # Mach-O fat (reverse endian)
 )
+
+CSV_DANGEROUS_PREFIXES = ("=", "+", "-", "@")
 
 
 # =============================================================================
@@ -247,6 +251,60 @@ def strip_exif_data(file: BinaryIO, content_type: str) -> BinaryIO:
         raise ValueError("Failed to sanitize image file") from exc
 
 
+def sanitize_csv(file: BinaryIO, content_type: str) -> BinaryIO:
+    """
+    Sanitize CSV files to prevent Formula Injection.
+
+    Prepends "'" to cells starting with =, +, -, @.
+    """
+    if content_type not in ("text/csv", "application/csv"):
+        return file
+
+    try:
+        file.seek(0)
+        content_bytes = file.read()
+
+        # Simple encoding detection (UTF-8 vs Latin-1)
+        try:
+            content_str = content_bytes.decode("utf-8")
+            encoding = "utf-8"
+        except UnicodeDecodeError:
+            content_str = content_bytes.decode("latin-1", errors="replace")
+            encoding = "latin-1"
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        reader = csv.reader(io.StringIO(content_str))
+
+        rows = []
+        modified = False
+        for row in reader:
+            sanitized_row = []
+            for cell in row:
+                if cell.startswith(CSV_DANGEROUS_PREFIXES):
+                    sanitized_row.append(f"'{cell}")
+                    modified = True
+                else:
+                    sanitized_row.append(cell)
+            rows.append(sanitized_row)
+
+        if not modified:
+            file.seek(0)
+            return file
+
+        writer.writerows(rows)
+
+        # Return new BytesIO
+        new_file = io.BytesIO(output.getvalue().encode(encoding))
+        new_file.seek(0)
+        return new_file
+
+    except Exception as exc:
+        logger.warning("Failed to sanitize CSV: %s", exc)
+        file.seek(0)
+        return file
+
+
 def generate_signed_url(storage_key: str, expires_in_seconds: int | None = None) -> str:
     """Generate signed download URL."""
     backend = _get_storage_backend()
@@ -381,6 +439,9 @@ def upload_attachment(
 
     # Strip EXIF data from images for privacy
     processed_file = strip_exif_data(file, normalized_content_type)
+
+    # Sanitize CSV to prevent formula injection
+    processed_file = sanitize_csv(processed_file, normalized_content_type)
 
     # Generate storage key
     attachment_id = uuid.uuid4()

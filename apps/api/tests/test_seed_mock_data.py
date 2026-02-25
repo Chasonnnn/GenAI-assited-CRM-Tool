@@ -68,7 +68,9 @@ def test_create_surrogates_generates_status_history_and_activity(db, test_org, t
 def test_create_intended_parents_generates_status_history(db, test_org, test_user) -> None:
     seed_mock_data.create_intended_parents(db, test_org.id, test_user.id, count=10)
 
-    ip_count = db.query(IntendedParent).filter(IntendedParent.organization_id == test_org.id).count()
+    ip_count = (
+        db.query(IntendedParent).filter(IntendedParent.organization_id == test_org.id).count()
+    )
     assert ip_count == 10
 
     ip_history_count = db.query(IntendedParentStatusHistory).count()
@@ -144,8 +146,7 @@ def test_create_matches_balanced_statuses(db, test_org, test_user) -> None:
     )
 
     statuses = {
-        row[0]
-        for row in db.query(Match.status).filter(Match.organization_id == test_org.id).all()
+        row[0] for row in db.query(Match.status).filter(Match.organization_id == test_org.id).all()
     }
     assert {"proposed", "reviewing", "accepted", "rejected", "cancelled"}.issubset(statuses)
 

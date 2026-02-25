@@ -74,7 +74,9 @@ def test_upload_archive_uses_put_object_with_static_body(monkeypatch, tmp_path):
 
     monkeypatch.setattr(storage_client, "get_s3_client", lambda: StubClient())
 
-    clamav_signature_service._upload_archive("test-bucket", "clamav/signatures.tar.gz", str(sig_dir))
+    clamav_signature_service._upload_archive(
+        "test-bucket", "clamav/signatures.tar.gz", str(sig_dir)
+    )
 
     assert captured["Bucket"] == "test-bucket"
     assert captured["Key"] == "clamav/signatures.tar.gz"

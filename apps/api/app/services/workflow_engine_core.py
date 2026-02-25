@@ -569,7 +569,9 @@ class WorkflowEngineCore:
                         )
                         execution.actions_executed = action_results
                         execution.status = WorkflowExecutionStatus.FAILED.value
-                        execution.error_message = approval_error or "Approver not found for approval"
+                        execution.error_message = (
+                            approval_error or "Approver not found for approval"
+                        )
                         db.commit()
                         return
 

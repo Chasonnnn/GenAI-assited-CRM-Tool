@@ -867,9 +867,8 @@ def list_surrogates(
         )
         owner_clause = None
         if user_id:
-            owner_clause = (
-                (Surrogate.owner_type == OwnerType.USER.value)
-                & (Surrogate.owner_id == user_id)
+            owner_clause = (Surrogate.owner_type == OwnerType.USER.value) & (
+                Surrogate.owner_id == user_id
             )
         stage_clause_args = [
             Surrogate.stage_id.is_(None),
@@ -896,8 +895,8 @@ def list_surrogates(
     if role_filter == Role.INTAKE_SPECIALIST.value or role_filter == Role.INTAKE_SPECIALIST:
         # Intake specialists see owned surrogates + surrogates they moved to approved.
         if user_id:
-            owned_clause = (
-                (Surrogate.owner_type == OwnerType.USER.value) & (Surrogate.owner_id == user_id)
+            owned_clause = (Surrogate.owner_type == OwnerType.USER.value) & (
+                Surrogate.owner_id == user_id
             )
             followed_ids = (
                 select(SurrogateStatusHistory.surrogate_id)

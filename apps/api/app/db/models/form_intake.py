@@ -63,7 +63,9 @@ class FormIntakeLink(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
     max_submissions: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    submissions_count: Mapped[int] = mapped_column(Integer, server_default=text("0"), nullable=False)
+    submissions_count: Mapped[int] = mapped_column(
+        Integer, server_default=text("0"), nullable=False
+    )
 
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True

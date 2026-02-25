@@ -903,7 +903,9 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
                 else f"/book/self-service/{surrogate.organization_id}/cancel/{upcoming_appointment.cancel_token}"
             )
 
-        tz_name = upcoming_appointment.client_timezone or (org.timezone if org else "America/Los_Angeles")
+        tz_name = upcoming_appointment.client_timezone or (
+            org.timezone if org else "America/Los_Angeles"
+        )
         try:
             local_tz = ZoneInfo(tz_name)
         except Exception:

@@ -28,6 +28,5 @@ def test_surrogate_generated_types_are_up_to_date() -> None:
         "Run: python3 scripts/gen_surrogate_contracts.py"
     )
     assert output_path.read_text(encoding="utf-8") == rendered, (
-        "surrogate.generated.ts is out of date. "
-        "Run: python3 scripts/gen_surrogate_contracts.py"
+        "surrogate.generated.ts is out of date. Run: python3 scripts/gen_surrogate_contracts.py"
     )

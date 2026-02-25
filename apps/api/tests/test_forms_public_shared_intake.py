@@ -11,8 +11,20 @@ import pytest
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import FormSubmissionMatchStatus
 from app.db.enums import IntakeLeadStatus
-from app.db.models import AutomationWorkflow, FormSubmission, IntakeLead, Surrogate, Task, WorkflowExecution
-from app.utils.normalization import normalize_email, normalize_name, normalize_phone, normalize_search_text
+from app.db.models import (
+    AutomationWorkflow,
+    FormSubmission,
+    IntakeLead,
+    Surrogate,
+    Task,
+    WorkflowExecution,
+)
+from app.utils.normalization import (
+    normalize_email,
+    normalize_name,
+    normalize_phone,
+    normalize_search_text,
+)
 
 
 def _create_surrogate(
@@ -115,7 +127,9 @@ async def test_shared_draft_lifecycle(authed_client):
     delete_res = await authed_client.delete(f"/forms/public/intake/{slug}/draft/{draft_session_id}")
     assert delete_res.status_code == 204
 
-    after_delete_res = await authed_client.get(f"/forms/public/intake/{slug}/draft/{draft_session_id}")
+    after_delete_res = await authed_client.get(
+        f"/forms/public/intake/{slug}/draft/{draft_session_id}"
+    )
     assert after_delete_res.status_code == 404
 
 

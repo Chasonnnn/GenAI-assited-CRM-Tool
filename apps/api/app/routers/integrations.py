@@ -515,7 +515,9 @@ def google_calendar_connection_status(
         else None,
         tasks_accessible=tasks_accessible,
         tasks_error=tasks_error,
-        last_sync_at=integration.updated_at.isoformat() if integration and integration.updated_at else None,
+        last_sync_at=integration.updated_at.isoformat()
+        if integration and integration.updated_at
+        else None,
     )
 
 
@@ -578,10 +580,12 @@ async def sync_google_calendar_now(
         )
 
     try:
-        appointment_changes = await appointment_integrations.sync_manual_google_events_for_appointments_async(
-            db=db,
-            user_id=session.user_id,
-            org_id=session.org_id,
+        appointment_changes = (
+            await appointment_integrations.sync_manual_google_events_for_appointments_async(
+                db=db,
+                user_id=session.user_id,
+                org_id=session.org_id,
+            )
         )
     except Exception:
         appointment_changes = 0

@@ -58,7 +58,9 @@ def upgrade() -> None:
     _create_enum("ticket_link_status", ["unlinked", "linked", "needs_review"])
     _create_enum("surrogate_email_contact_source", ["system", "manual"])
 
-    op.add_column("user_integrations", sa.Column("granted_scopes", postgresql.JSONB(), nullable=True))
+    op.add_column(
+        "user_integrations", sa.Column("granted_scopes", postgresql.JSONB(), nullable=True)
+    )
     op.add_column(
         "user_integrations", sa.Column("gmail_sent_last_history_id", sa.BigInteger(), nullable=True)
     )
@@ -66,13 +68,16 @@ def upgrade() -> None:
         "user_integrations",
         sa.Column("gmail_sent_last_sync_at", sa.DateTime(timezone=True), nullable=True),
     )
-    op.add_column(
-        "user_integrations", sa.Column("gmail_sent_sync_error", sa.Text(), nullable=True)
-    )
+    op.add_column("user_integrations", sa.Column("gmail_sent_sync_error", sa.Text(), nullable=True))
 
     op.create_table(
         "mailbox_credentials",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column(
             "provider",
@@ -84,8 +89,18 @@ def upgrade() -> None:
         sa.Column("refresh_token_encrypted", sa.Text(), nullable=False),
         sa.Column("token_expires_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("granted_scopes", postgresql.JSONB(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
@@ -104,7 +119,12 @@ def upgrade() -> None:
 
     op.create_table(
         "mailboxes",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column(
             "kind",
@@ -128,11 +148,23 @@ def upgrade() -> None:
         sa.Column("last_incremental_sync_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_full_sync_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_sync_error", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["credential_id"], ["mailbox_credentials.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(["user_integration_id"], ["user_integrations.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(
+            ["user_integration_id"], ["user_integrations.id"], ondelete="SET NULL"
+        ),
         sa.ForeignKeyConstraint(["default_queue_id"], ["queues.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
@@ -142,18 +174,32 @@ def upgrade() -> None:
             name="uq_mailboxes_org_kind_email",
         ),
     )
-    op.create_index("idx_mailboxes_org_enabled", "mailboxes", ["organization_id", "is_enabled"], unique=False)
-    op.create_index("idx_mailboxes_org_kind", "mailboxes", ["organization_id", "kind"], unique=False)
+    op.create_index(
+        "idx_mailboxes_org_enabled", "mailboxes", ["organization_id", "is_enabled"], unique=False
+    )
+    op.create_index(
+        "idx_mailboxes_org_kind", "mailboxes", ["organization_id", "kind"], unique=False
+    )
 
     op.create_table(
         "email_raw_blobs",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("sha256_hex", sa.String(length=64), nullable=False),
         sa.Column("storage_key", sa.String(length=512), nullable=False),
         sa.Column("size_bytes", sa.BigInteger(), nullable=False),
         sa.Column("content_type", sa.String(length=100), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("organization_id", "sha256_hex", name="uq_email_raw_blob_sha"),
@@ -167,7 +213,12 @@ def upgrade() -> None:
 
     op.create_table(
         "email_messages",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column(
             "direction",
@@ -180,8 +231,18 @@ def upgrade() -> None:
         sa.Column("fingerprint_sha256", sa.String(length=64), nullable=False),
         sa.Column("signature_sha256", sa.String(length=64), nullable=False),
         sa.Column("collision_group_id", postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("first_seen_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "first_seen_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
@@ -191,27 +252,69 @@ def upgrade() -> None:
             name="uq_email_messages_fingerprint_signature",
         ),
     )
-    op.create_index("idx_email_messages_org_created", "email_messages", ["organization_id", "created_at"], unique=False)
-    op.create_index("idx_email_messages_org_rfc", "email_messages", ["organization_id", "rfc_message_id"], unique=False)
-    op.create_index("idx_email_messages_org_thread", "email_messages", ["organization_id", "gmail_thread_id"], unique=False)
+    op.create_index(
+        "idx_email_messages_org_created",
+        "email_messages",
+        ["organization_id", "created_at"],
+        unique=False,
+    )
+    op.create_index(
+        "idx_email_messages_org_rfc",
+        "email_messages",
+        ["organization_id", "rfc_message_id"],
+        unique=False,
+    )
+    op.create_index(
+        "idx_email_messages_org_thread",
+        "email_messages",
+        ["organization_id", "gmail_thread_id"],
+        unique=False,
+    )
 
     op.create_table(
         "email_message_contents",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("message_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("content_version", sa.Integer(), server_default=sa.text("1"), nullable=False),
         sa.Column("parser_version", sa.Integer(), server_default=sa.text("1"), nullable=False),
-        sa.Column("parsed_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "parsed_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
+        ),
         sa.Column("date_header", sa.DateTime(timezone=True), nullable=True),
         sa.Column("subject", sa.Text(), nullable=True),
         sa.Column("subject_norm", sa.Text(), nullable=True),
         sa.Column("from_email", postgresql.CITEXT(), nullable=True),
         sa.Column("from_name", sa.Text(), nullable=True),
-        sa.Column("reply_to_emails", postgresql.ARRAY(postgresql.CITEXT()), server_default=sa.text("'{}'"), nullable=False),
-        sa.Column("to_emails", postgresql.ARRAY(postgresql.CITEXT()), server_default=sa.text("'{}'"), nullable=False),
-        sa.Column("cc_emails", postgresql.ARRAY(postgresql.CITEXT()), server_default=sa.text("'{}'"), nullable=False),
-        sa.Column("headers_json", postgresql.JSONB(), server_default=sa.text("'{}'::jsonb"), nullable=False),
+        sa.Column(
+            "reply_to_emails",
+            postgresql.ARRAY(postgresql.CITEXT()),
+            server_default=sa.text("'{}'"),
+            nullable=False,
+        ),
+        sa.Column(
+            "to_emails",
+            postgresql.ARRAY(postgresql.CITEXT()),
+            server_default=sa.text("'{}'"),
+            nullable=False,
+        ),
+        sa.Column(
+            "cc_emails",
+            postgresql.ARRAY(postgresql.CITEXT()),
+            server_default=sa.text("'{}'"),
+            nullable=False,
+        ),
+        sa.Column(
+            "headers_json",
+            postgresql.JSONB(),
+            server_default=sa.text("'{}'::jsonb"),
+            nullable=False,
+        ),
         sa.Column("body_text", sa.Text(), nullable=True),
         sa.Column("body_html_sanitized", sa.Text(), nullable=True),
         sa.Column("has_attachments", sa.Boolean(), server_default=sa.text("FALSE"), nullable=False),
@@ -236,12 +339,22 @@ def upgrade() -> None:
 
     op.create_table(
         "email_message_thread_refs",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("message_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("ref_type", sa.String(length=30), nullable=False),
         sa.Column("ref_rfc_message_id", sa.Text(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["message_id"], ["email_messages.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
@@ -261,7 +374,12 @@ def upgrade() -> None:
 
     op.create_table(
         "tickets",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("ticket_code", sa.String(length=32), nullable=False),
         sa.Column(
@@ -324,8 +442,18 @@ def upgrade() -> None:
             server_default=sa.text("'low'"),
             nullable=False,
         ),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.Column("first_message_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_message_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_activity_at", sa.DateTime(timezone=True), nullable=True),
@@ -337,15 +465,21 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("organization_id", "ticket_code", name="uq_tickets_code"),
     )
-    op.create_index("idx_tickets_org_status", "tickets", ["organization_id", "status"], unique=False)
+    op.create_index(
+        "idx_tickets_org_status", "tickets", ["organization_id", "status"], unique=False
+    )
     op.create_index(
         "idx_tickets_org_assignee",
         "tickets",
         ["organization_id", "assignee_user_id", "assignee_queue_id"],
         unique=False,
     )
-    op.create_index("idx_tickets_org_surrogate", "tickets", ["organization_id", "surrogate_id"], unique=False)
-    op.create_index("idx_tickets_org_activity", "tickets", ["organization_id", "last_activity_at"], unique=False)
+    op.create_index(
+        "idx_tickets_org_surrogate", "tickets", ["organization_id", "surrogate_id"], unique=False
+    )
+    op.create_index(
+        "idx_tickets_org_activity", "tickets", ["organization_id", "last_activity_at"], unique=False
+    )
     op.create_index(
         "idx_tickets_org_link_status",
         "tickets",
@@ -355,14 +489,21 @@ def upgrade() -> None:
 
     op.create_table(
         "email_message_occurrences",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("mailbox_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("gmail_message_id", sa.Text(), nullable=False),
         sa.Column("gmail_thread_id", sa.Text(), nullable=True),
         sa.Column("gmail_history_id", sa.BigInteger(), nullable=True),
         sa.Column("gmail_internal_date", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("label_ids", postgresql.ARRAY(sa.Text()), server_default=sa.text("'{}'"), nullable=False),
+        sa.Column(
+            "label_ids", postgresql.ARRAY(sa.Text()), server_default=sa.text("'{}'"), nullable=False
+        ),
         sa.Column(
             "state",
             postgresql.ENUM(
@@ -422,8 +563,18 @@ def upgrade() -> None:
             server_default=sa.text("'{}'::jsonb"),
             nullable=False,
         ),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["mailbox_id"], ["mailboxes.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["raw_blob_id"], ["email_raw_blobs.id"], ondelete="SET NULL"),
@@ -464,7 +615,12 @@ def upgrade() -> None:
 
     op.create_table(
         "email_message_attachments",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("message_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("attachment_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -473,7 +629,12 @@ def upgrade() -> None:
         sa.Column("size_bytes", sa.BigInteger(), server_default=sa.text("0"), nullable=False),
         sa.Column("is_inline", sa.Boolean(), server_default=sa.text("FALSE"), nullable=False),
         sa.Column("content_id", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["message_id"], ["email_messages.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["attachment_id"], ["attachments.id"], ondelete="CASCADE"),
@@ -494,11 +655,21 @@ def upgrade() -> None:
 
     op.create_table(
         "ticket_messages",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("ticket_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("message_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("stitched_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "stitched_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.Column("stitch_reason", sa.String(length=50), nullable=False),
         sa.Column(
             "stitch_confidence",
@@ -537,13 +708,25 @@ def upgrade() -> None:
 
     op.create_table(
         "ticket_events",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("ticket_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("actor_user_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("event_type", sa.String(length=50), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("event_data", postgresql.JSONB(), server_default=sa.text("'{}'::jsonb"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "event_data", postgresql.JSONB(), server_default=sa.text("'{}'::jsonb"), nullable=False
+        ),
         sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["ticket_id"], ["tickets.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["actor_user_id"], ["users.id"], ondelete="SET NULL"),
@@ -558,14 +741,29 @@ def upgrade() -> None:
 
     op.create_table(
         "ticket_notes",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("ticket_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("author_user_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("body_markdown", sa.Text(), nullable=False),
         sa.Column("body_html_sanitized", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["ticket_id"], ["tickets.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["author_user_id"], ["users.id"], ondelete="SET NULL"),
@@ -580,22 +778,49 @@ def upgrade() -> None:
 
     op.create_table(
         "ticket_saved_views",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("name", sa.String(length=120), nullable=False),
-        sa.Column("filters_json", postgresql.JSONB(), server_default=sa.text("'{}'::jsonb"), nullable=False),
+        sa.Column(
+            "filters_json",
+            postgresql.JSONB(),
+            server_default=sa.text("'{}'::jsonb"),
+            nullable=False,
+        ),
         sa.Column("is_default", sa.Boolean(), server_default=sa.text("FALSE"), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("organization_id", "name", name="uq_ticket_saved_view_name"),
     )
-    op.create_index("idx_ticket_saved_views_org", "ticket_saved_views", ["organization_id"], unique=False)
+    op.create_index(
+        "idx_ticket_saved_views_org", "ticket_saved_views", ["organization_id"], unique=False
+    )
 
     op.create_table(
         "ticket_surrogate_link_candidates",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("ticket_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("surrogate_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -610,9 +835,19 @@ def upgrade() -> None:
             ),
             nullable=False,
         ),
-        sa.Column("evidence_json", postgresql.JSONB(), server_default=sa.text("'{}'::jsonb"), nullable=False),
+        sa.Column(
+            "evidence_json",
+            postgresql.JSONB(),
+            server_default=sa.text("'{}'::jsonb"),
+            nullable=False,
+        ),
         sa.Column("is_selected", sa.Boolean(), server_default=sa.text("FALSE"), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["ticket_id"], ["tickets.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["surrogate_id"], ["surrogates.id"], ondelete="CASCADE"),
@@ -633,7 +868,12 @@ def upgrade() -> None:
 
     op.create_table(
         "surrogate_email_contacts",
-        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            server_default=sa.text("gen_random_uuid()"),
+            nullable=False,
+        ),
         sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("surrogate_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("email", sa.Text(), nullable=False),
@@ -653,8 +893,18 @@ def upgrade() -> None:
         sa.Column("contact_type", sa.String(length=40), nullable=True),
         sa.Column("is_active", sa.Boolean(), server_default=sa.text("TRUE"), nullable=False),
         sa.Column("created_by_user_id", postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["surrogate_id"], ["surrogates.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["created_by_user_id"], ["users.id"], ondelete="SET NULL"),
@@ -691,10 +941,14 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("idx_surrogate_email_contacts_org_active", table_name="surrogate_email_contacts")
     op.drop_index("idx_surrogate_email_contacts_org_hash", table_name="surrogate_email_contacts")
-    op.drop_index("idx_surrogate_email_contacts_org_surrogate", table_name="surrogate_email_contacts")
+    op.drop_index(
+        "idx_surrogate_email_contacts_org_surrogate", table_name="surrogate_email_contacts"
+    )
     op.drop_table("surrogate_email_contacts")
 
-    op.drop_index("idx_ticket_surrogate_candidates_org_ticket", table_name="ticket_surrogate_link_candidates")
+    op.drop_index(
+        "idx_ticket_surrogate_candidates_org_ticket", table_name="ticket_surrogate_link_candidates"
+    )
     op.drop_table("ticket_surrogate_link_candidates")
 
     op.drop_index("idx_ticket_saved_views_org", table_name="ticket_saved_views")
@@ -710,7 +964,9 @@ def downgrade() -> None:
     op.drop_index("idx_ticket_messages_org_ticket", table_name="ticket_messages")
     op.drop_table("ticket_messages")
 
-    op.drop_index("idx_email_message_attachments_org_message", table_name="email_message_attachments")
+    op.drop_index(
+        "idx_email_message_attachments_org_message", table_name="email_message_attachments"
+    )
     op.drop_table("email_message_attachments")
 
     op.drop_index("idx_email_occurrence_org_thread", table_name="email_message_occurrences")
@@ -727,7 +983,9 @@ def downgrade() -> None:
     op.drop_table("tickets")
 
     op.drop_index("idx_email_message_thread_refs_org_rfc", table_name="email_message_thread_refs")
-    op.drop_index("idx_email_message_thread_refs_org_message", table_name="email_message_thread_refs")
+    op.drop_index(
+        "idx_email_message_thread_refs_org_message", table_name="email_message_thread_refs"
+    )
     op.drop_table("email_message_thread_refs")
 
     op.drop_index("idx_email_message_contents_org_message", table_name="email_message_contents")

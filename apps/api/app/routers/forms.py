@@ -511,13 +511,10 @@ def update_form_delivery_settings(
     if not form:
         raise HTTPException(status_code=404, detail="Form not found")
 
-    if (
-        body.default_application_email_template_id is not None
-        and not email_service.get_template(
-            db,
-            body.default_application_email_template_id,
-            session.org_id,
-        )
+    if body.default_application_email_template_id is not None and not email_service.get_template(
+        db,
+        body.default_application_email_template_id,
+        session.org_id,
     ):
         raise HTTPException(status_code=404, detail="Email template not found")
 
@@ -940,7 +937,10 @@ def send_submission_token(
             normalized_surrogate_phone = surrogate.phone
 
     if settings.FORMS_TOKEN_LOCK:
-        if token.locked_recipient_email and token.locked_recipient_email != normalized_surrogate_email:
+        if (
+            token.locked_recipient_email
+            and token.locked_recipient_email != normalized_surrogate_email
+        ):
             raise HTTPException(
                 status_code=409,
                 detail="Token is locked to a different recipient email. Regenerate the token.",
@@ -1185,7 +1185,9 @@ def resolve_submission_match(
         surrogate = surrogate_service.get_surrogate(db, session.org_id, body.surrogate_id)
         if not surrogate:
             raise HTTPException(status_code=404, detail="Surrogate not found")
-        check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+        check_surrogate_access(
+            surrogate, session.role, session.user_id, db=db, org_id=session.org_id
+        )
 
     try:
         submission, outcome = form_intake_service.resolve_submission_match(

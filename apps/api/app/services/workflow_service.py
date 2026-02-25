@@ -1151,10 +1151,14 @@ def _normalize_actions_for_trigger(
         return normalized
 
     auto_match_indices = [
-        idx for idx, action in enumerate(normalized) if action.get("action_type") == "auto_match_submission"
+        idx
+        for idx, action in enumerate(normalized)
+        if action.get("action_type") == "auto_match_submission"
     ]
     create_lead_indices = [
-        idx for idx, action in enumerate(normalized) if action.get("action_type") == "create_intake_lead"
+        idx
+        for idx, action in enumerate(normalized)
+        if action.get("action_type") == "create_intake_lead"
     ]
     if auto_match_indices and create_lead_indices:
         first_match_idx = auto_match_indices[0]

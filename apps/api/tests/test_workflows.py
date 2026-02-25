@@ -150,7 +150,9 @@ def test_workflow_service_form_submitted_enforces_auto_match_priority(db, test_o
     from app.schemas.workflow import WorkflowCreate
     from app.db.enums import WorkflowTriggerType
 
-    with pytest.raises(ValueError, match="auto_match_submission must be placed before create_intake_lead"):
+    with pytest.raises(
+        ValueError, match="auto_match_submission must be placed before create_intake_lead"
+    ):
         workflow_service.create_workflow(
             db,
             test_org.id,
@@ -173,7 +175,9 @@ def test_workflow_service_auto_match_submission_org_scope_only(db, test_org, tes
     from app.schemas.workflow import WorkflowCreate
     from app.db.enums import WorkflowTriggerType
 
-    with pytest.raises(ValueError, match="auto_match_submission is only supported for org workflows"):
+    with pytest.raises(
+        ValueError, match="auto_match_submission is only supported for org workflows"
+    ):
         workflow_service.create_workflow(
             db,
             test_org.id,

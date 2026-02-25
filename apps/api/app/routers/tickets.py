@@ -66,7 +66,9 @@ def list_tickets(
             id=ticket.id,
             ticket_code=ticket.ticket_code,
             status=ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status),
-            priority=ticket.priority.value if hasattr(ticket.priority, "value") else str(ticket.priority),
+            priority=ticket.priority.value
+            if hasattr(ticket.priority, "value")
+            else str(ticket.priority),
             subject=ticket.subject,
             requester_email=ticket.requester_email,
             requester_name=ticket.requester_name,
@@ -138,7 +140,9 @@ def patch_ticket(
         id=ticket.id,
         ticket_code=ticket.ticket_code,
         status=ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status),
-        priority=ticket.priority.value if hasattr(ticket.priority, "value") else str(ticket.priority),
+        priority=ticket.priority.value
+        if hasattr(ticket.priority, "value")
+        else str(ticket.priority),
         subject=ticket.subject,
         requester_email=ticket.requester_email,
         requester_name=ticket.requester_name,
@@ -265,7 +269,9 @@ def link_ticket_surrogate(
         id=ticket.id,
         ticket_code=ticket.ticket_code,
         status=ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status),
-        priority=ticket.priority.value if hasattr(ticket.priority, "value") else str(ticket.priority),
+        priority=ticket.priority.value
+        if hasattr(ticket.priority, "value")
+        else str(ticket.priority),
         subject=ticket.subject,
         requester_email=ticket.requester_email,
         requester_name=ticket.requester_name,

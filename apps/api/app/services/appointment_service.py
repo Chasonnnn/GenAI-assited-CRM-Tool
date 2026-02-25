@@ -884,7 +884,9 @@ def get_reschedule_slots_for_appointment(
         buffer_after_minutes=appointment.buffer_after_minutes,
     )
 
-    appt_type = get_appointment_type(db, appointment.appointment_type_id, appointment.organization_id)
+    appt_type = get_appointment_type(
+        db, appointment.appointment_type_id, appointment.organization_id
+    )
     return slots, appt_type
 
 

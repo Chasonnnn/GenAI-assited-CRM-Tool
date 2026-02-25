@@ -87,7 +87,13 @@ async def send_surrogate_email(
     Keeps legacy provider behavior (auto/gmail/resend) and writes ticketing
     metadata on successful Gmail sends.
     """
-    from app.services import email_composition_service, email_service, gmail_service, oauth_service, org_service
+    from app.services import (
+        email_composition_service,
+        email_service,
+        gmail_service,
+        oauth_service,
+        org_service,
+    )
 
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
     if not surrogate:
@@ -299,7 +305,9 @@ def list_surrogate_emails(
                 id=ticket.id,
                 ticket_code=ticket.ticket_code,
                 subject=ticket.subject,
-                status=ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status),
+                status=ticket.status.value
+                if hasattr(ticket.status, "value")
+                else str(ticket.status),
                 priority=ticket.priority.value
                 if hasattr(ticket.priority, "value")
                 else str(ticket.priority),
@@ -341,7 +349,9 @@ def list_surrogate_email_contacts(
                 surrogate_id=contact.surrogate_id,
                 email=contact.email,
                 email_domain=contact.email_domain,
-                source=contact.source.value if hasattr(contact.source, "value") else str(contact.source),
+                source=contact.source.value
+                if hasattr(contact.source, "value")
+                else str(contact.source),
                 label=contact.label,
                 contact_type=contact.contact_type,
                 is_active=contact.is_active,
@@ -357,7 +367,10 @@ def list_surrogate_email_contacts(
 @router.post(
     "/{surrogate_id:uuid}/email-contacts",
     response_model=SurrogateEmailContactRead,
-    dependencies=[Depends(require_csrf_header), Depends(require_permission(POLICIES["tickets"].actions["link_surrogates"]))],
+    dependencies=[
+        Depends(require_csrf_header),
+        Depends(require_permission(POLICIES["tickets"].actions["link_surrogates"])),
+    ],
 )
 def create_surrogate_email_contact(
     surrogate_id: UUID,
@@ -399,7 +412,10 @@ def create_surrogate_email_contact(
 @router.patch(
     "/{surrogate_id:uuid}/email-contacts/{contact_id:uuid}",
     response_model=SurrogateEmailContactRead,
-    dependencies=[Depends(require_csrf_header), Depends(require_permission(POLICIES["tickets"].actions["link_surrogates"]))],
+    dependencies=[
+        Depends(require_csrf_header),
+        Depends(require_permission(POLICIES["tickets"].actions["link_surrogates"])),
+    ],
 )
 def patch_surrogate_email_contact(
     surrogate_id: UUID,
@@ -442,7 +458,10 @@ def patch_surrogate_email_contact(
 
 @router.delete(
     "/{surrogate_id:uuid}/email-contacts/{contact_id:uuid}",
-    dependencies=[Depends(require_csrf_header), Depends(require_permission(POLICIES["tickets"].actions["link_surrogates"]))],
+    dependencies=[
+        Depends(require_csrf_header),
+        Depends(require_permission(POLICIES["tickets"].actions["link_surrogates"])),
+    ],
 )
 def delete_surrogate_email_contact(
     surrogate_id: UUID,
