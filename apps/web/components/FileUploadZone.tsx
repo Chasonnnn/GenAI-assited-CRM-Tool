@@ -118,7 +118,7 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
         [surrogateId, uploadMutation]
     )
 
-    const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
         onDrop,
         accept: {
             "application/pdf": [".pdf"],
@@ -148,16 +148,32 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
         }
     }
 
+    const fileToDelete = attachments.find((a: Attachment) => a.id === deleteTarget)
+
     return (
         <div className={cn("space-y-4", className)}>
+            {/* Live Status for Screen Readers */}
+            <div className="sr-only" aria-live="polite">
+                {uploadProgress !== null && uploadProgress < 100 && "Uploading file..."}
+                {uploadProgress === 100 && "Upload complete."}
+                {error && `Error: ${error}`}
+            </div>
+
             {/* Upload Zone */}
             <div
                 {...getRootProps({
                     role: "button",
                     "aria-label": "Upload attachments",
+                    tabIndex: 0,
+                    onKeyDown: (e: React.KeyboardEvent) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault()
+                            open()
+                        }
+                    },
                 })}
                 className={cn(
-                    "border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors",
+                    "border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
                     isDragActive
                         ? "border-primary bg-primary/5"
                         : "border-muted-foreground/25 hover:border-primary/50"
@@ -253,9 +269,10 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                     ))}
                 </ul>
             ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                    No attachments yet
-                </p>
+                <div className="flex flex-col items-center justify-center py-8 text-muted-foreground opacity-50">
+                    <File className="size-8 mb-2" aria-hidden="true" />
+                    <p className="text-sm">No attachments yet</p>
+                </div>
             )}
 
             {/* Delete Confirmation Dialog */}
@@ -264,7 +281,7 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                     <AlertDialogHeader>
                         <AlertDialogTitle>Delete Attachment</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This will permanently delete this file.
+                            This will permanently delete {fileToDelete ? <span className="font-medium text-foreground">'{fileToDelete.filename}'</span> : "this file"}.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

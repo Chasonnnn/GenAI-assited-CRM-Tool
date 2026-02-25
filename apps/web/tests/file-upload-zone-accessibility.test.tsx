@@ -57,13 +57,27 @@ describe("FileUploadZone accessibility", () => {
     it("renders upload area and attachments with semantic list structure", () => {
         render(<FileUploadZone surrogateId="surrogate-1" />)
 
-        expect(screen.getByRole("button", { name: "Upload attachments" })).toBeInTheDocument()
+        const dropzone = screen.getByRole("button", { name: "Upload attachments" })
+        expect(dropzone).toBeInTheDocument()
+        expect(dropzone).toHaveAttribute("tabIndex", "0")
 
         const list = screen.getByRole("list", { name: "Attachments" })
         expect(within(list).getAllByRole("listitem")).toHaveLength(1)
 
         expect(screen.getByRole("button", { name: "Download contract.pdf" })).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Delete contract.pdf" })).toBeInTheDocument()
+    })
+
+    it("renders empty state when no attachments exist", () => {
+        mockUseAttachments.mockReturnValue({
+            isLoading: false,
+            data: [],
+        })
+
+        render(<FileUploadZone surrogateId="surrogate-1" />)
+
+        expect(screen.getByText("No attachments yet")).toBeInTheDocument()
+        expect(screen.queryByRole("list", { name: "Attachments" })).not.toBeInTheDocument()
     })
 
     it("hides decorative icons from screen readers", () => {
