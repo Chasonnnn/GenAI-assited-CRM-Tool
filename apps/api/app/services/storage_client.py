@@ -31,17 +31,26 @@ def _resolve_region(region: str | None, endpoint_url: str | None) -> str | None:
     return selected
 
 
-def _build_s3_config() -> Config | None:
+def _build_s3_config(signature_version: str | None = None) -> Config | None:
+    config_kwargs: dict[str, object] = {}
+
     style = (settings.S3_URL_STYLE or "").strip().lower()
     if style in {"path", "virtual"}:
-        return Config(s3={"addressing_style": style})
-    return None
+        config_kwargs["s3"] = {"addressing_style": style}
+
+    if signature_version:
+        config_kwargs["signature_version"] = signature_version
+
+    if not config_kwargs:
+        return None
+    return Config(**config_kwargs)
 
 
 def get_s3_client(
     *,
     region: str | None = None,
     endpoint_url: str | None = None,
+    signature_version: str | None = None,
 ) -> BaseClient:
     """Return a configured S3 client (supports S3-compatible endpoints)."""
     normalized_endpoint = _normalize_endpoint(endpoint_url or settings.S3_ENDPOINT_URL)
@@ -51,7 +60,7 @@ def get_s3_client(
         aws_access_key_id=settings.AWS_ACCESS_KEY_ID or None,
         aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY or None,
         endpoint_url=normalized_endpoint,
-        config=_build_s3_config(),
+        config=_build_s3_config(signature_version=signature_version),
     )
 
 

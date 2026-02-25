@@ -136,7 +136,23 @@ def _upload_archive_with_signature_retry(bucket: str, key: str, sig_dir: str) ->
         logger.warning(
             "ClamAV signature upload failed with SignatureDoesNotMatch; retrying with region=auto"
         )
-        _upload_archive_with_region(bucket, key, sig_dir, region="auto")
+        try:
+            _upload_archive_with_region(bucket, key, sig_dir, region="auto")
+            return
+        except ClientError as retry_exc:
+            retry_code = retry_exc.response.get("Error", {}).get("Code")
+            if retry_code != "SignatureDoesNotMatch":
+                raise
+            logger.warning(
+                "ClamAV signature upload still failed with region=auto; retrying with signature_version=s3"
+            )
+            _upload_archive_with_region_and_signature(
+                bucket,
+                key,
+                sig_dir,
+                region="auto",
+                signature_version="s3",
+            )
 
 
 def _upload_archive_with_region(bucket: str, key: str, sig_dir: str, region: str) -> None:
@@ -146,6 +162,36 @@ def _upload_archive_with_region(bucket: str, key: str, sig_dir: str, region: str
         return
 
     client = storage_client.get_s3_client(region=region)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        archive_path = os.path.join(tmpdir, ARCHIVE_NAME)
+        with tarfile.open(archive_path, "w:gz") as tar:
+            for path in files:
+                tar.add(path, arcname=os.path.basename(path))
+        with open(archive_path, "rb") as archive_file:
+            archive_bytes = archive_file.read()
+        client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=archive_bytes,
+            ContentLength=len(archive_bytes),
+            ContentType="application/gzip",
+        )
+
+
+def _upload_archive_with_region_and_signature(
+    bucket: str,
+    key: str,
+    sig_dir: str,
+    *,
+    region: str,
+    signature_version: str,
+) -> None:
+    files = _local_signature_files(sig_dir)
+    if not files:
+        logger.warning("No ClamAV signature files found to upload")
+        return
+
+    client = storage_client.get_s3_client(region=region, signature_version=signature_version)
     with tempfile.TemporaryDirectory() as tmpdir:
         archive_path = os.path.join(tmpdir, ARCHIVE_NAME)
         with tarfile.open(archive_path, "w:gz") as tar:
