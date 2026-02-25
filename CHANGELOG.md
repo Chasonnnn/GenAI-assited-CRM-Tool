@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.7...surrogacy-crm-platform-v0.90.8) (2026-02-25)
+
+
+### Bug Fixes
+
+* avoid streaming signature mismatch in clamav archive upload ([716883b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/716883bd9b6524ca7ac6a7122d99552e434d0e61))
+* use display_name in queue member responses ([ff86ded](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ff86ded8dcaa0eec7fab0549e6885b4d6dbc7759))
+
 ## [0.90.7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.6...surrogacy-crm-platform-v0.90.7) (2026-02-25)
 
 
