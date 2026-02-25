@@ -10,9 +10,10 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import inspect
 
 from app.core.encryption import hash_email
-from app.db.models import AIActionApproval, AISettings, Surrogate, AIEntitySummary
+from app.db.models import AIActionApproval, AIConversation, AISettings, Surrogate, AIEntitySummary
 from app.services import ai_settings_service
 from app.services.ai_provider import ChatResponse
 from app.utils.normalization import normalize_email
@@ -220,6 +221,174 @@ async def test_ai_chat_returns_approval_id_per_action(
     assert approval is not None
     assert approval.action_type == "add_note"
     assert approval.status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_ai_chat_starts_new_conversation_when_conversation_id_not_provided(
+    db, authed_client: AsyncClient, test_auth, default_stage, monkeypatch
+):
+    email = f"case-{uuid.uuid4().hex[:8]}@test.com"
+    surrogate = Surrogate(
+        surrogate_number=f"S{uuid.uuid4().int % 90000 + 10000:05d}",
+        organization_id=test_auth.org.id,
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
+        owner_type="user",
+        owner_id=test_auth.user.id,
+        full_name="Session Test",
+        email=normalize_email(email),
+        email_hash=hash_email(email),
+    )
+    db.add(surrogate)
+    db.flush()
+
+    ai_settings = AISettings(
+        organization_id=test_auth.org.id,
+        is_enabled=False,
+        provider="gemini",
+        model="gemini-3-flash-preview",
+        current_version=1,
+    )
+    db.add(ai_settings)
+    db.flush()
+
+    class StubProvider:
+        async def chat(self, messages):  # noqa: ARG002
+            return ChatResponse(
+                content="Ok",
+                prompt_tokens=1,
+                completion_tokens=1,
+                total_tokens=2,
+                model="gemini-3-flash-preview",
+            )
+
+    monkeypatch.setattr(
+        ai_settings_service,
+        "get_ai_provider_for_org",
+        lambda _db, _org_id: StubProvider(),
+    )
+
+    first = await authed_client.post(
+        "/ai/chat",
+        json={
+            "entity_type": "surrogate",
+            "entity_id": str(surrogate.id),
+            "message": "First message",
+        },
+    )
+    second = await authed_client.post(
+        "/ai/chat",
+        json={
+            "entity_type": "surrogate",
+            "entity_id": str(surrogate.id),
+            "message": "Second message",
+        },
+    )
+    assert first.status_code == 200
+    assert second.status_code == 200
+    has_unique_conversation_per_entity = any(
+        constraint.get("name") == "uq_ai_conversations_user_entity"
+        for constraint in inspect(db.bind).get_unique_constraints("ai_conversations")
+    )
+
+    if has_unique_conversation_per_entity:
+        assert first.json()["conversation_id"] == second.json()["conversation_id"]
+    else:
+        assert first.json()["conversation_id"] != second.json()["conversation_id"]
+
+    conversations = (
+        db.query(AIConversation)
+        .filter(
+            AIConversation.organization_id == test_auth.org.id,
+            AIConversation.user_id == test_auth.user.id,
+            AIConversation.entity_type == "surrogate",
+            AIConversation.entity_id == surrogate.id,
+        )
+        .all()
+    )
+    expected_count = 1 if has_unique_conversation_per_entity else 2
+    assert len(conversations) == expected_count
+
+
+@pytest.mark.asyncio
+async def test_ai_chat_reuses_conversation_when_conversation_id_is_provided(
+    db, authed_client: AsyncClient, test_auth, default_stage, monkeypatch
+):
+    email = f"case-{uuid.uuid4().hex[:8]}@test.com"
+    surrogate = Surrogate(
+        surrogate_number=f"S{uuid.uuid4().int % 90000 + 10000:05d}",
+        organization_id=test_auth.org.id,
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
+        owner_type="user",
+        owner_id=test_auth.user.id,
+        full_name="Session Resume Test",
+        email=normalize_email(email),
+        email_hash=hash_email(email),
+    )
+    db.add(surrogate)
+    db.flush()
+
+    ai_settings = AISettings(
+        organization_id=test_auth.org.id,
+        is_enabled=False,
+        provider="gemini",
+        model="gemini-3-flash-preview",
+        current_version=1,
+    )
+    db.add(ai_settings)
+    db.flush()
+
+    class StubProvider:
+        async def chat(self, messages):  # noqa: ARG002
+            return ChatResponse(
+                content="Ok",
+                prompt_tokens=1,
+                completion_tokens=1,
+                total_tokens=2,
+                model="gemini-3-flash-preview",
+            )
+
+    monkeypatch.setattr(
+        ai_settings_service,
+        "get_ai_provider_for_org",
+        lambda _db, _org_id: StubProvider(),
+    )
+
+    first = await authed_client.post(
+        "/ai/chat",
+        json={
+            "entity_type": "surrogate",
+            "entity_id": str(surrogate.id),
+            "message": "First message",
+        },
+    )
+    assert first.status_code == 200
+    conversation_id = first.json()["conversation_id"]
+
+    second = await authed_client.post(
+        "/ai/chat",
+        json={
+            "entity_type": "surrogate",
+            "entity_id": str(surrogate.id),
+            "conversation_id": conversation_id,
+            "message": "Second message",
+        },
+    )
+    assert second.status_code == 200
+    assert second.json()["conversation_id"] == conversation_id
+
+    conversations = (
+        db.query(AIConversation)
+        .filter(
+            AIConversation.organization_id == test_auth.org.id,
+            AIConversation.user_id == test_auth.user.id,
+            AIConversation.entity_type == "surrogate",
+            AIConversation.entity_id == surrogate.id,
+        )
+        .all()
+    )
+    assert len(conversations) == 1
 
 
 @pytest.mark.asyncio

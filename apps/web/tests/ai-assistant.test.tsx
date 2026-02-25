@@ -183,6 +183,81 @@ describe('AIAssistantPage', () => {
         rerender(<AIAssistantPage />)
 
         await waitFor(() => expect(screen.queryByText('Session 1')).not.toBeInTheDocument())
-        expect(screen.getByText('No chat history yet')).toBeInTheDocument()
+        expect(screen.getByText('Global Chat')).toBeInTheDocument()
+    })
+
+    it('starts with a fresh chat session by default even when history exists', async () => {
+        sessionStorage.setItem(
+            'ai-assistant-chat-history-v1',
+            JSON.stringify([
+                {
+                    id: 'session-old',
+                    label: 'Session Old',
+                    preview: 'Existing preview',
+                    updatedAt: new Date().toISOString(),
+                    entityType: 'global',
+                    entityId: null,
+                    conversationId: 'conv-old',
+                    messages: [
+                        {
+                            id: 'user-old',
+                            role: 'user',
+                            content: 'Old conversation content',
+                            timestamp: '9:00 AM',
+                            status: 'done',
+                        },
+                    ],
+                },
+            ])
+        )
+
+        render(<AIAssistantPage />)
+
+        expect(screen.getByText('Session Old')).toBeInTheDocument()
+        expect(screen.queryByText('Old conversation content', { selector: 'p' })).not.toBeInTheDocument()
+        expect(
+            screen.getByText("Hello! I'm your AI assistant. Ask me anything, or select a surrogate to add context.")
+        ).toBeInTheDocument()
+    })
+
+    it('continues prior chat only when selected from chat history', async () => {
+        sessionStorage.setItem(
+            'ai-assistant-chat-history-v1',
+            JSON.stringify([
+                {
+                    id: 'session-previous',
+                    label: 'Previous Session',
+                    preview: 'Earlier message',
+                    updatedAt: new Date().toISOString(),
+                    entityType: 'global',
+                    entityId: null,
+                    conversationId: 'conv-previous',
+                    messages: [
+                        {
+                            id: 'user-previous',
+                            role: 'user',
+                            content: 'Earlier message',
+                            timestamp: '9:00 AM',
+                            status: 'done',
+                        },
+                    ],
+                },
+            ])
+        )
+
+        render(<AIAssistantPage />)
+
+        fireEvent.click(screen.getByText('Previous Session'))
+
+        const input = screen.getByRole('textbox')
+        fireEvent.change(input, { target: { value: 'Continue this thread' } })
+        fireEvent.keyDown(input, { key: 'Enter', shiftKey: false })
+
+        await waitFor(() => expect(mockStreamMessage).toHaveBeenCalled())
+        const request = mockStreamMessage.mock.calls[0]?.[0]
+        expect(request).toEqual({
+            message: 'Continue this thread',
+            conversation_id: 'conv-previous',
+        })
     })
 })
