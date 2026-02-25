@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.10](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.9...surrogacy-crm-platform-v0.90.10) (2026-02-25)
+
+
+### Bug Fixes
+
+* add s3 signature fallback for gcs clamav uploads ([034e42d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/034e42d80644ec869b56fabf5d86237e8a474157))
+
 ## [0.90.9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.8...surrogacy-crm-platform-v0.90.9) (2026-02-25)
 
 
