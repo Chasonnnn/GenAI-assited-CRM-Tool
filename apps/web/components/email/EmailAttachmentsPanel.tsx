@@ -36,6 +36,7 @@ export interface EmailAttachmentSelectionState {
 interface EmailAttachmentsPanelProps {
     surrogateId: string
     onSelectionChange: (state: EmailAttachmentSelectionState) => void
+    hideUI?: boolean
 }
 
 export interface EmailAttachmentsPanelHandle {
@@ -76,7 +77,7 @@ function getScanBadge(attachment: Attachment) {
 }
 
 export const EmailAttachmentsPanel = React.forwardRef<EmailAttachmentsPanelHandle, EmailAttachmentsPanelProps>(
-function EmailAttachmentsPanel({ surrogateId, onSelectionChange }: EmailAttachmentsPanelProps, ref) {
+function EmailAttachmentsPanel({ surrogateId, onSelectionChange, hideUI = false }: EmailAttachmentsPanelProps, ref) {
     const { data: attachments = [], isLoading } = useAttachments(surrogateId)
     const uploadMutation = useUploadAttachment()
     const fileInputRef = React.useRef<HTMLInputElement | null>(null)
@@ -198,6 +199,10 @@ function EmailAttachmentsPanel({ surrogateId, onSelectionChange }: EmailAttachme
         },
         [uploadFiles]
     )
+
+    if (hideUI) {
+        return null
+    }
 
     return (
         <div className="grid gap-3">

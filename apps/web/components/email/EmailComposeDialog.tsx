@@ -462,12 +462,6 @@ export function EmailComposeDialog({
                         />
                     </div>
 
-                    <EmailAttachmentsPanel
-                        ref={attachmentsPanelRef}
-                        surrogateId={surrogateData.id}
-                        onSelectionChange={setAttachmentSelection}
-                    />
-
                     {/* Subject Line */}
                     <div className="grid gap-2">
                         <Label htmlFor="subject">Subject</Label>
@@ -519,6 +513,18 @@ export function EmailComposeDialog({
                                 )}
                             </Button>
                         </div>
+                        <p className="text-xs text-muted-foreground">
+                            Drag and drop files into the message area to attach.
+                        </p>
+                        {attachmentSelection.selectedAttachmentIds.length > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                                {attachmentSelection.selectedAttachmentIds.length} attachment
+                                {attachmentSelection.selectedAttachmentIds.length === 1 ? "" : "s"} ready to send
+                            </p>
+                        )}
+                        {attachmentSelection.errorMessage && (
+                            <p className="text-xs text-destructive">{attachmentSelection.errorMessage}</p>
+                        )}
 
                         {isBodyDropActive && (
                             <p className="text-xs font-medium text-primary">
@@ -604,6 +610,13 @@ export function EmailComposeDialog({
                             Email sent successfully!
                         </div>
                     )}
+
+                    <EmailAttachmentsPanel
+                        ref={attachmentsPanelRef}
+                        surrogateId={surrogateData.id}
+                        onSelectionChange={setAttachmentSelection}
+                        hideUI
+                    />
                 </div>
 
                 <DialogFooter>

@@ -10,6 +10,7 @@ const mockUseSurrogateTemplateVariables = vi.fn()
 const mockUseSignaturePreview = vi.fn()
 const mockUseOrgSignaturePreview = vi.fn()
 const mockUploadFilesFromComposeDrop = vi.fn()
+const mockAttachmentPanelProps = vi.fn()
 let mockAttachmentSelectionState = {
     selectedAttachmentIds: [] as string[],
     hasBlockingAttachments: false,
@@ -150,8 +151,10 @@ vi.mock("@/components/email/EmailAttachmentsPanel", () => ({
     EmailAttachmentsPanel: React.forwardRef(function MockEmailAttachmentsPanel(
         {
             onSelectionChange,
+            hideUI,
         }: {
             onSelectionChange: (state: typeof mockAttachmentSelectionState) => void
+            hideUI?: boolean
         },
         ref: React.ForwardedRef<{ uploadFiles: (files: File[]) => Promise<void> }>
     ) {
@@ -159,8 +162,9 @@ vi.mock("@/components/email/EmailAttachmentsPanel", () => ({
             uploadFiles: mockUploadFilesFromComposeDrop,
         }))
         React.useEffect(() => {
+            mockAttachmentPanelProps({ hideUI: hideUI === true })
             onSelectionChange(mockAttachmentSelectionState)
-        }, [onSelectionChange])
+        }, [hideUI, onSelectionChange])
         return <div data-testid="email-attachments-panel" />
     }),
 }))
@@ -179,6 +183,7 @@ describe("EmailComposeDialog", () => {
     beforeEach(() => {
         vi.clearAllMocks()
         mockUploadFilesFromComposeDrop.mockReset()
+        mockAttachmentPanelProps.mockReset()
         mockUploadFilesFromComposeDrop.mockResolvedValue(undefined)
         mockAttachmentSelectionState = {
             selectedAttachmentIds: [],
@@ -205,6 +210,22 @@ describe("EmailComposeDialog", () => {
             data: { html: "<div>Org Signature Block</div>" },
             isLoading: false,
         })
+    })
+
+    it("hides the old attachment section and uses drag-and-drop mode", () => {
+        mockUseEmailTemplates.mockReturnValue({ data: [], isLoading: false })
+        mockUseEmailTemplate.mockReturnValue({ data: null, isLoading: false })
+
+        render(
+            <EmailComposeDialog
+                open
+                onOpenChange={vi.fn()}
+                surrogateData={baseSurrogateData}
+            />
+        )
+
+        expect(mockAttachmentPanelProps).toHaveBeenCalledWith({ hideUI: true })
+        expect(screen.getByText("Drag and drop files into the message area to attach.")).toBeInTheDocument()
     })
 
     it("shows resolved template name instead of raw uuid in the selected value", async () => {
