@@ -308,7 +308,7 @@ def restore_version(
 ):
     """Restore interview transcript to a previous version."""
     interview, case = _check_interview_access(db, session.org_id, interview_id, session)
-    _check_can_modify_interview(case, session)
+    _check_can_modify_interview(case, session, db)
 
     try:
         interview = interview_service.restore_version(
@@ -502,7 +502,7 @@ async def upload_attachment(
 ):
     """Upload a new attachment and link it to the interview."""
     interview, case = _check_interview_access(db, session.org_id, interview_id, session)
-    _check_can_modify_interview(case, session)
+    _check_can_modify_interview(case, session, db)
 
     if content_length_exceeds_limit(
         request.headers.get("content-length"),
@@ -562,7 +562,7 @@ def link_existing_attachment(
 ):
     """Link an existing attachment to the interview."""
     interview, case = _check_interview_access(db, session.org_id, interview_id, session)
-    _check_can_modify_interview(case, session)
+    _check_can_modify_interview(case, session, db)
 
     try:
         link = interview_attachment_service.link_attachment(
@@ -631,7 +631,7 @@ async def request_transcription(
     from app.services import transcription_service
 
     interview, case = _check_interview_access(db, session.org_id, interview_id, session)
-    _check_can_modify_interview(case, session)
+    _check_can_modify_interview(case, session, db)
 
     link = interview_attachment_service.get_interview_attachment(
         db, session.org_id, interview_id, attachment_id
