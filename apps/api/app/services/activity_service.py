@@ -295,6 +295,48 @@ def log_email_sent(
     )
 
 
+def log_email_bounced(
+    db: Session,
+    surrogate_id: UUID,
+    organization_id: UUID,
+    actor_user_id: UUID,
+    email_log_id: UUID,
+    subject: str,
+    provider: str,
+    reason: str = "bounced",
+    bounce_type: str | None = None,
+) -> SurrogateActivityLog:
+    """Log email delivery failure with idempotency keyed by email_log_id."""
+    existing = (
+        db.query(SurrogateActivityLog)
+        .filter(
+            SurrogateActivityLog.organization_id == organization_id,
+            SurrogateActivityLog.surrogate_id == surrogate_id,
+            SurrogateActivityLog.activity_type == SurrogateActivityType.EMAIL_BOUNCED.value,
+            SurrogateActivityLog.details["email_log_id"].astext == str(email_log_id),
+        )
+        .order_by(SurrogateActivityLog.created_at.desc())
+        .first()
+    )
+    if existing:
+        return existing
+
+    return log_activity(
+        db=db,
+        surrogate_id=surrogate_id,
+        organization_id=organization_id,
+        activity_type=SurrogateActivityType.EMAIL_BOUNCED,
+        actor_user_id=actor_user_id,
+        details={
+            "email_log_id": str(email_log_id),
+            "subject": (subject or "").strip()[:200],
+            "provider": provider,
+            "reason": reason,
+            "bounce_type": (bounce_type or "").strip() or None,
+        },
+    )
+
+
 def log_attachment_added(
     db: Session,
     surrogate_id: UUID,

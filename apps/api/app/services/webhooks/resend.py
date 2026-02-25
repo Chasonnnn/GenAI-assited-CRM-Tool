@@ -123,6 +123,10 @@ def _process_resend_event(
 
         email_log.status = EmailStatus.FAILED.value
         email_log.error = "bounced"
+        _downgrade_workflow_execution_for_delivery_failure(
+            db, email_log=email_log, event_type=event_type
+        )
+        _log_surrogate_email_bounced_activity(db, email_log=email_log)
 
         # Add to suppression list for hard bounces
         if email_log.bounce_type == "hard":
@@ -148,6 +152,9 @@ def _process_resend_event(
 
         email_log.status = EmailStatus.FAILED.value
         email_log.error = "complaint"
+        _downgrade_workflow_execution_for_delivery_failure(
+            db, email_log=email_log, event_type=event_type
+        )
 
         # Add to suppression list for complaints
         campaign_service.add_to_suppression(
@@ -280,6 +287,104 @@ def _process_resend_event(
                     )
                     .count()
                 )
+
+
+def _downgrade_workflow_execution_for_delivery_failure(
+    db: Session,
+    *,
+    email_log: EmailLog,
+    event_type: str | None,
+) -> None:
+    """Downgrade linked workflow execution after bounce/complaint events."""
+    if event_type not in {"email.bounced", "email.complained"}:
+        return
+
+    if not email_log.job_id:
+        return
+
+    from uuid import UUID
+
+    from app.db.enums import JobType, WorkflowExecutionStatus
+    from app.db.models import Job, WorkflowExecution
+
+    job = (
+        db.query(Job)
+        .filter(
+            Job.id == email_log.job_id,
+            Job.organization_id == email_log.organization_id,
+        )
+        .first()
+    )
+    if not job or job.job_type != JobType.WORKFLOW_EMAIL.value:
+        return
+
+    payload = job.payload if isinstance(job.payload, dict) else {}
+    execution_id_value = payload.get("workflow_execution_id")
+    if not execution_id_value:
+        return
+
+    try:
+        execution_id = UUID(str(execution_id_value))
+    except (TypeError, ValueError):
+        logger.warning(
+            "Resend: invalid workflow_execution_id in workflow email job payload: job_id=%s",
+            job.id,
+        )
+        return
+
+    execution = (
+        db.query(WorkflowExecution)
+        .filter(
+            WorkflowExecution.id == execution_id,
+            WorkflowExecution.organization_id == email_log.organization_id,
+        )
+        .first()
+    )
+    if not execution:
+        return
+
+    if execution.status not in {
+        WorkflowExecutionStatus.SUCCESS.value,
+        WorkflowExecutionStatus.PARTIAL.value,
+    }:
+        return
+
+    failure_kind = "bounced" if event_type == "email.bounced" else "complaint"
+    failure_message = (
+        f"Workflow email {failure_kind} via Resend webhook (email_log={email_log.id})"
+    )
+    existing_error = (execution.error_message or "").strip()
+    if not existing_error:
+        execution.error_message = failure_message
+    elif failure_kind not in existing_error.lower():
+        execution.error_message = f"{existing_error}; {failure_message}"
+
+    execution.status = WorkflowExecutionStatus.PARTIAL.value
+
+
+def _log_surrogate_email_bounced_activity(
+    db: Session,
+    *,
+    email_log: EmailLog,
+) -> None:
+    """Log a case activity row for bounced outbound emails."""
+    if not email_log.surrogate_id:
+        return
+
+    from app.core.constants import SYSTEM_USER_ID
+    from app.services import activity_service
+
+    activity_service.log_email_bounced(
+        db=db,
+        surrogate_id=email_log.surrogate_id,
+        organization_id=email_log.organization_id,
+        actor_user_id=SYSTEM_USER_ID,
+        email_log_id=email_log.id,
+        subject=email_log.subject,
+        provider="resend",
+        reason="bounced",
+        bounce_type=email_log.bounce_type,
+    )
 
 
 class ResendWebhookHandler:

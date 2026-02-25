@@ -77,6 +77,7 @@ class WorkflowDomainAdapter(Protocol):
         workflow_scope: str = "org",
         workflow_owner_id: UUID | None = None,
         trigger_callback: TriggerCallback | None = None,
+        workflow_execution_id: UUID | None = None,
     ) -> dict: ...
 
 
@@ -238,6 +239,7 @@ class DefaultWorkflowDomainAdapter:
         workflow_scope: str = "org",
         workflow_owner_id: UUID | None = None,
         trigger_callback: TriggerCallback | None = None,
+        workflow_execution_id: UUID | None = None,
     ) -> dict:
         """Execute a single action."""
         action_type = action.get("action_type")
@@ -299,7 +301,13 @@ class DefaultWorkflowDomainAdapter:
         try:
             if action_type == WorkflowActionType.SEND_EMAIL.value:
                 result = self._action_send_email(
-                    db, action, action_entity, event_id, workflow_scope, workflow_owner_id
+                    db=db,
+                    action=action,
+                    entity=action_entity,
+                    event_id=event_id,
+                    workflow_scope=workflow_scope,
+                    workflow_owner_id=workflow_owner_id,
+                    workflow_execution_id=workflow_execution_id,
                 )
                 return _with_action_type(result)
 
@@ -373,6 +381,7 @@ class DefaultWorkflowDomainAdapter:
         event_id: UUID,
         workflow_scope: str = "org",
         workflow_owner_id: UUID | None = None,
+        workflow_execution_id: UUID | None = None,
     ) -> dict:
         """Queue an email using template."""
         template_id = action.get("template_id")
@@ -443,6 +452,9 @@ class DefaultWorkflowDomainAdapter:
                     "variables": variables,
                     "surrogate_id": str(entity.id),
                     "event_id": str(event_id),
+                    "workflow_execution_id": (
+                        str(workflow_execution_id) if workflow_execution_id else None
+                    ),
                     # Scope info for email provider resolution
                     "workflow_scope": workflow_scope,
                     "workflow_owner_id": str(workflow_owner_id) if workflow_owner_id else None,

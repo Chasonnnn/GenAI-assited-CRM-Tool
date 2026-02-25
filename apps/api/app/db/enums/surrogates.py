@@ -109,6 +109,7 @@ class SurrogateActivityType(str, Enum):
     ATTACHMENT_ADDED = "attachment_added"
     ATTACHMENT_DELETED = "attachment_deleted"
     EMAIL_SENT = "email_sent"  # Email sent to surrogate contact
+    EMAIL_BOUNCED = "email_bounced"  # Email delivery failed (bounce)
     TASK_CREATED = "task_created"  # Task created for surrogate
     TASK_DELETED = "task_deleted"  # Task deleted for surrogate
     MATCH_PROPOSED = "match_proposed"  # New match proposed

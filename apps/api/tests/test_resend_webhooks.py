@@ -40,6 +40,31 @@ def _generate_svix_signature(body: bytes, secret: str, timestamp: str) -> str:
     return msg_id, f"v1,{signature_b64}"
 
 
+def _create_surrogate_for_email_activity(db, test_org, test_user, default_stage):
+    from app.core.encryption import hash_email
+    from app.db.enums import OwnerType
+    from app.db.models import Surrogate
+    from app.utils.normalization import normalize_email
+
+    normalized_email = normalize_email(f"bounce-{uuid.uuid4().hex[:8]}@example.com")
+    surrogate = Surrogate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        surrogate_number=f"S{uuid.uuid4().hex[:5]}",
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
+        owner_type=OwnerType.USER.value,
+        owner_id=test_user.id,
+        full_name="Bounce Activity Surrogate",
+        email=normalized_email,
+        email_hash=hash_email(normalized_email),
+        created_by_user_id=test_user.id,
+    )
+    db.add(surrogate)
+    db.flush()
+    return surrogate
+
+
 class TestResendWebhookSignature:
     """Test signature verification."""
 
@@ -397,6 +422,154 @@ class TestResendWebhookHandler:
         )
         assert suppression is not None
         assert suppression.reason == "bounced"
+
+    @pytest.mark.asyncio
+    async def test_webhook_bounced_logs_surrogate_activity_event(
+        self, db, test_org, test_user, default_stage, client, setup_email_log
+    ):
+        """Bounced event should append an email_bounced activity for linked surrogates."""
+        import json
+        from app.db.enums import SurrogateActivityType
+        from app.db.models import SurrogateActivityLog
+
+        email_log, settings, webhook_secret = setup_email_log
+        surrogate = _create_surrogate_for_email_activity(db, test_org, test_user, default_stage)
+        email_log.surrogate_id = surrogate.id
+        db.commit()
+
+        payload = {
+            "type": "email.bounced",
+            "data": {
+                "email_id": email_log.external_id,
+                "bounce": {"type": "hard"},
+            },
+        }
+
+        body = json.dumps(payload).encode("utf-8")
+        timestamp = str(int(time.time()))
+        msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+
+        response = await client.post(
+            f"/webhooks/resend/{settings.webhook_id}",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "svix-id": msg_id,
+                "svix-timestamp": timestamp,
+                "svix-signature": signature,
+            },
+        )
+        assert response.status_code == 200
+
+        activity = (
+            db.query(SurrogateActivityLog)
+            .filter(
+                SurrogateActivityLog.organization_id == test_org.id,
+                SurrogateActivityLog.surrogate_id == surrogate.id,
+                SurrogateActivityLog.activity_type == SurrogateActivityType.EMAIL_BOUNCED.value,
+                SurrogateActivityLog.details["email_log_id"].astext == str(email_log.id),
+            )
+            .first()
+        )
+
+        assert activity is not None
+        assert activity.details.get("provider") == "resend"
+        assert activity.details.get("reason") == "bounced"
+        assert activity.details.get("bounce_type") == "hard"
+
+    @pytest.mark.asyncio
+    async def test_webhook_bounced_downgrades_workflow_execution_status(
+        self, db, test_org, test_user, client, setup_email_log
+    ):
+        """Bounced workflow email should downgrade execution status from success."""
+        import json
+        from uuid import uuid4
+
+        from app.db.enums import JobStatus, JobType, WorkflowEventSource, WorkflowExecutionStatus
+        from app.db.models import AutomationWorkflow, Job, WorkflowExecution
+
+        email_log, settings, webhook_secret = setup_email_log
+
+        workflow = AutomationWorkflow(
+            id=uuid4(),
+            organization_id=test_org.id,
+            name="Workflow bounce regression",
+            trigger_type="surrogate_created",
+            trigger_config={},
+            conditions=[],
+            condition_logic="AND",
+            actions=[{"action_type": "send_email", "template_id": str(uuid4())}],
+            is_enabled=True,
+            is_system_workflow=False,
+            created_by_user_id=test_user.id,
+        )
+        db.add(workflow)
+        db.flush()
+
+        execution_id = uuid4()
+        job = Job(
+            id=uuid4(),
+            organization_id=test_org.id,
+            job_type=JobType.WORKFLOW_EMAIL.value,
+            payload={"workflow_execution_id": str(execution_id)},
+            status=JobStatus.COMPLETED.value,
+            attempts=1,
+            max_attempts=3,
+        )
+        db.add(job)
+        db.flush()
+
+        execution = WorkflowExecution(
+            id=execution_id,
+            organization_id=test_org.id,
+            workflow_id=workflow.id,
+            event_id=uuid4(),
+            depth=0,
+            event_source=WorkflowEventSource.USER.value,
+            entity_type="surrogate",
+            entity_id=uuid4(),
+            trigger_event={"source": "test"},
+            matched_conditions=True,
+            actions_executed=[
+                {
+                    "success": True,
+                    "action_type": "send_email",
+                    "job_ids": [str(job.id)],
+                }
+            ],
+            status=WorkflowExecutionStatus.SUCCESS.value,
+        )
+        db.add(execution)
+        email_log.job_id = job.id
+        db.commit()
+
+        payload = {
+            "type": "email.bounced",
+            "data": {
+                "email_id": email_log.external_id,
+                "bounce": {"type": "hard"},
+            },
+        }
+
+        body = json.dumps(payload).encode("utf-8")
+        timestamp = str(int(time.time()))
+        msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+
+        response = await client.post(
+            f"/webhooks/resend/{settings.webhook_id}",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "svix-id": msg_id,
+                "svix-timestamp": timestamp,
+                "svix-signature": signature,
+            },
+        )
+        assert response.status_code == 200
+
+        db.refresh(execution)
+        assert execution.status == WorkflowExecutionStatus.PARTIAL.value
+        assert "bounced" in (execution.error_message or "")
 
     @pytest.mark.asyncio
     async def test_webhook_complained_adds_suppression(self, db, test_org, client, setup_email_log):

@@ -424,6 +424,7 @@ class WorkflowEngineCore:
                 workflow_scope=workflow.scope,
                 workflow_owner_id=workflow.owner_user_id,
                 trigger_callback=self.trigger,
+                workflow_execution_id=execution.id,
             )
             action_results.append(result)
             if not result.get("success"):
@@ -538,6 +539,7 @@ class WorkflowEngineCore:
                 workflow_scope=workflow.scope,
                 workflow_owner_id=workflow.owner_user_id,
                 trigger_callback=self.trigger,
+                workflow_execution_id=execution.id,
             )
             action_results.append(result)
 
@@ -603,6 +605,7 @@ class WorkflowEngineCore:
                     workflow_scope=workflow.scope,
                     workflow_owner_id=workflow.owner_user_id,
                     trigger_callback=self.trigger,
+                    workflow_execution_id=execution.id,
                 )
                 action_results.append(result)
 
