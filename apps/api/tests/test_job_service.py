@@ -10,14 +10,14 @@ from app.services import job_service
 
 
 def test_claim_pending_jobs_marks_running(db, test_org):
-    job_service.schedule_job(
+    job_1 = job_service.schedule_job(
         db=db,
         org_id=test_org.id,
         job_type=JobType.NOTIFICATION,
         payload={"message": "job-1"},
         run_at=datetime.now(timezone.utc),
     )
-    job_service.schedule_job(
+    job_2 = job_service.schedule_job(
         db=db,
         org_id=test_org.id,
         job_type=JobType.NOTIFICATION,
@@ -31,7 +31,14 @@ def test_claim_pending_jobs_marks_running(db, test_org):
     assert claimed_job.status == JobStatus.RUNNING.value
     assert claimed_job.attempts == 1
 
-    pending = job_service.get_pending_jobs(db, limit=10)
+    pending = (
+        db.query(Job)
+        .filter(
+            Job.id.in_([job_1.id, job_2.id]),
+            Job.status == JobStatus.PENDING.value,
+        )
+        .all()
+    )
     assert len(pending) == 1
     assert pending[0].id != claimed_job.id
     assert pending[0].status == JobStatus.PENDING.value
@@ -60,9 +67,10 @@ def test_claim_pending_jobs_skip_locked(db_engine):
         session1.commit()
         org_id = org.id
 
+        lock_test_job_type = f"job_lock_test_{uuid.uuid4().hex[:12]}"
         job = Job(
             organization_id=org.id,
-            job_type=JobType.NOTIFICATION.value,
+            job_type=lock_test_job_type,
             payload={"message": "locked-job"},
             run_at=datetime.now(timezone.utc),
             status=JobStatus.PENDING.value,
@@ -73,7 +81,11 @@ def test_claim_pending_jobs_skip_locked(db_engine):
 
         session1.query(Job).filter(Job.id == job_id).with_for_update().one()
 
-        claimed = job_service.claim_pending_jobs(session2, limit=1)
+        claimed = job_service.claim_pending_jobs(
+            session2,
+            limit=1,
+            job_types=[lock_test_job_type],
+        )
         assert claimed == []
     finally:
         session1.rollback()
