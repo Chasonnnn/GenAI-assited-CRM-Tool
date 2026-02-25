@@ -13,6 +13,7 @@ from app.db.models import (
     User,
     Queue,
     EmailTemplate,
+    Surrogate,
 )
 from app.db.enums import WorkflowTriggerType, WorkflowExecutionStatus, OwnerType
 from app.schemas.workflow import (
@@ -856,8 +857,21 @@ def list_org_executions(
     Returns executions with workflow name joined for display.
     """
     query = (
-        db.query(WorkflowExecution, AutomationWorkflow.name)
+        db.query(
+            WorkflowExecution,
+            AutomationWorkflow.name,
+            Surrogate.full_name,
+            Surrogate.surrogate_number,
+        )
         .join(AutomationWorkflow, WorkflowExecution.workflow_id == AutomationWorkflow.id)
+        .outerjoin(
+            Surrogate,
+            and_(
+                WorkflowExecution.entity_type == "surrogate",
+                WorkflowExecution.entity_id == Surrogate.id,
+                Surrogate.organization_id == WorkflowExecution.organization_id,
+            ),
+        )
         .filter(WorkflowExecution.organization_id == org_id)
     )
 
@@ -872,7 +886,7 @@ def list_org_executions(
 
     # Build response with workflow name
     result = []
-    for exec, workflow_name in items:
+    for exec, workflow_name, surrogate_name, surrogate_number in items:
         result.append(
             {
                 "id": exec.id,
@@ -881,6 +895,8 @@ def list_org_executions(
                 "status": exec.status,
                 "entity_type": exec.entity_type,
                 "entity_id": exec.entity_id,
+                "entity_name": surrogate_name,
+                "entity_number": surrogate_number,
                 "action_count": len(exec.actions_executed) if exec.actions_executed else 0,
                 "duration_ms": exec.duration_ms or 0,
                 "executed_at": exec.executed_at.isoformat(),

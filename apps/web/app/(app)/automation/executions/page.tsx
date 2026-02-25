@@ -52,6 +52,8 @@ interface Execution {
     workflow_name: string
     entity_type: string
     entity_id: string
+    entity_name?: string | null
+    entity_number?: string | null
     action_count: number
     duration_ms: number
     executed_at: string
@@ -165,6 +167,17 @@ function getEntityLink(entityType: string, entityId: string): string | null {
         default:
             return null
     }
+}
+
+function formatEntityLabel(execution: Execution): string {
+    if (execution.entity_type.toLowerCase() === "surrogate") {
+        const name = execution.entity_name?.trim()
+        const number = execution.entity_number?.trim()
+        if (name && number) return `${name} (${number})`
+        if (name) return name
+        if (number) return number
+    }
+    return `${execution.entity_type} #${execution.entity_id.slice(0, 8)}`
 }
 
 export default function WorkflowExecutionsPage() {
@@ -449,11 +462,11 @@ export default function WorkflowExecutionsPage() {
                                                             className="text-primary hover:underline"
                                                             onClick={(e) => e.stopPropagation()}
                                                         >
-                                                            {execution.entity_type} #{execution.entity_id.slice(0, 8)}
+                                                            {formatEntityLabel(execution)}
                                                         </Link>
                                                     ) : (
                                                         <span className="text-muted-foreground">
-                                                            {execution.entity_type} #{execution.entity_id.slice(0, 8)}
+                                                            {formatEntityLabel(execution)}
                                                         </span>
                                                     )}
                                                 </TableCell>

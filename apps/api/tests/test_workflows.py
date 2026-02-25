@@ -245,6 +245,65 @@ def test_workflow_service_delete(db, test_org, test_workflow):
     assert workflow is None
 
 
+def test_workflow_service_list_org_executions_includes_surrogate_identity(
+    db, test_org, test_user, default_stage
+):
+    """Org execution list should include surrogate name + surrogate number when available."""
+    from app.db.enums import WorkflowEventSource, WorkflowExecutionStatus
+    from app.db.models import AutomationWorkflow, WorkflowExecution
+    from app.services import workflow_service
+
+    surrogate = _create_surrogate_for_workflow(db, test_org, test_user, default_stage)
+
+    workflow = AutomationWorkflow(
+        id=uuid4(),
+        organization_id=test_org.id,
+        name="Execution Identity Workflow",
+        trigger_type="surrogate_created",
+        trigger_config={},
+        conditions=[],
+        condition_logic="AND",
+        actions=[{"action_type": "add_note", "content": "identity"}],
+        is_enabled=True,
+        is_system_workflow=False,
+        created_by_user_id=test_user.id,
+    )
+    db.add(workflow)
+    db.flush()
+
+    execution = WorkflowExecution(
+        id=uuid4(),
+        organization_id=test_org.id,
+        workflow_id=workflow.id,
+        event_id=uuid4(),
+        depth=0,
+        event_source=WorkflowEventSource.USER.value,
+        entity_type="surrogate",
+        entity_id=surrogate.id,
+        trigger_event={"source": "test"},
+        matched_conditions=True,
+        actions_executed=[{"success": True, "action_type": "add_note"}],
+        status=WorkflowExecutionStatus.SUCCESS.value,
+        duration_ms=123,
+    )
+    db.add(execution)
+    db.commit()
+
+    items, total = workflow_service.list_org_executions(
+        db=db,
+        org_id=test_org.id,
+        limit=20,
+        offset=0,
+    )
+
+    assert total >= 1
+    row = next(item for item in items if item["id"] == execution.id)
+    assert row["entity_type"] == "surrogate"
+    assert row["entity_id"] == surrogate.id
+    assert row["entity_name"] == surrogate.full_name
+    assert row["entity_number"] == surrogate.surrogate_number
+
+
 # =============================================================================
 # AI Workflow Generation Tests (Unit Tests)
 # =============================================================================
