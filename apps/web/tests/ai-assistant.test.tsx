@@ -1,4 +1,3 @@
-import type { PropsWithChildren } from "react"
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import AIAssistantPage from '../app/(app)/ai-assistant/page'
@@ -8,34 +7,9 @@ vi.mock('@/components/ui/sidebar', () => ({
     SidebarTrigger: () => <button type="button">Sidebar</button>,
 }))
 
-// Use a simple native <select> for deterministic tests
-vi.mock('@/components/ui/select', () => ({
-    Select: ({ value, onValueChange, children }: PropsWithChildren<{ value?: string; onValueChange: (value: string) => void }>) => (
-        <select
-            data-testid="select"
-            value={value ?? ''}
-            onChange={(e) => onValueChange(e.target.value)}
-        >
-            <option value="">Select</option>
-            {children}
-        </select>
-    ),
-    SelectTrigger: () => null,
-    SelectValue: () => null,
-    SelectContent: ({ children }: PropsWithChildren) => <>{children}</>,
-    SelectItem: ({ value, children }: PropsWithChildren<{ value: string }>) => <option value={value}>{children}</option>,
-}))
-
-const mockUseQuery = vi.fn()
-vi.mock('@tanstack/react-query', () => ({
-    useQuery: (opts: unknown) => mockUseQuery(opts),
-    useQueryClient: () => ({ invalidateQueries: vi.fn() }),
-}))
-
 const mockStreamMessage = vi.fn()
 const mockApproveAction = vi.fn()
 const mockRejectAction = vi.fn()
-const mockUseConversation = vi.fn()
 const mockUseAuth = vi.fn()
 
 let mockUser: { user_id: string } | null = { user_id: 'u1' }
@@ -45,7 +19,6 @@ vi.mock('@/lib/hooks/use-ai', () => ({
     useStreamChatMessage: () => mockStreamMessage,
     useApproveAction: () => ({ mutateAsync: mockApproveAction, isPending: false }),
     useRejectAction: () => ({ mutateAsync: mockRejectAction, isPending: false }),
-    useConversation: () => mockUseConversation(),
 }))
 
 vi.mock('@/lib/auth-context', () => ({
@@ -56,17 +29,6 @@ describe('AIAssistantPage', () => {
     beforeEach(() => {
         mockUser = { user_id: 'u1' }
         mockUseAuth.mockReturnValue({ user: mockUser, isLoading: false, error: null, refetch: vi.fn() })
-        mockUseQuery.mockReturnValue({
-            data: [
-                { id: 's1', surrogate_number: 'S12345', full_name: 'Jane Applicant' },
-            ],
-            isLoading: false,
-        })
-        mockUseConversation.mockReturnValue({
-            data: { messages: [] },
-            isLoading: false,
-            isFetching: false,
-        })
 
         mockStreamMessage.mockImplementation(async (_request, onEvent) => {
             onEvent({ type: 'start', data: { status: 'thinking' } })
@@ -96,20 +58,16 @@ describe('AIAssistantPage', () => {
         sessionStorage.clear()
     })
 
-    it('sends a message and can approve a proposed action', async () => {
+    it('sends a message and can approve a proposed action in global mode', async () => {
         render(<AIAssistantPage />)
 
-        fireEvent.change(screen.getByTestId('select'), { target: { value: 's1' } })
-
         const input = screen.getByRole('textbox')
-        fireEvent.change(input, { target: { value: 'Summarize this surrogate' } })
+        fireEvent.change(input, { target: { value: 'Summarize this workflow' } })
         fireEvent.keyDown(input, { key: 'Enter', shiftKey: false })
 
         expect(mockStreamMessage).toHaveBeenCalledWith(
             {
-                entity_type: 'surrogate',
-                entity_id: 's1',
-                message: 'Summarize this surrogate',
+                message: 'Summarize this workflow',
             },
             expect.any(Function),
             expect.anything()
@@ -123,8 +81,12 @@ describe('AIAssistantPage', () => {
         expect(await screen.findByText('approved')).toBeInTheDocument()
     })
 
-    it('allows global chat without selecting a surrogate and records history', async () => {
+    it('shows global-only mode without raw selector values and records history', async () => {
         render(<AIAssistantPage />)
+
+        expect(screen.getByText('Global mode')).toBeInTheDocument()
+        expect(screen.queryByText('__global__')).not.toBeInTheDocument()
+        expect(screen.queryByText(/S12345/)).not.toBeInTheDocument()
 
         const input = screen.getByRole('textbox')
         fireEvent.change(input, { target: { value: 'Hello there' } })
@@ -135,9 +97,7 @@ describe('AIAssistantPage', () => {
         const call = mockStreamMessage.mock.calls[0]?.[0]
         expect(call).toEqual({ message: 'Hello there' })
 
-        expect(
-            await screen.findByText(/Global mode.*select a surrogate to add context/i),
-        ).toBeInTheDocument()
+        expect(await screen.findByText('Global mode · Press Enter to send')).toBeInTheDocument()
         expect(screen.getByText('Hello there', { selector: 'p' })).toBeInTheDocument()
     })
 
@@ -158,6 +118,39 @@ describe('AIAssistantPage', () => {
         expect(items).toHaveLength(10)
         expect(screen.queryByText('Session 10')).not.toBeInTheDocument()
         expect(screen.getByText('Session 0')).toBeInTheDocument()
+    })
+
+    it('hides legacy surrogate-scoped sessions from chat history', async () => {
+        sessionStorage.setItem(
+            'ai-assistant-chat-history-v1',
+            JSON.stringify([
+                {
+                    id: 'session-surrogate',
+                    label: 'Surrogate Session',
+                    preview: 'Should be hidden',
+                    updatedAt: new Date().toISOString(),
+                    entityType: 'surrogate',
+                    entityId: 's1',
+                    conversationId: 'conv-surrogate',
+                    messages: [],
+                },
+                {
+                    id: 'session-global',
+                    label: 'Global Session',
+                    preview: 'Should stay',
+                    updatedAt: new Date().toISOString(),
+                    entityType: 'global',
+                    entityId: null,
+                    conversationId: 'conv-global',
+                    messages: [],
+                },
+            ])
+        )
+
+        render(<AIAssistantPage />)
+
+        expect(await screen.findByText('Global Session')).toBeInTheDocument()
+        expect(screen.queryByText('Surrogate Session')).not.toBeInTheDocument()
     })
 
     it('clears chat history when the user changes', async () => {
@@ -216,7 +209,7 @@ describe('AIAssistantPage', () => {
         expect(screen.getByText('Session Old')).toBeInTheDocument()
         expect(screen.queryByText('Old conversation content', { selector: 'p' })).not.toBeInTheDocument()
         expect(
-            screen.getByText("Hello! I'm your AI assistant. Ask me anything, or select a surrogate to add context.")
+            screen.getByText("Hello! I'm your AI assistant. Ask me anything about your workflows.")
         ).toBeInTheDocument()
     })
 
