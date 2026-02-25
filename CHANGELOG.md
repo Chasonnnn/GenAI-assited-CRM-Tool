@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.5...surrogacy-crm-platform-v0.90.6) (2026-02-25)
+
+
+### Bug Fixes
+
+* harden clamav signature update upload path ([5bbc1cc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5bbc1cc3249fb0dc9d4616432d6b264292794175))
+* improve surrogate history details and rolling 24h lead stats ([7fa1b86](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7fa1b86c3786f23c21848f678fa14d357ef2e5cc))
+
 ## [0.90.5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.4...surrogacy-crm-platform-v0.90.5) (2026-02-25)
 
 
