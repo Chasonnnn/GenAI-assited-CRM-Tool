@@ -332,6 +332,8 @@ def _global_search_unified(
                         surrogate_access_filter,
                         or_(*hash_filters),
                     )
+                    .order_by(surrogate_table.c.created_at.desc())
+                    .limit(limit + offset)
                 )
 
             surrogate_rank = func.ts_rank(surrogate_table.c.search_vector, tsquery_simple).label(
@@ -360,6 +362,8 @@ def _global_search_unified(
                     surrogate_table.c.search_vector.op("@@")(tsquery_simple),
                     surrogate_access_filter,
                 )
+                .order_by(surrogate_rank.desc(), surrogate_table.c.created_at.desc())
+                .limit(limit + offset)
             )
 
             fallback_filters = []
@@ -405,6 +409,8 @@ def _global_search_unified(
                         surrogate_access_filter,
                         or_(*fallback_filters),
                     )
+                    .order_by(surrogate_table.c.created_at.desc())
+                    .limit(limit + offset)
                 )
 
         if "note" in entity_types and can_view_notes:
@@ -450,6 +456,8 @@ def _global_search_unified(
                     notes_table.c.search_vector.op("@@")(tsquery_english),
                     surrogate_access_filter,
                 )
+                .order_by(note_rank.desc(), notes_table.c.created_at.desc())
+                .limit(limit + offset)
             )
 
             if can_view_intended_parents:
@@ -480,6 +488,8 @@ def _global_search_unified(
                         notes_table.c.organization_id == org_id,
                         notes_table.c.search_vector.op("@@")(tsquery_english),
                     )
+                    .order_by(note_rank.desc(), notes_table.c.created_at.desc())
+                    .limit(limit + offset)
                 )
 
         if "attachment" in entity_types:
@@ -515,6 +525,8 @@ def _global_search_unified(
                     attachments_table.c.search_vector.op("@@")(tsquery_simple),
                     surrogate_access_filter,
                 )
+                .order_by(attachment_rank.desc(), attachments_table.c.created_at.desc())
+                .limit(limit + offset)
             )
 
             if can_view_intended_parents:
@@ -547,6 +559,8 @@ def _global_search_unified(
                         attachments_table.c.quarantined.is_(False),
                         attachments_table.c.search_vector.op("@@")(tsquery_simple),
                     )
+                    .order_by(attachment_rank.desc(), attachments_table.c.created_at.desc())
+                    .limit(limit + offset)
                 )
 
         if "intended_parent" in entity_types and can_view_intended_parents:
@@ -575,7 +589,10 @@ def _global_search_unified(
                         literal(None).label("surrogate_id"),
                         literal(None).label("surrogate_name"),
                         ip_table.c.created_at.label("created_at"),
-                    ).where(ip_table.c.organization_id == org_id, or_(*hash_filters))
+                    )
+                    .where(ip_table.c.organization_id == org_id, or_(*hash_filters))
+                    .order_by(ip_table.c.created_at.desc())
+                    .limit(limit + offset)
                 )
 
             ip_rank = func.ts_rank(ip_table.c.search_vector, tsquery_simple).label("rank")
@@ -595,10 +612,13 @@ def _global_search_unified(
                     literal(None).label("surrogate_id"),
                     literal(None).label("surrogate_name"),
                     ip_table.c.created_at.label("created_at"),
-                ).where(
+                )
+                .where(
                     ip_table.c.organization_id == org_id,
                     ip_table.c.search_vector.op("@@")(tsquery_simple),
                 )
+                .order_by(ip_rank.desc(), ip_table.c.created_at.desc())
+                .limit(limit + offset)
             )
 
             ip_fallback_filters = []
@@ -634,10 +654,13 @@ def _global_search_unified(
                         literal(None).label("surrogate_id"),
                         literal(None).label("surrogate_name"),
                         ip_table.c.created_at.label("created_at"),
-                    ).where(
+                    )
+                    .where(
                         ip_table.c.organization_id == org_id,
                         or_(*ip_fallback_filters),
                     )
+                    .order_by(ip_table.c.created_at.desc())
+                    .limit(limit + offset)
                 )
 
         if not subqueries:
