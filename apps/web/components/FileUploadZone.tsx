@@ -264,7 +264,7 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                     <AlertDialogHeader>
                         <AlertDialogTitle>Delete Attachment</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This will permanently delete this file.
+                            Are you sure you want to delete <span className="font-medium text-foreground">{attachments.find((a) => a.id === deleteTarget)?.filename}</span>? This will permanently delete this file.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

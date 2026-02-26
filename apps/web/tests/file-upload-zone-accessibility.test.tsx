@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { render, screen, within } from "@testing-library/react"
+import { render, screen, within, fireEvent } from "@testing-library/react"
 
 import { FileUploadZone } from "@/components/FileUploadZone"
 
@@ -82,5 +82,24 @@ describe("FileUploadZone accessibility", () => {
             expect(icon).toBeTruthy()
             expect(icon).toHaveAttribute("aria-hidden", "true")
         })
+    })
+
+    it("shows filename in delete confirmation dialog", async () => {
+        render(<FileUploadZone surrogateId="surrogate-1" />)
+
+        const deleteButton = screen.getByRole("button", { name: "Delete contract.pdf" })
+        fireEvent.click(deleteButton)
+
+        // Find the dialog
+        const dialog = await screen.findByRole("alertdialog")
+        expect(dialog).toBeInTheDocument()
+
+        // Check for specific filename in description
+        // Using a regex to match part of the string since the exact phrasing might change slightly
+        // But we MUST ensure the filename is present
+        expect(within(dialog).getByText(/contract\.pdf/)).toBeInTheDocument()
+
+        // Ensure the warning text is also present
+        expect(within(dialog).getByText(/permanently delete/)).toBeInTheDocument()
     })
 })
