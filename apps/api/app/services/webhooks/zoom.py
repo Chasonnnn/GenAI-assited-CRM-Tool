@@ -32,6 +32,16 @@ def _verify_zoom_webhook_signature(
     Zoom sends: v0:timestamp:body_string
     Then HMAC-SHA256 with webhook secret, compare to signature.
     """
+    # Prevent replay attacks (5 minute window)
+    try:
+        ts_val = float(timestamp)
+    except (ValueError, TypeError):
+        return False
+
+    now = datetime.now(timezone.utc).timestamp()
+    if abs(now - ts_val) > 300:  # 5 minutes
+        return False
+
     message = b"v0:" + timestamp.encode("utf-8") + b":" + body
     expected = hmac.new(
         secret.encode("utf-8"),
