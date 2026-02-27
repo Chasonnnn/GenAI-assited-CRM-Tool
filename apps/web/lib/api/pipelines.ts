@@ -9,6 +9,7 @@ export type StageType = 'intake' | 'post_approval' | 'terminal';
 
 export interface PipelineStage {
     id: string;
+    stage_key: string;
     slug: string;
     label: string;
     color: string;
@@ -27,6 +28,7 @@ export interface StageCreate {
 }
 
 export interface StageUpdate {
+    slug?: string;
     label?: string;
     color?: string;
     order?: number;
@@ -55,6 +57,7 @@ export interface PipelineVersion {
     payload: {
         name: string;
         stages: Array<{
+            stage_key: string;
             slug: string;
             label: string;
             color: string;

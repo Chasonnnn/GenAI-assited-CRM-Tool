@@ -14,7 +14,7 @@ export interface ZapierSettings {
     outbound_secret_configured: boolean;
     send_hashed_pii: boolean;
     event_mapping: Array<{
-        stage_slug: string;
+        stage_key: string;
         event_name: string;
         enabled: boolean;
     }>;
@@ -41,7 +41,7 @@ export interface ZapierOutboundSettingsRequest {
     outbound_enabled?: boolean;
     send_hashed_pii?: boolean;
     event_mapping?: Array<{
-        stage_slug: string;
+        stage_key: string;
         event_name: string;
         enabled: boolean;
     }>;
@@ -78,7 +78,7 @@ export interface ZapierInboundWebhookUpdateRequest {
 }
 
 export interface ZapierOutboundTestRequest {
-    stage_slug?: string;
+    stage_key?: string;
     lead_id?: string;
 }
 

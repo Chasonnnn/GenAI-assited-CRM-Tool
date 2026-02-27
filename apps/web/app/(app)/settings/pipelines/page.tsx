@@ -63,11 +63,12 @@ function StageEditor({
         setDragIndex(null)
     }
 
-    const updateStage = (index: number, field: "label" | "color", value: string) => {
+    const updateStage = (index: number, field: "label" | "color" | "slug", value: string) => {
         const newStages = [...stages]
         const currentStage = newStages[index]
         if (!currentStage) return
-        newStages[index] = { ...currentStage, [field]: value }
+        const nextValue = field === "slug" ? value.toLowerCase().replace(/[^a-z0-9_]/g, "_") : value
+        newStages[index] = { ...currentStage, [field]: nextValue }
         onChange(newStages)
     }
 
@@ -96,7 +97,7 @@ function StageEditor({
                             />
                         </div>
 
-                        <div className="flex-1 grid grid-cols-2 gap-3">
+                        <div className="flex-1 grid grid-cols-3 gap-3">
                             <Input
                                 value={stage.label}
                                 onChange={(e) => updateStage(index, "label", e.target.value)}
@@ -107,11 +108,17 @@ function StageEditor({
                             />
                             <Input
                                 value={stage.slug}
+                                onChange={(e) => updateStage(index, "slug", e.target.value)}
+                                className="h-9 font-mono text-sm"
+                                aria-label="Stage slug"
+                            />
+                            <Input
+                                value={stage.stage_key}
                                 readOnly
                                 disabled
-                                className="h-9 font-mono text-sm bg-muted"
-                                title="Stage slug is read-only"
-                                aria-label="Stage slug"
+                                className="h-9 font-mono text-xs bg-muted"
+                                title="Stage key is immutable"
+                                aria-label="Stage key"
                             />
                         </div>
 
@@ -125,7 +132,7 @@ function StageEditor({
             <Alert>
                 <InfoIcon className="size-4" aria-hidden="true" />
                 <AlertDescription>
-                    Drag stages to reorder. Edit labels and colors. Stage slugs are read-only.
+                    Drag stages to reorder. Edit labels, slugs, and colors. Stage keys stay immutable.
                 </AlertDescription>
             </Alert>
         </div>
@@ -236,7 +243,12 @@ export default function PipelinesSettingsPage() {
         const originalById = new Map(originalStages.map(stage => [stage.id, stage]))
         const changedStages = editedStages.filter(stage => {
             const original = originalById.get(stage.id)
-            return original && (stage.label !== original.label || stage.color !== original.color)
+            return (
+                original &&
+                (stage.label !== original.label ||
+                    stage.color !== original.color ||
+                    stage.slug !== original.slug)
+            )
         })
         const orderChanged = editedStages.map(stage => stage.id).join(",") !== originalStages.map(stage => stage.id).join(",")
 
@@ -256,6 +268,7 @@ export default function PipelinesSettingsPage() {
                     pipelineId: pipeline.id,
                     stageId: stage.id,
                     data: {
+                        slug: stage.slug,
                         label: stage.label,
                         color: stage.color,
                         expected_version: expectedVersion,

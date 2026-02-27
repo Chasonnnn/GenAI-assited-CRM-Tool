@@ -694,7 +694,7 @@ export default function EmailTemplatesPage() {
                 case "intended_parent_number":
                     return "I10001"
                 case "status_label":
-                    return "Qualified"
+                    return "Pre-Qualified"
                 case "state":
                     return "CA"
                 case "owner_name":
@@ -1026,7 +1026,7 @@ export default function EmailTemplatesPage() {
                 .replace(/\{\{email\}\}/g, "john@example.com")
                 .replace(/\{\{phone\}\}/g, "(555) 123-4567")
                 .replace(/\{\{surrogate_number\}\}/g, "S10001")
-                .replace(/\{\{status_label\}\}/g, "Qualified")
+                .replace(/\{\{status_label\}\}/g, "Pre-Qualified")
                 .replace(/\{\{owner_name\}\}/g, "Sara Manager")
                 .replace(/\{\{form_link\}\}/g, "https://app.surrogacyforce.com/apply/EXAMPLE_TOKEN")
                 .replace(/\{\{appointment_link\}\}/g, "https://app.surrogacyforce.com/book/EXAMPLE_APPOINTMENT_SLUG")

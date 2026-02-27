@@ -239,13 +239,13 @@ export default function CampaignsPage() {
                       stageIds: stageOptions
                           .filter((stage) =>
                               [
-                                  "new unread",
+                                  "new_unread",
                                   "contacted",
-                                  "qualified",
-                                  "interview scheduled",
-                                  "application submitted",
-                                  "under review",
-                              ].includes(normalizeStageLabel(stage.label))
+                                  "pre_qualified",
+                                  "interview_scheduled",
+                                  "application_submitted",
+                                  "under_review",
+                              ].includes(("stage_key" in stage ? stage.stage_key : stage.id).toString())
                           )
                           .map((stage) => stage.id),
                   },
@@ -256,11 +256,11 @@ export default function CampaignsPage() {
                           .filter((stage) =>
                               [
                                   "approved",
-                                  "ready to match",
+                                  "ready_to_match",
                                   "matched",
-                                  "medical clearance passed",
-                                  "legal clearance passed",
-                              ].includes(normalizeStageLabel(stage.label))
+                                  "medical_clearance_passed",
+                                  "legal_clearance_passed",
+                              ].includes(("stage_key" in stage ? stage.stage_key : stage.id).toString())
                           )
                           .map((stage) => stage.id),
                   },
@@ -270,14 +270,13 @@ export default function CampaignsPage() {
                       stageIds: stageOptions
                           .filter((stage) =>
                               [
-                                  "transfer cycle initiated",
-                                  "transfer cycle",
-                                  "second hcg confirmed",
-                                  "heartbeat confirmed",
-                                  "ob care established",
-                                  "anatomy scanned",
+                                  "transfer_cycle",
+                                  "second_hcg_confirmed",
+                                  "heartbeat_confirmed",
+                                  "ob_care_established",
+                                  "anatomy_scanned",
                                   "delivered",
-                              ].includes(normalizeStageLabel(stage.label))
+                              ].includes(("stage_key" in stage ? stage.stage_key : stage.id).toString())
                           )
                           .map((stage) => stage.id),
                   },

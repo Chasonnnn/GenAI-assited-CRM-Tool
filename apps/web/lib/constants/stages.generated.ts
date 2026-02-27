@@ -3,6 +3,7 @@
 export type StageType = "intake" | "post_approval" | "terminal"
 
 export type StageDef = {
+    stageKey: string
     slug: string
     label: string
     color: string
@@ -17,6 +18,7 @@ export type RoleStageRule = {
 
 export const STAGE_DEFS: StageDef[] = [
     {
+        "stageKey": "new_unread",
         "slug": "new_unread",
         "label": "New Unread",
         "color": "#3B82F6",
@@ -24,6 +26,7 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "intake"
     },
     {
+        "stageKey": "contacted",
         "slug": "contacted",
         "label": "Contacted",
         "color": "#06B6D4",
@@ -31,13 +34,15 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "intake"
     },
     {
-        "slug": "qualified",
-        "label": "Qualified",
+        "stageKey": "pre_qualified",
+        "slug": "pre_qualified",
+        "label": "Pre-Qualified",
         "color": "#10B981",
         "order": 3,
         "stageType": "intake"
     },
     {
+        "stageKey": "application_submitted",
         "slug": "application_submitted",
         "label": "Application Submitted",
         "color": "#8B5CF6",
@@ -45,6 +50,7 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "intake"
     },
     {
+        "stageKey": "interview_scheduled",
         "slug": "interview_scheduled",
         "label": "Interview Scheduled",
         "color": "#A855F7",
@@ -52,6 +58,7 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "intake"
     },
     {
+        "stageKey": "under_review",
         "slug": "under_review",
         "label": "Under Review",
         "color": "#F59E0B",
@@ -59,6 +66,7 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "intake"
     },
     {
+        "stageKey": "approved",
         "slug": "approved",
         "label": "Approved",
         "color": "#22C55E",
@@ -66,6 +74,7 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "intake"
     },
     {
+        "stageKey": "ready_to_match",
         "slug": "ready_to_match",
         "label": "Ready to Match",
         "color": "#0EA5E9",
@@ -73,6 +82,7 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "post_approval"
     },
     {
+        "stageKey": "matched",
         "slug": "matched",
         "label": "Matched",
         "color": "#6366F1",
@@ -80,6 +90,7 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "post_approval"
     },
     {
+        "stageKey": "medical_clearance_passed",
         "slug": "medical_clearance_passed",
         "label": "Medical Clearance Passed",
         "color": "#14B8A6",
@@ -87,6 +98,7 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "post_approval"
     },
     {
+        "stageKey": "legal_clearance_passed",
         "slug": "legal_clearance_passed",
         "label": "Legal Clearance Passed",
         "color": "#059669",
@@ -94,6 +106,7 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "post_approval"
     },
     {
+        "stageKey": "transfer_cycle",
         "slug": "transfer_cycle",
         "label": "Transfer Cycle Initiated",
         "color": "#0D9488",
@@ -101,6 +114,7 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "post_approval"
     },
     {
+        "stageKey": "second_hcg_confirmed",
         "slug": "second_hcg_confirmed",
         "label": "Second hCG confirmed",
         "color": "#10B981",
@@ -108,6 +122,7 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "post_approval"
     },
     {
+        "stageKey": "heartbeat_confirmed",
         "slug": "heartbeat_confirmed",
         "label": "Heartbeat Confirmed",
         "color": "#22C55E",
@@ -115,6 +130,7 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "post_approval"
     },
     {
+        "stageKey": "ob_care_established",
         "slug": "ob_care_established",
         "label": "OB Care Established",
         "color": "#84CC16",
@@ -122,6 +138,7 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "post_approval"
     },
     {
+        "stageKey": "anatomy_scanned",
         "slug": "anatomy_scanned",
         "label": "Anatomy Scanned",
         "color": "#16A34A",
@@ -129,6 +146,7 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "post_approval"
     },
     {
+        "stageKey": "delivered",
         "slug": "delivered",
         "label": "Delivered",
         "color": "#16A34A",
@@ -136,6 +154,7 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "post_approval"
     },
     {
+        "stageKey": "lost",
         "slug": "lost",
         "label": "Lost",
         "color": "#EF4444",
@@ -143,6 +162,7 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "terminal"
     },
     {
+        "stageKey": "disqualified",
         "slug": "disqualified",
         "label": "Disqualified",
         "color": "#EF4444",
@@ -166,7 +186,7 @@ export const STAGE_TYPE_MAP: Record<string, StageType> = {
     "medical_clearance_passed": "post_approval",
     "new_unread": "intake",
     "ob_care_established": "post_approval",
-    "qualified": "intake",
+    "pre_qualified": "intake",
     "ready_to_match": "post_approval",
     "second_hcg_confirmed": "post_approval",
     "transfer_cycle": "post_approval",
@@ -176,7 +196,7 @@ export const STAGE_TYPE_MAP: Record<string, StageType> = {
 export const DEFAULT_STAGE_ORDER: string[] = [
     "new_unread",
     "contacted",
-    "qualified",
+    "pre_qualified",
     "application_submitted",
     "interview_scheduled",
     "under_review",

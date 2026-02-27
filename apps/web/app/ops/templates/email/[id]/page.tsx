@@ -138,7 +138,7 @@ export default function PlatformEmailTemplatePage() {
                 case "intended_parent_number":
                     return "I10001"
                 case "status_label":
-                    return "Qualified"
+                    return "Pre-Qualified"
                 case "state":
                     return "CA"
                 case "owner_name":

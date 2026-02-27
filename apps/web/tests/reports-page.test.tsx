@@ -61,7 +61,7 @@ vi.mock('@/components/ui/date-range-picker', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-analytics', () => ({
-    useAnalyticsSummary: () => ({ data: { total_surrogates: 42, new_this_period: 5, qualified_rate: 10 }, isLoading: false }),
+    useAnalyticsSummary: () => ({ data: { total_surrogates: 42, new_this_period: 5, pre_qualified_rate: 10 }, isLoading: false }),
     useSurrogatesByStatus: () => ({ data: [{ status: 'new_unread', count: 1 }], isLoading: false }),
     useSurrogatesByAssignee: () => ({ data: [{ user_email: 'alice@example.com', count: 2 }], isLoading: false }),
     useSurrogatesTrend: () => ({ data: [{ date: '2025-01-01', count: 1 }], isLoading: false }),

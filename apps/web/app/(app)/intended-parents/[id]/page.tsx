@@ -90,6 +90,7 @@ const STATUS_OPTIONS: IntendedParentStatus[] = ["new", "ready_to_match", "matche
 
 const STATUS_STAGE_OPTIONS: PipelineStage[] = STATUS_OPTIONS.map((status) => ({
     id: status,
+    stage_key: status,
     slug: status,
     label: STATUS_LABELS[status],
     color: STATUS_DOT_COLORS[status],

@@ -50,9 +50,9 @@ const zapierSettingsData = {
     outbound_secret_configured: false,
     send_hashed_pii: false,
     event_mapping: [
-        { stage_slug: 'new_unread', event_name: 'Lead', enabled: true },
-        { stage_slug: 'qualified', event_name: 'QualifiedLead', enabled: true },
-        { stage_slug: 'matched', event_name: 'ConvertedLead', enabled: true },
+        { stage_key: 'new_unread', event_name: 'Lead', enabled: true },
+        { stage_key: 'pre_qualified', event_name: 'PreQualifiedLead', enabled: true },
+        { stage_key: 'matched', event_name: 'ConvertedLead', enabled: true },
     ],
 } as const
 

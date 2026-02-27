@@ -10,8 +10,8 @@ import type { JsonObject } from '../types/json';
 export interface AnalyticsSummary {
     total_surrogates: number;
     new_this_period: number;
-    qualified_rate: number;
-    avg_time_to_qualified_hours: number | null;
+    pre_qualified_rate: number;
+    avg_time_to_pre_qualified_hours: number | null;
 }
 
 export interface StatusCount {
@@ -34,9 +34,9 @@ export interface TrendPoint {
 
 export interface MetaPerformance {
     leads_received: number;
-    leads_qualified: number;
+    leads_pre_qualified: number;
     leads_converted: number;
-    qualification_rate: number;
+    pre_qualification_rate: number;
     conversion_rate: number;
     avg_time_to_convert_hours: number | null;
 }
@@ -249,7 +249,7 @@ export interface UserPerformanceData {
     total_surrogates: number;
     archived_count: number;
     contacted: number;
-    qualified: number;
+    pre_qualified: number;
     ready_to_match: number;
     matched: number;
     application_submitted: number;
@@ -263,7 +263,7 @@ export interface UnassignedPerformanceData {
     total_surrogates: number;
     archived_count: number;
     contacted: number;
-    qualified: number;
+    pre_qualified: number;
     ready_to_match: number;
     matched: number;
     application_submitted: number;
@@ -407,9 +407,9 @@ export interface FormPerformance {
     mapping_status: string;
     lead_count: number;
     surrogate_count: number;
-    qualified_count: number;
+    pre_qualified_count: number;
     conversion_rate: number;
-    qualified_rate: number;
+    pre_qualified_rate: number;
 }
 
 export interface MetaPlatformBreakdownItem {

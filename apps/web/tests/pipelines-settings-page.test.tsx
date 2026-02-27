@@ -30,6 +30,7 @@ const pipelineFixture = {
     stages: [
         {
             id: 's1',
+            stage_key: 'new_unread',
             slug: 'new_unread',
             label: 'New Unread',
             color: '#3b82f6',
@@ -39,6 +40,7 @@ const pipelineFixture = {
         },
         {
             id: 's2',
+            stage_key: 'contacted',
             slug: 'contacted',
             label: 'Contacted',
             color: '#06b6d4',
@@ -70,16 +72,20 @@ describe('PipelinesSettingsPage', () => {
         mockReorderStages.mockResolvedValue({})
     })
 
-    it('renders stages with read-only slug inputs', () => {
+    it('renders stages with editable slug inputs', () => {
         render(<PipelinesSettingsPage />)
 
         expect(screen.getByText('Pipeline Settings')).toBeInTheDocument()
         expect(screen.getByDisplayValue('New Unread')).toBeInTheDocument()
 
-        // Slug inputs should be readonly
-        const slugInput = screen.getByDisplayValue('new_unread')
-        expect(slugInput).toBeDisabled()
-        expect(slugInput).toHaveAttribute('readonly')
+        // Slug inputs are now editable while stage_key remains immutable.
+        const slugInput = screen.getAllByLabelText('Stage slug')[0]
+        expect(slugInput).toBeEnabled()
+        expect(slugInput).not.toHaveAttribute('readonly')
+
+        const stageKeyInput = screen.getAllByLabelText('Stage key')[0]
+        expect(stageKeyInput).toBeDisabled()
+        expect(stageKeyInput).toHaveAttribute('readonly')
     })
 
     it('saves edited stage label using updateStage', async () => {
@@ -100,6 +106,26 @@ describe('PipelinesSettingsPage', () => {
         expect(call.pipelineId).toBe('p1')
         expect(call.stageId).toBe('s1')
         expect(call.data.label).toBe('New Lead')
+        expect(call.data.expected_version).toBe(2)
+    })
+
+    it('saves edited stage slug using updateStage', async () => {
+        render(<PipelinesSettingsPage />)
+
+        const slugInput = screen.getAllByLabelText('Stage slug')[0]
+        fireEvent.change(slugInput, { target: { value: 'new_lead' } })
+
+        expect(screen.getByText('Unsaved changes')).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+
+        await waitFor(() => {
+            expect(mockUpdateStage).toHaveBeenCalled()
+        })
+
+        const call = mockUpdateStage.mock.calls[0][0]
+        expect(call.pipelineId).toBe('p1')
+        expect(call.stageId).toBe('s1')
+        expect(call.data.slug).toBe('new_lead')
         expect(call.data.expected_version).toBe(2)
     })
 

@@ -395,9 +395,9 @@ function FormPerformanceTable({
         mapping_status: string
         lead_count: number
         surrogate_count: number
-        qualified_count: number
+        pre_qualified_count: number
         conversion_rate: number
-        qualified_rate: number
+        pre_qualified_rate: number
     }> | undefined
     loading: boolean
     error: boolean
@@ -438,9 +438,9 @@ function FormPerformanceTable({
                         <th className="px-4 py-3 text-left font-medium text-muted-foreground">Mapping</th>
                         <th className="px-4 py-3 text-right font-medium text-muted-foreground">Leads</th>
                         <th className="px-4 py-3 text-right font-medium text-muted-foreground">Surrogates</th>
-                        <th className="px-4 py-3 text-right font-medium text-muted-foreground hidden sm:table-cell">Qualified</th>
+                        <th className="px-4 py-3 text-right font-medium text-muted-foreground hidden sm:table-cell">Pre-Qualified</th>
                         <th className="px-4 py-3 text-right font-medium text-muted-foreground">Conv. %</th>
-                        <th className="px-4 py-3 text-right font-medium text-muted-foreground hidden md:table-cell">Qual. %</th>
+                        <th className="px-4 py-3 text-right font-medium text-muted-foreground hidden md:table-cell">Pre-Qual. %</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -476,7 +476,7 @@ function FormPerformanceTable({
                                 {formatNumber(form.surrogate_count)}
                             </td>
                             <td className="px-4 py-3 text-right text-emerald-600 hidden sm:table-cell">
-                                {formatNumber(form.qualified_count)}
+                                {formatNumber(form.pre_qualified_count)}
                             </td>
                             <td className="px-4 py-3 text-right">
                                 <span className={cn(
@@ -489,9 +489,9 @@ function FormPerformanceTable({
                             <td className="px-4 py-3 text-right hidden md:table-cell">
                                 <span className={cn(
                                     "font-medium",
-                                    form.qualified_rate >= 30 ? "text-emerald-600" : form.qualified_rate < 10 ? "text-amber-600" : ""
+                                    form.pre_qualified_rate >= 30 ? "text-emerald-600" : form.pre_qualified_rate < 10 ? "text-amber-600" : ""
                                 )}>
-                                    {formatPercent(form.qualified_rate)}
+                                    {formatPercent(form.pre_qualified_rate)}
                                 </span>
                             </td>
                         </tr>

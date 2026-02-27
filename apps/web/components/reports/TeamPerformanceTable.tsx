@@ -25,7 +25,7 @@ interface TeamPerformanceTableProps {
     asOf?: string
 }
 
-type SortKey = "user_name" | "total_surrogates" | "contacted" | "qualified" | "ready_to_match" | "matched" | "application_submitted" | "lost" | "conversion_rate" | "avg_days_to_match" | "avg_days_to_application_submitted"
+type SortKey = "user_name" | "total_surrogates" | "contacted" | "pre_qualified" | "ready_to_match" | "matched" | "application_submitted" | "lost" | "conversion_rate" | "avg_days_to_match" | "avg_days_to_application_submitted"
 type SortDirection = "asc" | "desc"
 
 function SortDirectionIcon({
@@ -205,10 +205,10 @@ export function TeamPerformanceTable({
                                     variant="ghost"
                                     size="sm"
                                     className="h-8 px-2 hover:bg-transparent"
-                                    onClick={() => handleSort("qualified")}
+                                    onClick={() => handleSort("pre_qualified")}
                                 >
-                                    Qualified
-                                    <SortDirectionIcon columnKey="qualified" sortKey={sortKey} sortDirection={sortDirection} />
+                                    Pre-Qualified
+                                    <SortDirectionIcon columnKey="pre_qualified" sortKey={sortKey} sortDirection={sortDirection} />
                                 </Button>
                             </TableHead>
                             <TableHead className="text-center">
@@ -308,7 +308,7 @@ export function TeamPerformanceTable({
                                     {user.contacted}
                                 </TableCell>
                                 <TableCell className="text-center">
-                                    {user.qualified}
+                                    {user.pre_qualified}
                                 </TableCell>
                                 <TableCell className="text-center">
                                     {user.ready_to_match}
@@ -366,7 +366,7 @@ export function TeamPerformanceTable({
                                     {unassigned.contacted}
                                 </TableCell>
                                 <TableCell className="text-center text-muted-foreground">
-                                    {unassigned.qualified}
+                                    {unassigned.pre_qualified}
                                 </TableCell>
                                 <TableCell className="text-center text-muted-foreground">
                                     {unassigned.ready_to_match}

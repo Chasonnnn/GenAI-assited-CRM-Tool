@@ -59,7 +59,7 @@ type AssigneeChartDatum = {
 
 type MetaPerformance = {
     leads_received?: number | null
-    leads_qualified?: number | null
+    leads_pre_qualified?: number | null
     leads_converted?: number | null
     avg_time_to_convert_hours?: number | null
     conversion_rate?: number | null
@@ -285,8 +285,8 @@ export function ReportsChartsGrid({
                     ) : (
                         <ChartContainer
                             config={{
-                                notQualified: { label: "Not Qualified", color: "#94a3b8" },
-                                qualified: { label: "Qualified Only", color: "#3b82f6" },
+                                notPreQualified: { label: "Not Pre-Qualified", color: "#94a3b8" },
+                                preQualified: { label: "Pre-Qualified Only", color: "#3b82f6" },
                                 converted: { label: "Converted", color: "#22c55e" },
                             }}
                             className="h-[300px] w-full"
@@ -296,19 +296,19 @@ export function ReportsChartsGrid({
                                 <Pie
                                     data={[
                                         {
-                                            name: "Not Qualified",
+                                            name: "Not Pre-Qualified",
                                             value: Math.max(
                                                 0,
                                                 (metaPerf?.leads_received ?? 0) -
-                                                    (metaPerf?.leads_qualified ?? 0)
+                                                    (metaPerf?.leads_pre_qualified ?? 0)
                                             ),
                                             fill: "#94a3b8",
                                         },
                                         {
-                                            name: "Qualified Only",
+                                            name: "Pre-Qualified Only",
                                             value: Math.max(
                                                 0,
-                                                (metaPerf?.leads_qualified ?? 0) -
+                                                (metaPerf?.leads_pre_qualified ?? 0) -
                                                     (metaPerf?.leads_converted ?? 0)
                                             ),
                                             fill: "#3b82f6",

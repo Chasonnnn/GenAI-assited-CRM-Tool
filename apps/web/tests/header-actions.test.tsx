@@ -169,18 +169,18 @@ describe("HeaderActions", () => {
         mockUseSurrogateDetailData.mockReturnValue({
             surrogate: {
                 id: "s1",
-                stage_id: "stage_qualified",
+                stage_id: "stage_pre_qualified",
                 owner_type: "user",
                 owner_id: "intake-user-1",
                 is_archived: false,
                 surrogate_number: "S123",
                 full_name: "Jane Doe",
-                stage_slug: "qualified",
+                stage_slug: "pre_qualified",
             },
             stageById: new Map([
                 [
-                    "stage_qualified",
-                    { slug: "qualified", stage_type: "intake", order: 3 },
+                    "stage_pre_qualified",
+                    { slug: "pre_qualified", stage_type: "intake", order: 3 },
                 ],
             ]),
             stageOptions: [],

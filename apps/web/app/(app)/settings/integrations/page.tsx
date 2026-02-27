@@ -1202,7 +1202,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
     const [outboundSecret, setOutboundSecret] = useState('')
     const [outboundEnabled, setOutboundEnabled] = useState(false)
     const [sendHashedPii, setSendHashedPii] = useState(false)
-    const [eventMapping, setEventMapping] = useState<Array<{ stage_slug: string; event_name: string; enabled: boolean }>>([])
+    const [eventMapping, setEventMapping] = useState<Array<{ stage_key: string; event_name: string; enabled: boolean }>>([])
     const [selectedOutboundStage, setSelectedOutboundStage] = useState<string>('')
 
     useEffect(() => {
@@ -1247,7 +1247,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
         setOutboundEnabled(Boolean(settings.outbound_enabled))
         setSendHashedPii(Boolean(settings.send_hashed_pii))
         setEventMapping(settings.event_mapping || [])
-        const firstStage = settings.event_mapping?.[0]?.stage_slug
+        const firstStage = settings.event_mapping?.[0]?.stage_key
         if (firstStage) {
             setSelectedOutboundStage(firstStage)
         }
@@ -1387,7 +1387,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                 outbound_webhook_secret?: string | null
                 outbound_enabled: boolean
                 send_hashed_pii: boolean
-                event_mapping: Array<{ stage_slug: string; event_name: string; enabled: boolean }>
+                event_mapping: Array<{ stage_key: string; event_name: string; enabled: boolean }>
             } = {
                 outbound_webhook_url: outboundUrl.trim() || null,
                 outbound_enabled: outboundEnabled,
@@ -1408,7 +1408,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
 
     const handleOutboundTest = async () => {
         try {
-            const payload = selectedOutboundStage ? { stage_slug: selectedOutboundStage } : {}
+            const payload = selectedOutboundStage ? { stage_key: selectedOutboundStage } : {}
             const result = await sendOutboundTest.mutateAsync(payload)
             toast.success(`Test event queued: ${result.event_name}`)
         } catch {
@@ -1855,11 +1855,11 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                             <div className="space-y-2">
                                 {eventMapping.map((item, index) => (
                                     <div
-                                        key={item.stage_slug}
+                                        key={item.stage_key}
                                         className={`flex flex-col gap-2 rounded-md border p-3 ${isDialog ? "" : "md:flex-row md:items-center"}`}
                                     >
                                         <div className="w-32 text-sm font-medium">
-                                            {item.stage_slug.replace(/_/g, " ")}
+                                            {item.stage_key.replace(/_/g, " ")}
                                         </div>
                                         <Input
                                             value={item.event_name}
@@ -1871,7 +1871,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                                 setEventMapping(next)
                                             }}
                                             placeholder="Event name"
-                                            name={`zapier-event-${item.stage_slug}`}
+                                            name={`zapier-event-${item.stage_key}`}
                                             autoComplete="off"
                                         />
                                         <div className="flex items-center gap-2">
@@ -1884,7 +1884,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                                     next[index] = { ...existing, enabled: checked }
                                                     setEventMapping(next)
                                                 }}
-                                                aria-label={`Enable ${item.stage_slug} event`}
+                                                aria-label={`Enable ${item.stage_key} event`}
                                             />
                                             <span className="text-xs text-muted-foreground">Enabled</span>
                                         </div>
@@ -1914,8 +1914,8 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                     </SelectTrigger>
                                     <SelectContent>
                                         {eventMapping.map((item) => (
-                                            <SelectItem key={item.stage_slug} value={item.stage_slug}>
-                                                {item.stage_slug.replace(/_/g, " ")}
+                                            <SelectItem key={item.stage_key} value={item.stage_key}>
+                                                {item.stage_key.replace(/_/g, " ")}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
