@@ -7,6 +7,21 @@ import { useProfile, useSyncProfile, useSaveProfileOverrides, useToggleProfileHi
 import { exportProfilePdf } from "@/lib/api/profile"
 import type { FormSchema } from "@/lib/api/forms"
 import type { JsonObject, JsonValue } from "@/lib/types/json"
+import type { ProfileCustomQa } from "@/lib/api/profile"
+
+export const PROFILE_HEADER_NAME_KEY = "__profile_header_name"
+export const PROFILE_HEADER_NOTE_KEY = "__profile_header_note"
+export const PROFILE_CUSTOM_QAS_KEY = "__profile_custom_qas"
+
+export function renderProfileTemplate(template: string, values: JsonObject): string {
+    return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, token) => {
+        const value = values[token]
+        if (value === null || value === undefined) {
+            return `{{${token}}}`
+        }
+        return String(value)
+    })
+}
 
 // ============================================================================
 // Types
@@ -29,6 +44,9 @@ export interface ProfileData {
     merged_view: JsonObject
     base_answers: JsonObject
     schema_snapshot: FormSchema | null
+    header_name_override: string | null
+    header_note: string | null
+    custom_qas: ProfileCustomQa[]
 }
 
 export interface ProfileCardDataContextValue {
@@ -180,13 +198,21 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
             merged_view: profileData.merged_view,
             base_answers: profileData.base_answers,
             schema_snapshot: profileData.schema_snapshot as FormSchema | null,
+            header_name_override: profileData.header_name_override ?? null,
+            header_note: profileData.header_note ?? null,
+            custom_qas: profileData.custom_qas ?? [],
         }
     }, [profileData])
 
     // Reset local state when profile changes
     useEffect(() => {
         if (profile) {
-            const overrides = profile.overrides
+            const overrides: JsonObject = {
+                ...profile.overrides,
+                [PROFILE_HEADER_NAME_KEY]: profile.header_name_override ?? "",
+                [PROFILE_HEADER_NOTE_KEY]: profile.header_note ?? "",
+                [PROFILE_CUSTOM_QAS_KEY]: profile.custom_qas ?? [],
+            }
             const hidden = profile.hidden_fields
             setEditedFields(overrides)
             setBaselineOverrides(overrides)

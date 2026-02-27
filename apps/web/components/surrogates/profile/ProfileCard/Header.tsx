@@ -2,16 +2,19 @@
 
 import { Button } from "@/components/ui/button"
 import { CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import {
     RefreshCwIcon,
     Loader2Icon,
     DownloadIcon,
     EditIcon,
 } from "lucide-react"
-import { useProfileCardActions, useProfileCardMode } from "./context"
+import { useProfileCardActions, useProfileCardData, useProfileCardEdits, useProfileCardMode, PROFILE_HEADER_NAME_KEY, PROFILE_HEADER_NOTE_KEY, renderProfileTemplate } from "./context"
 
 export function Header() {
+    const { profile } = useProfileCardData()
     const { mode, enterEditMode } = useProfileCardMode()
+    const { editedFields, setFieldValue } = useProfileCardEdits()
     const {
         cancelAllChanges,
         syncProfile,
@@ -21,10 +24,43 @@ export function Header() {
     } = useProfileCardActions()
 
     const isEditMode = mode.type === "edit"
+    const profileName = String(
+        editedFields[PROFILE_HEADER_NAME_KEY] ||
+        profile?.header_name_override ||
+        profile?.merged_view?.full_name ||
+        "Profile Card"
+    )
+    const profileNote = String(
+        editedFields[PROFILE_HEADER_NOTE_KEY] ||
+        profile?.header_note ||
+        ""
+    )
+    const renderedNote = renderProfileTemplate(profileNote, profile?.merged_view ?? {})
 
     return (
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-lg">Profile Card</CardTitle>
+        <CardHeader className="pb-2 space-y-3">
+            <div>
+                {isEditMode ? (
+                    <Input
+                        value={profileName}
+                        onChange={(e) => setFieldValue(PROFILE_HEADER_NAME_KEY, e.target.value)}
+                        placeholder="Profile header name"
+                        className="h-8 text-base font-semibold"
+                    />
+                ) : (
+                    <CardTitle className="text-lg">{profileName}</CardTitle>
+                )}
+                {isEditMode ? (
+                    <Input
+                        value={profileNote}
+                        onChange={(e) => setFieldValue(PROFILE_HEADER_NOTE_KEY, e.target.value)}
+                        placeholder="Add a custom header note (supports tokens like {{first_name}})"
+                        className="mt-2 h-8 text-sm"
+                    />
+                ) : (
+                    renderedNote ? <p className="mt-2 text-sm text-muted-foreground">{renderedNote}</p> : null
+                )}
+            </div>
             <div className="flex items-center gap-2">
                 <Button
                     size="sm"

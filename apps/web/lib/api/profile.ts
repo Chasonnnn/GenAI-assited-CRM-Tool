@@ -14,6 +14,18 @@ export interface ProfileDataResponse {
     hidden_fields: string[]
     merged_view: JsonObject
     schema_snapshot: FormSchema | null
+    header_name_override?: string | null
+    header_note?: string | null
+    custom_qas?: ProfileCustomQa[]
+}
+
+export interface ProfileCustomQa {
+    [key: string]: JsonValue
+    id: string
+    section_key: string
+    question: string
+    answer: string
+    order: number
 }
 
 export interface SyncDiffItem {
