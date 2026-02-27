@@ -59,6 +59,7 @@ export function FieldRow({ fieldKey, field, mergedValue, baseValue }: FieldRowPr
                         variant="ghost"
                         className="h-7 w-7 p-0"
                         onClick={() => cancelFieldEdit(fieldKey)}
+                        aria-label="Cancel edit"
                     >
                         <XIcon className="h-3.5 w-3.5" />
                     </Button>
@@ -126,6 +127,7 @@ export function FieldRow({ fieldKey, field, mergedValue, baseValue }: FieldRowPr
                         variant="ghost"
                         className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={() => setEditingField(fieldKey)}
+                        aria-label={`Edit ${field.label}`}
                     >
                         <PencilIcon className="h-3 w-3" />
                     </Button>

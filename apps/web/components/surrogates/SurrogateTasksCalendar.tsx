@@ -225,7 +225,7 @@ export function SurrogateTasksCalendar({
                         No tasks yet
                     </p>
                     <p className="text-xs text-muted-foreground/70 mb-4">
-                        Create a task to track work for this surrogate
+                        Keep track of important steps and appointments for this surrogate.
                     </p>
                     <Button size="sm" variant="outline" onClick={onAddTask}>
                         <PlusIcon className="size-4 mr-1.5" />
