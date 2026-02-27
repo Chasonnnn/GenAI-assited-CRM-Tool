@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.db.models import Surrogate
+from app.db.models import Surrogate, SurrogateActivityLog
 
 
 @pytest.mark.asyncio
@@ -46,6 +46,32 @@ async def test_surrogates_list_normalizes_bmi_using_rounded_inches(authed_client
 
     assert match is not None
     assert match["bmi"] == pytest.approx(34.0, abs=0.01)
+
+
+@pytest.mark.asyncio
+async def test_surrogates_list_does_not_fallback_to_updated_at_for_last_activity(authed_client, db):
+    payload = {
+        "full_name": "No Activity Test",
+        "email": f"no-activity-{uuid.uuid4().hex[:8]}@example.com",
+    }
+    create_res = await authed_client.post("/surrogates", json=payload)
+    assert create_res.status_code == 201, create_res.text
+    created_id = create_res.json()["id"]
+    surrogate_id = uuid.UUID(created_id)
+
+    db.query(SurrogateActivityLog).filter(SurrogateActivityLog.surrogate_id == surrogate_id).delete()
+    surrogate = db.query(Surrogate).filter(Surrogate.id == surrogate_id).first()
+    assert surrogate is not None
+    surrogate.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+    list_res = await authed_client.get("/surrogates")
+    assert list_res.status_code == 200, list_res.text
+    items = list_res.json()["items"]
+    match = next((item for item in items if item["id"] == created_id), None)
+
+    assert match is not None
+    assert match["last_activity_at"] is None
 
 
 @pytest.mark.asyncio

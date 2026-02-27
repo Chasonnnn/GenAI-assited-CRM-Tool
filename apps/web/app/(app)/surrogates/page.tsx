@@ -843,7 +843,7 @@ export default function SurrogatesPage() {
                                         <SortableTableHead column="source" label="Source" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <TableHead>Assigned To</TableHead>
                                         <SortableTableHead column="created_at" label="Created" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                        <TableHead>Last Updated</TableHead>
+                                        <TableHead>Last Modified</TableHead>
                                         <TableHead className="w-[50px]"></TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -939,7 +939,7 @@ export default function SurrogatesPage() {
                                                     {formatDate(surrogateItem.created_at)}
                                                 </TableCell>
                                                 <TableCell className={mutedCellClass}>
-                                                    {formatDate(surrogateItem.last_activity_at || surrogateItem.created_at)}
+                                                    {formatDate(surrogateItem.last_activity_at)}
                                                 </TableCell>
                                                 <TableCell>
                                                     <DropdownMenu>

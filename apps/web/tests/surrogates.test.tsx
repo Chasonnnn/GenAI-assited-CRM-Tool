@@ -165,6 +165,43 @@ describe('SurrogatesPage', () => {
         expect(screen.getByText('john@example.com')).toBeInTheDocument()
     })
 
+    it('renders Last Modified column label', () => {
+        const mockSurrogates = [
+            {
+                id: '1',
+                surrogate_number: 'S12345',
+                full_name: 'John Doe',
+                stage_id: 's1',
+                stage_slug: 'new_unread',
+                stage_type: 'intake',
+                status_label: 'New Unread',
+                source: 'manual',
+                email: 'john@example.com',
+                phone: null,
+                state: null,
+                race: null,
+                owner_type: 'user',
+                owner_id: 'u1',
+                owner_name: 'Owner',
+                created_at: new Date().toISOString(),
+                last_activity_at: new Date().toISOString(),
+                is_priority: false,
+                is_archived: false,
+                age: null,
+                bmi: null,
+            },
+        ]
+
+        mockUseSurrogates.mockReturnValue({
+            data: { items: mockSurrogates, total: 1, pages: 1 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+        expect(screen.getByText('Last Modified')).toBeInTheDocument()
+    })
+
     it('opens New Surrogates dialog', () => {
         mockUseSurrogates.mockReturnValue({
             data: { items: [], total: 0, pages: 0 },

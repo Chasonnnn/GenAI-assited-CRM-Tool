@@ -1079,7 +1079,7 @@ def list_claim_queue(
 ) -> tuple[list[Surrogate], int]:
     """List approved surrogates in the Surrogate Pool queue (org-scoped)."""
     from app.db.enums import OwnerType
-    from app.db.models import PipelineStage, Queue
+    from app.db.models import PipelineStage, Queue, SurrogateActivityLog
     from app.services import pipeline_service, queue_service
 
     pool_queue = queue_service.get_or_create_surrogate_pool_queue(db, org_id)
@@ -1091,26 +1091,39 @@ def list_claim_queue(
     if not approved_stage:
         return [], 0
 
+    base_query = db.query(Surrogate).filter(
+        Surrogate.organization_id == org_id,
+        Surrogate.is_archived.is_(False),
+        Surrogate.owner_type == OwnerType.QUEUE.value,
+        Surrogate.owner_id == pool_queue.id,
+        Surrogate.stage_id == approved_stage.id,
+    )
+    last_activity_subquery = (
+        select(func.max(SurrogateActivityLog.created_at))
+        .where(
+            SurrogateActivityLog.organization_id == org_id,
+            SurrogateActivityLog.surrogate_id == Surrogate.id,
+        )
+        .correlate(Surrogate)
+        .scalar_subquery()
+    )
     query = (
-        db.query(Surrogate)
-        .options(
+        base_query.options(
             joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
             joinedload(Surrogate.owner_user).load_only(User.display_name),
             joinedload(Surrogate.owner_queue).load_only(Queue.name),
         )
-        .filter(
-            Surrogate.organization_id == org_id,
-            Surrogate.is_archived.is_(False),
-            Surrogate.owner_type == OwnerType.QUEUE.value,
-            Surrogate.owner_id == pool_queue.id,
-            Surrogate.stage_id == approved_stage.id,
-        )
+        .add_columns(last_activity_subquery.label("last_activity_at"))
         .order_by(Surrogate.updated_at.desc())
     )
 
-    total = query.count()
+    total = base_query.count()
     offset = (page - 1) * per_page
-    surrogates = query.offset(offset).limit(per_page).all()
+    rows = query.offset(offset).limit(per_page).all()
+    surrogates: list[Surrogate] = []
+    for surrogate, last_activity_at in rows:
+        surrogate.last_activity_at = last_activity_at
+        surrogates.append(surrogate)
 
     return surrogates, total
 
@@ -1123,32 +1136,45 @@ def list_unassigned_queue(
 ) -> tuple[list[Surrogate], int]:
     """List surrogates in the system default Unassigned queue (org-scoped)."""
     from app.db.enums import OwnerType
-    from app.db.models import PipelineStage, Queue
+    from app.db.models import PipelineStage, Queue, SurrogateActivityLog
     from app.services import queue_service
 
     default_queue = queue_service.get_or_create_default_queue(db, org_id)
     if not default_queue:
         return [], 0
 
+    base_query = db.query(Surrogate).filter(
+        Surrogate.organization_id == org_id,
+        Surrogate.is_archived.is_(False),
+        Surrogate.owner_type == OwnerType.QUEUE.value,
+        Surrogate.owner_id == default_queue.id,
+    )
+    last_activity_subquery = (
+        select(func.max(SurrogateActivityLog.created_at))
+        .where(
+            SurrogateActivityLog.organization_id == org_id,
+            SurrogateActivityLog.surrogate_id == Surrogate.id,
+        )
+        .correlate(Surrogate)
+        .scalar_subquery()
+    )
     query = (
-        db.query(Surrogate)
-        .options(
+        base_query.options(
             joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
             joinedload(Surrogate.owner_user).load_only(User.display_name),
             joinedload(Surrogate.owner_queue).load_only(Queue.name),
         )
-        .filter(
-            Surrogate.organization_id == org_id,
-            Surrogate.is_archived.is_(False),
-            Surrogate.owner_type == OwnerType.QUEUE.value,
-            Surrogate.owner_id == default_queue.id,
-        )
+        .add_columns(last_activity_subquery.label("last_activity_at"))
         .order_by(Surrogate.updated_at.desc())
     )
 
-    total = query.count()
+    total = base_query.count()
     offset = (page - 1) * per_page
-    surrogates = query.offset(offset).limit(per_page).all()
+    rows = query.offset(offset).limit(per_page).all()
+    surrogates: list[Surrogate] = []
+    for surrogate, last_activity_at in rows:
+        surrogate.last_activity_at = last_activity_at
+        surrogates.append(surrogate)
 
     return surrogates, total
 
