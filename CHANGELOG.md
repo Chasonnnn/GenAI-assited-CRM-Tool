@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.12](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.11...surrogacy-crm-platform-v0.90.12) (2026-02-27)
+
+
+### Bug Fixes
+
+* use activity-log timestamp for surrogate last modified ([9addd89](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9addd89be3d8f16d4ce04ae7c2412a2d41eebaf1))
+
 ## [0.90.11](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.10...surrogacy-crm-platform-v0.90.11) (2026-02-27)
 
 
