@@ -601,8 +601,6 @@ def seed_system_workflows(db: Session, org_id: UUID, user_id: UUID | None = None
 
     pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
     pipeline_service.sync_missing_stages(db, pipeline, user_id)
-    stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
-    stage_map = {s.slug: str(s.id) for s in stages}
 
     # First, get the template IDs for this org
     template_keys = [t["system_key"] for t in SYSTEM_TEMPLATES]
@@ -635,10 +633,16 @@ def seed_system_workflows(db: Session, org_id: UUID, user_id: UUID | None = None
         if workflow_data.get("trigger_type") == "status_changed":
             to_slug = trigger_config.pop("to_stage_slug", None)
             from_slug = trigger_config.pop("from_stage_slug", None)
-            if to_slug and to_slug in stage_map:
-                trigger_config["to_stage_id"] = stage_map[to_slug]
-            if from_slug and from_slug in stage_map:
-                trigger_config["from_stage_id"] = stage_map[from_slug]
+            if to_slug:
+                to_stage = pipeline_service.resolve_stage(db, pipeline.id, to_slug)
+                if to_stage:
+                    trigger_config["to_stage_id"] = str(to_stage.id)
+                    trigger_config["to_stage_key"] = to_stage.stage_key
+            if from_slug:
+                from_stage = pipeline_service.resolve_stage(db, pipeline.id, from_slug)
+                if from_stage:
+                    trigger_config["from_stage_id"] = str(from_stage.id)
+                    trigger_config["from_stage_key"] = from_stage.stage_key
 
         # Resolve template_key to template_id in actions
         actions = []

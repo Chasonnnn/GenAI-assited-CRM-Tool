@@ -74,7 +74,7 @@ MILESTONES: tuple[MilestoneDefinition, ...] = (
         mapped_stage_slugs=(
             "new_unread",
             "contacted",
-            "qualified",
+            "pre_qualified",
             "application_submitted",
         ),
     ),

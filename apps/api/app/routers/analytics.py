@@ -35,8 +35,8 @@ router = APIRouter(
 class AnalyticsSummary(BaseModel):
     total_surrogates: int
     new_this_period: int
-    qualified_rate: float
-    avg_time_to_qualified_hours: Optional[float]
+    pre_qualified_rate: float
+    avg_time_to_pre_qualified_hours: Optional[float]
 
 
 class StatusCount(BaseModel):
@@ -59,9 +59,9 @@ class TrendPoint(BaseModel):
 
 class MetaPerformance(BaseModel):
     leads_received: int
-    leads_qualified: int
+    leads_pre_qualified: int
     leads_converted: int
-    qualification_rate: float
+    pre_qualification_rate: float
     conversion_rate: float
     avg_time_to_convert_hours: Optional[float]
 
@@ -79,7 +79,7 @@ class UserPerformanceData(BaseModel):
     total_surrogates: int
     archived_count: int
     contacted: int
-    qualified: int
+    pre_qualified: int
     ready_to_match: int
     matched: int
     application_submitted: int
@@ -95,7 +95,7 @@ class UnassignedPerformanceData(BaseModel):
     total_surrogates: int
     archived_count: int
     contacted: int
-    qualified: int
+    pre_qualified: int
     ready_to_match: int
     matched: int
     application_submitted: int
@@ -219,7 +219,7 @@ def get_meta_performance(
     """
     Get Meta Lead Ads performance metrics.
 
-    Qualified = Lead's surrogate reached the "Qualified" stage or later.
+    Pre-qualified = Lead's surrogate reached the "Pre-Qualified" stage or later.
     Converted = Lead's surrogate reached the "Application Submitted" stage or later.
     """
     from app.services import analytics_service
@@ -299,9 +299,9 @@ class FormPerformanceItem(BaseModel):
     mapping_status: str
     lead_count: int
     surrogate_count: int
-    qualified_count: int
+    pre_qualified_count: int
     conversion_rate: float
-    qualified_rate: float
+    pre_qualified_rate: float
 
 
 class MetaPlatformBreakdownItem(BaseModel):
@@ -698,7 +698,7 @@ def get_performance_by_user(
     **Metrics:**
     - `total_surrogates`: Number of surrogates (cohort: created in range; activity: with transitions in range)
     - `archived_count`: Cases that are archived
-    - `contacted/qualified/ready_to_match/matched/application_submitted`: Surrogates that reached each stage
+    - `contacted/pre_qualified/ready_to_match/matched/application_submitted`: Surrogates that reached each stage
     - `lost`: Surrogates that reached lost stage AND never reached application_submitted
     - `conversion_rate`: (application_submitted / total_surrogates) * 100
     - `avg_days_to_match`: Average days from creation to first match transition

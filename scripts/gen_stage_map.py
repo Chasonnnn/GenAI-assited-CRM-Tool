@@ -27,6 +27,7 @@ def _stage_defs() -> list[dict[str, object]]:
     stage_defs = stage_definitions.get_default_stage_defs()
     return [
         {
+            "stageKey": stage["stage_key"],
             "slug": stage["slug"],
             "label": stage["label"],
             "color": stage["color"],
@@ -67,6 +68,7 @@ def main() -> None:
 export type StageType = {stage_type_union}
 
 export type StageDef = {{
+    stageKey: string
     slug: string
     label: string
     color: string

@@ -85,6 +85,7 @@ class StageRead(BaseModel):
     """Stage response."""
 
     id: UUID
+    stage_key: str
     slug: str
     label: str
     color: str
@@ -107,8 +108,9 @@ class StageCreate(BaseModel):
 
 
 class StageUpdate(BaseModel):
-    """Request to update a stage (slug/stage_type immutable)."""
+    """Request to update a stage (stage_key/stage_type immutable)."""
 
+    slug: str | None = Field(None, min_length=1, max_length=50, pattern=r"^[a-z0-9_]+$")
     label: str | None = Field(None, min_length=1, max_length=100)
     color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
     order: int | None = None
@@ -581,9 +583,9 @@ async def update_stage(
     _: str = Depends(require_csrf_header),
 ):
     """
-    Update a stage's label, color, or order.
+    Update a stage's slug, label, color, or order.
 
-    Slug and stage_type are IMMUTABLE and cannot be changed.
+    stage_key and stage_type are immutable.
     When label changes, all cases using this stage update their status_label.
     Requires: Manager+ role
     """
@@ -605,14 +607,18 @@ async def update_stage(
     if not stage.is_active:
         raise HTTPException(400, "Cannot update an inactive stage")
 
-    return pipeline_service.update_stage(
-        db=db,
-        stage=stage,
-        label=data.label,
-        color=data.color,
-        order=data.order,
-        user_id=session.user_id,
-    )
+    try:
+        return pipeline_service.update_stage(
+            db=db,
+            stage=stage,
+            slug=data.slug,
+            label=data.label,
+            color=data.color,
+            order=data.order,
+            user_id=session.user_id,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.delete(

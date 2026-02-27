@@ -83,12 +83,17 @@ def handle_status_changed(
     _maybe_send_zapier_stage_event(
         db,
         surrogate,
+        new_stage_key=new_stage.stage_key,
         new_stage_slug=new_stage.slug,
+        new_stage_id=str(new_stage.id),
         new_stage_label=new_stage.label,
         effective_at=effective_at,
     )
 
     if trigger_workflows:
+        from app.services import pipeline_service
+
+        old_stage = pipeline_service.get_stage_by_id(db, old_stage_id) if old_stage_id else None
         workflow_triggers.trigger_status_changed(
             db=db,
             surrogate=surrogate,
@@ -96,6 +101,8 @@ def handle_status_changed(
             new_stage_id=new_stage.id,
             old_stage_slug=old_slug,
             new_stage_slug=new_stage.slug,
+            old_stage_key=old_stage.stage_key if old_stage else None,
+            new_stage_key=new_stage.stage_key,
             effective_at=effective_at,
             recorded_at=recorded_at,
             is_undo=is_undo,
@@ -163,7 +170,9 @@ def _maybe_send_zapier_stage_event(
     db: Session,
     surrogate: Surrogate,
     *,
+    new_stage_key: str,
     new_stage_slug: str,
+    new_stage_id: str,
     new_stage_label: str | None,
     effective_at: datetime,
 ) -> None:
@@ -174,7 +183,9 @@ def _maybe_send_zapier_stage_event(
         zapier_outbound_service.enqueue_stage_event(
             db=db,
             surrogate=surrogate,
+            stage_key=new_stage_key,
             stage_slug=new_stage_slug,
+            stage_id=new_stage_id,
             stage_label=new_stage_label,
             effective_at=effective_at,
         )

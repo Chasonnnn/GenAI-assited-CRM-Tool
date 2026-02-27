@@ -296,20 +296,19 @@ def _build_recipient_query(db: Session, org_id: UUID, recipient_type: str, filte
         if criteria.stage_ids:
             query = query.filter(Surrogate.stage_id.in_(criteria.stage_ids))
 
+        stage_refs = []
+        if criteria.stage_keys:
+            stage_refs.extend(criteria.stage_keys)
         if criteria.stage_slugs:
-            # IMPORTANT: Scope stages to org's pipelines to prevent cross-tenant leakage
-            from app.db.models import Pipeline
+            stage_refs.extend(criteria.stage_slugs)
 
-            stage_ids = (
-                db.query(PipelineStage.id)
-                .join(Pipeline, PipelineStage.pipeline_id == Pipeline.id)
-                .filter(
-                    Pipeline.organization_id == org_id,
-                    PipelineStage.slug.in_(criteria.stage_slugs),
-                )
-                .all()
+        if stage_refs:
+            from app.services import pipeline_service
+
+            resolved_stage_ids = pipeline_service.get_stage_ids_by_keys_or_slugs(
+                db, org_id, stage_refs
             )
-            query = query.filter(Surrogate.stage_id.in_([s.id for s in stage_ids]))
+            query = query.filter(Surrogate.stage_id.in_(resolved_stage_ids))
 
         if criteria.states:
             query = query.filter(Surrogate.state.in_(criteria.states))

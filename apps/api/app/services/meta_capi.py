@@ -44,7 +44,7 @@ META_STATUS_LOST = "Lost"
 # Surrogate status mapping (slug -> Meta status bucket)
 META_INTAKE_STATUSES = {
     "contacted",
-    "qualified",
+    "pre_qualified",
     "interview_scheduled",
 }
 META_CONVERTED_STATUSES = {

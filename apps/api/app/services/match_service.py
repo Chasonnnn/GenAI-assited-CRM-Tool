@@ -446,7 +446,7 @@ def accept_match(
                 org_id,
                 actor_user_id,
             ).id
-        matched_stage = pipeline_service.get_stage_by_slug(db, pipeline_id, "matched")
+        matched_stage = pipeline_service.get_stage_by_key(db, pipeline_id, "matched")
         if matched_stage:
             surrogate_service.change_status(
                 db=db,

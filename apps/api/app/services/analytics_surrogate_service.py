@@ -57,13 +57,13 @@ def get_analytics_summary(
 
     pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
     stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
-    qualified_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "qualified")
-    if qualified_stage:
-        qualified_stage_ids = [
-            s.id for s in stages if s.order >= qualified_stage.order and s.is_active
+    pre_qualified_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "pre_qualified")
+    if pre_qualified_stage:
+        pre_qualified_stage_ids = [
+            s.id for s in stages if s.order >= pre_qualified_stage.order and s.is_active
         ]
     else:
-        qualified_stage_ids = [
+        pre_qualified_stage_ids = [
             s.id for s in stages if s.stage_type in ("post_approval", "terminal") and s.is_active
         ]
 
@@ -86,12 +86,12 @@ def get_analytics_summary(
             func.coalesce(
                 func.sum(
                     case(
-                        (Surrogate.stage_id.in_(qualified_stage_ids), 1),
+                        (Surrogate.stage_id.in_(pre_qualified_stage_ids), 1),
                         else_=0,
                     )
                 ),
                 0,
-            ).label("qualified_count"),
+            ).label("pre_qualified_count"),
         )
         .filter(
             Surrogate.organization_id == organization_id,
@@ -102,12 +102,14 @@ def get_analytics_summary(
 
     total_surrogates = int(metrics.total_surrogates or 0)
     new_this_period = int(metrics.new_this_period or 0)
-    qualified_count = int(metrics.qualified_count or 0)
+    pre_qualified_count = int(metrics.pre_qualified_count or 0)
 
-    qualified_rate = (qualified_count / total_surrogates * 100) if total_surrogates > 0 else 0.0
+    pre_qualified_rate = (
+        (pre_qualified_count / total_surrogates * 100) if total_surrogates > 0 else 0.0
+    )
 
-    avg_time_to_qualified_hours = None
-    if qualified_stage:
+    avg_time_to_pre_qualified_hours = None
+    if pre_qualified_stage:
         result = db.execute(
             text(
                 """
@@ -116,7 +118,7 @@ def get_analytics_summary(
                 JOIN surrogate_status_history csh ON c.id = csh.surrogate_id
                 WHERE c.organization_id = :org_id
                   AND c.is_archived = false
-                  AND csh.to_stage_id = :qualified_stage_id
+                  AND csh.to_stage_id = :pre_qualified_stage_id
                   AND csh.changed_at >= :start
                   AND csh.changed_at < :end
             """
@@ -125,17 +127,17 @@ def get_analytics_summary(
                 "org_id": organization_id,
                 "start": start,
                 "end": end,
-                "qualified_stage_id": qualified_stage.id,
+                "pre_qualified_stage_id": pre_qualified_stage.id,
             },
         )
         row = result.fetchone()
-        avg_time_to_qualified_hours = float(round(row[0], 1)) if row and row[0] else None
+        avg_time_to_pre_qualified_hours = float(round(row[0], 1)) if row and row[0] else None
 
     return {
         "total_surrogates": total_surrogates,
         "new_this_period": new_this_period,
-        "qualified_rate": round(qualified_rate, 1),
-        "avg_time_to_qualified_hours": avg_time_to_qualified_hours,
+        "pre_qualified_rate": round(pre_qualified_rate, 1),
+        "avg_time_to_pre_qualified_hours": avg_time_to_pre_qualified_hours,
     }
 
 
@@ -817,7 +819,7 @@ def get_cached_summary_kpis(
 
 PERFORMANCE_STAGE_SLUGS = [
     "contacted",
-    "qualified",
+    "pre_qualified",
     "ready_to_match",
     "matched",
     "application_submitted",
@@ -829,13 +831,13 @@ def get_performance_stage_ids(
     db: Session,
     pipeline_id: uuid.UUID,
 ) -> dict[str, uuid.UUID | None]:
-    """Resolve performance stage slugs to IDs for a pipeline."""
+    """Resolve performance stage keys to IDs for a pipeline."""
     from app.services import pipeline_service
 
     stage_ids: dict[str, uuid.UUID | None] = {}
-    for slug in PERFORMANCE_STAGE_SLUGS:
-        stage = pipeline_service.get_stage_by_slug(db, pipeline_id, slug)
-        stage_ids[slug] = stage.id if stage else None
+    for stage_key in PERFORMANCE_STAGE_SLUGS:
+        stage = pipeline_service.get_stage_by_key(db, pipeline_id, stage_key)
+        stage_ids[stage_key] = stage.id if stage else None
 
     return stage_ids
 
@@ -946,7 +948,9 @@ def _get_cohort_performance(
             func.count(func.distinct(Surrogate.id)).label("total_surrogates"),
             _count_distinct(Surrogate.is_archived.is_(True)).label("archived_count"),
             _count_distinct(_stage_condition(stage_ids.get("contacted"))).label("contacted"),
-            _count_distinct(_stage_condition(stage_ids.get("qualified"))).label("qualified"),
+            _count_distinct(_stage_condition(stage_ids.get("pre_qualified"))).label(
+                "pre_qualified"
+            ),
             _count_distinct(_stage_condition(stage_ids.get("ready_to_match"))).label(
                 "ready_to_match"
             ),
@@ -982,7 +986,7 @@ def _get_cohort_performance(
                 "total_surrogates": total,
                 "archived_count": metrics.archived_count if metrics else 0,
                 "contacted": metrics.contacted if metrics else 0,
-                "qualified": metrics.qualified if metrics else 0,
+                "pre_qualified": metrics.pre_qualified if metrics else 0,
                 "ready_to_match": metrics.ready_to_match if metrics else 0,
                 "matched": metrics.matched if metrics else 0,
                 "application_submitted": metrics.application_submitted if metrics else 0,
@@ -1007,7 +1011,9 @@ def _get_cohort_performance(
             func.count(func.distinct(Surrogate.id)).label("total_surrogates"),
             _count_distinct(Surrogate.is_archived.is_(True)).label("archived_count"),
             _count_distinct(_stage_condition(stage_ids.get("contacted"))).label("contacted"),
-            _count_distinct(_stage_condition(stage_ids.get("qualified"))).label("qualified"),
+            _count_distinct(_stage_condition(stage_ids.get("pre_qualified"))).label(
+                "pre_qualified"
+            ),
             _count_distinct(_stage_condition(stage_ids.get("ready_to_match"))).label(
                 "ready_to_match"
             ),
@@ -1027,7 +1033,7 @@ def _get_cohort_performance(
         "total_surrogates": unassigned_row.total_surrogates if unassigned_row else 0,
         "archived_count": unassigned_row.archived_count if unassigned_row else 0,
         "contacted": unassigned_row.contacted if unassigned_row else 0,
-        "qualified": unassigned_row.qualified if unassigned_row else 0,
+        "pre_qualified": unassigned_row.pre_qualified if unassigned_row else 0,
         "ready_to_match": unassigned_row.ready_to_match if unassigned_row else 0,
         "matched": unassigned_row.matched if unassigned_row else 0,
         "application_submitted": unassigned_row.application_submitted if unassigned_row else 0,
@@ -1097,7 +1103,9 @@ def _get_activity_performance(
             func.count(func.distinct(Surrogate.id)).label("total_surrogates"),
             _count_distinct(Surrogate.is_archived.is_(True)).label("archived_count"),
             _count_distinct(_stage_condition(stage_ids.get("contacted"))).label("contacted"),
-            _count_distinct(_stage_condition(stage_ids.get("qualified"))).label("qualified"),
+            _count_distinct(_stage_condition(stage_ids.get("pre_qualified"))).label(
+                "pre_qualified"
+            ),
             _count_distinct(_stage_condition(stage_ids.get("ready_to_match"))).label(
                 "ready_to_match"
             ),
@@ -1133,7 +1141,7 @@ def _get_activity_performance(
                 "total_surrogates": total,
                 "archived_count": metrics.archived_count if metrics else 0,
                 "contacted": metrics.contacted if metrics else 0,
-                "qualified": metrics.qualified if metrics else 0,
+                "pre_qualified": metrics.pre_qualified if metrics else 0,
                 "ready_to_match": metrics.ready_to_match if metrics else 0,
                 "matched": metrics.matched if metrics else 0,
                 "application_submitted": metrics.application_submitted if metrics else 0,
@@ -1158,7 +1166,9 @@ def _get_activity_performance(
             func.count(func.distinct(Surrogate.id)).label("total_surrogates"),
             _count_distinct(Surrogate.is_archived.is_(True)).label("archived_count"),
             _count_distinct(_stage_condition(stage_ids.get("contacted"))).label("contacted"),
-            _count_distinct(_stage_condition(stage_ids.get("qualified"))).label("qualified"),
+            _count_distinct(_stage_condition(stage_ids.get("pre_qualified"))).label(
+                "pre_qualified"
+            ),
             _count_distinct(_stage_condition(stage_ids.get("ready_to_match"))).label(
                 "ready_to_match"
             ),
@@ -1178,7 +1188,7 @@ def _get_activity_performance(
         "total_surrogates": unassigned_row.total_surrogates if unassigned_row else 0,
         "archived_count": unassigned_row.archived_count if unassigned_row else 0,
         "contacted": unassigned_row.contacted if unassigned_row else 0,
-        "qualified": unassigned_row.qualified if unassigned_row else 0,
+        "pre_qualified": unassigned_row.pre_qualified if unassigned_row else 0,
         "ready_to_match": unassigned_row.ready_to_match if unassigned_row else 0,
         "matched": unassigned_row.matched if unassigned_row else 0,
         "application_submitted": unassigned_row.application_submitted if unassigned_row else 0,

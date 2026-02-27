@@ -92,7 +92,7 @@ def build_sample_variables(
         # Case
         "surrogate_number": "S10001",
         "intended_parent_number": "I10001",
-        "status_label": "Qualified",
+        "status_label": "Pre-Qualified",
         "state": "CA",
         "owner_name": actor_display_name or "Case Manager",
         "form_link": form_link,

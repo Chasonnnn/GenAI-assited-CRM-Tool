@@ -1462,8 +1462,8 @@ def _generate_analytics_html(
             <div class="metric-label">New This Period</div>
         </div>
         <div class="metric-card">
-            <div class="metric-value">{summary.get("qualified_rate", 0):.1f}%</div>
-            <div class="metric-label">Qualified Rate</div>
+            <div class="metric-value">{summary.get("pre_qualified_rate", 0):.1f}%</div>
+            <div class="metric-label">Pre-Qualified Rate</div>
         </div>
         <div class="metric-card">
             <div class="metric-value">{summary.get("pending_tasks", 0)}</div>
@@ -1554,17 +1554,17 @@ def _generate_analytics_html(
     meta_section = ""
     if meta_performance and meta_performance.get("leads_received", 0) > 0:
         leads_received = meta_performance.get("leads_received", 0)
-        leads_qualified = meta_performance.get("leads_qualified", 0)
+        leads_pre_qualified = meta_performance.get("leads_pre_qualified", 0)
         leads_converted = meta_performance.get("leads_converted", 0)
         conv_rate = meta_performance.get("conversion_rate", 0)
 
-        # Build pie chart data like frontend (Not Qualified, Qualified Only, Converted)
-        not_qualified = max(0, leads_received - leads_qualified)
-        qualified_only = max(0, leads_qualified - leads_converted)
+        # Build pie chart data like frontend (Not Pre-Qualified, Pre-Qualified Only, Converted)
+        not_pre_qualified = max(0, leads_received - leads_pre_qualified)
+        pre_qualified_only = max(0, leads_pre_qualified - leads_converted)
 
         meta_pie_data = [
-            {"name": "Not Qualified", "value": not_qualified},
-            {"name": "Qualified Only", "value": qualified_only},
+            {"name": "Not Pre-Qualified", "value": not_pre_qualified},
+            {"name": "Pre-Qualified Only", "value": pre_qualified_only},
             {"name": "Converted", "value": leads_converted},
         ]
         # Filter out zero values
@@ -1613,7 +1613,7 @@ def _generate_analytics_html(
             user_name = html.escape(user.get("user_name", "Unknown"))
             total = user.get("total_surrogates", 0)
             contacted = user.get("contacted", 0)
-            qualified = user.get("qualified", 0)
+            pre_qualified = user.get("pre_qualified", 0)
             matched = user.get("matched", 0)
             application_submitted = user.get("application_submitted", 0)
             lost = user.get("lost", 0)
@@ -1628,7 +1628,7 @@ def _generate_analytics_html(
                 <td>{user_name}</td>
                 <td class="text-center">{total}</td>
                 <td class="text-center">{contacted}</td>
-                <td class="text-center">{qualified}</td>
+                <td class="text-center">{pre_qualified}</td>
                 <td class="text-center">{matched}</td>
                 <td class="text-center">{application_submitted}</td>
                 <td class="text-center">{lost}</td>
@@ -1646,7 +1646,7 @@ def _generate_analytics_html(
                 <td>Unassigned</td>
                 <td class="text-center">{unassigned.get("total_surrogates", 0)}</td>
                 <td class="text-center">{unassigned.get("contacted", 0)}</td>
-                <td class="text-center">{unassigned.get("qualified", 0)}</td>
+                <td class="text-center">{unassigned.get("pre_qualified", 0)}</td>
                 <td class="text-center">{unassigned.get("matched", 0)}</td>
                 <td class="text-center">{unassigned.get("application_submitted", 0)}</td>
                 <td class="text-center">{unassigned.get("lost", 0)}</td>
@@ -1665,7 +1665,7 @@ def _generate_analytics_html(
                         <th>Team Member</th>
                         <th class="text-center">Total</th>
                         <th class="text-center">Contacted</th>
-                        <th class="text-center">Qualified</th>
+                        <th class="text-center">Pre-Qualified</th>
                         <th class="text-center">Matched</th>
                         <th class="text-center">Application Submitted</th>
                         <th class="text-center">Lost</th>

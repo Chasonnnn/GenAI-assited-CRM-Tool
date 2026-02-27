@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.stage_definitions import canonicalize_stage_key
 from app.core.url_validation import validate_outbound_webhook_url
 from app.db.models import ZapierInboundWebhook, ZapierWebhookSettings
 from app.services import oauth_service
@@ -17,9 +18,9 @@ from app.services import oauth_service
 logger = logging.getLogger(__name__)
 
 DEFAULT_EVENT_MAPPING = [
-    {"stage_slug": "new_unread", "event_name": "Lead", "enabled": True},
-    {"stage_slug": "qualified", "event_name": "QualifiedLead", "enabled": True},
-    {"stage_slug": "matched", "event_name": "ConvertedLead", "enabled": True},
+    {"stage_key": "new_unread", "event_name": "Lead", "enabled": True},
+    {"stage_key": "pre_qualified", "event_name": "PreQualifiedLead", "enabled": True},
+    {"stage_key": "matched", "event_name": "ConvertedLead", "enabled": True},
 ]
 
 
@@ -246,14 +247,17 @@ def normalize_event_mapping(mapping: list[dict] | None) -> list[dict]:
     for item in mapping:
         if not isinstance(item, dict):
             continue
-        stage_slug = str(item.get("stage_slug") or "").strip()
+        stage_ref = str(item.get("stage_key") or item.get("stage_slug") or "").strip()
+        stage_key = canonicalize_stage_key(stage_ref)
         event_name = str(item.get("event_name") or "").strip()
         enabled = bool(item.get("enabled", True))
-        if not stage_slug or not event_name:
+        if not stage_key or not event_name:
             continue
+        if event_name == "QualifiedLead" and stage_key == "pre_qualified":
+            event_name = "PreQualifiedLead"
         normalized.append(
             {
-                "stage_slug": stage_slug,
+                "stage_key": stage_key,
                 "event_name": event_name,
                 "enabled": enabled,
             }

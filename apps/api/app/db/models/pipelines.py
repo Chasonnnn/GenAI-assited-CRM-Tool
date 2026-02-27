@@ -27,6 +27,14 @@ if TYPE_CHECKING:
     from app.db.models import Organization, User
 
 
+def _default_stage_key(context) -> str:
+    """Derive immutable stage_key from slug when callers omit stage_key."""
+    slug = str((context.get_current_parameters() or {}).get("slug") or "").strip().lower()
+    if slug == "qualified":
+        return "pre_qualified"
+    return slug
+
+
 class Pipeline(Base):
     """
     Organization pipeline configuration.
@@ -34,7 +42,7 @@ class Pipeline(Base):
     v2 (Full CRUD):
     - PipelineStage rows define custom stages
     - Surrogates reference stage_id (FK)
-    - Stages have immutable slugs, editable labels/colors
+    - Stages have immutable stage_key, editable slug/label/color
     """
 
     __tablename__ = "pipelines"
@@ -71,7 +79,8 @@ class PipelineStage(Base):
     """
     Individual pipeline stage configuration.
 
-    - slug: Immutable after creation, unique per pipeline
+    - stage_key: Immutable semantic key, unique per pipeline
+    - slug: Editable external identifier, unique per pipeline
     - stage_type: Immutable, controls role access (intake/post_approval/terminal)
     - Soft-delete via is_active + deleted_at
     - Surrogates reference stage_id (FK)
@@ -80,8 +89,10 @@ class PipelineStage(Base):
     __tablename__ = "pipeline_stages"
     __table_args__ = (
         UniqueConstraint("pipeline_id", "slug", name="uq_stage_slug"),
+        UniqueConstraint("pipeline_id", "stage_key", name="uq_stage_key"),
         Index("idx_stage_pipeline_order", "pipeline_id", "order"),
         Index("idx_stage_pipeline_active", "pipeline_id", "is_active"),
+        Index("idx_stage_pipeline_key", "pipeline_id", "stage_key"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -93,7 +104,14 @@ class PipelineStage(Base):
         nullable=False,
     )
 
-    # Immutable after creation
+    # Immutable semantic identity
+    stage_key: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default=_default_stage_key,
+    )
+
+    # Editable external reference
     slug: Mapped[str] = mapped_column(String(50), nullable=False)
     stage_type: Mapped[str] = mapped_column(
         String(20), nullable=False

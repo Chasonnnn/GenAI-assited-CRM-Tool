@@ -17,7 +17,7 @@ from app.db.models import AnalyticsSnapshot
 FUNNEL_SLUGS = [
     "new_unread",
     "contacted",
-    "qualified",
+    "pre_qualified",
     "ready_to_match",
     "matched",
     "medical_clearance_passed",

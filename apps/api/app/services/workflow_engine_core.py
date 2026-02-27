@@ -178,12 +178,18 @@ class WorkflowEngineCore:
         if trigger_type == WorkflowTriggerType.STATUS_CHANGED:
             to_stage_id = config.get("to_stage_id")
             from_stage_id = config.get("from_stage_id")
+            to_stage_key = config.get("to_stage_key")
+            from_stage_key = config.get("from_stage_key")
             to_status = config.get("to_status")
             from_status = config.get("from_status")
 
             if to_stage_id and str(event_data.get("new_stage_id")) != str(to_stage_id):
                 return False
             if from_stage_id and str(event_data.get("old_stage_id")) != str(from_stage_id):
+                return False
+            if to_stage_key and str(event_data.get("new_stage_key")) != str(to_stage_key):
+                return False
+            if from_stage_key and str(event_data.get("old_stage_key")) != str(from_stage_key):
                 return False
             if to_status and str(event_data.get("new_status")) != str(to_status):
                 return False

@@ -10,7 +10,7 @@ DEFAULT_COLORS = {
     # Stage A: Intake Pipeline (blues/greens)
     "new_unread": "#3B82F6",  # Blue
     "contacted": "#06B6D4",  # Cyan
-    "qualified": "#10B981",  # Green
+    "pre_qualified": "#10B981",  # Green
     "interview_scheduled": "#A855F7",  # Purple
     "application_submitted": "#8B5CF6",  # Violet
     "under_review": "#F59E0B",  # Amber
@@ -33,7 +33,7 @@ DEFAULT_COLORS = {
 STAGE_TYPE_MAP = {
     "new_unread": "intake",
     "contacted": "intake",
-    "qualified": "intake",
+    "pre_qualified": "intake",
     "interview_scheduled": "intake",
     "application_submitted": "intake",
     "under_review": "intake",
@@ -53,16 +53,21 @@ STAGE_TYPE_MAP = {
 }
 
 LABEL_OVERRIDES = {
+    "pre_qualified": "Pre-Qualified",
     "second_hcg_confirmed": "Second hCG confirmed",
     "ready_to_match": "Ready to Match",
     "transfer_cycle": "Transfer Cycle Initiated",
     "ob_care_established": "OB Care Established",
 }
 
+LEGACY_STAGE_KEY_ALIASES = {
+    "qualified": "pre_qualified",
+}
+
 DEFAULT_STAGE_ORDER = [
     "new_unread",
     "contacted",
-    "qualified",
+    "pre_qualified",
     "application_submitted",
     "interview_scheduled",
     "under_review",
@@ -82,13 +87,21 @@ DEFAULT_STAGE_ORDER = [
 ]
 
 
+def canonicalize_stage_key(value: str | None) -> str:
+    """Normalize old aliases to canonical immutable stage keys."""
+    normalized = (value or "").strip().lower()
+    return LEGACY_STAGE_KEY_ALIASES.get(normalized, normalized)
+
+
 def get_default_stage_defs() -> list[dict[str, object]]:
     """Generate default pipeline stage definitions."""
     stages: list[dict[str, object]] = []
     for order, slug in enumerate(DEFAULT_STAGE_ORDER, start=1):
+        stage_key = canonicalize_stage_key(slug)
         stages.append(
             {
                 "slug": slug,
+                "stage_key": stage_key,
                 "label": LABEL_OVERRIDES.get(slug, humanize_identifier(slug)),
                 "color": DEFAULT_COLORS.get(slug, "#6B7280"),
                 "order": order,

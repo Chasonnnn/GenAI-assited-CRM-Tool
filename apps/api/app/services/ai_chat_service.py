@@ -80,7 +80,7 @@ def _build_performance_context(
             "\n## Team Performance (Last 90 Days)",
             "Mode: Cohort (surrogates created in the period)",
             "",
-            "| Team Member | Surrogates | Contacted | Qualified | Matched | Application Submitted | Lost | Conv. Rate |",
+            "| Team Member | Surrogates | Contacted | Pre-Qualified | Matched | Application Submitted | Lost | Conv. Rate |",
             "|-------------|-------|-----------|-----------|---------|---------|------|------------|",
         ]
 
@@ -88,7 +88,7 @@ def _build_performance_context(
             if user["total_surrogates"] > 0:
                 lines.append(
                     f"| {user['user_name']} | {user['total_surrogates']} | {user['contacted']} | "
-                    f"{user['qualified']} | {user['matched']} | {user['application_submitted']} | "
+                    f"{user['pre_qualified']} | {user['matched']} | {user['application_submitted']} | "
                     f"{user['lost']} | {user['conversion_rate']}% |"
                 )
 
@@ -97,7 +97,7 @@ def _build_performance_context(
         if unassigned.get("total_surrogates", 0) > 0:
             lines.append(
                 f"| Unassigned | {unassigned['total_surrogates']} | {unassigned['contacted']} | "
-                f"{unassigned['qualified']} | {unassigned['matched']} | {unassigned['application_submitted']} | "
+                f"{unassigned['pre_qualified']} | {unassigned['matched']} | {unassigned['application_submitted']} | "
                 f"{unassigned['lost']} | - |"
             )
 

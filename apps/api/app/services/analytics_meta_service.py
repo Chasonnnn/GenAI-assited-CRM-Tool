@@ -38,14 +38,14 @@ def get_meta_performance(
 
     pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
     stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
-    qualified_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "qualified")
-    converted_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "application_submitted")
+    pre_qualified_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "pre_qualified")
+    converted_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "application_submitted")
 
-    qualified_or_later_ids = []
+    pre_qualified_or_later_ids = []
     converted_or_later_ids = []
-    if qualified_stage:
-        qualified_or_later_ids = [
-            s.id for s in stages if s.order >= qualified_stage.order and s.is_active
+    if pre_qualified_stage:
+        pre_qualified_or_later_ids = [
+            s.id for s in stages if s.order >= pre_qualified_stage.order and s.is_active
         ]
     if converted_stage:
         converted_or_later_ids = [
@@ -63,9 +63,9 @@ def get_meta_performance(
         .count()
     )
 
-    leads_qualified = 0
-    if qualified_or_later_ids:
-        leads_qualified = (
+    leads_pre_qualified = 0
+    if pre_qualified_or_later_ids:
+        leads_pre_qualified = (
             db.execute(
                 text(
                     """
@@ -83,7 +83,7 @@ def get_meta_performance(
                     "org_id": organization_id,
                     "start": start,
                     "end": end,
-                    "stage_ids": qualified_or_later_ids,
+                    "stage_ids": pre_qualified_or_later_ids,
                 },
             ).scalar()
             or 0
@@ -115,7 +115,9 @@ def get_meta_performance(
             or 0
         )
 
-    qualification_rate = (leads_qualified / leads_received * 100) if leads_received > 0 else 0.0
+    pre_qualification_rate = (
+        (leads_pre_qualified / leads_received * 100) if leads_received > 0 else 0.0
+    )
     conversion_rate = (leads_converted / leads_received * 100) if leads_received > 0 else 0.0
 
     avg_hours = None
@@ -145,9 +147,9 @@ def get_meta_performance(
 
     return {
         "leads_received": leads_received,
-        "leads_qualified": leads_qualified,
+        "leads_pre_qualified": leads_pre_qualified,
         "leads_converted": leads_converted,
-        "qualification_rate": round(qualification_rate, 1),
+        "pre_qualification_rate": round(pre_qualification_rate, 1),
         "conversion_rate": round(conversion_rate, 1),
         "avg_time_to_convert_hours": avg_hours,
     }
@@ -1100,37 +1102,37 @@ def get_leads_by_form(
 
     pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
     stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
-    qualified_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "qualified")
+    pre_qualified_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "pre_qualified")
 
-    qualified_stage_ids = []
-    if qualified_stage:
-        qualified_stage_ids = [
-            s.id for s in stages if s.order >= qualified_stage.order and s.is_active
+    pre_qualified_stage_ids = []
+    if pre_qualified_stage:
+        pre_qualified_stage_ids = [
+            s.id for s in stages if s.order >= pre_qualified_stage.order and s.is_active
         ]
 
-    qualified_counts: dict[str, int] = {}
-    if qualified_stage_ids:
-        qualified_query = (
+    pre_qualified_counts: dict[str, int] = {}
+    if pre_qualified_stage_ids:
+        pre_qualified_query = (
             db.query(
                 MetaLead.meta_form_id.label("form_external_id"),
-                func.count(Surrogate.id).label("qualified_count"),
+                func.count(Surrogate.id).label("pre_qualified_count"),
             )
             .join(Surrogate, MetaLead.converted_surrogate_id == Surrogate.id)
             .filter(
                 MetaLead.organization_id == organization_id,
                 MetaLead.meta_form_id.isnot(None),
                 MetaLead.is_converted.is_(True),
-                Surrogate.stage_id.in_(qualified_stage_ids),
+                Surrogate.stage_id.in_(pre_qualified_stage_ids),
             )
         )
-        qualified_query = _apply_date_range_filters(
-            qualified_query, lead_time, start_date, end_date
+        pre_qualified_query = _apply_date_range_filters(
+            pre_qualified_query, lead_time, start_date, end_date
         )
 
-        qualified_query = qualified_query.group_by(MetaLead.meta_form_id)
+        pre_qualified_query = pre_qualified_query.group_by(MetaLead.meta_form_id)
 
-        for r in qualified_query.all():
-            qualified_counts[r.form_external_id] = r.qualified_count
+        for r in pre_qualified_query.all():
+            pre_qualified_counts[r.form_external_id] = r.pre_qualified_count
 
     form_names: dict[str, str] = {}
     form_statuses: dict[str, str] = {}
@@ -1147,11 +1149,11 @@ def get_leads_by_form(
     for form_external_id, counts in lead_counts.items():
         lead_count = counts.lead_count or 0
         surrogate_count = counts.surrogate_count or 0
-        qualified_count = qualified_counts.get(form_external_id, 0)
+        pre_qualified_count = pre_qualified_counts.get(form_external_id, 0)
 
         conversion_rate = round(surrogate_count / lead_count * 100, 1) if lead_count > 0 else 0.0
-        qualified_rate = (
-            round(qualified_count / surrogate_count * 100, 1) if surrogate_count > 0 else 0.0
+        pre_qualified_rate = (
+            round(pre_qualified_count / surrogate_count * 100, 1) if surrogate_count > 0 else 0.0
         )
 
         result.append(
@@ -1161,9 +1163,9 @@ def get_leads_by_form(
                 "mapping_status": form_statuses.get(form_external_id, "unknown"),
                 "lead_count": lead_count,
                 "surrogate_count": surrogate_count,
-                "qualified_count": qualified_count,
+                "pre_qualified_count": pre_qualified_count,
                 "conversion_rate": conversion_rate,
-                "qualified_rate": qualified_rate,
+                "pre_qualified_rate": pre_qualified_rate,
             }
         )
 

@@ -166,12 +166,12 @@ def upgrade() -> None:
             ),
         },
         {
-            "name": "Qualified - Next Steps",
-            "subject": "You're qualified — next steps with {{org_name}}",
+            "name": "Pre-Qualified - Next Steps",
+            "subject": "You're pre-qualified — next steps with {{org_name}}",
             "category": "surrogates",
             "body": build_email(
-                "You're qualified to move forward.",
-                "You're qualified — next steps",
+                "You're pre-qualified to move forward.",
+                "You're pre-qualified — next steps",
                 """
                 <tr>
                   <td style="padding: 16px 48px 0 48px;">
@@ -179,7 +179,7 @@ def upgrade() -> None:
                       Hi {{first_name}},
                     </p>
                     <p style="margin: 12px 0 0 0; font-size: 16px; line-height: 1.6; color: #374151;">
-                      Great news — you're qualified to move forward in the surrogacy process with {{org_name}}.
+                      Great news — you're pre-qualified to move forward in the surrogacy process with {{org_name}}.
                     </p>
                   </td>
                 </tr>

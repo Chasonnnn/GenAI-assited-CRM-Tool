@@ -1,29 +1,24 @@
-"""Pipeline service - manage org-configurable case pipelines.
-
-v2: With version control integration
-- Creates version snapshot on every change
-- Optimistic locking via expected_version
-- Rollback support with audit trail
-
-v2.1: PipelineStage CRUD
-- Stage rows instead of JSON
-- Immutable slug/stage_type
-- Soft-delete with migration
-
-Stages are stored as PipelineStage rows with immutable slugs.
-"""
+"""Pipeline service - manage org-configurable case pipelines."""
 
 from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.stage_definitions import get_default_stage_defs
+from app.core.stage_definitions import canonicalize_stage_key, get_default_stage_defs
 from app.db.models import Pipeline, PipelineStage, Surrogate
 from app.services import version_service
 from app.utils.presentation import humanize_identifier
 
 ENTITY_TYPE = "pipeline"
+
+
+def _normalize_slug(value: str | None) -> str:
+    return (value or "").strip().lower()
+
+
+def _normalize_stage_key(value: str | None) -> str:
+    return canonicalize_stage_key(value)
 
 
 def _pipeline_payload(pipeline: Pipeline) -> dict:
@@ -33,6 +28,7 @@ def _pipeline_payload(pipeline: Pipeline) -> dict:
         "is_default": pipeline.is_default,
         "stages": [
             {
+                "stage_key": stage.stage_key,
                 "slug": stage.slug,
                 "label": stage.label,
                 "color": stage.color,
@@ -81,6 +77,7 @@ def get_or_create_default_pipeline(
             [
                 PipelineStage(
                     pipeline_id=pipeline.id,
+                    stage_key=_normalize_stage_key(stage.get("stage_key") or stage["slug"]),
                     slug=stage["slug"],
                     label=stage["label"],
                     color=stage["color"],
@@ -148,11 +145,15 @@ def sync_missing_stages(
     Returns count of stages added.
     """
     # Get existing stage slugs
-    existing_slugs = {s.slug for s in pipeline.stages if not s.deleted_at}
+    existing_stage_keys = {s.stage_key for s in pipeline.stages if not s.deleted_at}
 
-    # Find missing slugs
+    # Find missing stage keys
     default_defs = get_default_stage_defs()
-    missing = [d for d in default_defs if d["slug"] not in existing_slugs]
+    missing = [
+        d
+        for d in default_defs
+        if _normalize_stage_key(d.get("stage_key") or d["slug"]) not in existing_stage_keys
+    ]
 
     if not missing:
         return 0
@@ -165,6 +166,7 @@ def sync_missing_stages(
         db.add(
             PipelineStage(
                 pipeline_id=pipeline.id,
+                stage_key=_normalize_stage_key(stage_def.get("stage_key") or stage_def["slug"]),
                 slug=stage_def["slug"],
                 label=stage_def["label"],
                 color=stage_def["color"],
@@ -241,6 +243,7 @@ def create_pipeline(
         [
             PipelineStage(
                 pipeline_id=pipeline.id,
+                stage_key=_normalize_stage_key(stage.get("stage_key") or stage["slug"]),
                 slug=stage["slug"],
                 label=stage["label"],
                 color=stage["color"],
@@ -373,23 +376,28 @@ def rollback_pipeline(
     pipeline.current_version = new_version.version
     pipeline.updated_at = datetime.now(timezone.utc)
 
-    # Reconcile stage rows by slug
+    # Reconcile stage rows by immutable stage_key (fallback to slug for legacy payloads)
     payload_stages = payload.get("stages", [])
-    existing = {s.slug: s for s in pipeline.stages}
-    payload_slugs = set()
+    existing_by_key = {s.stage_key: s for s in pipeline.stages}
+    existing_by_slug = {s.slug: s for s in pipeline.stages}
+    payload_stage_keys = set()
 
     for stage_data in payload_stages:
-        slug = stage_data.get("slug")
-        if not slug:
+        stage_key = _normalize_stage_key(stage_data.get("stage_key") or stage_data.get("slug"))
+        slug = _normalize_slug(stage_data.get("slug") or stage_key)
+        if not stage_key or not slug:
             continue
-        payload_slugs.add(slug)
+        payload_stage_keys.add(stage_key)
 
-        stage = existing.get(slug)
+        stage = existing_by_key.get(stage_key) or existing_by_slug.get(slug)
         if stage:
+            stage.stage_key = stage_key
+            stage.slug = slug
             stage.label = stage_data.get("label", stage.label)
             stage.color = stage_data.get("color", stage.color)
             stage.order = stage_data.get("order", stage.order)
             stage.stage_type = stage_data.get("stage_type", stage.stage_type)
+            stage.is_intake_stage = stage.stage_type == "intake"
             stage.is_active = stage_data.get("is_active", stage.is_active)
             stage.updated_at = datetime.now(timezone.utc)
             if not stage.is_active and stage.deleted_at is None:
@@ -397,18 +405,20 @@ def rollback_pipeline(
         else:
             stage = PipelineStage(
                 pipeline_id=pipeline.id,
+                stage_key=stage_key,
                 slug=slug,
                 label=stage_data.get("label", humanize_identifier(slug)),
                 color=stage_data.get("color", "#6B7280"),
-                order=stage_data.get("order", len(existing) + 1),
+                order=stage_data.get("order", len(existing_by_key) + 1),
                 stage_type=stage_data.get("stage_type", "intake"),
+                is_intake_stage=stage_data.get("stage_type", "intake") == "intake",
                 is_active=stage_data.get("is_active", True),
             )
             db.add(stage)
 
     # Soft-deactivate stages not present in payload
-    for slug, stage in existing.items():
-        if slug not in payload_slugs and stage.is_active:
+    for stage_key, stage in existing_by_key.items():
+        if stage_key not in payload_stage_keys and stage.is_active:
             stage.is_active = False
             stage.deleted_at = datetime.now(timezone.utc)
             stage.updated_at = datetime.now(timezone.utc)
@@ -441,24 +451,129 @@ def get_stage_by_id(db: Session, stage_id: UUID) -> PipelineStage | None:
     return db.query(PipelineStage).filter(PipelineStage.id == stage_id).first()
 
 
-def get_stage_by_slug(db: Session, pipeline_id: UUID, slug: str) -> PipelineStage | None:
-    """Get a stage by slug (unique per pipeline)."""
+def get_stage_by_key(db: Session, pipeline_id: UUID, stage_key: str) -> PipelineStage | None:
+    """Get a stage by immutable semantic key (unique per pipeline)."""
+    normalized_key = _normalize_stage_key(stage_key)
+    if not normalized_key:
+        return None
     return (
         db.query(PipelineStage)
         .filter(
             PipelineStage.pipeline_id == pipeline_id,
-            PipelineStage.slug == slug,
+            PipelineStage.stage_key == normalized_key,
         )
         .first()
     )
 
 
-def validate_stage_slug(db: Session, pipeline_id: UUID, slug: str) -> bool:
+def get_stage_by_slug(db: Session, pipeline_id: UUID, slug: str) -> PipelineStage | None:
+    """Get a stage by slug, with stage_key fallback for dynamic resolution."""
+    normalized_slug = _normalize_slug(slug)
+    if not normalized_slug:
+        return None
+    normalized_key = _normalize_stage_key(normalized_slug)
+    return (
+        db.query(PipelineStage)
+        .filter(
+            PipelineStage.pipeline_id == pipeline_id,
+            (PipelineStage.slug == normalized_slug) | (PipelineStage.stage_key == normalized_key),
+        )
+        .order_by((PipelineStage.slug == normalized_slug).desc())
+        .first()
+    )
+
+
+def resolve_stage(db: Session, pipeline_id: UUID, ref: str | UUID | None) -> PipelineStage | None:
+    """
+    Resolve a stage by stage ID, stage_key, or slug.
+
+    Resolution order:
+    1) stage_id (UUID)
+    2) stage_key (canonicalized)
+    3) slug
+    """
+    if ref is None:
+        return None
+
+    if isinstance(ref, UUID):
+        return (
+            db.query(PipelineStage)
+            .filter(
+                PipelineStage.pipeline_id == pipeline_id,
+                PipelineStage.id == ref,
+            )
+            .first()
+        )
+
+    ref_str = str(ref).strip()
+    if not ref_str:
+        return None
+
+    try:
+        ref_uuid = UUID(ref_str)
+    except ValueError:
+        ref_uuid = None
+
+    if ref_uuid is not None:
+        stage = (
+            db.query(PipelineStage)
+            .filter(
+                PipelineStage.pipeline_id == pipeline_id,
+                PipelineStage.id == ref_uuid,
+            )
+            .first()
+        )
+        if stage:
+            return stage
+
+    stage = get_stage_by_key(db, pipeline_id, ref_str)
+    if stage:
+        return stage
+    return get_stage_by_slug(db, pipeline_id, ref_str)
+
+
+def get_stage_ids_by_keys_or_slugs(
+    db: Session,
+    org_id: UUID,
+    refs: list[str],
+    pipeline_id: UUID | None = None,
+) -> list[UUID]:
+    """Resolve a mixed list of stage keys/slugs into stage IDs for an org pipeline."""
+    if not refs:
+        return []
+
+    if pipeline_id is None:
+        pipeline = get_or_create_default_pipeline(db, org_id)
+        pipeline_id = pipeline.id
+
+    stage_ids: list[UUID] = []
+    seen: set[UUID] = set()
+    for ref in refs:
+        stage = resolve_stage(db, pipeline_id, ref)
+        if stage and stage.id not in seen:
+            seen.add(stage.id)
+            stage_ids.append(stage.id)
+    return stage_ids
+
+
+def validate_stage_slug(
+    db: Session,
+    pipeline_id: UUID,
+    slug: str,
+    *,
+    exclude_stage_id: UUID | None = None,
+) -> bool:
     """Check if slug is valid (unique per pipeline, not empty)."""
-    if not slug or len(slug) > 50:
+    normalized_slug = _normalize_slug(slug)
+    if not normalized_slug or len(normalized_slug) > 50:
         return False
-    existing = get_stage_by_slug(db, pipeline_id, slug)
-    return existing is None
+    query = db.query(PipelineStage).filter(
+        PipelineStage.pipeline_id == pipeline_id,
+        PipelineStage.slug == normalized_slug,
+    )
+    if exclude_stage_id is not None:
+        query = query.filter(PipelineStage.id != exclude_stage_id)
+    return query.first() is None
 
 
 def create_stage(
@@ -474,16 +589,27 @@ def create_stage(
     """
     Create a new pipeline stage.
 
-    Slug and stage_type are immutable after creation.
-    Raises ValueError if slug already exists or stage_type is invalid.
+    stage_key and stage_type are immutable after creation.
+    Slug is editable via update_stage.
+    Raises ValueError if slug/stage_key already exists or stage_type is invalid.
     """
+    normalized_slug = _normalize_slug(slug)
+    stage_key = _normalize_stage_key(normalized_slug)
+    if not normalized_slug:
+        raise ValueError("Slug cannot be empty")
+
     # Validate stage_type
     if stage_type not in ("intake", "post_approval", "terminal"):
         raise ValueError(f"Invalid stage_type: {stage_type}")
 
     # Validate slug uniqueness
-    if not validate_stage_slug(db, pipeline_id, slug):
-        raise ValueError(f"Slug '{slug}' already exists or is invalid")
+    if not validate_stage_slug(db, pipeline_id, normalized_slug):
+        raise ValueError(f"Slug '{normalized_slug}' already exists or is invalid")
+
+    # Validate stage_key uniqueness (immutable semantic key)
+    existing_key = get_stage_by_key(db, pipeline_id, stage_key)
+    if existing_key:
+        raise ValueError(f"Stage key '{stage_key}' already exists in this pipeline")
 
     # Auto-calculate order if not provided
     if order is None:
@@ -498,7 +624,8 @@ def create_stage(
 
     stage = PipelineStage(
         pipeline_id=pipeline_id,
-        slug=slug,
+        stage_key=stage_key,
+        slug=normalized_slug,
         label=label,
         color=color,
         stage_type=stage_type,
@@ -511,7 +638,7 @@ def create_stage(
     pipeline = db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
     if pipeline:
         pipeline.stages.append(stage)
-        _bump_pipeline_version(db, pipeline, user_id, f"Added stage {slug}")
+        _bump_pipeline_version(db, pipeline, user_id, f"Added stage {normalized_slug}")
     db.commit()
     db.refresh(stage)
     return stage
@@ -520,18 +647,27 @@ def create_stage(
 def update_stage(
     db: Session,
     stage: PipelineStage,
+    slug: str | None = None,
     label: str | None = None,
     color: str | None = None,
     order: int | None = None,
     user_id: UUID | None = None,
 ) -> PipelineStage:
     """
-    Update stage label, color, or order.
+    Update stage slug, label, color, or order.
 
-    Slug and stage_type are IMMUTABLE - any attempt to change them is ignored.
+    stage_key and stage_type are immutable.
     Syncs case status_label when label changes.
     """
     label_changed = False
+
+    if slug is not None:
+        normalized_slug = _normalize_slug(slug)
+        if not validate_stage_slug(
+            db, stage.pipeline_id, normalized_slug, exclude_stage_id=stage.id
+        ):
+            raise ValueError(f"Slug '{normalized_slug}' already exists or is invalid")
+        stage.slug = normalized_slug
 
     if label is not None and label != stage.label:
         stage.label = label
@@ -546,7 +682,7 @@ def update_stage(
     stage.updated_at = datetime.now(timezone.utc)
     pipeline = db.query(Pipeline).filter(Pipeline.id == stage.pipeline_id).first()
     if pipeline:
-        _bump_pipeline_version(db, pipeline, user_id, f"Updated stage {stage.slug}")
+        _bump_pipeline_version(db, pipeline, user_id, f"Updated stage {stage.stage_key}")
     db.commit()
     db.refresh(stage)
 

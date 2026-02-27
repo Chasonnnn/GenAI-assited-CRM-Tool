@@ -170,7 +170,7 @@ def test_status_change_enqueues_zapier_stage_event(monkeypatch, db, test_org, te
     settings.outbound_enabled = True
     settings.outbound_send_hashed_pii = False
     settings.outbound_event_mapping = [
-        {"stage_slug": "qualified", "event_name": "QualifiedLead", "enabled": True}
+        {"stage_key": "pre_qualified", "event_name": "PreQualifiedLead", "enabled": True}
     ]
     db.commit()
 
@@ -182,7 +182,7 @@ def test_status_change_enqueues_zapier_stage_event(monkeypatch, db, test_org, te
     surrogate.meta_campaign_external_id = "camp_123"
     db.commit()
 
-    new_stage = _get_stage(db, test_org.id, "qualified")
+    new_stage = _get_stage(db, test_org.id, "pre_qualified")
 
     monkeypatch.setattr(surrogate_events, "_maybe_send_capi_event", lambda *_args, **_kwargs: None)
     from app.services import notification_facade, workflow_triggers
@@ -207,9 +207,9 @@ def test_status_change_enqueues_zapier_stage_event(monkeypatch, db, test_org, te
     )
     assert job is not None
     data = job.payload["data"]
-    assert data["event_name"] == "QualifiedLead"
+    assert data["event_name"] == "PreQualifiedLead"
     assert data["lead_id"] == lead.meta_lead_id
-    assert data["stage_slug"] == "qualified"
+    assert data["stage_key"] == "pre_qualified"
     assert data["meta_ad_id"] == "ad_123"
     assert data["meta_campaign_id"] == "camp_123"
 
@@ -224,12 +224,12 @@ def test_status_change_skips_zapier_event_without_meta_lead(monkeypatch, db, tes
     )
     settings.outbound_enabled = True
     settings.outbound_event_mapping = [
-        {"stage_slug": "qualified", "event_name": "QualifiedLead", "enabled": True}
+        {"stage_key": "pre_qualified", "event_name": "PreQualifiedLead", "enabled": True}
     ]
     db.commit()
 
     surrogate = _create_surrogate(db, test_org.id, test_user.id, source=SurrogateSource.META)
-    new_stage = _get_stage(db, test_org.id, "qualified")
+    new_stage = _get_stage(db, test_org.id, "pre_qualified")
 
     monkeypatch.setattr(surrogate_events, "_maybe_send_capi_event", lambda *_args, **_kwargs: None)
     from app.services import notification_facade, workflow_triggers

@@ -60,26 +60,26 @@ def get_pdf_export_data(
     from app.services import pipeline_service
 
     pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
-    qualified_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "qualified")
+    pre_qualified_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "pre_qualified")
 
-    qualified_rate = 0.0
-    if qualified_stage and total_surrogates > 0:
-        qualified_stage_ids = db.query(PipelineStage.id).filter(
+    pre_qualified_rate = 0.0
+    if pre_qualified_stage and total_surrogates > 0:
+        pre_qualified_stage_ids = db.query(PipelineStage.id).filter(
             PipelineStage.pipeline_id == pipeline.id,
-            PipelineStage.order >= qualified_stage.order,
+            PipelineStage.order >= pre_qualified_stage.order,
             PipelineStage.is_active.is_(True),
         )
-        qualified_count = (
+        pre_qualified_count = (
             db.query(func.count(Surrogate.id))
             .filter(
                 Surrogate.organization_id == organization_id,
                 Surrogate.is_archived.is_(False),
-                Surrogate.stage_id.in_(qualified_stage_ids),
+                Surrogate.stage_id.in_(pre_qualified_stage_ids),
             )
             .scalar()
             or 0
         )
-        qualified_rate = (qualified_count / total_surrogates) * 100
+        pre_qualified_rate = (pre_qualified_count / total_surrogates) * 100
 
     pending_tasks = (
         db.query(func.count(Task.id))
@@ -107,7 +107,7 @@ def get_pdf_export_data(
     summary = {
         "total_surrogates": total_surrogates,
         "new_this_period": new_this_period,
-        "qualified_rate": qualified_rate,
+        "pre_qualified_rate": pre_qualified_rate,
         "pending_tasks": pending_tasks,
         "overdue_tasks": overdue_tasks,
     }

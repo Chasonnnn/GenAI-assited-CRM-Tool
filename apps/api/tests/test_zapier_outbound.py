@@ -13,9 +13,13 @@ async def test_zapier_outbound_settings_update(authed_client):
         "outbound_enabled": True,
         "send_hashed_pii": True,
         "event_mapping": [
-            {"stage_slug": "new_unread", "event_name": "Lead", "enabled": True},
-            {"stage_slug": "qualified", "event_name": "QualifiedLead", "enabled": True},
-            {"stage_slug": "matched", "event_name": "ConvertedLead", "enabled": False},
+            {"stage_key": "new_unread", "event_name": "Lead", "enabled": True},
+            {
+                "stage_key": "pre_qualified",
+                "event_name": "PreQualifiedLead",
+                "enabled": True,
+            },
+            {"stage_key": "matched", "event_name": "ConvertedLead", "enabled": False},
         ],
     }
 
@@ -26,7 +30,9 @@ async def test_zapier_outbound_settings_update(authed_client):
     assert data["outbound_webhook_url"] == payload["outbound_webhook_url"]
     assert data["outbound_secret_configured"] is True
     assert data["send_hashed_pii"] is True
-    assert any(m["stage_slug"] == "qualified" and m["enabled"] for m in data["event_mapping"])
+    assert any(
+        m["stage_key"] == "pre_qualified" and m["enabled"] for m in data["event_mapping"]
+    )
 
     res2 = await authed_client.get("/integrations/zapier/settings")
     assert res2.status_code == 200
@@ -48,18 +54,18 @@ async def test_zapier_outbound_test_event_queues_job(authed_client, db, test_org
     settings.outbound_webhook_secret_encrypted = zapier_settings_service.encrypt_secret("secret")
     settings.outbound_enabled = True
     settings.outbound_event_mapping = [
-        {"stage_slug": "qualified", "event_name": "QualifiedLead", "enabled": True}
+        {"stage_key": "pre_qualified", "event_name": "PreQualifiedLead", "enabled": True}
     ]
     db.commit()
 
     res = await authed_client.post(
         "/integrations/zapier/test-outbound",
-        json={"stage_slug": "qualified", "lead_id": "lead-test-1"},
+        json={"stage_key": "pre_qualified", "lead_id": "lead-test-1"},
     )
     assert res.status_code == 200
     data = res.json()
     assert data["status"] == "queued"
-    assert data["event_name"] == "QualifiedLead"
+    assert data["event_name"] == "PreQualifiedLead"
 
     job = (
         db.query(Job)
@@ -72,4 +78,4 @@ async def test_zapier_outbound_test_event_queues_job(authed_client, db, test_org
     )
     assert job is not None
     assert job.payload["data"]["lead_id"] == "lead-test-1"
-    assert job.payload["data"]["event_name"] == "QualifiedLead"
+    assert job.payload["data"]["event_name"] == "PreQualifiedLead"

@@ -21,9 +21,9 @@ def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def resolve_event_name(mapping: list[dict], stage_slug: str) -> str | None:
+def resolve_event_name(mapping: list[dict], stage_key: str) -> str | None:
     for item in mapping:
-        if item.get("stage_slug") == stage_slug and item.get("enabled", True):
+        if item.get("stage_key") == stage_key and item.get("enabled", True):
             return item.get("event_name")
     return None
 
@@ -33,7 +33,9 @@ def build_stage_event_payload(
     lead_id: str,
     event_name: str,
     event_time: datetime,
-    stage_slug: str,
+    stage_key: str,
+    stage_slug: str | None,
+    stage_id: str | None,
     stage_label: str | None,
     surrogate_id: str | None,
     include_hashed_pii: bool,
@@ -44,11 +46,13 @@ def build_stage_event_payload(
     test_mode: bool = False,
 ) -> dict:
     payload = {
-        "event_id": event_id or f"zapier_stage:{lead_id}:{stage_slug}",
+        "event_id": event_id or f"zapier_stage:{lead_id}:{stage_key}",
         "event_name": event_name,
         "event_time": event_time.astimezone(timezone.utc).isoformat(),
         "lead_id": lead_id,
+        "stage_key": stage_key,
         "stage_slug": stage_slug,
+        "stage_id": stage_id,
         "stage_label": stage_label,
     }
 
@@ -106,7 +110,9 @@ def enqueue_stage_event(
     db: Session,
     surrogate: Surrogate,
     *,
-    stage_slug: str,
+    stage_key: str,
+    stage_slug: str | None,
+    stage_id: str | None = None,
     stage_label: str | None,
     effective_at: datetime | None = None,
 ) -> None:
@@ -123,7 +129,7 @@ def enqueue_stage_event(
         return
 
     mapping = zapier_settings_service.normalize_event_mapping(settings.outbound_event_mapping)
-    event_name = resolve_event_name(mapping, stage_slug)
+    event_name = resolve_event_name(mapping, stage_key)
     if not event_name:
         return
 
@@ -144,7 +150,9 @@ def enqueue_stage_event(
         lead_id=meta_lead.meta_lead_id,
         event_name=event_name,
         event_time=event_time,
+        stage_key=stage_key,
         stage_slug=stage_slug,
+        stage_id=stage_id,
         stage_label=stage_label,
         surrogate_id=str(surrogate.id),
         include_hashed_pii=settings.outbound_send_hashed_pii,
@@ -166,7 +174,7 @@ def enqueue_stage_event(
         "data": payload,
         "webhook_id": settings.webhook_id,
     }
-    idempotency_key = f"zapier_stage:{meta_lead.meta_lead_id}:{stage_slug}"
+    idempotency_key = f"zapier_stage:{meta_lead.meta_lead_id}:{stage_key}"
 
     try:
         job_service.schedule_job(
@@ -184,7 +192,7 @@ def enqueue_test_event(
     db: Session,
     organization_id: UUID,
     *,
-    stage_slug: str,
+    stage_key: str,
     event_name: str,
     lead_id: str,
     include_hashed_pii: bool,
@@ -194,13 +202,15 @@ def enqueue_test_event(
         raise ValueError("Outbound webhook is not configured")
 
     event_time = _now_utc()
-    event_id = f"zapier_stage_test:{lead_id}:{stage_slug}:{event_time.timestamp()}"
+    event_id = f"zapier_stage_test:{lead_id}:{stage_key}:{event_time.timestamp()}"
     payload = build_stage_event_payload(
         lead_id=lead_id,
         event_name=event_name,
         event_time=event_time,
-        stage_slug=stage_slug,
-        stage_label=LABEL_OVERRIDES.get(stage_slug, humanize_identifier(stage_slug)),
+        stage_key=stage_key,
+        stage_slug=stage_key,
+        stage_id=None,
+        stage_label=LABEL_OVERRIDES.get(stage_key, humanize_identifier(stage_key)),
         surrogate_id=None,
         include_hashed_pii=include_hashed_pii,
         email="zapier-test@example.com" if include_hashed_pii else None,

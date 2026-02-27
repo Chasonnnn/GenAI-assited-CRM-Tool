@@ -55,7 +55,7 @@ def analytics_pipeline_stages(db, test_org):
     stages_data = [
         ("new_unread", "New Unread", 1, "#3B82F6"),
         ("contacted", "Contacted", 2, "#10B981"),
-        ("qualified", "Qualified", 3, "#8B5CF6"),
+        ("pre_qualified", "Pre-Qualified", 3, "#8B5CF6"),
         ("application_submitted", "Application Submitted", 4, "#8B5CF6"),
         ("approved", "Approved", 8, "#22C55E"),
     ]
@@ -72,6 +72,7 @@ def analytics_pipeline_stages(db, test_org):
             stage = PipelineStage(
                 id=uuid.uuid4(),
                 pipeline_id=pipeline.id,
+                stage_key=slug,
                 slug=slug,
                 label=label,
                 color=color,
@@ -97,7 +98,7 @@ def sample_cases(db, test_org, test_user, analytics_pipeline_stages):
         [
             ("new_unread", 3),
             ("contacted", 2),
-            ("qualified", 2),
+            ("pre_qualified", 2),
             ("application_submitted", 1),
             ("approved", 1),
         ]
@@ -136,15 +137,15 @@ def sample_meta_leads(db, test_org, sample_cases, analytics_pipeline_stages):
     """Create sample Meta leads for analytics tests."""
     leads = []
 
-    # Find cases in qualified and approved stages
-    qualified_case = None
+    # Find cases in pre-qualified and approved stages
+    pre_qualified_case = None
     converted_case = None
     approved_case = None
 
     for case in sample_cases:
         stage = db.query(PipelineStage).filter(PipelineStage.id == case.stage_id).first()
-        if stage.slug == "qualified" and not qualified_case:
-            qualified_case = case
+        if stage.slug == "pre_qualified" and not pre_qualified_case:
+            pre_qualified_case = case
         if stage.slug == "application_submitted" and not converted_case:
             converted_case = case
         if stage.slug == "approved" and not approved_case:
@@ -164,8 +165,8 @@ def sample_meta_leads(db, test_org, sample_cases, analytics_pipeline_stages):
     db.add(lead1)
     leads.append(lead1)
 
-    # Create converted lead (qualified)
-    if qualified_case:
+    # Create converted lead (pre-qualified)
+    if pre_qualified_case:
         lead2 = MetaLead(
             id=uuid.uuid4(),
             organization_id=test_org.id,
@@ -174,7 +175,7 @@ def sample_meta_leads(db, test_org, sample_cases, analytics_pipeline_stages):
             meta_created_time=datetime.now(timezone.utc) - timedelta(days=3),
             received_at=datetime.now(timezone.utc) - timedelta(days=3),
             is_converted=True,
-            converted_surrogate_id=qualified_case.id,
+            converted_surrogate_id=pre_qualified_case.id,
             converted_at=datetime.now(timezone.utc) - timedelta(days=2),
             status="converted",
         )
@@ -236,7 +237,7 @@ class TestAnalyticsSummary:
         data = response.json()
         assert "total_surrogates" in data
         assert "new_this_period" in data
-        assert "qualified_rate" in data
+        assert "pre_qualified_rate" in data
         assert data["total_surrogates"] >= 0
 
     @pytest.mark.asyncio
@@ -335,9 +336,9 @@ class TestMetaPerformance:
 
         data = response.json()
         assert "leads_received" in data
-        assert "leads_qualified" in data
+        assert "leads_pre_qualified" in data
         assert "leads_converted" in data
-        assert "qualification_rate" in data
+        assert "pre_qualification_rate" in data
         assert "conversion_rate" in data
         assert "avg_time_to_convert_hours" in data
 
@@ -349,9 +350,9 @@ class TestMetaPerformance:
 
         data = response.json()
         assert data["leads_received"] == 4
-        assert data["leads_qualified"] == 3
+        assert data["leads_pre_qualified"] == 3
         assert data["leads_converted"] == 2
-        assert data["qualification_rate"] >= 0
+        assert data["pre_qualification_rate"] >= 0
         assert data["conversion_rate"] >= 0
 
     @pytest.mark.asyncio
@@ -487,7 +488,7 @@ class TestAnalyticsFunnel:
         by_stage = {stage["stage"]: stage for stage in data["data"]}
         assert by_stage["new_unread"]["count"] == 9
         assert by_stage["contacted"]["count"] == 6
-        assert by_stage["qualified"]["count"] == 4
+        assert by_stage["pre_qualified"]["count"] == 4
 
 
 # =============================================================================
@@ -525,7 +526,7 @@ def performance_pipeline_stages(db, test_org):
     stages_data = [
         ("new_unread", "New Unread", 1, "#3B82F6"),
         ("contacted", "Contacted", 2, "#10B981"),
-        ("qualified", "Qualified", 3, "#8B5CF6"),
+        ("pre_qualified", "Pre-Qualified", 3, "#8B5CF6"),
         ("ready_to_match", "Ready to Match", 4, "#F59E0B"),
         ("matched", "Matched", 5, "#22C55E"),
         ("application_submitted", "Application Submitted", 6, "#8B5CF6"),
@@ -544,6 +545,7 @@ def performance_pipeline_stages(db, test_org):
             stage = PipelineStage(
                 id=uuid.uuid4(),
                 pipeline_id=pipeline.id,
+                stage_key=slug,
                 slug=slug,
                 label=label,
                 color=color,
@@ -635,7 +637,7 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
         if i < 2:  # Cases 0 and 1 reached application_submitted
             for stage_slug in [
                 "contacted",
-                "qualified",
+                "pre_qualified",
                 "ready_to_match",
                 "matched",
                 "application_submitted",
@@ -651,7 +653,7 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
                 )
                 db.add(history)
         else:  # Case 2 reached lost
-            for stage_slug in ["contacted", "qualified", "lost"]:
+            for stage_slug in ["contacted", "pre_qualified", "lost"]:
                 history = SurrogateStatusHistory(
                     id=uuid.uuid4(),
                     surrogate_id=case.id,
@@ -689,7 +691,7 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
         cases.append(case)
 
         if i == 0:  # Case reached matched only
-            for stage_slug in ["contacted", "qualified", "ready_to_match", "matched"]:
+            for stage_slug in ["contacted", "pre_qualified", "ready_to_match", "matched"]:
                 history = SurrogateStatusHistory(
                     id=uuid.uuid4(),
                     surrogate_id=case.id,
@@ -703,7 +705,7 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
         else:  # Case reached application_submitted THEN lost (should NOT count as lost)
             for stage_slug in [
                 "contacted",
-                "qualified",
+                "pre_qualified",
                 "ready_to_match",
                 "matched",
                 "application_submitted",
@@ -783,7 +785,7 @@ class TestPerformanceByUser:
         assert user_data is not None
         assert user_data["total_surrogates"] == 3
         assert user_data["contacted"] == 3  # All 3 reached contacted
-        assert user_data["qualified"] == 3  # All 3 reached qualified
+        assert user_data["pre_qualified"] == 3  # All 3 reached pre-qualified
         assert user_data["application_submitted"] == 2  # 2 reached application_submitted
         assert user_data["lost"] == 1  # 1 lost (without application_submitted)
 

@@ -66,7 +66,7 @@ class ZapierInboundWebhookUpdateRequest(BaseModel):
 
 
 class ZapierEventMappingItem(BaseModel):
-    stage_slug: str
+    stage_key: str
     event_name: str
     enabled: bool = True
 
@@ -93,7 +93,7 @@ class ZapierTestLeadResponse(BaseModel):
 
 
 class ZapierOutboundTestRequest(BaseModel):
-    stage_slug: str | None = None
+    stage_key: str | None = None
     lead_id: str | None = None
 
 
@@ -369,13 +369,13 @@ def send_outbound_test(
         raise HTTPException(status_code=400, detail="Outbound webhook is disabled.")
 
     mapping = zapier_settings_service.normalize_event_mapping(settings.outbound_event_mapping)
-    stage_slug = data.stage_slug or (mapping[0]["stage_slug"] if mapping else None)
-    if not stage_slug:
+    stage_key = data.stage_key or (mapping[0]["stage_key"] if mapping else None)
+    if not stage_key:
         raise HTTPException(status_code=400, detail="No stage mapping available.")
 
     event_name = None
     for item in mapping:
-        if item.get("stage_slug") == stage_slug and item.get("enabled", True):
+        if item.get("stage_key") == stage_key and item.get("enabled", True):
             event_name = item.get("event_name")
             break
     if not event_name:
@@ -386,7 +386,7 @@ def send_outbound_test(
     result = zapier_outbound_service.enqueue_test_event(
         db,
         session.org_id,
-        stage_slug=stage_slug,
+        stage_key=stage_key,
         event_name=event_name,
         lead_id=lead_id,
         include_hashed_pii=settings.outbound_send_hashed_pii,

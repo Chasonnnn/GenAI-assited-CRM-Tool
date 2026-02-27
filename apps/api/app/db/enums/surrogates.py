@@ -8,7 +8,7 @@ class SurrogateStatus(str, Enum):
     Surrogate status enum covering Intake (Stage A) and Post-approval (Stage B).
 
     Stage A (Intake Pipeline):
-        new_unread → contacted → qualified → interview_scheduled
+        new_unread → contacted → pre_qualified → interview_scheduled
         → application_submitted → under_review → approved → lost/disqualified
 
     Stage B (Post-Approval, Case Manager only):
@@ -20,7 +20,7 @@ class SurrogateStatus(str, Enum):
     # Stage A: Intake Pipeline
     NEW_UNREAD = "new_unread"
     CONTACTED = "contacted"
-    QUALIFIED = "qualified"  # Intake confirmed info, applicant is qualified
+    PRE_QUALIFIED = "pre_qualified"  # Intake confirmed info, applicant is pre-qualified
     INTERVIEW_SCHEDULED = "interview_scheduled"  # Interview scheduled with applicant
     APPLICATION_SUBMITTED = "application_submitted"
     UNDER_REVIEW = "under_review"
@@ -50,7 +50,7 @@ class SurrogateStatus(str, Enum):
         return [
             cls.NEW_UNREAD.value,
             cls.CONTACTED.value,
-            cls.QUALIFIED.value,
+            cls.PRE_QUALIFIED.value,
             cls.INTERVIEW_SCHEDULED.value,
             cls.APPLICATION_SUBMITTED.value,
             cls.UNDER_REVIEW.value,

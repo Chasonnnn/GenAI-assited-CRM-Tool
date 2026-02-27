@@ -130,7 +130,7 @@ def create_surrogate(
         owner_id = default_queue.id
 
     pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id, user_id)
-    default_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "new_unread")
+    default_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "new_unread")
     if not default_stage or not default_stage.is_active:
         default_stage = pipeline_service.get_default_stage(db, pipeline.id)
     if not default_stage:
@@ -1087,7 +1087,7 @@ def list_claim_queue(
         return [], 0
 
     pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
-    approved_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "approved")
+    approved_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "approved")
     if not approved_stage:
         return [], 0
 

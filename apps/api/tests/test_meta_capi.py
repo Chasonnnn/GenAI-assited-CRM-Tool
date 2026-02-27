@@ -7,7 +7,7 @@ from app.services import meta_capi
     "status,expected",
     [
         ("contacted", meta_capi.META_STATUS_INTAKE),
-        ("qualified", meta_capi.META_STATUS_INTAKE),
+        ("pre_qualified", meta_capi.META_STATUS_INTAKE),
         ("interview_scheduled", meta_capi.META_STATUS_INTAKE),
         ("application_submitted", meta_capi.META_STATUS_QUALIFIED),
         ("approved", meta_capi.META_STATUS_QUALIFIED),
@@ -33,8 +33,8 @@ def test_map_case_status_to_meta_status_unknown(status):
     "from_status,to_status,expected",
     [
         ("new_unread", "contacted", True),
-        ("contacted", "qualified", False),
-        ("qualified", "application_submitted", True),
+        ("contacted", "pre_qualified", False),
+        ("pre_qualified", "application_submitted", True),
         ("application_submitted", "under_review", False),
         ("approved", "ready_to_match", False),
         ("contacted", "disqualified", True),

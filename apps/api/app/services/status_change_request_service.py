@@ -203,7 +203,7 @@ def approve_request(
                 org_id,
                 admin_user_id,
             ).id
-        ready_stage = pipeline_service.get_stage_by_slug(db, pipeline_id, "ready_to_match")
+        ready_stage = pipeline_service.get_stage_by_key(db, pipeline_id, "ready_to_match")
         if not ready_stage:
             raise ValueError("Ready to match stage not found")
 

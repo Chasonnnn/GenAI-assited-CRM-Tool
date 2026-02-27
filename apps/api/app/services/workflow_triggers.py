@@ -57,6 +57,7 @@ def trigger_surrogate_created(db: Session, surrogate: Surrogate) -> None:
 
     stage = pipeline_service.get_stage_by_id(db, surrogate.stage_id)
     stage_slug = stage.slug if stage else None
+    stage_key = stage.stage_key if stage else None
     engine.trigger(
         db=db,
         trigger_type=WorkflowTriggerType.SURROGATE_CREATED,
@@ -68,6 +69,7 @@ def trigger_surrogate_created(db: Session, surrogate: Surrogate) -> None:
             "source": surrogate.source,
             "stage_id": str(surrogate.stage_id),
             "stage_slug": stage_slug,
+            "stage_key": stage_key,
             "status_label": surrogate.status_label,
         },
         org_id=surrogate.organization_id,
@@ -83,6 +85,8 @@ def trigger_status_changed(
     new_stage_id: UUID | None,
     old_stage_slug: str | None,
     new_stage_slug: str | None,
+    old_stage_key: str | None = None,
+    new_stage_key: str | None = None,
     effective_at: datetime | None = None,
     recorded_at: datetime | None = None,
     is_undo: bool = False,
@@ -107,6 +111,8 @@ def trigger_status_changed(
             "new_stage_id": str(new_stage_id) if new_stage_id else None,
             "old_status": old_stage_slug,
             "new_status": new_stage_slug,
+            "old_stage_key": old_stage_key,
+            "new_stage_key": new_stage_key,
             "effective_at": effective_at.isoformat() if effective_at else None,
             "recorded_at": recorded_at.isoformat() if recorded_at else None,
             "is_undo": is_undo,
