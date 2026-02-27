@@ -32,7 +32,13 @@ def _resolve_region(region: str | None, endpoint_url: str | None) -> str | None:
 
 
 def _build_s3_config(signature_version: str | None = None) -> Config | None:
-    config_kwargs: dict[str, object] = {}
+    # Prefer checksum headers only when required by the API contract.
+    # Some S3-compatible backends (e.g. GCS XML API) reject optional
+    # checksum headers and can surface SignatureDoesNotMatch.
+    config_kwargs: dict[str, object] = {
+        "request_checksum_calculation": "when_required",
+        "response_checksum_validation": "when_required",
+    }
 
     style = (settings.S3_URL_STYLE or "").strip().lower()
     if style in {"path", "virtual"}:

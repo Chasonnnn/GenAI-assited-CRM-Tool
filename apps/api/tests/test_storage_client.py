@@ -24,6 +24,8 @@ def test_get_s3_client_uses_auto_region_for_gcs_endpoint(monkeypatch):
     assert kwargs["region_name"] == "auto"
     assert kwargs["endpoint_url"] == "https://storage.googleapis.com"
     assert kwargs["config"].s3.get("addressing_style") == "path"
+    assert kwargs["config"].request_checksum_calculation == "when_required"
+    assert kwargs["config"].response_checksum_validation == "when_required"
 
 
 def test_get_s3_client_honors_virtual_style(monkeypatch):
@@ -45,6 +47,8 @@ def test_get_s3_client_honors_virtual_style(monkeypatch):
     assert captured["service_name"] == "s3"
     assert kwargs["region_name"] == "us-east-1"
     assert kwargs["config"].s3.get("addressing_style") == "virtual"
+    assert kwargs["config"].request_checksum_calculation == "when_required"
+    assert kwargs["config"].response_checksum_validation == "when_required"
 
 
 def test_get_s3_client_honors_signature_version_override(monkeypatch):
@@ -65,3 +69,5 @@ def test_get_s3_client_honors_signature_version_override(monkeypatch):
     kwargs = captured["kwargs"]
     assert captured["service_name"] == "s3"
     assert kwargs["config"].signature_version == "s3"
+    assert kwargs["config"].request_checksum_calculation == "when_required"
+    assert kwargs["config"].response_checksum_validation == "when_required"

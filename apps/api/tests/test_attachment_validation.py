@@ -3,6 +3,7 @@ from unittest.mock import Mock
 import uuid
 
 import pytest
+from botocore.exceptions import ClientError
 
 from app.core.config import settings
 from app.core.encryption import hash_email
@@ -47,13 +48,55 @@ def test_store_file_sets_content_type_for_s3_upload(monkeypatch):
 
     attachment_service.store_file("org/key/file.png", BytesIO(b"png-bytes"), "image/png")
 
-    s3.upload_fileobj.assert_called_once()
-    _fileobj, bucket, key = s3.upload_fileobj.call_args.args
-    extra = s3.upload_fileobj.call_args.kwargs
+    s3.put_object.assert_called_once()
+    kwargs = s3.put_object.call_args.kwargs
 
-    assert bucket == "test-bucket"
-    assert key == "org/key/file.png"
-    assert extra == {"ExtraArgs": {"ContentType": "image/png"}}
+    assert kwargs["Bucket"] == "test-bucket"
+    assert kwargs["Key"] == "org/key/file.png"
+    assert kwargs["Body"] == b"png-bytes"
+    assert kwargs["ContentLength"] == len(b"png-bytes")
+    assert kwargs["ContentType"] == "image/png"
+
+
+def test_store_file_retries_signature_mismatch_for_s3_compat(monkeypatch):
+    calls: list[tuple[str, str | None] | str] = []
+    captured: dict[str, object] = {}
+
+    class FailingClient:
+        def put_object(self, **_kwargs):  # noqa: ANN003 - boto style kwargs
+            raise ClientError({"Error": {"Code": "SignatureDoesNotMatch"}}, "PutObject")
+
+    class SuccessClient:
+        def put_object(self, **kwargs):  # noqa: ANN003 - boto style kwargs
+            calls.append("put")
+            captured["Bucket"] = kwargs["Bucket"]
+            captured["Key"] = kwargs["Key"]
+            captured["Body"] = kwargs["Body"]
+            captured["ContentType"] = kwargs["ContentType"]
+            captured["ContentLength"] = kwargs["ContentLength"]
+
+    monkeypatch.setattr(settings, "STORAGE_BACKEND", "s3", raising=False)
+    monkeypatch.setattr(settings, "S3_BUCKET", "test-bucket", raising=False)
+    monkeypatch.setattr(attachment_service, "_get_s3_client", lambda: FailingClient())
+
+    def _fake_get_s3_client(*, region=None, endpoint_url=None, signature_version=None):  # noqa: ANN001, ARG001
+        calls.append((region or "", signature_version))
+        if signature_version == "s3":
+            return SuccessClient()
+        return FailingClient()
+
+    monkeypatch.setattr(attachment_service.storage_client, "get_s3_client", _fake_get_s3_client)
+
+    attachment_service.store_file("org/key/file.pdf", BytesIO(b"%PDF-1.4"), "application/pdf")
+
+    assert calls[0] == ("auto", None)
+    assert calls[1] == ("auto", "s3")
+    assert calls[-1] == "put"
+    assert captured["Bucket"] == "test-bucket"
+    assert captured["Key"] == "org/key/file.pdf"
+    assert captured["Body"] == b"%PDF-1.4"
+    assert captured["ContentType"] == "application/pdf"
+    assert captured["ContentLength"] == len(b"%PDF-1.4")
 
 
 @pytest.mark.asyncio

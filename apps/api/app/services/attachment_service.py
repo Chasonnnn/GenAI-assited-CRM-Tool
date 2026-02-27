@@ -189,13 +189,14 @@ def store_file(storage_key: str, file: BinaryIO, content_type: str) -> None:
     backend = _get_storage_backend()
 
     if backend == "s3":
-        s3 = _get_s3_client()
-        bucket = getattr(settings, "S3_BUCKET", "crm-attachments")
-        s3.upload_fileobj(
-            file,
-            bucket,
-            storage_key,
-            ExtraArgs={"ContentType": _normalize_content_type(content_type)},
+        # Use static payload uploads to avoid multipart/chunked signature issues
+        # on some S3-compatible endpoints (for example GCS XML API).
+        file.seek(0)
+        payload = file.read()
+        _store_s3_object_with_signature_retry(
+            storage_key=storage_key,
+            payload=payload,
+            content_type=_normalize_content_type(content_type),
         )
     else:
         # Local storage
@@ -204,6 +205,74 @@ def store_file(storage_key: str, file: BinaryIO, content_type: str) -> None:
         with open(path, "wb") as f:
             file.seek(0)
             shutil.copyfileobj(file, f)
+
+
+def _put_s3_object(
+    client: BaseClient,
+    *,
+    bucket: str,
+    storage_key: str,
+    payload: bytes,
+    content_type: str,
+) -> None:
+    client.put_object(
+        Bucket=bucket,
+        Key=storage_key,
+        Body=payload,
+        ContentLength=len(payload),
+        ContentType=content_type,
+    )
+
+
+def _store_s3_object_with_signature_retry(
+    *,
+    storage_key: str,
+    payload: bytes,
+    content_type: str,
+) -> None:
+    bucket = getattr(settings, "S3_BUCKET", "crm-attachments")
+
+    try:
+        _put_s3_object(
+            _get_s3_client(),
+            bucket=bucket,
+            storage_key=storage_key,
+            payload=payload,
+            content_type=content_type,
+        )
+        return
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code")
+        if code != "SignatureDoesNotMatch":
+            raise
+        logger.warning(
+            "Attachment upload failed with SignatureDoesNotMatch; retrying with region=auto"
+        )
+
+    try:
+        _put_s3_object(
+            storage_client.get_s3_client(region="auto"),
+            bucket=bucket,
+            storage_key=storage_key,
+            payload=payload,
+            content_type=content_type,
+        )
+        return
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code")
+        if code != "SignatureDoesNotMatch":
+            raise
+        logger.warning(
+            "Attachment upload still failed with region=auto; retrying with signature_version=s3"
+        )
+
+    _put_s3_object(
+        storage_client.get_s3_client(region="auto", signature_version="s3"),
+        bucket=bucket,
+        storage_key=storage_key,
+        payload=payload,
+        content_type=content_type,
+    )
 
 
 def strip_exif_data(file: BinaryIO, content_type: str) -> BinaryIO:
