@@ -14,4 +14,4 @@ def test_pypdf_pin_meets_cve_2026_fix_floor():
 
     assert pypdf_pin is not None, "Expected an explicit pypdf== pin in pyproject.toml"
     pinned_version = pypdf_pin.split("==", 1)[1].strip()
-    assert Version(pinned_version) >= Version("6.7.1")
+    assert Version(pinned_version) >= Version("6.7.3")
