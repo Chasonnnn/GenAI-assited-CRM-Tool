@@ -151,3 +151,67 @@ async def test_profile_hidden_toggle(authed_client, db, test_org, test_user, def
     profile_res = await authed_client.get(f"/surrogates/{surrogate.id}/profile")
     assert profile_res.status_code == 200
     assert "full_name" not in profile_res.json()["hidden_fields"]
+
+
+@pytest.mark.asyncio
+async def test_profile_returns_custom_header_and_qas(
+    authed_client, db, test_org, test_user, default_stage
+):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+    await _create_form_and_submission(authed_client, surrogate.id, "One", "Base Name")
+
+    save_res = await authed_client.put(
+        f"/surrogates/{surrogate.id}/profile/overrides",
+        json={
+            "overrides": {
+                "__profile_header_name": "Display Name",
+                "__profile_header_note": "Custom note for this profile",
+                "__profile_custom_qas": [
+                    {
+                        "id": "qa-1",
+                        "section_key": "section_0",
+                        "question": "Preferred schedule",
+                        "answer": "Weekday mornings",
+                        "order": 0,
+                    }
+                ],
+            },
+        },
+    )
+    assert save_res.status_code == 200
+
+    profile_res = await authed_client.get(f"/surrogates/{surrogate.id}/profile")
+    assert profile_res.status_code == 200
+    data = profile_res.json()
+    assert data["header_name_override"] == "Display Name"
+    assert data["header_note"] == "Custom note for this profile"
+    assert len(data["custom_qas"]) == 1
+    assert data["custom_qas"][0]["question"] == "Preferred schedule"
+    assert "__profile_header_name" not in data["merged_view"]
+    assert "__profile_header_note" not in data["merged_view"]
+
+
+@pytest.mark.asyncio
+async def test_profile_sync_ignores_profile_meta_keys(
+    authed_client, db, test_org, test_user, default_stage
+):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+    await _create_form_and_submission(authed_client, surrogate.id, "One", "Base Name")
+
+    save_res = await authed_client.put(
+        f"/surrogates/{surrogate.id}/profile/overrides",
+        json={
+            "overrides": {
+                "__profile_header_name": "Header Only Name",
+                "__profile_header_note": "Header Note",
+            },
+        },
+    )
+    assert save_res.status_code == 200
+
+    sync_res = await authed_client.post(f"/surrogates/{surrogate.id}/profile/sync")
+    assert sync_res.status_code == 200
+    staged = sync_res.json()["staged_changes"]
+    field_keys = {item["field_key"] for item in staged}
+    assert "__profile_header_name" not in field_keys
+    assert "__profile_header_note" not in field_keys
