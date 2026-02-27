@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.11](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.10...surrogacy-crm-platform-v0.90.11) (2026-02-27)
+
+
+### Features
+
+* add floating horizontal scrollbar UX for surrogates table ([3c8be1d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3c8be1d9c0e74ae049735a61e0b09bf7ef68763f))
+* add surrogate mass archive apply endpoint and date filter parity ([371eadf](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/371eadf0e28defb9eb4663bfb04ff6e9237b7823))
+* extend mass edit modal with archive action and date overrides ([c41bc25](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c41bc25aadab9677bde2c12c32fb0a2bd41fb14b))
+
+
+### Bug Fixes
+
+* bump pypdf to 6.7.3 for audit guard ([14fcbb4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/14fcbb4dfd3ce73d8c3d9aaa1e6f0c3e04281d83))
+* patch rollup and minimatch audit vulnerabilities ([8156f57](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8156f57a9aa16c7736a3fe81d12081ca439c5dcd))
+
 ## [0.90.10](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.9...surrogacy-crm-platform-v0.90.10) (2026-02-25)
 
 
