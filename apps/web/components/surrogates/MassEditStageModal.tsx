@@ -28,6 +28,7 @@ import type {
     SurrogateMassEditStagePreviewResponse,
 } from "@/lib/api/surrogates"
 import {
+    useApplySurrogateMassEditArchive,
     useApplySurrogateMassEditStage,
     usePreviewSurrogateMassEditStage,
     useSurrogateMassEditOptions,
@@ -36,6 +37,7 @@ import { toast } from "sonner"
 
 type TriState = "any" | "true" | "false"
 type ComparisonOp = ">" | ">=" | "<" | "<=" | "="
+type ActionMode = "change_stage" | "archive"
 
 function parseStates(input: string): { states: string[] | undefined; error: string | null } {
     const trimmed = input.trim()
@@ -95,10 +97,13 @@ export function MassEditStageModal({
     baseFilters: SurrogateMassEditStageFilters
 }) {
     const previewMutation = usePreviewSurrogateMassEditStage()
-    const applyMutation = useApplySurrogateMassEditStage()
+    const applyStageMutation = useApplySurrogateMassEditStage()
+    const applyArchiveMutation = useApplySurrogateMassEditArchive()
     const optionsQuery = useSurrogateMassEditOptions({ enabled: open })
 
     const [statesInput, setStatesInput] = React.useState("")
+    const [createdFrom, setCreatedFrom] = React.useState("")
+    const [createdTo, setCreatedTo] = React.useState("")
     const [selectedRaces, setSelectedRaces] = React.useState<string[]>([])
     const [raceToAdd, setRaceToAdd] = React.useState<string | null>(null)
     const [ageOp, setAgeOp] = React.useState<ComparisonOp | null>(null)
@@ -113,6 +118,7 @@ export function MassEditStageModal({
     const [hasSurrogateExperience, setHasSurrogateExperience] = React.useState<TriState>("any")
 
     const [targetStageId, setTargetStageId] = React.useState<string>("")
+    const [actionMode, setActionMode] = React.useState<ActionMode>("change_stage")
     const [triggerWorkflows, setTriggerWorkflows] = React.useState(false)
     const [reason, setReason] = React.useState("")
 
@@ -138,6 +144,8 @@ export function MassEditStageModal({
 
         hasInitializedOpenRef.current = true
         setStatesInput("")
+        setCreatedFrom("")
+        setCreatedTo("")
         setSelectedRaces([])
         setRaceToAdd(null)
         setAgeOp(null)
@@ -149,6 +157,7 @@ export function MassEditStageModal({
         setHasChild("any")
         setIsNonSmoker(null)
         setHasSurrogateExperience("any")
+        setActionMode("change_stage")
         setTriggerWorkflows(false)
         setReason("")
         setPreview(null)
@@ -163,6 +172,11 @@ export function MassEditStageModal({
 
     const { states, error: statesError } = React.useMemo(() => parseStates(statesInput), [statesInput])
     const races = React.useMemo(() => (selectedRaces.length ? selectedRaces : undefined), [selectedRaces])
+    const createdDateError = React.useMemo(() => {
+        if (!createdFrom || !createdTo) return null
+        if (createdFrom <= createdTo) return null
+        return "Created From must be on or before Created To."
+    }, [createdFrom, createdTo])
 
     const { age_min, age_max, ageError } = React.useMemo(() => {
         const raw = ageValue.trim()
@@ -229,6 +243,8 @@ export function MassEditStageModal({
         const has_surrogate_experience = triStateToBool(hasSurrogateExperience)
 
         return {
+            ...(createdFrom ? { created_from: createdFrom } : {}),
+            ...(createdTo ? { created_to: createdTo } : {}),
             ...(states ? { states } : {}),
             ...(races ? { races } : {}),
             ...(age_min !== undefined ? { age_min } : {}),
@@ -253,25 +269,49 @@ export function MassEditStageModal({
         hasChild,
         isNonSmoker,
         hasSurrogateExperience,
+        createdFrom,
+        createdTo,
     ])
 
     // Any filter change invalidates preview (forces a re-preview before apply)
     React.useEffect(() => {
         setPreview(null)
-    }, [derivedFilters, targetStageId, triggerWorkflows, reason])
+    }, [derivedFilters, targetStageId, actionMode, triggerWorkflows, reason])
 
-    const mergedFilters: SurrogateMassEditStageFilters = React.useMemo(
-        () => ({ ...baseFilters, ...derivedFilters }),
-        [baseFilters, derivedFilters]
-    )
+    const mergedFilters: SurrogateMassEditStageFilters = React.useMemo(() => {
+        const merged: SurrogateMassEditStageFilters = { ...baseFilters, ...derivedFilters }
+        const hasModalCreatedOverride = Boolean(createdFrom || createdTo)
+
+        if (!hasModalCreatedOverride) return merged
+
+        const withoutCreated: SurrogateMassEditStageFilters = { ...merged }
+        delete withoutCreated.created_from
+        delete withoutCreated.created_to
+        return {
+            ...withoutCreated,
+            ...(createdFrom ? { created_from: createdFrom } : {}),
+            ...(createdTo ? { created_to: createdTo } : {}),
+        }
+    }, [baseFilters, derivedFilters, createdFrom, createdTo])
+
+    const hasCreatedOverride = Boolean((baseFilters.created_from || baseFilters.created_to) && (createdFrom || createdTo))
+    const effectiveCreatedRange = React.useMemo(() => {
+        if (!mergedFilters.created_from && !mergedFilters.created_to) return null
+        return `${mergedFilters.created_from ?? "…"} to ${mergedFilters.created_to ?? "…"}`
+    }, [mergedFilters.created_from, mergedFilters.created_to])
 
     const selectedStage = React.useMemo(
         () => activeStages.find((s) => s.id === targetStageId),
         [activeStages, targetStageId]
     )
 
-    const canPreview = !statesError && !ageError && !bmiError
-    const canApply = !!preview && !preview.over_limit && !!targetStageId && !applyMutation.isPending
+    const isApplying = applyStageMutation.isPending || applyArchiveMutation.isPending
+    const canPreview = !statesError && !ageError && !bmiError && !createdDateError
+    const canApply =
+        !!preview &&
+        !preview.over_limit &&
+        !isApplying &&
+        (actionMode === "archive" || !!targetStageId)
 
     const handlePreview = async () => {
         if (!canPreview) return
@@ -286,22 +326,38 @@ export function MassEditStageModal({
     }
 
     const handleApply = async () => {
-        if (!preview || !targetStageId) return
+        if (!preview) return
         try {
-            const result = await applyMutation.mutateAsync({
-                filters: mergedFilters,
-                stage_id: targetStageId,
-                expected_total: preview.total,
-                trigger_workflows: triggerWorkflows,
-                ...(reason.trim() ? { reason: reason.trim() } : {}),
-            })
+            if (actionMode === "archive") {
+                const result = await applyArchiveMutation.mutateAsync({
+                    filters: mergedFilters,
+                    expected_total: preview.total,
+                    ...(reason.trim() ? { reason: reason.trim() } : {}),
+                })
 
-            if (result.failed?.length) {
-                toast.error(`Updated ${result.applied}/${result.matched}. ${result.failed.length} failed.`)
-            } else if (result.pending_approval) {
-                toast.info(`Applied ${result.applied}. ${result.pending_approval} pending approval.`)
+                if (result.failed?.length) {
+                    toast.error(`Archived ${result.archived}/${result.matched}. ${result.failed.length} failed.`)
+                } else {
+                    toast.success(`Archived ${result.archived} surrogate${result.archived === 1 ? "" : "s"}.`)
+                }
             } else {
-                toast.success(`Updated ${result.applied} surrogate${result.applied === 1 ? "" : "s"}.`)
+                if (!targetStageId) return
+
+                const result = await applyStageMutation.mutateAsync({
+                    filters: mergedFilters,
+                    stage_id: targetStageId,
+                    expected_total: preview.total,
+                    trigger_workflows: triggerWorkflows,
+                    ...(reason.trim() ? { reason: reason.trim() } : {}),
+                })
+
+                if (result.failed?.length) {
+                    toast.error(`Updated ${result.applied}/${result.matched}. ${result.failed.length} failed.`)
+                } else if (result.pending_approval) {
+                    toast.info(`Applied ${result.applied}. ${result.pending_approval} pending approval.`)
+                } else {
+                    toast.success(`Updated ${result.applied} surrogate${result.applied === 1 ? "" : "s"}.`)
+                }
             }
 
             onOpenChange(false)
@@ -318,18 +374,18 @@ export function MassEditStageModal({
     if (baseFilters.q) baseBadges.push({ label: "Search", value: baseFilters.q })
     if (baseFilters.created_from || baseFilters.created_to) {
         baseBadges.push({
-            label: "Created",
+            label: "Created (list)",
             value: `${baseFilters.created_from ?? "…"} to ${baseFilters.created_to ?? "…"}`
         })
     }
 
     return (
-        <Dialog open={open} onOpenChange={(next) => !applyMutation.isPending && onOpenChange(next)}>
+        <Dialog open={open} onOpenChange={(next) => !isApplying && onOpenChange(next)}>
             <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
                 <DialogHeader className="pr-10">
                     <DialogTitle className="flex items-center gap-2">
                         <SparklesIcon className="size-5" />
-                        Mass Edit: Change Stage
+                        Mass Edit
                     </DialogTitle>
                     <DialogDescription>
                         Dev-only tool. Applies to all surrogates matching your current list filters plus any extra filters below.
@@ -352,6 +408,18 @@ export function MassEditStageModal({
                                     ))
                                 )}
                             </div>
+                            {(effectiveCreatedRange || hasCreatedOverride) && (
+                                <div className="flex flex-wrap gap-2">
+                                    {effectiveCreatedRange && (
+                                        <Badge variant="outline">
+                                            Effective Created: {effectiveCreatedRange}
+                                        </Badge>
+                                    )}
+                                    {hasCreatedOverride && (
+                                        <Badge variant="outline">Created: modal override</Badge>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         <Separator />
@@ -359,6 +427,12 @@ export function MassEditStageModal({
                         {/* Extra Filters */}
                         <div className="space-y-3">
                             <div className="text-sm font-medium">Extra Filters</div>
+                            <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-1">
+                                <div className="font-medium text-foreground">Filter Logic</div>
+                                <p>Different filter groups combine with <span className="font-semibold">AND</span>.</p>
+                                <p>Multiple values in one field (for example, States or Race) combine with <span className="font-semibold">OR</span>.</p>
+                                <p>Search matches name, email, phone, or surrogate number with <span className="font-semibold">OR</span>.</p>
+                            </div>
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <div className="space-y-2">
                                     <Label htmlFor="mass-states">States (comma or space separated)</Label>
@@ -370,6 +444,33 @@ export function MassEditStageModal({
                                     />
                                     {statesError && (
                                         <p className="text-xs text-destructive">{statesError}</p>
+                                    )}
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="mass-created-from">Created From</Label>
+                                    <Input
+                                        id="mass-created-from"
+                                        type="date"
+                                        value={createdFrom}
+                                        onChange={(e) => setCreatedFrom(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="mass-created-to">Created To</Label>
+                                    <Input
+                                        id="mass-created-to"
+                                        type="date"
+                                        value={createdTo}
+                                        onChange={(e) => setCreatedTo(e.target.value)}
+                                    />
+                                    {createdDateError ? (
+                                        <p className="text-xs text-destructive">{createdDateError}</p>
+                                    ) : (
+                                        <p className="text-xs text-muted-foreground">
+                                            When set here, this overrides the Surrogates page date filter.
+                                        </p>
                                     )}
                                 </div>
 
@@ -588,50 +689,75 @@ export function MassEditStageModal({
 
                         <Separator />
 
-                        {/* Stage Change */}
+                        {/* Action */}
                         <div className="space-y-3">
-                            <div className="text-sm font-medium">Stage Change</div>
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label>New Stage</Label>
-                                    <Select value={targetStageId} onValueChange={(v) => setTargetStageId(v ?? "")}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select a stage">
-                                                {(value: string | null) => {
-                                                    if (!value) return "Select a stage"
-                                                    const stage = activeStages.find((s) => s.id === value)
-                                                    return stage?.label ?? value
-                                                }}
-                                            </SelectValue>
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {activeStages.map((s) => (
-                                                <SelectItem key={s.id} value={s.id}>
-                                                    {s.label}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    {selectedStage && (
-                                        <p className="text-xs text-muted-foreground">
-                                            Target: <span className="font-medium">{selectedStage.label}</span>
-                                        </p>
-                                    )}
-                                </div>
+                            <div className="text-sm font-medium">Action</div>
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    type="button"
+                                    variant={actionMode === "change_stage" ? "secondary" : "outline"}
+                                    size="sm"
+                                    onClick={() => setActionMode("change_stage")}
+                                >
+                                    Change Stage
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant={actionMode === "archive" ? "secondary" : "outline"}
+                                    size="sm"
+                                    onClick={() => setActionMode("archive")}
+                                >
+                                    Archive
+                                </Button>
+                            </div>
 
-                                <div className="space-y-2">
-                                    <Label>Trigger Workflows</Label>
-                                    <div className="flex items-center justify-between rounded-md border px-3 py-2">
-                                        <div className="text-sm">
-                                            <div className="font-medium">Automation workflows</div>
-                                            <div className="text-xs text-muted-foreground">
-                                                Toggle whether status-change workflows run.
+                            {actionMode === "change_stage" ? (
+                                <div className="grid gap-4 sm:grid-cols-2">
+                                    <div className="space-y-2">
+                                        <Label>New Stage</Label>
+                                        <Select value={targetStageId} onValueChange={(v) => setTargetStageId(v ?? "")}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select a stage">
+                                                    {(value: string | null) => {
+                                                        if (!value) return "Select a stage"
+                                                        const stage = activeStages.find((s) => s.id === value)
+                                                        return stage?.label ?? value
+                                                    }}
+                                                </SelectValue>
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {activeStages.map((s) => (
+                                                    <SelectItem key={s.id} value={s.id}>
+                                                        {s.label}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {selectedStage && (
+                                            <p className="text-xs text-muted-foreground">
+                                                Target: <span className="font-medium">{selectedStage.label}</span>
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label>Trigger Workflows</Label>
+                                        <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                                            <div className="text-sm">
+                                                <div className="font-medium">Automation workflows</div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    Toggle whether status-change workflows run.
+                                                </div>
                                             </div>
+                                            <Switch checked={triggerWorkflows} onCheckedChange={setTriggerWorkflows} />
                                         </div>
-                                        <Switch checked={triggerWorkflows} onCheckedChange={setTriggerWorkflows} />
                                     </div>
                                 </div>
-                            </div>
+                            ) : (
+                                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700">
+                                    Archive action will soft-archive all matched surrogates.
+                                </div>
+                            )}
 
                             <div className="space-y-2">
                                 <Label htmlFor="mass-reason">Reason (optional)</Label>
@@ -639,7 +765,11 @@ export function MassEditStageModal({
                                     id="mass-reason"
                                     value={reason}
                                     onChange={(e) => setReason(e.target.value)}
-                                    placeholder="e.g. Bulk disqualify based on eligibility checklist"
+                                    placeholder={
+                                        actionMode === "archive"
+                                            ? "e.g. Bulk archive dormant leads"
+                                            : "e.g. Bulk disqualify based on eligibility checklist"
+                                    }
                                     rows={2}
                                 />
                             </div>
@@ -654,7 +784,7 @@ export function MassEditStageModal({
                                 <Button
                                     variant="outline"
                                     onClick={handlePreview}
-                                    disabled={!canPreview || previewMutation.isPending || applyMutation.isPending}
+                                    disabled={!canPreview || previewMutation.isPending || isApplying}
                                 >
                                     {previewMutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
                                     Preview Matches
@@ -666,7 +796,11 @@ export function MassEditStageModal({
                                     <div className="flex flex-wrap items-center justify-between gap-2">
                                         <div className="text-sm">
                                             <span className="font-medium">{preview.total.toLocaleString()}</span> match{preview.total === 1 ? "" : "es"}
-                                            {selectedStage ? (
+                                            {actionMode === "archive" ? (
+                                                <>
+                                                    {" "}will be archived
+                                                </>
+                                            ) : selectedStage ? (
                                                 <>
                                                     {" "}will be moved to{" "}
                                                     <span className="font-medium">{selectedStage.label}</span>
@@ -717,7 +851,7 @@ export function MassEditStageModal({
                         <Button
                             variant="outline"
                             onClick={() => onOpenChange(false)}
-                            disabled={applyMutation.isPending}
+                            disabled={isApplying}
                         >
                             Cancel
                         </Button>
@@ -726,8 +860,8 @@ export function MassEditStageModal({
                             disabled={!canApply}
                             className={cn(preview?.over_limit && "opacity-50")}
                         >
-                            {applyMutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
-                            Apply Stage Change
+                            {isApplying && <Loader2Icon className="mr-2 size-4 animate-spin" />}
+                            {actionMode === "archive" ? "Apply Archive" : "Apply Stage Change"}
                         </Button>
                     </DialogFooter>
 

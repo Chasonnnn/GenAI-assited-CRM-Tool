@@ -310,6 +310,21 @@ export function useApplySurrogateMassEditStage() {
 }
 
 /**
+ * Dev-only: archive all surrogates matching current mass-edit filters.
+ */
+export function useApplySurrogateMassEditArchive() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: surrogatesApi.applySurrogateMassEditArchive,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+        },
+    });
+}
+
+/**
  * Fetch surrogate activity log (paginated).
  */
 export function useSurrogateActivity(surrogateId: string, page: number = 1, perPage: number = 20) {

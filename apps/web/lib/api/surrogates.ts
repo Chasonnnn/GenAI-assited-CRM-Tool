@@ -503,6 +503,29 @@ export function applySurrogateMassEditStage(
     return api.post<SurrogateMassEditStageApplyResponse>('/surrogates/mass-edit/stage', data);
 }
 
+export interface SurrogateMassEditArchiveApplyRequest {
+    filters: SurrogateMassEditStageFilters;
+    expected_total: number;
+    reason?: string;
+}
+
+export interface SurrogateMassEditArchiveApplyFailure {
+    surrogate_id: string;
+    reason: string;
+}
+
+export interface SurrogateMassEditArchiveApplyResponse {
+    matched: number;
+    archived: number;
+    failed: SurrogateMassEditArchiveApplyFailure[];
+}
+
+export function applySurrogateMassEditArchive(
+    data: SurrogateMassEditArchiveApplyRequest
+): Promise<SurrogateMassEditArchiveApplyResponse> {
+    return api.post<SurrogateMassEditArchiveApplyResponse>('/surrogates/mass-edit/archive', data);
+}
+
 /**
  * Get comprehensive activity log for a surrogate (paginated).
  */
