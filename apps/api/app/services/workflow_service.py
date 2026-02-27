@@ -37,6 +37,7 @@ from app.schemas.workflow import (
     CreateTaskActionConfig,
     AssignSurrogateActionConfig,
     SendNotificationActionConfig,
+    SendZapierConversionEventActionConfig,
     UpdateFieldActionConfig,
     AddNoteActionConfig,
     PromoteIntakeLeadActionConfig,
@@ -93,7 +94,14 @@ def create_workflow(
 
     # Validate actions
     for action in actions:
-        _validate_action_config(db, org_id, action, data.scope, user_id)
+        _validate_action_config(
+            db,
+            org_id,
+            action,
+            data.scope,
+            user_id,
+            data.trigger_type,
+        )
 
     # Determine owner_user_id based on scope
     owner_user_id = user_id if data.scope == "personal" else None
@@ -157,6 +165,7 @@ def update_workflow(
                 action,
                 workflow.scope,
                 workflow.owner_user_id,
+                effective_trigger_type,
             )
         if _has_send_email_action(normalized_actions):
             is_valid, error = validate_email_provider(
@@ -167,6 +176,16 @@ def update_workflow(
             )
             if not is_valid:
                 raise ValueError(error)
+    elif data.trigger_type is not None:
+        for action in workflow.actions or []:
+            _validate_action_config(
+                db,
+                workflow.organization_id,
+                dict(action),
+                workflow.scope,
+                workflow.owner_user_id,
+                effective_trigger_type,
+            )
 
     # Update fields
     if data.name is not None:
@@ -656,6 +675,11 @@ def get_workflow_options(
             "description": "Send in-app notification",
         },
         {
+            "value": "send_zapier_conversion_event",
+            "label": "Send Zapier Conversion Event",
+            "description": "Queue a conversion status update to Zapier outbound webhook",
+        },
+        {
             "value": "update_field",
             "label": "Update Field",
             "description": "Update a case field",
@@ -690,6 +714,10 @@ def get_workflow_options(
         "update_field",
         "add_note",
     ]
+    status_changed_action_values = [
+        *surrogate_action_values,
+        "send_zapier_conversion_event",
+    ]
     form_submission_action_values = [
         "auto_match_submission",
         "create_intake_lead",
@@ -697,7 +725,9 @@ def get_workflow_options(
     ]
     action_types_by_trigger: dict[str, list[str]] = {}
     for trigger, entity_type in TRIGGER_ENTITY_TYPES.items():
-        if entity_type in ("surrogate", "task"):
+        if trigger == WorkflowTriggerType.STATUS_CHANGED.value:
+            action_types_by_trigger[trigger] = status_changed_action_values
+        elif entity_type in ("surrogate", "task"):
             action_types_by_trigger[trigger] = surrogate_action_values
         elif entity_type == "form_submission":
             action_types_by_trigger[trigger] = form_submission_action_values
@@ -1191,6 +1221,7 @@ def _validate_action_config(
     action: dict,
     workflow_scope: str | None = None,
     owner_user_id: UUID | None = None,
+    trigger_type: WorkflowTriggerType | None = None,
 ) -> None:
     """Validate action config and referenced entities exist in org."""
     action_type = action.get("action_type")
@@ -1313,6 +1344,15 @@ def _validate_action_config(
             if missing_ids:
                 missing_list = ", ".join(str(user_id) for user_id in missing_ids)
                 raise ValueError(f"Users not found in organization: {missing_list}")
+
+    elif action_type == "send_zapier_conversion_event":
+        SendZapierConversionEventActionConfig.model_validate(action)
+        if workflow_scope == "personal":
+            raise ValueError("send_zapier_conversion_event is only supported for org workflows")
+        if trigger_type is not None and trigger_type != WorkflowTriggerType.STATUS_CHANGED:
+            raise ValueError(
+                "send_zapier_conversion_event is only supported for status_changed triggers"
+            )
 
     elif action_type == "update_field":
         UpdateFieldActionConfig.model_validate(action)

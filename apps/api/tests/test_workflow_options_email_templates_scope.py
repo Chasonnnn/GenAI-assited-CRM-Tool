@@ -137,9 +137,15 @@ async def test_workflow_options_filters_email_templates_by_scope(db, test_org):
         assert "Organization Invite" not in names
         assert "intake_lead_created" in {item["value"] for item in org_payload["trigger_types"]}
         assert "promote_intake_lead" in {item["value"] for item in org_payload["action_types"]}
+        assert "send_zapier_conversion_event" in {
+            item["value"] for item in org_payload["action_types"]
+        }
         assert org_payload["action_types_by_trigger"]["intake_lead_created"] == [
             "send_notification",
             "promote_intake_lead",
+        ]
+        assert "send_zapier_conversion_event" in org_payload["action_types_by_trigger"][
+            "status_changed"
         ]
         assert org_payload["trigger_entity_types"]["form_submitted"] == "form_submission"
         assert org_payload["action_types_by_trigger"]["form_submitted"][:2] == [

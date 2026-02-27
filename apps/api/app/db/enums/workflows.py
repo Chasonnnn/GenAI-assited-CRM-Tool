@@ -44,6 +44,7 @@ class WorkflowActionType(str, Enum):
     CREATE_TASK = "create_task"
     ASSIGN_SURROGATE = "assign_surrogate"
     SEND_NOTIFICATION = "send_notification"
+    SEND_ZAPIER_CONVERSION_EVENT = "send_zapier_conversion_event"
     UPDATE_FIELD = "update_field"
     ADD_NOTE = "add_note"
     AUTO_MATCH_SUBMISSION = "auto_match_submission"

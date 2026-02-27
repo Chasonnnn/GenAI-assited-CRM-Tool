@@ -48,6 +48,9 @@ def build_action_preview(
     if action_type == WorkflowActionType.SEND_NOTIFICATION.value:
         return _preview_send_notification(db, action, entity)
 
+    if action_type == WorkflowActionType.SEND_ZAPIER_CONVERSION_EVENT.value:
+        return _preview_send_zapier_conversion_event(db, action, entity)
+
     if action_type == WorkflowActionType.UPDATE_FIELD.value:
         return _preview_update_field(db, action, entity)
 
@@ -150,6 +153,11 @@ def _preview_send_notification(db: Session, action: dict, entity: Any) -> str:
 
     recipients_desc = _describe_recipients(recipients)
     return f"Send notification '{title}' to {recipients_desc}"
+
+
+def _preview_send_zapier_conversion_event(db: Session, action: dict, entity: Any) -> str:
+    """Preview for send_zapier_conversion_event action."""
+    return "Queue Zapier conversion event for critical stage changes"
 
 
 def _preview_update_field(db: Session, action: dict, entity: Any) -> str:

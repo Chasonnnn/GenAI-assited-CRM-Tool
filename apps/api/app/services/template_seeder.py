@@ -536,6 +536,24 @@ SYSTEM_WORKFLOWS = [
         "requires_review": True,
         "recurrence_mode": "one_time",
     },
+    {
+        "system_key": "zapier_meta_conversion_sync",
+        "name": "Zapier Meta Conversion Sync",
+        "description": "Queues outbound Zapier conversion events for conversion-critical stage changes",
+        "icon": "activity",
+        "trigger_type": "status_changed",
+        "trigger_config": {},
+        "conditions": [],
+        "condition_logic": "AND",
+        "actions": [
+            {
+                "action_type": "send_zapier_conversion_event",
+            }
+        ],
+        "is_enabled": False,
+        "requires_review": True,
+        "recurrence_mode": "one_time",
+    },
 ]
 
 

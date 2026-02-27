@@ -106,7 +106,7 @@ class StatusChangeTriggerConfig(BaseModel):
     """Config for status_changed trigger."""
 
     from_stage_id: UUID | None = None
-    to_stage_id: UUID
+    to_stage_id: UUID | None = None
 
 
 class ScheduledTriggerConfig(BaseModel):
@@ -206,6 +206,12 @@ class SendNotificationActionConfig(BaseModel):
     recipients: Literal["owner", "creator", "all_admins"] | list[UUID] = "owner"
 
 
+class SendZapierConversionEventActionConfig(BaseModel):
+    """Config for send_zapier_conversion_event action."""
+
+    action_type: Literal["send_zapier_conversion_event"] = "send_zapier_conversion_event"
+
+
 class UpdateFieldActionConfig(BaseModel):
     """Config for update_field action."""
 
@@ -258,6 +264,7 @@ ActionConfig = (
     | CreateTaskActionConfig
     | AssignSurrogateActionConfig
     | SendNotificationActionConfig
+    | SendZapierConversionEventActionConfig
     | UpdateFieldActionConfig
     | AddNoteActionConfig
     | PromoteIntakeLeadActionConfig

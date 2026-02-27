@@ -151,6 +151,11 @@ AVAILABLE_ACTIONS = {
         "required_fields": ["title"],
         "optional_fields": ["body", "recipients", "user_id"],
     },
+    "send_zapier_conversion_event": {
+        "description": "Queue a Zapier outbound conversion event for critical stage changes",
+        "required_fields": [],
+        "optional_fields": [],
+    },
     "promote_intake_lead": {
         "description": "Promote intake lead into a surrogate case",
         "required_fields": [],

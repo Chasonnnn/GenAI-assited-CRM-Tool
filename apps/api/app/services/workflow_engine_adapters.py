@@ -28,6 +28,7 @@ from app.db.models import (
     IntakeLead,
     Match,
     Organization,
+    PipelineStage,
     Surrogate,
     Task,
     User,
@@ -89,6 +90,7 @@ class DefaultWorkflowDomainAdapter:
         WorkflowActionType.SEND_EMAIL.value,
         WorkflowActionType.CREATE_TASK.value,
         WorkflowActionType.ASSIGN_SURROGATE.value,
+        WorkflowActionType.SEND_ZAPIER_CONVERSION_EVENT.value,
         WorkflowActionType.UPDATE_FIELD.value,
         WorkflowActionType.ADD_NOTE.value,
     }
@@ -323,6 +325,10 @@ class DefaultWorkflowDomainAdapter:
 
             if action_type == WorkflowActionType.SEND_NOTIFICATION.value:
                 result = self._action_send_notification(db, action, entity)
+                return _with_action_type(result)
+
+            if action_type == WorkflowActionType.SEND_ZAPIER_CONVERSION_EVENT.value:
+                result = self._action_send_zapier_conversion_event(db, action_entity)
                 return _with_action_type(result)
 
             if action_type == WorkflowActionType.UPDATE_FIELD.value:
@@ -654,6 +660,100 @@ class DefaultWorkflowDomainAdapter:
             "success": True,
             "recipients_count": len(user_ids),
             "description": f"Sent notification to {len(user_ids)} user(s)",
+        }
+
+    def _action_send_zapier_conversion_event(
+        self,
+        db: Session,
+        entity: Surrogate,
+    ) -> dict:
+        """Queue a Zapier conversion event for critical surrogate stages."""
+        from app.services import zapier_outbound_service, zapier_settings_service
+
+        settings = zapier_settings_service.get_settings(db, entity.organization_id)
+        if not settings or not settings.outbound_enabled:
+            return {
+                "success": True,
+                "queued": False,
+                "skipped": True,
+                "description": "Skipped Zapier conversion event: outbound webhook is disabled.",
+            }
+        if not settings.outbound_webhook_url:
+            return {
+                "success": True,
+                "queued": False,
+                "skipped": True,
+                "description": "Skipped Zapier conversion event: outbound webhook URL is missing.",
+            }
+
+        if not entity.stage_id:
+            return {
+                "success": True,
+                "queued": False,
+                "skipped": True,
+                "description": "Skipped Zapier conversion event: surrogate has no current stage.",
+            }
+
+        stage = db.query(PipelineStage).filter(PipelineStage.id == entity.stage_id).first()
+        if not stage:
+            return {
+                "success": True,
+                "queued": False,
+                "skipped": True,
+                "description": "Skipped Zapier conversion event: stage not found.",
+            }
+
+        mapping = zapier_settings_service.normalize_event_mapping(settings.outbound_event_mapping)
+        if not zapier_settings_service.resolve_meta_stage_bucket(stage.stage_key, mapping):
+            return {
+                "success": True,
+                "queued": False,
+                "skipped": True,
+                "description": "Skipped Zapier conversion event: stage is not conversion-critical.",
+            }
+
+        enqueue_result = zapier_outbound_service.enqueue_stage_event(
+            db=db,
+            surrogate=entity,
+            stage_key=stage.stage_key,
+            stage_slug=stage.slug,
+            stage_id=str(stage.id),
+            stage_label=stage.label,
+            effective_at=datetime.now(timezone.utc),
+        )
+        if enqueue_result.get("queued"):
+            event_name = str(enqueue_result.get("event_name") or "Lead")
+            return {
+                "success": True,
+                "queued": True,
+                "event_name": event_name,
+                "description": f"Queued Zapier conversion event '{event_name}'.",
+            }
+
+        reason = str(enqueue_result.get("reason") or "not_queued")
+        if reason == "enqueue_failed":
+            return {
+                "success": False,
+                "queued": False,
+                "error": "Failed to enqueue Zapier conversion event job.",
+            }
+
+        reason_labels = {
+            "unmapped_stage": "stage is not mapped in outbound settings",
+            "not_meta_source": "surrogate source is not Meta",
+            "missing_meta_lead_fk": "surrogate is missing a linked Meta lead",
+            "missing_meta_lead": "linked Meta lead record was not found",
+            "missing_meta_lead_id": "linked Meta lead is missing lead id",
+            "duplicate": "duplicate event already queued",
+            "outbound_disabled": "outbound webhook is disabled",
+            "missing_webhook_url": "outbound webhook URL is missing",
+        }
+        reason_text = reason_labels.get(reason, reason.replace("_", " "))
+        return {
+            "success": True,
+            "queued": False,
+            "skipped": True,
+            "description": f"Skipped Zapier conversion event: {reason_text}.",
         }
 
     def _action_promote_intake_lead(

@@ -215,6 +215,54 @@ def test_workflow_service_form_submission_actions_allow_requires_approval(db, te
     assert workflow.actions[1]["requires_approval"] is True
 
 
+def test_workflow_service_send_zapier_conversion_event_requires_status_changed_trigger(
+    db, test_org, test_user
+):
+    """send_zapier_conversion_event is valid only for status_changed workflows."""
+    from app.services import workflow_service
+    from app.schemas.workflow import WorkflowCreate
+    from app.db.enums import WorkflowTriggerType
+
+    with pytest.raises(
+        ValueError, match="send_zapier_conversion_event is only supported for status_changed triggers"
+    ):
+        workflow_service.create_workflow(
+            db,
+            test_org.id,
+            test_user.id,
+            WorkflowCreate(
+                name="Invalid Zapier conversion action trigger",
+                trigger_type=WorkflowTriggerType.SURROGATE_CREATED,
+                actions=[{"action_type": "send_zapier_conversion_event"}],
+            ),
+        )
+
+
+def test_workflow_service_send_zapier_conversion_event_allows_any_status_change(
+    db, test_org, test_user
+):
+    """send_zapier_conversion_event can run on any status change without a fixed target stage."""
+    from app.services import workflow_service
+    from app.schemas.workflow import WorkflowCreate
+    from app.db.enums import WorkflowTriggerType
+
+    workflow = workflow_service.create_workflow(
+        db,
+        test_org.id,
+        test_user.id,
+        WorkflowCreate(
+            name="Zapier conversion on any status change",
+            trigger_type=WorkflowTriggerType.STATUS_CHANGED,
+            trigger_config={},
+            actions=[{"action_type": "send_zapier_conversion_event"}],
+        ),
+    )
+
+    assert workflow.trigger_type == WorkflowTriggerType.STATUS_CHANGED.value
+    assert workflow.trigger_config == {}
+    assert workflow.actions[0]["action_type"] == "send_zapier_conversion_event"
+
+
 def test_workflow_service_update(db, test_org, test_user, test_workflow):
     """Test workflow service update function."""
     from app.services import workflow_service
