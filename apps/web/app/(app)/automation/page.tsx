@@ -967,10 +967,6 @@ export default function AutomationPage() {
     }
 
     const getTriggerConfigValidationError = (): string | null => {
-        if (triggerType === "status_changed") {
-            const toStage = triggerConfig.to_stage_id
-            if (!toStage || typeof toStage !== "string") return "Select a target stage."
-        }
         if (triggerType === "scheduled") {
             const cron = triggerConfig.cron
             if (!cron || typeof cron !== "string") return "Cron schedule is required."
@@ -1684,21 +1680,22 @@ export default function AutomationPage() {
                                 {triggerType === "status_changed" && (
                                     <div className="grid gap-4 md:grid-cols-2">
                                         <div>
-                                            <Label>To Stage *</Label>
+                                            <Label>To Stage (Optional)</Label>
                                             <Select
                                                 value={typeof triggerConfig.to_stage_id === "string" ? triggerConfig.to_stage_id : ""}
-                                                onValueChange={(v) => v && setTriggerConfig({ ...triggerConfig, to_stage_id: v })}
+                                                onValueChange={(v) => setTriggerConfig({ ...triggerConfig, to_stage_id: v })}
                                             >
                                                 <SelectTrigger className="mt-1.5">
-                                                    <SelectValue placeholder="Select stage">
+                                                    <SelectValue placeholder="Any stage">
                                                         {(value: string | null) => {
-                                                            if (!value) return "Select stage"
+                                                            if (!value) return "Any stage"
                                                             const status = statusOptions.find((s) => s.id === value)
                                                             return status?.label ?? value
                                                         }}
                                                     </SelectValue>
                                                 </SelectTrigger>
                                                 <SelectContent>
+                                                    <SelectItem value="">Any stage</SelectItem>
                                                     {activeStatusOptions.map((s) => (
                                                         <SelectItem key={s.id ?? s.value} value={s.id ?? s.value}>{s.label}</SelectItem>
                                                     ))}

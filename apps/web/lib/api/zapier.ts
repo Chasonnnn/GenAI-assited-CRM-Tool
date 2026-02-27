@@ -4,6 +4,15 @@
 
 import { api } from '../api';
 
+export type ZapierStageBucket = 'qualified' | 'converted' | 'lost' | 'not_qualified';
+
+export interface ZapierEventMappingItem {
+    stage_key: string;
+    event_name: string;
+    enabled: boolean;
+    bucket?: ZapierStageBucket | null;
+}
+
 export interface ZapierSettings {
     webhook_url: string;
     is_active: boolean;
@@ -13,11 +22,7 @@ export interface ZapierSettings {
     outbound_enabled: boolean;
     outbound_secret_configured: boolean;
     send_hashed_pii: boolean;
-    event_mapping: Array<{
-        stage_key: string;
-        event_name: string;
-        enabled: boolean;
-    }>;
+    event_mapping: ZapierEventMappingItem[];
 }
 
 export interface ZapierInboundWebhook {
@@ -40,11 +45,7 @@ export interface ZapierOutboundSettingsRequest {
     outbound_webhook_secret?: string | null;
     outbound_enabled?: boolean;
     send_hashed_pii?: boolean;
-    event_mapping?: Array<{
-        stage_key: string;
-        event_name: string;
-        enabled: boolean;
-    }>;
+    event_mapping?: ZapierEventMappingItem[];
 }
 
 export interface ZapierTestLeadRequest {

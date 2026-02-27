@@ -31,7 +31,7 @@ const mockUpdateResendSettings = vi.fn()
 const mockTestResendKey = vi.fn()
 const mockRotateWebhook = vi.fn()
 
-const zapierSettingsData = {
+const createZapierSettingsData = () => ({
     webhook_url: 'https://api.test/webhooks/zapier/abc',
     is_active: true,
     secret_configured: true,
@@ -50,11 +50,33 @@ const zapierSettingsData = {
     outbound_secret_configured: false,
     send_hashed_pii: false,
     event_mapping: [
-        { stage_key: 'new_unread', event_name: 'Lead', enabled: true },
-        { stage_key: 'pre_qualified', event_name: 'PreQualifiedLead', enabled: true },
-        { stage_key: 'matched', event_name: 'ConvertedLead', enabled: true },
+        { stage_key: 'new_unread', event_name: 'Lead', enabled: true, bucket: null },
+        { stage_key: 'pre_qualified', event_name: 'PreQualifiedLead', enabled: true, bucket: null },
+        { stage_key: 'matched', event_name: 'ConvertedLead', enabled: true, bucket: null },
     ],
-} as const
+})
+
+const recommendedZapierMapping = [
+    { stage_key: 'pre_qualified', event_name: 'Qualified', enabled: true, bucket: 'qualified' },
+    { stage_key: 'interview_scheduled', event_name: 'Qualified', enabled: true, bucket: 'qualified' },
+    { stage_key: 'application_submitted', event_name: 'Qualified', enabled: true, bucket: 'qualified' },
+    { stage_key: 'under_review', event_name: 'Qualified', enabled: true, bucket: 'qualified' },
+    { stage_key: 'approved', event_name: 'Qualified', enabled: true, bucket: 'qualified' },
+    { stage_key: 'ready_to_match', event_name: 'Converted', enabled: true, bucket: 'converted' },
+    { stage_key: 'matched', event_name: 'Converted', enabled: true, bucket: 'converted' },
+    { stage_key: 'medical_clearance_passed', event_name: 'Converted', enabled: true, bucket: 'converted' },
+    { stage_key: 'legal_clearance_passed', event_name: 'Converted', enabled: true, bucket: 'converted' },
+    { stage_key: 'transfer_cycle', event_name: 'Converted', enabled: true, bucket: 'converted' },
+    { stage_key: 'second_hcg_confirmed', event_name: 'Converted', enabled: true, bucket: 'converted' },
+    { stage_key: 'heartbeat_confirmed', event_name: 'Converted', enabled: true, bucket: 'converted' },
+    { stage_key: 'ob_care_established', event_name: 'Converted', enabled: true, bucket: 'converted' },
+    { stage_key: 'anatomy_scanned', event_name: 'Converted', enabled: true, bucket: 'converted' },
+    { stage_key: 'delivered', event_name: 'Converted', enabled: true, bucket: 'converted' },
+    { stage_key: 'lost', event_name: 'Lost', enabled: true, bucket: 'lost' },
+    { stage_key: 'disqualified', event_name: 'Not Qualified', enabled: true, bucket: 'not_qualified' },
+]
+
+let zapierSettingsData = createZapierSettingsData()
 
 const aiSettingsData = {
     is_enabled: true,
@@ -170,6 +192,7 @@ vi.mock('@/lib/hooks/use-meta-forms', () => ({
 
 describe('IntegrationsPage', () => {
     beforeEach(() => {
+        zapierSettingsData = createZapierSettingsData()
         mockUseAuth.mockReturnValue({ user: { role: 'admin', user_id: 'u1' } })
         mockUseEffectivePermissions.mockReturnValue({
             data: { permissions: ['manage_integrations'] },
@@ -257,6 +280,20 @@ describe('IntegrationsPage', () => {
         expect(within(aiCard as HTMLElement).getByText('Enabled', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
         expect(within(emailCard as HTMLElement).getByText('Configured', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
         expect(within(zapierCard as HTMLElement).getByText('Active', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
+        expect(within(zapierCard as HTMLElement).getByTestId('zapier-mapping-health-card-badge')).toHaveTextContent('Mapping Needs Review')
+    })
+
+    it('shows healthy mapping badge when recommended zapier mapping is configured', () => {
+        zapierSettingsData = {
+            ...createZapierSettingsData(),
+            event_mapping: recommendedZapierMapping,
+        }
+
+        render(<IntegrationsPage />)
+
+        const zapierCard = screen.getByText('Zapier').closest('[data-slot="card"]')
+        expect(zapierCard).not.toBeNull()
+        expect(within(zapierCard as HTMLElement).getByTestId('zapier-mapping-health-card-badge')).toHaveTextContent('Mapping Healthy')
     })
 
     it('stacks zapier dialog layout rows in the modal', () => {
@@ -268,6 +305,7 @@ describe('IntegrationsPage', () => {
         expect(dialog.className).toContain('h-[85vh]')
         expect(within(dialog).getByTestId('zapier-dialog-body').className).toContain('overflow-y-auto')
         expect(within(dialog).getByTestId('zapier-dialog-body').className).toContain('min-h-0')
+        expect(within(dialog).getByTestId('zapier-mapping-health-dialog-badge')).toHaveTextContent('Mapping Needs Review')
         const inboundHeader = within(dialog).getByTestId('zapier-inbound-header')
         expect(inboundHeader.className).not.toContain('md:flex-row')
     })

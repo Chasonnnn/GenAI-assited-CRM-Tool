@@ -92,7 +92,11 @@ import { formatRelativeTime } from "@/lib/formatters"
 import { CopyIcon, SendIcon, RotateCwIcon, ActivityIcon, PlusIcon } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { toast } from "sonner"
-import type { ZapierFieldPasteResponse } from "@/lib/api/zapier"
+import type {
+    ZapierEventMappingItem,
+    ZapierFieldPasteResponse,
+    ZapierStageBucket,
+} from "@/lib/api/zapier"
 
 const statusConfig = {
     healthy: { icon: CheckCircleIcon, color: "text-green-600", badge: "default" as const, label: "Healthy" },
@@ -127,6 +131,87 @@ const integrationTypeConfig: Record<string, { icon: typeof FacebookIcon; label: 
         label: "Zapier",
         description: "Outbound stage events and inbound lead webhooks"
     },
+}
+
+const ZAPIER_BUCKET_EVENT_NAME: Record<ZapierStageBucket, string> = {
+    qualified: "Qualified",
+    converted: "Converted",
+    lost: "Lost",
+    not_qualified: "Not Qualified",
+}
+
+const ZAPIER_BUCKET_OPTIONS: Array<{ value: ZapierStageBucket; label: string }> = [
+    { value: "qualified", label: "Qualified" },
+    { value: "converted", label: "Converted" },
+    { value: "lost", label: "Lost" },
+    { value: "not_qualified", label: "Not Qualified" },
+]
+
+const ZAPIER_RECOMMENDED_BUCKET_BY_STAGE: Record<string, ZapierStageBucket> = {
+    pre_qualified: "qualified",
+    interview_scheduled: "qualified",
+    application_submitted: "qualified",
+    under_review: "qualified",
+    approved: "qualified",
+    ready_to_match: "converted",
+    matched: "converted",
+    medical_clearance_passed: "converted",
+    legal_clearance_passed: "converted",
+    transfer_cycle: "converted",
+    second_hcg_confirmed: "converted",
+    heartbeat_confirmed: "converted",
+    ob_care_established: "converted",
+    anatomy_scanned: "converted",
+    delivered: "converted",
+    lost: "lost",
+    disqualified: "not_qualified",
+}
+
+const isZapierStageBucket = (value: unknown): value is ZapierStageBucket =>
+    value === "qualified" ||
+    value === "converted" ||
+    value === "lost" ||
+    value === "not_qualified"
+
+function inferZapierBucket(item: ZapierEventMappingItem): ZapierStageBucket | null {
+    if (isZapierStageBucket(item.bucket)) {
+        return item.bucket
+    }
+    const normalized = (item.event_name || "").trim().toLowerCase()
+    if (normalized === "qualified") return "qualified"
+    if (normalized === "converted") return "converted"
+    if (normalized === "lost") return "lost"
+    if (normalized === "not qualified") return "not_qualified"
+    return null
+}
+
+function getZapierMappingHealth(eventMapping: ZapierEventMappingItem[] | null | undefined): {
+    total: number
+    matched: number
+    isHealthy: boolean
+} {
+    const total = Object.keys(ZAPIER_RECOMMENDED_BUCKET_BY_STAGE).length
+    if (!eventMapping || eventMapping.length === 0) {
+        return { total, matched: 0, isHealthy: false }
+    }
+
+    const byStage = new Map(eventMapping.map((item) => [item.stage_key, item]))
+    let matched = 0
+    for (const [stageKey, expectedBucket] of Object.entries(ZAPIER_RECOMMENDED_BUCKET_BY_STAGE)) {
+        const item = byStage.get(stageKey)
+        if (!item || !item.enabled) {
+            continue
+        }
+        if (inferZapierBucket(item) === expectedBucket) {
+            matched += 1
+        }
+    }
+
+    return {
+        total,
+        matched,
+        isHealthy: matched === total && total > 0,
+    }
 }
 
 // AI provider options
@@ -1202,7 +1287,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
     const [outboundSecret, setOutboundSecret] = useState('')
     const [outboundEnabled, setOutboundEnabled] = useState(false)
     const [sendHashedPii, setSendHashedPii] = useState(false)
-    const [eventMapping, setEventMapping] = useState<Array<{ stage_key: string; event_name: string; enabled: boolean }>>([])
+    const [eventMapping, setEventMapping] = useState<ZapierEventMappingItem[]>([])
     const [selectedOutboundStage, setSelectedOutboundStage] = useState<string>('')
 
     useEffect(() => {
@@ -1387,7 +1472,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                 outbound_webhook_secret?: string | null
                 outbound_enabled: boolean
                 send_hashed_pii: boolean
-                event_mapping: Array<{ stage_key: string; event_name: string; enabled: boolean }>
+                event_mapping: ZapierEventMappingItem[]
             } = {
                 outbound_webhook_url: outboundUrl.trim() || null,
                 outbound_enabled: outboundEnabled,
@@ -1414,6 +1499,24 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
         } catch {
             toast.error("Failed to send outbound test event")
         }
+    }
+
+    const applyRecommendedBucketMapping = () => {
+        setEventMapping((current) =>
+            current.map((item) => {
+                const recommendedBucket = ZAPIER_RECOMMENDED_BUCKET_BY_STAGE[item.stage_key]
+                if (!recommendedBucket) {
+                    return item
+                }
+                return {
+                    ...item,
+                    bucket: recommendedBucket,
+                    event_name: ZAPIER_BUCKET_EVENT_NAME[recommendedBucket],
+                    enabled: true,
+                }
+            })
+        )
+        toast.success("Applied recommended Meta conversion stage mapping")
     }
     const showHeading = variant === "page"
     const isDialog = variant === "dialog"
@@ -1851,7 +1954,20 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                         </div>
 
                         <div className="space-y-2">
-                            <Label>Stage → Event Mapping</Label>
+                            <div className="flex items-center justify-between">
+                                <Label>Stage → Event Mapping</Label>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={applyRecommendedBucketMapping}
+                                >
+                                    Apply Recommended Mapping
+                                </Button>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Set each stage bucket for Meta conversion status mapping. Dedupe runs once per lead per bucket.
+                            </p>
                             <div className="space-y-2">
                                 {eventMapping.map((item, index) => (
                                     <div
@@ -1861,6 +1977,43 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                         <div className="w-32 text-sm font-medium">
                                             {item.stage_key.replace(/_/g, " ")}
                                         </div>
+                                        <Select
+                                            value={isZapierStageBucket(item.bucket) ? item.bucket : "__none__"}
+                                            onValueChange={(value) => {
+                                                const next = [...eventMapping]
+                                                const existing = next[index]
+                                                if (!existing) return
+                                                if (value === "__none__") {
+                                                    next[index] = {
+                                                        ...existing,
+                                                        bucket: null,
+                                                        enabled: ZAPIER_RECOMMENDED_BUCKET_BY_STAGE[existing.stage_key]
+                                                            ? false
+                                                            : existing.enabled,
+                                                    }
+                                                } else if (isZapierStageBucket(value)) {
+                                                    next[index] = {
+                                                        ...existing,
+                                                        bucket: value,
+                                                        event_name: ZAPIER_BUCKET_EVENT_NAME[value],
+                                                        enabled: true,
+                                                    }
+                                                }
+                                                setEventMapping(next)
+                                            }}
+                                        >
+                                            <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-44"}>
+                                                <SelectValue placeholder="Bucket" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="__none__">Not Tracked</SelectItem>
+                                                {ZAPIER_BUCKET_OPTIONS.map((option) => (
+                                                    <SelectItem key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
                                         <Input
                                             value={item.event_name}
                                             onChange={(event) => {
@@ -1873,6 +2026,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                             placeholder="Event name"
                                             name={`zapier-event-${item.stage_key}`}
                                             autoComplete="off"
+                                            disabled={isZapierStageBucket(item.bucket)}
                                         />
                                         <div className="flex items-center gap-2">
                                             <Switch
@@ -2434,6 +2588,12 @@ export default function IntegrationsPage() {
     const inboundWebhooks = zapierSettings?.inbound_webhooks ?? []
     const zapierConfigured = inboundWebhooks.some((hook) => hook.secret_configured) || Boolean(zapierSettings?.secret_configured)
     const zapierActive = inboundWebhooks.some((hook) => hook.is_active) || Boolean(zapierSettings?.is_active)
+    const zapierMappingHealth = getZapierMappingHealth(zapierSettings?.event_mapping)
+    const zapierMappingBadgeLabel = zapierMappingHealth.isHealthy
+        ? "Mapping Healthy"
+        : "Mapping Needs Review"
+    const zapierMappingBadgeVariant = zapierMappingHealth.isHealthy ? "default" : "secondary"
+    const zapierMappingDetail = `${zapierMappingHealth.matched}/${zapierMappingHealth.total} recommended stages`
     const zapierStatusLabel = zapierConfigured
         ? (zapierActive ? "Active" : "Configured")
         : "Not configured"
@@ -2792,9 +2952,17 @@ export default function IntegrationsPage() {
                                             <ZapierStatusIcon className="size-3" aria-hidden="true" />
                                             {zapierStatusLabel}
                                         </Badge>
+                                        <Badge
+                                            data-testid="zapier-mapping-health-card-badge"
+                                            variant={zapierMappingBadgeVariant}
+                                            className="w-fit"
+                                        >
+                                            {zapierMappingBadgeLabel}
+                                        </Badge>
                                         <p className="text-xs text-muted-foreground">
                                             {zapierDetail}
                                         </p>
+                                        <p className="text-xs text-muted-foreground">{zapierMappingDetail}</p>
                                         <Button
                                             variant="outline"
                                             className="w-full"
@@ -2912,10 +3080,18 @@ export default function IntegrationsPage() {
                                         Manage inbound lead webhooks and outbound stage event delivery.
                                     </DialogDescription>
                                 </div>
-                                <Badge variant={zapierStatusVariant} className="mt-1 flex items-center gap-1">
-                                    <ZapierStatusIcon className="size-3" aria-hidden="true" />
-                                    {zapierStatusLabel}
-                                </Badge>
+                                <div className="mt-1 flex items-center gap-2">
+                                    <Badge variant={zapierStatusVariant} className="flex items-center gap-1">
+                                        <ZapierStatusIcon className="size-3" aria-hidden="true" />
+                                        {zapierStatusLabel}
+                                    </Badge>
+                                    <Badge
+                                        data-testid="zapier-mapping-health-dialog-badge"
+                                        variant={zapierMappingBadgeVariant}
+                                    >
+                                        {zapierMappingBadgeLabel}
+                                    </Badge>
+                                </div>
                             </div>
                         </DialogHeader>
                         <div

@@ -188,6 +188,11 @@ const FALLBACK_ACTION_TYPES = [
     { value: "create_task", label: "Create Task", description: "Create a task on the case" },
     { value: "assign_surrogate", label: "Assign Surrogate", description: "Assign to user or queue" },
     { value: "send_notification", label: "Send Notification", description: "Send in-app notification" },
+    {
+        value: "send_zapier_conversion_event",
+        label: "Send Zapier Conversion Event",
+        description: "Queue outbound Zapier conversion event for mapped critical stages",
+    },
     { value: "update_field", label: "Update Field", description: "Update a case field" },
     { value: "add_note", label: "Add Note", description: "Add a note to the case" },
     { value: "promote_intake_lead", label: "Promote Intake Lead", description: "Promote lead into surrogate case" },
@@ -207,6 +212,19 @@ const FALLBACK_OPERATORS = [
     { value: "greater_than", label: "Greater than" },
     { value: "less_than", label: "Less than" },
 ]
+
+const ZAPIER_CONVERSION_SAMPLE = {
+    name: "Meta Conversion Stage Sync (Zapier)",
+    description:
+        "Queues outbound Zapier stage events for critical conversion buckets based on integration mapping.",
+    icon: "activity",
+    category: "integrations",
+    trigger_type: "status_changed",
+    trigger_config: {},
+    conditions: [] as Condition[],
+    condition_logic: "AND" as const,
+    actions: [{ action_type: "send_zapier_conversion_event" }] as ActionConfig[],
+}
 
 function toListArray(value: JsonValue): string[] {
     if (Array.isArray(value)) {
@@ -483,6 +501,19 @@ export default function PlatformWorkflowTemplatePage() {
         ? triggerConfig.fields.filter((field): field is string => typeof field === "string")
         : []
 
+    const applyZapierConversionSample = () => {
+        setName(ZAPIER_CONVERSION_SAMPLE.name)
+        setDescription(ZAPIER_CONVERSION_SAMPLE.description)
+        setIcon(ZAPIER_CONVERSION_SAMPLE.icon)
+        setCategory(ZAPIER_CONVERSION_SAMPLE.category)
+        setTriggerType(ZAPIER_CONVERSION_SAMPLE.trigger_type)
+        setTriggerConfig(ZAPIER_CONVERSION_SAMPLE.trigger_config)
+        setConditions(ZAPIER_CONVERSION_SAMPLE.conditions)
+        setConditionLogic(ZAPIER_CONVERSION_SAMPLE.condition_logic)
+        setActions(ZAPIER_CONVERSION_SAMPLE.actions)
+        toast.success("Loaded Zapier conversion sample workflow")
+    }
+
     useEffect(() => {
         if (!templateData || isNew) return
         const draft = templateData.draft
@@ -743,10 +774,6 @@ export default function PlatformWorkflowTemplatePage() {
 
     const getTriggerValidationError = (): string | null => {
         if (!triggerType) return "Trigger type is required."
-        if (triggerType === "status_changed") {
-            const toStage = triggerConfig.to_stage_id
-            if (!toStage || typeof toStage !== "string") return "Select a target stage."
-        }
         if (triggerType === "form_started") {
             const formId = triggerConfig.form_id
             if (!formId || typeof formId !== "string") return "Select a form."
@@ -1071,9 +1098,14 @@ export default function PlatformWorkflowTemplatePage() {
                         </CardHeader>
                         <CardContent className="grid gap-4 md:grid-cols-2">
                             <div className="md:col-span-2">
-                                <Button type="button" variant="outline" size="sm" onClick={applySharedIntakeSample}>
-                                    Load Shared Intake Sample
-                                </Button>
+                                <div className="flex flex-wrap gap-2">
+                                    <Button type="button" variant="outline" size="sm" onClick={applySharedIntakeSample}>
+                                        Load Shared Intake Sample
+                                    </Button>
+                                    <Button type="button" variant="outline" size="sm" onClick={applyZapierConversionSample}>
+                                        Load Zapier Conversion Sample
+                                    </Button>
+                                </div>
                             </div>
                             <div className="space-y-2 md:col-span-2">
                                 <Label>Description</Label>
@@ -1141,15 +1173,16 @@ export default function PlatformWorkflowTemplatePage() {
                             {triggerType === "status_changed" && (
                                 <div className="grid gap-4 md:grid-cols-2">
                                     <div>
-                                        <Label>To Stage *</Label>
+                                        <Label>To Stage (Optional)</Label>
                                         <Select
                                             value={typeof triggerConfig.to_stage_id === "string" ? triggerConfig.to_stage_id : ""}
-                                            onValueChange={(value) => value && setTriggerConfig({ ...triggerConfig, to_stage_id: value })}
+                                            onValueChange={(value) => setTriggerConfig({ ...triggerConfig, to_stage_id: value })}
                                         >
                                             <SelectTrigger className="mt-1.5">
-                                                <SelectValue placeholder="Select stage" />
+                                                <SelectValue placeholder="Any stage" />
                                             </SelectTrigger>
                                             <SelectContent>
+                                                <SelectItem value="">Any stage</SelectItem>
                                                 {stageIdOptions.map((stage) => (
                                                     <SelectItem key={stage.value} value={stage.value}>
                                                         {stage.label}
@@ -1935,6 +1968,14 @@ export default function PlatformWorkflowTemplatePage() {
                                                         onChange={(event) => updateAction(index, { source: event.target.value })}
                                                     />
                                                 </div>
+                                            )}
+
+                                            {action.action_type === "send_zapier_conversion_event" && (
+                                                <p className="rounded-md border p-3 text-sm text-muted-foreground">
+                                                    Queues a Zapier outbound stage update when the current stage maps to
+                                                    Qualified, Converted, Lost, or Not Qualified. Skips automatically if outbound
+                                                    integration is disabled.
+                                                </p>
                                             )}
 
                                             {action.action_type === "promote_intake_lead" && (
