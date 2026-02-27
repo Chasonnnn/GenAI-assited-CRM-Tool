@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.14](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.13...surrogacy-crm-platform-v0.90.14) (2026-02-27)
+
+
+### Features
+
+* add configurable profile header and custom details export ([15e0385](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/15e03850dc1b3c4f569c74b1142d4c7d368a8f33))
+* add configurable Zapier conversion buckets and dedupe ([1c59860](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1c598604079cb037e2d8850686ae9ec44c915576))
+* add editable profile header and per-section custom Q&A ([d607fee](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d607feedfea5ba37860d2fe303bc8da85581bea8))
+* add workflow action and seeded Zapier conversion template ([b17808a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b17808a22f494fb77126f7f736c9af82013b51d1))
+* add Zapier mapping health badges and OPS sample workflow ([7a45a14](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7a45a14427ba7f5825441692a6ff880f57a90a9e))
+* align web stage and analytics contracts with pre-qualified keys ([a773016](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a7730166e3473ee25aaf2376a9bc37d053018dde))
+* cut over pipeline stages to immutable stage keys ([f320d9e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f320d9e4a0c375c02952853d6aa73f91cb5648fe))
+
+
+### Bug Fixes
+
+* guard baseline postgres extensions by dialect ([5455d91](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5455d9104f51acb4162cea3448660d0763955f79))
+
 ## [0.90.13](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.12...surrogacy-crm-platform-v0.90.13) (2026-02-27)
 
 
