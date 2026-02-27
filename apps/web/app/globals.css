@@ -181,6 +181,53 @@
   }
 }
 
+.surrogates-floating-scrollbar-viewport {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(107, 107, 107, 0.7) rgba(229, 229, 229, 0.65);
+}
+
+.surrogates-floating-scrollbar-viewport::-webkit-scrollbar {
+  height: 8px;
+}
+
+.surrogates-floating-scrollbar-viewport::-webkit-scrollbar-track {
+  border-radius: 9999px;
+  background: rgba(229, 229, 229, 0.65);
+}
+
+.surrogates-floating-scrollbar-viewport::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: rgba(107, 107, 107, 0.7);
+}
+
+.surrogates-floating-scrollbar-viewport:hover::-webkit-scrollbar-thumb {
+  background: rgba(86, 86, 86, 0.78);
+}
+
+.surrogates-floating-scrollbar-viewport:active::-webkit-scrollbar-thumb {
+  background: rgba(60, 60, 60, 0.86);
+}
+
+.dark .surrogates-floating-scrollbar-viewport {
+  scrollbar-color: rgba(220, 220, 220, 0.72) rgba(58, 58, 58, 0.75);
+}
+
+.dark .surrogates-floating-scrollbar-viewport::-webkit-scrollbar-track {
+  background: rgba(58, 58, 58, 0.75);
+}
+
+.dark .surrogates-floating-scrollbar-viewport::-webkit-scrollbar-thumb {
+  background: rgba(220, 220, 220, 0.72);
+}
+
+.dark .surrogates-floating-scrollbar-viewport:hover::-webkit-scrollbar-thumb {
+  background: rgba(238, 238, 238, 0.82);
+}
+
+.dark .surrogates-floating-scrollbar-viewport:active::-webkit-scrollbar-thumb {
+  background: rgba(252, 252, 252, 0.9);
+}
+
 /* View Transition API for Circle Blur theme toggle */
 
 /* Keyframes for circle animation */

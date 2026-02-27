@@ -30,6 +30,7 @@ import { formatRace } from "@/lib/formatters"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { MassEditStageModal } from "@/components/surrogates/MassEditStageModal"
+import { SurrogatesFloatingScrollbar } from "@/components/surrogates/SurrogatesFloatingScrollbar"
 
 // Format date for display
 function formatDate(dateString: string | null | undefined): string {
@@ -819,7 +820,8 @@ export default function SurrogatesPage() {
                 {/* Surrogates Table */}
                 {!isLoading && !isError && data && data.items.length > 0 && (
                     <Card className="overflow-hidden py-0">
-                        <Table className={cn("min-w-max [&_th]:!text-center [&_td]:!text-center [&_th>div]:justify-center transition-opacity", isFilterPending && "opacity-60")}>
+                        <SurrogatesFloatingScrollbar>
+                            <Table className={cn("min-w-max [&_th]:!text-center [&_td]:!text-center [&_th>div]:justify-center transition-opacity", isFilterPending && "opacity-60")}>
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead className="w-[40px]">
@@ -980,7 +982,8 @@ export default function SurrogatesPage() {
                                         )
                                     })}
                                 </TableBody>
-                        </Table>
+                            </Table>
+                        </SurrogatesFloatingScrollbar>
 
                         {/* Pagination */}
                         {totalPages && totalPages > 1 && (
