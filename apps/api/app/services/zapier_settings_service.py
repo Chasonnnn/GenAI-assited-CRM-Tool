@@ -17,10 +17,151 @@ from app.services import oauth_service
 
 logger = logging.getLogger(__name__)
 
+QUALIFIED_EVENT_NAME = "Qualified"
+CONVERTED_EVENT_NAME = "Converted"
+LOST_EVENT_NAME = "Lost"
+NOT_QUALIFIED_EVENT_NAME = "Not Qualified"
+
+QUALIFIED_BUCKET = "qualified"
+CONVERTED_BUCKET = "converted"
+LOST_BUCKET = "lost"
+NOT_QUALIFIED_BUCKET = "not_qualified"
+
+QUALIFIED_STAGE_KEYS = {
+    "pre_qualified",
+    "interview_scheduled",
+    "application_submitted",
+    "under_review",
+    "approved",
+}
+CONVERTED_STAGE_KEYS = {
+    "ready_to_match",
+    "matched",
+    "medical_clearance_passed",
+    "legal_clearance_passed",
+    "transfer_cycle",
+    "second_hcg_confirmed",
+    "heartbeat_confirmed",
+    "ob_care_established",
+    "anatomy_scanned",
+    "delivered",
+}
+LOST_STAGE_KEYS = {"lost"}
+NOT_QUALIFIED_STAGE_KEYS = {"disqualified"}
+
+DEFAULT_BUCKET_BY_STAGE_KEY: dict[str, str] = {
+    **{stage_key: QUALIFIED_BUCKET for stage_key in QUALIFIED_STAGE_KEYS},
+    **{stage_key: CONVERTED_BUCKET for stage_key in CONVERTED_STAGE_KEYS},
+    **{stage_key: LOST_BUCKET for stage_key in LOST_STAGE_KEYS},
+    **{stage_key: NOT_QUALIFIED_BUCKET for stage_key in NOT_QUALIFIED_STAGE_KEYS},
+}
+
+EVENT_NAME_BY_BUCKET = {
+    QUALIFIED_BUCKET: QUALIFIED_EVENT_NAME,
+    CONVERTED_BUCKET: CONVERTED_EVENT_NAME,
+    LOST_BUCKET: LOST_EVENT_NAME,
+    NOT_QUALIFIED_BUCKET: NOT_QUALIFIED_EVENT_NAME,
+}
+
 DEFAULT_EVENT_MAPPING = [
-    {"stage_key": "new_unread", "event_name": "Lead", "enabled": True},
-    {"stage_key": "pre_qualified", "event_name": "PreQualifiedLead", "enabled": True},
-    {"stage_key": "matched", "event_name": "ConvertedLead", "enabled": True},
+    {"stage_key": "new_unread", "event_name": "Lead", "enabled": True, "bucket": None},
+    {
+        "stage_key": "pre_qualified",
+        "event_name": QUALIFIED_EVENT_NAME,
+        "enabled": True,
+        "bucket": QUALIFIED_BUCKET,
+    },
+    {
+        "stage_key": "interview_scheduled",
+        "event_name": QUALIFIED_EVENT_NAME,
+        "enabled": True,
+        "bucket": QUALIFIED_BUCKET,
+    },
+    {
+        "stage_key": "application_submitted",
+        "event_name": QUALIFIED_EVENT_NAME,
+        "enabled": True,
+        "bucket": QUALIFIED_BUCKET,
+    },
+    {
+        "stage_key": "under_review",
+        "event_name": QUALIFIED_EVENT_NAME,
+        "enabled": True,
+        "bucket": QUALIFIED_BUCKET,
+    },
+    {
+        "stage_key": "approved",
+        "event_name": QUALIFIED_EVENT_NAME,
+        "enabled": True,
+        "bucket": QUALIFIED_BUCKET,
+    },
+    {
+        "stage_key": "ready_to_match",
+        "event_name": CONVERTED_EVENT_NAME,
+        "enabled": True,
+        "bucket": CONVERTED_BUCKET,
+    },
+    {
+        "stage_key": "matched",
+        "event_name": CONVERTED_EVENT_NAME,
+        "enabled": True,
+        "bucket": CONVERTED_BUCKET,
+    },
+    {
+        "stage_key": "medical_clearance_passed",
+        "event_name": CONVERTED_EVENT_NAME,
+        "enabled": True,
+        "bucket": CONVERTED_BUCKET,
+    },
+    {
+        "stage_key": "legal_clearance_passed",
+        "event_name": CONVERTED_EVENT_NAME,
+        "enabled": True,
+        "bucket": CONVERTED_BUCKET,
+    },
+    {
+        "stage_key": "transfer_cycle",
+        "event_name": CONVERTED_EVENT_NAME,
+        "enabled": True,
+        "bucket": CONVERTED_BUCKET,
+    },
+    {
+        "stage_key": "second_hcg_confirmed",
+        "event_name": CONVERTED_EVENT_NAME,
+        "enabled": True,
+        "bucket": CONVERTED_BUCKET,
+    },
+    {
+        "stage_key": "heartbeat_confirmed",
+        "event_name": CONVERTED_EVENT_NAME,
+        "enabled": True,
+        "bucket": CONVERTED_BUCKET,
+    },
+    {
+        "stage_key": "ob_care_established",
+        "event_name": CONVERTED_EVENT_NAME,
+        "enabled": True,
+        "bucket": CONVERTED_BUCKET,
+    },
+    {
+        "stage_key": "anatomy_scanned",
+        "event_name": CONVERTED_EVENT_NAME,
+        "enabled": True,
+        "bucket": CONVERTED_BUCKET,
+    },
+    {
+        "stage_key": "delivered",
+        "event_name": CONVERTED_EVENT_NAME,
+        "enabled": True,
+        "bucket": CONVERTED_BUCKET,
+    },
+    {"stage_key": "lost", "event_name": LOST_EVENT_NAME, "enabled": True, "bucket": LOST_BUCKET},
+    {
+        "stage_key": "disqualified",
+        "event_name": NOT_QUALIFIED_EVENT_NAME,
+        "enabled": True,
+        "bucket": NOT_QUALIFIED_BUCKET,
+    },
 ]
 
 
@@ -31,6 +172,94 @@ def _now_utc() -> datetime:
 def _generate_webhook_secret() -> str:
     """Generate a shared secret for Zapier webhooks."""
     return secrets.token_urlsafe(32)
+
+
+def _event_name_key(value: str) -> str:
+    return "".join(ch for ch in value.lower() if ch.isalnum())
+
+
+def _normalize_bucket(value: str | None) -> str | None:
+    if not value:
+        return None
+    key = _event_name_key(value)
+    if key in {QUALIFIED_BUCKET, "qualifiedlead", "prequalifiedlead", "qualifiedconverted"}:
+        return QUALIFIED_BUCKET
+    if key in {CONVERTED_BUCKET, "convertedlead"}:
+        return CONVERTED_BUCKET
+    if key in {LOST_BUCKET, "lostlead"}:
+        return LOST_BUCKET
+    if key in {
+        "notqualified",
+        "notqualifiedlead",
+        "notqualifiedlost",
+        "disqualified",
+        NOT_QUALIFIED_BUCKET,
+    }:
+        return NOT_QUALIFIED_BUCKET
+    return None
+
+
+def event_name_for_bucket(bucket: str | None) -> str | None:
+    if not bucket:
+        return None
+    return EVENT_NAME_BY_BUCKET.get(bucket)
+
+
+def _resolve_bucket_from_mapping_item(stage_key: str, item: dict) -> str | None:
+    if not bool(item.get("enabled", True)):
+        return None
+    configured_bucket = _normalize_bucket(str(item.get("bucket") or "").strip())
+    if configured_bucket:
+        return configured_bucket
+    event_name = str(item.get("event_name") or "").strip()
+    event_bucket = _normalize_bucket(event_name)
+    if event_bucket:
+        return event_bucket
+    return DEFAULT_BUCKET_BY_STAGE_KEY.get(stage_key)
+
+
+def resolve_meta_stage_bucket(stage_key: str | None, mapping: list[dict] | None = None) -> str | None:
+    """Return a canonical funnel bucket for Meta CAPI-style webhook events."""
+    normalized = canonicalize_stage_key(stage_key)
+    if not normalized:
+        return None
+
+    if mapping:
+        for item in mapping:
+            if not isinstance(item, dict):
+                continue
+            mapped_stage = canonicalize_stage_key(str(item.get("stage_key") or "").strip())
+            if mapped_stage != normalized:
+                continue
+            return _resolve_bucket_from_mapping_item(normalized, item)
+
+    return DEFAULT_BUCKET_BY_STAGE_KEY.get(normalized)
+
+
+def _normalize_event_name(stage_key: str, event_name: str) -> str:
+    key = _event_name_key(event_name)
+    if stage_key in QUALIFIED_STAGE_KEYS and key in {
+        "qualified",
+        "qualifiedlead",
+        "prequalifiedlead",
+        "qualifiedconverted",
+    }:
+        return QUALIFIED_EVENT_NAME
+    if stage_key in CONVERTED_STAGE_KEYS and key in {
+        "converted",
+        "convertedlead",
+    }:
+        return CONVERTED_EVENT_NAME
+    if stage_key in LOST_STAGE_KEYS and key in {"lost", "lostlead"}:
+        return LOST_EVENT_NAME
+    if stage_key in NOT_QUALIFIED_STAGE_KEYS and key in {
+        "notqualified",
+        "notqualifiedlead",
+        "notqualifiedlost",
+        "disqualified",
+    }:
+        return NOT_QUALIFIED_EVENT_NAME
+    return event_name
 
 
 def encrypt_secret(secret: str) -> str:
@@ -242,27 +471,51 @@ def update_inbound_webhook(
 
 def normalize_event_mapping(mapping: list[dict] | None) -> list[dict]:
     if not mapping:
-        return DEFAULT_EVENT_MAPPING
+        return [dict(item) for item in DEFAULT_EVENT_MAPPING]
     normalized: list[dict] = []
+    index_by_stage_key: dict[str, int] = {}
     for item in mapping:
         if not isinstance(item, dict):
             continue
         stage_ref = str(item.get("stage_key") or item.get("stage_slug") or "").strip()
         stage_key = canonicalize_stage_key(stage_ref)
         event_name = str(item.get("event_name") or "").strip()
+        bucket = _normalize_bucket(str(item.get("bucket") or "").strip())
         enabled = bool(item.get("enabled", True))
-        if not stage_key or not event_name:
+        if not stage_key:
             continue
-        if event_name == "QualifiedLead" and stage_key == "pre_qualified":
-            event_name = "PreQualifiedLead"
-        normalized.append(
-            {
-                "stage_key": stage_key,
-                "event_name": event_name,
-                "enabled": enabled,
-            }
-        )
-    return normalized or DEFAULT_EVENT_MAPPING
+        if not bucket:
+            bucket = _normalize_bucket(event_name)
+        if not bucket:
+            bucket = DEFAULT_BUCKET_BY_STAGE_KEY.get(stage_key)
+
+        normalized_event_name = event_name_for_bucket(bucket)
+        if not normalized_event_name:
+            normalized_event_name = _normalize_event_name(stage_key, event_name)
+        if not normalized_event_name:
+            continue
+
+        normalized_item = {
+            "stage_key": stage_key,
+            "event_name": normalized_event_name,
+            "enabled": enabled,
+            "bucket": bucket,
+        }
+        existing_index = index_by_stage_key.get(stage_key)
+        if existing_index is None:
+            index_by_stage_key[stage_key] = len(normalized)
+            normalized.append(normalized_item)
+        else:
+            normalized[existing_index] = normalized_item
+
+    for default_item in DEFAULT_EVENT_MAPPING:
+        stage_key = default_item["stage_key"]
+        if stage_key in index_by_stage_key:
+            continue
+        index_by_stage_key[stage_key] = len(normalized)
+        normalized.append(dict(default_item))
+
+    return normalized or [dict(item) for item in DEFAULT_EVENT_MAPPING]
 
 
 def update_outbound_settings(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -39,7 +40,7 @@ class ZapierSettingsResponse(BaseModel):
     outbound_enabled: bool
     outbound_secret_configured: bool
     send_hashed_pii: bool
-    event_mapping: list[dict]
+    event_mapping: list["ZapierEventMappingItem"]
 
 
 class RotateSecretResponse(BaseModel):
@@ -69,6 +70,7 @@ class ZapierEventMappingItem(BaseModel):
     stage_key: str
     event_name: str
     enabled: bool = True
+    bucket: Literal["qualified", "converted", "lost", "not_qualified"] | None = None
 
 
 class ZapierOutboundSettingsUpdate(BaseModel):

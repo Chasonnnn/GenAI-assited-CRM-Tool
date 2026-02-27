@@ -14,11 +14,7 @@ async def test_zapier_outbound_settings_update(authed_client):
         "send_hashed_pii": True,
         "event_mapping": [
             {"stage_key": "new_unread", "event_name": "Lead", "enabled": True},
-            {
-                "stage_key": "pre_qualified",
-                "event_name": "PreQualifiedLead",
-                "enabled": True,
-            },
+            {"stage_key": "pre_qualified", "event_name": "Qualified", "bucket": "qualified", "enabled": True},
             {"stage_key": "matched", "event_name": "ConvertedLead", "enabled": False},
         ],
     }
@@ -32,6 +28,10 @@ async def test_zapier_outbound_settings_update(authed_client):
     assert data["send_hashed_pii"] is True
     assert any(
         m["stage_key"] == "pre_qualified" and m["enabled"] for m in data["event_mapping"]
+    )
+    assert any(
+        m["stage_key"] == "pre_qualified" and m.get("bucket") == "qualified"
+        for m in data["event_mapping"]
     )
 
     res2 = await authed_client.get("/integrations/zapier/settings")
@@ -65,7 +65,7 @@ async def test_zapier_outbound_test_event_queues_job(authed_client, db, test_org
     assert res.status_code == 200
     data = res.json()
     assert data["status"] == "queued"
-    assert data["event_name"] == "PreQualifiedLead"
+    assert data["event_name"] == "Qualified"
 
     job = (
         db.query(Job)
@@ -78,4 +78,55 @@ async def test_zapier_outbound_test_event_queues_job(authed_client, db, test_org
     )
     assert job is not None
     assert job.payload["data"]["lead_id"] == "lead-test-1"
-    assert job.payload["data"]["event_name"] == "PreQualifiedLead"
+    assert job.payload["data"]["event_name"] == "Qualified"
+
+
+def test_normalize_event_mapping_expands_meta_status_ranges():
+    from app.services import zapier_settings_service
+
+    mapping = zapier_settings_service.normalize_event_mapping(
+        [
+            {"stage_key": "pre_qualified", "event_name": "PreQualifiedLead", "enabled": True},
+            {"stage_key": "matched", "event_name": "ConvertedLead", "enabled": True},
+        ]
+    )
+    by_stage = {item["stage_key"]: item for item in mapping}
+
+    assert by_stage["pre_qualified"]["event_name"] == "Qualified"
+    assert by_stage["pre_qualified"]["bucket"] == "qualified"
+    assert by_stage["application_submitted"]["event_name"] == "Qualified"
+    assert by_stage["application_submitted"]["bucket"] == "qualified"
+    assert by_stage["ready_to_match"]["event_name"] == "Converted"
+    assert by_stage["ready_to_match"]["bucket"] == "converted"
+    assert by_stage["lost"]["event_name"] == "Lost"
+    assert by_stage["lost"]["bucket"] == "lost"
+    assert by_stage["disqualified"]["event_name"] == "Not Qualified"
+    assert by_stage["disqualified"]["bucket"] == "not_qualified"
+
+
+def test_resolve_meta_stage_bucket_uses_configured_mapping():
+    from app.services import zapier_settings_service
+
+    mapping = zapier_settings_service.normalize_event_mapping(
+        [
+            {
+                "stage_key": "approved",
+                "event_name": "Converted",
+                "bucket": "converted",
+                "enabled": True,
+            }
+        ]
+    )
+    assert zapier_settings_service.resolve_meta_stage_bucket("approved", mapping) == "converted"
+
+    disabled_mapping = zapier_settings_service.normalize_event_mapping(
+        [
+            {
+                "stage_key": "approved",
+                "event_name": "Converted",
+                "bucket": "converted",
+                "enabled": False,
+            }
+        ]
+    )
+    assert zapier_settings_service.resolve_meta_stage_bucket("approved", disabled_mapping) is None
