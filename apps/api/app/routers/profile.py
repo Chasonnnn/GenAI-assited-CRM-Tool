@@ -44,6 +44,9 @@ class ProfileDataResponse(BaseModel):
     hidden_fields: list[str]
     merged_view: dict[str, Any]
     schema_snapshot: dict | None
+    header_name_override: str | None = None
+    header_note: str | None = None
+    custom_qas: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class SyncDiffItem(BaseModel):

@@ -5,6 +5,7 @@ import base64
 import html
 import math
 import os
+import re
 import uuid
 from io import BytesIO
 from pathlib import Path
@@ -177,10 +178,22 @@ def _generate_submission_html(
     answers: dict[str, Any],
     files: list[dict[str, Any]],
     hidden_fields: set[str] | None = None,
+    header_note: str | None = None,
+    custom_qas: list[dict[str, Any]] | None = None,
 ) -> str:
     """Generate HTML for submission/profile export."""
     hidden_fields = hidden_fields or set()
     pages = schema.get("pages") or []
+
+    def _render_profile_template(template: str) -> str:
+        def _replace(match: re.Match[str]) -> str:
+            token = match.group(1)
+            value = answers.get(token)
+            if value is None:
+                return "{{" + token + "}}"
+            return str(value)
+
+        return re.sub(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}", _replace, template)
 
     sections_html = ""
     for page in pages:
@@ -232,6 +245,30 @@ def _generate_submission_html(
     attachments_hidden = bool(file_field_keys) and file_field_keys.issubset(hidden_fields)
 
     attachments_html = _build_file_section(files, hidden=attachments_hidden)
+    custom_qas = custom_qas or []
+    custom_qas_rows = ""
+    for qa in sorted(custom_qas, key=lambda item: int(item.get("order") or 0)):
+        question = html.escape(str(qa.get("question") or "").strip())
+        answer_text = _render_profile_template(str(qa.get("answer") or "").strip())
+        answer = html.escape(answer_text)
+        if not question and not answer:
+            continue
+        custom_qas_rows += f"""
+        <div class="field-row">
+            <span class="field-label">{question or "Question"}</span>
+            <span class="field-value">{answer or '<span class="muted">—</span>'}</span>
+        </div>
+        """
+    custom_qas_html = (
+        f"""
+        <div class="section">
+            <h2>Custom Details</h2>
+            {custom_qas_rows}
+        </div>
+        """
+        if custom_qas_rows
+        else ""
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -265,6 +302,11 @@ def _generate_submission_html(
             font-size: 10pt;
             color: #64748b;
             margin-top: 4px;
+        }}
+        .header .note {{
+            font-size: 10pt;
+            color: #334155;
+            margin-top: 6px;
         }}
         .muted {{
             color: #94a3b8;
@@ -355,9 +397,11 @@ def _generate_submission_html(
     <div class="header">
         <h1>{html.escape(surrogate_name)}</h1>
         <div class="subtitle">{html.escape(title)} • {datetime.now().strftime("%B %d, %Y")}{" • " + html.escape(org_name) if org_name else ""}</div>
+        {f'<div class="note">{html.escape(_render_profile_template(header_note))}</div>' if header_note else ''}
     </div>
     
     {sections_html}
+    {custom_qas_html}
 
     {attachments_html}
     
@@ -795,6 +839,12 @@ def export_profile_pdf(
     # Get profile data
     profile_data = profile_service.get_profile_data(db, org_id, surrogate_id)
     hidden_fields = set(profile_data.get("hidden_fields") or [])
+    answers = profile_data.get("merged_view") or {}
+    effective_name = (
+        profile_data.get("header_name_override")
+        or answers.get("full_name")
+        or surrogate_name
+    )
 
     base_submission_id = profile_data.get("base_submission_id")
     if not base_submission_id:
@@ -817,12 +867,14 @@ def export_profile_pdf(
 
     html_content = _generate_submission_html(
         title="Profile Card Export",
-        surrogate_name=surrogate_name,
+        surrogate_name=effective_name,
         org_name=org_name,
         schema=schema,
-        answers=profile_data.get("merged_view") or {},
+        answers=answers,
         files=file_entries,
         hidden_fields=hidden_fields,
+        header_note=profile_data.get("header_note"),
+        custom_qas=profile_data.get("custom_qas") or [],
     )
 
     # Render to PDF (run async in sync context)

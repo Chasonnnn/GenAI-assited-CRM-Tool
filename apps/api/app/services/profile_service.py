@@ -15,6 +15,46 @@ from app.db.models import (
 )
 from app.services import activity_service
 
+PROFILE_HEADER_NAME_KEY = "__profile_header_name"
+PROFILE_HEADER_NOTE_KEY = "__profile_header_note"
+PROFILE_CUSTOM_QAS_KEY = "__profile_custom_qas"
+PROFILE_META_KEYS = {
+    PROFILE_HEADER_NAME_KEY,
+    PROFILE_HEADER_NOTE_KEY,
+    PROFILE_CUSTOM_QAS_KEY,
+}
+
+
+def _coerce_optional_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _coerce_custom_qas(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+
+    normalized: list[dict[str, Any]] = []
+    for i, item in enumerate(value):
+        if not isinstance(item, dict):
+            continue
+        question = str(item.get("question") or "").strip()
+        answer = str(item.get("answer") or "").strip()
+        if not question and not answer:
+            continue
+        normalized.append(
+            {
+                "id": str(item.get("id") or f"qa_{i}"),
+                "section_key": str(item.get("section_key") or "default"),
+                "question": question,
+                "answer": answer,
+                "order": int(item.get("order") or i),
+            }
+        )
+    return normalized
+
 
 def get_profile_data(
     db: Session,
@@ -64,6 +104,10 @@ def get_profile_data(
         .all()
     )
     overrides = {o.field_key: o.value for o in overrides_list}
+    header_name_override = _coerce_optional_text(overrides.get(PROFILE_HEADER_NAME_KEY))
+    header_note = _coerce_optional_text(overrides.get(PROFILE_HEADER_NOTE_KEY))
+    custom_qas = _coerce_custom_qas(overrides.get(PROFILE_CUSTOM_QAS_KEY))
+    display_overrides = {k: v for k, v in overrides.items() if k not in PROFILE_META_KEYS}
 
     # Get hidden fields
     hidden_list = (
@@ -77,15 +121,18 @@ def get_profile_data(
     hidden_fields = [h.field_key for h in hidden_list]
 
     # Merge: base + overrides
-    merged_view = {**base_answers, **overrides}
+    merged_view = {**base_answers, **display_overrides}
 
     return {
         "base_submission_id": base_submission_id,
         "base_answers": base_answers,
-        "overrides": overrides,
+        "overrides": display_overrides,
         "hidden_fields": hidden_fields,
         "merged_view": merged_view,
         "schema_snapshot": schema_snapshot,
+        "header_name_override": header_name_override,
+        "header_note": header_note,
+        "custom_qas": custom_qas,
     }
 
 
@@ -156,6 +203,7 @@ def get_sync_diff(
 
     # Compare all keys from latest submission
     all_keys = set(latest_answers.keys()) | set(current_merged.keys())
+    all_keys.difference_update(PROFILE_META_KEYS)
 
     for key in all_keys:
         old_val = current_merged.get(key)
