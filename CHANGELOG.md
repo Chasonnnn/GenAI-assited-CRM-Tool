@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.13](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.12...surrogacy-crm-platform-v0.90.13) (2026-02-27)
+
+
+### Bug Fixes
+
+* harden attachment uploads for GCS S3 compatibility ([9cafca7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9cafca7650bba604ab4ca1dfa44edd4d1d27d893))
+
 ## [0.90.12](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.11...surrogacy-crm-platform-v0.90.12) (2026-02-27)
 
 
