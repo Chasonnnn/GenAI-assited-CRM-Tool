@@ -166,6 +166,31 @@ class SurrogateMassEditStageApplyResponse(BaseModel):
     failed: list[SurrogateMassEditStageFailure] = Field(default_factory=list)
 
 
+class SurrogateMassEditArchiveApplyRequest(BaseModel):
+    """Archive all surrogates matching the filters.
+
+    Notes:
+    - `expected_total` must come from preview to prevent accidental wide updates.
+    """
+
+    filters: SurrogateMassEditStageFilters = Field(default_factory=SurrogateMassEditStageFilters)
+    expected_total: int = Field(..., ge=0)
+    reason: str | None = Field(None, max_length=500)
+
+    model_config = {"extra": "forbid"}
+
+
+class SurrogateMassEditArchiveFailure(BaseModel):
+    surrogate_id: UUID
+    reason: str
+
+
+class SurrogateMassEditArchiveApplyResponse(BaseModel):
+    matched: int
+    archived: int
+    failed: list[SurrogateMassEditArchiveFailure] = Field(default_factory=list)
+
+
 class SurrogateMassEditOptionsResponse(BaseModel):
     """Distinct filter option values derived from org data."""
 

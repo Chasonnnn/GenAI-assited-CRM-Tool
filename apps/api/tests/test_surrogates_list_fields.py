@@ -1,6 +1,9 @@
 import uuid
+from datetime import datetime, timezone
 
 import pytest
+
+from app.db.models import Surrogate
 
 
 @pytest.mark.asyncio
@@ -43,3 +46,41 @@ async def test_surrogates_list_normalizes_bmi_using_rounded_inches(authed_client
 
     assert match is not None
     assert match["bmi"] == pytest.approx(34.0, abs=0.01)
+
+
+@pytest.mark.asyncio
+async def test_surrogates_list_created_to_date_includes_entire_day(authed_client, db):
+    res_same_day = await authed_client.post(
+        "/surrogates",
+        json={
+            "full_name": "Created To Same Day",
+            "email": f"created-to-same-day-{uuid.uuid4().hex[:8]}@example.com",
+        },
+    )
+    assert res_same_day.status_code == 201, res_same_day.text
+    same_day_id = res_same_day.json()["id"]
+
+    res_next_day = await authed_client.post(
+        "/surrogates",
+        json={
+            "full_name": "Created To Next Day",
+            "email": f"created-to-next-day-{uuid.uuid4().hex[:8]}@example.com",
+        },
+    )
+    assert res_next_day.status_code == 201, res_next_day.text
+    next_day_id = res_next_day.json()["id"]
+
+    same_day_row = db.query(Surrogate).filter(Surrogate.id == uuid.UUID(same_day_id)).first()
+    next_day_row = db.query(Surrogate).filter(Surrogate.id == uuid.UUID(next_day_id)).first()
+    assert same_day_row is not None and next_day_row is not None
+
+    same_day_row.created_at = datetime(2025, 1, 10, 15, 45, tzinfo=timezone.utc)
+    next_day_row.created_at = datetime(2025, 1, 11, 0, 0, 1, tzinfo=timezone.utc)
+    db.commit()
+
+    list_res = await authed_client.get("/surrogates", params={"created_to": "2025-01-10"})
+    assert list_res.status_code == 200, list_res.text
+    ids = {item["id"] for item in list_res.json()["items"]}
+
+    assert same_day_id in ids
+    assert next_day_id not in ids

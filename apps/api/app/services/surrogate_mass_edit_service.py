@@ -21,6 +21,8 @@ from app.core.encryption import hash_email, hash_phone
 from app.db.enums import OwnerType, Role
 from app.db.models import Surrogate
 from app.schemas.surrogate_mass_edit import (
+    SurrogateMassEditArchiveApplyResponse,
+    SurrogateMassEditArchiveFailure,
     SurrogateMassEditOptionsResponse,
     SurrogateMassEditStageApplyResponse,
     SurrogateMassEditStageFailure,
@@ -381,6 +383,85 @@ def apply_stage_change(
         matched=matched_total,
         applied=applied,
         pending_approval=pending_approval,
+        failed=failed,
+    )
+
+
+def apply_archive_change(
+    db: Session,
+    org_id: UUID,
+    *,
+    filters: SurrogateMassEditStageFilters,
+    expected_total: int,
+    user_id: UUID,
+    reason: str | None,
+) -> SurrogateMassEditArchiveApplyResponse:
+    from app.services import dashboard_events, surrogate_service
+
+    query = _build_base_query(db, org_id, filters)
+    needs_age_scan = filters.age_min is not None or filters.age_max is not None
+
+    if needs_age_scan:
+        base_count = query.count()
+        if base_count > MAX_DERIVED_SCAN:
+            raise ValueError(
+                f"Too many candidates ({base_count}) to evaluate age filter. Add more filters."
+            )
+        candidates = (
+            query.options(load_only(Surrogate.id, Surrogate.date_of_birth))
+            .order_by(Surrogate.created_at.desc())
+            .all()
+        )
+        matched_surrogates = _apply_age_filter_in_memory(
+            candidates, age_min=filters.age_min, age_max=filters.age_max
+        )
+        matching_ids = [s.id for s in matched_surrogates]
+        matched_total = len(matching_ids)
+    else:
+        matched_total = query.count()
+
+    if matched_total != expected_total:
+        raise ValueError(
+            f"Selection changed (expected {expected_total}, now {matched_total}). Re-run preview."
+        )
+
+    if matched_total > MAX_APPLY:
+        raise ValueError(f"Too many surrogates matched ({matched_total}). Narrow filters.")
+
+    if not needs_age_scan:
+        matching_ids = [row[0] for row in query.with_entities(Surrogate.id).all()]
+
+    _ = reason  # Reserved for future archive history/audit annotation support.
+    archived = 0
+    failed: list[SurrogateMassEditArchiveFailure] = []
+
+    for sid in matching_ids:
+        surrogate = surrogate_service.get_surrogate(db, org_id, sid)
+        if not surrogate:
+            failed.append(SurrogateMassEditArchiveFailure(surrogate_id=sid, reason="Surrogate not found"))
+            continue
+        if surrogate.is_archived:
+            failed.append(
+                SurrogateMassEditArchiveFailure(
+                    surrogate_id=sid, reason="Surrogate already archived"
+                )
+            )
+            continue
+
+        try:
+            surrogate_service.archive_surrogate(db, surrogate, user_id, emit_events=False)
+            archived += 1
+        except Exception as exc:
+            failed.append(SurrogateMassEditArchiveFailure(surrogate_id=sid, reason=str(exc)))
+
+    try:
+        dashboard_events.push_dashboard_stats(db, org_id)
+    except Exception:
+        pass
+
+    return SurrogateMassEditArchiveApplyResponse(
+        matched=matched_total,
+        archived=archived,
         failed=failed,
     )
 

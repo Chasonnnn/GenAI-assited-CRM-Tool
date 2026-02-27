@@ -1,6 +1,6 @@
 """Surrogate service - business logic for surrogate operations."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 import logging
 from uuid import UUID
 
@@ -31,6 +31,23 @@ from app.utils.normalization import (
 from app.services.surrogate_status_service import StatusChangeResult
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_created_to_filter(value: str) -> tuple[datetime, bool]:
+    """Parse created_to value.
+
+    Returns:
+        (parsed_datetime, is_date_only)
+    """
+    normalized = value.strip()
+    # Date-only values are interpreted as an inclusive day on the API surface.
+    # Convert to exclusive next-day midnight for stable DB filtering.
+    if "T" not in normalized:
+        parsed_date = date.fromisoformat(normalized)
+        return datetime.combine(parsed_date + timedelta(days=1), time(0, 0, 0)), True
+
+    parsed_datetime = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+    return parsed_datetime, False
 
 
 def generate_surrogate_number(db: Session, org_id: UUID) -> str:
@@ -940,8 +957,11 @@ def list_surrogates(
 
     if created_to:
         try:
-            to_date = datetime.fromisoformat(created_to.replace("Z", "+00:00"))
-            filter_clauses.append(Surrogate.created_at <= to_date)
+            to_date, is_date_only = _parse_created_to_filter(created_to)
+            if is_date_only:
+                filter_clauses.append(Surrogate.created_at < to_date)
+            else:
+                filter_clauses.append(Surrogate.created_at <= to_date)
         except (ValueError, AttributeError):
             pass  # Ignore invalid date format
 

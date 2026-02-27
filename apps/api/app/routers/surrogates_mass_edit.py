@@ -10,6 +10,8 @@ from app.core.policies import POLICIES
 from app.db.enums import Role
 from app.schemas.auth import UserSession
 from app.schemas.surrogate_mass_edit import (
+    SurrogateMassEditArchiveApplyRequest,
+    SurrogateMassEditArchiveApplyResponse,
     SurrogateMassEditOptionsResponse,
     SurrogateMassEditStageApplyRequest,
     SurrogateMassEditStageApplyResponse,
@@ -97,6 +99,37 @@ def apply_mass_edit_stage(
             user_id=session.user_id,
             user_role=session.role,
             trigger_workflows=data.trigger_workflows,
+            reason=data.reason,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if message.startswith("Selection changed"):
+            raise HTTPException(status_code=409, detail=message) from exc
+        raise HTTPException(status_code=400, detail=message) from exc
+
+
+@router.post(
+    "/mass-edit/archive",
+    response_model=SurrogateMassEditArchiveApplyResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+def apply_mass_edit_archive(
+    data: SurrogateMassEditArchiveApplyRequest,
+    db: Session = Depends(get_db),
+    session: UserSession = Depends(
+        require_permission(POLICIES["surrogates"].actions["archive"])
+    ),
+):
+    """Archive all surrogates matching the given filters."""
+    _require_developer(session)
+
+    try:
+        return surrogate_mass_edit_service.apply_archive_change(
+            db=db,
+            org_id=session.org_id,
+            filters=data.filters,
+            expected_total=data.expected_total,
+            user_id=session.user_id,
             reason=data.reason,
         )
     except ValueError as exc:

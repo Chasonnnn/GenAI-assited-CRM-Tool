@@ -110,6 +110,15 @@ async def test_mass_edit_stage_requires_developer_role(db, test_org):
         )
         assert apply_res.status_code == 403
 
+        archive_res = await admin_client.post(
+            "/surrogates/mass-edit/archive",
+            json={
+                "filters": {"states": ["CA"]},
+                "expected_total": 0,
+            },
+        )
+        assert archive_res.status_code == 403
+
     app.dependency_overrides.clear()
 
 
@@ -336,3 +345,90 @@ async def test_mass_edit_stage_rejects_effective_at_field(authed_client, db, tes
         },
     )
     assert apply_res.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_mass_edit_stage_preview_rejects_invalid_created_range(authed_client):
+    preview = await authed_client.post(
+        "/surrogates/mass-edit/stage/preview",
+        json={
+            "filters": {
+                "created_from": "2025-01-11",
+                "created_to": "2025-01-10",
+            }
+        },
+    )
+    assert preview.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_mass_edit_preview_total_matches_surrogates_list_for_same_created_range(
+    authed_client, db
+):
+    in_range_1 = await _create_surrogate(authed_client, state="CA")
+    in_range_2 = await _create_surrogate(authed_client, state="TX")
+    out_of_range = await _create_surrogate(authed_client, state="FL")
+
+    in_range_1_row = db.query(Surrogate).filter(Surrogate.id == UUID(in_range_1["id"])).first()
+    in_range_2_row = db.query(Surrogate).filter(Surrogate.id == UUID(in_range_2["id"])).first()
+    out_of_range_row = db.query(Surrogate).filter(Surrogate.id == UUID(out_of_range["id"])).first()
+    assert in_range_1_row is not None and in_range_2_row is not None and out_of_range_row is not None
+
+    in_range_1_row.created_at = datetime(2025, 1, 10, 8, 0, tzinfo=timezone.utc)
+    in_range_2_row.created_at = datetime(2025, 1, 10, 23, 59, tzinfo=timezone.utc)
+    out_of_range_row.created_at = datetime(2025, 1, 11, 0, 0, tzinfo=timezone.utc)
+    db.commit()
+
+    created_range = {"created_from": "2025-01-10", "created_to": "2025-01-10"}
+    list_res = await authed_client.get("/surrogates", params=created_range)
+    assert list_res.status_code == 200, list_res.text
+    list_total = list_res.json()["total"]
+
+    preview = await authed_client.post(
+        "/surrogates/mass-edit/stage/preview",
+        json={"filters": created_range},
+    )
+    assert preview.status_code == 200, preview.text
+    preview_total = preview.json()["total"]
+
+    assert list_total == 2
+    assert preview_total == 2
+    assert list_total == preview_total
+
+
+@pytest.mark.asyncio
+async def test_mass_edit_archive_preview_and_apply_archives_matching_surrogates(
+    authed_client, db
+):
+    s1 = await _create_surrogate(authed_client, state="CA")
+    s2 = await _create_surrogate(authed_client, state="CA")
+    s3 = await _create_surrogate(authed_client, state="TX")
+
+    preview = await authed_client.post(
+        "/surrogates/mass-edit/stage/preview",
+        json={"filters": {"states": ["CA"]}},
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["total"] == 2
+
+    archive_res = await authed_client.post(
+        "/surrogates/mass-edit/archive",
+        json={
+            "filters": {"states": ["CA"]},
+            "expected_total": 2,
+            "reason": "Bulk archive test",
+        },
+    )
+    assert archive_res.status_code == 200, archive_res.text
+    payload = archive_res.json()
+    assert payload["matched"] == 2
+    assert payload["archived"] == 2
+    assert payload["failed"] == []
+
+    s1_row = db.query(Surrogate).filter(Surrogate.id == UUID(s1["id"])).first()
+    s2_row = db.query(Surrogate).filter(Surrogate.id == UUID(s2["id"])).first()
+    s3_row = db.query(Surrogate).filter(Surrogate.id == UUID(s3["id"])).first()
+    assert s1_row is not None and s2_row is not None and s3_row is not None
+    assert s1_row.is_archived is True
+    assert s2_row.is_archived is True
+    assert s3_row.is_archived is False
