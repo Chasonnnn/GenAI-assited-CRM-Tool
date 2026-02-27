@@ -2069,6 +2069,9 @@ requires-dist = [
 ]
 provides-extras = ["test"]
 
+[package.metadata.requires-dev]
+dev = []
+
 [[package]]
 name = "tenacity"
 version = "9.1.2"

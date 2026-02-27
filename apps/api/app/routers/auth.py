@@ -123,6 +123,7 @@ def google_login(
 
 
 @router.get("/google/callback")
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 async def google_callback(
     request: Request,
     code: str | None = None,
@@ -913,6 +914,7 @@ def delete_signature_photo(
 
 
 @router.post("/logout", dependencies=[Depends(require_csrf_header)])
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def logout(
     request: Request,
     response: Response,
