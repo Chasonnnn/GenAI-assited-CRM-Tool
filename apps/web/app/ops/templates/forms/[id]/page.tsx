@@ -440,27 +440,29 @@ export default function FormBuilderPage() {
         maxFileCount,
         allowedMimeTypesText,
     ])
-    const draftFingerprint = useMemo(() => JSON.stringify(draftPayload), [draftPayload])
     const debouncedPayload = useDebouncedValue(draftPayload, 1200)
+    // ⚡ Bolt: Removed expensive synchronous `JSON.stringify(draftPayload)` on every render.
+    // Instead, we compute the fingerprint only on the debounced payload, saving CPU cycles.
     const debouncedFingerprint = useMemo(
         () => JSON.stringify(debouncedPayload),
         [debouncedPayload],
     )
-    const isDirty = draftFingerprint !== lastSavedFingerprintRef.current
+    // The form is dirty if the user is typing (draft != debounced) or if the last saved payload differs from current.
+    const isDirty = draftPayload !== debouncedPayload || debouncedFingerprint !== lastSavedFingerprintRef.current
 
     useEffect(() => {
         if (!hasHydrated) return
         const identity = isNewForm ? "new" : formId || "unknown"
         if (hydratedFormRef.current === identity) return
         hydratedFormRef.current = identity
-        lastSavedFingerprintRef.current = draftFingerprint
+        lastSavedFingerprintRef.current = debouncedFingerprint
         if (!isNewForm && templateData?.updated_at) {
             setAutoSaveStatus("saved")
             setLastSavedAt(new Date(templateData.updated_at))
         } else {
             setAutoSaveStatus("idle")
         }
-    }, [hasHydrated, isNewForm, formId, draftFingerprint, templateData?.updated_at])
+    }, [hasHydrated, isNewForm, formId, debouncedFingerprint, templateData?.updated_at])
 
     // Drag and drop handlers
     const handleDragStart = (type: FieldType, label: string) => {
@@ -902,7 +904,8 @@ export default function FormBuilderPage() {
         setIsSaving(true)
         try {
             const savedTemplate = await queueSave(draftPayload)
-            markSaved(draftFingerprint, savedTemplate)
+            // Save the exact payload we just synced to avoid immediately marking as dirty again
+            markSaved(JSON.stringify(draftPayload), savedTemplate)
             toast.success("Template saved")
         } catch {
             setAutoSaveStatus("error")
@@ -919,7 +922,7 @@ export default function FormBuilderPage() {
     useEffect(() => {
         if (!hasHydrated) return
         if (!formName.trim()) return
-        if (debouncedFingerprint !== draftFingerprint) return
+        if (draftPayload !== debouncedPayload) return
         if (debouncedFingerprint === lastSavedFingerprintRef.current) return
         if (isSaving || isPublishing) return
 
@@ -942,7 +945,7 @@ export default function FormBuilderPage() {
     }, [
         hasHydrated,
         formName,
-        draftFingerprint,
+        draftPayload,
         debouncedFingerprint,
         debouncedPayload,
         isSaving,
@@ -1007,7 +1010,7 @@ export default function FormBuilderPage() {
         setIsPublishing(true)
         try {
             const savedTemplate = await queueSave(draftPayload)
-            markSaved(draftFingerprint, savedTemplate)
+            markSaved(JSON.stringify(draftPayload), savedTemplate)
             await publishTemplateMutation.mutateAsync({
                 id: savedTemplate.id,
                 payload: {
