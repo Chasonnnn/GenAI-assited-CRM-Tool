@@ -60,6 +60,9 @@ async function renderManagePage(searchParams: Record<string, string> = {}) {
 describe("Self-service manage appointment page", () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        vi.useFakeTimers({ toFake: ["Date"] })
+        vi.setSystemTime(new Date("2026-03-01T00:00:00.000Z"))
+
         getAppointmentForManageMock.mockResolvedValue(APPOINTMENT)
         getRescheduleSlotsByTokenMock.mockResolvedValue({
             slots: [
@@ -127,5 +130,9 @@ describe("Self-service manage appointment page", () => {
         })
 
         expect(await screen.findByText("Appointment Rescheduled")).toBeInTheDocument()
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
     })
 })
