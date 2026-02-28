@@ -60,6 +60,8 @@ async function renderManagePage(searchParams: Record<string, string> = {}) {
 describe("Self-service manage appointment page", () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(new Date("2026-03-01T12:00:00.000Z"))
         getAppointmentForManageMock.mockResolvedValue(APPOINTMENT)
         getRescheduleSlotsByTokenMock.mockResolvedValue({
             slots: [
@@ -72,6 +74,10 @@ describe("Self-service manage appointment page", () => {
         })
         rescheduleByManageTokenMock.mockResolvedValue(APPOINTMENT)
         cancelByManageTokenMock.mockResolvedValue({ ...APPOINTMENT, status: "cancelled" })
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
     })
 
     it("renders invalid/expired token error state", async () => {
