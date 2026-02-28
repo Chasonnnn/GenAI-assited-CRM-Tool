@@ -561,6 +561,7 @@ def duo_health_check():
     response_model=DuoInitiateResponse,
     dependencies=[Depends(require_csrf_header)],
 )
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def initiate_duo_auth(
     request: Request,
     response: Response,
@@ -622,6 +623,7 @@ def initiate_duo_auth(
     "/duo/callback",
     dependencies=[Depends(require_csrf_header)],
 )
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def verify_duo_callback(
     request: Request,
     body: DuoCallbackRequest,
