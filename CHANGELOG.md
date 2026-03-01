@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.15](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.14...surrogacy-crm-platform-v0.90.15) (2026-03-01)
+
+
+### Features
+
+* add bulk complete selection in tasks list ([07d63c0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/07d63c0f06e6c13a8ff175dde437643b0a5a7b21))
+* add workflow path metrics instrumentation ([b11bf8b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b11bf8ba2734026f415c86d00ed87b2fc6c2ebc8))
+* cut over forms APIs to shared intake and identity resume ([df60513](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/df60513a42267cec67f615676d5f7dd7da3012da))
+* migrate web intake and send flows to shared links ([6554946](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6554946cd01e875fa8bd1f87ec755281d711d4db))
+
+
+### Bug Fixes
+
+* add csv download confirmation safeguards ([25004ff](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/25004ff46030b38f518d546ba5cd042eb0ace536))
+* apply owner filter from surrogates URL params ([91ffd83](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/91ffd83db280d901e5df9e350f657d255dac1b34))
+* bump pypdf to 6.7.4 for audit guard ([c09f6b8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c09f6b8fc88b3127ceba4d0909e7076b044b52e6))
+* defer form fingerprinting until debounce ([e7376c2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e7376c2c2e7cbe5a3fe17726630ba24765806ea4))
+* harden auth and zoom webhook security ([309e3f5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/309e3f5327a2ffec2775cd5c53296e434e707458))
+* improve upload and surrogate accessibility ([ddc3b75](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ddc3b75af927d62aa80b68d26d48ae66edd7aa8f))
+* keep journey tab available with pre-match empty state ([24ab542](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/24ab542e6eb2429fdba8da79968c3e364cf1b185))
+* optimize surrogate and unified search queries ([374af3a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/374af3aeb87464d2752571ff1a6fa94dfaf5a9a8))
+
 ## [0.90.14](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.13...surrogacy-crm-platform-v0.90.14) (2026-02-27)
 
 
