@@ -8,6 +8,7 @@ import { useSurrogateHistory } from "@/lib/hooks/use-surrogates"
 import { attachmentsApi, Attachment } from "@/lib/api/attachments"
 import { NoteRead } from "@/lib/api/notes"
 import { sanitizeHtml } from "@/lib/utils/sanitize"
+import { openDownloadUrlWithSpreadsheetWarning } from "@/lib/utils/csv-download-warning"
 
 interface LatestUpdatesCardProps {
     surrogateId: string
@@ -42,8 +43,8 @@ export function LatestUpdatesCard({
     const handleAttachmentClick = async (attachmentId: string) => {
         setIsDownloading(true)
         try {
-            const { download_url } = await attachmentsApi.getDownloadUrl(attachmentId)
-            window.open(download_url, '_blank')
+            const { download_url, filename } = await attachmentsApi.getDownloadUrl(attachmentId)
+            openDownloadUrlWithSpreadsheetWarning(download_url, filename)
         } finally {
             setIsDownloading(false)
         }
@@ -82,6 +83,7 @@ export function LatestUpdatesCard({
                         onClick={() => handleAttachmentClick(latestAttachment.id)}
                         disabled={isDownloading}
                         className="flex items-start gap-2 w-full text-left hover:bg-muted/50 rounded p-1 -m-1 transition-colors"
+                        aria-label={`Download ${latestAttachment.filename}`}
                     >
                         <PaperclipIcon className="size-4 text-muted-foreground mt-0.5 shrink-0" />
                         <div className="flex-1 min-w-0">
@@ -126,4 +128,3 @@ export function LatestUpdatesCard({
         </Card>
     )
 }
-

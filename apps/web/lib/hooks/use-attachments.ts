@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { attachmentsApi } from "../api/attachments"
 import { toast } from "sonner"
 import { surrogateKeys } from "./use-surrogates"
+import { openDownloadUrlWithSpreadsheetWarning } from "@/lib/utils/csv-download-warning"
 
 export function useAttachments(surrogateId: string | null) {
     return useQuery({
@@ -49,8 +50,13 @@ export function useDownloadAttachment() {
         mutationFn: (attachmentId: string) =>
             attachmentsApi.getDownloadUrl(attachmentId),
         onSuccess: (data) => {
-            // Open download URL in new tab
-            window.open(data.download_url, "_blank")
+            const opened = openDownloadUrlWithSpreadsheetWarning(
+                data.download_url,
+                data.filename,
+            )
+            if (!opened) {
+                toast.info(`Download cancelled for ${data.filename}`)
+            }
         },
         onError: (error: Error) => {
             toast.error("Download failed", {

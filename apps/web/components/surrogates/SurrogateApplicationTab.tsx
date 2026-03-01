@@ -60,6 +60,7 @@ import {
 } from "@/lib/api/forms"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { cn } from "@/lib/utils"
+import { openDownloadUrlWithSpreadsheetWarning } from "@/lib/utils/csv-download-warning"
 
 interface SurrogateApplicationTabProps {
     surrogateId: string
@@ -1068,7 +1069,13 @@ export function SurrogateApplicationTab({
     const handleDownloadFile = async (fileId: string) => {
         try {
             const response = await getSubmissionFileDownloadUrl(submission.id, fileId)
-            window.open(response.download_url, "_blank", "noopener,noreferrer")
+            const opened = openDownloadUrlWithSpreadsheetWarning(
+                response.download_url,
+                response.filename,
+            )
+            if (!opened) {
+                toast.info(`Download cancelled for ${response.filename}`)
+            }
         } catch {
             toast.error("Failed to download file")
         }
