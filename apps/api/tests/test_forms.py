@@ -2,17 +2,30 @@
 
 import json
 import uuid
+from datetime import date
 
 import pytest
 
-from app.core.encryption import hash_email
-from app.db.models import EmailTemplate, FormIntakeLink, FormSubmission, Surrogate
-from app.utils.normalization import normalize_email
+from app.core.encryption import hash_email, hash_phone
+from app.db.models import AutomationWorkflow, EmailTemplate, FormIntakeLink, FormSubmission, Surrogate
+from app.utils.normalization import normalize_email, normalize_name, normalize_phone, normalize_search_text
 
 
-def _create_surrogate(db, org_id, user_id, stage):
-    email = f"form-test-{uuid.uuid4().hex[:8]}@example.com"
+def _create_surrogate(
+    db,
+    org_id,
+    user_id,
+    stage,
+    *,
+    full_name: str = "Original Name",
+    email: str | None = None,
+    phone: str = "+1 (555) 100-2000",
+    date_of_birth: str = "1990-01-01",
+):
+    email = email or f"form-test-{uuid.uuid4().hex[:8]}@example.com"
+    normalized_name = normalize_name(full_name)
     normalized_email = normalize_email(email)
+    normalized_phone = normalize_phone(phone)
     surrogate = Surrogate(
         id=uuid.uuid4(),
         organization_id=org_id,
@@ -22,13 +35,64 @@ def _create_surrogate(db, org_id, user_id, stage):
         owner_type="user",
         owner_id=user_id,
         created_by_user_id=user_id,
-        full_name="Original Name",
+        full_name=normalized_name,
+        full_name_normalized=normalize_search_text(normalized_name),
         email=normalized_email,
         email_hash=hash_email(normalized_email),
+        phone=normalized_phone,
+        phone_hash=hash_phone(normalized_phone),
+        date_of_birth=date.fromisoformat(date_of_birth),
     )
     db.add(surrogate)
     db.flush()
     return surrogate
+
+
+async def _create_published_form_and_shared_link(*, authed_client, name: str, schema: dict):
+    create_res = await authed_client.post(
+        "/forms",
+        json={"name": name, "description": "Test form", "form_schema": schema},
+    )
+    assert create_res.status_code == 200
+    form_id = create_res.json()["id"]
+
+    publish_res = await authed_client.post(f"/forms/{form_id}/publish")
+    assert publish_res.status_code == 200
+
+    links_res = await authed_client.get(f"/forms/{form_id}/intake-links")
+    assert links_res.status_code == 200
+    links = links_res.json()
+    assert len(links) >= 1
+    link = links[0]
+    return form_id, link["id"], link["slug"]
+
+
+async def _submit_shared_intake(*, authed_client, slug: str, answers: dict) -> str:
+    submission_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={"answers": json.dumps(answers)},
+    )
+    assert submission_res.status_code == 200
+    return submission_res.json()["id"]
+
+
+def _create_auto_match_workflow(*, db, test_org, test_user, form_id: str):
+    workflow = AutomationWorkflow(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Auto match {uuid.uuid4().hex[:6]}",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": form_id},
+        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
+        condition_logic="AND",
+        actions=[{"action_type": "auto_match_submission"}],
+        is_enabled=True,
+        scope="org",
+        owner_user_id=None,
+        created_by_user_id=test_user.id,
+    )
+    db.add(workflow)
+    db.commit()
 
 
 @pytest.mark.asyncio
@@ -42,36 +106,20 @@ async def test_form_submission_approval_updates_surrogate(
             {
                 "title": "Basics",
                 "fields": [
-                    {
-                        "key": "full_name",
-                        "label": "Full Name",
-                        "type": "text",
-                        "required": True,
-                    },
-                    {
-                        "key": "date_of_birth",
-                        "label": "Date of Birth",
-                        "type": "date",
-                        "required": False,
-                    },
+                    {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
+                    {"key": "date_of_birth", "label": "Date of Birth", "type": "date", "required": True},
+                    {"key": "phone", "label": "Phone", "type": "text", "required": True},
+                    {"key": "email", "label": "Email", "type": "email", "required": True},
                 ],
             }
         ]
     }
 
-    create_res = await authed_client.post(
-        "/forms",
-        json={
-            "name": "Application Form",
-            "description": "Test form",
-            "form_schema": schema,
-        },
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(
+        authed_client=authed_client,
+        name="Application Form",
+        schema=schema,
     )
-    assert create_res.status_code == 200
-    form_id = create_res.json()["id"]
-
-    publish_res = await authed_client.post(f"/forms/{form_id}/publish")
-    assert publish_res.status_code == 200
 
     mapping_res = await authed_client.put(
         f"/forms/{form_id}/mappings",
@@ -84,28 +132,30 @@ async def test_form_submission_approval_updates_surrogate(
     )
     assert mapping_res.status_code == 200
 
-    token_res = await authed_client.post(
-        f"/forms/{form_id}/tokens",
-        json={"surrogate_id": str(surrogate.id), "expires_in_days": 7},
-    )
-    assert token_res.status_code == 200
-    token_payload = token_res.json()
-    token = token_payload["token"]
-    assert token_payload["application_url"].endswith(f"/apply/{token}")
-
     submission_res = await authed_client.post(
-        f"/forms/public/{token}/submit",
+        f"/forms/public/intake/{slug}/submit",
         data={
             "answers": json.dumps(
                 {
                     "full_name": "Jane Doe",
                     "date_of_birth": "1990-01-01",
+                    "phone": "+1 (555) 303-0000",
+                    "email": "jane.doe@example.com",
                 }
             )
         },
     )
     assert submission_res.status_code == 200
     submission_id = submission_res.json()["id"]
+
+    resolve_res = await authed_client.post(
+        f"/forms/submissions/{submission_id}/match/resolve",
+        json={
+            "surrogate_id": str(surrogate.id),
+            "create_intake_lead": False,
+        },
+    )
+    assert resolve_res.status_code == 200
 
     surrogate_submission = await authed_client.get(
         f"/forms/{form_id}/surrogates/{surrogate.id}/submission"
@@ -181,6 +231,102 @@ async def test_publish_form_auto_generates_default_shared_intake_link(
 
 
 @pytest.mark.asyncio
+async def test_publish_form_auto_provisions_default_intake_routing_workflow(
+    authed_client, db, test_org, test_user
+):
+    schema = {
+        "pages": [
+            {
+                "title": "Basics",
+                "fields": [
+                    {"key": "full_name", "label": "Full Name", "type": "text", "required": True}
+                ],
+            }
+        ]
+    }
+
+    create_res = await authed_client.post(
+        "/forms",
+        json={"name": "Routing Provision Form", "form_schema": schema},
+    )
+    assert create_res.status_code == 200
+    form_id = create_res.json()["id"]
+
+    publish_res = await authed_client.post(f"/forms/{form_id}/publish")
+    assert publish_res.status_code == 200
+
+    workflow = (
+        db.query(AutomationWorkflow)
+        .filter(
+            AutomationWorkflow.organization_id == test_org.id,
+            AutomationWorkflow.system_key == f"shared_intake_routing:{form_id}",
+        )
+        .first()
+    )
+    assert workflow is not None
+    assert workflow.is_enabled is True
+    assert workflow.trigger_type == "form_submitted"
+    assert workflow.trigger_config.get("form_id") == form_id
+
+    action_types = [action.get("action_type") for action in (workflow.actions or [])]
+    assert action_types == ["auto_match_submission", "create_intake_lead"]
+    assert all(action.get("requires_approval") is True for action in (workflow.actions or []))
+
+
+@pytest.mark.asyncio
+async def test_publish_form_skips_default_routing_workflow_when_enabled_form_workflow_exists(
+    authed_client, db, test_org, test_user
+):
+    schema = {
+        "pages": [
+            {
+                "title": "Basics",
+                "fields": [
+                    {"key": "full_name", "label": "Full Name", "type": "text", "required": True}
+                ],
+            }
+        ]
+    }
+
+    create_res = await authed_client.post(
+        "/forms",
+        json={"name": "Routing Skip Form", "form_schema": schema},
+    )
+    assert create_res.status_code == 200
+    form_id = create_res.json()["id"]
+
+    custom_workflow = AutomationWorkflow(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Custom form submitted {uuid.uuid4().hex[:6]}",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": form_id},
+        conditions=[],
+        condition_logic="AND",
+        actions=[{"action_type": "auto_match_submission"}],
+        is_enabled=True,
+        scope="org",
+        owner_user_id=None,
+        created_by_user_id=test_user.id,
+    )
+    db.add(custom_workflow)
+    db.commit()
+
+    publish_res = await authed_client.post(f"/forms/{form_id}/publish")
+    assert publish_res.status_code == 200
+
+    auto_workflow = (
+        db.query(AutomationWorkflow)
+        .filter(
+            AutomationWorkflow.organization_id == test_org.id,
+            AutomationWorkflow.system_key == f"shared_intake_routing:{form_id}",
+        )
+        .first()
+    )
+    assert auto_workflow is None
+
+
+@pytest.mark.asyncio
 async def test_delete_form_removes_it_from_list(authed_client):
     create_res = await authed_client.post(
         "/forms",
@@ -203,86 +349,92 @@ async def test_delete_form_removes_it_from_list(authed_client):
 
 
 @pytest.mark.asyncio
-async def test_form_submission_can_be_resent_for_existing_surrogate(
-    authed_client, db, test_org, test_user, default_stage
+async def test_auto_match_keeps_new_submission_ambiguous_when_surrogate_already_has_submission(
+    authed_client, db, test_org, test_user, default_stage, monkeypatch
 ):
-    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "FORMS_SHARED_DUPLICATE_WINDOW_SECONDS", 0)
+
+    surrogate = _create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        default_stage,
+        full_name="Repeat Candidate",
+        email="repeat-candidate@example.com",
+        phone="+1 (555) 401-5000",
+        date_of_birth="1991-03-04",
+    )
 
     schema = {
         "pages": [
             {
                 "title": "Basics",
                 "fields": [
-                    {
-                        "key": "full_name",
-                        "label": "Full Name",
-                        "type": "text",
-                        "required": True,
-                    }
+                    {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
+                    {"key": "date_of_birth", "label": "Date of Birth", "type": "date", "required": True},
+                    {"key": "phone", "label": "Phone", "type": "text", "required": True},
+                    {"key": "email", "label": "Email", "type": "email", "required": True},
                 ],
             }
         ]
     }
 
-    create_res = await authed_client.post(
-        "/forms",
-        json={"name": "Single Submit Form", "form_schema": schema},
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(
+        authed_client=authed_client,
+        name="Single Submit Form",
+        schema=schema,
     )
-    assert create_res.status_code == 200
-    form_id = create_res.json()["id"]
-
-    publish_res = await authed_client.post(f"/forms/{form_id}/publish")
-    assert publish_res.status_code == 200
-
-    token_res = await authed_client.post(
-        f"/forms/{form_id}/tokens",
-        json={"surrogate_id": str(surrogate.id), "expires_in_days": 7},
-    )
-    assert token_res.status_code == 200
-    token = token_res.json()["token"]
+    _create_auto_match_workflow(db=db, test_org=test_org, test_user=test_user, form_id=form_id)
 
     submission_res = await authed_client.post(
-        f"/forms/public/{token}/submit",
-        data={"answers": json.dumps({"full_name": "Jane Doe"})},
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "Repeat Candidate",
+                    "date_of_birth": "1991-03-04",
+                    "phone": "+1 (555) 401-5000",
+                    "email": "repeat-candidate@example.com",
+                }
+            )
+        },
     )
     assert submission_res.status_code == 200
-
-    second_token_res = await authed_client.post(
-        f"/forms/{form_id}/tokens",
-        json={"surrogate_id": str(surrogate.id), "expires_in_days": 7},
-    )
-    assert second_token_res.status_code == 200
-    second_payload = second_token_res.json()
-    second_token = second_payload["token"]
-    assert second_payload["application_url"].endswith(f"/apply/{second_token}")
-    assert second_token != token
+    first_payload = submission_res.json()
+    assert first_payload["outcome"] == "linked"
+    assert first_payload["surrogate_id"] == str(surrogate.id)
 
     resubmission_res = await authed_client.post(
-        f"/forms/public/{second_token}/submit",
-        data={"answers": json.dumps({"full_name": "Jane Smith"})},
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "Repeat Candidate",
+                    "date_of_birth": "1991-03-04",
+                    "phone": "+1 (555) 401-5000",
+                    "email": "repeat-candidate@example.com",
+                }
+            )
+        },
     )
     assert resubmission_res.status_code == 200
+    second_payload = resubmission_res.json()
+    assert second_payload["outcome"] == "ambiguous_review"
+    assert second_payload["surrogate_id"] is None
 
-    latest_submission_res = await authed_client.get(
-        f"/forms/{form_id}/surrogates/{surrogate.id}/submission"
+    second_submission = (
+        db.query(FormSubmission).filter(FormSubmission.id == uuid.UUID(second_payload["id"])).first()
     )
-    assert latest_submission_res.status_code == 200
-    assert latest_submission_res.json()["answers"]["full_name"] == "Jane Smith"
-
-    submission_count = (
-        db.query(FormSubmission)
-        .filter(
-            FormSubmission.organization_id == test_org.id,
-            FormSubmission.form_id == form_id,
-            FormSubmission.surrogate_id == surrogate.id,
-        )
-        .count()
-    )
-    assert submission_count == 1
+    assert second_submission is not None
+    assert second_submission.surrogate_id is None
+    assert second_submission.match_status == "ambiguous_review"
+    assert second_submission.match_reason == "existing_submission_for_surrogate"
 
 
 @pytest.mark.asyncio
-async def test_send_token_enforces_locked_recipient_email(
+async def test_send_shared_intake_link_uses_template_and_returns_intake_url(
     authed_client, db, test_org, test_user, default_stage
 ):
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
@@ -298,57 +450,34 @@ async def test_send_token_enforces_locked_recipient_email(
         ]
     }
 
-    create_res = await authed_client.post(
-        "/forms",
-        json={"name": "Lock Test Form", "form_schema": schema},
+    form_id, link_id, slug = await _create_published_form_and_shared_link(
+        authed_client=authed_client,
+        name="Shared Send Form",
+        schema=schema,
     )
-    assert create_res.status_code == 200
-    form_id = create_res.json()["id"]
-
-    publish_res = await authed_client.post(f"/forms/{form_id}/publish")
-    assert publish_res.status_code == 200
 
     template = EmailTemplate(
         organization_id=test_org.id,
         created_by_user_id=test_user.id,
-        name=f"Lock Template {uuid.uuid4().hex[:6]}",
+        name=f"Send Template {uuid.uuid4().hex[:6]}",
         subject="Complete your application",
         body="Click {{form_link}}",
         scope="org",
         is_active=True,
     )
     db.add(template)
-    db.flush()
-
-    token_res = await authed_client.post(
-        f"/forms/{form_id}/tokens",
-        json={"surrogate_id": str(surrogate.id), "expires_in_days": 7},
-    )
-    assert token_res.status_code == 200
-    token_payload = token_res.json()
-    token = token_payload["token"]
-    token_id = token_payload["token_id"]
-
-    token_row = (
-        db.query(FormSubmission)
-        .filter(FormSubmission.form_id == uuid.UUID(form_id), FormSubmission.surrogate_id == surrogate.id)
-        .first()
-    )
-    assert token_row is None  # No submission yet; lock applies to token record only
-
-    from app.services import form_submission_service
-
-    token_record = form_submission_service.get_token_row(db, token)
-    assert token_record is not None
-    token_record.locked_recipient_email = "different@example.com"
     db.commit()
 
-    send_res = await authed_client.post(
-        f"/forms/{form_id}/tokens/{token_id}/send",
-        json={"template_id": str(template.id)},
+    send_link_res = await authed_client.post(
+        f"/forms/{form_id}/intake-links/{link_id}/send",
+        json={"surrogate_id": str(surrogate.id), "template_id": str(template.id)},
     )
-    assert send_res.status_code == 409
-    assert "locked to a different recipient email" in send_res.json()["detail"]
+    assert send_link_res.status_code == 200
+    payload = send_link_res.json()
+    assert payload["intake_link_id"] == link_id
+    assert payload["template_id"] == str(template.id)
+    assert payload["email_log_id"]
+    assert payload["intake_url"].endswith(f"/intake/{slug}")
 
 
 @pytest.mark.asyncio
@@ -372,26 +501,20 @@ async def test_update_submission_answers_syncs_surrogate_fields(
                         "key": "date_of_birth",
                         "label": "Date of Birth",
                         "type": "date",
-                        "required": False,
+                        "required": True,
                     },
+                    {"key": "phone", "label": "Phone", "type": "text", "required": True},
+                    {"key": "email", "label": "Email", "type": "email", "required": True},
                 ],
             }
         ]
     }
 
-    create_res = await authed_client.post(
-        "/forms",
-        json={
-            "name": "Application Form",
-            "description": "Test form",
-            "form_schema": schema,
-        },
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(
+        authed_client=authed_client,
+        name="Application Form",
+        schema=schema,
     )
-    assert create_res.status_code == 200
-    form_id = create_res.json()["id"]
-
-    publish_res = await authed_client.post(f"/forms/{form_id}/publish")
-    assert publish_res.status_code == 200
 
     mapping_res = await authed_client.put(
         f"/forms/{form_id}/mappings",
@@ -404,26 +527,30 @@ async def test_update_submission_answers_syncs_surrogate_fields(
     )
     assert mapping_res.status_code == 200
 
-    token_res = await authed_client.post(
-        f"/forms/{form_id}/tokens",
-        json={"surrogate_id": str(surrogate.id), "expires_in_days": 7},
-    )
-    assert token_res.status_code == 200
-    token = token_res.json()["token"]
-
     submission_res = await authed_client.post(
-        f"/forms/public/{token}/submit",
+        f"/forms/public/intake/{slug}/submit",
         data={
             "answers": json.dumps(
                 {
                     "full_name": "Jane Doe",
                     "date_of_birth": "1990-01-01",
+                    "phone": "+1 (555) 800-1111",
+                    "email": "update-test@example.com",
                 }
             )
         },
     )
     assert submission_res.status_code == 200
     submission_id = submission_res.json()["id"]
+
+    resolve_res = await authed_client.post(
+        f"/forms/submissions/{submission_id}/match/resolve",
+        json={
+            "surrogate_id": str(surrogate.id),
+            "create_intake_lead": False,
+        },
+    )
+    assert resolve_res.status_code == 200
 
     update_res = await authed_client.patch(
         f"/forms/submissions/{submission_id}/answers",
@@ -506,6 +633,10 @@ async def test_public_form_requires_file_fields(
             {
                 "title": "Docs",
                 "fields": [
+                    {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
+                    {"key": "date_of_birth", "label": "Date of Birth", "type": "date", "required": True},
+                    {"key": "phone", "label": "Phone", "type": "text", "required": True},
+                    {"key": "email", "label": "Email", "type": "email", "required": True},
                     {
                         "key": "supporting_docs",
                         "label": "Supporting Documents",
@@ -517,31 +648,24 @@ async def test_public_form_requires_file_fields(
         ]
     }
 
-    # Use authed client to create form and token
-    create_res = await authed_client.post(
-        "/forms",
-        json={
-            "name": "Docs Form",
-            "description": "Test form",
-            "form_schema": schema,
-        },
+    _form_id, _link_id, slug = await _create_published_form_and_shared_link(
+        authed_client=authed_client,
+        name="Docs Form",
+        schema=schema,
     )
-    assert create_res.status_code == 200
-    form_id = create_res.json()["id"]
-
-    publish_res = await authed_client.post(f"/forms/{form_id}/publish")
-    assert publish_res.status_code == 200
-
-    token_res = await authed_client.post(
-        f"/forms/{form_id}/tokens",
-        json={"surrogate_id": str(surrogate.id), "expires_in_days": 7},
-    )
-    assert token_res.status_code == 200
-    token = token_res.json()["token"]
 
     submission_res = await client.post(
-        f"/forms/public/{token}/submit",
-        data={"answers": json.dumps({})},
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": surrogate.full_name,
+                    "date_of_birth": "1990-01-01",
+                    "phone": surrogate.phone,
+                    "email": surrogate.email,
+                }
+            )
+        },
     )
     assert submission_res.status_code == 400
 
@@ -557,6 +681,10 @@ async def test_form_mapping_allows_extended_surrogate_fields(
             {
                 "title": "Insurance",
                 "fields": [
+                    {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
+                    {"key": "date_of_birth", "label": "Date of Birth", "type": "date", "required": True},
+                    {"key": "phone", "label": "Phone", "type": "text", "required": True},
+                    {"key": "email", "label": "Email", "type": "email", "required": True},
                     {
                         "key": "insurance_company",
                         "label": "Insurance Company",
@@ -568,19 +696,11 @@ async def test_form_mapping_allows_extended_surrogate_fields(
         ]
     }
 
-    create_res = await authed_client.post(
-        "/forms",
-        json={
-            "name": "Insurance Form",
-            "description": "Extended mapping test form",
-            "form_schema": schema,
-        },
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(
+        authed_client=authed_client,
+        name="Insurance Form",
+        schema=schema,
     )
-    assert create_res.status_code == 200
-    form_id = create_res.json()["id"]
-
-    publish_res = await authed_client.post(f"/forms/{form_id}/publish")
-    assert publish_res.status_code == 200
 
     mapping_res = await authed_client.put(
         f"/forms/{form_id}/mappings",
@@ -595,19 +715,31 @@ async def test_form_mapping_allows_extended_surrogate_fields(
     )
     assert mapping_res.status_code == 200
 
-    token_res = await authed_client.post(
-        f"/forms/{form_id}/tokens",
-        json={"surrogate_id": str(surrogate.id), "expires_in_days": 7},
-    )
-    assert token_res.status_code == 200
-    token = token_res.json()["token"]
-
     submission_res = await authed_client.post(
-        f"/forms/public/{token}/submit",
-        data={"answers": json.dumps({"insurance_company": "Northwest Mutual"})},
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "Insurance Candidate",
+                    "date_of_birth": "1990-01-01",
+                    "phone": "+1 (555) 907-0000",
+                    "email": "insurance-candidate@example.com",
+                    "insurance_company": "Northwest Mutual",
+                }
+            )
+        },
     )
     assert submission_res.status_code == 200
     submission_id = submission_res.json()["id"]
+
+    resolve_res = await authed_client.post(
+        f"/forms/submissions/{submission_id}/match/resolve",
+        json={
+            "surrogate_id": str(surrogate.id),
+            "create_intake_lead": False,
+        },
+    )
+    assert resolve_res.status_code == 200
 
     approve_res = await authed_client.post(
         f"/forms/submissions/{submission_id}/approve",
@@ -639,7 +771,7 @@ async def test_form_mapping_options_include_extended_fields(authed_client):
 
 
 @pytest.mark.asyncio
-async def test_dedicated_token_creation_requires_surrogate_application_purpose(
+async def test_dedicated_token_creation_endpoint_returns_gone_after_retirement(
     authed_client, db, test_org, test_user, default_stage
 ):
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
@@ -667,25 +799,14 @@ async def test_dedicated_token_creation_requires_surrogate_application_purpose(
         f"/forms/{form_id}/tokens",
         json={"surrogate_id": str(surrogate.id), "expires_in_days": 7},
     )
-    assert denied_res.status_code == 400
-    assert "purpose=surrogate_application" in denied_res.json()["detail"]
-
-    override_res = await authed_client.post(
-        f"/forms/{form_id}/tokens",
-        json={
-            "surrogate_id": str(surrogate.id),
-            "expires_in_days": 7,
-            "allow_purpose_override": True,
-        },
-    )
-    assert override_res.status_code == 200
+    assert denied_res.status_code == 410
+    assert "retired" in denied_res.json()["detail"].lower()
 
 
 @pytest.mark.asyncio
-async def test_send_token_requires_purpose_override_for_non_application_form(
-    authed_client, db, test_org, test_user, default_stage
+async def test_dedicated_token_send_endpoint_returns_gone_after_retirement(
+    authed_client, db, test_org, test_user
 ):
-    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     schema = {
         "pages": [
             {"title": "Basics", "fields": [{"key": "full_name", "label": "Full Name", "type": "text"}]}
@@ -706,17 +827,6 @@ async def test_send_token_requires_purpose_override_for_non_application_form(
     publish_res = await authed_client.post(f"/forms/{form_id}/publish")
     assert publish_res.status_code == 200
 
-    token_res = await authed_client.post(
-        f"/forms/{form_id}/tokens",
-        json={
-            "surrogate_id": str(surrogate.id),
-            "expires_in_days": 7,
-            "allow_purpose_override": True,
-        },
-    )
-    assert token_res.status_code == 200
-    token_id = token_res.json()["token_id"]
-
     template = EmailTemplate(
         organization_id=test_org.id,
         created_by_user_id=test_user.id,
@@ -730,17 +840,11 @@ async def test_send_token_requires_purpose_override_for_non_application_form(
     db.commit()
 
     send_denied_res = await authed_client.post(
-        f"/forms/{form_id}/tokens/{token_id}/send",
+        f"/forms/{form_id}/tokens/{uuid.uuid4()}/send",
         json={"template_id": str(template.id)},
     )
-    assert send_denied_res.status_code == 400
-    assert "purpose=surrogate_application" in send_denied_res.json()["detail"]
-
-    send_override_res = await authed_client.post(
-        f"/forms/{form_id}/tokens/{token_id}/send",
-        json={"template_id": str(template.id), "allow_purpose_override": True},
-    )
-    assert send_override_res.status_code == 200
+    assert send_denied_res.status_code == 410
+    assert "retired" in send_denied_res.json()["detail"].lower()
 
 
 @pytest.mark.asyncio

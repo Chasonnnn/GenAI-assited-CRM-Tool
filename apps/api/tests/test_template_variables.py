@@ -3,10 +3,10 @@
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from app.db.models import Appointment, AppointmentType, BookingLink, FormSubmissionToken
+from app.db.models import Appointment, AppointmentType, BookingLink, FormIntakeLink
 from app.db.enums import AppointmentStatus, MeetingMode
 from app.services import form_service
-from app.services import form_submission_service
+from app.services import form_intake_service
 from app.services import org_service
 from app.services import email_service
 from app.services import appointment_service
@@ -67,15 +67,11 @@ def test_build_surrogate_template_variables_includes_form_link(db, test_org, tes
 
     assert "form_link" in variables
     base_url = org_service.get_org_portal_base_url(test_org)
-    assert variables["form_link"].startswith(f"{base_url}/apply/")
-
-    issued_token = variables["form_link"].removeprefix(f"{base_url}/apply/")
-    token_row = (
-        db.query(FormSubmissionToken).filter(FormSubmissionToken.token == issued_token).first()
-    )
-    assert token_row is not None
-    assert token_row.form_id == created_form.id
-    assert token_row.surrogate_id == surrogate.id
+    assert variables["form_link"].startswith(f"{base_url}/intake/")
+    issued_slug = variables["form_link"].removeprefix(f"{base_url}/intake/")
+    link_row = db.query(FormIntakeLink).filter(FormIntakeLink.slug == issued_slug).first()
+    assert link_row is not None
+    assert link_row.form_id == created_form.id
 
 
 def test_build_surrogate_template_variables_includes_appointment_link(db, test_org, test_user):
@@ -115,30 +111,40 @@ def test_build_surrogate_template_variables_reuses_existing_form_link(db, test_o
         ),
     )
     form = _create_published_form(db, test_org.id, test_user.id)
-
-    existing_token = form_submission_service.create_submission_token(
-        db=db,
+    form_intake_service.ensure_default_intake_link(
+        db,
         org_id=test_org.id,
         form=form,
-        surrogate=surrogate,
         user_id=test_user.id,
-        expires_in_days=14,
+    )
+    existing_link = form_intake_service.get_active_intake_link_for_form(
+        db,
+        org_id=test_org.id,
+        form_id=form.id,
+    )
+    assert existing_link is not None
+    existing_link_count = (
+        db.query(FormIntakeLink)
+        .filter(
+            FormIntakeLink.organization_id == test_org.id,
+            FormIntakeLink.form_id == form.id,
+        )
+        .count()
     )
 
     variables = email_service.build_surrogate_template_variables(db, surrogate)
 
     base_url = org_service.get_org_portal_base_url(test_org)
-    assert variables["form_link"] == f"{base_url}/apply/{existing_token.token}"
-    token_count = (
-        db.query(FormSubmissionToken)
+    assert variables["form_link"] == f"{base_url}/intake/{existing_link.slug}"
+    link_count = (
+        db.query(FormIntakeLink)
         .filter(
-            FormSubmissionToken.organization_id == test_org.id,
-            FormSubmissionToken.form_id == form.id,
-            FormSubmissionToken.surrogate_id == surrogate.id,
+            FormIntakeLink.organization_id == test_org.id,
+            FormIntakeLink.form_id == form.id,
         )
         .count()
     )
-    assert token_count == 1
+    assert link_count == existing_link_count
 
 
 def test_build_surrogate_template_variables_form_link_empty_without_published_form(
@@ -158,6 +164,48 @@ def test_build_surrogate_template_variables_form_link_empty_without_published_fo
     variables = email_service.build_surrogate_template_variables(db, surrogate)
 
     assert variables["form_link"] == ""
+
+
+def test_build_surrogate_template_variables_auto_creates_shared_link_when_missing(
+    db, test_org, test_user
+):
+    surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(
+            full_name="Auto Link User",
+            email="auto-link@example.com",
+            source=SurrogateSource.MANUAL,
+        ),
+    )
+    form = _create_published_form(db, test_org.id, test_user.id)
+
+    # Simulate a missing active link by disabling all existing links.
+    (
+        db.query(FormIntakeLink)
+        .filter(
+            FormIntakeLink.organization_id == test_org.id,
+            FormIntakeLink.form_id == form.id,
+        )
+        .update({"is_active": False}, synchronize_session=False)
+    )
+    db.commit()
+
+    variables = email_service.build_surrogate_template_variables(db, surrogate)
+
+    base_url = org_service.get_org_portal_base_url(test_org)
+    assert variables["form_link"].startswith(f"{base_url}/intake/")
+    active_link = (
+        db.query(FormIntakeLink)
+        .filter(
+            FormIntakeLink.organization_id == test_org.id,
+            FormIntakeLink.form_id == form.id,
+            FormIntakeLink.is_active.is_(True),
+        )
+        .first()
+    )
+    assert active_link is not None
 
 
 def test_build_surrogate_template_variables_reuses_existing_appointment_link(

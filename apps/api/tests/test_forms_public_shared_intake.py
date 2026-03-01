@@ -4,14 +4,23 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import FormSubmissionMatchStatus
 from app.db.enums import IntakeLeadStatus
-from app.db.models import AutomationWorkflow, FormSubmission, IntakeLead, Surrogate, Task, WorkflowExecution
+from app.db.models import (
+    AutomationWorkflow,
+    FormIntakeDraft,
+    FormIntakeLink,
+    FormSubmission,
+    IntakeLead,
+    Surrogate,
+    Task,
+    WorkflowExecution,
+)
 from app.utils.normalization import normalize_email, normalize_name, normalize_phone, normalize_search_text
 
 
@@ -117,6 +126,226 @@ async def test_shared_draft_lifecycle(authed_client):
 
     after_delete_res = await authed_client.get(f"/forms/public/intake/{slug}/draft/{draft_session_id}")
     assert after_delete_res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_shared_draft_lookup_handles_insufficient_identity_and_no_match(authed_client):
+    _form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+
+    insufficient_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/draft/lookup",
+        json={"answers": {"full_name": "Only Name"}},
+    )
+    assert insufficient_res.status_code == 200
+    assert insufficient_res.json()["status"] == "insufficient_identity"
+
+    no_match_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/draft/lookup",
+        json={
+            "answers": {
+                "full_name": "No Match",
+                "date_of_birth": "1990-01-01",
+                "email": "no-match@example.com",
+            }
+        },
+    )
+    assert no_match_res.status_code == 200
+    assert no_match_res.json()["status"] == "no_match"
+
+
+@pytest.mark.asyncio
+async def test_shared_draft_lookup_matches_across_links_and_returns_most_recent(authed_client, db):
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    links_res = await authed_client.get(f"/forms/{form_id}/intake-links")
+    assert links_res.status_code == 200
+    first_link_id = links_res.json()[0]["id"]
+
+    create_link_res = await authed_client.post(
+        f"/forms/{form_id}/intake-links",
+        json={"campaign_name": "Second link"},
+    )
+    assert create_link_res.status_code == 200
+    second_slug = create_link_res.json()["slug"]
+
+    identity_answers = {
+        "full_name": "Resume Person",
+        "date_of_birth": "1992-08-09",
+        "phone": "+1 (555) 901-1111",
+        "email": "resume-person@example.com",
+    }
+
+    first_session = "lookup-first-session"
+    second_session = "lookup-second-session"
+    first_upsert = await authed_client.put(
+        f"/forms/public/intake/{slug}/draft/{first_session}",
+        json={"answers": identity_answers},
+    )
+    assert first_upsert.status_code == 200
+
+    second_upsert = await authed_client.put(
+        f"/forms/public/intake/{second_slug}/draft/{second_session}",
+        json={"answers": identity_answers},
+    )
+    assert second_upsert.status_code == 200
+
+    first_draft = db.query(FormIntakeDraft).filter(FormIntakeDraft.draft_session_id == first_session).first()
+    second_draft = (
+        db.query(FormIntakeDraft).filter(FormIntakeDraft.draft_session_id == second_session).first()
+    )
+    assert first_draft is not None
+    assert second_draft is not None
+
+    lookup_email_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/draft/lookup",
+        json={
+            "answers": {
+                "full_name": identity_answers["full_name"],
+                "date_of_birth": identity_answers["date_of_birth"],
+                "email": identity_answers["email"],
+            },
+            "current_draft_session_id": first_session,
+        },
+    )
+    assert lookup_email_res.status_code == 200
+    email_payload = lookup_email_res.json()
+    assert email_payload["status"] == "match_found"
+    assert email_payload["source_draft_id"] == str(second_draft.id)
+    assert email_payload["match_reason"] == "name_dob_email"
+
+    lookup_phone_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/draft/lookup",
+        json={
+            "answers": {
+                "full_name": identity_answers["full_name"],
+                "date_of_birth": identity_answers["date_of_birth"],
+                "phone": identity_answers["phone"],
+            },
+            "current_draft_session_id": first_session,
+        },
+    )
+    assert lookup_phone_res.status_code == 200
+    phone_payload = lookup_phone_res.json()
+    assert phone_payload["status"] == "match_found"
+    assert phone_payload["source_draft_id"] == str(second_draft.id)
+    assert phone_payload["match_reason"] == "name_dob_phone"
+
+    first_link = db.query(FormIntakeLink).filter(FormIntakeLink.id == uuid.UUID(first_link_id)).first()
+    assert first_link is not None
+
+
+@pytest.mark.asyncio
+async def test_shared_draft_lookup_excludes_stale_drafts(authed_client, db):
+    _form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    session_id = "stale-draft-session"
+    identity_answers = {
+        "full_name": "Stale Person",
+        "date_of_birth": "1990-05-06",
+        "phone": "+1 (555) 777-1000",
+        "email": "stale@example.com",
+    }
+    upsert_res = await authed_client.put(
+        f"/forms/public/intake/{slug}/draft/{session_id}",
+        json={"answers": identity_answers},
+    )
+    assert upsert_res.status_code == 200
+
+    stale_draft = db.query(FormIntakeDraft).filter(FormIntakeDraft.draft_session_id == session_id).first()
+    assert stale_draft is not None
+    stale_draft.updated_at = datetime.now(timezone.utc) - timedelta(days=45)
+    db.commit()
+
+    lookup_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/draft/lookup",
+        json={
+            "answers": {
+                "full_name": identity_answers["full_name"],
+                "date_of_birth": identity_answers["date_of_birth"],
+                "email": identity_answers["email"],
+            }
+        },
+    )
+    assert lookup_res.status_code == 200
+    assert lookup_res.json()["status"] == "no_match"
+
+
+@pytest.mark.asyncio
+async def test_shared_draft_restore_copies_answers_and_keeps_source(authed_client, db):
+    _form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    source_session = "restore-source"
+    target_session = "restore-target"
+    source_answers = {
+        "full_name": "Restore Person",
+        "date_of_birth": "1991-10-11",
+        "phone": "+1 (555) 120-3333",
+        "email": "restore-person@example.com",
+    }
+
+    source_upsert = await authed_client.put(
+        f"/forms/public/intake/{slug}/draft/{source_session}",
+        json={"answers": source_answers},
+    )
+    assert source_upsert.status_code == 200
+
+    source_draft = db.query(FormIntakeDraft).filter(FormIntakeDraft.draft_session_id == source_session).first()
+    assert source_draft is not None
+
+    restore_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/draft/{target_session}/restore",
+        json={"source_draft_id": str(source_draft.id)},
+    )
+    assert restore_res.status_code == 200
+    restored_payload = restore_res.json()
+    assert restored_payload["answers"]["full_name"] == source_answers["full_name"]
+    assert restored_payload["answers"]["email"] == source_answers["email"]
+
+    refreshed_source = db.query(FormIntakeDraft).filter(FormIntakeDraft.id == source_draft.id).first()
+    assert refreshed_source is not None
+    assert refreshed_source.answers_json["full_name"] == source_answers["full_name"]
+
+
+@pytest.mark.asyncio
+async def test_shared_submit_clears_matching_drafts_across_links(authed_client, db):
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    create_link_res = await authed_client.post(
+        f"/forms/{form_id}/intake-links",
+        json={"campaign_name": "Cleanup link"},
+    )
+    assert create_link_res.status_code == 200
+    second_slug = create_link_res.json()["slug"]
+
+    shared_identity = {
+        "full_name": "Cleanup Person",
+        "date_of_birth": "1993-11-20",
+        "phone": "+1 (555) 212-4455",
+        "email": "cleanup@example.com",
+    }
+
+    upsert_a = await authed_client.put(
+        f"/forms/public/intake/{slug}/draft/cleanup-a",
+        json={"answers": shared_identity},
+    )
+    assert upsert_a.status_code == 200
+    upsert_b = await authed_client.put(
+        f"/forms/public/intake/{second_slug}/draft/cleanup-b",
+        json={"answers": shared_identity},
+    )
+    assert upsert_b.status_code == 200
+
+    submit_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={"answers": json.dumps(shared_identity)},
+    )
+    assert submit_res.status_code == 200
+
+    remaining = (
+        db.query(FormIntakeDraft)
+        .filter(
+            FormIntakeDraft.full_name_normalized == normalize_search_text("Cleanup Person"),
+            FormIntakeDraft.date_of_birth == date.fromisoformat("1993-11-20"),
+        )
+        .count()
+    )
+    assert remaining == 0
 
 
 @pytest.mark.asyncio
