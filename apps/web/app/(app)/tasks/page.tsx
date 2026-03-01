@@ -16,7 +16,7 @@ import { TasksListView } from "@/components/tasks/TasksListView"
 import { TasksApprovalsSection } from "@/components/tasks/TasksApprovalsSection"
 import { TaskEditModal } from "@/components/tasks/TaskEditModal"
 import { AddTaskDialog, type TaskFormData } from "@/components/tasks/AddTaskDialog"
-import { useTasks, useCompleteTask, useUncompleteTask, useUpdateTask, useCreateTask, useDeleteTask } from "@/lib/hooks/use-tasks"
+import { useTasks, useCompleteTask, useUncompleteTask, useUpdateTask, useCreateTask, useDeleteTask, useBulkCompleteTasks } from "@/lib/hooks/use-tasks"
 import { useStatusChangeRequests } from "@/lib/hooks/use-status-change-requests"
 import { usePendingImportApprovals } from "@/lib/hooks/use-import"
 import { useAuth } from "@/lib/auth-context"
@@ -24,6 +24,7 @@ import { useAIContext } from "@/lib/context/ai-context"
 import type { TaskListItem } from "@/lib/types/task"
 import { buildRecurringDates, MAX_TASK_OCCURRENCES } from "@/lib/utils/task-recurrence"
 import { format, parseISO } from "date-fns"
+import { toast } from "sonner"
 
 type FilterType = "all" | "my_tasks"
 const isFilterType = (value: string | null): value is FilterType =>
@@ -84,6 +85,7 @@ export default function TasksPage() {
         isFocusTarget(urlFocus) ? urlFocus : null
     )
     const [showCompleted, setShowCompleted] = useState(false)
+    const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
     const [view, setView] = useState<ViewType>(() => {
         if (typeof window !== "undefined") {
             const stored = localStorage.getItem("tasks-view")
@@ -206,6 +208,7 @@ export default function TasksPage() {
 
     const completeTask = useCompleteTask()
     const uncompleteTask = useUncompleteTask()
+    const bulkCompleteTasks = useBulkCompleteTasks()
     const updateTask = useUpdateTask()
     const createTask = useCreateTask()
     const deleteTask = useDeleteTask()
@@ -227,12 +230,53 @@ export default function TasksPage() {
     }, [editingTask, setAIContext, clearAIContext])
 
     const handleTaskToggle = async (taskId: string, isCompleted: boolean) => {
+        setSelectedTaskIds((prev) => {
+            if (!prev.has(taskId)) return prev
+            const next = new Set(prev)
+            next.delete(taskId)
+            return next
+        })
         if (isCompleted) {
             await uncompleteTask.mutateAsync(taskId)
         } else {
             await completeTask.mutateAsync(taskId)
         }
     }
+
+    const handleSelectTask = useCallback((taskId: string, selected: boolean) => {
+        setSelectedTaskIds((prev) => {
+            const next = new Set(prev)
+            if (selected) {
+                next.add(taskId)
+            } else {
+                next.delete(taskId)
+            }
+            return next
+        })
+    }, [])
+
+    const handleSelectAllTasks = useCallback((selected: boolean) => {
+        if (!selected) {
+            setSelectedTaskIds(new Set())
+            return
+        }
+        const visibleTaskIds = (incompleteTasks?.items ?? []).map((task) => task.id)
+        setSelectedTaskIds(new Set(visibleTaskIds))
+    }, [incompleteTasks?.items])
+
+    const handleBulkCompleteSelected = useCallback(async () => {
+        const taskIds = Array.from(selectedTaskIds)
+        if (taskIds.length === 0) return
+        const result = await bulkCompleteTasks.mutateAsync(taskIds)
+        setSelectedTaskIds(new Set())
+        if (result.failed.length > 0) {
+            toast.warning(
+                `Completed ${result.completed} tasks, ${result.failed.length} failed.`
+            )
+            return
+        }
+        toast.success(`Completed ${result.completed} tasks.`)
+    }, [bulkCompleteTasks, selectedTaskIds])
 
     const handleAddTask = async (data: TaskFormData) => {
         const dueTime = data.due_time ? `${data.due_time}:00` : undefined
@@ -303,6 +347,23 @@ export default function TasksPage() {
         target.scrollIntoView({ behavior: "smooth", block: "start" })
         setPendingFocus(null)
     }, [pendingFocus, view, isLoading, loadingApprovals, loadingStatusRequests, loadingImportApprovals])
+
+    useEffect(() => {
+        const visibleIds = new Set((incompleteTasks?.items ?? []).map((task) => task.id))
+        setSelectedTaskIds((prev) => {
+            if (prev.size === 0) return prev
+            let changed = false
+            const next = new Set<string>()
+            for (const taskId of prev) {
+                if (visibleIds.has(taskId)) {
+                    next.add(taskId)
+                } else {
+                    changed = true
+                }
+            }
+            return changed ? next : prev
+        })
+    }, [incompleteTasks?.items])
 
     return (
         <div className="flex min-h-screen flex-col">
@@ -406,12 +467,17 @@ export default function TasksPage() {
                     <TasksListView
                         incompleteTasks={incompleteTasks?.items ?? []}
                         completedTasks={completedTasks ?? null}
+                        selectedTaskIds={selectedTaskIds}
                         showCompleted={showCompleted}
                         loadingCompleted={loadingCompleted}
                         completedError={!!completedError}
                         onToggleShowCompleted={() => setShowCompleted((prev) => !prev)}
                         onTaskToggle={handleTaskToggle}
                         onTaskClick={handleTaskClick}
+                        onSelectTask={handleSelectTask}
+                        onSelectAll={handleSelectAllTasks}
+                        onBulkCompleteSelected={handleBulkCompleteSelected}
+                        bulkCompletePending={bulkCompleteTasks.isPending}
                     />
                 )}
 

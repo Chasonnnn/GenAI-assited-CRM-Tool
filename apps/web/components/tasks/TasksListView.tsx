@@ -15,12 +15,17 @@ import { Loader2Icon } from "lucide-react"
 type TasksListViewProps = {
     incompleteTasks: TaskListItem[]
     completedTasks: { items: TaskListItem[]; total?: number } | null
+    selectedTaskIds: Set<string>
     showCompleted: boolean
     loadingCompleted: boolean
     completedError: boolean
     onToggleShowCompleted: () => void
     onTaskToggle: (taskId: string, isCompleted: boolean) => void
     onTaskClick: (task: TaskListItem) => void
+    onSelectTask: (taskId: string, selected: boolean) => void
+    onSelectAll: (selected: boolean) => void
+    onBulkCompleteSelected: () => void
+    bulkCompletePending: boolean
 }
 
 function getInitials(name: string | null): string {
@@ -36,12 +41,17 @@ function getInitials(name: string | null): string {
 export function TasksListView({
     incompleteTasks,
     completedTasks,
+    selectedTaskIds,
     showCompleted,
     loadingCompleted,
     completedError,
     onToggleShowCompleted,
     onTaskToggle,
     onTaskClick,
+    onSelectTask,
+    onSelectAll,
+    onBulkCompleteSelected,
+    bulkCompletePending,
 }: TasksListViewProps) {
     const groupedTasks = useMemo(() => {
         const grouped: Record<DueCategory, TaskListItem[]> = {
@@ -62,6 +72,7 @@ export function TasksListView({
     const renderTaskItem = (task: TaskListItem, showCategory = true) => {
         const category = getDueCategory(task)
         const colors = categoryColors[category]
+        const isSelected = selectedTaskIds.has(task.id)
 
         return (
             <div
@@ -71,7 +82,11 @@ export function TasksListView({
                 }`}
                 role="button"
                 tabIndex={0}
-                onClick={() => onTaskClick(task)}
+                onClick={(event) => {
+                    const target = event.target as HTMLElement
+                    if (target.closest('[data-task-checkbox="true"]')) return
+                    onTaskClick(task)
+                }}
                 onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault()
@@ -79,12 +94,30 @@ export function TasksListView({
                     }
                 }}
             >
-                <Checkbox
-                    className="mt-0.5"
-                    checked={task.is_completed}
-                    onCheckedChange={() => onTaskToggle(task.id, task.is_completed)}
-                    onClick={(event) => event.stopPropagation()}
-                />
+                {!task.is_completed && (
+                    <div data-task-checkbox="true" onClick={(event) => event.stopPropagation()}>
+                        <Checkbox
+                            className="mt-0.5"
+                            aria-label={`Select task ${task.title}`}
+                            checked={isSelected}
+                            onCheckedChange={(checked) => onSelectTask(task.id, checked === true)}
+                            onClick={(event) => event.stopPropagation()}
+                        />
+                    </div>
+                )}
+                <div data-task-checkbox="true" onClick={(event) => event.stopPropagation()}>
+                    <Checkbox
+                        className="mt-0.5"
+                        aria-label={
+                            task.is_completed
+                                ? `Mark task ${task.title} incomplete`
+                                : `Mark task ${task.title} complete`
+                        }
+                        checked={task.is_completed}
+                        onCheckedChange={() => onTaskToggle(task.id, task.is_completed)}
+                        onClick={(event) => event.stopPropagation()}
+                    />
+                </div>
                 <div className="flex-1 space-y-1">
                     <div className="flex items-center gap-2">
                         <span className={`font-medium ${task.is_completed ? "line-through" : ""}`}>
@@ -153,10 +186,44 @@ export function TasksListView({
     }
 
     const completedTotal = completedTasks?.total ?? 0
+    const selectedIncompleteCount = useMemo(
+        () => incompleteTasks.filter((task) => selectedTaskIds.has(task.id)).length,
+        [incompleteTasks, selectedTaskIds]
+    )
+    const allVisibleSelected = incompleteTasks.length > 0 && selectedIncompleteCount === incompleteTasks.length
 
     return (
         <Card id="tasks-list" className="p-6">
             <div className="space-y-6">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3">
+                    <div className="flex items-center gap-3">
+                        <Checkbox
+                            aria-label="Select all visible tasks"
+                            checked={allVisibleSelected}
+                            onCheckedChange={(checked) => onSelectAll(checked === true)}
+                        />
+                        <span className="text-sm text-muted-foreground">
+                            {selectedIncompleteCount > 0
+                                ? `${selectedIncompleteCount} selected`
+                                : "Select tasks for bulk complete"}
+                        </span>
+                    </div>
+                    <Button
+                        size="sm"
+                        disabled={selectedIncompleteCount === 0 || bulkCompletePending}
+                        onClick={onBulkCompleteSelected}
+                    >
+                        {bulkCompletePending ? (
+                            <>
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                Completing...
+                            </>
+                        ) : (
+                            "Complete selected"
+                        )}
+                    </Button>
+                </div>
+
                 {renderSection("overdue", groupedTasks.overdue)}
                 {renderSection("today", groupedTasks.today)}
                 {renderSection("tomorrow", groupedTasks.tomorrow)}

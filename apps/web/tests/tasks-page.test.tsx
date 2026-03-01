@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import TasksPage from '../app/(app)/tasks/page'
 import { TasksListView } from '@/components/tasks/TasksListView'
 import { TasksCalendarView } from '@/components/tasks/TasksCalendarView'
@@ -42,6 +42,7 @@ const mockUncompleteTask = vi.fn()
 const mockUpdateTask = vi.fn()
 const mockCreateTask = vi.fn()
 const mockDeleteTask = vi.fn()
+const mockBulkCompleteTasks = vi.fn()
 const mockResolveApproval = vi.fn()
 const mockUsePendingImportApprovals = vi.fn()
 const mockApproveImport = vi.fn()
@@ -61,6 +62,7 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
     useUpdateTask: () => ({ mutateAsync: mockUpdateTask }),
     useCreateTask: () => ({ mutateAsync: mockCreateTask, isPending: false }),
     useDeleteTask: () => ({ mutateAsync: mockDeleteTask, isPending: false }),
+    useBulkCompleteTasks: () => ({ mutateAsync: mockBulkCompleteTasks, isPending: false }),
     useResolveWorkflowApproval: () => ({ mutateAsync: mockResolveApproval, isPending: false }),
 }))
 
@@ -142,6 +144,17 @@ describe('TasksPage', () => {
                                 owner_id: 'u1',
                                 owner_name: 'Jane Doe',
                             },
+                            {
+                                id: 't2',
+                                title: 'Call fertility clinic',
+                                is_completed: false,
+                                due_date: null,
+                                surrogate_id: 's2',
+                                surrogate_number: 'S12346',
+                                owner_type: 'user',
+                                owner_id: 'u1',
+                                owner_name: 'Jane Doe',
+                            },
                         ],
                     },
                     isLoading: false,
@@ -156,6 +169,7 @@ describe('TasksPage', () => {
         })
         mockCompleteTask.mockReset()
         mockUncompleteTask.mockReset()
+        mockBulkCompleteTasks.mockReset()
         mockResolveApproval.mockReset()
         mockApproveImport.mockReset()
         mockRejectImport.mockReset()
@@ -167,7 +181,7 @@ describe('TasksPage', () => {
         expect(screen.getByText('Tasks')).toBeInTheDocument()
         expect(screen.getByText('Follow up with surrogate')).toBeInTheDocument()
 
-        const checkbox = screen.getAllByRole('checkbox')[0]
+        const checkbox = screen.getByLabelText('Mark task Follow up with surrogate complete')
         fireEvent.click(checkbox)
 
         expect(mockCompleteTask).toHaveBeenCalledWith('t1')
@@ -235,12 +249,29 @@ describe('TasksPage', () => {
         expect(screen.getByText(/120 rows/i)).toBeInTheDocument()
         expect(screen.getByText(/1 duplicate/i)).toBeInTheDocument()
     })
+
+    it('bulk completes selected tasks from the list view', async () => {
+        mockBulkCompleteTasks.mockResolvedValue({ completed: 2, failed: [] })
+
+        render(<TasksPage />)
+
+        fireEvent.click(screen.getByLabelText('Select task Follow up with surrogate'))
+        fireEvent.click(screen.getByLabelText('Select task Call fertility clinic'))
+        fireEvent.click(screen.getByRole('button', { name: 'Complete selected' }))
+
+        await waitFor(() => {
+            expect(mockBulkCompleteTasks).toHaveBeenCalledWith(['t1', 't2'])
+        })
+    })
 })
 
 describe('TasksListView', () => {
     it('renders tasks and toggles completion', () => {
         const onTaskToggle = vi.fn()
         const onTaskClick = vi.fn()
+        const onSelectTask = vi.fn()
+        const onSelectAll = vi.fn()
+        const onBulkCompleteSelected = vi.fn()
         render(
             <TasksListView
                 incompleteTasks={[
@@ -257,17 +288,22 @@ describe('TasksListView', () => {
                     } as TaskListItem,
                 ]}
                 completedTasks={{ items: [], total: 0 }}
+                selectedTaskIds={new Set()}
                 showCompleted={false}
                 loadingCompleted={false}
                 completedError={false}
                 onToggleShowCompleted={() => {}}
                 onTaskToggle={onTaskToggle}
                 onTaskClick={onTaskClick}
+                onSelectTask={onSelectTask}
+                onSelectAll={onSelectAll}
+                onBulkCompleteSelected={onBulkCompleteSelected}
+                bulkCompletePending={false}
             />
         )
 
         expect(screen.getByText('Follow up with surrogate')).toBeInTheDocument()
-        const checkbox = screen.getAllByRole('checkbox')[0]
+        const checkbox = screen.getByLabelText('Mark task Follow up with surrogate complete')
         fireEvent.click(checkbox)
         expect(onTaskToggle).toHaveBeenCalledWith('t1', false)
     })
