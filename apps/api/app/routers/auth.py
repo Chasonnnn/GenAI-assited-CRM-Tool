@@ -123,6 +123,8 @@ def google_login(
 
 
 @router.get("/google/callback")
+# Security: Rate limit OAuth callbacks to prevent brute-force attacks and abuse.
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 async def google_callback(
     request: Request,
     code: str | None = None,
@@ -913,6 +915,8 @@ def delete_signature_photo(
 
 
 @router.post("/logout", dependencies=[Depends(require_csrf_header)])
+# Security: Rate limit logout to prevent DoS attacks.
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def logout(
     request: Request,
     response: Response,
