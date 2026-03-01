@@ -8,6 +8,28 @@ const mockUseUnifiedCalendarData = vi.fn()
 const mockUseAppointment = vi.fn()
 const mockUseRescheduleSlots = vi.fn()
 
+const now = new Date()
+const appointmentStartLocal = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    10,
+    12,
+    0,
+    0,
+    0
+)
+const appointmentEndLocal = new Date(appointmentStartLocal.getTime() + 30 * 60 * 1000)
+const rescheduleSlotStartLocal = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    11,
+    12,
+    0,
+    0,
+    0
+)
+const rescheduleSlotEndLocal = new Date(rescheduleSlotStartLocal.getTime() + 30 * 60 * 1000)
+
 vi.mock("@/lib/hooks/use-unified-calendar-data", () => ({
     useUnifiedCalendarData: (args: unknown) => mockUseUnifiedCalendarData(args),
 }))
@@ -60,8 +82,8 @@ describe("UnifiedCalendar drag-to-reschedule", () => {
                     client_email: "test@example.com",
                     client_phone: "+1-555-123-4567",
                     client_timezone: "America/Los_Angeles",
-                    scheduled_start: "2026-02-25T22:30:00Z",
-                    scheduled_end: "2026-02-25T23:00:00Z",
+                    scheduled_start: appointmentStartLocal.toISOString(),
+                    scheduled_end: appointmentEndLocal.toISOString(),
                     duration_minutes: 30,
                     meeting_mode: "zoom",
                     meeting_location: null,
@@ -93,8 +115,8 @@ describe("UnifiedCalendar drag-to-reschedule", () => {
                 client_phone: "+1-555-123-4567",
                 client_timezone: "America/Los_Angeles",
                 client_notes: null,
-                scheduled_start: "2026-02-25T22:30:00Z",
-                scheduled_end: "2026-02-25T23:00:00Z",
+                scheduled_start: appointmentStartLocal.toISOString(),
+                scheduled_end: appointmentEndLocal.toISOString(),
                 duration_minutes: 30,
                 meeting_mode: "zoom",
                 meeting_location: null,
@@ -113,8 +135,8 @@ describe("UnifiedCalendar drag-to-reschedule", () => {
             data: {
                 slots: [
                     {
-                        start: "2026-02-26T18:00:00Z",
-                        end: "2026-02-26T18:30:00Z",
+                        start: rescheduleSlotStartLocal.toISOString(),
+                        end: rescheduleSlotEndLocal.toISOString(),
                     },
                 ],
                 appointment_type: null,
@@ -136,7 +158,7 @@ describe("UnifiedCalendar drag-to-reschedule", () => {
         }
         fireEvent.dragStart(draggableAppt, { dataTransfer })
 
-        const dateCells = screen.getAllByText("26")
+        const dateCells = screen.getAllByText(String(rescheduleSlotStartLocal.getDate()))
         const dropTarget = dateCells[0]?.closest("div")
         expect(dropTarget).toBeInTheDocument()
         fireEvent.drop(dropTarget as HTMLElement, { dataTransfer })
