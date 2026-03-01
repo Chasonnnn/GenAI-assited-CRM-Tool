@@ -257,6 +257,30 @@ export interface FormIntakeLinkRead {
     updated_at: string
 }
 
+export type SharedDraftLookupStatus = 'insufficient_identity' | 'no_match' | 'match_found'
+export type SharedDraftMatchReason = 'name_dob_email' | 'name_dob_phone'
+
+export interface FormIntakeDraftLookupResponse {
+    status: SharedDraftLookupStatus
+    source_draft_id?: string | null
+    updated_at?: string | null
+    match_reason?: SharedDraftMatchReason | null
+}
+
+export interface FormIntakeDraftRestoreResponse {
+    answers: JsonObject
+    started_at: string | null
+    updated_at: string
+}
+
+export interface FormIntakeLinkSendResponse {
+    intake_link_id: string
+    template_id: string
+    email_log_id: string
+    sent_at: string
+    intake_url: string
+}
+
 export interface FormIntakeLinkCreatePayload {
     campaign_name?: string | null
     event_name?: string | null
@@ -571,6 +595,18 @@ export function rotateFormIntakeLink(linkId: string): Promise<FormIntakeLinkRead
     return api.post<FormIntakeLinkRead>(`/forms/intake-links/${linkId}/rotate`, {})
 }
 
+export function sendFormIntakeLink(
+    formId: string,
+    linkId: string,
+    surrogateId: string,
+    templateId?: string | null,
+): Promise<FormIntakeLinkSendResponse> {
+    return api.post<FormIntakeLinkSendResponse>(`/forms/${formId}/intake-links/${linkId}/send`, {
+        surrogate_id: surrogateId,
+        template_id: templateId ?? null,
+    })
+}
+
 export function getSurrogateSubmission(formId: string, surrogateId: string): Promise<FormSubmissionRead> {
     return api.get<FormSubmissionRead>(`/forms/${formId}/surrogates/${surrogateId}/submission`)
 }
@@ -619,6 +655,17 @@ export function getSharedPublicFormDraft(
     return api.get<FormDraftPublicRead>(`/forms/public/intake/${slug}/draft/${draftSessionId}`)
 }
 
+export function lookupSharedPublicFormDraft(
+    slug: string,
+    answers: JsonObject,
+    currentDraftSessionId?: string | null,
+): Promise<FormIntakeDraftLookupResponse> {
+    return api.post<FormIntakeDraftLookupResponse>(`/forms/public/intake/${slug}/draft/lookup`, {
+        answers,
+        current_draft_session_id: currentDraftSessionId ?? null,
+    })
+}
+
 export function savePublicFormDraft(
     token: string,
     answers: JsonObject,
@@ -645,6 +692,19 @@ export function deleteSharedPublicFormDraft(
     draftSessionId: string,
 ): Promise<void> {
     return api.delete<void>(`/forms/public/intake/${slug}/draft/${draftSessionId}`)
+}
+
+export function restoreSharedPublicFormDraft(
+    slug: string,
+    draftSessionId: string,
+    sourceDraftId: string,
+): Promise<FormIntakeDraftRestoreResponse> {
+    return api.post<FormIntakeDraftRestoreResponse>(
+        `/forms/public/intake/${slug}/draft/${draftSessionId}/restore`,
+        {
+            source_draft_id: sourceDraftId,
+        },
+    )
 }
 
 export function getSurrogateDraftStatus(

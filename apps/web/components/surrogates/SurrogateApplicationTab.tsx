@@ -38,14 +38,13 @@ import {
     UploadIcon,
 } from "lucide-react"
 import { toast } from "sonner"
-import { ApiError } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
 import {
     useApproveFormSubmission,
     useSurrogateFormSubmission,
     useSurrogateFormDraftStatus,
-    useCreateFormToken,
-    useSendFormToken,
+    useFormIntakeLinks,
+    useSendFormIntakeLink,
     useRejectFormSubmission,
     useUpdateSubmissionAnswers,
     useUploadSubmissionFile,
@@ -55,9 +54,9 @@ import { useEmailTemplates } from "@/lib/hooks/use-email-templates"
 import {
     exportSubmissionPdf,
     getSubmissionFileDownloadUrl,
+    type FormIntakeLinkRead,
     type FormSchema,
     type FormSummary,
-    type FormTokenRead,
 } from "@/lib/api/forms"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { cn } from "@/lib/utils"
@@ -69,35 +68,19 @@ interface SurrogateApplicationTabProps {
 }
 
 const EMPTY_PUBLISHED_FORMS: FormSummary[] = []
-const LINK_EXPIRATION_OPTIONS_DAYS = [7, 14, 30, 45, 60]
 
-function buildApplyLink(baseUrl: string, token: string): string {
-    const fallback = `/apply/${token}`
-    const trimmedBaseUrl = baseUrl.trim()
-    if (!trimmedBaseUrl) return fallback
+function resolveIntakeLink(baseUrl: string, link: FormIntakeLinkRead): string {
+    const serverUrl = link.intake_url?.trim()
+    const fallback = `/intake/${link.slug}`
+    const candidate = serverUrl || fallback
+    const normalizedBase = baseUrl.trim()
 
+    if (!normalizedBase) return candidate
     try {
-        const normalizedBase = trimmedBaseUrl.endsWith("/") ? trimmedBaseUrl : `${trimmedBaseUrl}/`
-        return new URL(`apply/${token}`, normalizedBase).toString()
+        return new URL(candidate, normalizedBase.endsWith("/") ? normalizedBase : `${normalizedBase}/`).toString()
     } catch {
-        return fallback
+        return candidate
     }
-}
-
-function resolveApplicationLink(baseUrl: string, tokenData: FormTokenRead): string {
-    const serverUrl = tokenData.application_url?.trim()
-    if (serverUrl) {
-        try {
-            const normalizedBase = baseUrl.trim()
-            if (normalizedBase) {
-                return new URL(serverUrl, normalizedBase.endsWith("/") ? normalizedBase : `${normalizedBase}/`).toString()
-            }
-            return new URL(serverUrl).toString()
-        } catch {
-            return serverUrl
-        }
-    }
-    return buildApplyLink(baseUrl, tokenData.token)
 }
 
 // Format file size for display
@@ -199,8 +182,8 @@ export function SurrogateApplicationTab({
         error: submissionError,
     } = useSurrogateFormSubmission(effectiveFormId || null, surrogateId)
     const { data: draftStatus } = useSurrogateFormDraftStatus(effectiveFormId || null, surrogateId)
-    const createTokenMutation = useCreateFormToken()
-    const sendTokenMutation = useSendFormToken()
+    const { data: intakeLinks = [] } = useFormIntakeLinks(effectiveFormId || null, true)
+    const sendIntakeLinkMutation = useSendFormIntakeLink()
     const { data: emailTemplates = [] } = useEmailTemplates({ activeOnly: true })
     const approveMutation = useApproveFormSubmission()
     const rejectMutation = useRejectFormSubmission()
@@ -230,17 +213,28 @@ export function SurrogateApplicationTab({
     const [rejectReason, setRejectReason] = React.useState("")
     const [approveNotes, setApproveNotes] = React.useState("")
     const [formLinkCopied, setFormLinkCopied] = React.useState(false)
-    const [currentTokenId, setCurrentTokenId] = React.useState("")
     const [formLink, setFormLink] = React.useState("")
-    const [formLinkExpiresAt, setFormLinkExpiresAt] = React.useState("")
-    const [linkExpirationDays, setLinkExpirationDays] = React.useState(14)
+    const [selectedIntakeLinkId, setSelectedIntakeLinkId] = React.useState("")
     const [selectedTemplateId, setSelectedTemplateId] = React.useState("")
 
     // Loading state for actions
     const [isApproving, setIsApproving] = React.useState(false)
     const [isRejecting, setIsRejecting] = React.useState(false)
-    const [isGeneratingLink, setIsGeneratingLink] = React.useState(false)
     const [isSendingLink, setIsSendingLink] = React.useState(false)
+
+    const activeIntakeLinks = React.useMemo(
+        () => intakeLinks.filter((link) => link.is_active),
+        [intakeLinks],
+    )
+    const sendableIntakeLinks = activeIntakeLinks.length > 0 ? activeIntakeLinks : intakeLinks
+    const selectedIntakeLink = React.useMemo(() => {
+        if (sendableIntakeLinks.length === 0) return null
+        return (
+            sendableIntakeLinks.find((link) => link.id === selectedIntakeLinkId) ||
+            sendableIntakeLinks[0] ||
+            null
+        )
+    }, [selectedIntakeLinkId, sendableIntakeLinks])
 
     React.useEffect(() => {
         if (!submission?.schema_snapshot?.pages) return
@@ -269,6 +263,17 @@ export function SurrogateApplicationTab({
         if (emailTemplates.length === 0) return
         setSelectedTemplateId(emailTemplates[0]?.id || "")
     }, [emailTemplates, selectedTemplateId])
+
+    React.useEffect(() => {
+        if (sendableIntakeLinks.length === 0) {
+            setSelectedIntakeLinkId("")
+            setFormLink("")
+            return
+        }
+        if (!sendableIntakeLinks.some((link) => link.id === selectedIntakeLinkId)) {
+            setSelectedIntakeLinkId(sendableIntakeLinks[0]?.id || "")
+        }
+    }, [selectedIntakeLinkId, sendableIntakeLinks])
 
     const copyFormLink = async () => {
         if (!formLink) {
@@ -326,30 +331,18 @@ export function SurrogateApplicationTab({
             toast.error("Confirm advanced override before sending")
             return
         }
-        setIsGeneratingLink(true)
-        try {
-            const tokenData = await createTokenMutation.mutateAsync({
-                formId: effectiveFormId,
-                surrogateId,
-                expiresInDays: linkExpirationDays,
-                allowPurposeOverride: requiresPurposeOverride,
-            })
-            const link = resolveApplicationLink(baseUrl, tokenData)
-            setCurrentTokenId(tokenData.token_id)
-            setFormLink(link)
-            setFormLinkExpiresAt(tokenData.expires_at)
-            setFormLinkCopied(false)
-            setSendFormModalOpen(true)
-        } catch {
-            toast.error("Failed to generate form link")
-        } finally {
-            setIsGeneratingLink(false)
+        if (!selectedIntakeLink) {
+            toast.error("No shared intake link is available for this form")
+            return
         }
+        setFormLink(resolveIntakeLink(baseUrl, selectedIntakeLink))
+        setFormLinkCopied(false)
+        setSendFormModalOpen(true)
     }
 
     const handleSendEmailLink = async () => {
-        if (!effectiveFormId || !currentTokenId) {
-            toast.error("Generate a form link first")
+        if (!effectiveFormId || !selectedIntakeLink) {
+            toast.error("Select a shared intake link first")
             return
         }
         if (!selectedTemplateId) {
@@ -358,28 +351,16 @@ export function SurrogateApplicationTab({
         }
         setIsSendingLink(true)
         try {
-            const response = await sendTokenMutation.mutateAsync({
+            const response = await sendIntakeLinkMutation.mutateAsync({
                 formId: effectiveFormId,
-                tokenId: currentTokenId,
+                linkId: selectedIntakeLink.id,
+                surrogateId,
                 templateId: selectedTemplateId,
-                allowPurposeOverride: requiresPurposeOverride,
             })
-            const resolved = response.application_url?.trim()
-            if (resolved) {
-                setFormLink(resolveApplicationLink(baseUrl, {
-                    token_id: response.token_id,
-                    token: response.token,
-                    expires_at: formLinkExpiresAt || new Date().toISOString(),
-                    application_url: resolved,
-                }))
-            }
+            setFormLink(response.intake_url || resolveIntakeLink(baseUrl, selectedIntakeLink))
             toast.success("Application link sent")
-        } catch (error) {
-            if (error instanceof ApiError && error.status === 409) {
-                toast.error(error.message || "Token is locked to a different recipient")
-            } else {
-                toast.error("Failed to send application link")
-            }
+        } catch {
+            toast.error("Failed to send application link")
         } finally {
             setIsSendingLink(false)
         }
@@ -883,39 +864,38 @@ export function SurrogateApplicationTab({
                     )}
                     {availableForms.length > 0 && (
                         <div className="mb-4 w-full max-w-xs text-left">
-                            <Label htmlFor="form-link-expiration" className="mb-2 block text-xs font-medium text-muted-foreground">
-                                Link expiration
+                            <Label htmlFor="intake-link-select" className="mb-2 block text-xs font-medium text-muted-foreground">
+                                Shared intake link
                             </Label>
                             <NativeSelect
-                                id="form-link-expiration"
-                                value={String(linkExpirationDays)}
-                                onChange={(e) => {
-                                    const parsedDays = Number.parseInt(e.target.value, 10)
-                                    setLinkExpirationDays(Number.isNaN(parsedDays) ? 14 : parsedDays)
-                                }}
+                                id="intake-link-select"
+                                value={selectedIntakeLinkId}
+                                onChange={(e) => setSelectedIntakeLinkId(e.target.value)}
                                 className="w-full"
                             >
-                                {LINK_EXPIRATION_OPTIONS_DAYS.map((days) => (
-                                    <NativeSelectOption key={days} value={String(days)}>
-                                        {days} days
+                                {sendableIntakeLinks.length === 0 ? (
+                                    <NativeSelectOption value="">
+                                        No shared links available
                                     </NativeSelectOption>
-                                ))}
+                                ) : (
+                                    sendableIntakeLinks.map((link) => (
+                                        <NativeSelectOption key={link.id} value={link.id}>
+                                            {link.campaign_name || link.event_name || link.slug}
+                                        </NativeSelectOption>
+                                    ))
+                                )}
                             </NativeSelect>
                             <p className="mt-2 text-xs text-muted-foreground">
-                                Choose how long the application link remains active.
+                                Shared links can be reused by any applicant. Resume and autosave happen on the intake page.
                             </p>
                         </div>
                     )}
                     <Button
                         className="bg-teal-500 hover:bg-teal-600"
                         onClick={handleGenerateFormLink}
-                        disabled={isGeneratingLink || !canSendLink}
+                        disabled={!canSendLink || !selectedIntakeLink}
                     >
-                        {isGeneratingLink ? (
-                            <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
-                        ) : (
-                            <SendIcon className="h-4 w-4 mr-2" />
-                        )}
+                        <SendIcon className="h-4 w-4 mr-2" />
                         Send Form Link
                     </Button>
 
@@ -925,7 +905,7 @@ export function SurrogateApplicationTab({
                             <DialogHeader>
                                 <DialogTitle>Send Application Form</DialogTitle>
                                 <DialogDescription>
-                                    Generate and copy a secure, unique link for this candidate to complete their application.
+                                    Use the shared intake URL for this form, then send it through an email template.
                                 </DialogDescription>
                             </DialogHeader>
                             <div className="space-y-4">
@@ -941,7 +921,7 @@ export function SurrogateApplicationTab({
                                 )}
                                 <div className="rounded-lg border p-4 bg-muted/50">
                                     <p className="text-sm font-mono break-all">
-                                        {formLink || `${baseUrl || ""}/apply/[token]`}
+                                        {formLink || `${baseUrl || ""}/intake/[slug]`}
                                     </p>
                                 </div>
                                 <div className="space-y-2">
@@ -959,35 +939,19 @@ export function SurrogateApplicationTab({
                                         ))}
                                     </NativeSelect>
                                     <p className="text-xs text-muted-foreground">
-                                        Uses template variable <code>{"{{form_link}}"}</code> with this dedicated token.
+                                        Uses template variable <code>{"{{form_link}}"}</code> with the selected shared intake URL.
                                     </p>
                                 </div>
-                                {formLinkExpiresAt && (
-                                    <p className="text-sm text-muted-foreground">
-                                        Expires on <span className="font-medium text-foreground">{formatDateTime(formLinkExpiresAt)}</span>
-                                    </p>
-                                )}
                                 <div className="flex items-start gap-2 text-sm text-muted-foreground">
                                     <AlertTriangleIcon className="h-4 w-4 mt-0.5 shrink-0" />
                                     <p>
-                                        This link is unique to this surrogate and expires after {linkExpirationDays} days. The candidate
-                                        can reopen the link while it is active.
+                                        This is a shared link. Applicants can return later and resume from autosaved progress.
                                     </p>
                                 </div>
                             </div>
                             <DialogFooter>
                                 <Button variant="outline" onClick={() => setSendFormModalOpen(false)}>
                                     Close
-                                </Button>
-                                <Button variant="outline" onClick={handleGenerateFormLink} disabled={isGeneratingLink || !effectiveFormId}>
-                                    {isGeneratingLink ? (
-                                        <>
-                                            <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
-                                            Regenerating...
-                                        </>
-                                    ) : (
-                                        "Regenerate Link"
-                                    )}
                                 </Button>
                                 <Button onClick={copyFormLink} disabled={!formLink}>
                                     {formLinkCopied ? (

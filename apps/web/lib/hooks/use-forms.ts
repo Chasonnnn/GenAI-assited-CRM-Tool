@@ -16,6 +16,7 @@ import {
     createFormIntakeLink,
     listFormIntakeLinks,
     rotateFormIntakeLink,
+    sendFormIntakeLink,
     sendFormToken,
     setDefaultSurrogateApplicationForm,
     updateFormDeliverySettings,
@@ -297,6 +298,22 @@ export function useRotateFormIntakeLink() {
         onSuccess: (_result, { formId }) => {
             queryClient.invalidateQueries({ queryKey: formKeys.intakeLinks(formId) })
         },
+    })
+}
+
+export function useSendFormIntakeLink() {
+    return useMutation({
+        mutationFn: ({
+            formId,
+            linkId,
+            surrogateId,
+            templateId,
+        }: {
+            formId: string
+            linkId: string
+            surrogateId: string
+            templateId?: string | null
+        }) => sendFormIntakeLink(formId, linkId, surrogateId, templateId),
     })
 }
 

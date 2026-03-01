@@ -53,7 +53,7 @@ interface EmailComposeDialogProps {
 
 const PREVIEW_FONT_STACK =
     '-apple-system, BlinkMacSystemFont, "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", Arial, sans-serif'
-const PREVIEW_FORM_LINK = "https://app.surrogacyforce.com/apply/EXAMPLE_TOKEN"
+const PREVIEW_FORM_LINK = "https://app.surrogacyforce.com/intake/EXAMPLE_SLUG"
 const PREVIEW_APPOINTMENT_LINK = "https://app.surrogacyforce.com/book/EXAMPLE_APPOINTMENT_SLUG"
 
 const LEGACY_UNSUBSCRIBE_TOKEN_RE = /\{\{\s*unsubscribe_url\s*\}\}/gi
