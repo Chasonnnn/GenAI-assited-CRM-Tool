@@ -2,17 +2,21 @@
 
 import json
 import uuid
+from datetime import date
 
 import pytest
 
-from app.core.encryption import hash_email
+from app.core.encryption import hash_email, hash_phone
 from app.db.models import Surrogate
-from app.utils.normalization import normalize_email
+from app.utils.normalization import normalize_email, normalize_name, normalize_phone, normalize_search_text
 
 
 def _create_surrogate(db, org_id, user_id, stage):
     email = f"profile-test-{uuid.uuid4().hex[:8]}@example.com"
+    phone = f"+1 (555) {uuid.uuid4().int % 900 + 100}-{uuid.uuid4().int % 9000 + 1000}"
     normalized_email = normalize_email(email)
+    normalized_phone = normalize_phone(phone)
+    full_name = "Original Name"
     surrogate = Surrogate(
         id=uuid.uuid4(),
         organization_id=org_id,
@@ -22,27 +26,29 @@ def _create_surrogate(db, org_id, user_id, stage):
         owner_type="user",
         owner_id=user_id,
         created_by_user_id=user_id,
-        full_name="Original Name",
+        full_name=full_name,
+        full_name_normalized=normalize_search_text(normalize_name(full_name)),
         email=normalized_email,
         email_hash=hash_email(normalized_email),
+        phone=normalized_phone,
+        phone_hash=hash_phone(normalized_phone),
+        date_of_birth=date.fromisoformat("1990-01-01"),
     )
     db.add(surrogate)
     db.flush()
     return surrogate
 
 
-async def _create_form_and_submission(authed_client, surrogate_id, label, full_name):
+async def _create_form_and_submission(authed_client, surrogate: Surrogate, label, full_name):
     schema = {
         "pages": [
             {
                 "title": "Basics",
                 "fields": [
-                    {
-                        "key": "full_name",
-                        "label": "Full Name",
-                        "type": "text",
-                        "required": True,
-                    },
+                    {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
+                    {"key": "date_of_birth", "label": "Date of Birth", "type": "date", "required": True},
+                    {"key": "phone", "label": "Phone", "type": "text", "required": True},
+                    {"key": "email", "label": "Email", "type": "email", "required": True},
                 ],
             }
         ]
@@ -62,19 +68,32 @@ async def _create_form_and_submission(authed_client, surrogate_id, label, full_n
     publish_res = await authed_client.post(f"/forms/{form_id}/publish")
     assert publish_res.status_code == 200
 
-    token_res = await authed_client.post(
-        f"/forms/{form_id}/tokens",
-        json={"surrogate_id": str(surrogate_id), "expires_in_days": 7},
-    )
-    assert token_res.status_code == 200
-    token = token_res.json()["token"]
+    links_res = await authed_client.get(f"/forms/{form_id}/intake-links")
+    assert links_res.status_code == 200
+    slug = links_res.json()[0]["slug"]
 
     submission_res = await authed_client.post(
-        f"/forms/public/{token}/submit",
-        data={"answers": json.dumps({"full_name": full_name})},
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": full_name,
+                    "date_of_birth": str(surrogate.date_of_birth or "1990-01-01"),
+                    "phone": surrogate.phone or "+1 (555) 111-1111",
+                    "email": surrogate.email or f"{uuid.uuid4().hex[:8]}@example.com",
+                }
+            )
+        },
     )
     assert submission_res.status_code == 200
-    return submission_res.json()["id"]
+    submission_id = submission_res.json()["id"]
+
+    resolve_res = await authed_client.post(
+        f"/forms/submissions/{submission_id}/match/resolve",
+        json={"surrogate_id": str(surrogate.id), "create_intake_lead": False},
+    )
+    assert resolve_res.status_code == 200
+    return submission_id
 
 
 @pytest.mark.asyncio
@@ -84,10 +103,10 @@ async def test_profile_defaults_to_latest_submission(
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
 
     first_submission_id = await _create_form_and_submission(
-        authed_client, surrogate.id, "One", "First Name"
+        authed_client, surrogate, "One", "First Name"
     )
     second_submission_id = await _create_form_and_submission(
-        authed_client, surrogate.id, "Two", "Second Name"
+        authed_client, surrogate, "Two", "Second Name"
     )
 
     profile_res = await authed_client.get(f"/surrogates/{surrogate.id}/profile")
@@ -104,10 +123,10 @@ async def test_profile_sync_updates_base_submission(
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
 
     first_submission_id = await _create_form_and_submission(
-        authed_client, surrogate.id, "One", "First Name"
+        authed_client, surrogate, "One", "First Name"
     )
     second_submission_id = await _create_form_and_submission(
-        authed_client, surrogate.id, "Two", "Second Name"
+        authed_client, surrogate, "Two", "Second Name"
     )
 
     sync_res = await authed_client.post(f"/surrogates/{surrogate.id}/profile/sync")
@@ -130,7 +149,7 @@ async def test_profile_sync_updates_base_submission(
 async def test_profile_hidden_toggle(authed_client, db, test_org, test_user, default_stage):
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
 
-    await _create_form_and_submission(authed_client, surrogate.id, "One", "Hidden Name")
+    await _create_form_and_submission(authed_client, surrogate, "One", "Hidden Name")
 
     hide_res = await authed_client.post(
         f"/surrogates/{surrogate.id}/profile/hidden",
@@ -158,7 +177,7 @@ async def test_profile_returns_custom_header_and_qas(
     authed_client, db, test_org, test_user, default_stage
 ):
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
-    await _create_form_and_submission(authed_client, surrogate.id, "One", "Base Name")
+    await _create_form_and_submission(authed_client, surrogate, "One", "Base Name")
 
     save_res = await authed_client.put(
         f"/surrogates/{surrogate.id}/profile/overrides",
@@ -196,7 +215,7 @@ async def test_profile_sync_ignores_profile_meta_keys(
     authed_client, db, test_org, test_user, default_stage
 ):
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
-    await _create_form_and_submission(authed_client, surrogate.id, "One", "Base Name")
+    await _create_form_and_submission(authed_client, surrogate, "One", "Base Name")
 
     save_res = await authed_client.put(
         f"/surrogates/{surrogate.id}/profile/overrides",
