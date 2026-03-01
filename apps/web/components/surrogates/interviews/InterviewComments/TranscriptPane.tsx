@@ -86,7 +86,6 @@ export function TranscriptPane({ className }: TranscriptPaneProps) {
                 }}
                 role="button"
                 tabIndex={0}
-                aria-label="Interview Transcript"
                 dangerouslySetInnerHTML={{ __html: transcriptHtml }}
             />
             <SelectionPopover

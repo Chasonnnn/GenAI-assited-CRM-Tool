@@ -50,6 +50,8 @@ vi.mock("@/lib/hooks/use-appointments", () => ({
 describe("UnifiedCalendar drag-to-reschedule", () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(new Date("2026-02-20T12:00:00Z"))
 
         mockUseUnifiedCalendarData.mockReturnValue({
             appointments: [
@@ -143,5 +145,9 @@ describe("UnifiedCalendar drag-to-reschedule", () => {
 
         expect(mockMutate).not.toHaveBeenCalled()
         expect(screen.getByText("Available Times")).toBeInTheDocument()
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
     })
 })
