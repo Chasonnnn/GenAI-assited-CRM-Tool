@@ -284,6 +284,7 @@ export function SurrogateTasksCalendar({
                                                     <button
                                                         type="button"
                                                         className="flex-1 min-w-0 text-left"
+                                                        aria-label={`View task: ${task.title}`}
                                                         onClick={() => onTaskClick(task)}
                                                     >
                                                         <span
@@ -373,6 +374,7 @@ export function SurrogateTasksCalendar({
                                                     <button
                                                         type="button"
                                                         className="flex-1 min-w-0 text-left text-sm line-through text-muted-foreground"
+                                                        aria-label={`View completed task: ${task.title}`}
                                                         onClick={() => onTaskClick(task)}
                                                     >
                                                         {task.title}
