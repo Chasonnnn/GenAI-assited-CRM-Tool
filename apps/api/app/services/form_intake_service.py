@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import UploadFile
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -20,7 +21,9 @@ from app.db.enums import (
     FormSubmissionStatus,
     IntakeLeadStatus,
 )
+from app.db.enums.workflows import WorkflowTriggerType
 from app.db.models import (
+    AutomationWorkflow,
     Form,
     FormIntakeDraft,
     FormIntakeLink,
@@ -118,6 +121,121 @@ def ensure_default_intake_link(
     )
 
 
+def _trigger_config_form_id(trigger_config: dict[str, Any] | None) -> str | None:
+    if not isinstance(trigger_config, dict):
+        return None
+    value = trigger_config.get("form_id")
+    if value is None:
+        return None
+    return str(value)
+
+
+def _has_enabled_form_scoped_submission_workflow(
+    db: Session,
+    *,
+    org_id: uuid.UUID,
+    form_id: uuid.UUID,
+) -> bool:
+    workflows = (
+        db.query(AutomationWorkflow)
+        .filter(
+            AutomationWorkflow.organization_id == org_id,
+            AutomationWorkflow.scope == "org",
+            AutomationWorkflow.trigger_type == WorkflowTriggerType.FORM_SUBMITTED.value,
+            AutomationWorkflow.is_enabled.is_(True),
+        )
+        .all()
+    )
+    target_form_id = str(form_id)
+    return any(_trigger_config_form_id(workflow.trigger_config) == target_form_id for workflow in workflows)
+
+
+def _default_intake_routing_actions() -> list[dict[str, Any]]:
+    return [
+        {
+            "action_type": "auto_match_submission",
+            "requires_approval": True,
+        },
+        {
+            "action_type": "create_intake_lead",
+            "requires_approval": True,
+        },
+    ]
+
+
+def ensure_default_intake_routing_workflow(
+    db: Session,
+    *,
+    org_id: uuid.UUID,
+    form: Form,
+    user_id: uuid.UUID | None,
+) -> AutomationWorkflow | None:
+    """Ensure an enabled, form-scoped shared-intake routing workflow exists."""
+    if form.status != FormStatus.PUBLISHED.value:
+        return None
+
+    # Respect existing enabled custom workflows for this form.
+    if _has_enabled_form_scoped_submission_workflow(db, org_id=org_id, form_id=form.id):
+        return None
+
+    system_key = f"shared_intake_routing:{form.id}"
+    workflow = (
+        db.query(AutomationWorkflow)
+        .filter(
+            AutomationWorkflow.organization_id == org_id,
+            AutomationWorkflow.system_key == system_key,
+            AutomationWorkflow.scope == "org",
+            AutomationWorkflow.trigger_type == WorkflowTriggerType.FORM_SUBMITTED.value,
+        )
+        .first()
+    )
+
+    trigger_config = {"form_id": str(form.id)}
+    actions = _default_intake_routing_actions()
+    now = datetime.now(timezone.utc)
+
+    if workflow:
+        workflow.trigger_config = trigger_config
+        workflow.actions = actions
+        workflow.conditions = []
+        workflow.condition_logic = "AND"
+        workflow.is_enabled = True
+        workflow.requires_review = False
+        workflow.is_system_workflow = True
+        workflow.updated_by_user_id = user_id
+        workflow.updated_at = now
+        db.commit()
+        db.refresh(workflow)
+        return workflow
+
+    workflow = AutomationWorkflow(
+        organization_id=org_id,
+        name=f"Intake Routing ({str(form.id)[:8]})",
+        description=(
+            "Automatically routes shared form submissions by running auto-match first, "
+            "then creating an intake lead if no deterministic match exists."
+        ),
+        icon="workflow",
+        scope="org",
+        owner_user_id=None,
+        trigger_type=WorkflowTriggerType.FORM_SUBMITTED.value,
+        trigger_config=trigger_config,
+        conditions=[],
+        condition_logic="AND",
+        actions=actions,
+        is_enabled=True,
+        is_system_workflow=True,
+        system_key=system_key,
+        requires_review=False,
+        created_by_user_id=user_id,
+        updated_by_user_id=user_id,
+    )
+    db.add(workflow)
+    db.commit()
+    db.refresh(workflow)
+    return workflow
+
+
 def list_intake_links(
     db: Session,
     *,
@@ -154,22 +272,41 @@ def get_intake_link_by_slug(db: Session, slug: str) -> FormIntakeLink | None:
     return db.query(FormIntakeLink).filter(FormIntakeLink.slug == slug).first()
 
 
-def get_active_intake_link_by_slug(db: Session, slug: str) -> FormIntakeLink | None:
-    link = get_intake_link_by_slug(db, slug)
-    if not link:
-        return None
+def _is_link_publicly_available(link: FormIntakeLink) -> bool:
     if not link.is_active:
-        return None
+        return False
     now = datetime.now(timezone.utc)
     if link.expires_at:
         expires_at = link.expires_at
         if expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=timezone.utc)
         if expires_at < now:
-            return None
+            return False
     if link.max_submissions is not None and link.submissions_count >= link.max_submissions:
+        return False
+    return True
+
+
+def get_active_intake_link_by_slug(db: Session, slug: str) -> FormIntakeLink | None:
+    link = get_intake_link_by_slug(db, slug)
+    if not link:
+        return None
+    if not _is_link_publicly_available(link):
         return None
     return link
+
+
+def get_active_intake_link_for_form(
+    db: Session,
+    *,
+    org_id: uuid.UUID,
+    form_id: uuid.UUID,
+) -> FormIntakeLink | None:
+    links = list_intake_links(db, org_id=org_id, form_id=form_id, include_inactive=False)
+    for link in links:
+        if _is_link_publicly_available(link):
+            return link
+    return None
 
 
 def update_intake_link(
@@ -224,6 +361,13 @@ def _parse_date(value: Any) -> date | None:
     raise ValueError("date_of_birth must be YYYY-MM-DD")
 
 
+def _parse_date_safe(value: Any) -> date | None:
+    try:
+        return _parse_date(value)
+    except Exception:
+        return None
+
+
 def _build_form_mapping_lookup(db: Session, form_id: uuid.UUID) -> dict[str, str]:
     return {
         m.surrogate_field: m.field_key
@@ -243,15 +387,12 @@ def _extract_identity(
             return answers.get(mapped_key)
         return answers.get(surrogate_field)
 
-    full_name_raw = _from_answer("full_name")
-    dob_raw = _from_answer("date_of_birth")
-    phone_raw = _from_answer("phone")
-    email_raw = _from_answer("email")
+    partial = _extract_identity_partial(answers=answers, mapping_lookup=mapping_lookup)
 
-    full_name = normalize_name(str(full_name_raw)) if full_name_raw not in (None, "") else None
-    dob = _parse_date(dob_raw)
-    phone = normalize_phone(str(phone_raw)) if phone_raw not in (None, "") else None
-    email = normalize_email(str(email_raw)) if email_raw not in (None, "") else None
+    full_name = partial["full_name"]
+    dob = partial["date_of_birth"]
+    phone = partial["phone"]
+    email = partial["email"]
 
     if not full_name:
         raise ValueError("Missing required field: full_name")
@@ -270,6 +411,48 @@ def _extract_identity(
         "phone_hash": hash_phone(phone),
         "email": email,
         "email_hash": hash_email(email),
+    }
+
+
+def _extract_identity_partial(
+    *,
+    answers: dict[str, Any],
+    mapping_lookup: dict[str, str],
+) -> dict[str, Any]:
+    def _from_answer(surrogate_field: str) -> Any:
+        mapped_key = mapping_lookup.get(surrogate_field)
+        if mapped_key and mapped_key in answers:
+            return answers.get(mapped_key)
+        return answers.get(surrogate_field)
+
+    full_name_raw = _from_answer("full_name")
+    dob_raw = _from_answer("date_of_birth")
+    phone_raw = _from_answer("phone")
+    email_raw = _from_answer("email")
+
+    full_name = normalize_name(str(full_name_raw)) if full_name_raw not in (None, "") else None
+    full_name_normalized = normalize_search_text(full_name) if full_name else None
+    dob = _parse_date_safe(dob_raw)
+
+    phone: str | None = None
+    if phone_raw not in (None, ""):
+        try:
+            phone = normalize_phone(str(phone_raw))
+        except Exception:
+            phone = None
+
+    email = normalize_email(str(email_raw)) if email_raw not in (None, "") else None
+    email_hash = hash_email(email) if email else None
+    phone_hash = hash_phone(phone) if phone else None
+
+    return {
+        "full_name": full_name,
+        "full_name_normalized": full_name_normalized,
+        "date_of_birth": dob,
+        "phone": phone,
+        "phone_hash": phone_hash,
+        "email": email,
+        "email_hash": email_hash,
     }
 
 
@@ -313,6 +496,27 @@ def _match_rule_email(
     candidates = query.all()
     target_dob = identity.get("date_of_birth")
     return [candidate for candidate in candidates if candidate.date_of_birth == target_dob]
+
+
+def _has_existing_submission_for_surrogate_form(
+    db: Session,
+    *,
+    org_id: uuid.UUID,
+    form_id: uuid.UUID,
+    surrogate_id: uuid.UUID,
+    exclude_submission_id: uuid.UUID,
+) -> bool:
+    return (
+        db.query(FormSubmission.id)
+        .filter(
+            FormSubmission.organization_id == org_id,
+            FormSubmission.form_id == form_id,
+            FormSubmission.surrogate_id == surrogate_id,
+            FormSubmission.id != exclude_submission_id,
+        )
+        .first()
+        is not None
+    )
 
 
 def _detect_duplicate_recent_submission(
@@ -579,6 +783,12 @@ def create_shared_submission(
         match_reason="workflow_pending",
         matched_at=None,
     )
+    clear_shared_drafts_for_identity(
+        db,
+        org_id=link.organization_id,
+        form_id=form.id,
+        identity=identity,
+    )
     db.commit()
     db.refresh(submission)
     _trigger_form_submitted_workflow(db, submission=submission)
@@ -624,6 +834,20 @@ def auto_match_submission(
 
     if len(phone_matches) == 1:
         matched = phone_matches[0]
+        if _has_existing_submission_for_surrogate_form(
+            db,
+            org_id=submission.organization_id,
+            form_id=submission.form_id,
+            surrogate_id=matched.id,
+            exclude_submission_id=submission.id,
+        ):
+            submission.surrogate_id = None
+            submission.match_status = FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
+            submission.match_reason = "existing_submission_for_surrogate"
+            submission.matched_at = None
+            db.commit()
+            db.refresh(submission)
+            return submission, FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
         submission.surrogate_id = matched.id
         submission.match_status = FormSubmissionMatchStatus.LINKED.value
         submission.match_reason = "phone_dob_name_exact"
@@ -653,6 +877,20 @@ def auto_match_submission(
 
     if len(email_matches) == 1:
         matched = email_matches[0]
+        if _has_existing_submission_for_surrogate_form(
+            db,
+            org_id=submission.organization_id,
+            form_id=submission.form_id,
+            surrogate_id=matched.id,
+            exclude_submission_id=submission.id,
+        ):
+            submission.surrogate_id = None
+            submission.match_status = FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
+            submission.match_reason = "existing_submission_for_surrogate"
+            submission.matched_at = None
+            db.commit()
+            db.refresh(submission)
+            return submission, FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
         submission.surrogate_id = matched.id
         submission.match_status = FormSubmissionMatchStatus.LINKED.value
         submission.match_reason = "email_dob_name_exact"
@@ -790,6 +1028,174 @@ def get_shared_draft(
     )
 
 
+def get_shared_draft_by_id(
+    db: Session,
+    *,
+    org_id: uuid.UUID,
+    form_id: uuid.UUID,
+    draft_id: uuid.UUID,
+) -> FormIntakeDraft | None:
+    return (
+        db.query(FormIntakeDraft)
+        .filter(
+            FormIntakeDraft.organization_id == org_id,
+            FormIntakeDraft.form_id == form_id,
+            FormIntakeDraft.id == draft_id,
+        )
+        .first()
+    )
+
+
+def _apply_draft_identity(
+    *,
+    draft: FormIntakeDraft,
+    identity: dict[str, Any],
+) -> None:
+    draft.full_name_normalized = identity.get("full_name_normalized")
+    draft.date_of_birth = identity.get("date_of_birth")
+    draft.email_hash = identity.get("email_hash")
+    draft.phone_hash = identity.get("phone_hash")
+
+
+def lookup_shared_resume_draft(
+    db: Session,
+    *,
+    link: FormIntakeLink,
+    form: Form,
+    answers: dict[str, Any],
+    current_draft_session_id: str | None = None,
+) -> dict[str, Any]:
+    mapping_lookup = _build_form_mapping_lookup(db, form.id)
+    identity = _extract_identity_partial(answers=answers, mapping_lookup=mapping_lookup)
+    full_name_normalized = identity.get("full_name_normalized")
+    date_of_birth = identity.get("date_of_birth")
+    email_hash = identity.get("email_hash")
+    phone_hash = identity.get("phone_hash")
+
+    if not full_name_normalized or not date_of_birth or (not email_hash and not phone_hash):
+        return {"status": "insufficient_identity"}
+
+    window_days = max(1, int(settings.FORMS_SHARED_DRAFT_RESUME_WINDOW_DAYS or 30))
+    cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
+    query = db.query(FormIntakeDraft).filter(
+        FormIntakeDraft.organization_id == link.organization_id,
+        FormIntakeDraft.form_id == form.id,
+        FormIntakeDraft.full_name_normalized == full_name_normalized,
+        FormIntakeDraft.date_of_birth == date_of_birth,
+        FormIntakeDraft.updated_at >= cutoff,
+    )
+    if current_draft_session_id:
+        query = query.filter(FormIntakeDraft.draft_session_id != current_draft_session_id)
+
+    contact_filters: list[Any] = []
+    if email_hash:
+        contact_filters.append(FormIntakeDraft.email_hash == email_hash)
+    if phone_hash:
+        contact_filters.append(FormIntakeDraft.phone_hash == phone_hash)
+    if not contact_filters:
+        return {"status": "insufficient_identity"}
+
+    query = query.filter(or_(*contact_filters))
+    matched = query.order_by(FormIntakeDraft.updated_at.desc(), FormIntakeDraft.created_at.desc()).first()
+    if not matched:
+        return {"status": "no_match"}
+
+    reason = "name_dob_phone"
+    if email_hash and matched.email_hash == email_hash:
+        reason = "name_dob_email"
+    elif phone_hash and matched.phone_hash == phone_hash:
+        reason = "name_dob_phone"
+
+    return {
+        "status": "match_found",
+        "source_draft_id": matched.id,
+        "updated_at": matched.updated_at,
+        "match_reason": reason,
+    }
+
+
+def restore_shared_draft(
+    db: Session,
+    *,
+    link: FormIntakeLink,
+    form: Form,
+    draft_session_id: str,
+    source_draft_id: uuid.UUID,
+) -> FormIntakeDraft:
+    source_draft = get_shared_draft_by_id(
+        db,
+        org_id=link.organization_id,
+        form_id=form.id,
+        draft_id=source_draft_id,
+    )
+    if not source_draft:
+        raise ValueError("Source draft not found")
+
+    target = get_shared_draft(db, link=link, draft_session_id=draft_session_id)
+    now = datetime.now(timezone.utc)
+    if not target:
+        target = FormIntakeDraft(
+            organization_id=link.organization_id,
+            intake_link_id=link.id,
+            form_id=form.id,
+            draft_session_id=draft_session_id,
+            answers_json={},
+        )
+        db.add(target)
+        db.flush()
+
+    target.answers_json = dict(source_draft.answers_json or {})
+    target.started_at = source_draft.started_at or target.started_at
+    target.updated_at = now
+    target.full_name_normalized = source_draft.full_name_normalized
+    target.date_of_birth = source_draft.date_of_birth
+    target.email_hash = source_draft.email_hash
+    target.phone_hash = source_draft.phone_hash
+
+    if target.started_at is None and any(v not in (None, "", [], {}) for v in target.answers_json.values()):
+        target.started_at = now
+
+    db.commit()
+    db.refresh(target)
+    return target
+
+
+def clear_shared_drafts_for_identity(
+    db: Session,
+    *,
+    org_id: uuid.UUID,
+    form_id: uuid.UUID,
+    identity: dict[str, Any],
+) -> int:
+    full_name_normalized = identity.get("full_name_normalized")
+    date_of_birth = identity.get("date_of_birth")
+    email_hash = identity.get("email_hash")
+    phone_hash = identity.get("phone_hash")
+
+    if not full_name_normalized or not date_of_birth:
+        return 0
+    contact_filters: list[Any] = []
+    if email_hash:
+        contact_filters.append(FormIntakeDraft.email_hash == email_hash)
+    if phone_hash:
+        contact_filters.append(FormIntakeDraft.phone_hash == phone_hash)
+    if not contact_filters:
+        return 0
+
+    deleted = (
+        db.query(FormIntakeDraft)
+        .filter(
+            FormIntakeDraft.organization_id == org_id,
+            FormIntakeDraft.form_id == form_id,
+            FormIntakeDraft.full_name_normalized == full_name_normalized,
+            FormIntakeDraft.date_of_birth == date_of_birth,
+        )
+        .filter(or_(*contact_filters))
+        .delete(synchronize_session=False)
+    )
+    return int(deleted or 0)
+
+
 def upsert_shared_draft(
     db: Session,
     *,
@@ -832,6 +1238,9 @@ def upsert_shared_draft(
     merged = dict(draft.answers_json or {})
     merged.update(answers)
     draft.answers_json = merged
+    mapping_lookup = _build_form_mapping_lookup(db, form.id)
+    partial_identity = _extract_identity_partial(answers=merged, mapping_lookup=mapping_lookup)
+    _apply_draft_identity(draft=draft, identity=partial_identity)
     draft.updated_at = now
     if draft.started_at is None and any(v not in (None, "", [], {}) for v in merged.values()):
         draft.started_at = now

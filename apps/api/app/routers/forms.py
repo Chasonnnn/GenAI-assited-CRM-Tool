@@ -26,6 +26,8 @@ from app.schemas.forms import (
     FormFieldMappingsUpdate,
     FormIntakeLinkCreate,
     FormIntakeLinkRead,
+    FormIntakeLinkSendRequest,
+    FormIntakeLinkSendResponse,
     FormIntakeLinkUpdate,
     FormSubmissionMatchRetryRequest,
     FormSubmissionMatchResolveRequest,
@@ -57,7 +59,6 @@ from app.schemas.platform_templates import (
     FormTemplateLibraryItem,
     FormTemplateLibraryDetail,
 )
-from app.utils.normalization import normalize_phone
 from app.services import (
     audit_service,
     email_service,
@@ -70,6 +71,9 @@ from app.services import (
 )
 
 router = APIRouter(prefix="/forms", tags=["forms"])
+DEDICATED_LINK_RETIRED_DETAIL = (
+    "Dedicated application links have been retired. Please use shared intake links."
+)
 
 
 def _schema_or_none(schema_json: dict | None) -> FormSchema | None:
@@ -597,6 +601,12 @@ def publish_form(
                 form=form,
                 user_id=session.user_id,
             )
+            form_intake_service.ensure_default_intake_routing_workflow(
+                db,
+                org_id=session.org_id,
+                form=form,
+                user_id=session.user_id,
+            )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return FormPublishResponse(
@@ -681,38 +691,7 @@ def create_submission_token(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    form = form_service.get_form(db, session.org_id, form_id)
-    if not form:
-        raise HTTPException(status_code=404, detail="Form not found")
-    surrogate = surrogate_service.get_surrogate(db, session.org_id, body.surrogate_id)
-    if not surrogate:
-        raise HTTPException(status_code=404, detail="Surrogate not found")
-    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
-    try:
-        token = form_submission_service.create_submission_token(
-            db=db,
-            org_id=session.org_id,
-            form=form,
-            surrogate=surrogate,
-            user_id=session.user_id,
-            expires_in_days=body.expires_in_days,
-            allow_purpose_override=body.allow_purpose_override,
-        )
-    except ValueError as exc:
-        detail = str(exc)
-        status_code = 409 if "already exists" in detail else 400
-        raise HTTPException(status_code=status_code, detail=detail) from exc
-    org = org_service.get_org_by_id(db, session.org_id)
-    application_url = form_submission_service.build_application_link(
-        org_service.get_org_portal_base_url(org),
-        token.token,
-    )
-    return FormTokenRead(
-        token_id=token.id,
-        token=token.token,
-        expires_at=token.expires_at,
-        application_url=application_url,
-    )
+    raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
 
 
 @router.get(
@@ -874,6 +853,76 @@ def rotate_form_intake_link(
 
 
 @router.post(
+    "/{form_id}/intake-links/{link_id}/send",
+    response_model=FormIntakeLinkSendResponse,
+    dependencies=[
+        Depends(require_permission(POLICIES["surrogates"].actions["edit"])),
+        Depends(require_csrf_header),
+    ],
+)
+def send_form_intake_link(
+    form_id: UUID,
+    link_id: UUID,
+    body: FormIntakeLinkSendRequest,
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    if not settings.FORMS_SHARED_INTAKE:
+        raise HTTPException(status_code=404, detail="Shared intake is disabled")
+
+    form = form_service.get_form(db, session.org_id, form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
+    link = form_intake_service.get_intake_link(db, org_id=session.org_id, intake_link_id=link_id)
+    if not link or link.form_id != form.id:
+        raise HTTPException(status_code=404, detail="Intake link not found")
+
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, body.surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    if not surrogate.email:
+        raise HTTPException(status_code=400, detail="Surrogate has no email address")
+
+    template_id = body.template_id or form.default_application_email_template_id
+    if not template_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No delivery template selected. Set a form default or pass template_id.",
+        )
+    template = email_service.get_template(db, template_id, session.org_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Email template not found")
+
+    org = org_service.get_org_by_id(db, session.org_id)
+    intake_url = form_intake_service.build_shared_application_link(
+        org_service.get_org_portal_base_url(org),
+        link.slug,
+    )
+    result = email_service.send_from_template(
+        db=db,
+        org_id=session.org_id,
+        template_id=template.id,
+        recipient_email=surrogate.email,
+        variables={"form_link": intake_url},
+        surrogate_id=surrogate.id,
+        sender_user_id=session.user_id,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Email template not found")
+
+    email_log, _job = result
+    return FormIntakeLinkSendResponse(
+        intake_link_id=link.id,
+        template_id=template.id,
+        email_log_id=email_log.id,
+        sent_at=datetime.now(timezone.utc),
+        intake_url=intake_url,
+    )
+
+
+@router.post(
     "/{form_id}/tokens/{token_id}/send",
     response_model=FormTokenSendResponse,
     dependencies=[
@@ -888,107 +937,7 @@ def send_submission_token(
     session: UserSession = Depends(get_current_session),
     db: Session = Depends(get_db),
 ):
-    form = form_service.get_form(db, session.org_id, form_id)
-    if not form:
-        raise HTTPException(status_code=404, detail="Form not found")
-
-    token = form_submission_service.get_token_by_id(
-        db,
-        org_id=session.org_id,
-        form_id=form.id,
-        token_id=token_id,
-    )
-    if not token:
-        raise HTTPException(status_code=404, detail="Token not found")
-
-    surrogate = surrogate_service.get_surrogate(db, session.org_id, token.surrogate_id)
-    if not surrogate:
-        raise HTTPException(status_code=404, detail="Surrogate not found")
-    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
-
-    if not surrogate.email:
-        raise HTTPException(status_code=400, detail="Surrogate has no email address")
-
-    valid_token = form_submission_service.get_valid_token(db, token.token)
-    if not valid_token:
-        raise HTTPException(status_code=409, detail="Token is no longer valid")
-
-    try:
-        form_submission_service.assert_dedicated_form_purpose(
-            form,
-            allow_purpose_override=body.allow_purpose_override,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    template_id = body.template_id or form.default_application_email_template_id
-    if not template_id:
-        raise HTTPException(
-            status_code=400,
-            detail="No delivery template selected. Set a form default or pass template_id.",
-        )
-    template = email_service.get_template(db, template_id, session.org_id)
-    if not template:
-        raise HTTPException(status_code=404, detail="Email template not found")
-
-    normalized_surrogate_email = surrogate.email.strip().lower()
-    normalized_surrogate_phone: str | None = None
-    if surrogate.phone:
-        try:
-            normalized_surrogate_phone = normalize_phone(surrogate.phone)
-        except Exception:
-            normalized_surrogate_phone = surrogate.phone
-
-    if settings.FORMS_TOKEN_LOCK:
-        if token.locked_recipient_email and token.locked_recipient_email != normalized_surrogate_email:
-            raise HTTPException(
-                status_code=409,
-                detail="Token is locked to a different recipient email. Regenerate the token.",
-            )
-        if (
-            token.locked_recipient_phone
-            and normalized_surrogate_phone
-            and token.locked_recipient_phone != normalized_surrogate_phone
-        ):
-            raise HTTPException(
-                status_code=409,
-                detail="Token is locked to a different recipient phone. Regenerate the token.",
-            )
-        if token.locked_recipient_email is None:
-            token.locked_recipient_email = normalized_surrogate_email
-        if token.locked_recipient_phone is None and normalized_surrogate_phone:
-            token.locked_recipient_phone = normalized_surrogate_phone
-
-    org = org_service.get_org_by_id(db, session.org_id)
-    application_url = form_submission_service.build_application_link(
-        org_service.get_org_portal_base_url(org),
-        token.token,
-    )
-    result = email_service.send_from_template(
-        db=db,
-        org_id=session.org_id,
-        template_id=template.id,
-        recipient_email=surrogate.email,
-        variables={"form_link": application_url},
-        surrogate_id=surrogate.id,
-        sender_user_id=session.user_id,
-    )
-    if not result:
-        raise HTTPException(status_code=404, detail="Email template not found")
-    email_log, _job = result
-    token.last_sent_at = datetime.now(timezone.utc)
-    token.last_sent_template_id = template.id
-    db.commit()
-
-    sent_at = token.last_sent_at or datetime.now(timezone.utc)
-    return FormTokenSendResponse(
-        token_id=token.id,
-        token=token.token,
-        template_id=template.id,
-        email_log_id=email_log.id,
-        sent_at=sent_at,
-        application_url=application_url,
-    )
+    raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
 
 
 @router.get(

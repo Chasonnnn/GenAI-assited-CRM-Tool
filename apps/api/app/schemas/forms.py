@@ -354,6 +354,32 @@ class FormIntakeDraftWriteResponse(BaseModel):
     updated_at: datetime
 
 
+SharedDraftLookupStatus = Literal["insufficient_identity", "no_match", "match_found"]
+SharedDraftMatchReason = Literal["name_dob_email", "name_dob_phone"]
+
+
+class FormIntakeDraftLookupRequest(BaseModel):
+    answers: dict[str, object] = Field(default_factory=dict)
+    current_draft_session_id: str | None = None
+
+
+class FormIntakeDraftLookupResponse(BaseModel):
+    status: SharedDraftLookupStatus
+    source_draft_id: UUID | None = None
+    updated_at: datetime | None = None
+    match_reason: SharedDraftMatchReason | None = None
+
+
+class FormIntakeDraftRestoreRequest(BaseModel):
+    source_draft_id: UUID
+
+
+class FormIntakeDraftRestoreResponse(BaseModel):
+    answers: dict[str, object]
+    started_at: datetime | None
+    updated_at: datetime
+
+
 class FormSubmissionSharedResponse(BaseModel):
     id: UUID
     status: str
@@ -429,3 +455,16 @@ class FormTokenSendResponse(BaseModel):
     email_log_id: UUID
     sent_at: datetime
     application_url: str | None = None
+
+
+class FormIntakeLinkSendRequest(BaseModel):
+    surrogate_id: UUID
+    template_id: UUID | None = None
+
+
+class FormIntakeLinkSendResponse(BaseModel):
+    intake_link_id: UUID
+    template_id: UUID
+    email_log_id: UUID
+    sent_at: datetime
+    intake_url: str

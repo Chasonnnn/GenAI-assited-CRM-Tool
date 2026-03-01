@@ -9,6 +9,7 @@ from datetime import datetime, date
 
 from sqlalchemy import (
     Boolean,
+    Date,
     ForeignKey,
     Index,
     Integer,
@@ -211,6 +212,30 @@ class FormIntakeDraft(Base):
         Index("idx_form_intake_drafts_org", "organization_id"),
         Index("idx_form_intake_drafts_link", "intake_link_id"),
         Index("idx_form_intake_drafts_form", "form_id"),
+        Index(
+            "idx_form_intake_drafts_org_form_updated",
+            "organization_id",
+            "form_id",
+            "updated_at",
+        ),
+        Index(
+            "idx_form_intake_drafts_identity_email",
+            "organization_id",
+            "form_id",
+            "full_name_normalized",
+            "date_of_birth",
+            "email_hash",
+            "updated_at",
+        ),
+        Index(
+            "idx_form_intake_drafts_identity_phone",
+            "organization_id",
+            "form_id",
+            "full_name_normalized",
+            "date_of_birth",
+            "phone_hash",
+            "updated_at",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -235,6 +260,10 @@ class FormIntakeDraft(Base):
     answers_json: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
+    full_name_normalized: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
+    email_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    phone_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(), server_default=text("now()"), nullable=False
