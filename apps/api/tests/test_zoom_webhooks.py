@@ -77,6 +77,52 @@ async def test_zoom_webhook_rejects_bad_signature(client, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_zoom_webhook_rejects_stale_timestamp(client, monkeypatch):
+    secret = "test-zoom-secret"
+    monkeypatch.setattr(settings, "ZOOM_WEBHOOK_SECRET", secret, raising=False)
+
+    payload = {"event": "meeting.started", "payload": {"object": {"id": 123}}}
+    body = json.dumps(payload)
+    stale_timestamp = str(int(time.time()) - 301)
+    signature = _sign_zoom(secret, stale_timestamp, body)
+
+    res = await client.post(
+        "/webhooks/zoom",
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "x-zm-request-timestamp": stale_timestamp,
+            "x-zm-signature": signature,
+        },
+    )
+
+    assert res.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_zoom_webhook_rejects_non_numeric_timestamp(client, monkeypatch):
+    secret = "test-zoom-secret"
+    monkeypatch.setattr(settings, "ZOOM_WEBHOOK_SECRET", secret, raising=False)
+
+    payload = {"event": "meeting.started", "payload": {"object": {"id": 123}}}
+    body = json.dumps(payload)
+    invalid_timestamp = "not-a-number"
+    signature = _sign_zoom(secret, invalid_timestamp, body)
+
+    res = await client.post(
+        "/webhooks/zoom",
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "x-zm-request-timestamp": invalid_timestamp,
+            "x-zm-signature": signature,
+        },
+    )
+
+    assert res.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_zoom_webhook_meeting_started_sets_timestamp(
     client, db, test_org, test_user, monkeypatch
 ):

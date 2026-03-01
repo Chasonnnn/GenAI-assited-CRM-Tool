@@ -18,6 +18,17 @@ from app.db.models import Appointment, ZoomWebhookEvent
 
 logger = logging.getLogger(__name__)
 MAX_PAYLOAD_BYTES = 1 * 1024 * 1024  # 1 MB
+MAX_TIMESTAMP_SKEW_SECONDS = 300
+
+
+def _is_timestamp_within_window(timestamp: str) -> bool:
+    try:
+        timestamp_int = int(timestamp)
+    except (TypeError, ValueError):
+        return False
+
+    now = int(datetime.now(timezone.utc).timestamp())
+    return abs(now - timestamp_int) <= MAX_TIMESTAMP_SKEW_SECONDS
 
 
 def _verify_zoom_webhook_signature(
@@ -116,6 +127,10 @@ class ZoomWebhookHandler:
         if not settings.ZOOM_WEBHOOK_SECRET:
             logger.error("ZOOM_WEBHOOK_SECRET not configured")
             raise HTTPException(500, "Webhook not configured")
+
+        if not _is_timestamp_within_window(timestamp):
+            logger.warning("Zoom webhook timestamp outside accepted window")
+            raise HTTPException(403, "Invalid signature")
 
         if not _verify_zoom_webhook_signature(
             body, signature, timestamp, settings.ZOOM_WEBHOOK_SECRET
