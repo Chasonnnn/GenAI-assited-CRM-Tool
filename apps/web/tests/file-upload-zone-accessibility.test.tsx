@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { render, screen, within } from "@testing-library/react"
+import { fireEvent, render, screen, within } from "@testing-library/react"
 
 import { FileUploadZone } from "@/components/FileUploadZone"
 
@@ -7,12 +7,14 @@ const mockUseAttachments = vi.fn()
 const mockUseUploadAttachment = vi.fn()
 const mockUseDownloadAttachment = vi.fn()
 const mockUseDeleteAttachment = vi.fn()
+const openMock = vi.fn()
 
 vi.mock("react-dropzone", () => ({
     useDropzone: () => ({
         getRootProps: (props: Record<string, unknown> = {}) => props,
         getInputProps: (props: Record<string, unknown> = {}) => props,
         isDragActive: false,
+        open: openMock,
     }),
 }))
 
@@ -25,6 +27,7 @@ vi.mock("@/lib/hooks/use-attachments", () => ({
 
 describe("FileUploadZone accessibility", () => {
     beforeEach(() => {
+        openMock.mockReset()
         mockUseUploadAttachment.mockReturnValue({
             mutateAsync: vi.fn(),
             isPending: false,
@@ -66,21 +69,36 @@ describe("FileUploadZone accessibility", () => {
         expect(screen.getByRole("button", { name: "Delete contract.pdf" })).toBeInTheDocument()
     })
 
-    it("hides decorative icons from screen readers", () => {
+    it("supports keyboard activation and includes an aria-live region", () => {
         const { container } = render(<FileUploadZone surrogateId="surrogate-1" />)
 
-        const iconSelectors = [
-            "svg.lucide-upload",
-            "svg.lucide-file",
-            "svg.lucide-circle-check",
-            "svg.lucide-download",
-            "svg.lucide-trash2",
-        ]
+        const uploadZone = screen.getByRole("button", { name: "Upload attachments" })
+        fireEvent.keyDown(uploadZone, { key: "Enter" })
+        fireEvent.keyDown(uploadZone, { key: " " })
 
-        iconSelectors.forEach((selector) => {
-            const icon = container.querySelector(selector)
-            expect(icon).toBeTruthy()
-            expect(icon).toHaveAttribute("aria-hidden", "true")
+        expect(openMock).toHaveBeenCalledTimes(2)
+        expect(container.querySelector('[aria-live="polite"]')).toBeTruthy()
+    })
+
+    it("mentions the file name in delete confirmation", () => {
+        render(<FileUploadZone surrogateId="surrogate-1" />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Delete contract.pdf" }))
+        const dialog = screen.getByRole("alertdialog")
+        expect(dialog).toHaveTextContent("This will permanently delete")
+        expect(dialog).toHaveTextContent("contract.pdf")
+    })
+
+    it("renders the enhanced empty state when no attachments exist", () => {
+        mockUseAttachments.mockReturnValue({
+            isLoading: false,
+            data: [],
         })
+
+        render(<FileUploadZone surrogateId="surrogate-1" />)
+        expect(screen.getByText("No attachments yet")).toBeInTheDocument()
+        expect(
+            screen.getByText("Upload documents to keep surrogate records complete.")
+        ).toBeInTheDocument()
     })
 })

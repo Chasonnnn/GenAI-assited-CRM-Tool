@@ -79,6 +79,7 @@ function getScanStatusBadge(status: string, quarantined: boolean) {
 export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) {
     const [uploadProgress, setUploadProgress] = useState<number | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [liveMessage, setLiveMessage] = useState("")
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
     const { data: attachments = [], isLoading } = useAttachments(surrogateId)
@@ -94,23 +95,31 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                 // Validate extension
                 const ext = file.name.split(".").pop()?.toLowerCase()
                 if (!ext || !ALLOWED_EXTENSIONS.includes(ext)) {
-                    setError(`File type .${ext} not allowed`)
+                    const message = `File type .${ext} not allowed`
+                    setError(message)
+                    setLiveMessage(message)
                     continue
                 }
 
                 // Validate size
                 if (file.size > MAX_FILE_SIZE) {
-                    setError("File exceeds 25 MB limit")
+                    const message = "File exceeds 25 MB limit"
+                    setError(message)
+                    setLiveMessage(message)
                     continue
                 }
 
                 try {
+                    setLiveMessage(`Uploading ${file.name}`)
                     setUploadProgress(0)
                     await uploadMutation.mutateAsync({ surrogateId, file })
                     setUploadProgress(100)
+                    setLiveMessage(`Uploaded ${file.name}`)
                     setTimeout(() => setUploadProgress(null), 1000)
                 } catch (err) {
-                    setError(err instanceof Error ? err.message : "Upload failed")
+                    const message = err instanceof Error ? err.message : "Upload failed"
+                    setError(message)
+                    setLiveMessage(message)
                     setUploadProgress(null)
                 }
             }
@@ -118,8 +127,10 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
         [surrogateId, uploadMutation]
     )
 
-    const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
         onDrop,
+        noClick: true,
+        noKeyboard: true,
         accept: {
             "application/pdf": [".pdf"],
             "image/*": [".png", ".jpg", ".jpeg"],
@@ -148,16 +159,33 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
         }
     }
 
+    const deleteTargetName = attachments.find((attachment) => attachment.id === deleteTarget)?.filename
+
     return (
         <div className={cn("space-y-4", className)}>
+            <div aria-live="polite" className="sr-only">
+                {liveMessage}
+            </div>
+
             {/* Upload Zone */}
             <div
                 {...getRootProps({
                     role: "button",
                     "aria-label": "Upload attachments",
+                    tabIndex: 0,
+                    onClick: (event) => {
+                        event.preventDefault()
+                        open()
+                    },
+                    onKeyDown: (event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault()
+                            open()
+                        }
+                    },
                 })}
                 className={cn(
-                    "border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors",
+                    "border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2",
                     isDragActive
                         ? "border-primary bg-primary/5"
                         : "border-muted-foreground/25 hover:border-primary/50"
@@ -253,9 +281,13 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                     ))}
                 </ul>
             ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                    No attachments yet
-                </p>
+                <div className="rounded-lg border bg-muted/20 py-8 px-4 text-center">
+                    <File className="size-7 text-muted-foreground/70 mx-auto mb-2" aria-hidden="true" />
+                    <p className="text-sm font-medium text-muted-foreground">No attachments yet</p>
+                    <p className="text-xs text-muted-foreground/80 mt-1">
+                        Upload documents to keep surrogate records complete.
+                    </p>
+                </div>
             )}
 
             {/* Delete Confirmation Dialog */}
@@ -264,7 +296,13 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                     <AlertDialogHeader>
                         <AlertDialogTitle>Delete Attachment</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This will permanently delete this file.
+                            {deleteTargetName ? (
+                                <>
+                                    This will permanently delete <strong>{deleteTargetName}</strong>.
+                                </>
+                            ) : (
+                                <>This will permanently delete this file.</>
+                            )}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
