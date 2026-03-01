@@ -26,6 +26,7 @@ import { Loader2Icon, PhoneIcon, MailIcon, MessageSquareIcon, CalendarIcon } fro
 import { useCreateContactAttempt } from "@/lib/hooks/use-surrogates"
 import { toast } from "sonner"
 import type { ContactMethod, ContactOutcome } from "@/lib/api/surrogates"
+import { trackFirstContactLogged } from "@/lib/workflow-metrics"
 
 interface LogContactAttemptDialogProps {
     open: boolean
@@ -102,6 +103,12 @@ export function LogContactAttemptDialog({
                     ? "Surrogate has been marked as contacted."
                     : "Contact attempt logged"
             )
+
+            trackFirstContactLogged(surrogateId, {
+                outcome,
+                contact_methods: selectedMethods,
+                is_backdated: isBackdating,
+            })
 
             resetForm()
             onOpenChange(false)

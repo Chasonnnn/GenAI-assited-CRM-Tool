@@ -113,5 +113,13 @@ class AuditEventType(str, Enum):
     # Tasks
     TASK_DELETED = "task_deleted"
 
+    # Workflow efficiency instrumentation
+    WORKFLOW_PATH_DASHBOARD_VIEWED = "workflow_path_dashboard_viewed"
+    WORKFLOW_PATH_UNASSIGNED_QUEUE_VIEWED = "workflow_path_unassigned_queue_viewed"
+    WORKFLOW_PATH_SURROGATE_VIEWED = "workflow_path_surrogate_viewed"
+    WORKFLOW_PATH_FIRST_CONTACT_LOGGED = "workflow_path_first_contact_logged"
+    WORKFLOW_SETUP_STARTED = "workflow_setup_started"
+    WORKFLOW_SETUP_COMPLETED = "workflow_setup_completed"
+
     # Generic fallback for authenticated mutation requests not explicitly instrumented
     API_MUTATION_FALLBACK = "api_mutation_fallback"

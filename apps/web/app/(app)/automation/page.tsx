@@ -84,6 +84,7 @@ import { getSurrogates, type SurrogateListParams } from "@/lib/api/surrogates"
 import { US_STATES } from "@/lib/constants/us-states"
 import { parseDateInput } from "@/lib/utils/date"
 import type { JsonObject, JsonValue } from "@/lib/types/json"
+import { completeWorkflowSetup, startWorkflowSetup } from "@/lib/workflow-metrics"
 
 // Icon mapping for trigger types
 const triggerIcons: Record<string, React.ElementType> = {
@@ -671,6 +672,7 @@ export default function AutomationPage() {
     const [conditions, setConditions] = useState<EditableCondition[]>([])
     const [conditionLogic, setConditionLogic] = useState<"AND" | "OR">("AND")
     const [actions, setActions] = useState<EditableAction[]>([])
+    const workflowSetupSessionIdRef = useRef<string | null>(null)
 
     // Email template state (preserved from original)
     const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false)
@@ -1072,6 +1074,7 @@ export default function AutomationPage() {
         resetWorkflowForm()
         setShowCreateModal(false)
         setEditingWorkflowId(null)
+        workflowSetupSessionIdRef.current = null
     }
 
     const handleCreate = (scope: WorkflowScope = activeWorkflowScope) => {
@@ -1079,6 +1082,7 @@ export default function AutomationPage() {
         setEditingWorkflowId(null)
         setWorkflowScope(scope)
         setShowCreateModal(true)
+        workflowSetupSessionIdRef.current = startWorkflowSetup(scope)
     }
 
     const handleEdit = async (workflowId: string) => {
@@ -1245,7 +1249,10 @@ export default function AutomationPage() {
             )
         } else {
             createWorkflow.mutate(data, {
-                onSuccess: () => resetWizard(),
+                onSuccess: () => {
+                    completeWorkflowSetup(workflowSetupSessionIdRef.current, workflowScope)
+                    resetWizard()
+                },
                 onError: (error) => setServerErrors(parseServerErrors(error)),
             })
         }

@@ -9,6 +9,7 @@ import { Loader2Icon, UserPlusIcon } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useUnassignedQueue } from "@/lib/hooks/use-surrogates"
 import { useClaimSurrogate } from "@/lib/hooks/use-queues"
+import { trackUnassignedQueueViewed } from "@/lib/workflow-metrics"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -51,6 +52,11 @@ export default function UnassignedSurrogatesPage() {
             router.replace("/surrogates")
         }
     }, [authLoaded, canViewUnassignedQueue, router])
+
+    useEffect(() => {
+        if (!authLoaded || !canViewUnassignedQueue) return
+        trackUnassignedQueueViewed()
+    }, [authLoaded, canViewUnassignedQueue])
 
     const { data, isLoading, error, refetch } = useUnassignedQueue(
         {

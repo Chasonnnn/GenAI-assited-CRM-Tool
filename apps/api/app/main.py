@@ -93,6 +93,7 @@ from app.routers import (
     webhooks,
     websocket as ws_router,
     workflows,
+    workflow_metrics,
 )
 from app.services import alert_service, metrics_service
 
@@ -679,6 +680,9 @@ app.include_router(booking.router, prefix="/book", tags=["booking"])
 
 # Email Tracking (public endpoints for pixel/click tracking)
 app.include_router(tracking.router)
+
+# Workflow metrics tracking (authenticated UI instrumentation events)
+app.include_router(workflow_metrics.router)
 
 # MFA (Multi-Factor Authentication)
 app.include_router(mfa.router, prefix="/mfa", tags=["mfa"])

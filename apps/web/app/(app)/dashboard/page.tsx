@@ -15,6 +15,7 @@ import { DashboardFiltersProvider, useDashboardFilters } from "./context/dashboa
 import { DashboardFilterBar } from "./components/dashboard-filter-bar"
 import { KPICardsSection } from "./components/kpi-cards-section"
 import { AttentionNeededPanel } from "./components/attention-needed-panel"
+import { trackDashboardViewed } from "@/lib/workflow-metrics"
 
 const TrendChart = dynamic(
     () => import("./components/trend-chart").then((mod) => mod.TrendChart),
@@ -76,6 +77,10 @@ function DashboardContent() {
 
     // WebSocket for real-time updates
     useDashboardSocket()
+
+    useEffect(() => {
+        trackDashboardViewed()
+    }, [])
 
     // Fetch data for "last updated" calculation
     const statsQuery = useSurrogateStats(statsParams)

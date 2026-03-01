@@ -29,6 +29,7 @@ import {
     formatMeetingTimeForInvite,
     toLocalIsoDateTime,
 } from "../surrogate-detail-utils"
+import { trackSurrogateViewed } from "@/lib/workflow-metrics"
 import type { SurrogateRead } from "@/lib/types/surrogate"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import type { Queue } from "@/lib/hooks/use-queues"
@@ -382,6 +383,11 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
         isInQueue &&
         (canManageQueue || (user?.role === "intake_specialist" && isUnassignedQueue))
     )
+
+    useEffect(() => {
+        if (!surrogateData?.id) return
+        trackSurrogateViewed(surrogateData.id)
+    }, [surrogateData?.id])
 
     // Set AI context
     useSetAIContext(
