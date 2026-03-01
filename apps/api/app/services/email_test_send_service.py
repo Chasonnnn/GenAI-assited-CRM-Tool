@@ -60,7 +60,7 @@ def build_sample_variables(
             base_url=portal_base_url,
         )
         form_link = (
-            f"{portal_base_url}/apply/EXAMPLE_TOKEN" if portal_base_url else "/apply/EXAMPLE_TOKEN"
+            f"{portal_base_url}/intake/EXAMPLE_SLUG" if portal_base_url else "/intake/EXAMPLE_SLUG"
         )
         appointment_link = (
             f"{portal_base_url}/book/EXAMPLE_APPOINTMENT_SLUG"

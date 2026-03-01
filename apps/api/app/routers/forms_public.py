@@ -16,7 +16,11 @@ from app.schemas.forms import (
     FormDraftPublicRead,
     FormDraftUpsertRequest,
     FormDraftWriteResponse,
+    FormIntakeDraftLookupRequest,
+    FormIntakeDraftLookupResponse,
     FormIntakeDraftPublicRead,
+    FormIntakeDraftRestoreRequest,
+    FormIntakeDraftRestoreResponse,
     FormIntakeDraftWriteResponse,
     FormIntakePublicRead,
     FormPublicRead,
@@ -25,7 +29,6 @@ from app.schemas.forms import (
     FormSubmissionPublicResponse,
 )
 from app.services import (
-    form_draft_service,
     form_intake_service,
     form_service,
     form_submission_service,
@@ -34,6 +37,9 @@ from app.services import (
 )
 
 router = APIRouter(prefix="/forms/public", tags=["forms-public"])
+DEDICATED_LINK_RETIRED_DETAIL = (
+    "Dedicated application links have been retired. Please use a shared intake link."
+)
 
 
 def _schema_or_none(schema_json: dict | None) -> FormSchema | None:
@@ -84,77 +90,11 @@ def get_org_signature_logo(request: Request, org_id: UUID, db: Session = Depends
 @router.get("/{token}", response_model=FormPublicRead)
 @limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
 def get_public_form(request: Request, token: str, db: Session = Depends(get_db)):
-    token_record = form_submission_service.get_valid_token(db, token)
-    if not token_record:
-        raise HTTPException(status_code=404, detail="Form not found")
-
-    form = form_service.get_form(db, token_record.organization_id, token_record.form_id)
-    if not form or form.status != FormStatus.PUBLISHED.value:
-        raise HTTPException(status_code=404, detail="Form not found")
-
-    schema = _schema_or_none(form.published_schema_json)
-    if not schema:
-        raise HTTPException(status_code=404, detail="Form not found")
-
-    schema = form_service.normalize_form_schema_logo_url(schema, token_record.organization_id)
-
-    return FormPublicRead(
-        form_id=form.id,
-        name=form.name,
-        description=form.description,
-        form_schema=schema,
-        max_file_size_bytes=form.max_file_size_bytes,
-        max_file_count=form.max_file_count,
-        allowed_mime_types=form.allowed_mime_types
-        or form_submission_service.DEFAULT_ALLOWED_FORM_UPLOAD_MIME_TYPES,
-    )
-
-
-def _has_submission(db: Session, token_row) -> bool:
-    return (
-        form_submission_service.get_submission_by_surrogate(
-            db,
-            token_row.organization_id,
-            token_row.form_id,
-            token_row.surrogate_id,
-        )
-        is not None
-    )
-
-
+    raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
 @router.get("/{token}/draft", response_model=FormDraftPublicRead)
 @limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_DRAFTS}/minute")
 def get_public_form_draft(request: Request, token: str, db: Session = Depends(get_db)):
-    token_row = form_submission_service.get_token_row(db, token)
-    if not token_row:
-        raise HTTPException(status_code=404, detail="Form not found")
-
-    # If already submitted, hide drafts (treat as not found).
-    if _has_submission(db, token_row):
-        raise HTTPException(status_code=404, detail="Draft not found")
-
-    token_record = form_submission_service.get_valid_token(db, token)
-    if not token_record:
-        raise HTTPException(status_code=404, detail="Form not found")
-
-    form = form_service.get_form(db, token_record.organization_id, token_record.form_id)
-    if not form or form.status != FormStatus.PUBLISHED.value:
-        raise HTTPException(status_code=404, detail="Form not found")
-
-    draft = form_draft_service.get_draft_by_surrogate_form(
-        db=db,
-        org_id=token_record.organization_id,
-        form_id=token_record.form_id,
-        surrogate_id=token_record.surrogate_id,
-    )
-    if not draft:
-        raise HTTPException(status_code=404, detail="Draft not found")
-
-    return FormDraftPublicRead(
-        answers=draft.answers_json or {},
-        started_at=draft.started_at,
-        updated_at=draft.updated_at,
-    )
+    raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
 
 
 @router.put("/{token}/draft", response_model=FormDraftWriteResponse)
@@ -165,31 +105,7 @@ def upsert_public_form_draft(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    token_row = form_submission_service.get_token_row(db, token)
-    if not token_row:
-        raise HTTPException(status_code=404, detail="Form not found")
-    if _has_submission(db, token_row):
-        raise HTTPException(status_code=409, detail="Submission already exists for this surrogate")
-
-    token_record = form_submission_service.get_valid_token(db, token)
-    if not token_record:
-        raise HTTPException(status_code=404, detail="Form not found")
-
-    form = form_service.get_form(db, token_record.organization_id, token_record.form_id)
-    if not form or form.status != FormStatus.PUBLISHED.value:
-        raise HTTPException(status_code=404, detail="Form not found")
-
-    try:
-        draft = form_draft_service.upsert_public_draft(
-            db=db,
-            token_record=token_record,
-            form=form,
-            answers=body.answers,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    return FormDraftWriteResponse(started_at=draft.started_at, updated_at=draft.updated_at)
+    raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
 
 
 @router.delete("/{token}/draft")
@@ -199,23 +115,7 @@ def delete_public_form_draft(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    token_row = form_submission_service.get_token_row(db, token)
-    if not token_row:
-        raise HTTPException(status_code=404, detail="Form not found")
-    if _has_submission(db, token_row):
-        raise HTTPException(status_code=409, detail="Submission already exists for this surrogate")
-
-    token_record = form_submission_service.get_valid_token(db, token)
-    if not token_record:
-        raise HTTPException(status_code=404, detail="Form not found")
-
-    form_draft_service.delete_draft(
-        db=db,
-        org_id=token_record.organization_id,
-        form_id=token_record.form_id,
-        surrogate_id=token_record.surrogate_id,
-    )
-    return Response(status_code=204)
+    raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
 
 
 @router.post("/{token}/submit", response_model=FormSubmissionPublicResponse)
@@ -228,45 +128,7 @@ async def submit_public_form(
     file_field_keys: str | None = Form(default=None),
     db: Session = Depends(get_db),
 ):
-    token_record = form_submission_service.get_valid_token(db, token)
-    if not token_record:
-        raise HTTPException(status_code=404, detail="Form not found")
-
-    form = form_service.get_form(db, token_record.organization_id, token_record.form_id)
-    if not form or form.status != FormStatus.PUBLISHED.value:
-        raise HTTPException(status_code=404, detail="Form not found")
-
-    try:
-        answers_data = json.loads(answers)
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=400, detail="Invalid answers JSON") from exc
-
-    try:
-        parsed_keys: list[str] | None = None
-        if file_field_keys:
-            try:
-                parsed = json.loads(file_field_keys)
-                if not isinstance(parsed, list) or not all(isinstance(k, str) for k in parsed):
-                    raise ValueError("Invalid file_field_keys payload")
-                parsed_keys = parsed
-            except json.JSONDecodeError as exc:
-                raise ValueError("Invalid file_field_keys payload") from exc
-
-        submission = form_submission_service.create_submission(
-            db=db,
-            token=token_record,
-            form=form,
-            answers=answers_data,
-            files=files or [],
-            file_field_keys=parsed_keys,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    return FormSubmissionPublicResponse(
-        id=submission.id,
-        status=submission.status,
-    )
+    raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
 
 
 @router.get("/intake/{slug}", response_model=FormIntakePublicRead)
@@ -331,6 +193,39 @@ def get_shared_public_form_draft(
     )
 
 
+@router.post("/intake/{slug}/draft/lookup", response_model=FormIntakeDraftLookupResponse)
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_DRAFTS}/minute")
+def lookup_shared_public_form_draft(
+    request: Request,
+    slug: str,
+    body: FormIntakeDraftLookupRequest,
+    db: Session = Depends(get_db),
+):
+    if not settings.FORMS_SHARED_INTAKE:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    intake_link = form_intake_service.get_active_intake_link_by_slug(db, slug)
+    if not intake_link:
+        raise HTTPException(status_code=404, detail="Form not found")
+    form = form_service.get_form(db, intake_link.organization_id, intake_link.form_id)
+    if not form or form.status != FormStatus.PUBLISHED.value:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    result = form_intake_service.lookup_shared_resume_draft(
+        db=db,
+        link=intake_link,
+        form=form,
+        answers=body.answers,
+        current_draft_session_id=body.current_draft_session_id,
+    )
+    return FormIntakeDraftLookupResponse(
+        status=result["status"],
+        source_draft_id=result.get("source_draft_id"),
+        updated_at=result.get("updated_at"),
+        match_reason=result.get("match_reason"),
+    )
+
+
 @router.put("/intake/{slug}/draft/{draft_session_id}", response_model=FormIntakeDraftWriteResponse)
 @limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_DRAFTS}/minute")
 def upsert_shared_public_form_draft(
@@ -361,6 +256,47 @@ def upsert_shared_public_form_draft(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return FormIntakeDraftWriteResponse(started_at=draft.started_at, updated_at=draft.updated_at)
+
+
+@router.post(
+    "/intake/{slug}/draft/{draft_session_id}/restore",
+    response_model=FormIntakeDraftRestoreResponse,
+)
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_DRAFTS}/minute")
+def restore_shared_public_form_draft(
+    request: Request,
+    slug: str,
+    draft_session_id: str,
+    body: FormIntakeDraftRestoreRequest,
+    db: Session = Depends(get_db),
+):
+    if not settings.FORMS_SHARED_INTAKE:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    intake_link = form_intake_service.get_active_intake_link_by_slug(db, slug)
+    if not intake_link:
+        raise HTTPException(status_code=404, detail="Form not found")
+    form = form_service.get_form(db, intake_link.organization_id, intake_link.form_id)
+    if not form or form.status != FormStatus.PUBLISHED.value:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    try:
+        draft = form_intake_service.restore_shared_draft(
+            db=db,
+            link=intake_link,
+            form=form,
+            draft_session_id=draft_session_id,
+            source_draft_id=body.source_draft_id,
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = 404 if "not found" in detail.lower() else 400
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+    return FormIntakeDraftRestoreResponse(
+        answers=draft.answers_json or {},
+        started_at=draft.started_at,
+        updated_at=draft.updated_at,
+    )
 
 
 @router.delete("/intake/{slug}/draft/{draft_session_id}")

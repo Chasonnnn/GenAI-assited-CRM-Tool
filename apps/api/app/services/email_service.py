@@ -781,50 +781,43 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
     appointment_date = ""
     appointment_time = ""
     appointment_location = ""
-    from app.services import form_submission_service
+    from app.services import form_intake_service
     from app.services import form_service
 
     default_application_form = form_service.get_default_surrogate_application_form(
         db, surrogate.organization_id
     )
-    default_form_id = default_application_form.id if default_application_form else None
-    form_token = form_submission_service.get_latest_active_token_for_surrogate(
-        db,
-        org_id=surrogate.organization_id,
-        surrogate_id=surrogate.id,
-        form_id=default_form_id,
-    )
-    if not form_token:
-        latest_published_form = (
-            default_application_form
-            or db.query(Form)
-            .filter(
-                Form.organization_id == surrogate.organization_id,
-                Form.status == FormStatus.PUBLISHED.value,
-                Form.purpose == FormPurpose.SURROGATE_APPLICATION.value,
-            )
-            .order_by(Form.updated_at.desc(), Form.created_at.desc())
-            .first()
+    selected_form = (
+        default_application_form
+        or db.query(Form)
+        .filter(
+            Form.organization_id == surrogate.organization_id,
+            Form.status == FormStatus.PUBLISHED.value,
+            Form.purpose == FormPurpose.SURROGATE_APPLICATION.value,
         )
-        if latest_published_form:
-            form_token = form_submission_service.get_or_create_submission_token(
-                db=db,
+        .order_by(Form.updated_at.desc(), Form.created_at.desc())
+        .first()
+    )
+    if selected_form:
+        intake_link = form_intake_service.get_active_intake_link_for_form(
+            db,
+            org_id=surrogate.organization_id,
+            form_id=selected_form.id,
+        )
+        if not intake_link:
+            intake_link = form_intake_service.ensure_default_intake_link(
+                db,
                 org_id=surrogate.organization_id,
-                form=latest_published_form,
-                surrogate=surrogate,
+                form=selected_form,
                 user_id=surrogate.created_by_user_id,
-                expires_in_days=form_submission_service.DEFAULT_TOKEN_EXPIRES_IN_DAYS,
-                allow_purpose_override=False,
-                commit=False,
             )
 
-    if form_token:
         from app.services import org_service
 
         portal_base_url = org_service.get_org_portal_base_url(org)
-        form_link = form_submission_service.build_application_link(
+        form_link = form_intake_service.build_shared_application_link(
             portal_base_url,
-            form_token.token,
+            intake_link.slug,
         )
 
     booking_link_user_id: UUID | None = None
