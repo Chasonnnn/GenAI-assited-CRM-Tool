@@ -52,7 +52,7 @@ export function ListItem({ interview, isSelected, onClick }: ListItemProps) {
                 "w-full p-4 border-b text-left cursor-pointer transition-colors",
                 isSelected ? "bg-primary/5" : "hover:bg-muted/50"
             )}
-            aria-label={`${formatInterviewType(interview.interview_type as InterviewType)} interview on ${formatDate(interview.conducted_at)} with ${interview.conducted_by_name}`}
+            aria-label={`View ${formatInterviewType(interview.interview_type as InterviewType)} interview from ${formatDate(interview.conducted_at)}`}
             onClick={onClick}
         >
             <div className="flex items-start gap-3">
