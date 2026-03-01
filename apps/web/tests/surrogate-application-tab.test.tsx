@@ -3,8 +3,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 
 import { SurrogateApplicationTab } from "@/components/surrogates/SurrogateApplicationTab"
 
-const mockCreateFormToken = vi.fn()
-const mockSendFormToken = vi.fn()
+const mockSendFormIntakeLink = vi.fn()
+const mockUseFormIntakeLinks = vi.fn()
 const mockUseSurrogateFormSubmission = vi.fn()
 
 vi.mock("@/lib/auth-context", () => ({
@@ -18,8 +18,8 @@ vi.mock("@/lib/auth-context", () => ({
 vi.mock("@/lib/hooks/use-forms", () => ({
     useSurrogateFormSubmission: (...args: unknown[]) => mockUseSurrogateFormSubmission(...args),
     useSurrogateFormDraftStatus: () => ({ data: null }),
-    useCreateFormToken: () => ({ mutateAsync: mockCreateFormToken, isPending: false }),
-    useSendFormToken: () => ({ mutateAsync: mockSendFormToken, isPending: false }),
+    useFormIntakeLinks: (...args: unknown[]) => mockUseFormIntakeLinks(...args),
+    useSendFormIntakeLink: () => ({ mutateAsync: mockSendFormIntakeLink, isPending: false }),
     useApproveFormSubmission: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useRejectFormSubmission: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useUpdateSubmissionAnswers: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -41,22 +41,44 @@ vi.mock("@/lib/api/forms", () => ({
 
 describe("SurrogateApplicationTab", () => {
     beforeEach(() => {
-        mockCreateFormToken.mockReset()
-        mockSendFormToken.mockReset()
+        mockSendFormIntakeLink.mockReset()
+        mockUseFormIntakeLinks.mockReset()
         mockUseSurrogateFormSubmission.mockReset()
         mockUseSurrogateFormSubmission.mockReturnValue({
             data: null,
             isLoading: false,
             error: null,
         })
+        mockUseFormIntakeLinks.mockReturnValue({
+            data: [
+                {
+                    id: "link-1",
+                    form_id: "form-1",
+                    slug: "shared-slug",
+                    campaign_name: "Default Shared Link",
+                    event_name: null,
+                    utm_defaults: null,
+                    is_active: true,
+                    expires_at: null,
+                    max_submissions: null,
+                    submissions_count: 0,
+                    intake_url: "https://portal.example.com/intake/shared-slug",
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+            ],
+            isLoading: false,
+            error: null,
+        })
     })
 
-    it("uses selected link expiration days when generating a link", async () => {
-        mockCreateFormToken.mockResolvedValue({
-            token_id: "token-id-123",
-            token: "token-123",
-            expires_at: "2026-04-15T13:00:00Z",
-            application_url: "https://portal.example.com/apply/token-123",
+    it("uses shared intake link send flow", async () => {
+        mockSendFormIntakeLink.mockResolvedValue({
+            intake_link_id: "link-1",
+            template_id: "template-1",
+            email_log_id: "email-log-1",
+            sent_at: new Date().toISOString(),
+            intake_url: "https://portal.example.com/intake/shared-slug",
         })
 
         render(
@@ -75,22 +97,23 @@ describe("SurrogateApplicationTab", () => {
             />,
         )
 
-        fireEvent.change(screen.getByLabelText(/link expiration/i), {
-            target: { value: "30" },
-        })
         fireEvent.click(screen.getByRole("button", { name: /send form link/i }))
 
+        expect(await screen.findByText(/portal\.example\.com\/intake\/shared-slug/i)).toBeInTheDocument()
+
         await waitFor(() =>
-            expect(mockCreateFormToken).toHaveBeenCalledWith({
+            expect(screen.getByRole("button", { name: /send email/i })).toBeEnabled(),
+        )
+        fireEvent.click(screen.getByRole("button", { name: /send email/i }))
+
+        await waitFor(() =>
+            expect(mockSendFormIntakeLink).toHaveBeenCalledWith({
                 formId: "form-1",
+                linkId: "link-1",
                 surrogateId: "surrogate-1",
-                expiresInDays: 30,
-                allowPurposeOverride: false,
+                templateId: "template-1",
             }),
         )
-
-        expect(await screen.findByText(/portal\.example\.com\/apply\/token-123/i)).toBeInTheDocument()
-        expect(screen.getByText(/expires on/i)).toBeInTheDocument()
     })
 
     it("shows a persistent field-selection hint before file upload when multiple file fields exist", async () => {

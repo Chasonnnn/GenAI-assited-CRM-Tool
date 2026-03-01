@@ -7,12 +7,16 @@ import PublicIntakeFormClient from '../app/intake/[slug]/page.client'
 const {
     getSharedPublicForm,
     getSharedPublicFormDraft,
+    lookupSharedPublicFormDraft,
+    restoreSharedPublicFormDraft,
     saveSharedPublicFormDraft,
     submitSharedPublicForm,
     deleteSharedPublicFormDraft,
 } = vi.hoisted(() => ({
     getSharedPublicForm: vi.fn(),
     getSharedPublicFormDraft: vi.fn(),
+    lookupSharedPublicFormDraft: vi.fn(),
+    restoreSharedPublicFormDraft: vi.fn(),
     saveSharedPublicFormDraft: vi.fn(),
     submitSharedPublicForm: vi.fn(),
     deleteSharedPublicFormDraft: vi.fn(),
@@ -28,6 +32,8 @@ vi.mock('@/lib/api/forms', async () => {
         ...actual,
         getSharedPublicForm,
         getSharedPublicFormDraft,
+        lookupSharedPublicFormDraft,
+        restoreSharedPublicFormDraft,
         saveSharedPublicFormDraft,
         submitSharedPublicForm,
         deleteSharedPublicFormDraft,
@@ -64,6 +70,14 @@ describe('Shared Intake Public Page', () => {
         vi.clearAllMocks()
         getSharedPublicForm.mockResolvedValue(baseForm)
         getSharedPublicFormDraft.mockResolvedValue({
+            answers: {},
+            started_at: null,
+            updated_at: new Date().toISOString(),
+        })
+        lookupSharedPublicFormDraft.mockResolvedValue({
+            status: "insufficient_identity",
+        })
+        restoreSharedPublicFormDraft.mockResolvedValue({
             answers: {},
             started_at: null,
             updated_at: new Date().toISOString(),
@@ -111,5 +125,120 @@ describe('Shared Intake Public Page', () => {
             await screen.findByText(/added to intake review/i),
         ).toBeInTheDocument()
         expect(deleteSharedPublicFormDraft).toHaveBeenCalledWith('event-abc', expect.any(String))
+    })
+
+    it('shows resume prompt and restores previous draft when continuing', async () => {
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            form_schema: {
+                pages: [
+                    {
+                        title: 'Identity',
+                        fields: [
+                            { key: 'full_name', label: 'Full Name', type: 'text', required: true },
+                            { key: 'date_of_birth', label: 'DOB', type: 'text', required: true },
+                            { key: 'email', label: 'Email', type: 'email', required: true },
+                        ],
+                    },
+                ],
+                public_title: 'Event Intake Form',
+                privacy_notice: 'https://example.com/privacy',
+            },
+        })
+        lookupSharedPublicFormDraft.mockResolvedValue({
+            status: 'match_found',
+            source_draft_id: 'source-draft-1',
+            updated_at: new Date().toISOString(),
+            match_reason: 'name_dob_email',
+        })
+        restoreSharedPublicFormDraft.mockResolvedValue({
+            answers: {
+                full_name: 'Resume Person',
+                date_of_birth: '1992-08-09',
+                email: 'resume@example.com',
+            },
+            started_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+
+        fireEvent.change(screen.getByLabelText(/full name/i), {
+            target: { value: 'Resume Person' },
+        })
+        fireEvent.change(screen.getByLabelText(/dob/i), {
+            target: { value: '1992-08-09' },
+        })
+        fireEvent.change(screen.getByLabelText(/email/i), {
+            target: { value: 'resume@example.com' },
+        })
+
+        expect(
+            await screen.findByRole('button', { name: /^continue previous application$/i }),
+        ).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: /^continue previous application$/i }))
+
+        await waitFor(() =>
+            expect(restoreSharedPublicFormDraft).toHaveBeenCalledWith(
+                'event-abc',
+                expect.any(String),
+                'source-draft-1',
+            ),
+        )
+        expect(await screen.findByText(/restored saved progress/i)).toBeInTheDocument()
+    })
+
+    it('suppresses repeated resume prompt after selecting start new', async () => {
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            form_schema: {
+                pages: [
+                    {
+                        title: 'Identity',
+                        fields: [
+                            { key: 'full_name', label: 'Full Name', type: 'text', required: true },
+                            { key: 'date_of_birth', label: 'DOB', type: 'text', required: true },
+                            { key: 'email', label: 'Email', type: 'email', required: true },
+                        ],
+                    },
+                ],
+                public_title: 'Event Intake Form',
+                privacy_notice: 'https://example.com/privacy',
+            },
+        })
+        lookupSharedPublicFormDraft.mockResolvedValue({
+            status: 'match_found',
+            source_draft_id: 'source-draft-2',
+            updated_at: new Date().toISOString(),
+            match_reason: 'name_dob_email',
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+
+        fireEvent.change(screen.getByLabelText(/full name/i), {
+            target: { value: 'Resume Person' },
+        })
+        fireEvent.change(screen.getByLabelText(/dob/i), {
+            target: { value: '1992-08-09' },
+        })
+        fireEvent.change(screen.getByLabelText(/email/i), {
+            target: { value: 'resume@example.com' },
+        })
+
+        expect(
+            await screen.findByRole('button', { name: /^continue previous application$/i }),
+        ).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: /start new/i }))
+
+        fireEvent.change(screen.getByLabelText(/full name/i), {
+            target: { value: 'Resume Person ' },
+        })
+
+        await new Promise((resolve) => setTimeout(resolve, 900))
+        expect(
+            screen.queryByRole('button', { name: /^continue previous application$/i }),
+        ).not.toBeInTheDocument()
     })
 })
