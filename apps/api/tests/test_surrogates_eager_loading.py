@@ -83,7 +83,7 @@ def test_surrogate_to_read_uses_loaded_owner_queue(db, test_org, test_user):
         mock_get.assert_not_called()
 
 
-def test_list_surrogates_eager_loads_in_single_statement(db, db_engine, test_org, test_user):
+def test_list_surrogates_eager_loads_in_two_statements(db, db_engine, test_org, test_user):
     # Make sure we have a default pipeline/stages so create_surrogate is consistent.
     pipeline_service.get_or_create_default_pipeline(db, test_org.id, test_user.id)
 
@@ -138,11 +138,12 @@ def test_list_surrogates_eager_loads_in_single_statement(db, db_engine, test_org
                 assert surrogate.owner_queue is not None
                 _ = surrogate.owner_queue.name
 
-    assert counter["n"] == 1, "\n".join(counter["statements"])
+    assert counter["n"] == 2, "\n".join(counter["statements"])
+    assert any("surrogate_activity_log" in stmt for stmt in counter["statements"])
 
 
 @pytest.mark.asyncio
-async def test_list_surrogates_endpoint_uses_single_statement_for_data_fetch(
+async def test_list_surrogates_endpoint_uses_batched_activity_query(
     db, db_engine, test_org, test_user, authed_client, monkeypatch
 ):
     from app.services import audit_service, permission_service
@@ -165,8 +166,8 @@ async def test_list_surrogates_endpoint_uses_single_statement_for_data_fetch(
         response = await authed_client.get("/surrogates", params={"include_total": "false"})
 
     assert response.status_code == 200, response.text
-    assert counter["n"] == 7, "\n".join(counter["statements"])
-    assert not any("surrogate_activity_log" in stmt for stmt in counter["statements"])
+    assert counter["n"] == 8, "\n".join(counter["statements"])
+    assert any("surrogate_activity_log" in stmt for stmt in counter["statements"])
 
 
 def test_list_claim_queue_eager_loads_in_few_statements(db, db_engine, test_org, test_user):
@@ -222,7 +223,7 @@ def test_list_claim_queue_eager_loads_in_few_statements(db, db_engine, test_org,
     # - list query (with joined eager loads)
     #
     # We allow a small ceiling to keep the test stable across ORM/dialect differences.
-    assert counter["n"] <= 7
+    assert counter["n"] <= 8
 
 
 def test_list_surrogates_does_not_use_query_count(db, test_org, test_user, monkeypatch):

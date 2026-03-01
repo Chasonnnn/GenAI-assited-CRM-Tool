@@ -59,3 +59,4 @@ def test_global_search_builds_union_all_query(db, test_org, test_user, monkeypat
     assert captured_statements
     sql = str(captured_statements[0]).upper()
     assert "UNION ALL" in sql
+    assert sql.count("LIMIT") >= 2

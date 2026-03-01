@@ -12,7 +12,7 @@ from typing import TypedDict
 from uuid import UUID
 
 from fastapi import Request
-from sqlalchemy import and_, func, literal, or_, select, true, union_all
+from sqlalchemy import and_, cast, func, literal, or_, select, true, union_all
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -280,6 +280,28 @@ def _global_search_unified(
         notes_table = EntityNote.__table__.alias("en")
         attachments_table = Attachment.__table__.alias("a")
         ip_table = IntendedParent.__table__.alias("ip")
+        branch_limit = max(limit + offset, 0)
+
+        def _apply_branch_limit(stmt):
+            """Bound each UNION branch to reduce intermediate materialization."""
+            if branch_limit <= 0:
+                return stmt.limit(0)
+
+            branch = stmt.subquery()
+            return (
+                select(
+                    branch.c.entity_type,
+                    branch.c.entity_id,
+                    branch.c.title,
+                    branch.c.snippet,
+                    branch.c.rank,
+                    cast(branch.c.surrogate_id, surrogate_table.c.id.type).label("surrogate_id"),
+                    branch.c.surrogate_name,
+                    branch.c.created_at,
+                )
+                .order_by(branch.c.rank.desc(), branch.c.created_at.desc())
+                .limit(branch_limit)
+            )
 
         surrogate_access_filter = _build_surrogate_access_filter(
             role,
@@ -643,6 +665,7 @@ def _global_search_unified(
         if not subqueries:
             return []
 
+        subqueries = [_apply_branch_limit(stmt) for stmt in subqueries]
         unioned = union_all(*subqueries).subquery("search_union")
         deduped = select(
             unioned.c.entity_type,
