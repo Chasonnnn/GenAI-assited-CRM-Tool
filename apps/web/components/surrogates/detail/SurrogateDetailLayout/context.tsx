@@ -344,12 +344,6 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
         return currentStage.order >= matchedStage.order
     }, [surrogateData, matchedStage, stageById])
 
-    useEffect(() => {
-        if (segment === "journey" && surrogateData && !canViewJourney) {
-            handleTabChange("overview")
-        }
-    }, [segment, surrogateData, canViewJourney, handleTabChange])
-
     const stage = surrogateData ? stageById.get(surrogateData.stage_id) : undefined
     const statusLabel = surrogateData?.status_label || stage?.label || "Unknown"
     const statusColor = stage?.color || "#6B7280"

@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { SurrogateDetailLayoutClient } from '@/components/surrogates/detail/SurrogateDetailLayoutClient'
 import { SurrogateOverviewTab } from '@/components/surrogates/detail/tabs/SurrogateOverviewTab'
 import { SurrogateDetailHeader } from '@/components/surrogates/detail/SurrogateDetailHeader'
+import SurrogateJourneyPage from '../app/(app)/surrogates/[id]/journey/page'
 
 const mockPush = vi.fn()
 const mockReplace = vi.fn()
@@ -323,7 +324,7 @@ describe('SurrogateDetailPage', () => {
         expect(mockReplace).toHaveBeenCalledWith('/surrogates/c1/notes', { scroll: false })
     })
 
-    it('disables Journey tab before matched', () => {
+    it('keeps Journey tab enabled before matched and hides global helper text', () => {
         render(
             <SurrogateDetailLayoutClient>
                 <SurrogateOverviewTab />
@@ -331,11 +332,11 @@ describe('SurrogateDetailPage', () => {
         )
 
         const journeyTab = screen.getByRole('tab', { name: /Journey/i })
-        expect(journeyTab).toHaveAttribute('aria-disabled', 'true')
-        expect(screen.getByText('Journey available after Match Confirmed')).toBeInTheDocument()
+        expect(journeyTab).not.toHaveAttribute('aria-disabled', 'true')
+        expect(screen.queryByText('Journey available after Match Confirmed')).not.toBeInTheDocument()
     })
 
-    it('redirects to overview when journey tab is requested before matched', () => {
+    it('does not redirect when journey tab is requested before matched', () => {
         mockSegment.value = 'journey'
 
         render(
@@ -344,7 +345,20 @@ describe('SurrogateDetailPage', () => {
             </SurrogateDetailLayoutClient>
         )
 
-        expect(mockReplace).toHaveBeenCalledWith('/surrogates/c1', { scroll: false })
+        expect(mockReplace).not.toHaveBeenCalledWith('/surrogates/c1', { scroll: false })
+    })
+
+    it('shows journey empty state before match confirmation', () => {
+        mockSegment.value = 'journey'
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateJourneyPage />
+            </SurrogateDetailLayoutClient>
+        )
+
+        expect(screen.getByText('No journey available yet')).toBeInTheDocument()
+        expect(screen.getByText('Journey becomes available after Match Confirmed.')).toBeInTheDocument()
     })
 
     it('shows Insurance Info and Activity on overview', () => {

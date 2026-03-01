@@ -29,7 +29,6 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
         statusColor,
         noteCount,
         taskCount,
-        canViewJourney,
         canViewProfile,
         navigateToList,
     } = useSurrogateDetailData()
@@ -93,7 +92,7 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
                         <TabsTrigger value="application">Application</TabsTrigger>
                         {canViewProfile && <TabsTrigger value="profile">Profile</TabsTrigger>}
                         <TabsTrigger value="history">History</TabsTrigger>
-                        <TabsTrigger value="journey" disabled={!canViewJourney}>
+                        <TabsTrigger value="journey">
                             Journey
                         </TabsTrigger>
                         <TabsTrigger value="ai" className="gap-1">
@@ -101,11 +100,6 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
                             AI
                         </TabsTrigger>
                     </TabsList>
-                    {!canViewJourney && (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            Journey available after Match Confirmed
-                        </p>
-                    )}
 
                     <SurrogateDetailProvider surrogate={surrogate}>
                         {children}
