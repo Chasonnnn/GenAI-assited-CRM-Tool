@@ -88,6 +88,7 @@ describe('SurrogatesPage', () => {
         mockSearchParams.delete('source')
         mockSearchParams.delete('queue')
         mockSearchParams.delete('q')
+        mockSearchParams.delete('owner_id')
         mockUseArchiveSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseRestoreSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseUpdateSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
@@ -227,6 +228,22 @@ describe('SurrogatesPage', () => {
         expect(mockUseSurrogates).toHaveBeenCalledWith(
             expect.objectContaining({
                 page: 3,
+            })
+        )
+    })
+
+    it('applies owner_id from URL params', () => {
+        mockSearchParams.set('owner_id', 'user-123')
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+        expect(mockUseSurrogates).toHaveBeenCalledWith(
+            expect.objectContaining({
+                owner_id: 'user-123',
             })
         )
     })

@@ -180,6 +180,7 @@ export default function SurrogatesPage() {
     const urlQueue = searchParams.get("queue")
     const urlSearch = searchParams.get("q")
     const urlPage = searchParams.get("page")
+    const urlOwnerId = searchParams.get("owner_id")
     const urlRange = searchParams.get("range")
     const urlFrom = searchParams.get("from")
     const urlTo = searchParams.get("to")
@@ -437,6 +438,7 @@ export default function SurrogatesPage() {
         page,
         per_page: perPage,
         sort_order: sortOrder,
+        ...(urlOwnerId ? { owner_id: urlOwnerId } : {}),
         ...getDateRangeParams(),
         ...(stageFilter === "all" ? {} : { stage_id: stageFilter }),
         ...(sourceFilter === "all" ? {} : { source: sourceFilter }),
