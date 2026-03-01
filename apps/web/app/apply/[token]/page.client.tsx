@@ -31,8 +31,6 @@ import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { ApiError } from "@/lib/api"
 import {
     deletePublicFormDraft,
-    getPublicForm,
-    getPublicFormDraft,
     savePublicFormDraft,
     submitPublicForm,
     type FormPublicRead,
@@ -427,7 +425,6 @@ export default function PublicApplicationForm({ token, previewKey }: PublicAppli
     const [datePickerOpen, setDatePickerOpen] = React.useState<Record<string, boolean>>({})
     const [agreed, setAgreed] = React.useState(false)
     const [logoError, setLogoError] = React.useState(false)
-    const [draftRestored, setDraftRestored] = React.useState(false)
     const [draftSaveState, setDraftSaveState] = React.useState<"idle" | "saving" | "saved" | "error">("idle")
     const [draftUpdatedAt, setDraftUpdatedAt] = React.useState<string | null>(null)
     const autosaveTimerRef = React.useRef<number | null>(null)
@@ -461,47 +458,10 @@ export default function PublicApplicationForm({ token, previewKey }: PublicAppli
                 }
                 return
             }
-
-            try {
-                const form = await getPublicForm(token)
-                setFormConfig(form)
-                setLogoError(false)
-                try {
-                    const draft = await getPublicFormDraft(token)
-                    const draftAnswers =
-                        draft && typeof draft.answers === "object" && draft.answers && !Array.isArray(draft.answers)
-                            ? (draft.answers as Record<string, unknown>)
-                            : {}
-                    const allowedKeys = new Set(
-                        form.form_schema.pages.flatMap((page) =>
-                            page.fields.filter((field) => field.type !== "file").map((field) => field.key),
-                        ),
-                    )
-                    const restored: Answers = {}
-                    for (const [key, value] of Object.entries(draftAnswers)) {
-                        if (!allowedKeys.has(key)) continue
-                        restored[key] = value as AnswerValue
-                    }
-                    if (Object.keys(restored).length > 0) {
-                        skipNextAutosaveRef.current = true
-                        setAnswers(restored)
-                        setDraftRestored(true)
-                    }
-                    if (draft?.updated_at) {
-                        setDraftUpdatedAt(draft.updated_at)
-                        setDraftSaveState("saved")
-                    }
-                } catch (error) {
-                    if (!(error instanceof ApiError && error.status === 404)) {
-                        setDraftSaveState("error")
-                    }
-                } finally {
-                    setIsLoading(false)
-                }
-            } catch {
-                setFormError("This form link is invalid or has expired.")
-                setIsLoading(false)
-            }
+            setFormError(
+                "Dedicated application links have been retired. Please request a shared intake link from your coordinator.",
+            )
+            setIsLoading(false)
         }
         loadForm()
     }, [token, isPreview, previewKey])
@@ -1358,12 +1318,6 @@ export default function PublicApplicationForm({ token, previewKey }: PublicAppli
                                                 : draftUpdatedAt
                                                     ? `Saved ${formatSavedTime(draftUpdatedAt)}`
                                                     : "Autosave on"}
-                                    </div>
-                                )}
-                                {!isPreview && draftRestored && (
-                                    <div className="flex items-center justify-center gap-2 text-xs text-stone-500">
-                                        <PencilIcon className="size-3" />
-                                        Restored saved progress
                                     </div>
                                 )}
                             </div>

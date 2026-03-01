@@ -29,10 +29,13 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { ApiError } from "@/lib/api"
+import type { JsonObject } from "@/lib/types/json"
 import {
     deleteSharedPublicFormDraft,
     getSharedPublicForm,
     getSharedPublicFormDraft,
+    lookupSharedPublicFormDraft,
+    restoreSharedPublicFormDraft,
     saveSharedPublicFormDraft,
     submitSharedPublicForm,
     type FormIntakePublicRead,
@@ -87,6 +90,107 @@ function formatSavedTime(value: string | null): string {
     const date = new Date(value)
     if (Number.isNaN(date.getTime())) return ""
     return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+}
+
+function formatSavedDateTime(value: string | null): string {
+    if (!value) return ""
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return ""
+    return date.toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    })
+}
+
+function sanitizeIdentityValue(value: AnswerValue): string {
+    if (value === null || value === undefined) return ""
+    if (typeof value === "string") return value.trim()
+    if (typeof value === "number" || typeof value === "boolean") return String(value).trim()
+    return ""
+}
+
+function normalizeIdentityName(value: string): string {
+    return value.trim().toLowerCase().replace(/\s+/g, " ")
+}
+
+function normalizeIdentityPhone(value: string): string {
+    return value.replace(/\D/g, "")
+}
+
+function buildIdentityFingerprint(args: {
+    fullName: string
+    dateOfBirth: string
+    email?: string
+    phone?: string
+}): string {
+    return [
+        normalizeIdentityName(args.fullName),
+        args.dateOfBirth.trim(),
+        (args.email || "").trim().toLowerCase(),
+        normalizeIdentityPhone(args.phone || ""),
+    ].join("|")
+}
+
+function resolveIdentityFieldKeys(schema: FormSchema): {
+    fullNameKey: string | null
+    dateOfBirthKey: string | null
+    emailKey: string | null
+    phoneKey: string | null
+} {
+    const firstPage = schema.pages[0]
+    if (!firstPage) {
+        return {
+            fullNameKey: null,
+            dateOfBirthKey: null,
+            emailKey: null,
+            phoneKey: null,
+        }
+    }
+
+    let fullNameKey: string | null = null
+    let dateOfBirthKey: string | null = null
+    let emailKey: string | null = null
+    let phoneKey: string | null = null
+
+    for (const field of firstPage.fields) {
+        const key = field.key.toLowerCase()
+        const label = (field.label || "").toLowerCase()
+
+        if (!fullNameKey && (key === "full_name" || key.includes("full_name") || label.includes("full name"))) {
+            fullNameKey = field.key
+        }
+        if (!dateOfBirthKey && (key === "date_of_birth" || key.includes("dob") || label.includes("date of birth") || label === "dob")) {
+            dateOfBirthKey = field.key
+        }
+        if (!emailKey && (key === "email" || key.includes("email") || label.includes("email"))) {
+            emailKey = field.key
+        }
+        if (!phoneKey && (key === "phone" || key.includes("phone") || key.includes("mobile") || label.includes("phone") || label.includes("mobile"))) {
+            phoneKey = field.key
+        }
+    }
+
+    return { fullNameKey, dateOfBirthKey, emailKey, phoneKey }
+}
+
+function filterDraftAnswersForSchema(schema: FormSchema, rawAnswers: unknown): Answers {
+    if (!rawAnswers || typeof rawAnswers !== "object" || Array.isArray(rawAnswers)) {
+        return {}
+    }
+    const allowedKeys = new Set(
+        schema.pages.flatMap((page) =>
+            page.fields.filter((field) => field.type !== "file").map((field) => field.key),
+        ),
+    )
+    const restored: Answers = {}
+    for (const [key, value] of Object.entries(rawAnswers as Record<string, unknown>)) {
+        if (!allowedKeys.has(key)) continue
+        restored[key] = value as AnswerValue
+    }
+    return restored
 }
 
 function shortenStepLabel(label: string): string {
@@ -412,6 +516,12 @@ type PublicApplicationFormProps = {
     slug: string
 }
 
+type SharedResumePrompt = {
+    sourceDraftId: string
+    updatedAt: string | null
+    fingerprint: string
+}
+
 // Main Form Component
 export default function PublicApplicationForm({ slug }: PublicApplicationFormProps) {
     const token = slug
@@ -433,8 +543,14 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
     const [draftSaveState, setDraftSaveState] = React.useState<"idle" | "saving" | "saved" | "error">("idle")
     const [draftUpdatedAt, setDraftUpdatedAt] = React.useState<string | null>(null)
     const [draftSessionId, setDraftSessionId] = React.useState<string | null>(null)
+    const [resumePrompt, setResumePrompt] = React.useState<SharedResumePrompt | null>(null)
+    const [isRestoringResume, setIsRestoringResume] = React.useState(false)
     const autosaveTimerRef = React.useRef<number | null>(null)
+    const resumeLookupTimerRef = React.useRef<number | null>(null)
     const skipNextAutosaveRef = React.useRef(true)
+    const suppressedIdentityFingerprintsRef = React.useRef<Set<string>>(new Set())
+    const lookupCacheRef = React.useRef<Map<string, "no_match" | "match_found">>(new Map())
+    const lookupSeqRef = React.useRef(0)
 
     React.useEffect(() => {
         if (!slug) return
@@ -473,20 +589,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                 setLogoError(false)
                 try {
                     const draft = await getSharedPublicFormDraft(token, draftSessionId)
-                    const draftAnswers =
-                        draft && typeof draft.answers === "object" && draft.answers && !Array.isArray(draft.answers)
-                            ? (draft.answers as Record<string, unknown>)
-                            : {}
-                    const allowedKeys = new Set(
-                        form.form_schema.pages.flatMap((page) =>
-                            page.fields.filter((field) => field.type !== "file").map((field) => field.key),
-                        ),
-                    )
-                    const restored: Answers = {}
-                    for (const [key, value] of Object.entries(draftAnswers)) {
-                        if (!allowedKeys.has(key)) continue
-                        restored[key] = value as AnswerValue
-                    }
+                    const restored = filterDraftAnswersForSchema(form.form_schema, draft?.answers)
                     if (Object.keys(restored).length > 0) {
                         skipNextAutosaveRef.current = true
                         setAnswers(restored)
@@ -510,6 +613,110 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         }
         loadForm()
     }, [draftSessionId, token, isPreview])
+
+    React.useEffect(() => {
+        if (!token || !formConfig || !draftSessionId || isPreview || isSubmitted || isRestoringResume) return
+
+        const identityKeys = resolveIdentityFieldKeys(formConfig.form_schema)
+        if (!identityKeys.fullNameKey || !identityKeys.dateOfBirthKey) {
+            return
+        }
+
+        const fullName = sanitizeIdentityValue(answers[identityKeys.fullNameKey] ?? null)
+        const dateOfBirth = sanitizeIdentityValue(answers[identityKeys.dateOfBirthKey] ?? null)
+        const email = identityKeys.emailKey
+            ? sanitizeIdentityValue(answers[identityKeys.emailKey] ?? null)
+            : ""
+        const phone = identityKeys.phoneKey
+            ? sanitizeIdentityValue(answers[identityKeys.phoneKey] ?? null)
+            : ""
+        const hasEnoughIdentity = Boolean(fullName && dateOfBirth && (email || phone))
+
+        if (!hasEnoughIdentity) {
+            setResumePrompt(null)
+            return
+        }
+
+        const fingerprint = buildIdentityFingerprint({ fullName, dateOfBirth, email, phone })
+        if (suppressedIdentityFingerprintsRef.current.has(fingerprint)) {
+            return
+        }
+
+        const cached = lookupCacheRef.current.get(fingerprint)
+        if (cached === "no_match") {
+            setResumePrompt(null)
+            return
+        }
+        if (cached === "match_found" && resumePrompt?.fingerprint === fingerprint) {
+            return
+        }
+
+        if (resumeLookupTimerRef.current) {
+            window.clearTimeout(resumeLookupTimerRef.current)
+        }
+
+        const lookupAnswers: Record<string, AnswerValue> = {}
+        lookupAnswers[identityKeys.fullNameKey] = fullName
+        lookupAnswers[identityKeys.dateOfBirthKey] = dateOfBirth
+        if (identityKeys.emailKey && email) {
+            lookupAnswers[identityKeys.emailKey] = email
+        }
+        if (identityKeys.phoneKey && phone) {
+            lookupAnswers[identityKeys.phoneKey] = phone
+        }
+
+        resumeLookupTimerRef.current = window.setTimeout(() => {
+            const requestId = lookupSeqRef.current + 1
+            lookupSeqRef.current = requestId
+
+            void (async () => {
+                try {
+                    const result = await lookupSharedPublicFormDraft(
+                        token,
+                        lookupAnswers as JsonObject,
+                        draftSessionId,
+                    )
+                    if (lookupSeqRef.current !== requestId) return
+                    if (
+                        result.status === "match_found" &&
+                        result.source_draft_id &&
+                        !suppressedIdentityFingerprintsRef.current.has(fingerprint)
+                    ) {
+                        lookupCacheRef.current.set(fingerprint, "match_found")
+                        setResumePrompt({
+                            sourceDraftId: result.source_draft_id,
+                            updatedAt: result.updated_at ?? null,
+                            fingerprint,
+                        })
+                        return
+                    }
+
+                    lookupCacheRef.current.set(fingerprint, "no_match")
+                    setResumePrompt((current) =>
+                        current?.fingerprint === fingerprint ? null : current,
+                    )
+                } catch {
+                    // No-op: keep typing flow uninterrupted.
+                }
+            })()
+        }, 700)
+
+        return () => {
+            if (resumeLookupTimerRef.current) {
+                window.clearTimeout(resumeLookupTimerRef.current)
+                resumeLookupTimerRef.current = null
+            }
+        }
+    }, [
+        answers,
+        draftSessionId,
+        formConfig,
+        isPreview,
+        isRestoringResume,
+        isSubmitted,
+        resumePrompt?.fingerprint,
+        token,
+    ])
 
     const isDraftValueEmpty = (value: AnswerValue): boolean => {
         if (value === null || value === undefined) return true
@@ -542,6 +749,37 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
             setDraftSaveState("error")
         }
     }, [answers, draftSessionId, formConfig, hasAnyDraftAnswer, token])
+
+    const handleContinuePreviousApplication = React.useCallback(async () => {
+        if (!resumePrompt || !draftSessionId || !formConfig) return
+        setIsRestoringResume(true)
+        try {
+            const restored = await restoreSharedPublicFormDraft(
+                token,
+                draftSessionId,
+                resumePrompt.sourceDraftId,
+            )
+            const nextAnswers = filterDraftAnswersForSchema(formConfig.form_schema, restored.answers)
+            skipNextAutosaveRef.current = true
+            setAnswers(nextAnswers)
+            setDraftUpdatedAt(restored.updated_at)
+            setDraftSaveState("saved")
+            setDraftRestored(true)
+            suppressedIdentityFingerprintsRef.current.add(resumePrompt.fingerprint)
+            setResumePrompt(null)
+            toast.success("Restored your previous application")
+        } catch {
+            toast.error("Unable to restore previous application")
+        } finally {
+            setIsRestoringResume(false)
+        }
+    }, [draftSessionId, formConfig, resumePrompt, token])
+
+    const handleStartNewApplication = React.useCallback(() => {
+        if (!resumePrompt) return
+        suppressedIdentityFingerprintsRef.current.add(resumePrompt.fingerprint)
+        setResumePrompt(null)
+    }, [resumePrompt])
 
     // Autosave drafts (answers only, not file uploads)
     React.useEffect(() => {
@@ -1372,6 +1610,45 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                                     <div className="flex items-center justify-center gap-2 text-xs text-stone-500">
                                         <PencilIcon className="size-3" />
                                         Restored saved progress
+                                    </div>
+                                )}
+                                {!isPreview && resumePrompt && (
+                                    <div className="mx-auto mt-3 w-full max-w-2xl rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-900">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="space-y-1">
+                                                <div className="font-medium">Continue previous application?</div>
+                                                <div className="text-xs text-amber-900/80">
+                                                    We found saved progress from{" "}
+                                                    {formatSavedDateTime(resumePrompt.updatedAt) || "a recent session"}.
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={handleStartNewApplication}
+                                                    disabled={isRestoringResume}
+                                                >
+                                                    Start new
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    onClick={() => void handleContinuePreviousApplication()}
+                                                    disabled={isRestoringResume}
+                                                >
+                                                    {isRestoringResume ? (
+                                                        <>
+                                                            <Loader2Icon className="mr-2 size-3.5 animate-spin" />
+                                                            Restoring...
+                                                        </>
+                                                    ) : (
+                                                        "Continue previous application"
+                                                    )}
+                                                </Button>
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
                             </div>
