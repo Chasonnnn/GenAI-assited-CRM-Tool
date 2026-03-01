@@ -556,27 +556,27 @@ export default function FormBuilderPage() {
         allowedMimeTypesText,
         defaultTemplateId,
     ])
-    const draftFingerprint = useMemo(() => JSON.stringify(draftPayload), [draftPayload])
     const debouncedPayload = useDebouncedValue(draftPayload, 1200)
     const debouncedFingerprint = useMemo(
         () => JSON.stringify(debouncedPayload),
         [debouncedPayload],
     )
-    const isDirty = draftFingerprint !== lastSavedFingerprintRef.current
+    const draftIsDebounced = draftPayload === debouncedPayload
+    const isDirty = !draftIsDebounced || debouncedFingerprint !== lastSavedFingerprintRef.current
 
     useEffect(() => {
         if (!hasHydrated) return
         const identity = isNewForm ? "new" : formId || "unknown"
         if (hydratedFormRef.current === identity) return
         hydratedFormRef.current = identity
-        lastSavedFingerprintRef.current = draftFingerprint
+        lastSavedFingerprintRef.current = debouncedFingerprint
         if (!isNewForm && formData?.updated_at) {
             setAutoSaveStatus("saved")
             setLastSavedAt(new Date(formData.updated_at))
         } else {
             setAutoSaveStatus("idle")
         }
-    }, [hasHydrated, isNewForm, formId, draftFingerprint, formData?.updated_at])
+    }, [hasHydrated, isNewForm, formId, debouncedFingerprint, formData?.updated_at])
 
     // Drag and drop handlers
     const handleDragStart = (type: FieldType, label: string) => {
@@ -1009,7 +1009,7 @@ export default function FormBuilderPage() {
         setIsSaving(true)
         try {
             const savedForm = await persistForm(draftPayload)
-            markSaved(draftFingerprint, savedForm)
+            markSaved(JSON.stringify(draftPayload), savedForm)
             toast.success("Form saved")
         } catch {
             setAutoSaveStatus("error")
@@ -1047,7 +1047,7 @@ export default function FormBuilderPage() {
     useEffect(() => {
         if (!hasHydrated) return
         if (!formName.trim()) return
-        if (debouncedFingerprint !== draftFingerprint) return
+        if (draftPayload !== debouncedPayload) return
         if (debouncedFingerprint === lastSavedFingerprintRef.current) return
         if (isSaving || isPublishing) return
         if (
@@ -1077,7 +1077,7 @@ export default function FormBuilderPage() {
     }, [
         hasHydrated,
         formName,
-        draftFingerprint,
+        draftPayload,
         debouncedFingerprint,
         debouncedPayload,
         isSaving,
@@ -1220,7 +1220,7 @@ export default function FormBuilderPage() {
         setIsPublishing(true)
         try {
             const savedForm = await persistForm(draftPayload)
-            markSaved(draftFingerprint, savedForm)
+            markSaved(JSON.stringify(draftPayload), savedForm)
             await publishFormMutation.mutateAsync(savedForm.id)
             setIsPublished(true)
             setPendingSharePrompt(true)
