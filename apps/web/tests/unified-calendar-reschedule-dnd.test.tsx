@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, screen, fireEvent } from "@testing-library/react"
 import "@testing-library/jest-dom"
 import { UnifiedCalendar } from "@/components/appointments/UnifiedCalendar"
@@ -50,6 +50,8 @@ vi.mock("@/lib/hooks/use-appointments", () => ({
 describe("UnifiedCalendar drag-to-reschedule", () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(new Date("2026-02-24T12:00:00Z"))
 
         mockUseUnifiedCalendarData.mockReturnValue({
             appointments: [
@@ -122,6 +124,10 @@ describe("UnifiedCalendar drag-to-reschedule", () => {
             isLoading: false,
             isError: false,
         })
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
     })
 
     it("opens reschedule selection flow on drop instead of rescheduling immediately", () => {
