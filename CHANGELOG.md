@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.18](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.17...surrogacy-crm-platform-v0.90.18) (2026-03-02)
+
+
+### Bug Fixes
+
+* **web:** associate labels with controls across task and public form UIs ([54d2ba4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/54d2ba45611cef6bf61ba843bae8ee28a3fb2d58))
+* **web:** reduce react-doctor warning hotspots ([0816699](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/081669989487935dde5edf681ed5d4f45a61193c))
+
 ## [0.90.17](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.16...surrogacy-crm-platform-v0.90.17) (2026-03-02)
 
 
