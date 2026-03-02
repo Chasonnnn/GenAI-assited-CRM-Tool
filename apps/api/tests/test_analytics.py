@@ -10,7 +10,7 @@ Tests the analytics router endpoints including:
 """
 
 import uuid
-from datetime import datetime, timedelta, timezone, date
+from datetime import datetime, timedelta, timezone, date, time
 from decimal import Decimal
 
 import pytest
@@ -323,6 +323,52 @@ class TestCasesTrend:
 
         data = response.json()
         assert isinstance(data, list)
+
+    @pytest.mark.asyncio
+    async def test_trend_date_only_range_includes_to_date(
+        self,
+        authed_client,
+        db,
+        test_org,
+        test_user,
+        analytics_pipeline_stages,
+    ):
+        """Date-only to_date should include the entire day."""
+        stage = analytics_pipeline_stages["new_unread"]
+        target_day = (datetime.now(timezone.utc) - timedelta(days=1)).date()
+        start_of_day = datetime.combine(target_day, time(0, 0), tzinfo=timezone.utc)
+
+        for idx, hour in enumerate((3, 22), start=1):
+            email = f"trend-date-only-{idx}@example.com"
+            normalized_email = normalize_email(email)
+            phone = f"555-110{idx}"
+            db.add(
+                Surrogate(
+                    id=uuid.uuid4(),
+                    organization_id=test_org.id,
+                    stage_id=stage.id,
+                    full_name=f"Trend DateOnly {idx}",
+                    status_label=stage.label,
+                    email=normalized_email,
+                    email_hash=hash_email(normalized_email),
+                    phone=phone,
+                    phone_hash=hash_phone(phone),
+                    source="website",
+                    surrogate_number=f"S{12000 + idx:05d}",
+                    created_by_user_id=test_user.id,
+                    owner_type="user",
+                    owner_id=test_user.id,
+                    created_at=start_of_day + timedelta(hours=hour),
+                )
+            )
+        db.flush()
+
+        day = target_day.isoformat()
+        response = await authed_client.get(
+            f"/analytics/surrogates/trend?from_date={day}&to_date={day}&period=day"
+        )
+        assert response.status_code == 200
+        assert response.json() == [{"date": day, "count": 2}]
 
 
 class TestMetaPerformance:

@@ -207,7 +207,11 @@ def get_surrogates_trend(
     ):
         raise HTTPException(status_code=403, detail="Not authorized to view other users' analytics")
 
-    start, end = analytics_service.parse_date_range(from_date, to_date)
+    start, end = analytics_service.parse_date_range(
+        from_date,
+        to_date,
+        inclusive_date_end=True,
+    )
     data = analytics_service.get_cached_surrogates_trend(
         db,
         session.org_id,
