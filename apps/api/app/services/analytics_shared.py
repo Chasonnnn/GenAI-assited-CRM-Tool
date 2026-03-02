@@ -161,15 +161,36 @@ def parse_date_range(
     from_date: str | None,
     to_date: str | None,
     default_days: int = 30,
+    inclusive_date_end: bool = False,
 ) -> tuple[datetime, datetime]:
     """Parse ISO date strings to a datetime range with defaults."""
+    def _parse_bound(value: str, *, is_end: bool) -> datetime:
+        raw = value.strip().replace("Z", "+00:00")
+        is_date_only = "T" not in raw and " " not in raw
+
+        if is_date_only:
+            parsed = datetime.combine(
+                date.fromisoformat(raw),
+                datetime.min.time(),
+                tzinfo=timezone.utc,
+            )
+            if is_end and inclusive_date_end:
+                parsed += timedelta(days=1)
+            return parsed
+
+        parsed = datetime.fromisoformat(raw)
+
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+
     if to_date:
-        end = datetime.fromisoformat(to_date.replace("Z", "+00:00"))
+        end = _parse_bound(to_date, is_end=True)
     else:
         end = datetime.now(timezone.utc)
 
     if from_date:
-        start = datetime.fromisoformat(from_date.replace("Z", "+00:00"))
+        start = _parse_bound(from_date, is_end=False)
     else:
         start = end - timedelta(days=default_days)
 
