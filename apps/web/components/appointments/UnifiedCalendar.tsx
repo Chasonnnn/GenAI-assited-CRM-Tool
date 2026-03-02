@@ -469,6 +469,7 @@ function AppointmentDetailDialog({
                                             size="sm"
                                             onClick={handleUnlinkSurrogate}
                                             disabled={updateLinkMutation.isPending}
+                                            aria-label="Unlink surrogate"
                                         >
                                             <XIcon className="size-4" />
                                         </Button>
@@ -485,6 +486,7 @@ function AppointmentDetailDialog({
                                             size="sm"
                                             onClick={handleUnlinkIp}
                                             disabled={updateLinkMutation.isPending}
+                                            aria-label="Unlink intended parent"
                                         >
                                             <XIcon className="size-4" />
                                         </Button>

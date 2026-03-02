@@ -799,6 +799,7 @@ function AppointmentTypesCard() {
                                             size="sm"
                                             className="text-destructive"
                                             onClick={() => handleDelete(type.id)}
+                                            aria-label="Delete appointment type"
                                         >
                                             <TrashIcon className="size-4" />
                                         </Button>

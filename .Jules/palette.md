@@ -9,3 +9,7 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+
+## 2025-05-20 - Missing ARIA Labels on Icon-Only Buttons
+**Learning:** Certain standard icon-only buttons across the app (like `<XIcon />` or `<TrashIcon />`) are commonly missing `aria-label`s, which leaves screen reader users completely blind to the action they will perform (e.g., "Remove file", "Delete note", "Unlink surrogate").
+**Action:** Always add an `aria-label` attribute to icon-only action buttons to guarantee accessibility for users relying on screen readers.
