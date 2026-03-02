@@ -1,17 +1,51 @@
 import { recordWorkflowMetricEvent, type WorkflowMetricEventPayload } from "@/lib/api/workflow-metrics"
+import { ApiError } from "@/lib/api"
 
 const DASHBOARD_VIEWED_AT_KEY = "workflow_metrics_dashboard_viewed_at_ms"
 const UNASSIGNED_VIEWED_AT_KEY = "workflow_metrics_unassigned_viewed_at_ms"
 const SURROGATE_VIEWED_AT_KEY = "workflow_metrics_surrogate_viewed_at_ms"
 const SURROGATE_VIEWED_ID_KEY = "workflow_metrics_surrogate_viewed_id"
+const METRICS_DISABLED_UNTIL_KEY = "workflow_metrics_disabled_until_ms"
+const METRICS_DISABLE_WINDOW_MS = 60 * 60 * 1000
 
 function isBrowserRuntime(): boolean {
     return typeof window !== "undefined" && typeof window.sessionStorage !== "undefined"
 }
 
+function isMetricsTemporarilyDisabled(): boolean {
+    if (!isBrowserRuntime()) return false
+    const raw = window.sessionStorage.getItem(METRICS_DISABLED_UNTIL_KEY)
+    if (!raw) return false
+
+    const disabledUntil = Number(raw)
+    if (!Number.isFinite(disabledUntil)) {
+        window.sessionStorage.removeItem(METRICS_DISABLED_UNTIL_KEY)
+        return false
+    }
+    if (Date.now() >= disabledUntil) {
+        window.sessionStorage.removeItem(METRICS_DISABLED_UNTIL_KEY)
+        return false
+    }
+    return true
+}
+
+function disableMetricsTemporarily(): void {
+    if (!isBrowserRuntime()) return
+    window.sessionStorage.setItem(
+        METRICS_DISABLED_UNTIL_KEY,
+        String(Date.now() + METRICS_DISABLE_WINDOW_MS),
+    )
+}
+
 function sendMetricEvent(payload: WorkflowMetricEventPayload): void {
     if (process.env.NODE_ENV === "test") return
-    void recordWorkflowMetricEvent(payload).catch(() => {
+    if (isMetricsTemporarilyDisabled()) return
+
+    void recordWorkflowMetricEvent(payload).catch((error: unknown) => {
+        if (error instanceof ApiError && error.status === 404) {
+            // Endpoint unavailable on this deployment revision: stop retrying in this tab.
+            disableMetricsTemporarily()
+        }
         // Best effort only - never block user flows on telemetry.
     })
 }
