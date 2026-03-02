@@ -1,0 +1,3493 @@
+{
+  "/": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/.well-known/jwks.json": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/.well-known/openid-configuration": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/admin/exports/analytics": {
+    "POST": [
+      "202",
+      "422"
+    ]
+  },
+  "/admin/exports/config": {
+    "POST": [
+      "202"
+    ]
+  },
+  "/admin/exports/jobs/{job_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/admin/exports/jobs/{job_id}/download": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/admin/exports/jobs/{job_id}/file": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/admin/exports/surrogates": {
+    "POST": [
+      "202"
+    ]
+  },
+  "/admin/imports/all": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/admin/imports/config": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/admin/imports/surrogates": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/admin/meta-ad-accounts": {
+    "GET": [
+      "200"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/admin/meta-ad-accounts/{account_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/admin/meta-pages": {
+    "GET": [
+      "200"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/admin/meta-pages/{page_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/admin/meta/sync/forms": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/admin/meta/sync/hierarchy": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/admin/meta/sync/spend": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/admin/meta/sync/status": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/admin/versions/{entity_type}/{entity_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/admin/versions/{entity_type}/{entity_id}/{version}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/actions/pending": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/actions/{approval_id}/approve": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/actions/{approval_id}/reject": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/analyze-dashboard": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/ai/analyze-dashboard/stream": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/ai/chat": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/chat/stream": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/consent": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/ai/consent/accept": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/ai/conversations/global": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/ai/conversations/{entity_type}/{entity_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/conversations/{entity_type}/{entity_id}/all": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/create-bulk-tasks": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/draft-email": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/draft-email/stream": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/email-templates/generate": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/email-templates/generate/stream": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/parse-schedule": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/parse-schedule/stream": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/settings": {
+    "GET": [
+      "200"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/settings/test": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/summarize-surrogate": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/summarize-surrogate/stream": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/usage/by-model": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/usage/daily": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/usage/me": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/usage/summary": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/usage/top-users": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/workflows/generate": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/workflows/generate/stream": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/workflows/save": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/workflows/validate": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/activity-feed": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/campaigns": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/analytics/export/pdf": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/funnel": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/funnel/compare": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/kpis": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/meta/ad-accounts": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/analytics/meta/ads": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/meta/campaigns": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/meta/forms": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/meta/performance": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/meta/platforms": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/meta/spend/by-breakdown": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/meta/spend/by-campaign": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/meta/spend/totals": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/meta/spend/trend": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/performance/by-user": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/summary": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/surrogates/by-assignee": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/analytics/surrogates/by-source": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/surrogates/by-state": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/surrogates/by-state/compare": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/surrogates/by-status": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/analytics/surrogates/trend": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/appointments": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/appointments/availability": {
+    "GET": [
+      "200"
+    ],
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/appointments/booking-link": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/appointments/booking-link/regenerate": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/appointments/booking-preview": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/appointments/booking-preview/slots": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/appointments/overrides": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/appointments/overrides/{override_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ]
+  },
+  "/appointments/types": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/appointments/types/{type_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/appointments/{appointment_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/appointments/{appointment_id}/approve": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/appointments/{appointment_id}/cancel": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/appointments/{appointment_id}/link": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/appointments/{appointment_id}/reschedule": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/appointments/{appointment_id}/reschedule/slots": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/attachments/intended-parents/{ip_id}/attachments": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/attachments/local/{storage_key}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/attachments/surrogates/{surrogate_id}/attachments": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/attachments/{attachment_id}": {
+    "DELETE": [
+      "200",
+      "422"
+    ]
+  },
+  "/attachments/{attachment_id}/download": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/audit/": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/audit/ai-activity": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/audit/event-types": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/audit/exports": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/audit/exports/{export_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/audit/exports/{export_id}/download": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/auth/google/callback": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/auth/google/login": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/auth/logout": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/auth/me": {
+    "GET": [
+      "200"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/auth/me/avatar": {
+    "DELETE": [
+      "200"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/auth/me/sessions": {
+    "DELETE": [
+      "200"
+    ],
+    "GET": [
+      "200"
+    ]
+  },
+  "/auth/me/sessions/{session_id}": {
+    "DELETE": [
+      "200",
+      "422"
+    ]
+  },
+  "/auth/me/signature": {
+    "GET": [
+      "200"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/auth/me/signature/photo": {
+    "DELETE": [
+      "200"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/auth/me/signature/preview": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/book/self-service/{org_id}/cancel/{token}": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/book/self-service/{org_id}/manage/{token}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/book/self-service/{org_id}/manage/{token}/cancel": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/book/self-service/{org_id}/manage/{token}/reschedule": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/book/self-service/{org_id}/reschedule/{token}": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/book/self-service/{org_id}/reschedule/{token}/slots": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/book/{public_slug}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/book/{public_slug}/book": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/book/{public_slug}/slots": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/campaigns": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/campaigns/preview-filters": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/campaigns/suppressions": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/campaigns/suppressions/{email}": {
+    "DELETE": [
+      "204",
+      "422"
+    ]
+  },
+  "/campaigns/{campaign_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/campaigns/{campaign_id}/cancel": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/campaigns/{campaign_id}/preview": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/campaigns/{campaign_id}/runs": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/campaigns/{campaign_id}/runs/{run_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/campaigns/{campaign_id}/runs/{run_id}/recipients": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/campaigns/{campaign_id}/runs/{run_id}/retry-failed": {
+    "POST": [
+      "202",
+      "422"
+    ]
+  },
+  "/campaigns/{campaign_id}/send": {
+    "POST": [
+      "202",
+      "422"
+    ]
+  },
+  "/compliance/legal-holds": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/compliance/legal-holds/{hold_id}/release": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/compliance/policies": {
+    "GET": [
+      "200"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/compliance/purge-execute": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/compliance/purge-preview": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/custom-fields": {
+    "GET": [
+      "200"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/custom-fields/{field_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/dashboard/attention": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/dashboard/upcoming": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/dev/cors": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/dev/login-as/{user_id}": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/dev/meta-leads/alerts": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/dev/meta-leads/all": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/dev/seed": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/dev/seed-templates": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/dev/seed-templates/{org_id}": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-templates": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/email-templates/library": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/email-templates/library/{template_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-templates/library/{template_id}/copy": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-templates/send": {
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/email-templates/variables": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/email-templates/{template_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-templates/{template_id}/copy": {
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/email-templates/{template_id}/rollback": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-templates/{template_id}/share": {
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/email-templates/{template_id}/test": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/email-templates/{template_id}/versions": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/email/unsubscribe/{token}": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms": {
+    "GET": [
+      "200"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/intake-leads/{lead_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/intake-leads/{lead_id}/promote": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/intake-links/{link_id}": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/intake-links/{link_id}/rotate": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/logos": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/mapping-options": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/forms/public/intake/{slug}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/public/intake/{slug}/draft/lookup": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/public/intake/{slug}/draft/{draft_session_id}": {
+    "DELETE": [
+      "200",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/public/intake/{slug}/draft/{draft_session_id}/restore": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/public/intake/{slug}/submit": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/public/{org_id}/logos/{logo_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/public/{org_id}/signature-logo": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/public/{token}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/public/{token}/draft": {
+    "DELETE": [
+      "200",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/public/{token}/submit": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/submissions/{submission_id}/answers": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/submissions/{submission_id}/approve": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/submissions/{submission_id}/export": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/submissions/{submission_id}/files": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/submissions/{submission_id}/files/{file_id}": {
+    "DELETE": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/submissions/{submission_id}/files/{file_id}/download": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/submissions/{submission_id}/match-candidates": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/submissions/{submission_id}/match/resolve": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/submissions/{submission_id}/match/retry": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/submissions/{submission_id}/reject": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/templates": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/forms/templates/{template_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/templates/{template_id}/use": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/{form_id}": {
+    "DELETE": [
+      "200",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/{form_id}/delivery-settings": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/{form_id}/intake-links": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/{form_id}/intake-links/{link_id}/send": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/{form_id}/mappings": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/{form_id}/publish": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/{form_id}/set-default-surrogate-application": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/{form_id}/submissions": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/{form_id}/surrogates/{surrogate_id}/draft": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/{form_id}/surrogates/{surrogate_id}/submission": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/{form_id}/tokens": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/{form_id}/tokens/{token_id}/send": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/health": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/health/live": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/health/ready": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/healthz": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/import-templates": {
+    "GET": [
+      "200"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/import-templates/{template_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/import-templates/{template_id}/clone": {
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/integrations/": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/integrations/gcp/callback": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/gcp/connect": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/integrations/gmail/callback": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/gmail/connect": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/integrations/gmail/status": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/integrations/google-calendar/callback": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/google-calendar/connect": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/integrations/google-calendar/status": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/integrations/google-calendar/sync": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/integrations/google/calendar/events": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/meta/callback": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/meta/connect": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/integrations/meta/connections": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/integrations/meta/connections/{connection_id}": {
+    "DELETE": [
+      "200",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/meta/connections/{connection_id}/available-assets": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/meta/connections/{connection_id}/connect-assets": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/meta/forms": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/integrations/meta/forms/sync": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/meta/forms/{form_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ]
+  },
+  "/integrations/meta/forms/{form_id}/mapping": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/zapier/field-paste": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/zapier/settings": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/integrations/zapier/settings/outbound": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/zapier/settings/rotate-secret": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/integrations/zapier/test-lead": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/zapier/test-outbound": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/zapier/webhooks": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/zapier/webhooks/{webhook_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/zapier/webhooks/{webhook_id}/rotate-secret": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/zoom/callback": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/zoom/connect": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/integrations/zoom/meetings": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/zoom/send-invite": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/zoom/status": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/integrations/{integration_type}": {
+    "DELETE": [
+      "200",
+      "422"
+    ]
+  },
+  "/intended-parents": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/intended-parents/stats": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/intended-parents/{ip_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/intended-parents/{ip_id}/archive": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/intended-parents/{ip_id}/history": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/intended-parents/{ip_id}/notes": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/intended-parents/{ip_id}/notes/{note_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ]
+  },
+  "/intended-parents/{ip_id}/restore": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/intended-parents/{ip_id}/status": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/internal/alerts/gcp": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/internal/scheduled/contact-reminders": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/internal/scheduled/data-purge": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/internal/scheduled/gmail-sync": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/internal/scheduled/google-calendar-sync": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/internal/scheduled/meta-forms-sync": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/internal/scheduled/meta-hierarchy-sync": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/internal/scheduled/meta-spend-sync": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/internal/scheduled/subscription-sweep": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/internal/scheduled/task-notifications": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/internal/scheduled/token-check": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/internal/scheduled/workflow-approval-expiry": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/internal/scheduled/workflow-sweep": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/interviews/{interview_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/interviews/{interview_id}/ai/summarize": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/interviews/{interview_id}/ai/summarize/stream": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/interviews/{interview_id}/attachments": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/interviews/{interview_id}/attachments/{attachment_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ]
+  },
+  "/interviews/{interview_id}/attachments/{attachment_id}/link": {
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/interviews/{interview_id}/attachments/{attachment_id}/transcribe": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/interviews/{interview_id}/attachments/{attachment_id}/transcription": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/interviews/{interview_id}/export": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/interviews/{interview_id}/notes": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/interviews/{interview_id}/notes/{note_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/interviews/{interview_id}/notes/{note_id}/resolve": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/interviews/{interview_id}/notes/{note_id}/unresolve": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/interviews/{interview_id}/versions": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/interviews/{interview_id}/versions/diff": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/interviews/{interview_id}/versions/{version}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/interviews/{interview_id}/versions/{version}/restore": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/jobs": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/jobs/dlq": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/jobs/dlq/replay": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/jobs/{job_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/jobs/{job_id}/replay": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/journey/surrogates/{surrogate_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/journey/surrogates/{surrogate_id}/export": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/journey/surrogates/{surrogate_id}/export-view": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/journey/surrogates/{surrogate_id}/milestones/{milestone_slug}/featured-image": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/mailboxes": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/mailboxes/journal/gmail/oauth/callback": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/mailboxes/journal/gmail/oauth/start": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/mailboxes/{mailbox_id}/sync/backfill": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/mailboxes/{mailbox_id}/sync/history": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/mailboxes/{mailbox_id}/sync/pause": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/mailboxes/{mailbox_id}/sync/resume": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/mailboxes/{mailbox_id}/sync/status": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/matches/": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/matches/stats": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/matches/{match_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/accept": {
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/cancel-request": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/events": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/events/{event_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/notes": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/matches/{match_id}/reject": {
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/me/notifications": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/me/notifications/count": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/me/notifications/read-all": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/me/notifications/{notification_id}/read": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/me/settings/notifications": {
+    "GET": [
+      "200"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/metadata/intended-parent-statuses": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/metadata/roles": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/metadata/sources": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/metadata/statuses": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/metadata/task-types": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/mfa/complete": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/mfa/disable": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/mfa/duo/callback": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/mfa/duo/health": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/mfa/duo/initiate": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/mfa/duo/status": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/mfa/recovery/regenerate": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/mfa/status": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/mfa/totp/setup": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/mfa/totp/verify": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/mfa/verify": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/notes/{note_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ]
+  },
+  "/ops/alerts": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/ops/alerts/summary": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/ops/alerts/{alert_id}/acknowledge": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ops/alerts/{alert_id}/resolve": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ops/alerts/{alert_id}/snooze": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ops/health": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/ops/sli": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/alerts": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/alerts/{alert_id}/acknowledge": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/alerts/{alert_id}/resolve": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/email/branding": {
+    "GET": [
+      "200"
+    ],
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/email/branding/logo": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/email/branding/logo/local/{storage_key}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/email/status": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/platform/email/system-templates": {
+    "GET": [
+      "200"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/platform/email/system-templates/{system_key}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/email/system-templates/{system_key}/campaign": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/email/system-templates/{system_key}/test": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/email/system-templates/{system_key}/variables": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/me": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/platform/orgs": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/orgs/{org_id}": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/orgs/{org_id}/admin-actions": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/orgs/{org_id}/delete": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/orgs/{org_id}/email/system-templates/{system_key}": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/orgs/{org_id}/email/system-templates/{system_key}/test": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/orgs/{org_id}/invites": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/orgs/{org_id}/invites/{invite_id}/resend": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/orgs/{org_id}/invites/{invite_id}/revoke": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/orgs/{org_id}/members": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/orgs/{org_id}/members/{member_id}": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/orgs/{org_id}/members/{member_id}/mfa/reset": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/orgs/{org_id}/purge": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/orgs/{org_id}/restore": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/orgs/{org_id}/subscription": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/orgs/{org_id}/subscription/extend": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/stats": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/platform/support-sessions": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/support-sessions/{session_id}/revoke": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/templates/email": {
+    "GET": [
+      "200"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/platform/templates/email/variables": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/platform/templates/email/{template_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/templates/email/{template_id}/publish": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/templates/email/{template_id}/test": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/templates/forms": {
+    "GET": [
+      "200"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/platform/templates/forms/{template_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/templates/forms/{template_id}/publish": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/templates/workflows": {
+    "GET": [
+      "200"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/platform/templates/workflows/{template_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/platform/templates/workflows/{template_id}/publish": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/public/org-by-domain": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/queues": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/queues/surrogates/{surrogate_id}/assign": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/queues/surrogates/{surrogate_id}/claim": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/queues/surrogates/{surrogate_id}/release": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/queues/{queue_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/queues/{queue_id}/members": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/queues/{queue_id}/members/{user_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ]
+  },
+  "/readyz": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/resend/eligible-senders": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/resend/settings": {
+    "GET": [
+      "200"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/resend/settings/rotate-webhook": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/resend/settings/test": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/search": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/invites": {
+    "GET": [
+      "200"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/invites/accept/{invite_id}": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/invites/{invite_id}": {
+    "DELETE": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/invites/{invite_id}/resend": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/organization": {
+    "GET": [
+      "200"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/organization/signature": {
+    "GET": [
+      "200"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/organization/signature/logo": {
+    "DELETE": [
+      "200"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/organization/signature/logo/local/{storage_key}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/organization/signature/preview": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/permissions/available": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/settings/permissions/effective/me": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/settings/permissions/effective/{user_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/permissions/members": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/settings/permissions/members/{member_id}": {
+    "DELETE": [
+      "200",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/permissions/roles": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/settings/permissions/roles/{role}": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/pipelines": {
+    "GET": [
+      "200"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/settings/pipelines/default": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/settings/pipelines/default/sync-stages": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/settings/pipelines/{pipeline_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/pipelines/{pipeline_id}/rollback": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/pipelines/{pipeline_id}/stages": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/settings/pipelines/{pipeline_id}/stages/reorder": {
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/pipelines/{pipeline_id}/stages/{stage_id}": {
+    "DELETE": [
+      "200",
+      "422"
+    ],
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/pipelines/{pipeline_id}/versions": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/sitemap.xml": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/status-change-requests": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/status-change-requests/{request_id}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/status-change-requests/{request_id}/approve": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/status-change-requests/{request_id}/cancel": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/status-change-requests/{request_id}/reject": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/surrogates/assignees": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/surrogates/bulk-assign": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/claim-queue": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/import": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/surrogates/import/ai-map": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/import/ai-map/stream": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/import/pending": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/surrogates/import/preview/enhanced": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/import/{import_id}": {
+    "DELETE": [
+      "200",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/import/{import_id}/approve": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/import/{import_id}/reject": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/import/{import_id}/retry": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/import/{import_id}/run-inline": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/import/{import_id}/submit": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/mass-edit/archive": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/mass-edit/options": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/surrogates/mass-edit/stage": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/mass-edit/stage/preview": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/stats": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/unassigned-queue": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/activity": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/archive": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/assign": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/claim": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/contact-attempts": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/email-contacts": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/email-contacts/{contact_id}": {
+    "DELETE": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/emails": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/export": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/export-view": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/history": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/interview-outcomes": {
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/interviews": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/interviews/ai/summarize-all": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/interviews/ai/summarize-all/stream": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/interviews/export": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/notes": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/profile": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/profile/export": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/profile/hidden": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/profile/overrides": {
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/profile/sync": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/restore": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/send-email": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/status": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/template-variables": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/tasks": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/tasks/bulk-complete": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/tasks/{task_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/tasks/{task_id}/complete": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/tasks/{task_id}/resolve": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/tasks/{task_id}/uncomplete": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/templates": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/templates/categories": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/templates/from-workflow": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/templates/{template_id}": {
+    "DELETE": [
+      "200",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/templates/{template_id}/use": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/tickets": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/tickets/compose": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/tickets/send-identities": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/tickets/{ticket_id}": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/tickets/{ticket_id}/attachments/{attachment_id}/download": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/tickets/{ticket_id}/link-surrogate": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/tickets/{ticket_id}/notes": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/tickets/{ticket_id}/reply": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/tracking/click/{token}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/tracking/open/{token}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/webhooks/google-calendar": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/webhooks/google-gmail": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/webhooks/meta": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200"
+    ]
+  },
+  "/webhooks/resend/platform": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/webhooks/resend/{webhook_id}": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/webhooks/zapier/{webhook_id}": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/webhooks/zoom": {
+    "POST": [
+      "200"
+    ]
+  },
+  "/workflow-metrics/events": {
+    "POST": [
+      "202",
+      "422"
+    ]
+  },
+  "/workflows": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/workflows/executions": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/workflows/executions/stats": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/workflows/executions/{execution_id}/retry": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/workflows/me/preferences": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/workflows/me/preferences/{workflow_id}": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/workflows/options": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/workflows/stats": {
+    "GET": [
+      "200"
+    ]
+  },
+  "/workflows/{workflow_id}": {
+    "DELETE": [
+      "200",
+      "422"
+    ],
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/workflows/{workflow_id}/duplicate": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/workflows/{workflow_id}/executions": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/workflows/{workflow_id}/test": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/workflows/{workflow_id}/toggle": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  }
+}
