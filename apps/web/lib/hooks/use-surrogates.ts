@@ -12,6 +12,7 @@ export const surrogateKeys = {
     lists: () => [...surrogateKeys.all, 'list'] as const,
     list: (params: SurrogateListParams) => [...surrogateKeys.lists(), params] as const,
     stats: () => [...surrogateKeys.all, 'stats'] as const,
+    intelligentSummary: () => [...surrogateKeys.all, 'intelligent-summary'] as const,
     unassignedQueue: () => [...surrogateKeys.all, 'unassigned-queue'] as const,
     unassignedQueueList: (params: surrogatesApi.UnassignedQueueParams) =>
         [...surrogateKeys.unassignedQueue(), params] as const,
@@ -33,6 +34,15 @@ export function useSurrogateStats(params: surrogatesApi.SurrogateStatsParams = {
         queryFn: () => surrogatesApi.getSurrogateStats(params),
         staleTime: 30 * 1000, // 30 seconds
         refetchInterval: (query) => (query.state.status === 'error' ? false : 60 * 1000),
+    });
+}
+
+export function useIntelligentSuggestionSummary(options: { enabled?: boolean } = {}) {
+    return useQuery({
+        queryKey: surrogateKeys.intelligentSummary(),
+        queryFn: surrogatesApi.getIntelligentSuggestionSummary,
+        staleTime: 30 * 1000,
+        enabled: options.enabled ?? true,
     });
 }
 

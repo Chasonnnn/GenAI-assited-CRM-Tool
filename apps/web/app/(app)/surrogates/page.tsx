@@ -18,12 +18,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { PaginationJump } from "@/components/ui/pagination-jump"
 import { MoreVerticalIcon, SearchIcon, XIcon, Loader2Icon, ArchiveIcon, UserPlusIcon, UsersIcon, UploadIcon, PlusIcon } from "lucide-react"
 import { SortableTableHead } from "@/components/ui/sortable-table-head"
-import { useSurrogates, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurrogate, useAssignees, useBulkAssign, useBulkArchive, useCreateSurrogate } from "@/lib/hooks/use-surrogates"
+import { useSurrogates, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurrogate, useAssignees, useBulkAssign, useBulkArchive, useCreateSurrogate, useIntelligentSuggestionSummary } from "@/lib/hooks/use-surrogates"
 import { useQueues } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
 import type { SurrogateSource } from "@/lib/types/surrogate"
-import type { SurrogateMassEditStageFilters } from "@/lib/api/surrogates"
+import { isDynamicSurrogateFilter, type DynamicSurrogateFilter, type SurrogateMassEditStageFilters } from "@/lib/api/surrogates"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { cn } from "@/lib/utils"
 import { formatRace } from "@/lib/formatters"
@@ -155,6 +155,15 @@ const VALID_DATE_RANGES: DateRangePreset[] = ["all", "today", "week", "month", "
 const isDateRangePreset = (value: string | null): value is DateRangePreset =>
     value !== null && VALID_DATE_RANGES.includes(value as DateRangePreset)
 
+const DYNAMIC_FILTER_LABELS: Record<DynamicSurrogateFilter, string> = {
+    intelligent_any: "Intelligent Suggestions",
+    intelligent_new_unread_stale: "New Unread Needs Follow-up",
+    intelligent_meeting_outcome_missing: "Meeting Outcome Missing",
+    intelligent_stuck_preapproval: "Pre-approval Stuck Cases",
+    attention_unreached: "Attention Needed: Unreached Leads",
+    attention_stuck: "Attention Needed: Stuck Leads",
+}
+
 const parsePageParam = (value: string | null): number => {
     const parsed = Number(value)
     return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1
@@ -184,6 +193,7 @@ export default function SurrogatesPage() {
     const urlRange = searchParams.get("range")
     const urlFrom = searchParams.get("from")
     const urlTo = searchParams.get("to")
+    const urlDynamicFilter = searchParams.get("dynamic_filter")
 
     const [stageFilter, setStageFilter] = useState<string>(urlStage || "all")
     const [sourceFilter, setSourceFilter] = useState<SourceFilter>(
@@ -201,6 +211,9 @@ export default function SurrogatesPage() {
     const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>(initialCustomRange)
     const [searchQuery, setSearchQuery] = useState(urlSearch || "")
     const [debouncedSearch, setDebouncedSearch] = useState(urlSearch || "")
+    const [dynamicFilter, setDynamicFilter] = useState<DynamicSurrogateFilter | null>(
+        isDynamicSurrogateFilter(urlDynamicFilter) ? urlDynamicFilter : null
+    )
     const [page, setPage] = useState(() => parsePageParam(urlPage))
     const [selectedSurrogates, setSelectedSurrogates] = useState<Set<string>>(new Set())
     const [sortBy, setSortBy] = useState<string | null>("surrogate_number")
@@ -215,6 +228,7 @@ export default function SurrogatesPage() {
     const perPage = 30
     const { user } = useAuth()
     const createMutation = useCreateSurrogate()
+    const { data: intelligentSummary } = useIntelligentSuggestionSummary()
     const [isFilterPending, startFilterTransition] = useTransition()
     const hasSyncedSearchRef = useRef(false)
 
@@ -226,55 +240,68 @@ export default function SurrogatesPage() {
         search: string,
         currentPage: number,
         range: DateRangePreset,
-        rangeDates: { from: Date | undefined; to: Date | undefined }
+        rangeDates: { from: Date | undefined; to: Date | undefined },
+        activeDynamicFilter: DynamicSurrogateFilter | null,
     ) => {
         const newParams = new URLSearchParams(searchParams.toString())
-        if (stage !== "all") {
-            newParams.set("stage", stage)
-        } else {
+        if (activeDynamicFilter) {
+            newParams.set("dynamic_filter", activeDynamicFilter)
             newParams.delete("stage")
-        }
-        if (source !== "all") {
-            newParams.set("source", source)
-        } else {
             newParams.delete("source")
-        }
-        if (queue !== "all") {
-            newParams.set("queue", queue)
-        } else {
             newParams.delete("queue")
-        }
-        if (search) {
-            newParams.set("q", search)
-        } else {
             newParams.delete("q")
+            newParams.delete("range")
+            newParams.delete("from")
+            newParams.delete("to")
+        } else {
+            newParams.delete("dynamic_filter")
+            if (stage !== "all") {
+                newParams.set("stage", stage)
+            } else {
+                newParams.delete("stage")
+            }
+            if (source !== "all") {
+                newParams.set("source", source)
+            } else {
+                newParams.delete("source")
+            }
+            if (queue !== "all") {
+                newParams.set("queue", queue)
+            } else {
+                newParams.delete("queue")
+            }
+            if (search) {
+                newParams.set("q", search)
+            } else {
+                newParams.delete("q")
+            }
+            if (range !== "all") {
+                newParams.set("range", range)
+                if (range === "custom") {
+                    if (rangeDates.from) {
+                        newParams.set("from", formatLocalDate(rangeDates.from))
+                    } else {
+                        newParams.delete("from")
+                    }
+                    if (rangeDates.to) {
+                        newParams.set("to", formatLocalDate(rangeDates.to))
+                    } else {
+                        newParams.delete("to")
+                    }
+                } else {
+                    newParams.delete("from")
+                    newParams.delete("to")
+                }
+            } else {
+                newParams.delete("range")
+                newParams.delete("from")
+                newParams.delete("to")
+            }
         }
         if (currentPage > 1) {
             newParams.set("page", String(currentPage))
         } else {
             newParams.delete("page")
-        }
-        if (range !== "all") {
-            newParams.set("range", range)
-            if (range === "custom") {
-                if (rangeDates.from) {
-                    newParams.set("from", formatLocalDate(rangeDates.from))
-                } else {
-                    newParams.delete("from")
-                }
-                if (rangeDates.to) {
-                    newParams.set("to", formatLocalDate(rangeDates.to))
-                } else {
-                    newParams.delete("to")
-                }
-            } else {
-                newParams.delete("from")
-                newParams.delete("to")
-            }
-        } else {
-            newParams.delete("range")
-            newParams.delete("from")
-            newParams.delete("to")
         }
         const nextQuery = newParams.toString()
         const currentQuery = searchParams.toString()
@@ -290,32 +317,32 @@ export default function SurrogatesPage() {
         startFilterTransition(() => {
             setStageFilter(stage)
             setPage(1)
-            updateUrlParams(stage, sourceFilter, queueFilter, debouncedSearch, 1, dateRange, customRange)
+            updateUrlParams(stage, sourceFilter, queueFilter, debouncedSearch, 1, dateRange, customRange, dynamicFilter)
         })
-    }, [sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange])
+    }, [sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange, dynamicFilter])
 
     const handleSourceChange = useCallback((source: SourceFilter) => {
         startFilterTransition(() => {
             setSourceFilter(source)
             setPage(1)
-            updateUrlParams(stageFilter, source, queueFilter, debouncedSearch, 1, dateRange, customRange)
+            updateUrlParams(stageFilter, source, queueFilter, debouncedSearch, 1, dateRange, customRange, dynamicFilter)
         })
-    }, [stageFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange])
+    }, [stageFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange, dynamicFilter])
 
     const handleQueueChange = useCallback((queue: string) => {
         startFilterTransition(() => {
             setQueueFilter(queue)
             setPage(1)
-            updateUrlParams(stageFilter, sourceFilter, queue, debouncedSearch, 1, dateRange, customRange)
+            updateUrlParams(stageFilter, sourceFilter, queue, debouncedSearch, 1, dateRange, customRange, dynamicFilter)
         })
-    }, [stageFilter, sourceFilter, debouncedSearch, updateUrlParams, dateRange, customRange])
+    }, [stageFilter, sourceFilter, debouncedSearch, updateUrlParams, dateRange, customRange, dynamicFilter])
 
     const handlePageChange = useCallback((nextPage: number) => {
         startFilterTransition(() => {
             setPage(nextPage)
-            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, nextPage, dateRange, customRange)
+            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, nextPage, dateRange, customRange, dynamicFilter)
         })
-    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange])
+    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange, dynamicFilter])
 
     const handlePresetChange = useCallback((preset: DateRangePreset) => {
         startFilterTransition(() => {
@@ -324,9 +351,9 @@ export default function SurrogatesPage() {
                 setCustomRange({ from: undefined, to: undefined })
             }
             setPage(1)
-            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, 1, preset, preset === "custom" ? customRange : { from: undefined, to: undefined })
+            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, 1, preset, preset === "custom" ? customRange : { from: undefined, to: undefined }, dynamicFilter)
         })
-    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, updateUrlParams, customRange])
+    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, updateUrlParams, customRange, dynamicFilter])
 
     const handleCustomRangeChange = useCallback((range: { from: Date | undefined; to: Date | undefined }) => {
         startFilterTransition(() => {
@@ -335,9 +362,37 @@ export default function SurrogatesPage() {
                 setDateRange("custom")
             }
             setPage(1)
-            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, 1, "custom", range)
+            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, 1, "custom", range, dynamicFilter)
         })
-    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange])
+    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, dynamicFilter])
+
+    const handleIntelligentSuggestionToggle = useCallback(() => {
+        startFilterTransition(() => {
+            const nextDynamicFilter: DynamicSurrogateFilter | null =
+                dynamicFilter === "intelligent_any" ? null : "intelligent_any"
+            setDynamicFilter(nextDynamicFilter)
+            setPage(1)
+            updateUrlParams(
+                stageFilter,
+                sourceFilter,
+                queueFilter,
+                debouncedSearch,
+                1,
+                dateRange,
+                customRange,
+                nextDynamicFilter,
+            )
+        })
+    }, [
+        customRange,
+        dateRange,
+        debouncedSearch,
+        dynamicFilter,
+        queueFilter,
+        sourceFilter,
+        stageFilter,
+        updateUrlParams,
+    ])
 
     // Fetch queues for filter dropdown (case_manager+ only)
     const canSeeQueues = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
@@ -359,50 +414,66 @@ export default function SurrogatesPage() {
             hasSyncedSearchRef.current = true
             return
         }
+        if (dynamicFilter) {
+            return
+        }
         const urlSearchValue = searchParams.get("q") || ""
         if (debouncedSearch !== urlSearchValue) {
             setPage(1)
-            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, 1, dateRange, customRange)
+            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, 1, dateRange, customRange, dynamicFilter)
         }
-    }, [debouncedSearch, searchParams, stageFilter, sourceFilter, queueFilter, updateUrlParams, dateRange, customRange])
+    }, [debouncedSearch, searchParams, stageFilter, sourceFilter, queueFilter, updateUrlParams, dateRange, customRange, dynamicFilter])
 
     // Sync state when URL changes (back/forward)
     useEffect(() => {
-        const nextStage = searchParams.get("stage") || "all"
-        if (nextStage !== stageFilter) {
-            setStageFilter(nextStage)
+        const dynamicFilterParam = searchParams.get("dynamic_filter")
+        const nextDynamicFilter = isDynamicSurrogateFilter(dynamicFilterParam)
+            ? dynamicFilterParam
+            : null
+        if (nextDynamicFilter !== dynamicFilter) {
+            setDynamicFilter(nextDynamicFilter)
         }
-        const nextSource = isSourceFilter(searchParams.get("source")) ? searchParams.get("source") as SourceFilter : "all"
-        if (nextSource !== sourceFilter) {
-            setSourceFilter(nextSource)
+
+        if (!nextDynamicFilter) {
+            const nextStage = searchParams.get("stage") || "all"
+            if (nextStage !== stageFilter) {
+                setStageFilter(nextStage)
+            }
+            const nextSource = isSourceFilter(searchParams.get("source")) ? searchParams.get("source") as SourceFilter : "all"
+            if (nextSource !== sourceFilter) {
+                setSourceFilter(nextSource)
+            }
+            const nextQueue = searchParams.get("queue") || "all"
+            if (nextQueue !== queueFilter) {
+                setQueueFilter(nextQueue)
+            }
+            const nextSearch = searchParams.get("q") || ""
+            if (nextSearch !== searchQuery) {
+                setSearchQuery(nextSearch)
+            }
+            if (nextSearch !== debouncedSearch) {
+                setDebouncedSearch(nextSearch)
+            }
         }
-        const nextQueue = searchParams.get("queue") || "all"
-        if (nextQueue !== queueFilter) {
-            setQueueFilter(nextQueue)
-        }
-        const nextSearch = searchParams.get("q") || ""
-        if (nextSearch !== searchQuery) {
-            setSearchQuery(nextSearch)
-        }
-        if (nextSearch !== debouncedSearch) {
-            setDebouncedSearch(nextSearch)
-        }
+
         const nextPage = parsePageParam(searchParams.get("page"))
         if (nextPage !== page) {
             setPage(nextPage)
         }
-        const nextRange = isDateRangePreset(searchParams.get("range")) ? searchParams.get("range") as DateRangePreset : "all"
-        if (nextRange !== dateRange) {
-            setDateRange(nextRange)
-        }
-        if (nextRange === "custom") {
-            const nextFrom = parseDateParam(searchParams.get("from"))
-            const nextTo = parseDateParam(searchParams.get("to"))
-            if (!datesEqual(nextFrom, customRange.from) || !datesEqual(nextTo, customRange.to)) {
-                setCustomRange({ from: nextFrom, to: nextTo })
+        if (!nextDynamicFilter) {
+            const nextRange = isDateRangePreset(searchParams.get("range")) ? searchParams.get("range") as DateRangePreset : "all"
+            if (nextRange !== dateRange) {
+                setDateRange(nextRange)
             }
-        } else if (customRange.from || customRange.to) {
-            setCustomRange({ from: undefined, to: undefined })
+            if (nextRange === "custom") {
+                const nextFrom = parseDateParam(searchParams.get("from"))
+                const nextTo = parseDateParam(searchParams.get("to"))
+                if (!datesEqual(nextFrom, customRange.from) || !datesEqual(nextTo, customRange.to)) {
+                    setCustomRange({ from: nextFrom, to: nextTo })
+                }
+            } else if (customRange.from || customRange.to) {
+                setCustomRange({ from: undefined, to: undefined })
+            }
         }
     }, [currentQuery]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -434,16 +505,24 @@ export default function SurrogatesPage() {
         ...getDateRangeParams(),
     }
 
+    const isDynamicFilterMode = dynamicFilter !== null
+    const isIntelligentDynamicFilter = dynamicFilter?.startsWith("intelligent_") ?? false
+    const intelligentSuggestionCount = intelligentSummary?.total ?? 0
+    const hasIntelligentSuggestions = intelligentSuggestionCount > 0
+    const activeDynamicFilterLabel = dynamicFilter ? DYNAMIC_FILTER_LABELS[dynamicFilter] : null
+
     const { data, isLoading, isError, error, refetch } = useSurrogates({
         page,
         per_page: perPage,
         sort_order: sortOrder,
         ...(urlOwnerId ? { owner_id: urlOwnerId } : {}),
-        ...getDateRangeParams(),
-        ...(stageFilter === "all" ? {} : { stage_id: stageFilter }),
-        ...(sourceFilter === "all" ? {} : { source: sourceFilter }),
-        ...(debouncedSearch ? { q: debouncedSearch } : {}),
-        ...(queueFilter === "all" ? {} : { queue_id: queueFilter }),
+        ...(dynamicFilter ? { dynamic_filter: dynamicFilter } : {
+            ...getDateRangeParams(),
+            ...(stageFilter === "all" ? {} : { stage_id: stageFilter }),
+            ...(sourceFilter === "all" ? {} : { source: sourceFilter }),
+            ...(debouncedSearch ? { q: debouncedSearch } : {}),
+            ...(queueFilter === "all" ? {} : { queue_id: queueFilter }),
+        }),
         ...(sortBy ? { sort_by: sortBy } : {}),
     })
 
@@ -468,12 +547,13 @@ export default function SurrogatesPage() {
     const restoreMutation = useRestoreSurrogate()
     const updateMutation = useUpdateSurrogate()
 
-    const hasActiveFilters = stageFilter !== "all" || sourceFilter !== "all" || queueFilter !== "all" || searchQuery !== "" || dateRange !== "all"
+    const hasActiveFilters = dynamicFilter !== null || stageFilter !== "all" || sourceFilter !== "all" || queueFilter !== "all" || searchQuery !== "" || dateRange !== "all"
 
     const resetFilters = useCallback(() => {
         setStageFilter("all")
         setSourceFilter("all")
         setQueueFilter("all")
+        setDynamicFilter(null)
         setDateRange("all")
         setCustomRange({ from: undefined, to: undefined })
         setSearchQuery("")
@@ -593,7 +673,21 @@ export default function SurrogatesPage() {
             {/* Filters Row */}
             <div className="flex-shrink-0 border-b border-border px-6 py-3">
                 <div className="flex flex-wrap items-center gap-3">
-                    <Select value={stageFilter} onValueChange={(value) => handleStageChange(value || "all")}>
+                    {hasIntelligentSuggestions && (
+                        <Button
+                            variant={dynamicFilter === "intelligent_any" ? "default" : "outline"}
+                            onClick={handleIntelligentSuggestionToggle}
+                            disabled={isFilterPending}
+                        >
+                            Intelligent Suggestions ({intelligentSuggestionCount})
+                        </Button>
+                    )}
+
+                    <Select
+                        value={stageFilter}
+                        onValueChange={(value) => handleStageChange(value || "all")}
+                        disabled={isDynamicFilterMode}
+                    >
                         <SelectTrigger className="w-full sm:w-[180px]">
                             <SelectValue placeholder="All Stages">
                                 {(value: string | null) => {
@@ -618,6 +712,7 @@ export default function SurrogatesPage() {
                         onValueChange={(value) =>
                             handleSourceChange(isSourceFilter(value) ? value : "all")
                         }
+                        disabled={isDynamicFilterMode}
                     >
                         <SelectTrigger className="w-full sm:w-[180px]">
                             <SelectValue placeholder="All Sources">
@@ -648,16 +743,22 @@ export default function SurrogatesPage() {
                         </SelectContent>
                     </Select>
 
-                    <DateRangePicker
-                        preset={dateRange}
-                        onPresetChange={handlePresetChange}
-                        customRange={customRange}
-                        onCustomRangeChange={handleCustomRangeChange}
-                    />
+                    <div className={cn(isDynamicFilterMode && "pointer-events-none opacity-60")}>
+                        <DateRangePicker
+                            preset={dateRange}
+                            onPresetChange={handlePresetChange}
+                            customRange={customRange}
+                            onCustomRangeChange={handleCustomRangeChange}
+                        />
+                    </div>
 
                     {/* Queue Filter (case_manager+ only) */}
                     {canSeeQueues && queues && queues.length > 0 && (
-                        <Select value={queueFilter} onValueChange={(value) => handleQueueChange(value || "all")}>
+                        <Select
+                            value={queueFilter}
+                            onValueChange={(value) => handleQueueChange(value || "all")}
+                            disabled={isDynamicFilterMode}
+                        >
                             <SelectTrigger className="w-full sm:w-[180px]">
                                 <UsersIcon className="h-4 w-4 mr-2" />
                                 <SelectValue placeholder="All Queues">
@@ -680,11 +781,12 @@ export default function SurrogatesPage() {
                     <div className="relative w-full sm:ml-auto sm:w-[280px]">
                         <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
-                            placeholder="Search surrogates..."
+                            placeholder={isDynamicFilterMode ? "Search disabled in dynamic filter mode" : "Search surrogates..."}
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="pl-9"
                             aria-label="Search surrogates"
+                            disabled={isDynamicFilterMode}
                         />
                     </div>
 
@@ -695,6 +797,11 @@ export default function SurrogatesPage() {
                         </Button>
                     )}
                 </div>
+                {activeDynamicFilterLabel && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                        Dynamic filter active: {activeDynamicFilterLabel}
+                    </p>
+                )}
             </div>
 
             {/* Create Modal */}
@@ -805,11 +912,18 @@ export default function SurrogatesPage() {
                     <Card className="p-12 text-center">
                         <div className="flex flex-col items-center gap-3">
                             <p className="text-muted-foreground">
-                                {hasActiveFilters
+                                {isIntelligentDynamicFilter
+                                    ? "Intelligent suggestions are not available right now."
+                                    : hasActiveFilters
                                     ? "No surrogates match your filters"
                                     : "No surrogates yet"
                                 }
                             </p>
+                            {isIntelligentDynamicFilter && (
+                                <p className="text-sm text-muted-foreground">
+                                    All suggested cases have been addressed.
+                                </p>
+                            )}
                             {hasActiveFilters && (
                                 <Button variant="outline" onClick={resetFilters}>
                                     Clear Filters

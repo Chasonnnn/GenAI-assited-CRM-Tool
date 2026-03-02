@@ -37,6 +37,7 @@ const mockUseCreateSurrogate = vi.fn()
 const mockUseAssignees = vi.fn()
 const mockUseBulkAssign = vi.fn()
 const mockUseBulkArchive = vi.fn()
+const mockUseIntelligentSuggestionSummary = vi.fn()
 const mockUseQueues = vi.fn()
 
 vi.mock('@/lib/hooks/use-surrogates', () => ({
@@ -48,6 +49,7 @@ vi.mock('@/lib/hooks/use-surrogates', () => ({
     useAssignees: () => mockUseAssignees(),
     useBulkAssign: () => mockUseBulkAssign(),
     useBulkArchive: () => mockUseBulkArchive(),
+    useIntelligentSuggestionSummary: () => mockUseIntelligentSuggestionSummary(),
 }))
 
 vi.mock('@/lib/hooks/use-queues', () => ({
@@ -89,6 +91,7 @@ describe('SurrogatesPage', () => {
         mockSearchParams.delete('queue')
         mockSearchParams.delete('q')
         mockSearchParams.delete('owner_id')
+        mockSearchParams.delete('dynamic_filter')
         mockUseArchiveSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseRestoreSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseUpdateSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
@@ -96,6 +99,9 @@ describe('SurrogatesPage', () => {
         mockUseAssignees.mockReturnValue({ data: [] })
         mockUseBulkAssign.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseBulkArchive.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockUseIntelligentSuggestionSummary.mockReturnValue({
+            data: { total: 0, counts: {}, has_suggestions: false },
+        })
         mockUseQueues.mockReturnValue({ data: [] })
     })
 
@@ -246,5 +252,33 @@ describe('SurrogatesPage', () => {
                 owner_id: 'user-123',
             })
         )
+    })
+
+    it('applies dynamic_filter from URL params', () => {
+        mockSearchParams.set('dynamic_filter', 'attention_unreached')
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+        expect(mockUseSurrogates).toHaveBeenCalledWith(
+            expect.objectContaining({
+                dynamic_filter: 'attention_unreached',
+            })
+        )
+    })
+
+    it('shows intelligent unavailable copy when intelligent dynamic filter has no results', () => {
+        mockSearchParams.set('dynamic_filter', 'intelligent_any')
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+        expect(screen.getByText('Intelligent suggestions are not available right now.')).toBeInTheDocument()
     })
 })

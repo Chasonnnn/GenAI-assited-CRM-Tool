@@ -220,6 +220,30 @@ describe('DashboardPage', () => {
         expect(await screen.findByText('View surrogates')).toBeInTheDocument()
     })
 
+    it('links attention surrogate cards to dynamic filters', async () => {
+        mockUseAttention.mockReturnValue({
+            data: {
+                unreached_leads: [{ id: 's1', surrogate_number: 'S10001', stage_label: 'New', days_since_contact: 9, created_at: new Date().toISOString() }],
+                unreached_count: 1,
+                overdue_tasks: [],
+                overdue_count: 0,
+                stuck_surrogates: [{ id: 's2', surrogate_number: 'S10002', stage_label: 'Contacted', days_in_stage: 35, last_stage_change: new Date().toISOString() }],
+                stuck_count: 1,
+                total_count: 2,
+            },
+            isLoading: false,
+            isError: false,
+        })
+
+        render(<DashboardPage />)
+
+        const unreachedLink = await screen.findByText('Unreached leads (7+ days)')
+        expect(unreachedLink.closest('a')).toHaveAttribute('href', '/surrogates?dynamic_filter=attention_unreached')
+
+        const stuckLink = await screen.findByText('Stuck surrogates (30+ days)')
+        expect(stuckLink.closest('a')).toHaveAttribute('href', '/surrogates?dynamic_filter=attention_stuck')
+    })
+
     it('shows filter-empty state for pipeline distribution when range filters exclude all', async () => {
         mockUseSearchParams.mockReturnValue(new URLSearchParams('range=week'))
 
