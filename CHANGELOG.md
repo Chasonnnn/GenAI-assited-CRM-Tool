@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.17](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.16...surrogacy-crm-platform-v0.90.17) (2026-03-02)
+
+
+### Features
+
+* **history:** surface assignment user names in surrogate activity ([006e78c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/006e78c94cdafbcdfa079eb1aa20ce57dc3116b6))
+
+
+### Bug Fixes
+
+* harden fallback audit and isolated alert FK handling ([c7208a8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c7208a88531523c9877e19bebf1ca7bf780e08ed))
+* **migrations:** bind JSON payloads with typed params in stage cutover ([5d083e5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5d083e581d2718960f0687e8921715702791cfb0))
+* suppress repeated workflow metric 404 requests per session ([4e31e14](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4e31e145ddc2aeb876ce4a6b513678fa3c49ab5c))
+* **web:** add id/name attributes across form controls ([0ccc47b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0ccc47bad60875adcbea4f247fba52312c98c0fb))
+
 ## [0.90.16](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.15...surrogacy-crm-platform-v0.90.16) (2026-03-02)
 
 
