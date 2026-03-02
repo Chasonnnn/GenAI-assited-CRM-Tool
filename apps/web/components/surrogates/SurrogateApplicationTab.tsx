@@ -840,15 +840,19 @@ export function SurrogateApplicationTab({
                                         </div>
                                     )}
                                     {hasExplicitOverride && (
-                                        <label className="flex items-start gap-2 text-xs">
+                                        <div className="flex items-start gap-2 text-xs">
                                             <Checkbox
+                                                id="confirm-non-default-form-override"
                                                 checked={confirmOverride}
                                                 onCheckedChange={(checked) => setConfirmOverride(checked === true)}
                                             />
-                                            <span>
+                                            <Label
+                                                htmlFor="confirm-non-default-form-override"
+                                                className="cursor-pointer text-xs font-normal leading-4"
+                                            >
                                                 I confirm I want to send a non-default form for this surrogate.
-                                            </span>
-                                        </label>
+                                            </Label>
+                                        </div>
                                     )}
                                 </div>
                             )}
@@ -1164,8 +1168,12 @@ export function SurrogateApplicationTab({
                         const pageTitle = page.title || `Page ${index + 1}`
                         const fields = page.fields.filter((field) => field.type !== "file")
                         const isOpen = sectionOpen[index] ?? true
+                        const pageKey =
+                            page.title?.trim() ||
+                            page.fields.map((field) => field.key).join("|") ||
+                            "page"
                         return (
-                            <Card key={`${pageTitle}-${index}`}>
+                            <Card key={pageKey}>
                                 <Collapsible
                                     open={isOpen}
                                     onOpenChange={(open) =>

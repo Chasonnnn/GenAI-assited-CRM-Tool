@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { ChangeEvent } from "react"
+import NextImage from "next/image"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -445,8 +446,8 @@ export default function FormBuilderPage() {
         setRightSidebarTab(fieldId ? "field" : "form")
     }, [])
 
-    useEffect(() => {
-        setHasHydrated(false)
+    const resetFormEditorState = useCallback((nextHasHydrated: boolean) => {
+        setHasHydrated(nextHasHydrated)
         setAutoSaveStatus("idle")
         setLastSavedAt(null)
         hydratedFormRef.current = null
@@ -462,16 +463,43 @@ export default function FormBuilderPage() {
         setWorkspaceTab("builder")
         setSubmissionHistoryFilter("all")
         setSelectedQueueSubmissionId(null)
+        setManualSurrogateId("")
         setResolveReviewNotes("")
         setShowSharePrompt(false)
         setPendingSharePrompt(false)
-    }, [formId])
+    }, [])
+
+    const hydrateFormEditorState = useCallback((
+        nextFormData: FormRead,
+        nextSchema: FormSchema | null | undefined,
+        nextMappingMap: Map<string, string>,
+    ) => {
+        setFormName(nextFormData.name)
+        setFormDescription(nextFormData.description || "")
+        setFormPurpose(nextFormData.purpose || "surrogate_application")
+        const metadata = schemaToMetadata(nextSchema || undefined)
+        setPublicTitle(metadata.publicTitle)
+        setLogoUrl(metadata.logoUrl)
+        setPrivacyNotice(metadata.privacyNotice)
+        setMaxFileSizeMb(Math.max(1, Math.round((nextFormData.max_file_size_bytes ?? 10485760) / (1024 * 1024))))
+        setMaxFileCount(nextFormData.max_file_count ?? 10)
+        setAllowedMimeTypesText((nextFormData.allowed_mime_types || []).join(", "))
+        setDefaultTemplateId(nextFormData.default_application_email_template_id || "")
+        setIsPublished(nextFormData.status === "published")
+        setPages(nextSchema ? schemaToPages(nextSchema, nextMappingMap) : [{ id: 1, name: "Page 1", fields: [] }])
+        setActivePage(1)
+        selectField(null)
+        setHasHydrated(true)
+    }, [selectField])
+
+    const syncAutosaveMeta = useCallback((status: "idle" | "saved", savedAt: Date | null) => {
+        setAutoSaveStatus(status)
+        setLastSavedAt(savedAt)
+    }, [])
 
     useEffect(() => {
-        if (isNewForm) {
-            setHasHydrated(true)
-        }
-    }, [isNewForm])
+        resetFormEditorState(isNewForm)
+    }, [formId, isNewForm, resetFormEditorState])
 
     useEffect(() => {
         if (workspaceTab !== "submissions") {
@@ -481,10 +509,6 @@ export default function FormBuilderPage() {
     }, [workspaceTab])
 
     useEffect(() => {
-        setManualSurrogateId("")
-    }, [selectedQueueSubmissionId])
-
-    useEffect(() => {
         if (isNewForm || !formData || isMappingsLoading || hasHydrated) return
 
         const mappingMap = new Map(
@@ -492,23 +516,8 @@ export default function FormBuilderPage() {
         )
         const schema = formData.form_schema || formData.published_schema
 
-        setFormName(formData.name)
-        setFormDescription(formData.description || "")
-        setFormPurpose(formData.purpose || "surrogate_application")
-        const metadata = schemaToMetadata(schema || undefined)
-        setPublicTitle(metadata.publicTitle)
-        setLogoUrl(metadata.logoUrl)
-        setPrivacyNotice(metadata.privacyNotice)
-        setMaxFileSizeMb(Math.max(1, Math.round((formData.max_file_size_bytes ?? 10485760) / (1024 * 1024))))
-        setMaxFileCount(formData.max_file_count ?? 10)
-        setAllowedMimeTypesText((formData.allowed_mime_types || []).join(", "))
-        setDefaultTemplateId(formData.default_application_email_template_id || "")
-        setIsPublished(formData.status === "published")
-        setPages(schema ? schemaToPages(schema, mappingMap) : [{ id: 1, name: "Page 1", fields: [] }])
-        setActivePage(1)
-        selectField(null)
-        setHasHydrated(true)
-    }, [formData, mappingData, isMappingsLoading, hasHydrated, isNewForm, selectField])
+        hydrateFormEditorState(formData, schema, mappingMap)
+    }, [formData, mappingData, isMappingsLoading, hasHydrated, isNewForm, hydrateFormEditorState])
 
     useEffect(() => {
         if (!hasHydrated || orgLogoInitRef.current) return
@@ -571,12 +580,11 @@ export default function FormBuilderPage() {
         hydratedFormRef.current = identity
         lastSavedFingerprintRef.current = debouncedFingerprint
         if (!isNewForm && formData?.updated_at) {
-            setAutoSaveStatus("saved")
-            setLastSavedAt(new Date(formData.updated_at))
+            syncAutosaveMeta("saved", new Date(formData.updated_at))
         } else {
-            setAutoSaveStatus("idle")
+            syncAutosaveMeta("idle", null)
         }
-    }, [hasHydrated, isNewForm, formId, debouncedFingerprint, formData?.updated_at])
+    }, [hasHydrated, isNewForm, formId, debouncedFingerprint, formData?.updated_at, syncAutosaveMeta])
 
     // Drag and drop handlers
     const handleDragStart = (type: FieldType, label: string) => {
@@ -1448,6 +1456,7 @@ export default function FormBuilderPage() {
             })
             toast.success("Submission linked to surrogate")
             setSelectedQueueSubmissionId(null)
+            setManualSurrogateId("")
             setResolveReviewNotes("")
             await refreshSubmissionQueues()
         } catch {
@@ -1466,6 +1475,7 @@ export default function FormBuilderPage() {
             })
             toast.success("Submission moved to intake lead")
             setSelectedQueueSubmissionId(null)
+            setManualSurrogateId("")
             setResolveReviewNotes("")
             await refreshSubmissionQueues()
         } catch {
@@ -1513,6 +1523,7 @@ export default function FormBuilderPage() {
             })
             toast.success(successMessage)
             setSelectedQueueSubmissionId(submission.id)
+            setManualSurrogateId("")
             await refreshSubmissionQueues()
         } catch {
             toast.error("Failed to reprocess submission")
@@ -2291,28 +2302,34 @@ export default function FormBuilderPage() {
                                 {selectedFieldData.options && (
                                     <div className="mt-4 space-y-2">
                                         <Label>Options</Label>
-                                        {selectedFieldData.options.map((option, index) => (
-                                            <div key={index} className="flex gap-2">
-                                                <Input
-                                                    value={option}
-                                                    onChange={(e) => {
-                                                        const newOptions = [...selectedFieldData.options!]
-                                                        newOptions[index] = e.target.value
-                                                        handleUpdateField(selectedFieldData.id, { options: newOptions })
-                                                    }}
-                                                />
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    onClick={() => {
-                                                        const newOptions = selectedFieldData.options!.filter((_, i) => i !== index)
-                                                        handleUpdateField(selectedFieldData.id, { options: newOptions })
-                                                    }}
-                                                >
-                                                    <XIcon className="size-4" />
-                                                </Button>
-                                            </div>
-                                        ))}
+                                        {selectedFieldData.options.map((option, optionIndex) => {
+                                            const optionOccurrence = selectedFieldData.options!
+                                                .slice(0, optionIndex + 1)
+                                                .filter((value) => value === option).length
+                                            const optionKey = `${selectedFieldData.id}-${option}-${optionOccurrence}`
+                                            return (
+                                                <div key={optionKey} className="flex gap-2">
+                                                    <Input
+                                                        value={option}
+                                                        onChange={(e) => {
+                                                            const newOptions = [...selectedFieldData.options!]
+                                                            newOptions[optionIndex] = e.target.value
+                                                            handleUpdateField(selectedFieldData.id, { options: newOptions })
+                                                        }}
+                                                    />
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => {
+                                                            const newOptions = selectedFieldData.options!.filter((_, i) => i !== optionIndex)
+                                                            handleUpdateField(selectedFieldData.id, { options: newOptions })
+                                                        }}
+                                                    >
+                                                        <XIcon className="size-4" />
+                                                    </Button>
+                                                </div>
+                                            )
+                                        })}
                                         <Button
                                             variant="outline"
                                             size="sm"
@@ -2488,9 +2505,12 @@ export default function FormBuilderPage() {
                                     </div>
                                     {logoUrl && (
                                         <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
-                                            <img
+                                            <NextImage
                                                 src={resolvedLogoUrl}
                                                 alt="Form logo preview"
+                                                width={224}
+                                                height={56}
+                                                unoptimized
                                                 className="h-14 w-auto rounded-md object-contain"
                                             />
                                         </div>
@@ -2808,11 +2828,12 @@ export default function FormBuilderPage() {
                                                                 type="button"
                                                                 size="sm"
                                                                 variant={isSelected ? "default" : "outline"}
-                                                                onClick={() =>
+                                                                onClick={() => {
                                                                     setSelectedQueueSubmissionId(
                                                                         isSelected ? null : submission.id,
                                                                     )
-                                                                }
+                                                                    setManualSurrogateId("")
+                                                                }}
                                                             >
                                                                 {isSelected ? "Hide Candidates" : "Review Candidates"}
                                                             </Button>
@@ -2987,9 +3008,10 @@ export default function FormBuilderPage() {
                                                             type="button"
                                                             size="sm"
                                                             variant="outline"
-                                                            onClick={() =>
+                                                            onClick={() => {
                                                                 setSelectedQueueSubmissionId(submission.id)
-                                                            }
+                                                                setManualSurrogateId("")
+                                                            }}
                                                         >
                                                             Review Candidates
                                                         </Button>

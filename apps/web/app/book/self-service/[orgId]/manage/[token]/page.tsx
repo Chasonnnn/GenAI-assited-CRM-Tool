@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useEffect, useMemo, useState } from "react"
+import { use, useCallback, useEffect, useMemo, useState } from "react"
 import { format, isSameDay, parseISO, startOfDay } from "date-fns"
 import {
     AlertCircleIcon,
@@ -86,11 +86,17 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
         : resolvedSearchParams.action
     const initialAction: ManageAction = rawAction === "cancel" ? "cancel" : "reschedule"
 
-    const [appointment, setAppointment] = useState<PublicAppointmentView | null>(null)
-    const [isLoading, setIsLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
+    const [loadState, setLoadState] = useState<{
+        appointment: PublicAppointmentView | null
+        isLoading: boolean
+        error: string | null
+    }>({
+        appointment: null,
+        isLoading: true,
+        error: null,
+    })
 
-    const [action, setAction] = useState<ManageAction>(initialAction)
+    const [action, setAction] = useState<ManageAction>(() => initialAction)
     const [timezone, setTimezone] = useState("America/Los_Angeles")
     const [viewMonth, setViewMonth] = useState(new Date())
     const [selectedDate, setSelectedDate] = useState<Date | null>(null)
@@ -101,10 +107,10 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
     const [reason, setReason] = useState("")
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [successState, setSuccessState] = useState<"rescheduled" | "cancelled" | null>(null)
-
-    useEffect(() => {
-        setAction(initialAction)
-    }, [initialAction])
+    const { appointment, isLoading, error } = loadState
+    const applyLoadState = useCallback((nextState: typeof loadState) => {
+        setLoadState(nextState)
+    }, [])
 
     useEffect(() => {
         try {
@@ -119,8 +125,11 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
 
     useEffect(() => {
         if (!orgId || !token) {
-            setError("Invalid appointment management link")
-            setIsLoading(false)
+            applyLoadState({
+                appointment: null,
+                isLoading: false,
+                error: "Invalid appointment management link",
+            })
             return
         }
 
@@ -130,16 +139,22 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
         async function load() {
             try {
                 const data = await getAppointmentForManage(orgIdForCall, tokenForCall)
-                setAppointment(data)
+                applyLoadState({
+                    appointment: data,
+                    isLoading: false,
+                    error: null,
+                })
             } catch (err: unknown) {
-                setError(err instanceof Error ? err.message : "Appointment not found")
-            } finally {
-                setIsLoading(false)
+                applyLoadState({
+                    appointment: null,
+                    isLoading: false,
+                    error: err instanceof Error ? err.message : "Appointment not found",
+                })
             }
         }
 
         load()
-    }, [orgId, token])
+    }, [orgId, token, applyLoadState])
 
     useEffect(() => {
         if (appointment?.client_timezone) {
@@ -159,9 +174,14 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
         const startDay = monthStart.getDay()
         const daysInMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0).getDate()
 
-        const days: Array<{ date: Date | null; isToday: boolean; isAvailable: boolean }> = []
+        const days: Array<{ key: string; date: Date | null; isToday: boolean; isAvailable: boolean }> = []
         for (let i = 0; i < startDay; i++) {
-            days.push({ date: null, isToday: false, isAvailable: false })
+            days.push({
+                key: `empty-${viewMonth.getFullYear()}-${viewMonth.getMonth()}-${i + 1}`,
+                date: null,
+                isToday: false,
+                isAvailable: false,
+            })
         }
 
         const today = startOfDay(new Date())
@@ -170,6 +190,7 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
             const weekday = date.getDay()
             const isWeekday = weekday >= 1 && weekday <= 5
             days.push({
+                key: `date-${viewMonth.getFullYear()}-${viewMonth.getMonth()}-${day}`,
                 date,
                 isToday: isSameDay(date, today),
                 isAvailable: isWeekday && date >= today,
@@ -207,12 +228,15 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
     const handleReschedule = async () => {
         if (!selectedSlot || !orgId || !token) return
         setIsSubmitting(true)
-        setError(null)
+        setLoadState((prev) => ({ ...prev, error: null }))
         try {
             await rescheduleByManageToken(orgId, token, selectedSlot.start)
             setSuccessState("rescheduled")
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : "Failed to reschedule appointment")
+            setLoadState((prev) => ({
+                ...prev,
+                error: err instanceof Error ? err.message : "Failed to reschedule appointment",
+            }))
         } finally {
             setIsSubmitting(false)
         }
@@ -221,12 +245,15 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
     const handleCancel = async () => {
         if (!orgId || !token) return
         setIsSubmitting(true)
-        setError(null)
+        setLoadState((prev) => ({ ...prev, error: null }))
         try {
             await cancelByManageToken(orgId, token, reason || undefined)
             setSuccessState("cancelled")
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : "Failed to cancel appointment")
+            setLoadState((prev) => ({
+                ...prev,
+                error: err instanceof Error ? err.message : "Failed to cancel appointment",
+            }))
         } finally {
             setIsSubmitting(false)
         }
@@ -428,16 +455,16 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
                                             </div>
 
                                             <div className="grid grid-cols-7 gap-1">
-                                                {calendarDays.map((day, index) => {
+                                                {calendarDays.map((day) => {
                                                     if (!day.date) {
-                                                        return <div key={index} className="h-10" />
+                                                        return <div key={day.key} className="h-10" />
                                                     }
                                                     const isSelected = selectedDate
                                                         ? isSameDay(day.date, selectedDate)
                                                         : false
                                                     return (
                                                         <Button
-                                                            key={index}
+                                                            key={day.key}
                                                             type="button"
                                                             variant="ghost"
                                                             size="sm"
