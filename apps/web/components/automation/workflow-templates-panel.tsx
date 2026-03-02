@@ -449,9 +449,12 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
                                                 typeof action.name === "string"
                                                     ? action.name
                                                     : `Email action ${index + 1}`
+                                            const overrideSelectId = `email-action-template-${index}`
                                             return (
                                                 <div key={`email-action-${index}`} className="space-y-2">
-                                                    <Label className="text-sm">{actionLabel}</Label>
+                                                    <Label htmlFor={overrideSelectId} className="text-sm">
+                                                        {actionLabel}
+                                                    </Label>
                                                     <Select
                                                         value={override}
                                                         onValueChange={(value) =>
@@ -464,7 +467,7 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
                                                             }))
                                                         }
                                                     >
-                                                        <SelectTrigger>
+                                                        <SelectTrigger id={overrideSelectId}>
                                                             <SelectValue placeholder="Choose an email template">
                                                                 {(value: string | null) => {
                                                                     if (!value) return "Choose an email template"

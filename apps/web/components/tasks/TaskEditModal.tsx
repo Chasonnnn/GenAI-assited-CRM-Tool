@@ -176,7 +176,7 @@ export function TaskEditModal({
                         <div className="space-y-2">
                             <Label htmlFor="task-type">Type</Label>
                             <Select value={taskType} onValueChange={(v) => v && setTaskType(v)}>
-                                <SelectTrigger>
+                                <SelectTrigger id="task-type">
                                     <SelectValue>
                                         {(value: string | null) => {
                                             const type = TASK_TYPES.find(t => t.value === value)
@@ -197,10 +197,11 @@ export function TaskEditModal({
                         {/* Due Date & Time */}
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label>Due Date</Label>
+                                <Label htmlFor="due-date-picker">Due Date</Label>
                                 <Popover>
                                     <PopoverTrigger render={
                                         <Button
+                                            id="due-date-picker"
                                             variant="outline"
                                             className={cn(
                                                 "w-full justify-start text-left font-normal",

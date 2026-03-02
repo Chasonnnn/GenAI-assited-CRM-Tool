@@ -146,9 +146,9 @@ export function AddSurrogateTaskDialog({
                     </div>
 
                     <div className="space-y-2">
-                        <Label>Type</Label>
+                        <Label htmlFor="surrogate-task-type">Type</Label>
                         <Select value={taskType} onValueChange={(v) => setTaskType(v as SurrogateTaskFormData["task_type"])}>
-                            <SelectTrigger>
+                            <SelectTrigger id="surrogate-task-type">
                                 <SelectValue>
                                     {(value: string | null) => {
                                         const type = TASK_TYPES.find(t => t.value === value)
@@ -188,9 +188,9 @@ export function AddSurrogateTaskDialog({
                     </div>
 
                     <div className="space-y-2">
-                        <Label>Repeat</Label>
+                        <Label htmlFor="surrogate-task-repeat">Repeat</Label>
                         <Select value={recurrence} onValueChange={(v) => setRecurrence(v as SurrogateTaskFormData["recurrence"])}>
-                            <SelectTrigger>
+                            <SelectTrigger id="surrogate-task-repeat">
                                 <SelectValue>
                                     {(value: string | null) => {
                                         const labels: Record<string, string> = {

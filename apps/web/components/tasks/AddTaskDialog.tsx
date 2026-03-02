@@ -147,9 +147,9 @@ export function AddTaskDialog({
                     </div>
 
                     <div className="space-y-2">
-                        <Label>Type</Label>
+                        <Label htmlFor="task-type">Type</Label>
                         <Select value={taskType} onValueChange={(v) => setTaskType(v as TaskFormData["task_type"])}>
-                            <SelectTrigger>
+                            <SelectTrigger id="task-type">
                                 <SelectValue>
                                     {(value: string | null) => {
                                         const type = TASK_TYPES.find(t => t.value === value)
@@ -189,9 +189,9 @@ export function AddTaskDialog({
                     </div>
 
                     <div className="space-y-2">
-                        <Label>Repeat</Label>
+                        <Label htmlFor="task-repeat">Repeat</Label>
                         <Select value={recurrence} onValueChange={(v) => setRecurrence(v as TaskRecurrence)}>
-                            <SelectTrigger>
+                            <SelectTrigger id="task-repeat">
                                 <SelectValue>
                                     {(value: string | null) => {
                                         const labels: Record<string, string> = {

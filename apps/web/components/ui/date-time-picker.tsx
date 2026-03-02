@@ -17,6 +17,9 @@ export interface DateTimePickerProps {
     className?: string
     disabled?: boolean
     placeholder?: string
+    triggerId?: string
+    timeInputId?: string
+    triggerAriaLabelledBy?: string
 }
 
 function parseTime(value: string): { hours: number; minutes: number } | null {
@@ -36,10 +39,15 @@ export function DateTimePicker({
     className,
     disabled = false,
     placeholder = "Select date & time",
+    triggerId,
+    timeInputId,
+    triggerAriaLabelledBy,
 }: DateTimePickerProps) {
     const [open, setOpen] = React.useState(false)
     const [draftDate, setDraftDate] = React.useState<Date | undefined>(value)
     const [draftTime, setDraftTime] = React.useState<string>(value ? format(value, "HH:mm") : "09:00")
+    const generatedTimeInputId = React.useId()
+    const resolvedTimeInputId = timeInputId ?? generatedTimeInputId
 
     React.useEffect(() => {
         if (!open) return
@@ -83,12 +91,14 @@ export function DateTimePicker({
             }}
         >
             <PopoverTrigger
+                {...(triggerId ? { id: triggerId } : {})}
                 className={cn(
                     "inline-flex w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-normal hover:bg-accent hover:text-accent-foreground",
                     disabled && "pointer-events-none opacity-50",
                     className
                 )}
                 aria-disabled={disabled}
+                {...(triggerAriaLabelledBy ? { "aria-labelledby": triggerAriaLabelledBy } : {})}
             >
                 <span className="inline-flex items-center gap-2">
                     <CalendarIcon className="size-4" />
@@ -114,11 +124,12 @@ export function DateTimePicker({
                     />
 
                     <div className="space-y-2">
-                        <Label className="inline-flex items-center gap-2">
+                        <Label htmlFor={resolvedTimeInputId} className="inline-flex items-center gap-2">
                             <ClockIcon className="size-4" />
                             Time
                         </Label>
                         <Input
+                            id={resolvedTimeInputId}
                             type="time"
                             value={draftTime}
                             onChange={(e) => setDraftTime(e.target.value)}
@@ -138,4 +149,3 @@ export function DateTimePicker({
         </Popover>
     )
 }
-

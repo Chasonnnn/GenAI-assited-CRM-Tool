@@ -108,10 +108,11 @@ export function AddTaskDialog({
                 <div className="space-y-4 py-4">
                     {/* Target selection */}
                     <div className="space-y-2">
-                        <Label>Assign to</Label>
+                        <Label id="match-task-target-label">Assign to</Label>
                         <RadioGroup
                             value={target}
                             onValueChange={(v) => setTarget(v as "surrogate" | "ip")}
+                            aria-labelledby="match-task-target-label"
                             className="flex gap-4"
                         >
                             <div className="flex items-center space-x-2">
@@ -143,9 +144,9 @@ export function AddTaskDialog({
 
                     {/* Task Type */}
                     <div className="space-y-2">
-                        <Label>Type</Label>
+                        <Label htmlFor="match-task-type">Type</Label>
                         <Select value={taskType} onValueChange={(v) => setTaskType(v as TaskFormData["task_type"])}>
-                            <SelectTrigger>
+                            <SelectTrigger id="match-task-type">
                                 <SelectValue>
                                     {(value: string | null) => {
                                         const type = TASK_TYPES.find(t => t.value === value)

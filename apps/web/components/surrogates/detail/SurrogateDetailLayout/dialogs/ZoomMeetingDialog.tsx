@@ -53,12 +53,14 @@ export function ZoomMeetingDialog() {
                         />
                     </div>
                     <div>
-                        <Label>When</Label>
+                        <Label htmlFor="zoom-when">When</Label>
                         <div className="mt-2">
                             <DateTimePicker
                                 value={zoomForm.startAt}
                                 onChange={setZoomStartAt}
                                 disabled={!!zoomForm.lastMeetingResult}
+                                triggerId="zoom-when"
+                                timeInputId="zoom-when-time"
                             />
                         </div>
                         <div className="mt-1 text-xs text-muted-foreground">

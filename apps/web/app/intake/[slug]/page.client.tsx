@@ -1417,43 +1417,49 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                                         className="rounded-xl border border-stone-200 bg-white p-3"
                                     >
                                         <div className="grid gap-3 md:grid-cols-2">
-                                            {columns.map((column) => (
-                                                <div key={column.key} className="space-y-2">
-                                                    <Label className="text-xs font-medium">
-                                                        {column.label}
-                                                        {column.required && (
-                                                            <span className="text-red-500"> *</span>
+                                            {columns.map((column) => {
+                                                const fieldInputId = `${field.key}-${rowIndex}-${column.key}`
+                                                const fieldInputName = `${field.key}[${rowIndex}][${column.key}]`
+                                                return (
+                                                    <div key={column.key} className="space-y-2">
+                                                        <Label htmlFor={fieldInputId} className="text-xs font-medium">
+                                                            {column.label}
+                                                            {column.required && (
+                                                                <span className="text-red-500"> *</span>
+                                                            )}
+                                                        </Label>
+                                                        {column.type === "select" ? (
+                                                            <select
+                                                                id={fieldInputId}
+                                                                name={fieldInputName}
+                                                                className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm"
+                                                                value={String(row[column.key] ?? "")}
+                                                                onChange={(e) =>
+                                                                    updateRow(rowIndex, column.key, e.target.value)
+                                                                }
+                                                            >
+                                                                <option value="">Select...</option>
+                                                                {(column.options || []).map((option) => (
+                                                                    <option key={option.value} value={option.value}>
+                                                                        {option.label}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        ) : (
+                                                            <Input
+                                                                id={fieldInputId}
+                                                                name={fieldInputName}
+                                                                type={column.type === "number" ? "number" : column.type === "date" ? "date" : "text"}
+                                                                value={String(row[column.key] ?? "")}
+                                                                onChange={(e) =>
+                                                                    updateRow(rowIndex, column.key, e.target.value)
+                                                                }
+                                                                className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
+                                                            />
                                                         )}
-                                                    </Label>
-                                                    {column.type === "select" ? (
-                                                        <select
-                                                            id={`${field.key}-${rowIndex}-${column.key}`}
-                                                            name={`${field.key}[${rowIndex}][${column.key}]`}
-                                                            className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm"
-                                                            value={String(row[column.key] ?? "")}
-                                                            onChange={(e) =>
-                                                                updateRow(rowIndex, column.key, e.target.value)
-                                                            }
-                                                        >
-                                                            <option value="">Select...</option>
-                                                            {(column.options || []).map((option) => (
-                                                                <option key={option.value} value={option.value}>
-                                                                    {option.label}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                    ) : (
-                                                        <Input
-                                                            type={column.type === "number" ? "number" : column.type === "date" ? "date" : "text"}
-                                                            value={String(row[column.key] ?? "")}
-                                                            onChange={(e) =>
-                                                                updateRow(rowIndex, column.key, e.target.value)
-                                                            }
-                                                            className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
-                                                        />
-                                                    )}
-                                                </div>
-                                            ))}
+                                                    </div>
+                                                )
+                                            })}
                                         </div>
                                         <div className="mt-3 flex justify-end">
                                             <Button
