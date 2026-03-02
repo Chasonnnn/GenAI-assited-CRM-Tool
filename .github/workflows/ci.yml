@@ -37,6 +37,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -60,7 +62,53 @@ jobs:
       
       - name: Run tests
         working-directory: apps/api
-        run: PYTHONPATH=. uv run -m pytest tests/ -v --tb=short
+        run: PYTHONPATH=. uv run -m pytest tests/ -v --tb=short --cov=app --cov-branch --cov-report=xml --cov-report=term-missing:skip-covered --cov-fail-under=75
+
+      - name: Upload backend coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-xml
+          path: apps/api/coverage.xml
+          if-no-files-found: error
+
+      - name: Enforce changed-line coverage
+        if: github.event_name == 'pull_request'
+        working-directory: apps/api
+        run: uv run diff-cover coverage.xml --compare-branch=origin/${{ github.base_ref }} --fail-under=90
+
+  backend-fastapi-gates:
+    name: Backend FastAPI Gates
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        working-directory: apps/api
+        run: uv sync --frozen --extra test
+
+      - name: Run FastAPI convention and contract gates
+        working-directory: apps/api
+        run: |
+          PYTHONPATH=. uv run -m pytest -v --tb=short \
+            tests/test_fastapi_conventions_signatures.py \
+            tests/test_fastapi_conventions_ellipsis.py \
+            tests/test_fastapi_conventions_response_contracts.py \
+            tests/test_fastapi_conventions_router_mounts.py \
+            tests/test_fastapi_conventions_async_sync.py \
+            tests/test_fastapi_openapi_contract.py \
+            tests/test_router_model_imports.py \
+            tests/test_router_service_boundaries.py
 
   ticketing-launch-gate:
     name: Ticketing Launch Gate
