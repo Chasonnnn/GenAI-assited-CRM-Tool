@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from io import BytesIO
 import uuid
 
+import pytest
 from fastapi import UploadFile
 from app.core.config import settings
 from app.core.encryption import hash_email
@@ -11,6 +12,37 @@ from app.jobs import scan_attachment
 from app.services import attachment_service, form_submission_service
 from app.utils.normalization import normalize_email
 from sqlalchemy.orm import sessionmaker
+
+
+def test_ensure_attachment_scan_job_deduplicates_inflight_jobs(db, test_org):
+    attachment_id = uuid.uuid4()
+
+    created = attachment_service.ensure_attachment_scan_job(
+        db=db,
+        org_id=test_org.id,
+        attachment_id=attachment_id,
+        commit=False,
+    )
+    created_again = attachment_service.ensure_attachment_scan_job(
+        db=db,
+        org_id=test_org.id,
+        attachment_id=attachment_id,
+        commit=False,
+    )
+
+    jobs = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.ATTACHMENT_SCAN.value,
+        )
+        .all()
+    )
+
+    assert created is True
+    assert created_again is False
+    assert len(jobs) == 1
+    assert jobs[0].payload.get("attachment_id") == str(attachment_id)
 
 
 def test_upload_attachment_enqueues_scan_job(db, test_org, test_user, default_stage, monkeypatch):
@@ -210,3 +242,68 @@ def test_form_submission_file_enqueues_scan_job(
     )
     assert job is not None
     assert job.payload.get("submission_file_id") == str(file_record.id)
+
+
+@pytest.mark.asyncio
+async def test_download_pending_attachment_requeues_scan_job_when_missing(
+    authed_client, db, test_org, test_user, default_stage, monkeypatch
+):
+    monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", True, raising=False)
+
+    normalized_email = normalize_email("scan-download-pending@test.com")
+    surrogate = Surrogate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        surrogate_number=f"S{uuid.uuid4().int % 90000 + 10000:05d}",
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
+        owner_type="user",
+        owner_id=test_user.id,
+        created_by_user_id=test_user.id,
+        full_name="Scan Download Pending",
+        email=normalized_email,
+        email_hash=hash_email(normalized_email),
+    )
+    db.add(surrogate)
+    db.flush()
+
+    attachment = Attachment(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        surrogate_id=surrogate.id,
+        uploaded_by_user_id=test_user.id,
+        filename="pending.pdf",
+        storage_key=f"{test_org.id}/{surrogate.id}/pending.pdf",
+        content_type="application/pdf",
+        file_size=12,
+        checksum_sha256="0" * 64,
+        scan_status="pending",
+        quarantined=False,
+    )
+    db.add(attachment)
+    db.flush()
+
+    existing = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.ATTACHMENT_SCAN.value,
+        )
+        .all()
+    )
+    assert existing == []
+
+    response = await authed_client.get(f"/attachments/{attachment.id}/download")
+    assert response.status_code == 409
+    assert response.json()["detail"] == "File is still being scanned"
+
+    jobs = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.ATTACHMENT_SCAN.value,
+        )
+        .all()
+    )
+    assert len(jobs) == 1
+    assert jobs[0].payload.get("attachment_id") == str(attachment.id)

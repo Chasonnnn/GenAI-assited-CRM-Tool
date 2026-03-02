@@ -363,20 +363,27 @@ def download_attachment(
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
-    if attachment.scan_status in ("infected", "error"):
-        detail = (
-            "File is infected" if attachment.scan_status == "infected" else "File failed virus scan"
-        )
-        raise HTTPException(status_code=403, detail=detail)
-    if settings.ATTACHMENT_SCAN_ENABLED and attachment.scan_status != "clean":
-        raise HTTPException(status_code=409, detail="File is still being scanned")
-
     # Verify access: case attachment requires case access, IP attachment uses org-wide access
     if attachment.surrogate_id:
         _get_surrogate_with_access(db, attachment.surrogate_id, session)
     elif attachment.intended_parent_id:
         # IP attachments use org-wide access (already verified by get_attachment org_id filter)
         _get_ip_with_access(db, attachment.intended_parent_id, session)
+
+    if attachment.scan_status in ("infected", "error"):
+        detail = (
+            "File is infected" if attachment.scan_status == "infected" else "File failed virus scan"
+        )
+        raise HTTPException(status_code=403, detail=detail)
+    if settings.ATTACHMENT_SCAN_ENABLED and attachment.scan_status != "clean":
+        attachment_service.ensure_attachment_scan_job(
+            db=db,
+            org_id=session.org_id,
+            attachment_id=attachment.id,
+            commit=False,
+        )
+        db.commit()
+        raise HTTPException(status_code=409, detail="File is still being scanned")
 
     url = attachment_service.get_download_url(
         db=db,
