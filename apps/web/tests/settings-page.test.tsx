@@ -50,6 +50,11 @@ const mockUpdateOrgSettings = vi.fn()
 const mockUpdateProfile = vi.fn()
 const mockGetIntelligentSuggestionSettings = vi.fn()
 const mockUpdateIntelligentSuggestionSettings = vi.fn()
+const mockGetIntelligentSuggestionTemplates = vi.fn()
+const mockGetIntelligentSuggestionRules = vi.fn()
+const mockCreateIntelligentSuggestionRule = vi.fn()
+const mockUpdateIntelligentSuggestionRule = vi.fn()
+const mockDeleteIntelligentSuggestionRule = vi.fn()
 
 vi.mock('@/lib/api/settings', async (importOriginal) => {
     const actual = await importOriginal<typeof import('@/lib/api/settings')>()
@@ -60,6 +65,12 @@ vi.mock('@/lib/api/settings', async (importOriginal) => {
         updateProfile: (payload: unknown) => mockUpdateProfile(payload),
         getIntelligentSuggestionSettings: () => mockGetIntelligentSuggestionSettings(),
         updateIntelligentSuggestionSettings: (payload: unknown) => mockUpdateIntelligentSuggestionSettings(payload),
+        getIntelligentSuggestionTemplates: () => mockGetIntelligentSuggestionTemplates(),
+        getIntelligentSuggestionRules: () => mockGetIntelligentSuggestionRules(),
+        createIntelligentSuggestionRule: (payload: unknown) => mockCreateIntelligentSuggestionRule(payload),
+        updateIntelligentSuggestionRule: (ruleId: string, payload: unknown) =>
+            mockUpdateIntelligentSuggestionRule(ruleId, payload),
+        deleteIntelligentSuggestionRule: (ruleId: string) => mockDeleteIntelligentSuggestionRule(ruleId),
     }
 })
 
@@ -95,7 +106,16 @@ vi.mock('@/lib/hooks/use-pipelines', () => ({
                 id: 'p1',
                 name: 'Default Pipeline',
                 is_default: true,
-                stages: [{ status: 'new_unread', label: 'New', color: '#000' }],
+                stages: [{
+                    id: 'stage-1',
+                    stage_key: 'new_unread',
+                    slug: 'new_unread',
+                    label: 'New',
+                    color: '#000',
+                    order: 1,
+                    stage_type: 'intake',
+                    is_active: true,
+                }],
                 current_version: 3,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
@@ -184,6 +204,44 @@ describe('SettingsPage', () => {
             daily_digest_enabled: true,
             digest_hour_local: 9,
         })
+        mockGetIntelligentSuggestionTemplates.mockResolvedValue([
+            {
+                template_key: 'stage_followup_custom',
+                name: 'Custom stage follow-up',
+                description: 'No updates after X business days at a selected stage.',
+                rule_kind: 'stage_inactivity',
+                default_stage_slug: 'new_unread',
+                default_business_days: 2,
+                is_default: false,
+            },
+            {
+                template_key: 'new_unread_followup',
+                name: 'New unread follow-up',
+                description: 'No updates after X business days in New Unread.',
+                rule_kind: 'stage_inactivity',
+                default_stage_slug: 'new_unread',
+                default_business_days: 1,
+                is_default: true,
+            },
+        ])
+        mockGetIntelligentSuggestionRules.mockResolvedValue([
+            {
+                id: 'rule-1',
+                organization_id: 'org-1',
+                template_key: 'new_unread_followup',
+                name: 'New unread follow-up',
+                rule_kind: 'stage_inactivity',
+                stage_slug: 'new_unread',
+                business_days: 1,
+                enabled: true,
+                sort_order: 0,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            },
+        ])
+        mockCreateIntelligentSuggestionRule.mockResolvedValue({})
+        mockUpdateIntelligentSuggestionRule.mockResolvedValue({})
+        mockDeleteIntelligentSuggestionRule.mockResolvedValue({})
         mockUpdateIntelligentSuggestionSettings.mockResolvedValue({})
     })
 

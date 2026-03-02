@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -28,7 +29,21 @@ import {
   LightbulbIcon,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { getOrgSettings, updateProfile, updateOrgSettings, getIntelligentSuggestionSettings, updateIntelligentSuggestionSettings, type IntelligentSuggestionSettings } from "@/lib/api/settings"
+import {
+  createIntelligentSuggestionRule,
+  deleteIntelligentSuggestionRule,
+  getIntelligentSuggestionRules,
+  getIntelligentSuggestionSettings,
+  getIntelligentSuggestionTemplates,
+  getOrgSettings,
+  updateIntelligentSuggestionRule,
+  updateIntelligentSuggestionSettings,
+  updateProfile,
+  updateOrgSettings,
+  type IntelligentSuggestionRule,
+  type IntelligentSuggestionSettings,
+  type IntelligentSuggestionTemplate,
+} from "@/lib/api/settings"
 import {
   useOrgSignature,
   useUpdateOrgSignature,
@@ -42,6 +57,7 @@ import {
   useUploadAvatar,
   useDeleteAvatar,
 } from "@/lib/hooks/use-sessions"
+import { usePipelines } from "@/lib/hooks/use-pipelines"
 import { useSystemHealth } from "@/lib/hooks/use-system"
 import type { SocialLink } from "@/lib/api/signature"
 import { toast } from "sonner"
@@ -967,29 +983,140 @@ function OrganizationBrandingSection() {
 }
 
 function IntelligentSuggestionsSection() {
+  type RuleDraft = {
+    template_key: string
+    name: string
+    stage_slug: string
+    business_days: number
+    enabled: boolean
+    sort_order: number
+  }
+
   const [settings, setSettings] = useState<IntelligentSuggestionSettings | null>(null)
+  const [templates, setTemplates] = useState<IntelligentSuggestionTemplate[]>([])
+  const [rules, setRules] = useState<IntelligentSuggestionRule[]>([])
+  const [newRuleDraft, setNewRuleDraft] = useState<RuleDraft | null>(null)
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null)
+  const [editingRuleDraft, setEditingRuleDraft] = useState<RuleDraft | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [ruleSaving, setRuleSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { data: pipelines } = usePipelines()
+
+  const stageOptions = useMemo(() => {
+    const bySlug = new Map<string, string>()
+    for (const pipeline of pipelines ?? []) {
+      for (const rawStage of pipeline.stages ?? []) {
+        const stage = rawStage as { slug?: string; status?: string; label?: string; is_active?: boolean }
+        const slug = stage.slug ?? stage.status
+        if (!slug || stage.is_active === false) continue
+        if (!bySlug.has(slug)) {
+          bySlug.set(slug, stage.label ?? slug)
+        }
+      }
+    }
+    return Array.from(bySlug.entries())
+      .map(([slug, label]) => ({ slug, label }))
+      .sort((left, right) => left.label.localeCompare(right.label))
+  }, [pipelines])
+
+  const stageLabelBySlug = useMemo(
+    () => new Map(stageOptions.map((option) => [option.slug, option.label])),
+    [stageOptions],
+  )
+  const templateByKey = useMemo(
+    () => new Map(templates.map((template) => [template.template_key, template])),
+    [templates],
+  )
+
+  const formatStageLabel = useCallback(
+    (slug: string | null | undefined) => {
+      if (!slug) return "N/A"
+      return stageLabelBySlug.get(slug) ?? slug.replaceAll("_", " ")
+    },
+    [stageLabelBySlug],
+  )
+
+  const requiresStageSelection = useCallback((template: IntelligentSuggestionTemplate | undefined) => {
+    if (!template) return false
+    return template.rule_kind === "stage_inactivity" && template.template_key !== "preapproval_stuck"
+  }, [])
+
+  const resolveStageSlug = useCallback(
+    (template: IntelligentSuggestionTemplate | undefined, stageSlug: string | null | undefined) => {
+      if (!template || !requiresStageSelection(template)) return ""
+      const normalized = (stageSlug ?? "").trim()
+      if (normalized && stageOptions.some((option) => option.slug === normalized)) {
+        return normalized
+      }
+      const defaultStage = (template.default_stage_slug ?? "").trim()
+      if (defaultStage && stageOptions.some((option) => option.slug === defaultStage)) {
+        return defaultStage
+      }
+      return stageOptions[0]?.slug ?? defaultStage
+    },
+    [requiresStageSelection, stageOptions],
+  )
+
+  const buildRuleDraft = useCallback(
+    (
+      template: IntelligentSuggestionTemplate | undefined,
+      sortOrder: number,
+      overrides: Partial<RuleDraft> = {},
+    ): RuleDraft | null => {
+      if (!template) return null
+      return {
+        template_key: template.template_key,
+        name: overrides.name ?? template.name,
+        stage_slug: resolveStageSlug(template, overrides.stage_slug ?? template.default_stage_slug),
+        business_days: overrides.business_days ?? template.default_business_days,
+        enabled: overrides.enabled ?? true,
+        sort_order: overrides.sort_order ?? sortOrder,
+      }
+    },
+    [resolveStageSlug],
+  )
 
   const loadSettings = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const response = await getIntelligentSuggestionSettings()
-      setSettings(response)
+      const [settingsResponse, templatesResponse, rulesResponse] = await Promise.all([
+        getIntelligentSuggestionSettings(),
+        getIntelligentSuggestionTemplates(),
+        getIntelligentSuggestionRules(),
+      ])
+      setSettings(settingsResponse)
+      setTemplates(templatesResponse)
+      setRules(rulesResponse)
+      const templateSeed = templatesResponse.find((template) => template.is_default) ?? templatesResponse[0]
+      if (templateSeed) {
+        const draft = buildRuleDraft(templateSeed, (rulesResponse.at(-1)?.sort_order ?? 0) + 1)
+        if (draft) setNewRuleDraft(draft)
+      }
     } catch (loadError) {
       console.error("Failed to load intelligent suggestion settings:", loadError)
       setError("Unable to load settings. Please retry.")
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [buildRuleDraft])
 
   useEffect(() => {
     loadSettings()
   }, [loadSettings])
+
+  useEffect(() => {
+    if (!newRuleDraft || templates.length === 0) return
+    const template = templateByKey.get(newRuleDraft.template_key)
+    if (!requiresStageSelection(template)) return
+    const normalizedStage = resolveStageSlug(template, newRuleDraft.stage_slug)
+    if (normalizedStage && normalizedStage !== newRuleDraft.stage_slug) {
+      setNewRuleDraft((prev) => (prev ? { ...prev, stage_slug: normalizedStage } : prev))
+    }
+  }, [newRuleDraft, templateByKey, templates, requiresStageSelection, resolveStageSlug])
 
   if (loading) {
     return (
@@ -1010,21 +1137,10 @@ function IntelligentSuggestionsSection() {
     )
   }
 
-  const setNumberField = (
-    key:
-      | "new_unread_business_days"
-      | "meeting_outcome_business_days"
-      | "stuck_business_days"
-      | "digest_hour_local",
-    rawValue: string,
-    min: number,
-    max: number,
-  ) => {
+  const setDigestField = (rawValue: string) => {
     const parsed = Number.parseInt(rawValue, 10)
-    const fallback = settings[key]
-    const normalized = Number.isFinite(parsed) ? parsed : fallback
-    const clamped = Math.min(max, Math.max(min, normalized))
-    setSettings((prev) => (prev ? { ...prev, [key]: clamped } : prev))
+    const normalized = Number.isFinite(parsed) ? parsed : settings.digest_hour_local
+    setSettings((prev) => (prev ? { ...prev, digest_hour_local: Math.max(0, Math.min(23, normalized)) } : prev))
   }
 
   const handleSave = async () => {
@@ -1035,7 +1151,7 @@ function IntelligentSuggestionsSection() {
       setSettings(updated)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
-      toast.success("Intelligent suggestion rules updated")
+      toast.success("Intelligent suggestion settings updated")
     } catch (saveError) {
       console.error("Failed to save intelligent suggestion settings:", saveError)
       setError("Unable to save settings. Please try again.")
@@ -1045,7 +1161,192 @@ function IntelligentSuggestionsSection() {
     }
   }
 
-  const rulesDisabled = !settings.enabled
+  const handleNewRuleTemplateChange = (templateKey: string | null) => {
+    if (!templateKey) return
+    const template = templateByKey.get(templateKey)
+    if (!template) return
+    setNewRuleDraft((prev) =>
+      buildRuleDraft(template, prev?.sort_order ?? (rules.at(-1)?.sort_order ?? 0) + 1, {
+        enabled: prev?.enabled ?? true,
+      }),
+    )
+  }
+
+  const handleCreateRule = async () => {
+    if (!newRuleDraft) return
+    const template = templateByKey.get(newRuleDraft.template_key)
+    if (!template) {
+      toast.error("Select a valid rule template")
+      return
+    }
+    const stageSlug = requiresStageSelection(template)
+      ? resolveStageSlug(template, newRuleDraft.stage_slug)
+      : null
+    if (requiresStageSelection(template) && !stageSlug) {
+      toast.error("Select a stage for this workflow rule")
+      return
+    }
+
+    setRuleSaving(true)
+    try {
+      const createdRule = await createIntelligentSuggestionRule({
+        template_key: template.template_key,
+        name: newRuleDraft.name.trim() || template.name,
+        stage_slug: stageSlug,
+        business_days: Math.max(1, Math.min(60, newRuleDraft.business_days)),
+        enabled: newRuleDraft.enabled,
+      })
+      setRules((prev) =>
+        [...prev, createdRule].sort((left, right) => left.sort_order - right.sort_order),
+      )
+      const resetDraft = buildRuleDraft(template, createdRule.sort_order + 1, { enabled: true })
+      if (resetDraft) setNewRuleDraft(resetDraft)
+      toast.success("Workflow rule created")
+    } catch (ruleError) {
+      console.error("Failed to create intelligent suggestion rule:", ruleError)
+      toast.error("Failed to create workflow rule")
+    } finally {
+      setRuleSaving(false)
+    }
+  }
+
+  const handleToggleRuleEnabled = async (rule: IntelligentSuggestionRule) => {
+    setRuleSaving(true)
+    try {
+      const updatedRule = await updateIntelligentSuggestionRule(rule.id, { enabled: !rule.enabled })
+      setRules((prev) => prev.map((current) => (current.id === rule.id ? updatedRule : current)))
+      if (editingRuleId === rule.id && editingRuleDraft) {
+        setEditingRuleDraft({ ...editingRuleDraft, enabled: updatedRule.enabled })
+      }
+      toast.success(`Rule ${updatedRule.enabled ? "enabled" : "disabled"}`)
+    } catch (ruleError) {
+      console.error("Failed to toggle intelligent suggestion rule:", ruleError)
+      toast.error("Failed to update rule status")
+    } finally {
+      setRuleSaving(false)
+    }
+  }
+
+  const startEditingRule = (rule: IntelligentSuggestionRule) => {
+    const template = templateByKey.get(rule.template_key)
+    const nextDraft = buildRuleDraft(template, rule.sort_order, {
+      name: rule.name,
+      stage_slug: rule.stage_slug ?? template?.default_stage_slug ?? "",
+      business_days: rule.business_days,
+      enabled: rule.enabled,
+      sort_order: rule.sort_order,
+    })
+    if (!nextDraft) return
+    setEditingRuleId(rule.id)
+    setEditingRuleDraft(nextDraft)
+  }
+
+  const cancelEditingRule = () => {
+    setEditingRuleId(null)
+    setEditingRuleDraft(null)
+  }
+
+  const handleSaveEditingRule = async () => {
+    if (!editingRuleId || !editingRuleDraft) return
+    const template = templateByKey.get(editingRuleDraft.template_key)
+    if (!template) {
+      toast.error("Unknown template for rule")
+      return
+    }
+    const stageSlug = requiresStageSelection(template)
+      ? resolveStageSlug(template, editingRuleDraft.stage_slug)
+      : null
+    if (requiresStageSelection(template) && !stageSlug) {
+      toast.error("Select a stage for this workflow rule")
+      return
+    }
+
+    setRuleSaving(true)
+    try {
+      const updatedRule = await updateIntelligentSuggestionRule(editingRuleId, {
+        name: editingRuleDraft.name.trim() || template.name,
+        stage_slug: stageSlug,
+        business_days: Math.max(1, Math.min(60, editingRuleDraft.business_days)),
+        enabled: editingRuleDraft.enabled,
+        sort_order: Math.max(0, editingRuleDraft.sort_order),
+      })
+      setRules((prev) =>
+        prev
+          .map((rule) => (rule.id === editingRuleId ? updatedRule : rule))
+          .sort((left, right) => left.sort_order - right.sort_order),
+      )
+      cancelEditingRule()
+      toast.success("Workflow rule updated")
+    } catch (ruleError) {
+      console.error("Failed to update intelligent suggestion rule:", ruleError)
+      toast.error("Failed to update workflow rule")
+    } finally {
+      setRuleSaving(false)
+    }
+  }
+
+  const handleDeleteRule = async (rule: IntelligentSuggestionRule) => {
+    if (!confirm(`Delete rule "${rule.name}"?`)) return
+    setRuleSaving(true)
+    try {
+      await deleteIntelligentSuggestionRule(rule.id)
+      setRules((prev) => prev.filter((current) => current.id !== rule.id))
+      if (editingRuleId === rule.id) cancelEditingRule()
+      toast.success("Workflow rule deleted")
+    } catch (ruleError) {
+      console.error("Failed to delete intelligent suggestion rule:", ruleError)
+      toast.error("Failed to delete workflow rule")
+    } finally {
+      setRuleSaving(false)
+    }
+  }
+
+  const renderRuleDescription = (rule: IntelligentSuggestionRule) => {
+    if (rule.rule_kind === "meeting_outcome_missing") {
+      return `Meeting outcome missing for ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"}`
+    }
+    if (rule.template_key === "preapproval_stuck") {
+      return `No updates in intake pre-approval stages for ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"}`
+    }
+    return `${formatStageLabel(rule.stage_slug)} has no updates for ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"}`
+  }
+
+  const renderStageInput = (
+    id: string,
+    value: string,
+    onChange: (nextValue: string | null) => void,
+    disabled = false,
+  ) => {
+    if (stageOptions.length > 0) {
+      return (
+        <Select value={value} onValueChange={onChange} disabled={disabled}>
+          <SelectTrigger id={id}>
+            <SelectValue placeholder="Select stage" />
+          </SelectTrigger>
+          <SelectContent>
+            {stageOptions.map((option) => (
+              <SelectItem key={option.slug} value={option.slug}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )
+    }
+    return (
+      <Input
+        id={id}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Stage slug (for example: new_unread)"
+      />
+    )
+  }
+
+  const newRuleTemplate = newRuleDraft ? templateByKey.get(newRuleDraft.template_key) : undefined
+  const newRuleNeedsStage = requiresStageSelection(newRuleTemplate)
+  const rulesPaused = !settings.enabled
 
   return (
     <div className="space-y-6">
@@ -1055,7 +1356,7 @@ function IntelligentSuggestionsSection() {
           Intelligent Suggestions
         </h3>
         <p className="text-sm text-muted-foreground">
-          Configure rule thresholds and digest timing for lead attention suggestions.
+          Configure workflow-style rule templates, stage thresholds, and digest timing.
         </p>
       </div>
 
@@ -1070,7 +1371,7 @@ function IntelligentSuggestionsSection() {
           <div>
             <p className="font-medium">Enable Intelligent Suggestions</p>
             <p className="text-sm text-muted-foreground">
-              Turn all intelligent suggestion rules on or off for your organization.
+              Turn all intelligent suggestion workflows on or off for your organization.
             </p>
           </div>
           <Switch
@@ -1078,98 +1379,276 @@ function IntelligentSuggestionsSection() {
             onCheckedChange={(checked) => setSettings((prev) => (prev ? { ...prev, enabled: checked } : prev))}
           />
         </div>
+        {rulesPaused && (
+          <p className="text-sm text-muted-foreground">
+            Intelligent suggestions are paused globally. You can still configure rules below.
+          </p>
+        )}
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-lg border border-border p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="font-medium">New unread stale leads</p>
-              <Switch
-                disabled={rulesDisabled}
-                checked={settings.new_unread_enabled}
-                onCheckedChange={(checked) =>
-                  setSettings((prev) => (prev ? { ...prev, new_unread_enabled: checked } : prev))
-                }
-              />
+        <div className="rounded-lg border border-border p-4 space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-medium">Add Workflow Rule</p>
+              <p className="text-sm text-muted-foreground">
+                Build rules like "stuck on stage X for Y business days" or "follow up after Y days."
+              </p>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Suggest when a lead in New Unread has no updates for N business days.
-            </p>
-            <div className="space-y-2">
-              <Label htmlFor="new-unread-days">Business days</Label>
-              <Input
-                id="new-unread-days"
-                type="number"
-                min={1}
-                max={30}
-                disabled={rulesDisabled || !settings.new_unread_enabled}
-                value={settings.new_unread_business_days}
-                onChange={(e) => setNumberField("new_unread_business_days", e.target.value, 1, 30)}
-              />
-            </div>
+            <Button
+              variant="outline"
+              onClick={handleCreateRule}
+              disabled={ruleSaving || !newRuleDraft || templates.length === 0}
+            >
+              <PlusIcon className="mr-2 size-4" aria-hidden="true" />
+              Add Rule
+            </Button>
           </div>
 
-          <div className="rounded-lg border border-border p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="font-medium">Meeting outcome follow-up</p>
-              <Switch
-                disabled={rulesDisabled}
-                checked={settings.meeting_outcome_enabled}
-                onCheckedChange={(checked) =>
-                  setSettings((prev) => (prev ? { ...prev, meeting_outcome_enabled: checked } : prev))
-                }
-              />
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Suggest when meeting outcomes are missing after N business days.
-            </p>
-            <div className="space-y-2">
-              <Label htmlFor="meeting-outcome-days">Business days</Label>
-              <Input
-                id="meeting-outcome-days"
-                type="number"
-                min={1}
-                max={30}
-                disabled={rulesDisabled || !settings.meeting_outcome_enabled}
-                value={settings.meeting_outcome_business_days}
-                onChange={(e) => setNumberField("meeting_outcome_business_days", e.target.value, 1, 30)}
-              />
-            </div>
-          </div>
+          {newRuleDraft ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="new-rule-template">Template</Label>
+                <Select
+                  value={newRuleDraft.template_key}
+                  onValueChange={handleNewRuleTemplateChange}
+                  disabled={ruleSaving || templates.length === 0}
+                >
+                  <SelectTrigger id="new-rule-template">
+                    <SelectValue placeholder="Select template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templates.map((template) => (
+                      <SelectItem key={template.template_key} value={template.template_key}>
+                        {template.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {newRuleTemplate && (
+                  <p className="text-xs text-muted-foreground">{newRuleTemplate.description}</p>
+                )}
+              </div>
 
-          <div className="rounded-lg border border-border p-4 space-y-3 md:col-span-2">
-            <div className="flex items-center justify-between">
-              <p className="font-medium">Stuck pre-approval leads</p>
-              <Switch
-                disabled={rulesDisabled}
-                checked={settings.stuck_enabled}
-                onCheckedChange={(checked) =>
-                  setSettings((prev) => (prev ? { ...prev, stuck_enabled: checked } : prev))
-                }
-              />
+              <div className="space-y-2">
+                <Label htmlFor="new-rule-name">Rule name</Label>
+                <Input
+                  id="new-rule-name"
+                  value={newRuleDraft.name}
+                  disabled={ruleSaving}
+                  onChange={(event) =>
+                    setNewRuleDraft((prev) => (prev ? { ...prev, name: event.target.value } : prev))
+                  }
+                />
+              </div>
+
+              {newRuleNeedsStage && (
+                <div className="space-y-2">
+                  <Label htmlFor="new-rule-stage">Stage</Label>
+                  {renderStageInput(
+                    "new-rule-stage",
+                    newRuleDraft.stage_slug,
+                    (nextStage) =>
+                      setNewRuleDraft((prev) =>
+                        nextStage && prev ? { ...prev, stage_slug: nextStage } : prev,
+                      ),
+                    ruleSaving,
+                  )}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="new-rule-days">Business days</Label>
+                <Input
+                  id="new-rule-days"
+                  type="number"
+                  min={1}
+                  max={60}
+                  disabled={ruleSaving}
+                  value={newRuleDraft.business_days}
+                  onChange={(event) => {
+                    const parsed = Number.parseInt(event.target.value, 10)
+                    const normalized = Number.isFinite(parsed) ? parsed : newRuleDraft.business_days
+                    setNewRuleDraft((prev) =>
+                      prev ? { ...prev, business_days: Math.max(1, Math.min(60, normalized)) } : prev,
+                    )
+                  }}
+                />
+              </div>
             </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No templates available. Reload to retry.</p>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <p className="font-medium">Configured Workflow Rules</p>
             <p className="text-sm text-muted-foreground">
-              Suggest when pre-approval leads have no updates for N business days.
+              Edit thresholds, target stages, priority, and enabled status.
             </p>
-            <div className="space-y-2 max-w-xs">
-              <Label htmlFor="stuck-days">Business days</Label>
-              <Input
-                id="stuck-days"
-                type="number"
-                min={1}
-                max={60}
-                disabled={rulesDisabled || !settings.stuck_enabled}
-                value={settings.stuck_business_days}
-                onChange={(e) => setNumberField("stuck_business_days", e.target.value, 1, 60)}
-              />
-            </div>
           </div>
+          {rules.length === 0 && (
+            <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
+              No intelligent suggestion rules configured.
+            </div>
+          )}
+          {rules.map((rule) => {
+            const template = templateByKey.get(rule.template_key)
+            const isEditing = editingRuleId === rule.id && editingRuleDraft !== null
+            const editingTemplate = isEditing ? templateByKey.get(editingRuleDraft.template_key) : undefined
+            const editingNeedsStage = requiresStageSelection(editingTemplate)
+
+            return (
+              <div key={rule.id} className="rounded-lg border border-border p-4 space-y-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium">{rule.name}</p>
+                    <p className="text-sm text-muted-foreground">{renderRuleDescription(rule)}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={rule.enabled ? "default" : "secondary"}>
+                      {rule.enabled ? "Enabled" : "Disabled"}
+                    </Badge>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={ruleSaving}
+                      onClick={() => handleToggleRuleEnabled(rule)}
+                    >
+                      {rule.enabled ? "Disable" : "Enable"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={ruleSaving}
+                      onClick={() => startEditingRule(rule)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={ruleSaving}
+                      onClick={() => handleDeleteRule(rule)}
+                    >
+                      <TrashIcon className="mr-1 size-4" aria-hidden="true" />
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 text-sm md:grid-cols-3">
+                  <p><span className="font-medium">Template:</span> {template?.name ?? rule.template_key}</p>
+                  <p><span className="font-medium">Stage:</span> {formatStageLabel(rule.stage_slug)}</p>
+                  <p><span className="font-medium">Priority:</span> {rule.sort_order}</p>
+                </div>
+
+                {isEditing && editingRuleDraft && (
+                  <div className="rounded-md border border-border bg-muted/30 p-3 space-y-3">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor={`edit-rule-name-${rule.id}`}>Rule name</Label>
+                        <Input
+                          id={`edit-rule-name-${rule.id}`}
+                          value={editingRuleDraft.name}
+                          disabled={ruleSaving}
+                          onChange={(event) =>
+                            setEditingRuleDraft((prev) =>
+                              prev ? { ...prev, name: event.target.value } : prev,
+                            )
+                          }
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor={`edit-rule-days-${rule.id}`}>Business days</Label>
+                        <Input
+                          id={`edit-rule-days-${rule.id}`}
+                          type="number"
+                          min={1}
+                          max={60}
+                          disabled={ruleSaving}
+                          value={editingRuleDraft.business_days}
+                          onChange={(event) => {
+                            const parsed = Number.parseInt(event.target.value, 10)
+                            const normalized = Number.isFinite(parsed) ? parsed : editingRuleDraft.business_days
+                            setEditingRuleDraft((prev) =>
+                              prev
+                                ? { ...prev, business_days: Math.max(1, Math.min(60, normalized)) }
+                                : prev,
+                            )
+                          }}
+                        />
+                      </div>
+
+                      {editingNeedsStage && (
+                        <div className="space-y-2">
+                          <Label htmlFor={`edit-rule-stage-${rule.id}`}>Stage</Label>
+                          {renderStageInput(
+                            `edit-rule-stage-${rule.id}`,
+                            editingRuleDraft.stage_slug,
+                            (nextStage) =>
+                              setEditingRuleDraft((prev) =>
+                                nextStage && prev ? { ...prev, stage_slug: nextStage } : prev,
+                              ),
+                            ruleSaving,
+                          )}
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <Label htmlFor={`edit-rule-priority-${rule.id}`}>Priority</Label>
+                        <Input
+                          id={`edit-rule-priority-${rule.id}`}
+                          type="number"
+                          min={0}
+                          disabled={ruleSaving}
+                          value={editingRuleDraft.sort_order}
+                          onChange={(event) => {
+                            const parsed = Number.parseInt(event.target.value, 10)
+                            const normalized = Number.isFinite(parsed) ? parsed : editingRuleDraft.sort_order
+                            setEditingRuleDraft((prev) =>
+                              prev ? { ...prev, sort_order: Math.max(0, normalized) } : prev,
+                            )
+                          }}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor={`edit-rule-enabled-${rule.id}`}>Enabled</Label>
+                        <div className="flex h-10 items-center rounded-md border border-input px-3">
+                          <Switch
+                            id={`edit-rule-enabled-${rule.id}`}
+                            checked={editingRuleDraft.enabled}
+                            disabled={ruleSaving}
+                            onCheckedChange={(checked) =>
+                              setEditingRuleDraft((prev) =>
+                                prev ? { ...prev, enabled: checked } : prev,
+                              )
+                            }
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" disabled={ruleSaving} onClick={handleSaveEditingRule}>
+                        Save Rule
+                      </Button>
+                      <Button size="sm" variant="outline" disabled={ruleSaving} onClick={cancelEditingRule}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
 
         <div className="rounded-lg border border-border p-4 space-y-3">
           <div className="flex items-center justify-between">
             <p className="font-medium">Daily digest notifications</p>
             <Switch
-              disabled={rulesDisabled}
+              disabled={!settings.enabled}
               checked={settings.daily_digest_enabled}
               onCheckedChange={(checked) =>
                 setSettings((prev) => (prev ? { ...prev, daily_digest_enabled: checked } : prev))
@@ -1186,9 +1665,9 @@ function IntelligentSuggestionsSection() {
               type="number"
               min={0}
               max={23}
-              disabled={rulesDisabled || !settings.daily_digest_enabled}
+              disabled={!settings.enabled || !settings.daily_digest_enabled}
               value={settings.digest_hour_local}
-              onChange={(e) => setNumberField("digest_hour_local", e.target.value, 0, 23)}
+              onChange={(event) => setDigestField(event.target.value)}
             />
           </div>
         </div>
