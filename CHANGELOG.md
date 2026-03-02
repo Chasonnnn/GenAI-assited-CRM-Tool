@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.16](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.15...surrogacy-crm-platform-v0.90.16) (2026-03-02)
+
+
+### Maintenance
+
+* enforce backend coverage and diff-cover ci gates ([756e20a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/756e20ab1f4dd200f6a0d70e30cbea2dc161a28a))
+* relax global coverage floor and keep diff-cover gating ([88e2978](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/88e29782d738297da3b0c853e3356ab27088227f))
+
 ## [0.90.15](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.14...surrogacy-crm-platform-v0.90.15) (2026-03-01)
 
 
