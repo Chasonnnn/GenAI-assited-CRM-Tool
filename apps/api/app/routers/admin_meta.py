@@ -7,10 +7,13 @@ Includes:
 - Sync triggers (hierarchy, spend, forms)
 """
 
+from typing import Annotated
+
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
+
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
@@ -23,6 +26,8 @@ from app.core.deps import (
 from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.services import meta_admin_service, meta_page_service, meta_sync_service
+
+csrf_header_dependency = require_csrf_header
 
 
 router = APIRouter(
@@ -51,9 +56,9 @@ def _manual_tokens_disabled() -> None:
 
 
 class MetaPageCreate(BaseModel):
-    page_id: str = Field(..., description="Meta page ID")
+    page_id: str = Field(description="Meta page ID")
     page_name: str | None = Field(None, description="Optional page name for display")
-    access_token: str = Field(..., description="Page access token (will be encrypted)")
+    access_token: str = Field(description="Page access token (will be encrypted)")
     expires_days: int = Field(60, ge=1, le=365, description="Token expiry in days")
 
 
@@ -93,8 +98,8 @@ class MetaPageTestResponse(BaseModel):
 
 @router.get("", response_model=list[MetaPageRead])
 def list_meta_pages(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """List all Meta page mappings for the organization."""
     return meta_page_service.list_meta_pages(db, session.org_id)
@@ -103,9 +108,9 @@ def list_meta_pages(
 @router.post("", response_model=MetaPageRead, status_code=status.HTTP_201_CREATED)
 def create_meta_page(
     data: MetaPageCreate,
-    _csrf: None = Depends(require_csrf_header),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Create or update Meta page mapping with encrypted token.
@@ -120,9 +125,9 @@ def create_meta_page(
 def update_meta_page(
     page_id: str,
     data: MetaPageUpdate,
-    _csrf: None = Depends(require_csrf_header),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Update existing Meta page mapping."""
     _manual_tokens_disabled()
@@ -132,10 +137,10 @@ def update_meta_page(
 @router.delete("/{page_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_meta_page(
     page_id: str,
-    _csrf: None = Depends(require_csrf_header),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> Response:
     """
     Delete Meta page mapping.
 
@@ -151,7 +156,7 @@ def delete_meta_page(
 
 
 class MetaAdAccountCreate(BaseModel):
-    ad_account_external_id: str = Field(..., description="Meta Ad Account ID (act_XXXXX)")
+    ad_account_external_id: str = Field(description="Meta Ad Account ID (act_XXXXX)")
     ad_account_name: str | None = Field(None, description="Display name")
     pixel_id: str | None = Field(None, description="Pixel ID for CAPI")
     capi_enabled: bool = Field(False, description="Enable CAPI for this account")
@@ -203,8 +208,8 @@ class SyncStatusResponse(BaseModel):
 
 @ad_account_router.get("", response_model=list[MetaAdAccountRead])
 def list_meta_ad_accounts(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """List all Meta ad accounts for the organization."""
     return meta_admin_service.list_ad_accounts(db, session.org_id)
@@ -213,9 +218,9 @@ def list_meta_ad_accounts(
 @ad_account_router.post("", response_model=MetaAdAccountRead, status_code=status.HTTP_201_CREATED)
 def create_meta_ad_account(
     data: MetaAdAccountCreate,
-    _csrf: None = Depends(require_csrf_header),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Create a new Meta ad account configuration."""
     _manual_tokens_disabled()
@@ -225,8 +230,8 @@ def create_meta_ad_account(
 @ad_account_router.get("/{account_id}", response_model=MetaAdAccountRead)
 def get_meta_ad_account(
     account_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get a specific Meta ad account."""
     account = meta_admin_service.get_ad_account(db, account_id, session.org_id)
@@ -239,9 +244,9 @@ def get_meta_ad_account(
 def update_meta_ad_account(
     account_id: UUID,
     data: MetaAdAccountUpdate,
-    _csrf: None = Depends(require_csrf_header),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Update Meta ad account configuration."""
     account = meta_admin_service.get_ad_account(db, account_id, session.org_id)
@@ -262,10 +267,10 @@ def update_meta_ad_account(
 @ad_account_router.delete("/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_meta_ad_account(
     account_id: UUID,
-    _csrf: None = Depends(require_csrf_header),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> Response:
     """
     Soft-delete Meta ad account (sets is_active=false).
 
@@ -293,9 +298,9 @@ sync_router = APIRouter(
 async def trigger_hierarchy_sync(
     account_id: UUID | None = None,
     full_sync: bool = False,
-    _csrf: None = Depends(require_csrf_header),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Trigger hierarchy sync (campaigns, adsets, ads).
@@ -330,9 +335,9 @@ async def trigger_hierarchy_sync(
 async def trigger_spend_sync(
     account_id: UUID | None = None,
     days_back: int = 7,
-    _csrf: None = Depends(require_csrf_header),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Trigger spend sync for ad accounts.
@@ -372,9 +377,9 @@ async def trigger_spend_sync(
 @sync_router.post("/forms", response_model=SyncTriggerResponse)
 async def trigger_forms_sync(
     page_id: str | None = None,
-    _csrf: None = Depends(require_csrf_header),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Trigger forms sync.
@@ -395,8 +400,8 @@ async def trigger_forms_sync(
 
 @sync_router.get("/status", response_model=list[SyncStatusResponse])
 def get_sync_status(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get sync status for all ad accounts."""
     accounts = meta_admin_service.list_active_ad_accounts(db, org_id=session.org_id)

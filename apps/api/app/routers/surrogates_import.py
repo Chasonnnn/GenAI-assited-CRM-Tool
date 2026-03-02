@@ -9,7 +9,8 @@ import os
 from collections.abc import AsyncIterator
 from uuid import UUID
 
-from typing import Literal
+from typing import Literal, Annotated
+
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -125,8 +126,8 @@ class ImportActionResponse(BaseModel):
 
 @router.get("", response_model=list[ImportHistoryItem])
 def list_imports(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """List recent imports for the organization."""
     imports = import_service.list_imports(
@@ -155,8 +156,10 @@ def list_imports(
 # NOTE: /pending MUST come before /{import_id} to avoid routing conflict
 @router.get("/pending", response_model=list[ImportApprovalItem])
 def list_pending_approvals(
-    session: UserSession = Depends(require_permission(POLICIES["org_settings"].default)),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["org_settings"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """List imports awaiting approval."""
     imports = import_service.list_pending_approvals(db, session.org_id)
@@ -199,8 +202,8 @@ def list_pending_approvals(
 def get_import_details(
     import_id: UUID,
     request: Request,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get detailed import information including errors."""
     import_record = import_service.get_import(
@@ -258,11 +261,11 @@ def get_import_details(
 )
 async def preview_csv_enhanced(
     request: Request,
-    file: UploadFile = File(..., description="CSV file to preview"),
+    file: Annotated[UploadFile, "fastapi_param"] = File(description="CSV file to preview"),
     apply_template: bool = True,
     enable_ai: bool = False,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Enhanced CSV preview with smart detection and column suggestions.
@@ -506,8 +509,8 @@ class AIMapResponse(BaseModel):
 )
 async def get_ai_mapping_suggestions(
     data: AIMapRequest,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Get AI-powered column mapping suggestions.
@@ -571,8 +574,8 @@ async def get_ai_mapping_suggestions(
 )
 async def get_ai_mapping_suggestions_stream(
     data: AIMapRequest,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> StreamingResponse:
     """Stream AI-powered column mapping suggestions via SSE."""
     from app.services.import_ai_mapper_service import (
@@ -746,8 +749,8 @@ class ImportRetryRequest(BaseModel):
 def submit_import_for_approval(
     import_id: UUID,
     data: ImportSubmitRequest | None = None,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Submit an import for admin approval.
@@ -837,8 +840,10 @@ def submit_import_for_approval(
 )
 def approve_import(
     import_id: UUID,
-    session: UserSession = Depends(require_permission(POLICIES["org_settings"].default)),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["org_settings"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Approve an import for execution.
@@ -886,8 +891,10 @@ def approve_import(
 def retry_import(
     import_id: UUID,
     data: ImportRetryRequest | None = None,
-    session: UserSession = Depends(require_permission(POLICIES["org_settings"].default)),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["org_settings"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Retry a failed/approved import by queueing a new job."""
     import_record = import_service.get_import(db, session.org_id, import_id)
@@ -927,8 +934,10 @@ def retry_import(
 )
 def run_import_inline(
     import_id: UUID,
-    session: UserSession = Depends(require_permission(POLICIES["org_settings"].default)),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["org_settings"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Run an approved import inline (no background worker)."""
     try:
@@ -954,8 +963,10 @@ def run_import_inline(
 def reject_import(
     import_id: UUID,
     data: ImportRejectRequest,
-    session: UserSession = Depends(require_permission(POLICIES["org_settings"].default)),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["org_settings"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Reject an import with a reason.
@@ -992,8 +1003,8 @@ def reject_import(
 )
 def cancel_import(
     import_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Cancel an import request and remove it from history."""
     try:

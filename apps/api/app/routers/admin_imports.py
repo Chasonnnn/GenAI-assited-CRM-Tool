@@ -1,6 +1,7 @@
 """Developer-only imports for org restore."""
 
 from __future__ import annotations
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Request
 from sqlalchemy.orm import Session
@@ -12,6 +13,8 @@ from app.core.permissions import PermissionKey as P
 from app.db.enums import AuditEventType
 from app.schemas.auth import UserSession
 from app.services import admin_import_service, audit_service
+
+csrf_header_dependency = require_csrf_header
 
 
 router = APIRouter(prefix="/admin/imports", tags=["Admin - Imports"])
@@ -26,12 +29,16 @@ def _ensure_dev_env() -> None:
 @limiter.limit("2/minute")
 async def import_all(
     request: Request,
-    config_zip: UploadFile = File(..., description="Organization config ZIP"),
-    surrogates_csv: UploadFile = File(..., description="Surrogates CSV"),
-    session: UserSession = Depends(require_permission(P.ADMIN_IMPORTS_MANAGE)),
-    db: Session = Depends(get_db),
-    _csrf: None = Depends(require_csrf_header),
-):
+    config_zip: Annotated[UploadFile, "fastapi_param"] = File(
+        description="Organization config ZIP"
+    ),
+    surrogates_csv: Annotated[UploadFile, "fastapi_param"] = File(description="Surrogates CSV"),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.ADMIN_IMPORTS_MANAGE)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+) -> object:
     """Import org config + surrogates into an empty org."""
     _ensure_dev_env()
 
@@ -76,11 +83,15 @@ async def import_all(
 @limiter.limit("2/minute")
 async def import_config(
     request: Request,
-    config_zip: UploadFile = File(..., description="Organization config ZIP"),
-    session: UserSession = Depends(require_permission(P.ADMIN_IMPORTS_MANAGE)),
-    db: Session = Depends(get_db),
-    _csrf: None = Depends(require_csrf_header),
-):
+    config_zip: Annotated[UploadFile, "fastapi_param"] = File(
+        description="Organization config ZIP"
+    ),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.ADMIN_IMPORTS_MANAGE)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+) -> object:
     """Import org config into an empty org."""
     _ensure_dev_env()
 
@@ -112,11 +123,13 @@ async def import_config(
 @limiter.limit("2/minute")
 async def import_surrogates(
     request: Request,
-    surrogates_csv: UploadFile = File(..., description="Surrogates CSV"),
-    session: UserSession = Depends(require_permission(P.ADMIN_IMPORTS_MANAGE)),
-    db: Session = Depends(get_db),
-    _csrf: None = Depends(require_csrf_header),
-):
+    surrogates_csv: Annotated[UploadFile, "fastapi_param"] = File(description="Surrogates CSV"),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.ADMIN_IMPORTS_MANAGE)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+) -> object:
     """Import surrogates CSV into an empty org (requires config imported first)."""
     _ensure_dev_env()
 

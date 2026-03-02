@@ -6,6 +6,8 @@ Endpoints for:
 - Viewing and editing role default permissions
 """
 
+from typing import Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -177,7 +179,9 @@ def _build_effective_permissions_response(
 
 @router.get("/available", response_model=list[PermissionInfo])
 def list_available_permissions(
-    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["team"].default)
+    ),
 ):
     """
     List all available permissions with metadata.
@@ -203,8 +207,10 @@ def list_available_permissions(
 
 @router.get("/members", response_model=list[MemberRead])
 def list_members(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["team"].default)
+    ),
 ):
     """
     List all org members with roles.
@@ -232,8 +238,10 @@ def list_members(
 @router.get("/members/{member_id}", response_model=MemberDetail)
 def get_member(
     member_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["team"].default)
+    ),
 ):
     """
     Get member detail with effective permissions and overrides.
@@ -292,8 +300,10 @@ def update_member(
     member_id: UUID,
     data: MemberUpdate,
     request: Request,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["team"].default)
+    ),
 ):
     """
     Update member role or permission overrides.
@@ -413,9 +423,11 @@ def update_member(
 def remove_member(
     member_id: UUID,
     request: Request,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["team"].default)
+    ),
+) -> object:
     """
     Remove member from organization.
 
@@ -460,8 +472,8 @@ def remove_member(
 
 @router.get("/effective/me", response_model=EffectivePermissions)
 def get_my_effective_permissions(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get effective permissions for the current authenticated user."""
     membership = permission_service.get_membership_for_user(db, session.org_id, session.user_id)
@@ -479,8 +491,10 @@ def get_my_effective_permissions(
 @router.get("/effective/{user_id}", response_model=EffectivePermissions)
 def get_effective_permissions(
     user_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["team"].default)
+    ),
 ):
     """
     Get effective permissions for a specific user.
@@ -516,7 +530,9 @@ ROLE_LABELS = {
 
 @router.get("/roles", response_model=list[RoleSummary])
 def list_roles(
-    session: UserSession = Depends(require_permission(POLICIES["team"].actions["view_roles"])),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["team"].actions["view_roles"])
+    ),
 ):
     """
     List all roles with permission counts.
@@ -537,8 +553,10 @@ def list_roles(
 @router.get("/roles/{role}", response_model=RoleDetail)
 def get_role_detail(
     role: str,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["team"].actions["view_roles"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["team"].actions["view_roles"])
+    ),
 ):
     """
     Get role detail with all permissions grouped by category.
@@ -593,8 +611,8 @@ def get_role_detail(
 def update_role_permissions(
     role: str,
     data: RolePermissionUpdate,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["team"].actions["manage_roles"])
     ),  # Developer only enforced by permission
 ):

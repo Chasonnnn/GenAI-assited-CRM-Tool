@@ -531,7 +531,7 @@ async def security_headers_middleware(request: Request, call_next):
 # ============================================================================
 
 # Auth router (always mounted)
-app.include_router(auth.router, prefix="/auth", tags=["auth"])
+app.include_router(auth.router)
 
 # OIDC discovery for Workload Identity Federation
 app.include_router(oidc.router)
@@ -546,14 +546,12 @@ app.include_router(import_templates.router)
 app.include_router(custom_fields.router)
 
 # Surrogates module routers
-app.include_router(surrogates.router, prefix="/surrogates", tags=["surrogates"])
+app.include_router(surrogates.router)
+app.include_router(notes.router)  # Mixed paths: /surrogates/{id}/notes and /notes/{id}
 app.include_router(
-    notes.router, tags=["notes"]
-)  # Mixed paths: /surrogates/{id}/notes and /notes/{id}
-app.include_router(
-    interviews.router, tags=["interviews"]
+    interviews.router
 )  # Mixed paths: /surrogates/{id}/interviews and /interviews/{id}
-app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
+app.include_router(tasks.router)
 app.include_router(surrogates_read.export_router)  # Token-auth surrogate export view
 
 # Surrogate Journey (timeline view)
@@ -561,18 +559,18 @@ app.include_router(journey.router)  # Authenticated journey endpoints
 app.include_router(journey.export_router)  # Token-auth export view
 
 # Intended Parents module
-app.include_router(intended_parents.router, prefix="/intended-parents", tags=["intended-parents"])
+app.include_router(intended_parents.router)
 
 # Notifications (user-scoped)
-app.include_router(notifications.router, prefix="/me", tags=["notifications"])
+app.include_router(notifications.router)
 
 # Email and jobs routers
-app.include_router(email_templates.router, prefix="/email-templates", tags=["email"])
+app.include_router(email_templates.router)
 app.include_router(unsubscribe.router)
-app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
+app.include_router(jobs.router)
 
 # Webhooks (Meta Lead Ads webhook handler)
-app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
+app.include_router(webhooks.router)
 
 # Internal endpoints (scheduled/cron jobs - protected by INTERNAL_SECRET)
 app.include_router(internal.router)
@@ -586,7 +584,7 @@ app.include_router(analytics.router)
 app.include_router(ops.router)
 
 # Platform admin endpoints (ops console - cross-org)
-app.include_router(platform.router, prefix="/platform", tags=["platform"])
+app.include_router(platform.router)
 
 # AI Assistant endpoints
 app.include_router(ai.router)
@@ -623,7 +621,7 @@ app.include_router(matches.router)
 app.include_router(workflows.router)  # Router already has prefix="/workflows"
 
 # Campaigns (Bulk email sends - Manager+)
-app.include_router(campaigns.router, prefix="/campaigns", tags=["campaigns"])
+app.include_router(campaigns.router)
 
 # Workflow Templates (Marketplace - Manager+)
 app.include_router(templates.router)
@@ -649,22 +647,22 @@ app.include_router(admin_exports.router)
 app.include_router(admin_imports.router)
 
 # Metadata API (Picklists - any authenticated user)
-app.include_router(metadata.router, prefix="/metadata", tags=["metadata"])
+app.include_router(metadata.router)
 
 # WebSocket for real-time notifications
 app.include_router(ws_router.router)
 
 # Queue Management (Surrogate Routing)
-app.include_router(queues.router, prefix="/queues", tags=["queues"])
+app.include_router(queues.router)
 
 # File Attachments
-app.include_router(attachments.router, tags=["attachments"])
+app.include_router(attachments.router)
 
 # Team Invitations
-app.include_router(invites.router, tags=["invites"])
+app.include_router(invites.router)
 
 # Settings (organization and user preferences)
-app.include_router(settings_router.router, tags=["settings"])
+app.include_router(settings_router.router)
 
 # Resend Email Configuration (Admin)
 app.include_router(resend.router)
@@ -673,10 +671,10 @@ app.include_router(resend.router)
 app.include_router(zapier.router)
 
 # Appointments (internal, authenticated)
-app.include_router(appointments.router, prefix="/appointments", tags=["appointments"])
+app.include_router(appointments.router)
 
 # Public Booking (unauthenticated)
-app.include_router(booking.router, prefix="/book", tags=["booking"])
+app.include_router(booking.router)
 
 # Email Tracking (public endpoints for pixel/click tracking)
 app.include_router(tracking.router)
@@ -685,7 +683,7 @@ app.include_router(tracking.router)
 app.include_router(workflow_metrics.router)
 
 # MFA (Multi-Factor Authentication)
-app.include_router(mfa.router, prefix="/mfa", tags=["mfa"])
+app.include_router(mfa.router)
 
 # Global Search
 app.include_router(search.router)
@@ -695,7 +693,7 @@ app.include_router(status_change_requests.router)
 
 # Dev router (ONLY mounted in dev-like environments)
 if settings.is_dev:
-    app.include_router(dev.router, prefix="/dev", tags=["dev"])
+    app.include_router(dev.router)
 
 
 # ============================================================================
@@ -707,7 +705,7 @@ logger = logging.getLogger(__name__)
 
 @app.get("/")
 @limiter.exempt
-def root():
+def root() -> object:
     """Basic availability endpoint (scanner-friendly)."""
     return JSONResponse(
         content={"status": "ok"},
@@ -717,7 +715,7 @@ def root():
 
 @app.get("/sitemap.xml")
 @limiter.exempt
-def sitemap():
+def sitemap() -> object:
     """Minimal sitemap to keep scanners happy."""
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -800,14 +798,14 @@ def _check_redis_connection() -> dict:
 
 @app.get("/healthz")
 @limiter.exempt
-def healthz():
+def healthz() -> object:
     """Liveness probe (no external dependencies)."""
     return {"status": "ok"}
 
 
 @app.get("/readyz")
 @limiter.exempt
-def readyz():
+def readyz() -> object:
     """Readiness probe (checks database connectivity)."""
     _check_db_connection()
     migration_status = _check_db_migrations()
@@ -829,20 +827,20 @@ def readyz():
 
 @app.get("/health/live")
 @limiter.exempt
-def health_live():
+def health_live() -> object:
     """Liveness alias."""
     return healthz()
 
 
 @app.get("/health/ready")
 @limiter.exempt
-def health_ready():
+def health_ready() -> object:
     """Readiness alias."""
     return readyz()
 
 
 @app.get("/health")
 @limiter.exempt
-def health():
+def health() -> object:
     """Legacy health endpoint (alias to readiness check)."""
     return readyz()

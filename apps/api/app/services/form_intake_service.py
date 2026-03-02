@@ -34,7 +34,12 @@ from app.db.models import (
 )
 from app.schemas.surrogate import SurrogateCreate
 from app.services import form_submission_service
-from app.utils.normalization import normalize_email, normalize_name, normalize_phone, normalize_search_text
+from app.utils.normalization import (
+    normalize_email,
+    normalize_name,
+    normalize_phone,
+    normalize_search_text,
+)
 
 IDENTITY_SURROGATE_FIELDS = ("full_name", "date_of_birth", "phone", "email")
 logger = logging.getLogger(__name__)
@@ -147,7 +152,9 @@ def _has_enabled_form_scoped_submission_workflow(
         .all()
     )
     target_form_id = str(form_id)
-    return any(_trigger_config_form_id(workflow.trigger_config) == target_form_id for workflow in workflows)
+    return any(
+        _trigger_config_form_id(workflow.trigger_config) == target_form_id for workflow in workflows
+    )
 
 
 def _default_intake_routing_actions() -> list[dict[str, Any]]:
@@ -769,7 +776,9 @@ def create_shared_submission(
         identity=identity,
         mapping_lookup=mapping_lookup,
     ):
-        raise ValueError("Duplicate submission detected. Please contact support if this is unexpected.")
+        raise ValueError(
+            "Duplicate submission detected. Please contact support if this is unexpected."
+        )
     submission = _create_shared_submission(
         db,
         form=form,
@@ -857,12 +866,14 @@ def auto_match_submission(
         return submission, FormSubmissionMatchStatus.LINKED.value
 
     if len(phone_matches) > 1 or len(email_matches) > 1:
-        reason = "phone_dob_name_ambiguous" if len(phone_matches) > 1 else "email_dob_name_ambiguous"
+        reason = (
+            "phone_dob_name_ambiguous" if len(phone_matches) > 1 else "email_dob_name_ambiguous"
+        )
         submission.surrogate_id = None
         submission.match_status = FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
         submission.match_reason = reason
         submission.matched_at = None
-        for surrogate in (phone_matches or email_matches):
+        for surrogate in phone_matches or email_matches:
             db.add(
                 FormSubmissionMatchCandidate(
                     organization_id=submission.organization_id,
@@ -1096,7 +1107,9 @@ def lookup_shared_resume_draft(
         return {"status": "insufficient_identity"}
 
     query = query.filter(or_(*contact_filters))
-    matched = query.order_by(FormIntakeDraft.updated_at.desc(), FormIntakeDraft.created_at.desc()).first()
+    matched = query.order_by(
+        FormIntakeDraft.updated_at.desc(), FormIntakeDraft.created_at.desc()
+    ).first()
     if not matched:
         return {"status": "no_match"}
 
@@ -1152,7 +1165,9 @@ def restore_shared_draft(
     target.email_hash = source_draft.email_hash
     target.phone_hash = source_draft.phone_hash
 
-    if target.started_at is None and any(v not in (None, "", [], {}) for v in target.answers_json.values()):
+    if target.started_at is None and any(
+        v not in (None, "", [], {}) for v in target.answers_json.values()
+    ):
         target.started_at = now
 
     db.commit()
@@ -1486,7 +1501,10 @@ def promote_intake_lead(
         if surrogate:
             linked_count = (
                 db.query(FormSubmission)
-                .filter(FormSubmission.intake_lead_id == lead.id, FormSubmission.surrogate_id == surrogate.id)
+                .filter(
+                    FormSubmission.intake_lead_id == lead.id,
+                    FormSubmission.surrogate_id == surrogate.id,
+                )
                 .count()
             )
             return surrogate, linked_count
@@ -1536,7 +1554,9 @@ def promote_intake_lead(
     )
     submission_ids = [
         row[0]
-        for row in db.query(FormSubmission.id).filter(FormSubmission.intake_lead_id == lead.id).all()
+        for row in db.query(FormSubmission.id)
+        .filter(FormSubmission.intake_lead_id == lead.id)
+        .all()
     ]
     if submission_ids:
         db.query(FormSubmissionMatchCandidate).filter(

@@ -1,5 +1,7 @@
 """AI settings routes."""
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -60,7 +62,7 @@ class AISettingsUpdate(BaseModel):
 class TestKeyRequest(BaseModel):
     """Test an API key."""
 
-    provider: str = Field(..., pattern="^(gemini|vertex_api_key)$")
+    provider: str = Field(pattern="^(gemini|vertex_api_key)$")
     api_key: str
     vertex_api_key: VertexAPIKeyConfig | None = None
 
@@ -73,8 +75,10 @@ class TestKeyResponse(BaseModel):
 
 @router.get("/settings", response_model=AISettingsResponse)
 def get_settings(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_SETTINGS_MANAGE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.AI_SETTINGS_MANAGE)
+    ),
 ) -> AISettingsResponse:
     """Get AI settings for the organization."""
     from app.services import ai_settings_service
@@ -121,8 +125,10 @@ def get_settings(
 def update_settings(
     update: AISettingsUpdate,
     request: Request,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_SETTINGS_MANAGE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.AI_SETTINGS_MANAGE)
+    ),
 ) -> AISettingsResponse:
     """Update AI settings for the organization. Creates version snapshot."""
     from app.services import ai_settings_service, version_service
@@ -236,7 +242,9 @@ def update_settings(
 )
 async def test_api_key(
     request: TestKeyRequest,
-    session: UserSession = Depends(require_permission(P.AI_SETTINGS_MANAGE)),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.AI_SETTINGS_MANAGE)
+    ),
 ) -> TestKeyResponse:
     """Test if an API key is valid."""
     from app.services import ai_settings_service

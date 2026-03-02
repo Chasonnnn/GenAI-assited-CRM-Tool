@@ -4,7 +4,8 @@ import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, Annotated
+
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 class GenerateWorkflowRequest(BaseModel):
     """Request to generate a workflow from natural language."""
 
-    description: str = Field(..., min_length=10, max_length=2000)
+    description: str = Field(min_length=10, max_length=2000)
     scope: str = Field(default="personal", pattern="^(personal|org)$")
 
 
@@ -80,8 +81,8 @@ class SaveWorkflowResponse(BaseModel):
 def generate_workflow(
     request: Request,
     body: GenerateWorkflowRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
 ) -> GenerateWorkflowResponse:
     """
     Generate a workflow configuration from natural language description.
@@ -124,8 +125,8 @@ def generate_workflow(
 async def generate_workflow_stream(
     request: Request,
     body: GenerateWorkflowRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
 ) -> StreamingResponse:
     """Stream workflow generation via SSE."""
     from app.services import ai_workflow_service, ai_settings_service
@@ -308,8 +309,8 @@ async def generate_workflow_stream(
 )
 def validate_workflow(
     body: ValidateWorkflowRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
 ) -> ValidateWorkflowResponse:
     """
     Validate a workflow configuration.
@@ -358,8 +359,8 @@ def validate_workflow(
 )
 def save_ai_workflow(
     body: SaveWorkflowRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
 ) -> SaveWorkflowResponse:
     """
     Save an approved AI-generated workflow.

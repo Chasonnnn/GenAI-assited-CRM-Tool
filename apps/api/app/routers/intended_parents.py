@@ -1,9 +1,12 @@
 """Intended Parents router - CRUD, status, notes for IPs."""
 
+from typing import Annotated
+
 from decimal import Decimal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status, Response
+
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
@@ -31,6 +34,7 @@ from app.utils.normalization import normalize_email
 router = APIRouter(
     tags=["Intended Parents"],
     dependencies=[Depends(require_permission(POLICIES["intended_parents"].default))],
+    prefix="/intended-parents",
 )
 
 
@@ -39,24 +43,34 @@ router = APIRouter(
 # =============================================================================
 
 
-@router.get("", response_model=dict)
+@router.get("", response_model=dict[str, object])
 def list_intended_parents(
     request: Request,
-    status: list[str] = Query(None, description="Filter by status (multi-select)"),
+    status: Annotated[list[str], "fastapi_param"] = Query(
+        None, description="Filter by status (multi-select)"
+    ),
     state: str | None = None,
     budget_min: Decimal | None = None,
     budget_max: Decimal | None = None,
-    q: str | None = Query(None, description="Search name/number or exact email/phone"),
+    q: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="Search name/number or exact email/phone"
+    ),
     owner_id: UUID | None = None,
     include_archived: bool = False,
-    created_after: str | None = Query(None, description="Created after (ISO format)"),
-    created_before: str | None = Query(None, description="Created before (ISO format)"),
-    page: int = Query(1, ge=1),
-    per_page: int = Query(20, ge=1, le=100),
-    sort_by: str | None = Query(None, description="Column to sort by"),
-    sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort direction"),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    created_after: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="Created after (ISO format)"
+    ),
+    created_before: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="Created before (ISO format)"
+    ),
+    page: Annotated[int, "fastapi_param"] = Query(1, ge=1),
+    per_page: Annotated[int, "fastapi_param"] = Query(20, ge=1, le=100),
+    sort_by: Annotated[str | None, "fastapi_param"] = Query(None, description="Column to sort by"),
+    sort_order: Annotated[str, "fastapi_param"] = Query(
+        "desc", pattern="^(asc|desc)$", description="Sort direction"
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """List intended parents with filters and pagination."""
     return ip_service.list_intended_parents_for_session(
@@ -81,8 +95,8 @@ def list_intended_parents(
 
 @router.get("/stats", response_model=IntendedParentStats)
 def get_stats(
-    db: Session = Depends(get_db),
-    session: dict = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get IP counts by status."""
     return ip_service.get_ip_stats(db, org_id=session.org_id)
@@ -102,8 +116,10 @@ def get_stats(
 def create_intended_parent(
     request: Request,
     data: IntendedParentCreate,
-    db: Session = Depends(get_db),
-    session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["intended_parents"].actions["edit"])
+    ),
 ):
     """Create a new intended parent."""
     # Check for duplicate email
@@ -148,8 +164,8 @@ def create_intended_parent(
 @router.get("/{ip_id}", response_model=IntendedParentRead)
 def get_intended_parent(
     ip_id: UUID,
-    db: Session = Depends(get_db),
-    session: dict = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get an intended parent by ID."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -178,8 +194,10 @@ def update_intended_parent(
     request: Request,
     ip_id: UUID,
     data: IntendedParentUpdate,
-    db: Session = Depends(get_db),
-    session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["intended_parents"].actions["edit"])
+    ),
 ):
     """Update an intended parent."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -239,8 +257,10 @@ def update_status(
     request: Request,
     ip_id: UUID,
     data: IntendedParentStatusUpdate,
-    db: Session = Depends(get_db),
-    session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["intended_parents"].actions["edit"])
+    ),
 ):
     """Change status of an intended parent."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -314,8 +334,10 @@ def update_status(
 def archive_intended_parent(
     request: Request,
     ip_id: UUID,
-    db: Session = Depends(get_db),
-    session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["intended_parents"].actions["edit"])
+    ),
 ):
     """Archive (soft delete) an intended parent."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -347,8 +369,10 @@ def archive_intended_parent(
 def restore_intended_parent(
     request: Request,
     ip_id: UUID,
-    db: Session = Depends(get_db),
-    session=Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["intended_parents"].actions["edit"])
+    ),
 ):
     """Restore an archived intended parent (admin only)."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -388,9 +412,11 @@ def restore_intended_parent(
 def delete_intended_parent(
     request: Request,
     ip_id: UUID,
-    db: Session = Depends(get_db),
-    session=Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["intended_parents"].actions["edit"])
+    ),
+) -> Response:
     """Hard delete an archived intended parent (admin only)."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
     if not ip:
@@ -419,8 +445,8 @@ def delete_intended_parent(
 @router.get("/{ip_id}/history", response_model=list[IntendedParentStatusHistoryItem])
 def get_status_history(
     ip_id: UUID,
-    db: Session = Depends(get_db),
-    session: dict = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get status history for an intended parent."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -474,8 +500,8 @@ def get_status_history(
 def list_notes(
     ip_id: UUID,
     request: Request,
-    db: Session = Depends(get_db),
-    session: dict = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """List notes for an intended parent."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -519,8 +545,10 @@ def list_notes(
 def create_note(
     ip_id: UUID,
     data: EntityNoteCreate,
-    db: Session = Depends(get_db),
-    session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["intended_parents"].actions["edit"])
+    ),
 ):
     """Add a note to an intended parent."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
@@ -551,9 +579,11 @@ def create_note(
 def delete_note(
     ip_id: UUID,
     note_id: UUID,
-    db: Session = Depends(get_db),
-    session: dict = Depends(require_permission(POLICIES["intended_parents"].actions["edit"])),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["intended_parents"].actions["edit"])
+    ),
+) -> Response:
     """Delete a note (author or admin only)."""
     ip = ip_service.get_intended_parent(db, ip_id, session.org_id)
     if not ip:

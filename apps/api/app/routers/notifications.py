@@ -4,6 +4,8 @@ Notifications Router - /me/notifications endpoints.
 Provides notification listing, read status, and settings.
 """
 
+from typing import Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -15,7 +17,7 @@ from app.schemas.auth import UserSession
 from app.services import notification_service
 
 
-router = APIRouter()
+router = APIRouter(prefix="/me", tags=["notifications"])
 
 
 # =============================================================================
@@ -91,13 +93,17 @@ class NotificationSettingsUpdate(BaseModel):
 
 @router.get("/notifications", response_model=NotificationListResponse)
 def list_notifications(
-    unread_only: bool = Query(False),
-    notification_types: str | None = Query(None, description="Comma-separated notification types"),
-    limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    cursor: str | None = Query(None, description="Cursor for keyset pagination"),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    unread_only: Annotated[bool, "fastapi_param"] = Query(False),
+    notification_types: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="Comma-separated notification types"
+    ),
+    limit: Annotated[int, "fastapi_param"] = Query(20, ge=1, le=100),
+    offset: Annotated[int, "fastapi_param"] = Query(0, ge=0),
+    cursor: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="Cursor for keyset pagination"
+    ),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get user's notifications."""
     # Parse types filter
@@ -149,8 +155,8 @@ def list_notifications(
 
 @router.get("/notifications/count", response_model=UnreadCountResponse)
 def get_unread_count(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get unread notification count (for polling)."""
     count = notification_service.get_unread_count(
@@ -168,8 +174,8 @@ def get_unread_count(
 )
 def mark_notification_read(
     notification_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Mark a notification as read."""
     notification = notification_service.mark_read(
@@ -199,9 +205,9 @@ def mark_notification_read(
     dependencies=[Depends(require_csrf_header)],
 )
 def mark_all_read(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Mark all notifications as read."""
     count = notification_service.mark_all_read(
         db=db,
@@ -213,8 +219,8 @@ def mark_all_read(
 
 @router.get("/settings/notifications", response_model=NotificationSettingsRead)
 def get_notification_settings(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get user's notification settings."""
     settings = notification_service.get_user_settings(
@@ -232,8 +238,8 @@ def get_notification_settings(
 )
 def update_notification_settings(
     data: NotificationSettingsUpdate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Update user's notification settings."""
     updates = data.model_dump(exclude_unset=True)

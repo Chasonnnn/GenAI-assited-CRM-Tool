@@ -3,7 +3,8 @@
 import os
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -70,14 +71,22 @@ class AuditAIActivityResponse(BaseModel):
 
 @router.get("/", response_model=AuditLogListResponse)
 def list_audit_logs(
-    page: int = Query(1, ge=1),
-    per_page: int = Query(50, ge=1, le=100),
-    event_type: str | None = Query(None, description="Filter by event type"),
-    actor_user_id: UUID | None = Query(None, description="Filter by actor"),
-    start_date: datetime | None = Query(None, description="Filter events after this date"),
-    end_date: datetime | None = Query(None, description="Filter events before this date"),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    page: Annotated[int, "fastapi_param"] = Query(1, ge=1),
+    per_page: Annotated[int, "fastapi_param"] = Query(50, ge=1, le=100),
+    event_type: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="Filter by event type"
+    ),
+    actor_user_id: Annotated[UUID | None, "fastapi_param"] = Query(
+        None, description="Filter by actor"
+    ),
+    start_date: Annotated[datetime | None, "fastapi_param"] = Query(
+        None, description="Filter events after this date"
+    ),
+    end_date: Annotated[datetime | None, "fastapi_param"] = Query(
+        None, description="Filter events before this date"
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> AuditLogListResponse:
     """
     List audit log entries for the organization.
@@ -121,7 +130,7 @@ def list_audit_logs(
 
 @router.get("/event-types")
 def list_event_types(
-    session: UserSession = Depends(get_current_session),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> list[str]:
     """List available audit event types for filtering."""
     return [e.value for e in AuditEventType]
@@ -129,10 +138,12 @@ def list_event_types(
 
 @router.get("/ai-activity", response_model=AuditAIActivityResponse)
 def get_ai_activity(
-    hours: int = Query(24, ge=1, le=720, description="Hours to look back for counts (default 24)"),
-    limit: int = Query(6, ge=1, le=50),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    hours: Annotated[int, "fastapi_param"] = Query(
+        24, ge=1, le=720, description="Hours to look back for counts (default 24)"
+    ),
+    limit: Annotated[int, "fastapi_param"] = Query(6, ge=1, le=50),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> AuditAIActivityResponse:
     """Get recent AI audit activity and counts for the specified time window."""
     counts, recent_logs, actor_names = audit_service.get_ai_activity(
@@ -165,9 +176,11 @@ def get_ai_activity(
 
 @router.get("/exports", response_model=ExportJobListResponse)
 def list_audit_exports(
-    limit: int = Query(50, ge=1, le=200),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["audit"].actions["export"])),
+    limit: Annotated[int, "fastapi_param"] = Query(50, ge=1, le=200),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["audit"].actions["export"])
+    ),
 ) -> ExportJobListResponse:
     """List recent audit exports for the organization."""
     jobs = compliance_service.list_export_jobs(db, session.org_id, limit=limit)
@@ -200,8 +213,10 @@ def list_audit_exports(
 @router.post("/exports", response_model=ExportJobRead, dependencies=[Depends(require_csrf_header)])
 def create_audit_export(
     payload: ExportJobCreate,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["audit"].actions["export"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["audit"].actions["export"])
+    ),
 ) -> ExportJobRead:
     """Request an async audit export job."""
     if payload.redact_mode == "full":
@@ -243,8 +258,10 @@ def create_audit_export(
 @router.get("/exports/{export_id}", response_model=ExportJobRead)
 def get_audit_export(
     export_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["audit"].actions["export"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["audit"].actions["export"])
+    ),
 ) -> ExportJobRead:
     """Get audit export job status."""
     job = compliance_service.get_export_job(db, session.org_id, export_id)
@@ -276,9 +293,11 @@ def get_audit_export(
 @router.get("/exports/{export_id}/download")
 def download_audit_export(
     export_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["audit"].actions["export"])),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["audit"].actions["export"])
+    ),
+) -> object:
     """Download an export file via signed URL or local file."""
     job = compliance_service.get_export_job(db, session.org_id, export_id)
     if not job:

@@ -1,5 +1,7 @@
 """Surrogate contact attempt routes."""
 
+from typing import Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -28,8 +30,10 @@ router = APIRouter()
 def create_contact_attempt(
     surrogate_id: UUID,
     data: ContactAttemptCreate,
-    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["edit"])),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["surrogates"].actions["edit"])
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Log a contact attempt for a surrogate."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
@@ -57,8 +61,8 @@ def create_contact_attempt(
 )
 def get_contact_attempts(
     surrogate_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get contact attempts summary for a surrogate."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)

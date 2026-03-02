@@ -1,5 +1,7 @@
 """Compliance router - retention policies and legal holds."""
 
+from typing import Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -28,8 +30,10 @@ router = APIRouter(prefix="/compliance", tags=["Compliance"])
 
 @router.get("/policies", response_model=list[RetentionPolicyRead])
 def list_policies(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.COMPLIANCE_MANAGE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.COMPLIANCE_MANAGE)
+    ),
 ) -> list[RetentionPolicyRead]:
     """List retention policies for the organization."""
     return compliance_service.list_retention_policies(db, session.org_id)
@@ -42,8 +46,10 @@ def list_policies(
 )
 def upsert_policy(
     payload: RetentionPolicyUpsert,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.COMPLIANCE_MANAGE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.COMPLIANCE_MANAGE)
+    ),
 ) -> RetentionPolicyRead:
     """Create or update a retention policy."""
     try:
@@ -61,9 +67,11 @@ def upsert_policy(
 
 @router.get("/legal-holds", response_model=LegalHoldListResponse)
 def list_legal_holds(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.COMPLIANCE_MANAGE)),
-    pagination: PaginationParams = Depends(get_pagination),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.COMPLIANCE_MANAGE)
+    ),
+    pagination: Annotated[PaginationParams, "fastapi_param"] = Depends(get_pagination),
 ) -> LegalHoldListResponse:
     """List legal holds for the organization."""
     items, total = compliance_service.list_legal_holds(db, session.org_id, pagination)
@@ -86,8 +94,10 @@ def list_legal_holds(
 )
 def create_legal_hold(
     payload: LegalHoldCreate,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.COMPLIANCE_MANAGE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.COMPLIANCE_MANAGE)
+    ),
 ) -> LegalHoldRead:
     """Create a legal hold (org-wide or entity-specific)."""
     return compliance_service.create_legal_hold(
@@ -107,8 +117,10 @@ def create_legal_hold(
 )
 def release_legal_hold(
     hold_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.COMPLIANCE_MANAGE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.COMPLIANCE_MANAGE)
+    ),
 ) -> LegalHoldRead:
     """Release a legal hold."""
     hold = compliance_service.release_legal_hold(
@@ -124,8 +136,10 @@ def release_legal_hold(
 
 @router.get("/purge-preview", response_model=PurgePreviewResponse)
 def purge_preview(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.COMPLIANCE_PURGE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.COMPLIANCE_PURGE)
+    ),
 ) -> PurgePreviewResponse:
     """Preview data purge counts by entity type."""
     results = compliance_service.preview_purge(db, session.org_id)
@@ -147,8 +161,10 @@ def purge_preview(
     dependencies=[Depends(require_csrf_header)],
 )
 def purge_execute(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.COMPLIANCE_PURGE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.COMPLIANCE_PURGE)
+    ),
 ) -> PurgeExecuteResponse:
     """Execute data purge based on retention policies."""
     job = job_service.schedule_job(

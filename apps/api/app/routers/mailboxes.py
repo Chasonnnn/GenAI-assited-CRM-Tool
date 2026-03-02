@@ -1,6 +1,7 @@
 """Mailbox source administration and sync control APIs."""
 
 from __future__ import annotations
+from typing import Annotated
 
 import logging
 from uuid import UUID
@@ -54,7 +55,7 @@ def _journal_redirect_uri() -> str:
     return f"{base}/mailboxes/journal/gmail/oauth/callback"
 
 
-def _verify_internal_secret(x_internal_secret: str = Header(...)) -> None:
+def _verify_internal_secret(x_internal_secret: str = Header()) -> None:
     expected = settings.INTERNAL_SECRET if hasattr(settings, "INTERNAL_SECRET") else None
     if not expected:
         raise HTTPException(status_code=501, detail="INTERNAL_SECRET not configured")
@@ -64,8 +65,8 @@ def _verify_internal_secret(x_internal_secret: str = Header(...)) -> None:
 
 @router.get("", response_model=MailboxListResponse)
 def list_mailboxes(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MailboxListResponse:
     """List mailbox sources and sync state for the current org."""
     rows = ticketing_service.list_mailboxes(db, org_id=session.org_id)
@@ -109,7 +110,7 @@ def list_mailboxes(
 def start_journal_oauth(
     request: Request,
     response: Response,
-    _session: UserSession = Depends(get_current_session),
+    _session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> OAuthStartResponse:
     """Start OAuth flow for organization journal mailbox."""
     if not settings.GOOGLE_CLIENT_ID:
@@ -142,8 +143,8 @@ async def complete_journal_oauth(
     request: Request,
     code: str,
     state: str,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> RedirectResponse:
     """Finish OAuth for journal mailbox and save org mailbox credential."""
     org = org_service.get_org_by_id(db, session.org_id)
@@ -227,8 +228,8 @@ async def complete_journal_oauth(
 )
 def enqueue_backfill(
     mailbox_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MailboxJobEnqueueResponse:
     """Enqueue full historical backfill."""
     job_id = ticketing_service.enqueue_mailbox_backfill(
@@ -251,8 +252,8 @@ def enqueue_backfill(
 )
 def enqueue_history_sync(
     mailbox_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MailboxJobEnqueueResponse:
     """Enqueue incremental history sync."""
     job_id = ticketing_service.enqueue_mailbox_history_sync(
@@ -271,8 +272,8 @@ def enqueue_history_sync(
 @router.get("/{mailbox_id}/sync/status", response_model=MailboxSyncStatusResponse)
 def mailbox_sync_status(
     mailbox_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MailboxSyncStatusResponse:
     """Get mailbox sync status and queue metrics."""
     status_view = ticketing_service.get_mailbox_sync_status(
@@ -305,8 +306,8 @@ def mailbox_sync_status(
 def pause_mailbox(
     mailbox_id: UUID,
     data: MailboxPauseRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MailboxPauseResponse:
     """Pause mailbox ingestion."""
     paused_until, pause_reason = ticketing_service.pause_mailbox_ingestion(
@@ -331,8 +332,8 @@ def pause_mailbox(
 )
 def resume_mailbox(
     mailbox_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MailboxJobEnqueueResponse:
     """Resume mailbox ingestion and queue incremental sync."""
     job_id = ticketing_service.resume_mailbox_ingestion(
@@ -349,7 +350,7 @@ def resume_mailbox(
 
 @_internal_router.post("/gmail-sync", response_model=InternalGmailSyncScheduleResponse)
 def schedule_gmail_sync_jobs(
-    x_internal_secret: str = Header(...),
+    x_internal_secret: Annotated[str, "fastapi_param"] = Header(),
 ) -> InternalGmailSyncScheduleResponse:
     """Cron/fallback trigger to enqueue incremental Gmail sync jobs."""
     _verify_internal_secret(x_internal_secret)

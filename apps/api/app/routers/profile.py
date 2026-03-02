@@ -1,6 +1,7 @@
 """Profile card API endpoints for case manager+ users."""
 
-from typing import Any
+from typing import Any, Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -74,7 +75,7 @@ class ProfileOverridesUpdate(BaseModel):
 class ProfileHiddenUpdate(BaseModel):
     """Toggle hidden state for a field."""
 
-    field_key: str = Field(..., min_length=1, max_length=255)
+    field_key: str = Field(min_length=1, max_length=255)
     hidden: bool
 
 
@@ -89,8 +90,8 @@ class ProfileHiddenUpdate(BaseModel):
 )
 def get_profile(
     surrogate_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get profile data for a surrogate (case_manager+ only)."""
     _require_case_manager(session)
@@ -111,8 +112,8 @@ def get_profile(
 )
 def sync_profile(
     surrogate_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get staged diff from latest submission (requires Save to persist)."""
     _require_case_manager(session)
@@ -143,9 +144,9 @@ def sync_profile(
 def save_profile_overrides(
     surrogate_id: UUID,
     body: ProfileOverridesUpdate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Save profile overrides (and optionally update base submission ID after sync)."""
     _require_case_manager(session)
 
@@ -175,9 +176,9 @@ def save_profile_overrides(
 def toggle_hidden_field(
     surrogate_id: UUID,
     body: ProfileHiddenUpdate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Toggle hidden state for a profile field."""
     _require_case_manager(session)
 
@@ -202,9 +203,9 @@ def toggle_hidden_field(
 )
 def export_profile_pdf(
     surrogate_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Export profile as PDF with hidden fields masked."""
     from fastapi.responses import Response
     from app.services import pdf_export_service

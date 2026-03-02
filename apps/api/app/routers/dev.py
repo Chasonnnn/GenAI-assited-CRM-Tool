@@ -1,5 +1,7 @@
 """Development-only endpoints for testing and seeding."""
 
+from typing import Annotated
+
 import re
 from uuid import UUID
 
@@ -20,10 +22,10 @@ from app.services import (
     user_service,
 )
 
-router = APIRouter()
+router = APIRouter(prefix="/dev", tags=["dev"])
 
 
-def _verify_dev_secret(x_dev_secret: str = Header(...)):
+def _verify_dev_secret(x_dev_secret: str = Header()):
     """
     Verify dev secret header.
 
@@ -39,7 +41,7 @@ def _verify_dev_secret(x_dev_secret: str = Header(...)):
 
 
 @router.post("/seed", dependencies=[Depends(_verify_dev_secret)])
-def seed_test_data(db: Session = Depends(get_db)):
+def seed_test_data(db: Annotated[Session, "fastapi_param"] = Depends(get_db)) -> object:
     """
     Create test organization and users for local development.
 
@@ -54,8 +56,8 @@ def login_as(
     user_id: UUID,
     request: Request,
     response: Response,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """
     Bypass OAuth and directly set session cookie for testing.
 
@@ -112,7 +114,7 @@ def login_as(
 
 
 @router.get("/cors", dependencies=[Depends(_verify_dev_secret)])
-def get_cors_config():
+def get_cors_config() -> object:
     """
     Return computed CORS settings (dev-only).
 
@@ -148,9 +150,9 @@ def get_cors_config():
 @router.get("/meta-leads/alerts", dependencies=[Depends(_verify_dev_secret)])
 def get_meta_lead_alerts(
     org_id: UUID,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     limit: int = 50,
-):
+) -> object:
     """
     Get Meta leads with issues (failed conversion, fetch errors, etc).
 
@@ -198,10 +200,10 @@ def get_meta_lead_alerts(
 @router.get("/meta-leads/all", dependencies=[Depends(_verify_dev_secret)])
 def get_all_meta_leads(
     org_id: UUID,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     limit: int = 100,
     status: str | None = None,
-):
+) -> object:
     """
     Get all Meta leads for debugging (org-scoped).
 
@@ -240,8 +242,8 @@ def get_all_meta_leads(
 @router.post("/seed-templates", dependencies=[Depends(_verify_dev_secret)])
 def seed_system_templates(
     org_id: UUID | None = None,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """
     Seed system email templates and default workflows for an organization.
 
@@ -297,8 +299,8 @@ def seed_system_templates(
 @router.post("/seed-templates/{org_id}", dependencies=[Depends(_verify_dev_secret)])
 def seed_org_templates(
     org_id: UUID,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """
     Seed system email templates and workflows for a specific organization.
 

@@ -1,9 +1,11 @@
 """Email templates router - CRUD for org email templates with personal scope support."""
 
-from typing import Literal
+from typing import Literal, Annotated
+
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
+
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -38,6 +40,7 @@ from app.services import email_service, user_service
 router = APIRouter(
     tags=["Email Templates"],
     dependencies=[Depends(require_permission(POLICIES["email_templates"].default))],
+    prefix="/email-templates",
 )
 
 
@@ -106,14 +109,14 @@ def _build_template_response(
 @router.get("", response_model=list[EmailTemplateListItem])
 def list_templates(
     active_only: bool = True,
-    scope: Literal["org", "personal"] | None = Query(
+    scope: Annotated[Literal["org", "personal"] | None, "fastapi_param"] = Query(
         None, description="Filter by scope: 'org' or 'personal'"
     ),
-    show_all_personal: bool = Query(
+    show_all_personal: Annotated[bool, "fastapi_param"] = Query(
         False, description="Admin-only: view all users' personal templates (read-only)"
     ),
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """
     List email templates for the organization.
@@ -147,8 +150,8 @@ def list_templates(
 )
 def create_template(
     data: EmailTemplateCreate,
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """
     Create a new email template.
@@ -218,8 +221,8 @@ def create_template(
 
 @router.get("/library", response_model=list[EmailTemplateLibraryItem])
 def list_platform_email_library(
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """List published platform email templates visible to this org."""
     from app.services import platform_template_service
@@ -242,8 +245,8 @@ def list_platform_email_library(
 @router.get("/library/{template_id}", response_model=EmailTemplateLibraryDetail)
 def get_platform_email_library_template(
     template_id: UUID,
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     from app.services import platform_template_service
 
@@ -267,8 +270,8 @@ def get_platform_email_library_template(
 @router.get("/{template_id}", response_model=EmailTemplateRead)
 def get_template(
     template_id: UUID,
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get an email template by ID."""
     template = email_service.get_template(db, template_id, session.org_id)
@@ -292,8 +295,8 @@ def get_template(
 def update_template(
     template_id: UUID,
     data: EmailTemplateUpdate,
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """
     Update an email template. Creates version snapshot.
@@ -375,9 +378,9 @@ def update_template(
 )
 def delete_template(
     template_id: UUID,
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
+) -> Response:
     """
     Soft delete (deactivate) an email template.
 
@@ -426,8 +429,8 @@ def delete_template(
 def copy_template(
     template_id: UUID,
     data: EmailTemplateCopyRequest,
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """
     Copy an org/system template to your personal templates.
@@ -461,8 +464,8 @@ def copy_template(
 def share_template(
     template_id: UUID,
     data: EmailTemplateShareRequest,
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """
     Share your personal template with the organization.
@@ -497,8 +500,10 @@ def share_template(
 )
 def send_email(
     data: EmailSendRequest,
-    db: Session = Depends(get_db),
-    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["email_templates"].actions["manage"])
+    ),
 ):
     """Send an email using a template (queues for async sending). Manager only."""
     try:
@@ -530,8 +535,8 @@ def send_email(
 async def send_test_email(
     template_id: UUID,
     body: EmailTemplateTestSendRequest,
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ) -> EmailTemplateTestSendResponse:
     """Send a test email for a given template.
 
@@ -663,9 +668,11 @@ class RollbackRequest(BaseModel):
 @router.get("/{template_id}/versions", response_model=list[TemplateVersionRead])
 def get_template_versions(
     template_id: UUID,
-    limit: int = Query(50, ge=1, le=100),
-    db: Session = Depends(get_db),
-    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
+    limit: Annotated[int, "fastapi_param"] = Query(50, ge=1, le=100),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["email_templates"].actions["manage"])
+    ),
 ):
     """Get version history for a template. Developer-only."""
     template = email_service.get_template(db, template_id, session.org_id)
@@ -693,8 +700,10 @@ def get_template_versions(
 def rollback_template(
     template_id: UUID,
     data: RollbackRequest,
-    db: Session = Depends(get_db),
-    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["email_templates"].actions["manage"])
+    ),
 ):
     """Rollback template to a previous version. Developer-only."""
     template = email_service.get_template(db, template_id, session.org_id)
@@ -722,8 +731,8 @@ def rollback_template(
 def copy_platform_email_template(
     template_id: UUID,
     data: EmailTemplateCopyRequest,
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """Copy a platform template into org templates."""
     from app.services import permission_service

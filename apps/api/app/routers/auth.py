@@ -1,5 +1,7 @@
 """Authentication router with Google OAuth and session management."""
 
+from typing import Annotated
+
 import io
 import logging
 import re
@@ -42,7 +44,7 @@ from app.services import (
 )
 from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
 
-router = APIRouter()
+router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 
 OAUTH_STATE_COOKIE = auth_callback_service.OAUTH_STATE_COOKIE
@@ -63,7 +65,7 @@ def google_login(
     request: Request,
     login_hint: str | None = None,
     return_to: str = "app",
-):
+) -> object:
     """
     Initiate Google OAuth flow.
 
@@ -129,8 +131,8 @@ async def google_callback(
     code: str | None = None,
     state: str | None = None,
     error: str | None = None,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """
     Handle Google OAuth callback.
 
@@ -158,8 +160,8 @@ async def google_callback(
 
 @router.get("/me")
 def get_me(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> MeResponse:
     """
     Get current authenticated user info.
@@ -201,8 +203,8 @@ class UpdateProfileRequest(BaseModel):
 @router.patch("/me", dependencies=[Depends(require_csrf_header)])
 def update_me(
     body: UpdateProfileRequest,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> MeResponse:
     """
     Update current user's profile.
@@ -248,8 +250,8 @@ def update_me(
 
 @router.get("/me/sessions", response_model=list[SessionResponse])
 def list_my_sessions(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> list[SessionResponse]:
     """
     List all active sessions for the current user.
@@ -272,9 +274,9 @@ def list_my_sessions(
 )
 def revoke_session(
     session_id: UUIDType,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """
     Revoke a specific session (logout that device).
 
@@ -306,9 +308,9 @@ def revoke_session(
     dependencies=[Depends(require_csrf_header)],
 )
 def revoke_all_sessions(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """
     Revoke all other sessions (logout all other devices).
 
@@ -385,9 +387,9 @@ class AvatarResponse(BaseModel):
 async def upload_avatar(
     background_tasks: BackgroundTasks,
     request: Request,
-    file: UploadFile = File(...),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    file: Annotated[UploadFile, "fastapi_param"] = File(),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> AvatarResponse:
     """
     Upload a new avatar image.
@@ -475,8 +477,8 @@ async def upload_avatar(
 )
 def delete_avatar(
     background_tasks: BackgroundTasks,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> AvatarResponse:
     """Delete current user's avatar."""
     user = user_service.get_user_by_id(db, session.user_id)
@@ -601,8 +603,8 @@ class SignaturePreviewResponse(BaseModel):
 
 @router.get("/me/signature", response_model=UserSignatureResponse)
 def get_my_signature(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> UserSignatureResponse:
     """Get user's signature overrides, profile defaults, and org branding."""
     user = user_service.get_user_by_id(db, session.user_id)
@@ -643,8 +645,8 @@ def get_my_signature(
 )
 def update_my_signature(
     body: UserSignatureUpdate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> UserSignatureResponse:
     """
     Update user's signature overrides and social links.
@@ -737,8 +739,8 @@ def update_my_signature(
 
 @router.get("/me/signature/preview", response_model=SignaturePreviewResponse)
 def get_my_signature_preview(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> SignaturePreviewResponse:
     """
     Get rendered HTML preview of user's email signature.
@@ -793,9 +795,9 @@ def _delete_old_signature_photo(photo_url: str):
 async def upload_signature_photo(
     background_tasks: BackgroundTasks,
     request: Request,
-    file: UploadFile = File(...),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    file: Annotated[UploadFile, "fastapi_param"] = File(),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> SignaturePhotoResponse:
     """
     Upload a signature-specific photo (separate from profile avatar).
@@ -886,8 +888,8 @@ async def upload_signature_photo(
 )
 def delete_signature_photo(
     background_tasks: BackgroundTasks,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> SignaturePhotoResponse:
     """
     Delete signature photo (falls back to profile avatar).
@@ -918,9 +920,9 @@ def delete_signature_photo(
 def logout(
     request: Request,
     response: Response,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """
     Clear session cookie, delete session from DB, and log logout event.
 

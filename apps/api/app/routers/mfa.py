@@ -8,6 +8,8 @@ Provides:
 - MFA verification during login
 """
 
+from typing import Annotated
+
 import json
 from urllib.parse import urlparse
 from uuid import UUID
@@ -25,7 +27,7 @@ from app.schemas.auth import UserSession
 from app.services import duo_service, membership_service, mfa_service, org_service, user_service
 
 
-router = APIRouter()
+router = APIRouter(prefix="/mfa", tags=["mfa"])
 
 DUO_STATE_COOKIE = "duo_state"
 DUO_STATE_MAX_AGE = 5 * 60
@@ -123,7 +125,7 @@ class TOTPSetupResponse(BaseModel):
 class TOTPVerifyRequest(BaseModel):
     """TOTP code verification request."""
 
-    code: str = Field(..., min_length=6, max_length=8)
+    code: str = Field(min_length=6, max_length=8)
 
 
 class TOTPSetupCompleteResponse(BaseModel):
@@ -144,7 +146,7 @@ class RecoveryCodesResponse(BaseModel):
 class MFAVerifyRequest(BaseModel):
     """MFA verification during login."""
 
-    code: str = Field(..., min_length=6, max_length=12)
+    code: str = Field(min_length=6, max_length=12)
 
 
 class MFAVerifyResponse(BaseModel):
@@ -175,8 +177,8 @@ def _is_totp_candidate(code: str) -> bool:
 
 @router.get("/status", response_model=MFAStatusResponse)
 def get_mfa_status(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get MFA enrollment status for the current user."""
     user = user_service.get_user_by_id(db, session.user_id)
@@ -192,8 +194,8 @@ def get_mfa_status(
     dependencies=[Depends(require_csrf_header)],
 )
 def setup_totp(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Start TOTP setup - generates a new secret and provisioning URI.
@@ -237,8 +239,8 @@ def setup_totp(
 def verify_totp_setup(
     request: Request,
     body: TOTPVerifyRequest,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Complete TOTP setup by verifying the first code.
@@ -284,8 +286,8 @@ def verify_totp_setup(
     dependencies=[Depends(require_csrf_header)],
 )
 def regenerate_recovery_codes(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Generate new recovery codes, replacing existing ones.
@@ -317,8 +319,8 @@ def regenerate_recovery_codes(
 def verify_mfa_code(
     request: Request,
     body: MFAVerifyRequest,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Verify an MFA code (TOTP or recovery).
@@ -370,8 +372,8 @@ def complete_mfa_challenge(
     request: Request,
     body: MFAVerifyRequest,
     response: Response,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Complete MFA challenge and upgrade session.
@@ -481,9 +483,9 @@ def complete_mfa_challenge(
     dependencies=[Depends(require_csrf_header)],
 )
 def disable_mfa(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """
     Disable MFA for the current user.
 
@@ -534,8 +536,8 @@ class DuoCallbackRequest(BaseModel):
 
 @router.get("/duo/status", response_model=DuoStatusResponse)
 def get_duo_status(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Check if Duo is available and user's enrollment status."""
     user = user_service.get_user_by_id(db, session.user_id)
@@ -550,7 +552,7 @@ def get_duo_status(
 
 
 @router.get("/duo/health")
-def duo_health_check():
+def duo_health_check() -> object:
     """Check Duo API connectivity."""
     is_healthy, message = duo_service.health_check()
     return {"healthy": is_healthy, "message": message}
@@ -565,9 +567,9 @@ def duo_health_check():
 def initiate_duo_auth(
     request: Request,
     response: Response,
-    return_to: str | None = Query(None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    return_to: Annotated[str | None, "fastapi_param"] = Query(None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Start Duo authentication flow.
@@ -628,10 +630,10 @@ def verify_duo_callback(
     request: Request,
     body: DuoCallbackRequest,
     response: Response,
-    return_to: str | None = Query(None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    return_to: Annotated[str | None, "fastapi_param"] = Query(None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """
     Verify Duo callback after user completes authentication.
 

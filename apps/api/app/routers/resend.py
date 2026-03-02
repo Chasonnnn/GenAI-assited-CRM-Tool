@@ -3,6 +3,8 @@
 Endpoints for managing org-level email provider settings (Resend or Gmail).
 """
 
+from typing import Annotated
+
 import logging
 import uuid
 
@@ -95,8 +97,10 @@ class EligibleSenderResponse(BaseModel):
 
 @router.get("/settings", response_model=ResendSettingsResponse)
 def get_settings(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
 ) -> ResendSettingsResponse:
     """Get Resend settings for the organization."""
     settings = resend_settings_service.get_or_create_resend_settings(
@@ -138,8 +142,10 @@ def get_settings(
 )
 async def update_settings(
     update: ResendSettingsUpdate,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
 ) -> ResendSettingsResponse:
     """Update Resend settings for the organization."""
     # Validate default sender if provided (non-empty)
@@ -256,7 +262,9 @@ async def update_settings(
 )
 async def test_api_key(
     request: TestKeyRequest,
-    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
 ) -> TestKeyResponse:
     """Test if a Resend API key is valid."""
     is_valid, error, domains = await resend_settings_service.test_api_key(request.api_key)
@@ -269,8 +277,10 @@ async def test_api_key(
     dependencies=[Depends(require_csrf_header)],
 )
 def rotate_webhook(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
 ) -> RotateWebhookResponse:
     """Rotate the webhook URL routing token (webhook_id)."""
     settings = resend_settings_service.rotate_webhook_id(db, session.org_id, session.user_id)
@@ -281,8 +291,10 @@ def rotate_webhook(
 
 @router.get("/eligible-senders", response_model=list[EligibleSenderResponse])
 def list_eligible_senders(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
 ) -> list[EligibleSenderResponse]:
     """List users eligible to be default Gmail senders (admin + Gmail connected)."""
     senders = resend_settings_service.list_eligible_senders(db, session.org_id)

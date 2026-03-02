@@ -6,9 +6,12 @@ v2: With version control
 - Rollback endpoint (Developer-only)
 """
 
+from typing import Annotated
+
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -22,6 +25,8 @@ from app.core.policies import POLICIES
 
 from app.schemas.auth import UserSession
 from app.services import pipeline_service, version_service
+
+csrf_header_dependency = require_csrf_header
 
 router = APIRouter(
     prefix="/settings/pipelines",
@@ -138,8 +143,8 @@ class StageReorder(BaseModel):
 
 @router.get("", response_model=list[PipelineRead], dependencies=[MANAGE_PIPELINES_DEP])
 def list_pipelines(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """
     List all pipelines for the organization.
@@ -168,8 +173,8 @@ def list_pipelines(
 
 @router.get("/default", response_model=PipelineRead)
 def get_default_pipeline(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """
     Get the default pipeline (creates if not exists).
@@ -192,8 +197,8 @@ def get_default_pipeline(
 @router.get("/{pipeline_id}", response_model=PipelineRead, dependencies=[MANAGE_PIPELINES_DEP])
 def get_pipeline(
     pipeline_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get a specific pipeline by ID."""
     pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
@@ -219,8 +224,8 @@ def get_pipeline(
 )
 def create_pipeline(
     data: PipelineCreate,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """
     Create a new non-default pipeline.
@@ -255,9 +260,9 @@ def create_pipeline(
     dependencies=[MANAGE_PIPELINES_DEP, Depends(require_csrf_header)],
 )
 def sync_default_pipeline_stages(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> object:
     """
     Sync missing stages to the default pipeline.
 
@@ -283,8 +288,8 @@ def sync_default_pipeline_stages(
 def update_pipeline(
     pipeline_id: UUID,
     data: PipelineUpdate,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """
     Update pipeline name and/or stages.
@@ -337,9 +342,9 @@ def update_pipeline(
 )
 def delete_pipeline(
     pipeline_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> Response:
     """
     Delete a pipeline.
 
@@ -370,9 +375,9 @@ def delete_pipeline(
 )
 def get_pipeline_versions(
     pipeline_id: UUID,
-    limit: int = Query(50, ge=1, le=100),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    limit: Annotated[int, "fastapi_param"] = Query(50, ge=1, le=100),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """
     Get version history for a pipeline.
@@ -406,8 +411,8 @@ def get_pipeline_versions(
 def rollback_pipeline(
     pipeline_id: UUID,
     data: RollbackRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """
     Rollback pipeline to a previous version.
@@ -469,11 +474,11 @@ def rollback_pipeline(
     response_model=list[StageRead],
     dependencies=[MANAGE_PIPELINES_DEP],
 )
-async def list_stages(
+def list_stages(
     pipeline_id: UUID,
-    include_inactive: bool = Query(False),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    include_inactive: Annotated[bool, "fastapi_param"] = Query(False),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """
     List all stages for a pipeline.
@@ -495,12 +500,12 @@ async def list_stages(
     status_code=201,
     dependencies=[MANAGE_PIPELINES_DEP],
 )
-async def create_stage(
+def create_stage(
     pipeline_id: UUID,
     data: StageCreate,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
-    _: str = Depends(require_csrf_header),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    _: Annotated[str, "fastapi_param"] = Depends(csrf_header_dependency),
 ):
     """
     Create a new stage in a pipeline.
@@ -541,12 +546,12 @@ async def create_stage(
     response_model=list[StageRead],
     dependencies=[MANAGE_PIPELINES_DEP],
 )
-async def reorder_stages(
+def reorder_stages(
     pipeline_id: UUID,
     data: StageReorder,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
-    _: str = Depends(require_csrf_header),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    _: Annotated[str, "fastapi_param"] = Depends(csrf_header_dependency),
 ):
     """
     Reorder stages by providing a list of stage IDs in desired order.
@@ -574,13 +579,13 @@ async def reorder_stages(
     response_model=StageRead,
     dependencies=[MANAGE_PIPELINES_DEP],
 )
-async def update_stage(
+def update_stage(
     pipeline_id: UUID,
     stage_id: UUID,
     data: StageUpdate,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
-    _: str = Depends(require_csrf_header),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    _: Annotated[str, "fastapi_param"] = Depends(csrf_header_dependency),
 ):
     """
     Update a stage's slug, label, color, or order.
@@ -625,14 +630,14 @@ async def update_stage(
     "/{pipeline_id}/stages/{stage_id}",
     dependencies=[MANAGE_PIPELINES_DEP],
 )
-async def delete_stage(
+def delete_stage(
     pipeline_id: UUID,
     stage_id: UUID,
     data: StageDelete,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
-    _: str = Depends(require_csrf_header),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    _: Annotated[str, "fastapi_param"] = Depends(csrf_header_dependency),
+) -> object:
     """
     Soft-delete a stage and migrate cases to another stage.
 

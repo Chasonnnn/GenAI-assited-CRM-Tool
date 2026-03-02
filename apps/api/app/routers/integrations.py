@@ -7,7 +7,8 @@ Each user connects their own accounts.
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Annotated
+
 
 import httpx
 
@@ -69,8 +70,8 @@ class IntegrationListResponse(BaseModel):
 
 @router.get("/", response_model=IntegrationListResponse)
 def list_integrations(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> IntegrationListResponse:
     """List user's connected integrations."""
     integrations = oauth_service.get_user_integrations(db, session.user_id)
@@ -93,9 +94,9 @@ def list_integrations(
 def disconnect_integration(
     integration_type: str,
     request: Request,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
-) -> dict[str, Any]:
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> dict[str, object]:
     """Disconnect an integration."""
     from app.db.enums import AuditEventType
     from app.services import audit_service, calendar_service
@@ -155,7 +156,7 @@ def disconnect_integration(
 def gmail_connect(
     request: Request,
     response: Response,
-    session: UserSession = Depends(get_current_session),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> dict[str, str]:
     """Get Gmail OAuth authorization URL.
 
@@ -193,8 +194,8 @@ async def gmail_callback(
     request: Request,
     code: str,
     state: str,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> RedirectResponse:
     """Handle Gmail OAuth callback."""
     org = org_service.get_org_by_id(db, session.org_id)
@@ -286,9 +287,9 @@ async def gmail_callback(
 
 @router.get("/gmail/status")
 def gmail_connection_status(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
-) -> dict[str, Any]:
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> dict[str, object]:
     """Check if current user has Gmail connected."""
     integration = oauth_service.get_user_integration(db, session.user_id, "gmail")
     scopes = integration.granted_scopes if integration else []
@@ -318,7 +319,7 @@ def gmail_connection_status(
 def google_calendar_connect(
     request: Request,
     response: Response,
-    session: UserSession = Depends(get_current_session),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> dict[str, str]:
     """Get Google Calendar OAuth authorization URL."""
     if not settings.GOOGLE_CLIENT_ID:
@@ -352,8 +353,8 @@ async def google_calendar_callback(
     request: Request,
     code: str,
     state: str,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> RedirectResponse:
     """Google Calendar OAuth callback."""
     org = org_service.get_org_by_id(db, session.org_id)
@@ -492,8 +493,8 @@ class GoogleCalendarSyncResponse(BaseModel):
 
 @router.get("/google-calendar/status", response_model=GoogleCalendarStatusResponse)
 def google_calendar_connection_status(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> GoogleCalendarStatusResponse:
     """Check if current user has Google Calendar connected."""
     integration = oauth_service.get_user_integration(db, session.user_id, "google_calendar")
@@ -515,7 +516,9 @@ def google_calendar_connection_status(
         else None,
         tasks_accessible=tasks_accessible,
         tasks_error=tasks_error,
-        last_sync_at=integration.updated_at.isoformat() if integration and integration.updated_at else None,
+        last_sync_at=integration.updated_at.isoformat()
+        if integration and integration.updated_at
+        else None,
     )
 
 
@@ -525,8 +528,8 @@ def google_calendar_connection_status(
     dependencies=[Depends(require_csrf_header)],
 )
 async def sync_google_calendar_now(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> GoogleCalendarSyncResponse:
     """
     Manually run Google Calendar/Tasks reconciliation for the current user.
@@ -578,10 +581,12 @@ async def sync_google_calendar_now(
         )
 
     try:
-        appointment_changes = await appointment_integrations.sync_manual_google_events_for_appointments_async(
-            db=db,
-            user_id=session.user_id,
-            org_id=session.org_id,
+        appointment_changes = (
+            await appointment_integrations.sync_manual_google_events_for_appointments_async(
+                db=db,
+                user_id=session.user_id,
+                org_id=session.org_id,
+            )
         )
     except Exception:
         appointment_changes = 0
@@ -630,7 +635,7 @@ async def sync_google_calendar_now(
 def gcp_connect(
     request: Request,
     response: Response,
-    session: UserSession = Depends(get_current_session),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> dict[str, str]:
     """Get Google Cloud OAuth authorization URL."""
     if not settings.GOOGLE_CLIENT_ID:
@@ -664,8 +669,8 @@ async def gcp_callback(
     request: Request,
     code: str,
     state: str,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> RedirectResponse:
     """Google Cloud OAuth callback."""
     org = org_service.get_org_by_id(db, session.org_id)
@@ -770,8 +775,8 @@ async def get_google_calendar_events(
     date_start: str,  # ISO date (YYYY-MM-DD)
     date_end: str,  # ISO date (YYYY-MM-DD)
     timezone: str | None = None,  # Optional: client timezone (e.g., "America/New_York")
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> GoogleCalendarEventsResponse:
     """
     Get user's Google Calendar events for a date range.
@@ -853,7 +858,7 @@ async def get_google_calendar_events(
 def zoom_connect(
     request: Request,
     response: Response,
-    session: UserSession = Depends(get_current_session),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> dict[str, str]:
     """Get Zoom OAuth authorization URL."""
     if not settings.ZOOM_CLIENT_ID:
@@ -888,8 +893,8 @@ async def zoom_callback(
     request: Request,
     code: str,
     state: str,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> RedirectResponse:
     """Handle Zoom OAuth callback."""
     org = org_service.get_org_by_id(db, session.org_id)
@@ -1011,8 +1016,8 @@ class CreateMeetingResponse(BaseModel):
 )
 async def create_zoom_meeting(
     request: CreateMeetingRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> CreateMeetingResponse:
     """Create a Zoom meeting for a surrogate or intended parent.
 
@@ -1115,9 +1120,9 @@ async def create_zoom_meeting(
 
 @router.get("/zoom/status")
 def zoom_connection_status(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
-) -> dict[str, Any]:
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> dict[str, object]:
     """Check if current user has Zoom connected."""
 
     integration = oauth_service.get_user_integration(db, session.user_id, "zoom")
@@ -1150,8 +1155,8 @@ class ZoomMeetingRead(BaseModel):
 @router.get("/zoom/meetings")
 def list_zoom_meetings(
     limit: int = 20,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> list[ZoomMeetingRead]:
     """List user's recently created Zoom meetings."""
     meetings = zoom_service.list_zoom_meetings(
@@ -1204,8 +1209,8 @@ class SendMeetingInviteResponse(BaseModel):
 )
 def send_zoom_meeting_invite(
     request: SendMeetingInviteRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> SendMeetingInviteResponse:
     """Send a Zoom meeting invite email using the org's template.
 

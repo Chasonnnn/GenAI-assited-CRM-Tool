@@ -17,7 +17,7 @@ from app.utils.normalization import normalize_phone, normalize_state
 class IntendedParentCreate(BaseModel):
     """Schema for creating an intended parent."""
 
-    full_name: str = Field(..., min_length=1, max_length=255)
+    full_name: str = Field(min_length=1, max_length=255)
     email: EmailStr
     phone: str | None = Field(None, max_length=50)
     state: str | None = Field(None, max_length=100)
@@ -63,7 +63,7 @@ class IntendedParentUpdate(BaseModel):
 class IntendedParentStatusUpdate(BaseModel):
     """Schema for changing status."""
 
-    status: str = Field(..., min_length=1)
+    status: str = Field(min_length=1)
     reason: str | None = Field(None, max_length=500)
     effective_at: datetime | None = Field(
         None, description="When the change actually occurred (optional, defaults to now)"

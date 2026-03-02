@@ -5,6 +5,8 @@ Public endpoints for recording email opens and link clicks.
 These endpoints must be unauthenticated since they're called from email clients.
 """
 
+from typing import Annotated
+
 import logging
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import RedirectResponse
@@ -82,10 +84,10 @@ TRANSPARENT_GIF = bytes(
 
 @router.get("/open/{token}")
 @limiter.exempt
-async def track_open(
+def track_open(
     token: str,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> Response:
     """
     Record an email open event and return a 1x1 transparent GIF.
@@ -125,12 +127,12 @@ async def track_open(
 
 @router.get("/click/{token}")
 @limiter.exempt
-async def track_click(
+def track_click(
     token: str,
     url: str,
     sig: str,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> Response:
     """
     Record a link click event and redirect to the original URL.

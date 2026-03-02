@@ -259,9 +259,7 @@ def ensure_default_surrogate_application_form(
     return next_default
 
 
-def get_default_surrogate_application_form(
-    db: Session, org_id: uuid.UUID
-) -> Form | None:
+def get_default_surrogate_application_form(db: Session, org_id: uuid.UUID) -> Form | None:
     default_form_id = ensure_default_surrogate_application_form(db, org_id, commit=False)
     if not default_form_id:
         return None
@@ -279,7 +277,9 @@ def set_default_surrogate_application_form(
     if form.status != FormStatus.PUBLISHED.value:
         raise ValueError("Default surrogate application form must be published")
     if form.purpose != FormPurpose.SURROGATE_APPLICATION.value:
-        raise ValueError("Default surrogate application form must have purpose=surrogate_application")
+        raise ValueError(
+            "Default surrogate application form must have purpose=surrogate_application"
+        )
 
     org = _get_org(db, org_id)
     if not org:

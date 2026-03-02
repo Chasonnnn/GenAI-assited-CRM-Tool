@@ -1,5 +1,7 @@
 """Surrogates read-only routes."""
 
+from typing import Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -41,10 +43,14 @@ class SurrogateCaseDetailsExportView(BaseModel):
 
 @router.get("/stats", response_model=SurrogateStats)
 def get_surrogate_stats(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-    pipeline_id: UUID | None = Query(None, description="Filter by pipeline UUID"),
-    owner_id: UUID | None = Query(None, description="Filter by owner UUID"),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    pipeline_id: Annotated[UUID | None, "fastapi_param"] = Query(
+        None, description="Filter by pipeline UUID"
+    ),
+    owner_id: Annotated[UUID | None, "fastapi_param"] = Query(
+        None, description="Filter by owner UUID"
+    ),
 ):
     """Get aggregated surrogate statistics for dashboard with period comparisons."""
     if (
@@ -76,19 +82,19 @@ def get_surrogate_stats(
 
 @router.get("/assignees")
 def get_assignees(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Get list of org members who can be assigned surrogates."""
     return surrogate_service.list_assignees(db, session.org_id)
 
 
 @router.get("/unassigned-queue", response_model=SurrogateListResponse)
 def list_unassigned_queue(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-    page: int = Query(1, ge=1),
-    per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    page: Annotated[int, "fastapi_param"] = Query(1, ge=1),
+    per_page: Annotated[int, "fastapi_param"] = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
 ):
     """List surrogates in the system Unassigned queue (ready for intake claim)."""
     surrogates, total = surrogate_service.list_unassigned_queue(
@@ -222,12 +228,12 @@ def list_surrogates(
 
 @router.get("/claim-queue", response_model=SurrogateListResponse)
 def list_claim_queue(
-    session: UserSession = Depends(
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["surrogates"].actions["view_post_approval"])
     ),
-    db: Session = Depends(get_db),
-    page: int = Query(1, ge=1),
-    per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    page: Annotated[int, "fastapi_param"] = Query(1, ge=1),
+    per_page: Annotated[int, "fastapi_param"] = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
 ):
     """List approved surrogates in Surrogate Pool (ready for claim)."""
     if session.role not in (Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER):
@@ -255,8 +261,8 @@ def list_claim_queue(
 def get_surrogate(
     surrogate_id: UUID,
     request: Request,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get surrogate by ID (respects permission-based access)."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
@@ -294,9 +300,9 @@ def get_surrogate(
 def export_surrogate_packet(
     surrogate_id: UUID,
     request: Request,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Export case details and include the latest application when available."""
     from app.services import audit_service, pdf_export_service
 
@@ -363,8 +369,8 @@ def export_surrogate_packet(
 )
 def get_surrogate_export_view(
     surrogate_id: UUID,
-    export_token: str = Query(..., alias="export_token"),
-    db: Session = Depends(get_db),
+    export_token: Annotated[str, "fastapi_param"] = Query(alias="export_token"),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> SurrogateCaseDetailsExportView:
     """Token-authenticated payload for rendering the case details print view."""
     from app.services import pipeline_service, task_service
@@ -463,8 +469,8 @@ def get_surrogate_export_view(
 @router.get("/{surrogate_id:uuid}/history", response_model=list[SurrogateStatusHistoryRead])
 def get_surrogate_history(
     surrogate_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get status change history for a surrogate."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
@@ -500,10 +506,10 @@ def get_surrogate_history(
 @router.get("/{surrogate_id:uuid}/activity", response_model=SurrogateActivityResponse)
 def get_surrogate_activity(
     surrogate_id: UUID,
-    page: int = Query(1, ge=1),
-    per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    page: Annotated[int, "fastapi_param"] = Query(1, ge=1),
+    per_page: Annotated[int, "fastapi_param"] = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get comprehensive activity log for a surrogate (paginated)."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)

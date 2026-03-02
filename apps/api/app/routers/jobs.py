@@ -1,5 +1,7 @@
 """Jobs router - view background jobs (developer only)."""
 
+from typing import Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -25,6 +27,7 @@ from app.services import job_service
 router = APIRouter(
     tags=["Jobs"],
     dependencies=[Depends(require_permission(POLICIES["jobs"].default))],
+    prefix="/jobs",
 )
 
 
@@ -33,8 +36,8 @@ def list_jobs(
     status: JobStatus | None = None,
     job_type: JobType | None = None,
     limit: int = 50,
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """List recent jobs for the organization (developer only)."""
     jobs = job_service.list_jobs(
@@ -51,8 +54,8 @@ def list_jobs(
 def list_dead_letter_jobs(
     job_type: JobType | None = None,
     limit: int = 100,
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """List failed jobs (dead-letter queue) for the organization."""
     return job_service.list_dead_letter_jobs(
@@ -70,8 +73,8 @@ def list_dead_letter_jobs(
 )
 def replay_dead_letter_jobs(
     data: JobReplayBulkRequest,
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """Replay failed jobs in bulk."""
     jobs = job_service.replay_failed_jobs(
@@ -90,8 +93,8 @@ def replay_dead_letter_jobs(
 @router.get("/{job_id}", response_model=JobRead)
 def get_job(
     job_id: UUID,
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get a job by ID (developer only)."""
     job = job_service.get_job(db, job_id, org_id=session.org_id)
@@ -108,8 +111,8 @@ def get_job(
 def replay_dead_letter_job(
     job_id: UUID,
     data: JobReplayRequest,
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """Replay a single failed job."""
     try:

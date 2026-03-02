@@ -1,6 +1,7 @@
 """Workflow API router - REST endpoints for automation workflows."""
 
-from typing import Literal
+from typing import Literal, Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -57,11 +58,11 @@ router = APIRouter(
 
 @router.get("", response_model=list[WorkflowListItem])
 def list_workflows(
-    scope: Literal["org", "personal"] | None = Query(default=None),
+    scope: Annotated[Literal["org", "personal"] | None, "fastapi_param"] = Query(default=None),
     enabled_only: bool = False,
     trigger_type: WorkflowTriggerType | None = None,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """
     List workflows for the organization.
@@ -92,12 +93,12 @@ def list_workflows(
 
 @router.get("/options", response_model=WorkflowOptions)
 def get_workflow_options(
-    workflow_scope: Literal["org", "personal"] | None = Query(
+    workflow_scope: Annotated[Literal["org", "personal"] | None, "fastapi_param"] = Query(
         default=None,
         description="Filter email templates by workflow scope",
     ),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """
     Get available options for workflow builder UI.
@@ -118,8 +119,8 @@ def get_workflow_options(
 
 @router.get("/stats", response_model=WorkflowStats)
 def get_workflow_stats(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get workflow statistics for dashboard."""
     return workflow_service.get_workflow_stats(db, session.org_id)
@@ -134,11 +135,11 @@ def get_workflow_stats(
 def list_org_executions(
     status: str | None = None,
     workflow_id: UUID | None = None,
-    page: int = Query(default=1, ge=1),
-    per_page: int = Query(default=20, le=100),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
-):
+    page: Annotated[int, "fastapi_param"] = Query(default=1, ge=1),
+    per_page: Annotated[int, "fastapi_param"] = Query(default=20, le=100),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> object:
     """
     List all workflow executions for the organization.
 
@@ -161,9 +162,9 @@ def list_org_executions(
 
 @router.get("/executions/stats")
 def get_execution_stats(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> object:
     """Get execution statistics for the dashboard (last 24h)."""
     if not workflow_access.has_manage_permission(db, session):
         raise HTTPException(status_code=403, detail="Cannot view org execution stats")
@@ -177,8 +178,8 @@ def get_execution_stats(
 )
 def retry_workflow_execution(
     execution_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """Retry a failed workflow execution (manual re-run)."""
     execution = workflow_service.get_execution(db, session.org_id, execution_id)
@@ -223,8 +224,8 @@ def retry_workflow_execution(
 @router.post("", response_model=WorkflowRead, dependencies=[Depends(require_csrf_header)])
 def create_workflow(
     data: WorkflowCreate,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """
     Create a new workflow.
@@ -253,8 +254,8 @@ def create_workflow(
 @router.get("/{workflow_id}", response_model=WorkflowRead)
 def get_workflow(
     workflow_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get a workflow by ID."""
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
@@ -275,8 +276,8 @@ def get_workflow(
 def update_workflow(
     workflow_id: UUID,
     data: WorkflowUpdate,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """Update a workflow."""
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
@@ -300,9 +301,9 @@ def update_workflow(
 @router.delete("/{workflow_id}", dependencies=[Depends(require_csrf_header)])
 def delete_workflow(
     workflow_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> object:
     """Delete a workflow."""
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
     if not workflow:
@@ -321,8 +322,8 @@ def delete_workflow(
 )
 def toggle_workflow(
     workflow_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """Toggle a workflow's enabled state."""
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
@@ -342,8 +343,8 @@ def toggle_workflow(
 )
 def duplicate_workflow(
     workflow_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """
     Duplicate a workflow.
@@ -380,8 +381,8 @@ def duplicate_workflow(
 def test_workflow(
     workflow_id: UUID,
     request: WorkflowTestRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """Test a workflow against an entity (dry run)."""
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
@@ -501,10 +502,10 @@ def test_workflow(
 @router.get("/{workflow_id}/executions", response_model=ExecutionListResponse)
 def list_executions(
     workflow_id: UUID,
-    limit: int = Query(default=50, le=100),
-    offset: int = Query(default=0, ge=0),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    limit: Annotated[int, "fastapi_param"] = Query(default=50, le=100),
+    offset: Annotated[int, "fastapi_param"] = Query(default=0, ge=0),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get execution history for a workflow."""
     workflow = workflow_service.get_workflow(db, workflow_id, session.org_id)
@@ -527,8 +528,8 @@ def list_executions(
 
 @router.get("/me/preferences", response_model=list[UserWorkflowPreferenceRead])
 def get_my_preferences(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get current user's workflow preferences."""
     prefs = workflow_service.get_user_preferences(db, session.user_id, session.org_id)
@@ -556,8 +557,8 @@ def get_my_preferences(
 def update_my_preference(
     workflow_id: UUID,
     data: UserWorkflowPreferenceUpdate,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """Update user's preference for a workflow (opt in/out)."""
     # Verify workflow exists and is in user's org

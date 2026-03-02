@@ -33,7 +33,7 @@ class FilterCriteria(BaseModel):
 class CampaignCreate(BaseModel):
     """Create a new campaign."""
 
-    name: str = Field(..., min_length=1, max_length=200)
+    name: str = Field(min_length=1, max_length=200)
     description: str | None = None
     email_template_id: UUID
     recipient_type: str = Field(default="case", pattern="^(case|intended_parent)$")
@@ -183,7 +183,7 @@ class CampaignPreviewResponse(BaseModel):
 class PreviewFiltersRequest(BaseModel):
     """Request to preview recipients matching filter criteria."""
 
-    recipient_type: str = Field(..., pattern="^(case|intended_parent)$")
+    recipient_type: str = Field(pattern="^(case|intended_parent)$")
     filter_criteria: FilterCriteria = Field(default_factory=FilterCriteria)
     include_unsubscribed: bool = False
 
@@ -215,7 +215,7 @@ class CampaignSendResponse(BaseModel):
 class SuppressionCreate(BaseModel):
     """Add an email to suppression list."""
 
-    email: str = Field(..., min_length=1)
+    email: str = Field(min_length=1)
     reason: str = Field(default="opt_out", pattern="^(opt_out|bounced|archived|complaint)$")
 
 

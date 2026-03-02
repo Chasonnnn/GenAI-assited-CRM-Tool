@@ -218,7 +218,9 @@ def _resolve_bucket_from_mapping_item(stage_key: str, item: dict) -> str | None:
     return DEFAULT_BUCKET_BY_STAGE_KEY.get(stage_key)
 
 
-def resolve_meta_stage_bucket(stage_key: str | None, mapping: list[dict] | None = None) -> str | None:
+def resolve_meta_stage_bucket(
+    stage_key: str | None, mapping: list[dict] | None = None
+) -> str | None:
     """Return a canonical funnel bucket for Meta CAPI-style webhook events."""
     normalized = canonicalize_stage_key(stage_key)
     if not normalized:

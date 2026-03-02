@@ -1,5 +1,7 @@
 """AI consent routes."""
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -38,8 +40,10 @@ class ConsentResponse(BaseModel):
 
 @router.get("/consent", response_model=ConsentResponse)
 def get_consent(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_SETTINGS_MANAGE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.AI_SETTINGS_MANAGE)
+    ),
 ) -> ConsentResponse:
     """Get consent text and status."""
     from app.services import ai_settings_service
@@ -60,8 +64,10 @@ def get_consent(
 @router.post("/consent/accept", dependencies=[Depends(require_csrf_header)])
 def accept_consent(
     request: Request,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_SETTINGS_MANAGE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.AI_SETTINGS_MANAGE)
+    ),
 ) -> dict[str, str | bool | None]:
     """Accept the AI data processing consent."""
     from app.services import ai_settings_service, audit_service

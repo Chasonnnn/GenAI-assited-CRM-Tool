@@ -18,7 +18,7 @@ MeetingModeLiteral = Literal["zoom", "google_meet", "phone", "in_person"]
 class AppointmentTypeCreate(BaseModel):
     """Schema for creating an appointment type."""
 
-    name: str = Field(..., min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=100)
     description: str | None = None
     duration_minutes: int = Field(30, ge=15, le=480)
     buffer_before_minutes: int = Field(0, ge=0, le=60)
@@ -78,9 +78,9 @@ class AppointmentTypeRead(BaseModel):
 class AvailabilityRuleInput(BaseModel):
     """Schema for a single availability rule."""
 
-    day_of_week: int = Field(..., ge=0, le=6, description="Monday=0, Sunday=6")
-    start_time: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="HH:MM format")
-    end_time: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="HH:MM format")
+    day_of_week: int = Field(ge=0, le=6, description="Monday=0, Sunday=6")
+    start_time: str = Field(pattern=r"^\d{2}:\d{2}$", description="HH:MM format")
+    end_time: str = Field(pattern=r"^\d{2}:\d{2}$", description="HH:MM format")
 
 
 class AvailabilityRulesSet(BaseModel):
@@ -153,10 +153,10 @@ class AppointmentCreate(BaseModel):
     """Schema for creating an appointment (public booking)."""
 
     appointment_type_id: UUID
-    client_name: str = Field(..., min_length=1, max_length=255)
+    client_name: str = Field(min_length=1, max_length=255)
     client_email: EmailStr
-    client_phone: str = Field(..., min_length=5, max_length=20)
-    client_timezone: str = Field(..., max_length=50)
+    client_phone: str = Field(min_length=5, max_length=20)
+    client_timezone: str = Field(max_length=50)
     scheduled_start: datetime
     client_notes: str | None = Field(None, max_length=2000)
     idempotency_key: str | None = Field(None, max_length=255)

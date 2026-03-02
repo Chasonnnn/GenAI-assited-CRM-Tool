@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 class ProposedTask(BaseModel):
     """A task proposal extracted from schedule text."""
 
-    title: str = Field(..., max_length=255)
+    title: str = Field(max_length=255)
     description: str | None = None
     due_date: date | None = None
     due_time: time | None = None

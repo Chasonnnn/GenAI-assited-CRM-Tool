@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, model_validator
 class BulkTaskItem(BaseModel):
     """A single task to create."""
 
-    title: str = Field(..., min_length=1, max_length=255)
+    title: str = Field(min_length=1, max_length=255)
     description: str | None = None
     due_date: str | None = None  # ISO format
     due_time: str | None = None  # HH:MM format
@@ -26,7 +26,7 @@ class BulkTaskCreateRequest(BaseModel):
     surrogate_id: uuid.UUID | None = None
     intended_parent_id: uuid.UUID | None = None
     match_id: uuid.UUID | None = None
-    tasks: list[BulkTaskItem] = Field(..., min_length=1, max_length=50)
+    tasks: list[BulkTaskItem] = Field(min_length=1, max_length=50)
 
     @model_validator(mode="before")
     @classmethod

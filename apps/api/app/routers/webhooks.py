@@ -1,5 +1,7 @@
 """Webhooks router - external service integrations."""
 
+from typing import Annotated
+
 import base64
 import json
 
@@ -16,7 +18,7 @@ from app.services.webhooks.meta import simulate_meta_webhook as simulate_meta_we
 # Rate limiting
 from app.core.rate_limit import limiter
 
-router = APIRouter()
+router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 
 def _decode_pubsub_json(data: object | None) -> dict | None:
@@ -33,10 +35,10 @@ def _decode_pubsub_json(data: object | None) -> dict | None:
 
 @router.get("/meta")
 async def verify_meta_webhook(
-    mode: str = Query(None, alias="hub.mode"),
-    token: str = Query(None, alias="hub.verify_token"),
-    challenge: str = Query(None, alias="hub.challenge"),
-):
+    mode: Annotated[str, "fastapi_param"] = Query(None, alias="hub.mode"),
+    token: Annotated[str, "fastapi_param"] = Query(None, alias="hub.verify_token"),
+    challenge: Annotated[str, "fastapi_param"] = Query(None, alias="hub.challenge"),
+) -> object:
     handler = get_handler("meta")
     return handler.verify(mode, token, challenge)
 
@@ -45,8 +47,8 @@ async def verify_meta_webhook(
 @limiter.limit(f"{settings.RATE_LIMIT_WEBHOOK}/minute")
 async def receive_meta_webhook(
     request: Request,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     handler = get_handler("meta")
     return await handler.handle(request, db)
 
@@ -59,8 +61,8 @@ async def receive_meta_webhook(
 @router.post("/meta/simulate", include_in_schema=False)
 async def simulate_meta_webhook(
     request: Request,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     return await simulate_meta_webhook_handler(request, db)
 
 
@@ -73,8 +75,8 @@ async def simulate_meta_webhook(
 @limiter.limit(f"{settings.RATE_LIMIT_WEBHOOK}/minute")
 async def zoom_webhook(
     request: Request,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     handler = get_handler("zoom")
     return await handler.handle(request, db)
 
@@ -86,10 +88,10 @@ async def zoom_webhook(
 
 @router.post("/google-calendar")
 @limiter.limit(f"{settings.RATE_LIMIT_WEBHOOK}/minute")
-async def google_calendar_push_webhook(
+def google_calendar_push_webhook(
     request: Request,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """
     Receive Google Calendar events.watch notifications and enqueue reconciliation.
 
@@ -117,8 +119,8 @@ async def google_calendar_push_webhook(
 @limiter.limit(f"{settings.RATE_LIMIT_WEBHOOK}/minute")
 async def google_gmail_push_webhook(
     request: Request,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """
     Receive Gmail Pub/Sub push notifications and enqueue mailbox history sync.
 
@@ -165,8 +167,8 @@ async def google_gmail_push_webhook(
 async def resend_webhook(
     webhook_id: str,
     request: Request,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     handler = get_handler("resend")
     return await handler.handle(request, db, webhook_id=webhook_id)
 
@@ -175,8 +177,8 @@ async def resend_webhook(
 @limiter.limit(f"{settings.RATE_LIMIT_WEBHOOK}/minute")
 async def resend_platform_webhook(
     request: Request,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     handler = get_handler("resend_platform")
     return await handler.handle(request, db)
 
@@ -191,7 +193,7 @@ async def resend_platform_webhook(
 async def zapier_webhook(
     webhook_id: str,
     request: Request,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     handler = get_handler("zapier")
     return await handler.handle(request, db, webhook_id=webhook_id)

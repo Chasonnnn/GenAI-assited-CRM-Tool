@@ -8,7 +8,8 @@ import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, Annotated
+
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
@@ -108,8 +109,8 @@ class AnalyzeDashboardResponse(BaseModel):
 def generate_email_template(
     request: Request,
     body: EmailTemplateGenerationRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
 ) -> EmailTemplateGenerationResponse:
     """Generate a reusable email template using AI."""
     from app.services import ai_email_template_service
@@ -130,8 +131,8 @@ def generate_email_template(
 async def generate_email_template_stream(
     request: Request,
     body: EmailTemplateGenerationRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
 ) -> StreamingResponse:
     """Stream AI email template generation via SSE."""
     from app.services import ai_settings_service
@@ -300,8 +301,8 @@ Highlight key qualifications and background while being professional and respect
 async def summarize_surrogate(
     request: Request,
     body: SummarizeSurrogateRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
 ) -> SummarizeSurrogateResponse:
     """Generate a comprehensive summary of a surrogate using AI.
 
@@ -463,8 +464,8 @@ Pending Tasks:
 async def summarize_surrogate_stream(
     request: Request,
     body: SummarizeSurrogateRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
 ) -> StreamingResponse:
     """Stream a surrogate summary via SSE."""
     from app.services import ai_settings_service, note_service, surrogate_service, task_service
@@ -656,8 +657,8 @@ Pending Tasks:
 async def draft_email(
     request: Request,
     body: DraftEmailRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
 ) -> DraftEmailResponse:
     """Draft an email for a case using AI.
 
@@ -782,8 +783,8 @@ async def draft_email(
 async def draft_email_stream(
     request: Request,
     body: DraftEmailRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
 ) -> StreamingResponse:
     """Stream an AI-drafted email via SSE."""
     from app.services import ai_settings_service, surrogate_service, user_service
@@ -939,8 +940,10 @@ async def draft_email_stream(
 @limiter.limit("10/minute")
 async def analyze_dashboard(
     request: Request,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_all_permissions([P.AI_USE, P.REPORTS_VIEW])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_all_permissions([P.AI_USE, P.REPORTS_VIEW])
+    ),
 ) -> AnalyzeDashboardResponse:
     """Analyze dashboard data and provide AI-powered insights."""
     from app.services import ai_settings_service, surrogate_service, task_service
@@ -1063,8 +1066,10 @@ async def analyze_dashboard(
 @limiter.limit("10/minute")
 async def analyze_dashboard_stream(
     request: Request,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_all_permissions([P.AI_USE, P.REPORTS_VIEW])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_all_permissions([P.AI_USE, P.REPORTS_VIEW])
+    ),
 ) -> StreamingResponse:
     """Stream dashboard analysis via SSE."""
     from app.services import ai_settings_service, surrogate_service, task_service

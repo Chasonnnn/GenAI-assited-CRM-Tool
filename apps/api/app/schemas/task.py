@@ -12,7 +12,7 @@ from app.db.enums import TaskType
 class TaskCreate(BaseModel):
     """Request to create a task."""
 
-    title: str = Field(..., min_length=1, max_length=255)
+    title: str = Field(min_length=1, max_length=255)
     description: str | None = Field(None, max_length=2000)
     task_type: TaskType = TaskType.OTHER
     surrogate_id: UUID | None = None
@@ -131,7 +131,7 @@ class TaskListResponse(BaseModel):
 class BulkTaskComplete(BaseModel):
     """Request to complete multiple tasks."""
 
-    task_ids: list[UUID] = Field(..., min_length=1, max_length=100)
+    task_ids: list[UUID] = Field(min_length=1, max_length=100)
 
 
 class BulkCompleteResponse(BaseModel):

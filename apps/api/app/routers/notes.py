@@ -3,9 +3,12 @@
 Uses unified EntityNote model with entity_type='surrogate'.
 """
 
+from typing import Annotated
+
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
@@ -23,7 +26,8 @@ from app.schemas.note import NoteCreate, NoteRead
 from app.services import surrogate_service, note_service
 
 router = APIRouter(
-    dependencies=[Depends(require_permission(POLICIES["surrogates"].actions["notes_view"]))]
+    dependencies=[Depends(require_permission(POLICIES["surrogates"].actions["notes_view"]))],
+    tags=["notes"],
 )
 
 
@@ -31,8 +35,8 @@ router = APIRouter(
 def list_notes(
     surrogate_id: UUID,
     request: Request,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """List notes for a surrogate (respects role-based access)."""
     # Verify surrogate exists and belongs to org
@@ -80,10 +84,10 @@ def list_notes(
 def create_note(
     surrogate_id: UUID,
     data: NoteCreate,
-    session: UserSession = Depends(
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["surrogates"].actions["notes_edit"])
     ),
-    db: Session = Depends(get_db),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Add a note to a surrogate (respects role-based access)."""
     # Verify surrogate exists and belongs to org
@@ -122,11 +126,11 @@ def create_note(
 @router.delete("/notes/{note_id}", status_code=204, dependencies=[Depends(require_csrf_header)])
 def delete_note(
     note_id: UUID,
-    session: UserSession = Depends(
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["surrogates"].actions["notes_edit"])
     ),
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> Response:
     """
     Delete a note.
 

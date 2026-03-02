@@ -3,6 +3,8 @@
 These endpoints are used by frontend middleware and other public-facing features.
 """
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
@@ -19,9 +21,11 @@ router = APIRouter(prefix="/public", tags=["public"])
 def get_org_by_domain(
     request: Request,
     response: Response,
-    domain: str = Query(..., min_length=1, max_length=255, description="Hostname to resolve"),
-    db: Session = Depends(get_db),
-):
+    domain: Annotated[str, "fastapi_param"] = Query(
+        min_length=1, max_length=255, description="Hostname to resolve"
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """
     Resolve organization by domain for frontend middleware.
 

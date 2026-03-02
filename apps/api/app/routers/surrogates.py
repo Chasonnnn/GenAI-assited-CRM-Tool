@@ -14,7 +14,11 @@ from app.routers import (
 )
 from app.schemas.surrogate import SurrogateListResponse, SurrogateRead
 
-router = APIRouter(dependencies=[Depends(require_permission(POLICIES["surrogates"].default))])
+router = APIRouter(
+    dependencies=[Depends(require_permission(POLICIES["surrogates"].default))],
+    prefix="/surrogates",
+    tags=["surrogates"],
+)
 
 router.add_api_route(
     "",

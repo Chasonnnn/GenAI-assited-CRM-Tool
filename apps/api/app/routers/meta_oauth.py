@@ -4,7 +4,8 @@ Handles OAuth connect/callback flow and connection-scoped asset management.
 """
 
 import logging
-from typing import Any
+from typing import Any, Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -151,7 +152,7 @@ class DisconnectResponse(BaseModel):
 def meta_connect(
     request: Request,
     response: Response,
-    session: UserSession = Depends(get_current_session),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MetaOAuthConnectResponse:
     """
     Get Meta OAuth authorization URL.
@@ -195,8 +196,8 @@ async def meta_callback(
     request: Request,
     code: str,
     state: str,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> RedirectResponse:
     """
     Handle Meta OAuth callback.
@@ -321,8 +322,8 @@ async def meta_callback(
     dependencies=[Depends(require_permission(POLICIES["meta_leads"].default))],
 )
 def list_connections(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MetaConnectionsListResponse:
     """List all Meta OAuth connections for the organization."""
     connections = meta_oauth_service.get_oauth_connections(db, session.org_id)
@@ -355,8 +356,8 @@ def list_connections(
 )
 def get_connection(
     connection_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MetaOAuthConnectionRead:
     """Get a specific OAuth connection."""
     connection = meta_oauth_service.get_oauth_connection(db, connection_id, session.org_id)
@@ -394,8 +395,8 @@ def get_connection(
 def disconnect_connection(
     connection_id: UUID,
     request: Request,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> DisconnectResponse:
     """
     Disconnect a Meta OAuth connection.
@@ -450,10 +451,12 @@ def disconnect_connection(
 )
 async def list_available_assets(
     connection_id: UUID,
-    cursor: str | None = Query(None, description="Pagination cursor"),
-    search: str | None = Query(None, description="Search filter for asset names"),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    cursor: Annotated[str | None, "fastapi_param"] = Query(None, description="Pagination cursor"),
+    search: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="Search filter for asset names"
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> AvailableAssetsResponse:
     """
     List assets available for a specific OAuth connection.
@@ -554,8 +557,8 @@ async def connect_assets(
     connection_id: UUID,
     data: ConnectAssetsRequest,
     request: Request,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> ConnectAssetsResponse:
     """
     Connect assets using a specific OAuth connection.

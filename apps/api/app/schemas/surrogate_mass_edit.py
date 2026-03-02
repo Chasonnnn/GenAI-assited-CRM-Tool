@@ -147,7 +147,7 @@ class SurrogateMassEditStageApplyRequest(BaseModel):
 
     filters: SurrogateMassEditStageFilters = Field(default_factory=SurrogateMassEditStageFilters)
     stage_id: UUID
-    expected_total: int = Field(..., ge=0)
+    expected_total: int = Field(ge=0)
     trigger_workflows: bool = False
     reason: str | None = Field(None, max_length=500)
 
@@ -174,7 +174,7 @@ class SurrogateMassEditArchiveApplyRequest(BaseModel):
     """
 
     filters: SurrogateMassEditStageFilters = Field(default_factory=SurrogateMassEditStageFilters)
-    expected_total: int = Field(..., ge=0)
+    expected_total: int = Field(ge=0)
     reason: str | None = Field(None, max_length=500)
 
     model_config = {"extra": "forbid"}

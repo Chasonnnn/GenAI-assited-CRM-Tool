@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class EntityNoteCreate(BaseModel):
     """Schema for creating a note on any entity."""
 
-    content: str = Field(..., min_length=1, max_length=50000)
+    content: str = Field(min_length=1, max_length=50000)
 
 
 class EntityNoteRead(BaseModel):

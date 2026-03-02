@@ -14,7 +14,7 @@ class SurrogateCreate(BaseModel):
     """Request schema for creating a surrogate."""
 
     # Contact (required)
-    full_name: str = Field(..., min_length=1, max_length=255)
+    full_name: str = Field(min_length=1, max_length=255)
     email: EmailStr
 
     # Contact (optional)
@@ -302,7 +302,7 @@ class SurrogateUpdate(BaseModel):
 class BulkAssign(BaseModel):
     """Request schema for bulk surrogateassignment."""
 
-    surrogate_ids: list[UUID] = Field(..., min_length=1, max_length=100)
+    surrogate_ids: list[UUID] = Field(min_length=1, max_length=100)
     owner_type: OwnerType
     owner_id: UUID
 
@@ -604,7 +604,7 @@ class InterviewOutcomeCreate(BaseModel):
 class ContactAttemptCreate(BaseModel):
     """Request schema for logging a contact attempt."""
 
-    contact_methods: list[str] = Field(..., min_length=1, max_length=3)
+    contact_methods: list[str] = Field(min_length=1, max_length=3)
     outcome: str
     notes: str | None = Field(None, max_length=5000)
     attempted_at: datetime | None = None  # Optional: defaults to now() if not provided

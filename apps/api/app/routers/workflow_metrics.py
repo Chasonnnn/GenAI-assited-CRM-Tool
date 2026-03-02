@@ -1,6 +1,7 @@
 """Workflow metrics router for UI instrumentation events."""
 
-from typing import Any, Literal
+from typing import Any, Literal, Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -46,8 +47,8 @@ router = APIRouter(prefix="/workflow-metrics", tags=["workflow-metrics"])
 def record_workflow_metric_event(
     payload: WorkflowMetricEventCreate,
     request: Request,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> WorkflowMetricEventResponse:
     """Record a workflow instrumentation event for baseline/throughput analysis."""
     details: JsonObject | None = payload.details

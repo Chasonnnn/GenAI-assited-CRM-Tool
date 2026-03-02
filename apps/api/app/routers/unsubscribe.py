@@ -1,5 +1,7 @@
 """Public unsubscribe endpoints."""
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
@@ -32,7 +34,9 @@ def _unsubscribe_response(success: bool) -> HTMLResponse:
 
 @router.get("/unsubscribe/{token}")
 @limiter.exempt
-async def unsubscribe_get(token: str, db: Session = Depends(get_db)) -> HTMLResponse:
+def unsubscribe_get(
+    token: str, db: Annotated[Session, "fastapi_param"] = Depends(get_db)
+) -> HTMLResponse:
     """Process unsubscribe link clicks (one-click and manual)."""
     parsed = unsubscribe_service.parse_unsubscribe_token(token)
     if not parsed:
@@ -53,7 +57,7 @@ async def unsubscribe_get(token: str, db: Session = Depends(get_db)) -> HTMLResp
 @router.post("/unsubscribe/{token}")
 @limiter.exempt
 async def unsubscribe_post(
-    token: str, request: Request, db: Session = Depends(get_db)
+    token: str, request: Request, db: Annotated[Session, "fastapi_param"] = Depends(get_db)
 ) -> HTMLResponse:
     """Handle List-Unsubscribe-Post one-click requests."""
     _ = await request.body()  # body not required; consumed to avoid warnings

@@ -17,14 +17,14 @@ EmailTemplateScope = Literal["org", "personal"]
 class EmailTemplateCreate(BaseModel):
     """Create a new email template."""
 
-    name: str = Field(..., min_length=1, max_length=100)
-    subject: str = Field(..., min_length=1, max_length=200)
+    name: str = Field(min_length=1, max_length=100)
+    subject: str = Field(min_length=1, max_length=200)
     from_email: str | None = Field(
         None,
         max_length=200,
         description="Optional per-template From header override (e.g., 'Surrogacy Force <invites@surrogacyforce.com>').",
     )
-    body: str = Field(..., min_length=1, max_length=50000)
+    body: str = Field(min_length=1, max_length=50000)
     scope: EmailTemplateScope = Field(
         default="org",
         description="Template scope: 'org' for shared templates, 'personal' for user-owned",
@@ -90,13 +90,13 @@ class EmailTemplateListItem(BaseModel):
 class EmailTemplateCopyRequest(BaseModel):
     """Request to copy an org/system template to personal."""
 
-    name: str = Field(..., min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=100)
 
 
 class EmailTemplateShareRequest(BaseModel):
     """Request to share a personal template with the organization."""
 
-    name: str = Field(..., min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=100)
 
 
 # =============================================================================

@@ -12,7 +12,7 @@ from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 import uuid
 
-import requests
+import httpx
 from google import genai
 from google.auth.credentials import Credentials
 from google.auth.transport.requests import Request
@@ -363,33 +363,32 @@ class VertexWIFCredentials(Credentials):
             claims=claims,
         )
 
-        sts_response = requests.post(
-            self.STS_URL,
-            data={
-                "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
-                "audience": audience,
-                "requested_token_type": "urn:ietf:params:oauth:token-type:access_token",  # nosec
-                "scope": "https://www.googleapis.com/auth/cloud-platform",
-                "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",  # nosec
-                "subject_token": subject_token,
-            },
-            timeout=20,
-        )
-        sts_response.raise_for_status()
-        sts_payload = sts_response.json()
-        sts_token = sts_payload["access_token"]
+        with httpx.Client(timeout=20.0) as client:
+            sts_response = client.post(
+                self.STS_URL,
+                data={
+                    "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+                    "audience": audience,
+                    "requested_token_type": "urn:ietf:params:oauth:token-type:access_token",  # nosec
+                    "scope": "https://www.googleapis.com/auth/cloud-platform",
+                    "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",  # nosec
+                    "subject_token": subject_token,
+                },
+            )
+            sts_response.raise_for_status()
+            sts_payload = sts_response.json()
+            sts_token = sts_payload["access_token"]
 
-        iam_response = requests.post(
-            self.IAM_CREDENTIALS_URL.format(service_account=self._config.service_account_email),
-            headers={"Authorization": f"Bearer {sts_token}"},
-            json={
-                "scope": ["https://www.googleapis.com/auth/cloud-platform"],
-                "lifetime": "3600s",
-            },
-            timeout=20,
-        )
-        iam_response.raise_for_status()
-        iam_payload = iam_response.json()
+            iam_response = client.post(
+                self.IAM_CREDENTIALS_URL.format(service_account=self._config.service_account_email),
+                headers={"Authorization": f"Bearer {sts_token}"},
+                json={
+                    "scope": ["https://www.googleapis.com/auth/cloud-platform"],
+                    "lifetime": "3600s",
+                },
+            )
+            iam_response.raise_for_status()
+            iam_payload = iam_response.json()
 
         access_token = iam_payload["accessToken"]
         expires_at = iam_payload.get("expireTime")

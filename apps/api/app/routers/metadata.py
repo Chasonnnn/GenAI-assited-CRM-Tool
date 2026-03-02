@@ -1,5 +1,7 @@
 """Metadata router - API endpoints for picklist values (enums)."""
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -9,14 +11,14 @@ from app.services import pipeline_service
 from app.schemas.auth import UserSession
 from app.utils.presentation import humanize_identifier
 
-router = APIRouter()
+router = APIRouter(prefix="/metadata", tags=["metadata"])
 
 
 @router.get("/statuses")
 def list_surrogate_statuses(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """
     Get all surrogate statuses with metadata.
 
@@ -40,8 +42,8 @@ def list_surrogate_statuses(
 
 @router.get("/sources")
 def list_surrogate_sources(
-    session: UserSession = Depends(get_current_session),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> object:
     """
     Get all surrogate sources.
 
@@ -71,8 +73,8 @@ def list_surrogate_sources(
 
 @router.get("/task-types")
 def list_task_types(
-    session: UserSession = Depends(get_current_session),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> object:
     """
     Get all task types.
 
@@ -86,8 +88,8 @@ def list_task_types(
 
 @router.get("/intended-parent-statuses")
 def list_intended_parent_statuses(
-    session: UserSession = Depends(get_current_session),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> object:
     """
     Get all intended parent statuses.
 
@@ -111,8 +113,8 @@ def list_intended_parent_statuses(
 
 @router.get("/roles")
 def list_roles(
-    session: UserSession = Depends(get_current_session),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> object:
     """
     Get all user roles.
 

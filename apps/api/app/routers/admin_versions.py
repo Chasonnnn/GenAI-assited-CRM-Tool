@@ -8,7 +8,8 @@ Provides a single endpoint to view version history for any versioned entity:
 Developer-only access.
 """
 
-from typing import Any
+from typing import Any, Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -59,9 +60,11 @@ class VersionDetailRead(VersionRead):
 def get_entity_versions(
     entity_type: str,
     entity_id: UUID,
-    limit: int = Query(50, ge=1, le=100),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.ADMIN_VERSIONS_MANAGE)),
+    limit: Annotated[int, "fastapi_param"] = Query(50, ge=1, le=100),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.ADMIN_VERSIONS_MANAGE)
+    ),
 ):
     """
     Get version history for any versioned entity.
@@ -107,8 +110,10 @@ def get_version_detail(
     entity_type: str,
     entity_id: UUID,
     version: int,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.ADMIN_VERSIONS_MANAGE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.ADMIN_VERSIONS_MANAGE)
+    ),
 ):
     """
     Get a specific version with decrypted payload.

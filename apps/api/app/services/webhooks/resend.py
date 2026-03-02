@@ -350,9 +350,7 @@ def _downgrade_workflow_execution_for_delivery_failure(
         return
 
     failure_kind = "bounced" if event_type == "email.bounced" else "complaint"
-    failure_message = (
-        f"Workflow email {failure_kind} via Resend webhook (email_log={email_log.id})"
-    )
+    failure_message = f"Workflow email {failure_kind} via Resend webhook (email_log={email_log.id})"
     existing_error = (execution.error_message or "").strip()
     if not existing_error:
         execution.error_message = failure_message

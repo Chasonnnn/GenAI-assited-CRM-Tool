@@ -49,7 +49,7 @@ ConditionOperator = Literal[
 
 
 class FormFieldCondition(BaseModel):
-    field_key: str = Field(..., min_length=1, max_length=100)
+    field_key: str = Field(min_length=1, max_length=100)
     operator: ConditionOperator
     value: object | None = None
 
@@ -58,8 +58,8 @@ TableColumnType = Literal["text", "number", "date", "select"]
 
 
 class FormFieldColumn(BaseModel):
-    key: str = Field(..., min_length=1, max_length=100)
-    label: str = Field(..., min_length=1, max_length=200)
+    key: str = Field(min_length=1, max_length=100)
+    label: str = Field(min_length=1, max_length=200)
     type: TableColumnType
     required: bool = False
     options: list[FormFieldOption] | None = None
@@ -67,8 +67,8 @@ class FormFieldColumn(BaseModel):
 
 
 class FormField(BaseModel):
-    key: str = Field(..., min_length=1, max_length=100)
-    label: str = Field(..., min_length=1, max_length=200)
+    key: str = Field(min_length=1, max_length=100)
+    label: str = Field(min_length=1, max_length=200)
     type: FieldType
     required: bool = False
     options: list[FormFieldOption] | None = None
@@ -93,7 +93,7 @@ class FormSchema(BaseModel):
 
 
 class FormCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=150)
+    name: str = Field(min_length=1, max_length=150)
     description: str | None = None
     purpose: FormPurpose = "surrogate_application"
     form_schema: FormSchema | None = None
@@ -234,13 +234,13 @@ class FormSubmissionStatusUpdate(BaseModel):
 
 
 class FormFieldMappingItem(BaseModel):
-    field_key: str = Field(..., min_length=1, max_length=100)
-    surrogate_field: str = Field(..., min_length=1, max_length=100)
+    field_key: str = Field(min_length=1, max_length=100)
+    surrogate_field: str = Field(min_length=1, max_length=100)
 
 
 class FormMappingOption(BaseModel):
-    value: str = Field(..., min_length=1, max_length=100)
-    label: str = Field(..., min_length=1, max_length=200)
+    value: str = Field(min_length=1, max_length=100)
+    label: str = Field(min_length=1, max_length=200)
     is_critical: bool = False
 
 
@@ -251,7 +251,7 @@ class FormFieldMappingsUpdate(BaseModel):
 class FormSubmissionAnswerUpdate(BaseModel):
     """Single field update in a submission."""
 
-    field_key: str = Field(..., min_length=1, max_length=100)
+    field_key: str = Field(min_length=1, max_length=100)
     value: object
 
 

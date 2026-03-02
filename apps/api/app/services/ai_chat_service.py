@@ -374,10 +374,7 @@ def get_or_create_conversation(
         )
         if not conversation:
             raise ValueError("Conversation not found.")
-        if (
-            conversation.entity_type not in entity_types
-            or conversation.entity_id != entity_id
-        ):
+        if conversation.entity_type not in entity_types or conversation.entity_id != entity_id:
             raise ValueError("Conversation does not match the requested context.")
         return conversation
 

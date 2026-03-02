@@ -69,7 +69,7 @@ class InterviewUpdate(BaseModel):
 class InterviewNoteCreate(BaseModel):
     """Request to create a note on an interview."""
 
-    content: str = Field(..., min_length=1, max_length=50_000)
+    content: str = Field(min_length=1, max_length=50_000)
     transcript_version: int | None = Field(None, ge=1)  # Defaults to current
 
     # TipTap comment mark ID (preferred - stable anchor)
@@ -90,7 +90,7 @@ class InterviewNoteCreate(BaseModel):
 class InterviewNoteUpdate(BaseModel):
     """Request to update a note."""
 
-    content: str = Field(..., min_length=1, max_length=50_000)
+    content: str = Field(min_length=1, max_length=50_000)
 
     @field_validator("content")
     @classmethod

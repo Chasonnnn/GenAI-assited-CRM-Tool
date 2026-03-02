@@ -1,5 +1,7 @@
 """Invitation management endpoints for settings."""
 
+from typing import Annotated
+
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
 
@@ -86,9 +88,11 @@ def _invite_to_read(invite) -> InviteRead:
 
 
 @router.get("", response_model=InviteListResponse)
-async def list_invites(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
+def list_invites(
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["team"].default)
+    ),
 ):
     """List all invitations for the organization (Admin+ only)."""
     invites = invite_service.list_invites(db, session.org_id)
@@ -104,8 +108,10 @@ async def list_invites(
 async def create_invite(
     body: InviteCreate,
     request: Request,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["team"].default)
+    ),
 ):
     """Create a new invitation (Admin+ only)."""
     # Ensure platform/system sender is configured for invites
@@ -165,9 +171,11 @@ async def create_invite(
 @router.post("/{invite_id}/resend", dependencies=[Depends(require_csrf_header)])
 async def resend_invite(
     invite_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["team"].default)
+    ),
+) -> object:
     """Resend an invitation email (Manager+ only)."""
     invite = invite_service.get_invite(db, session.org_id, invite_id)
     if not invite:
@@ -195,11 +203,13 @@ async def resend_invite(
 
 
 @router.delete("/{invite_id}", dependencies=[Depends(require_csrf_header)])
-async def revoke_invite(
+def revoke_invite(
     invite_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["team"].default)),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["team"].default)
+    ),
+) -> object:
     """Revoke an invitation (Manager+ only)."""
     invite = invite_service.get_invite(db, session.org_id, invite_id)
     if not invite:
@@ -231,9 +241,9 @@ class InviteDetailsRead(BaseModel):
 
 
 @router.get("/accept/{invite_id}", response_model=InviteDetailsRead)
-async def get_invite_details(
+def get_invite_details(
     invite_id: UUID,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get invite details for accept page (public endpoint)."""
     invite, org_name, inviter_name = invite_service.get_invite_details(db, invite_id)
@@ -254,11 +264,11 @@ async def get_invite_details(
 
 
 @router.post("/accept/{invite_id}", dependencies=[Depends(require_csrf_header)])
-async def accept_invite(
+def accept_invite(
     invite_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> object:
     """Accept an invitation and create membership."""
     try:
         result = invite_service.accept_invite(db, invite_id, session.user_id)

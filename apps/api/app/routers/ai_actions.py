@@ -2,7 +2,8 @@
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Annotated
+
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -34,8 +35,10 @@ class ActionApprovalResponse(BaseModel):
 )
 def approve_action(
     approval_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_APPROVE_ACTIONS)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.AI_APPROVE_ACTIONS)
+    ),
 ) -> ActionApprovalResponse:
     """Approve and execute a proposed action.
 
@@ -52,9 +55,9 @@ def approve_action(
 @router.post("/actions/{approval_id}/reject", dependencies=[Depends(require_csrf_header)])
 def reject_action(
     approval_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
-) -> dict[str, Any]:
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> dict[str, object]:
     """Reject a proposed action."""
     from app.services import ai_service, audit_service
 
@@ -108,9 +111,9 @@ def reject_action(
 def get_pending_actions(
     entity_type: str | None = None,
     entity_id: uuid.UUID | None = None,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USE)),
-) -> dict[str, Any]:
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
+) -> dict[str, object]:
     """Get all pending actions for the current user."""
     from app.services import ai_service
 

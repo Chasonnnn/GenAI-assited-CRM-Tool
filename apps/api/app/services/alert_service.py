@@ -59,13 +59,10 @@ def create_or_update_alert(
     dedupe_key = fingerprint(alert_type, integration_key, error_class, http_status)
     now = datetime.now(timezone.utc)
 
-    reopen_condition = (
-        (SystemAlert.status == AlertStatus.RESOLVED.value)
-        | (
-            (SystemAlert.status == AlertStatus.SNOOZED.value)
-            & SystemAlert.snoozed_until.is_not(None)
-            & (SystemAlert.snoozed_until < now)
-        )
+    reopen_condition = (SystemAlert.status == AlertStatus.RESOLVED.value) | (
+        (SystemAlert.status == AlertStatus.SNOOZED.value)
+        & SystemAlert.snoozed_until.is_not(None)
+        & (SystemAlert.snoozed_until < now)
     )
 
     update_values: dict[str, object] = {

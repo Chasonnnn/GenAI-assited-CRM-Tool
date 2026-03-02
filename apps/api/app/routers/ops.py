@@ -5,7 +5,8 @@ Manager+ access for viewing integration status and managing alerts.
 """
 
 from datetime import datetime
-from typing import Optional, Literal
+from typing import Optional, Literal, Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -99,8 +100,8 @@ AlertSeverityParam = Literal["warn", "error", "critical"]
 
 @router.get("/health", response_model=list[IntegrationHealthResponse])
 def get_integration_health(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get health status of all integrations."""
     return ops_service.list_integration_health(db, session.org_id)
@@ -108,8 +109,8 @@ def get_integration_health(
 
 @router.get("/alerts/summary", response_model=AlertSummaryResponse)
 def get_alerts_summary(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get count of open alerts by severity."""
     summary = alert_service.get_alert_summary(db, session.org_id)
@@ -118,12 +119,16 @@ def get_alerts_summary(
 
 @router.get("/alerts", response_model=AlertsListResponse)
 def list_alerts(
-    status: Optional[AlertStatusParam] = Query(None, description="Filter by status"),
-    severity: Optional[AlertSeverityParam] = Query(None, description="Filter by severity"),
-    limit: int = Query(50, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    status: Annotated[Optional[AlertStatusParam], "fastapi_param"] = Query(
+        None, description="Filter by status"
+    ),
+    severity: Annotated[Optional[AlertSeverityParam], "fastapi_param"] = Query(
+        None, description="Filter by severity"
+    ),
+    limit: Annotated[int, "fastapi_param"] = Query(50, ge=1, le=100),
+    offset: Annotated[int, "fastapi_param"] = Query(0, ge=0),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """List system alerts with optional filters."""
     # FastAPI validates the Literal types, so these are safe
@@ -165,11 +170,11 @@ def list_alerts(
 
 @router.get("/sli", response_model=list[WorkflowSliResponse])
 def get_workflow_sli(
-    window_minutes: int = Query(
+    window_minutes: Annotated[int, "fastapi_param"] = Query(
         settings.SLO_WINDOW_MINUTES, ge=5, le=1440, description="Window in minutes"
     ),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get SLI/SLO rollups for core workflows."""
     workflow_prefixes = {
@@ -218,9 +223,9 @@ def get_workflow_sli(
 @router.post("/alerts/{alert_id}/resolve", dependencies=[Depends(require_csrf_header)])
 def resolve_alert(
     alert_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Resolve an alert."""
     # Verify alert belongs to org
     alert = alert_service.get_alert_for_org(db, session.org_id, alert_id)
@@ -235,9 +240,9 @@ def resolve_alert(
 @router.post("/alerts/{alert_id}/acknowledge", dependencies=[Depends(require_csrf_header)])
 def acknowledge_alert(
     alert_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Acknowledge an alert (stops notifications but keeps open)."""
     # Verify alert belongs to org
     alert = alert_service.get_alert_for_org(db, session.org_id, alert_id)
@@ -252,10 +257,10 @@ def acknowledge_alert(
 @router.post("/alerts/{alert_id}/snooze", dependencies=[Depends(require_csrf_header)])
 def snooze_alert(
     alert_id: UUID,
-    hours: int = Query(24, ge=1, le=168),  # 1 hour to 1 week
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    hours: Annotated[int, "fastapi_param"] = Query(24, ge=1, le=168),  # 1 hour to 1 week
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Snooze an alert for specified hours."""
     # Verify alert belongs to org
     alert = alert_service.get_alert_for_org(db, session.org_id, alert_id)

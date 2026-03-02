@@ -1,6 +1,7 @@
 """AI bulk task creation routes."""
 
 from __future__ import annotations
+from typing import Annotated
 
 import logging
 
@@ -23,10 +24,10 @@ logger = logging.getLogger(__name__)
     response_model=BulkTaskCreateResponse,
     dependencies=[Depends(require_csrf_header)],
 )
-async def create_bulk_tasks(
+def create_bulk_tasks(
     body: BulkTaskCreateRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.TASKS_CREATE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.TASKS_CREATE)),
 ) -> BulkTaskCreateResponse:
     """
     Create multiple tasks in a single transaction (all-or-nothing).

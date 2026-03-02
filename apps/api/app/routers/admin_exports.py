@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -106,8 +107,10 @@ def _schedule_export_job(
 @limiter.limit("5/minute")
 def export_surrogates(
     request: Request,
-    session: UserSession = Depends(require_permission(P.ADMIN_EXPORTS_MANAGE)),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.ADMIN_EXPORTS_MANAGE)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> AdminExportJobResponse:
     """Queue a surrogates export (CSV)."""
     filename = admin_export_service.build_export_filename("surrogates_csv")
@@ -123,8 +126,10 @@ def export_surrogates(
 @limiter.limit("5/minute")
 def export_config(
     request: Request,
-    session: UserSession = Depends(require_permission(P.ADMIN_EXPORTS_MANAGE)),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.ADMIN_EXPORTS_MANAGE)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> AdminExportJobResponse:
     """Queue an organization configuration export (ZIP)."""
     filename = admin_export_service.build_export_filename("org_config_zip")
@@ -140,11 +145,17 @@ def export_config(
 @limiter.limit("5/minute")
 def export_analytics(
     request: Request,
-    from_date: Optional[str] = Query(None, description="ISO date string"),
-    to_date: Optional[str] = Query(None, description="ISO date string"),
-    ad_id: Optional[str] = Query(None, description="Optional campaign filter"),
-    session: UserSession = Depends(require_permission(P.ADMIN_EXPORTS_MANAGE)),
-    db: Session = Depends(get_db),
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(
+        None, description="ISO date string"
+    ),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(None, description="ISO date string"),
+    ad_id: Annotated[Optional[str], "fastapi_param"] = Query(
+        None, description="Optional campaign filter"
+    ),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.ADMIN_EXPORTS_MANAGE)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> AdminExportJobResponse:
     """Queue analytics export datasets (ZIP)."""
     filename = admin_export_service.build_export_filename("analytics_zip")
@@ -161,8 +172,10 @@ def export_analytics(
 @router.get("/jobs/{job_id}", response_model=AdminExportJobResponse)
 def get_export_job(
     job_id: UUID,
-    session: UserSession = Depends(require_permission(P.ADMIN_EXPORTS_MANAGE)),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.ADMIN_EXPORTS_MANAGE)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> AdminExportJobResponse:
     """Get admin export job status."""
     job = job_service.get_job(db, job_id, session.org_id)
@@ -175,8 +188,10 @@ def get_export_job(
 def download_export(
     job_id: UUID,
     request: Request,
-    session: UserSession = Depends(require_permission(P.ADMIN_EXPORTS_MANAGE)),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.ADMIN_EXPORTS_MANAGE)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> AdminExportDownloadResponse:
     """Get a download URL for a completed admin export."""
     job = job_service.get_job(db, job_id, session.org_id)
@@ -215,9 +230,11 @@ def download_export(
 @router.get("/jobs/{job_id}/file")
 def download_export_file(
     job_id: UUID,
-    session: UserSession = Depends(require_permission(P.ADMIN_EXPORTS_MANAGE)),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.ADMIN_EXPORTS_MANAGE)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Serve a local admin export file when using local storage."""
     if settings.EXPORT_STORAGE_BACKEND == "s3":
         raise HTTPException(status_code=400, detail="S3 exports use signed URLs")

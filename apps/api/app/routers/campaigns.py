@@ -1,8 +1,11 @@
 """Campaigns router - CRUD and send operations for bulk email campaigns."""
 
+from typing import Annotated
+
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Response
+
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
@@ -29,10 +32,13 @@ from app.schemas.campaign import (
     SuppressionResponse,
 )
 
+csrf_header_dependency = require_csrf_header
+
 
 router = APIRouter(
     tags=["Campaigns"],
     dependencies=[Depends(require_permission(POLICIES["email_templates"].default))],
+    prefix="/campaigns",
 )
 
 
@@ -43,11 +49,11 @@ router = APIRouter(
 
 @router.get("", response_model=list[CampaignListItem])
 def list_campaigns(
-    status: str | None = Query(None, description="Filter by status"),
-    limit: int = Query(50, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    status: Annotated[str | None, "fastapi_param"] = Query(None, description="Filter by status"),
+    limit: Annotated[int, "fastapi_param"] = Query(50, ge=1, le=100),
+    offset: Annotated[int, "fastapi_param"] = Query(0, ge=0),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """List campaigns for the organization."""
     campaigns, total = campaign_service.list_campaigns(
@@ -59,9 +65,11 @@ def list_campaigns(
 @router.post("", response_model=CampaignResponse, status_code=status.HTTP_201_CREATED)
 def create_campaign(
     data: CampaignCreate,
-    db: Session = Depends(get_db),
-    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
-    _csrf=Depends(require_csrf_header),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["email_templates"].actions["manage"])
+    ),
+    _csrf: Annotated[object, "fastapi_param"] = Depends(csrf_header_dependency),
 ):
     """Create a new campaign (draft status)."""
     try:
@@ -77,8 +85,8 @@ def create_campaign(
 @router.get("/{campaign_id}", response_model=CampaignResponse)
 def get_campaign(
     campaign_id: UUID,
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get a campaign by ID with stats."""
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
@@ -92,9 +100,11 @@ def get_campaign(
 def update_campaign(
     campaign_id: UUID,
     data: CampaignUpdate,
-    db: Session = Depends(get_db),
-    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
-    _csrf=Depends(require_csrf_header),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["email_templates"].actions["manage"])
+    ),
+    _csrf: Annotated[object, "fastapi_param"] = Depends(csrf_header_dependency),
 ):
     """Update a draft or scheduled campaign."""
     campaign = campaign_service.update_campaign(
@@ -113,10 +123,12 @@ def update_campaign(
 @router.delete("/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_campaign(
     campaign_id: UUID,
-    db: Session = Depends(get_db),
-    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
-    _csrf=Depends(require_csrf_header),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["email_templates"].actions["manage"])
+    ),
+    _csrf: Annotated[object, "fastapi_param"] = Depends(csrf_header_dependency),
+) -> Response:
     """Delete a draft campaign."""
     deleted = campaign_service.delete_campaign(db, session.org_id, campaign_id)
     if not deleted:
@@ -135,9 +147,11 @@ def delete_campaign(
 @router.post("/preview-filters", response_model=CampaignPreviewResponse)
 def preview_filters(
     data: PreviewFiltersRequest,
-    limit: int = Query(50, ge=1, le=100),
-    db: Session = Depends(get_db),
-    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
+    limit: Annotated[int, "fastapi_param"] = Query(50, ge=1, le=100),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["email_templates"].actions["manage"])
+    ),
 ):
     """
     Preview recipients that match filter criteria BEFORE creating a campaign.
@@ -160,9 +174,11 @@ def preview_filters(
 @router.get("/{campaign_id}/preview", response_model=CampaignPreviewResponse)
 def preview_recipients(
     campaign_id: UUID,
-    limit: int = Query(50, ge=1, le=100),
-    db: Session = Depends(get_db),
-    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
+    limit: Annotated[int, "fastapi_param"] = Query(50, ge=1, le=100),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["email_templates"].actions["manage"])
+    ),
 ):
     """Preview recipients that match the campaign filter."""
     campaign = campaign_service.get_campaign(db, session.org_id, campaign_id)
@@ -187,9 +203,11 @@ def preview_recipients(
 def send_campaign(
     campaign_id: UUID,
     data: CampaignSendRequest | None = None,
-    db: Session = Depends(get_db),
-    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
-    _csrf=Depends(require_csrf_header),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["email_templates"].actions["manage"])
+    ),
+    _csrf: Annotated[object, "fastapi_param"] = Depends(csrf_header_dependency),
 ):
     """
     Enqueue a campaign for sending.
@@ -220,10 +238,12 @@ def send_campaign(
 @router.post("/{campaign_id}/cancel", status_code=status.HTTP_200_OK)
 def cancel_campaign(
     campaign_id: UUID,
-    db: Session = Depends(get_db),
-    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
-    _csrf=Depends(require_csrf_header),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["email_templates"].actions["manage"])
+    ),
+    _csrf: Annotated[object, "fastapi_param"] = Depends(csrf_header_dependency),
+) -> object:
     """Cancel a scheduled or in-progress campaign."""
     cancelled = campaign_service.cancel_campaign(db, session.org_id, campaign_id)
     if not cancelled:
@@ -243,9 +263,9 @@ def cancel_campaign(
 @router.get("/{campaign_id}/runs", response_model=list[CampaignRunResponse])
 def list_campaign_runs(
     campaign_id: UUID,
-    limit: int = Query(20, ge=1, le=100),
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    limit: Annotated[int, "fastapi_param"] = Query(20, ge=1, le=100),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """List execution history for a campaign."""
     return campaign_service.list_campaign_runs(
@@ -257,8 +277,8 @@ def list_campaign_runs(
 def get_campaign_run(
     campaign_id: UUID,
     run_id: UUID,
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get run details with recipients."""
     run = campaign_service.get_campaign_run(db, session.org_id, run_id)
@@ -277,8 +297,10 @@ def get_campaign_run(
 def retry_failed_campaign_run(
     campaign_id: UUID,
     run_id: UUID,
-    db: Session = Depends(get_db),
-    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["email_templates"].actions["manage"])
+    ),
 ):
     """Retry failed recipients for a campaign run."""
     try:
@@ -309,11 +331,11 @@ def retry_failed_campaign_run(
 def list_run_recipients(
     campaign_id: UUID,
     run_id: UUID,
-    status: str | None = Query(None, description="Filter by status"),
-    limit: int = Query(100, ge=1, le=500),
-    offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
-    session=Depends(get_current_session),
+    status: Annotated[str | None, "fastapi_param"] = Query(None, description="Filter by status"),
+    limit: Annotated[int, "fastapi_param"] = Query(100, ge=1, le=500),
+    offset: Annotated[int, "fastapi_param"] = Query(0, ge=0),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """List recipients for a campaign run."""
     run = campaign_service.get_campaign_run(db, session.org_id, run_id)
@@ -338,10 +360,12 @@ def list_run_recipients(
 
 @router.get("/suppressions", response_model=list[SuppressionResponse])
 def list_suppressions(
-    limit: int = Query(100, ge=1, le=500),
-    offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
-    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
+    limit: Annotated[int, "fastapi_param"] = Query(100, ge=1, le=500),
+    offset: Annotated[int, "fastapi_param"] = Query(0, ge=0),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["email_templates"].actions["manage"])
+    ),
 ):
     """List suppressed emails for the organization."""
     items, total = campaign_service.list_suppressions(
@@ -357,9 +381,11 @@ def list_suppressions(
 )
 def add_suppression(
     data: SuppressionCreate,
-    db: Session = Depends(get_db),
-    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
-    _csrf=Depends(require_csrf_header),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["email_templates"].actions["manage"])
+    ),
+    _csrf: Annotated[object, "fastapi_param"] = Depends(csrf_header_dependency),
 ):
     """Add an email to the suppression list."""
     suppression = campaign_service.add_to_suppression(
@@ -372,10 +398,12 @@ def add_suppression(
 @router.delete("/suppressions/{email}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_suppression(
     email: str,
-    db: Session = Depends(get_db),
-    session=Depends(require_permission(POLICIES["email_templates"].actions["manage"])),
-    _csrf=Depends(require_csrf_header),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(
+        require_permission(POLICIES["email_templates"].actions["manage"])
+    ),
+    _csrf: Annotated[object, "fastapi_param"] = Depends(csrf_header_dependency),
+) -> Response:
     """Remove an email from the suppression list."""
     removed = campaign_service.remove_from_suppression(db, session.org_id, email)
     if not removed:

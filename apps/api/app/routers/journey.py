@@ -1,5 +1,7 @@
 """Journey router - API endpoints for surrogate journey timeline."""
 
+from typing import Annotated
+
 from datetime import datetime
 from uuid import UUID
 
@@ -14,6 +16,8 @@ from app.core.surrogate_access import check_surrogate_access
 from app.db.enums import Role
 from app.schemas.auth import UserSession
 from app.services import journey_service, surrogate_service
+
+csrf_header_dependency = require_csrf_header
 
 
 router = APIRouter(
@@ -78,8 +82,8 @@ class JourneyResponse(BaseModel):
 @router.get("/surrogates/{surrogate_id}", response_model=JourneyResponse)
 def get_surrogate_journey(
     surrogate_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> JourneyResponse:
     """
     Get the journey timeline for a surrogate.
@@ -142,8 +146,8 @@ def get_surrogate_journey(
 @export_router.get("/surrogates/{surrogate_id}/export-view", response_model=JourneyResponse)
 def get_surrogate_journey_export_view(
     surrogate_id: UUID,
-    export_token: str = Query(..., alias="export_token"),
-    db: Session = Depends(get_db),
+    export_token: Annotated[str, "fastapi_param"] = Query(alias="export_token"),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> JourneyResponse:
     """
     Token-authenticated journey payload for export rendering.
@@ -213,10 +217,10 @@ def get_surrogate_journey_export_view(
 @router.get("/surrogates/{surrogate_id}/export")
 def export_surrogate_journey(
     surrogate_id: UUID,
-    variant: str | None = Query(None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    variant: Annotated[str | None, "fastapi_param"] = Query(None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Export the journey timeline as a standalone PDF."""
     from fastapi.responses import Response
     from app.services import pdf_export_service
@@ -278,9 +282,9 @@ def update_milestone_featured_image(
     surrogate_id: UUID,
     milestone_slug: str,
     body: JourneyFeaturedImageUpdate,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
-    _: None = Depends(require_csrf_header),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    _: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
 ) -> JourneyFeaturedImageResponse:
     """
     Update the featured image for a journey milestone.

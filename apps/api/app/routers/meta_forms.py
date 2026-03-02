@@ -1,10 +1,12 @@
 """Meta lead form mapping endpoints."""
 
 from __future__ import annotations
+from typing import Annotated
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
+
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
@@ -27,6 +29,8 @@ from app.services import (
     user_service,
 )
 
+csrf_header_dependency = require_csrf_header
+
 
 router = APIRouter(
     prefix="/integrations/meta/forms",
@@ -37,8 +41,8 @@ router = APIRouter(
 
 @router.get("", response_model=list[MetaFormSummary])
 def list_meta_forms(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     forms = meta_form_mapping_service.list_forms(db, session.org_id)
     if not forms:
@@ -81,12 +85,12 @@ def list_meta_forms(
     return summaries
 
 
-@router.post("/sync", response_model=dict)
+@router.post("/sync", response_model=dict[str, object])
 async def sync_meta_forms(
     data: MetaFormSyncRequest,
-    _csrf: None = Depends(require_csrf_header),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     result = await meta_sync_service.sync_forms(db, session.org_id, data.page_id)
     return {
@@ -99,8 +103,8 @@ async def sync_meta_forms(
 @router.get("/{form_id}/mapping", response_model=MetaFormMappingPreviewResponse)
 def preview_meta_form_mapping(
     form_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     form = meta_form_mapping_service.get_form(db, session.org_id, form_id)
     if not form:
@@ -170,9 +174,9 @@ def preview_meta_form_mapping(
 def update_meta_form_mapping(
     form_id: UUID,
     data: MetaFormMappingUpdateRequest,
-    _csrf: None = Depends(require_csrf_header),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     form = meta_form_mapping_service.get_form(db, session.org_id, form_id)
     if not form:
@@ -222,10 +226,10 @@ def update_meta_form_mapping(
 @router.delete("/{form_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_meta_form(
     form_id: UUID,
-    _csrf: None = Depends(require_csrf_header),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> Response:
     deleted = meta_form_mapping_service.delete_form(db, session.org_id, form_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")

@@ -1,7 +1,8 @@
 """External monitoring webhooks (internal, secret-protected)."""
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -78,9 +79,9 @@ def _map_severity(value: str | None) -> AlertSeverity:
 @router.post("/gcp")
 def receive_gcp_alert(
     payload: GCPAlertPayload,
-    x_internal_secret: str | None = Header(default=None),
-    db: Session = Depends(get_db),
-):
+    x_internal_secret: Annotated[str | None, "fastapi_param"] = Header(default=None),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     verify_internal_secret(x_internal_secret)
 
     incident = payload.incident

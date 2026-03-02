@@ -30,7 +30,7 @@ REQUIRED_TEMPLATE_VARIABLES = {v.name for v in _ORG_VARIABLES if v.required}
 class EmailTemplateGenerationRequest(BaseModel):
     """Request to generate an email template from natural language."""
 
-    description: str = Field(..., min_length=10, max_length=2000)
+    description: str = Field(min_length=10, max_length=2000)
 
 
 class GeneratedEmailTemplate(BaseModel):

@@ -21,6 +21,8 @@ from app.schemas.auth import UserSession
 from app.services import activity_service, attachment_service, surrogate_service, ip_service
 from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
 
+csrf_header_dependency = require_csrf_header
+
 
 router = APIRouter(prefix="/attachments", tags=["attachments"])
 
@@ -88,9 +90,11 @@ async def upload_attachment(
     surrogate_id: UUID,
     file: Annotated[UploadFile, File()],
     request: Request,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["edit"])),
-    _: str = Depends(require_csrf_header),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["surrogates"].actions["edit"])
+    ),
+    _: Annotated[str, "fastapi_param"] = Depends(csrf_header_dependency),
 ):
     """
     Upload a file attachment to a surrogate.
@@ -157,11 +161,13 @@ async def upload_attachment(
 
 
 @router.get("/surrogates/{surrogate_id}/attachments", response_model=list[AttachmentRead])
-async def list_attachments(
+def list_attachments(
     surrogate_id: UUID,
     request: Request,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["surrogates"].default)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["surrogates"].default)
+    ),
     type: str | None = None,
 ):
     """List attachments for a surrogate (excludes infected/failed scans and deleted).
@@ -226,11 +232,13 @@ def _get_ip_with_access(db: Session, ip_id: UUID, session: UserSession):
 
 
 @router.get("/intended-parents/{ip_id}/attachments", response_model=list[AttachmentRead])
-async def list_ip_attachments(
+def list_ip_attachments(
     ip_id: UUID,
     request: Request,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["intended_parents"].default)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["intended_parents"].default)
+    ),
 ):
     """List attachments for an intended parent."""
     ip = _get_ip_with_access(db, ip_id, session)
@@ -275,11 +283,11 @@ async def upload_ip_attachment(
     ip_id: UUID,
     file: Annotated[UploadFile, File()],
     request: Request,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["intended_parents"].actions["edit"])
     ),
-    _: str = Depends(require_csrf_header),
+    _: Annotated[str, "fastapi_param"] = Depends(csrf_header_dependency),
 ):
     """Upload a file attachment to an intended parent."""
     ip = _get_ip_with_access(db, ip_id, session)
@@ -332,11 +340,11 @@ async def upload_ip_attachment(
 
 
 @router.get("/{attachment_id}/download", response_model=AttachmentDownloadResponse)
-async def download_attachment(
+def download_attachment(
     attachment_id: UUID,
     request: Request,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_any_permissions(
             [
                 POLICIES["surrogates"].default,
@@ -406,10 +414,10 @@ async def download_attachment(
 
 
 @router.delete("/{attachment_id}")
-async def delete_attachment(
+def delete_attachment(
     attachment_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_any_permissions(
             [
                 POLICIES["surrogates"].actions["edit"],
@@ -417,8 +425,8 @@ async def delete_attachment(
             ]
         )
     ),
-    _: str = Depends(require_csrf_header),
-):
+    _: Annotated[str, "fastapi_param"] = Depends(csrf_header_dependency),
+) -> object:
     """Soft-delete an attachment (uploader or Admin+ only)."""
     attachment = attachment_service.get_attachment(
         db=db,
@@ -472,10 +480,10 @@ async def delete_attachment(
 
 
 @router.get("/local/{storage_key:path}")
-async def download_local_attachment(
+def download_local_attachment(
     storage_key: str,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_any_permissions(
             [
                 POLICIES["surrogates"].default,
@@ -483,7 +491,7 @@ async def download_local_attachment(
             ]
         )
     ),
-):
+) -> object:
     """Serve local attachments (dev only)."""
     from fastapi.responses import FileResponse
     from app.services.attachment_service import _get_local_storage_path

@@ -1,8 +1,11 @@
 """Import template endpoints for CSV imports."""
 
+from typing import Annotated
+
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
+
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -30,8 +33,8 @@ router = APIRouter(
 
 @router.get("", response_model=list[ImportTemplateRead])
 def list_templates(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     return import_template_service.list_templates(db, session.org_id)
 
@@ -44,8 +47,8 @@ def list_templates(
 )
 def create_template(
     body: ImportTemplateCreate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     template = import_template_service.create_template(
         db=db,
@@ -67,8 +70,8 @@ def create_template(
 @router.get("/{template_id:uuid}", response_model=ImportTemplateRead)
 def get_template(
     template_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     template = import_template_service.get_template(db, session.org_id, template_id)
     if not template:
@@ -84,8 +87,8 @@ def get_template(
 def update_template(
     template_id: UUID,
     body: ImportTemplateUpdate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     template = import_template_service.get_template(db, session.org_id, template_id)
     if not template:
@@ -117,8 +120,8 @@ def update_template(
 def clone_template(
     template_id: UUID,
     body: ImportTemplateCloneRequest,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     template = import_template_service.get_template(db, session.org_id, template_id)
     if not template:
@@ -139,9 +142,9 @@ def clone_template(
 )
 def delete_template(
     template_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> Response:
     template = import_template_service.get_template(db, session.org_id, template_id)
     if not template:
         raise HTTPException(status_code=404, detail="Import template not found")

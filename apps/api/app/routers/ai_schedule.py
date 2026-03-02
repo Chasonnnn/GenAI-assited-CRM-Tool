@@ -1,6 +1,7 @@
 """AI schedule parsing routes."""
 
 from __future__ import annotations
+from typing import Annotated
 
 import asyncio
 import logging
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 class ParseScheduleRequest(BaseModel):
     """Request to parse a schedule text."""
 
-    text: str = Field(..., min_length=1, max_length=10000)
+    text: str = Field(min_length=1, max_length=10000)
     # At least one entity ID must be provided
     surrogate_id: uuid.UUID | None = None
     intended_parent_id: uuid.UUID | None = None
@@ -72,8 +73,8 @@ class ParseScheduleResponse(BaseModel):
 async def parse_schedule(
     request: Request,
     body: ParseScheduleRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
 ) -> ParseScheduleResponse:
     """
     Parse schedule text using AI and extract task proposals.
@@ -179,8 +180,8 @@ async def parse_schedule(
 async def parse_schedule_stream(
     request: Request,
     body: ParseScheduleRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
 ) -> StreamingResponse:
     """Stream schedule parsing via SSE."""
     from app.services import ai_settings_service, ip_service, match_service, surrogate_service

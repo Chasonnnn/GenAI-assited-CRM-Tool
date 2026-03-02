@@ -1,8 +1,11 @@
 """Surrogates write routes."""
 
+from typing import Annotated
+
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
@@ -69,14 +72,14 @@ def create_surrogate(
 
 @router.post(
     "/{surrogate_id:uuid}/claim",
-    response_model=dict,
+    response_model=dict[str, object],
     dependencies=[Depends(require_csrf_header)],
 )
 def claim_surrogate(
     request: Request,
     surrogate_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Claim a surrogate from a queue (atomic).
@@ -154,8 +157,8 @@ def update_surrogate(
     request: Request,
     surrogate_id: UUID,
     data: SurrogateUpdate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Update surrogate fields."""
     from app.services import permission_service, pipeline_service, surrogate_status_service
@@ -268,8 +271,10 @@ def update_surrogate(
 def log_interview_outcome(
     surrogate_id: UUID,
     data: InterviewOutcomeCreate,
-    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["edit"])),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["surrogates"].actions["edit"])
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Log a structured interview outcome for a surrogate."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
@@ -307,8 +312,10 @@ def assign_surrogate(
     request: Request,
     surrogate_id: UUID,
     data: SurrogateAssign,
-    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["assign"])),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["surrogates"].actions["assign"])
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Assign surrogate to a user or queue."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
@@ -350,9 +357,11 @@ def assign_surrogate(
 def bulk_assign_surrogates(
     request: Request,
     data: BulkAssign,
-    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["assign"])),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["surrogates"].actions["assign"])
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Bulk assign multiple surrogates to a user or queue."""
     if data.owner_type == OwnerType.USER:
         membership = membership_service.get_membership_for_org(db, session.org_id, data.owner_id)
@@ -413,8 +422,10 @@ def bulk_assign_surrogates(
 def archive_surrogate(
     request: Request,
     surrogate_id: UUID,
-    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["archive"])),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["surrogates"].actions["archive"])
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Soft-delete (archive) a surrogate."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
@@ -445,8 +456,10 @@ def archive_surrogate(
 def restore_surrogate(
     request: Request,
     surrogate_id: UUID,
-    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["archive"])),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["surrogates"].actions["archive"])
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Restore an archived surrogate."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
@@ -481,9 +494,11 @@ def restore_surrogate(
 def delete_surrogate(
     request: Request,
     surrogate_id: UUID,
-    session: UserSession = Depends(require_permission(POLICIES["surrogates"].actions["delete"])),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["surrogates"].actions["delete"])
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> Response:
     """Permanently delete a surrogate (requires prior archive)."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
     if not surrogate:

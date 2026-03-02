@@ -1,6 +1,7 @@
 """Developer-only surrogate mass edit routes."""
 
 from __future__ import annotations
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -37,8 +38,8 @@ def _require_developer(session: UserSession) -> None:
     response_model=SurrogateMassEditOptionsResponse,
 )
 def get_mass_edit_options(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["surrogates"].actions["change_status"])
     ),
 ):
@@ -54,9 +55,9 @@ def get_mass_edit_options(
 )
 def preview_mass_edit_stage(
     data: SurrogateMassEditStagePreviewRequest,
-    limit: int = Query(25, ge=1, le=100),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(
+    limit: Annotated[int, "fastapi_param"] = Query(25, ge=1, le=100),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["surrogates"].actions["change_status"])
     ),
 ):
@@ -81,8 +82,8 @@ def preview_mass_edit_stage(
 )
 def apply_mass_edit_stage(
     data: SurrogateMassEditStageApplyRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["surrogates"].actions["change_status"])
     ),
 ):
@@ -115,8 +116,8 @@ def apply_mass_edit_stage(
 )
 def apply_mass_edit_archive(
     data: SurrogateMassEditArchiveApplyRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["surrogates"].actions["archive"])
     ),
 ):

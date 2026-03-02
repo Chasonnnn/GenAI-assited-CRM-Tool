@@ -1,10 +1,12 @@
 """Matches router - API endpoints for matching surrogates with intended parents."""
 
 from datetime import date as date_type, datetime, timezone, timedelta
-from typing import Any
+from typing import Any, Annotated
+
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status, Response
+
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -111,7 +113,7 @@ class MatchRejectRequest(BaseModel):
     """Request to reject a match."""
 
     notes: str | None = None
-    rejection_reason: str = Field(..., min_length=1)
+    rejection_reason: str = Field(min_length=1)
 
 
 class MatchCancelRequest(BaseModel):
@@ -201,8 +203,10 @@ def _match_to_list_item(match: Any, surrogate: Any | None, ip: Any | None) -> Ma
 )
 def create_match(
     data: MatchCreate,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["matches"].actions["propose"])
+    ),
 ) -> MatchRead:
     """
     Propose a new match between a surrogate and intended parent.
@@ -264,16 +268,26 @@ def create_match(
 @router.get("/", response_model=MatchListResponse)
 def list_matches(
     request: Request,
-    status_filter: str | None = Query(None, alias="status", description="Filter by status"),
-    surrogate_id: UUID | None = Query(None, description="Filter by surrogate ID"),
-    intended_parent_id: UUID | None = Query(None, description="Filter by intended parent ID"),
-    q: str | None = Query(None, max_length=100, description="Search surrogate/IP names"),
-    page: int = Query(1, ge=1),
-    per_page: int = Query(20, ge=1, le=100),
-    sort_by: str | None = Query(None, description="Column to sort by"),
-    sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort direction"),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    status_filter: Annotated[str | None, "fastapi_param"] = Query(
+        None, alias="status", description="Filter by status"
+    ),
+    surrogate_id: Annotated[UUID | None, "fastapi_param"] = Query(
+        None, description="Filter by surrogate ID"
+    ),
+    intended_parent_id: Annotated[UUID | None, "fastapi_param"] = Query(
+        None, description="Filter by intended parent ID"
+    ),
+    q: Annotated[str | None, "fastapi_param"] = Query(
+        None, max_length=100, description="Search surrogate/IP names"
+    ),
+    page: Annotated[int, "fastapi_param"] = Query(1, ge=1),
+    per_page: Annotated[int, "fastapi_param"] = Query(20, ge=1, le=100),
+    sort_by: Annotated[str | None, "fastapi_param"] = Query(None, description="Column to sort by"),
+    sort_order: Annotated[str, "fastapi_param"] = Query(
+        "desc", pattern="^(asc|desc)$", description="Sort direction"
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MatchListResponse:
     """
     List matches with optional filters.
@@ -343,8 +357,8 @@ def list_matches(
 
 @router.get("/stats", response_model=MatchStatsResponse)
 def get_match_stats(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MatchStatsResponse:
     """Get match counts by status for the org."""
     total, counts = match_service.get_match_stats(db, session.org_id)
@@ -354,8 +368,8 @@ def get_match_stats(
 @router.get("/{match_id}", response_model=MatchRead)
 def get_match(
     match_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MatchRead:
     """Get match details. Auto-transitions to 'reviewing' on first view by non-proposer."""
     match = match_service.get_match(db, match_id, session.org_id)
@@ -396,8 +410,10 @@ def get_match(
 def accept_match(
     match_id: UUID,
     data: MatchAcceptRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["matches"].actions["propose"])
+    ),
 ) -> MatchRead:
     """
     Accept a match.
@@ -444,8 +460,10 @@ def accept_match(
 def reject_match(
     match_id: UUID,
     data: MatchRejectRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["matches"].actions["propose"])
+    ),
 ) -> MatchRead:
     """
     Reject a match with reason.
@@ -482,8 +500,10 @@ def reject_match(
 def request_cancel_match(
     match_id: UUID,
     data: MatchCancelRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["matches"].actions["propose"])
+    ),
 ) -> MatchRead:
     """
     Request cancellation of an accepted match (requires admin approval).
@@ -519,9 +539,11 @@ def request_cancel_match(
 )
 def cancel_match(
     match_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
-) -> None:
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["matches"].actions["propose"])
+    ),
+) -> Response:
     """
     Cancel a proposed match.
 
@@ -550,8 +572,10 @@ def cancel_match(
 def update_match_notes(
     match_id: UUID,
     data: MatchUpdateNotesRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["matches"].actions["propose"])
+    ),
 ) -> MatchRead:
     """Update match notes. Requires: Manager+ role."""
     match = match_service.get_match(db, match_id, session.org_id)
@@ -571,9 +595,9 @@ def update_match_notes(
 class MatchEventCreate(BaseModel):
     """Request to create a match event."""
 
-    person_type: str = Field(..., pattern="^(surrogate|ip)$")
-    event_type: str = Field(..., pattern="^(medication|medical_exam|legal|delivery|custom)$")
-    title: str = Field(..., min_length=1, max_length=200)
+    person_type: str = Field(pattern="^(surrogate|ip)$")
+    event_type: str = Field(pattern="^(medication|medical_exam|legal|delivery|custom)$")
+    title: str = Field(min_length=1, max_length=200)
     description: str | None = None
     starts_at: datetime | None = None
     ends_at: datetime | None = None
@@ -644,12 +668,20 @@ def _event_to_read(event: Any) -> MatchEventRead:
 @router.get("/{match_id}/events", response_model=list[MatchEventRead])
 def list_match_events(
     match_id: UUID,
-    from_date: str | None = Query(None, description="Filter events from this date (YYYY-MM-DD)"),
-    to_date: str | None = Query(None, description="Filter events until this date (YYYY-MM-DD)"),
-    person_type: str | None = Query(None, description="Filter by person type (surrogate/ip)"),
-    event_type: str | None = Query(None, description="Filter by event type"),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    from_date: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="Filter events from this date (YYYY-MM-DD)"
+    ),
+    to_date: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="Filter events until this date (YYYY-MM-DD)"
+    ),
+    person_type: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="Filter by person type (surrogate/ip)"
+    ),
+    event_type: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="Filter by event type"
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> list[MatchEventRead]:
     """
     List events for a match.
@@ -707,8 +739,10 @@ def list_match_events(
 def create_match_event(
     match_id: UUID,
     data: MatchEventCreate,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["matches"].actions["propose"])
+    ),
 ) -> MatchEventRead:
     """
     Create an event for a match.
@@ -763,8 +797,8 @@ def create_match_event(
 def get_match_event(
     match_id: UUID,
     event_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MatchEventRead:
     """
     Get a specific match event.
@@ -792,8 +826,10 @@ def update_match_event(
     match_id: UUID,
     event_id: UUID,
     data: MatchEventUpdate,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["matches"].actions["propose"])
+    ),
 ) -> MatchEventRead:
     """
     Update a match event.
@@ -861,9 +897,11 @@ def update_match_event(
 def delete_match_event(
     match_id: UUID,
     event_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["matches"].actions["propose"])),
-) -> None:
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["matches"].actions["propose"])
+    ),
+) -> Response:
     """
     Delete a match event.
 

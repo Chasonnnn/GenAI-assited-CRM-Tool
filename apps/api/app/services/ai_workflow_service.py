@@ -55,7 +55,7 @@ def _create_workflow_generation_alert(
 class WorkflowGenerationRequest(BaseModel):
     """Request to generate a workflow from natural language."""
 
-    description: str = Field(..., min_length=10, max_length=2000)
+    description: str = Field(min_length=10, max_length=2000)
 
 
 class GeneratedWorkflow(BaseModel):

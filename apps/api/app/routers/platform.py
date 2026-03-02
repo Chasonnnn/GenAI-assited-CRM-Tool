@@ -9,7 +9,8 @@ import logging
 import mimetypes
 import os
 import uuid as uuid_lib
-from typing import Literal
+from typing import Literal, Annotated
+
 from uuid import UUID
 
 from fastapi import (
@@ -63,7 +64,7 @@ from app.schemas.email import (
     TemplateVariableRead,
 )
 
-router = APIRouter()
+router = APIRouter(prefix="/platform", tags=["platform"])
 logger = logging.getLogger(__name__)
 
 
@@ -305,7 +306,7 @@ class SystemEmailCampaignRequest(BaseModel):
 
 @router.get("/me")
 def get_platform_me(
-    session: PlatformUserSession = Depends(require_platform_admin),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
 ) -> dict:
     """
     Get current platform admin info.
@@ -324,7 +325,7 @@ def get_platform_me(
 
 @router.get("/email/status", response_model=PlatformEmailStatusResponse)
 def get_platform_email_status(
-    session: PlatformUserSession = Depends(require_platform_admin),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
 ) -> PlatformEmailStatusResponse:
     """Get platform/system email sender status (Resend)."""
     from app.services import platform_email_service
@@ -344,8 +345,8 @@ def get_platform_email_status(
 
 @router.get("/stats")
 def get_platform_stats(
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get platform-wide statistics for ops dashboard."""
     return platform_service.get_platform_stats(db)
@@ -361,8 +362,8 @@ def create_support_session(
     body: CreateSupportSessionRequest,
     request: Request,
     response: Response,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Create a support session with role override and set session cookies."""
     try:
@@ -416,8 +417,8 @@ def revoke_support_session(
     session_id: UUID,
     request: Request,
     response: Response,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Revoke a support session."""
     result = platform_service.revoke_support_session(
@@ -449,12 +450,16 @@ def revoke_support_session(
 
 @router.get("/orgs")
 def list_organizations(
-    search: str | None = Query(None, description="Search by name or slug"),
-    status: str | None = Query(None, description="Filter by subscription status"),
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    search: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="Search by name or slug"
+    ),
+    status: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="Filter by subscription status"
+    ),
+    limit: Annotated[int, "fastapi_param"] = Query(50, ge=1, le=200),
+    offset: Annotated[int, "fastapi_param"] = Query(0, ge=0),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """List all organizations with summary info."""
     items, total = platform_service.list_organizations(
@@ -467,8 +472,8 @@ def list_organizations(
 def create_organization(
     body: CreateOrgRequest,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Create a new organization with subscription and first admin invite."""
     try:
@@ -488,8 +493,8 @@ def create_organization(
 @router.get("/orgs/{org_id}")
 def get_organization(
     org_id: UUID,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get organization detail."""
     result = platform_service.get_organization_detail(db, org_id)
@@ -503,8 +508,8 @@ def update_organization(
     org_id: UUID,
     body: UpdateOrgRequest,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """
     Update organization name and/or slug.
@@ -574,8 +579,8 @@ def update_organization(
 def delete_organization(
     org_id: UUID,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Soft delete an organization and schedule hard delete."""
     try:
@@ -593,8 +598,8 @@ def delete_organization(
 def restore_organization(
     org_id: UUID,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Restore a soft-deleted organization."""
     try:
@@ -612,8 +617,8 @@ def restore_organization(
 def purge_organization(
     org_id: UUID,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Immediately hard delete an organization (no grace period)."""
     try:
@@ -635,8 +640,8 @@ def purge_organization(
 @router.get("/orgs/{org_id}/subscription")
 def get_subscription(
     org_id: UUID,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get organization subscription details."""
     result = platform_service.get_subscription(db, org_id)
@@ -650,8 +655,8 @@ def update_subscription(
     org_id: UUID,
     body: UpdateSubscriptionRequest,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Update organization subscription."""
     try:
@@ -674,8 +679,8 @@ def extend_subscription(
     org_id: UUID,
     body: ExtendSubscriptionRequest,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Extend subscription by N days."""
     try:
@@ -698,8 +703,8 @@ def extend_subscription(
 @router.get("/orgs/{org_id}/members")
 def list_members(
     org_id: UUID,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> list[dict]:
     """List organization members."""
     return platform_service.list_members(db, org_id)
@@ -711,8 +716,8 @@ def update_member(
     member_id: UUID,
     body: UpdateMemberRequest,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Update member role or status."""
     try:
@@ -737,8 +742,8 @@ def reset_member_mfa(
     org_id: UUID,
     member_id: UUID,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Reset MFA for a member and revoke their sessions."""
     try:
@@ -761,8 +766,8 @@ def reset_member_mfa(
 @router.get("/orgs/{org_id}/invites")
 def list_invites(
     org_id: UUID,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> list[dict]:
     """List organization invites."""
     return platform_service.list_invites(db, org_id)
@@ -773,8 +778,8 @@ def create_invite(
     org_id: UUID,
     body: CreateInviteRequest,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Create a new invite."""
     try:
@@ -797,8 +802,8 @@ def revoke_invite(
     org_id: UUID,
     invite_id: UUID,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Revoke an invite."""
     try:
@@ -821,8 +826,8 @@ def resend_invite(
     org_id: UUID,
     invite_id: UUID,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Resend an invite."""
     try:
@@ -937,8 +942,8 @@ def _delete_platform_logo_from_storage(logo_url: str) -> None:
 
 @router.get("/email/branding", response_model=PlatformEmailBrandingRead)
 def get_platform_email_branding(
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformEmailBrandingRead:
     from app.services import platform_branding_service
 
@@ -947,10 +952,10 @@ def get_platform_email_branding(
 
 
 @router.get("/email/branding/logo/local/{storage_key:path}")
-async def get_platform_logo_local(
+def get_platform_logo_local(
     storage_key: str,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     from fastapi.responses import FileResponse
     from app.services import platform_branding_service
 
@@ -989,9 +994,9 @@ async def get_platform_logo_local(
 async def upload_platform_email_branding_logo(
     request: Request,
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    file: Annotated[UploadFile, "fastapi_param"] = File(),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformEmailBrandingRead:
     from app.services import platform_branding_service
 
@@ -1080,8 +1085,8 @@ async def upload_platform_email_branding_logo(
 def update_platform_email_branding(
     body: PlatformEmailBrandingUpdate,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformEmailBrandingRead:
     from app.services import platform_branding_service
 
@@ -1118,8 +1123,8 @@ def update_platform_email_branding(
 def create_platform_system_email_template(
     body: CreateSystemEmailTemplateRequest,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> SystemEmailTemplateRead:
     """Create a platform system email template (custom system_key)."""
     from app.services import system_email_template_service
@@ -1168,8 +1173,8 @@ def create_platform_system_email_template(
 def delete_platform_system_email_template(
     system_key: str,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> Response:
     """Delete a platform system email template (built-in or custom)."""
     from app.services import system_email_template_service
@@ -1193,8 +1198,8 @@ def delete_platform_system_email_template(
 
 @router.get("/email/system-templates", response_model=list[SystemEmailTemplateRead])
 def list_platform_system_email_templates(
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> list[SystemEmailTemplateRead]:
     from app.services import system_email_template_service
 
@@ -1220,8 +1225,8 @@ def list_platform_system_email_templates(
 )
 def get_platform_system_email_template(
     system_key: str,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> SystemEmailTemplateRead:
     """Get (and ensure) the platform system email template by system_key."""
     from app.services import system_email_template_service
@@ -1251,8 +1256,8 @@ def update_platform_system_email_template(
     system_key: str,
     body: UpdateSystemEmailTemplateRequest,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> SystemEmailTemplateRead:
     """Update the platform system email template by system_key."""
     from app.services import system_email_template_service
@@ -1303,8 +1308,8 @@ async def send_test_platform_system_email_template(
     system_key: str,
     body: SendTestSystemEmailRequest,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Send a test email using the platform system template + platform sender."""
     test_org_id = body.org_id
@@ -1328,8 +1333,8 @@ async def send_platform_system_email_campaign(
     system_key: str,
     body: SystemEmailCampaignRequest,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Send a system email template to selected org/users."""
     try:
@@ -1457,8 +1462,8 @@ async def _send_test_system_template(
 def get_org_system_email_template(
     org_id: UUID,
     system_key: str,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> SystemEmailTemplateRead:
     """Get (and ensure) the platform system email template by system_key."""
     from app.services import system_email_template_service
@@ -1489,8 +1494,8 @@ def update_org_system_email_template(
     system_key: str,
     body: UpdateSystemEmailTemplateRequest,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> SystemEmailTemplateRead:
     """Update the platform system email template by system_key."""
     from app.services import system_email_template_service
@@ -1542,8 +1547,8 @@ async def send_test_org_system_email_template(
     system_key: str,
     body: SendTestSystemEmailRequest,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Send a test email using the platform system template + platform sender."""
     return await _send_test_system_template(
@@ -1564,10 +1569,10 @@ async def send_test_org_system_email_template(
 @router.get("/orgs/{org_id}/admin-actions")
 def get_org_admin_actions(
     org_id: UUID,
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    limit: Annotated[int, "fastapi_param"] = Query(50, ge=1, le=200),
+    offset: Annotated[int, "fastapi_param"] = Query(0, ge=0),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get admin action logs for an organization."""
     items, total = platform_service.get_admin_action_logs(
@@ -1583,17 +1588,19 @@ def get_org_admin_actions(
 
 @router.get("/alerts")
 def list_alerts(
-    status: Literal["open", "acknowledged", "resolved", "snoozed"] | None = Query(
-        None, description="Filter by status (open, acknowledged, resolved, snoozed)"
-    ),
-    severity: Literal["critical", "error", "warn"] | None = Query(
+    status: Annotated[
+        Literal["open", "acknowledged", "resolved", "snoozed"] | None, "fastapi_param"
+    ] = Query(None, description="Filter by status (open, acknowledged, resolved, snoozed)"),
+    severity: Annotated[Literal["critical", "error", "warn"] | None, "fastapi_param"] = Query(
         None, description="Filter by severity (critical, error, warn)"
     ),
-    org_id: UUID | None = Query(None, description="Filter by organization"),
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    org_id: Annotated[UUID | None, "fastapi_param"] = Query(
+        None, description="Filter by organization"
+    ),
+    limit: Annotated[int, "fastapi_param"] = Query(50, ge=1, le=200),
+    offset: Annotated[int, "fastapi_param"] = Query(0, ge=0),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """List all alerts across organizations with optional filters."""
     items, total = platform_service.list_platform_alerts(
@@ -1611,8 +1618,8 @@ def list_alerts(
 def acknowledge_alert(
     alert_id: UUID,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Acknowledge an alert."""
     result = platform_service.acknowledge_alert(
@@ -1630,8 +1637,8 @@ def acknowledge_alert(
 def resolve_alert(
     alert_id: UUID,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Resolve an alert."""
     result = platform_service.resolve_alert(
@@ -1853,7 +1860,7 @@ def _workflow_list_item(template) -> PlatformWorkflowTemplateListItem:
 
 @router.get("/templates/email/variables", response_model=list[TemplateVariableRead])
 def list_platform_email_template_variables(
-    session: PlatformUserSession = Depends(require_platform_admin),  # noqa: ARG001
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),  # noqa: ARG001
 ):
     """List supported template variables for Ops platform email templates."""
     from app.services import template_variable_catalog
@@ -1877,7 +1884,7 @@ def list_platform_email_template_variables(
 )
 def list_platform_system_template_variables(
     system_key: str,
-    session: PlatformUserSession = Depends(require_platform_admin),  # noqa: ARG001
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),  # noqa: ARG001
 ):
     """List supported template variables for a platform system template."""
     from app.services import template_variable_catalog
@@ -1902,8 +1909,8 @@ def list_platform_system_template_variables(
 
 @router.get("/templates/email", response_model=list[PlatformEmailTemplateListItem])
 def list_platform_email_templates(
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> list[PlatformEmailTemplateListItem]:
     from app.services import platform_template_service
 
@@ -1920,8 +1927,8 @@ def list_platform_email_templates(
 def create_platform_email_template(
     body: PlatformEmailTemplateCreate,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformEmailTemplateRead:
     from app.services import platform_template_service
 
@@ -1947,8 +1954,8 @@ def create_platform_email_template(
 @router.get("/templates/email/{template_id}", response_model=PlatformEmailTemplateRead)
 def get_platform_email_template(
     template_id: UUID,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformEmailTemplateRead:
     from app.services import platform_template_service
 
@@ -1967,8 +1974,8 @@ def update_platform_email_template(
     template_id: UUID,
     body: PlatformEmailTemplateUpdate,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformEmailTemplateRead:
     from app.services import platform_template_service
 
@@ -2014,8 +2021,8 @@ def publish_platform_email_template(
     template_id: UUID,
     body: TemplatePublishRequest,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformEmailTemplateRead:
     from app.services import platform_template_service
 
@@ -2055,8 +2062,8 @@ def publish_platform_email_template(
 def delete_platform_email_template(
     template_id: UUID,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> Response:
     from app.services import platform_template_service
 
@@ -2085,8 +2092,8 @@ async def test_send_platform_email_template(
     template_id: UUID,
     body: PlatformEmailTemplateTestSendRequest,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> EmailTemplateTestSendResponse:
     """Send a test email using a platform email template for a specific org.
 
@@ -2152,8 +2159,8 @@ async def test_send_platform_email_template(
 
 @router.get("/templates/forms", response_model=list[PlatformFormTemplateListItem])
 def list_platform_form_templates(
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> list[PlatformFormTemplateListItem]:
     from app.services import platform_template_service
 
@@ -2170,8 +2177,8 @@ def list_platform_form_templates(
 def create_platform_form_template(
     body: PlatformFormTemplateCreate,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformFormTemplateRead:
     from app.services import platform_template_service
 
@@ -2196,8 +2203,8 @@ def create_platform_form_template(
 @router.get("/templates/forms/{template_id}", response_model=PlatformFormTemplateRead)
 def get_platform_form_template(
     template_id: UUID,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformFormTemplateRead:
     from app.services import platform_template_service
 
@@ -2216,8 +2223,8 @@ def update_platform_form_template(
     template_id: UUID,
     body: PlatformFormTemplateUpdate,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformFormTemplateRead:
     from app.services import platform_template_service
 
@@ -2266,8 +2273,8 @@ def publish_platform_form_template(
     template_id: UUID,
     body: TemplatePublishRequest,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformFormTemplateRead:
     from app.services import platform_template_service
 
@@ -2307,8 +2314,8 @@ def publish_platform_form_template(
 def delete_platform_form_template(
     template_id: UUID,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> Response:
     from app.services import platform_template_service
 
@@ -2330,8 +2337,8 @@ def delete_platform_form_template(
 
 @router.get("/templates/workflows", response_model=list[PlatformWorkflowTemplateListItem])
 def list_platform_workflow_templates(
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> list[PlatformWorkflowTemplateListItem]:
     from app.services import platform_template_service
 
@@ -2348,8 +2355,8 @@ def list_platform_workflow_templates(
 def create_platform_workflow_template(
     body: PlatformWorkflowTemplateCreate,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformWorkflowTemplateRead:
     from app.services import platform_template_service
 
@@ -2373,8 +2380,8 @@ def create_platform_workflow_template(
 @router.get("/templates/workflows/{template_id}", response_model=PlatformWorkflowTemplateRead)
 def get_platform_workflow_template(
     template_id: UUID,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformWorkflowTemplateRead:
     from app.services import platform_template_service
 
@@ -2393,8 +2400,8 @@ def update_platform_workflow_template(
     template_id: UUID,
     body: PlatformWorkflowTemplateUpdate,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformWorkflowTemplateRead:
     from app.services import platform_template_service
 
@@ -2435,8 +2442,8 @@ def publish_platform_workflow_template(
     template_id: UUID,
     body: TemplatePublishRequest,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PlatformWorkflowTemplateRead:
     from app.services import platform_template_service
 
@@ -2476,8 +2483,8 @@ def publish_platform_workflow_template(
 def delete_platform_workflow_template(
     template_id: UUID,
     request: Request,
-    session: PlatformUserSession = Depends(require_platform_admin),
-    db: Session = Depends(get_db),
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> Response:
     from app.services import platform_template_service
 

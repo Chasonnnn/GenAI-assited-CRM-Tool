@@ -1,5 +1,7 @@
 """Search router - global search endpoint."""
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
@@ -21,16 +23,18 @@ router = APIRouter(
 @limiter.limit(f"{settings.RATE_LIMIT_SEARCH}/minute")
 def global_search(
     request: Request,  # Required for slowapi rate limiter
-    q: str = Query(..., min_length=1, max_length=200, description="Search query"),
-    types: str = Query(
+    q: Annotated[str, "fastapi_param"] = Query(
+        min_length=1, max_length=200, description="Search query"
+    ),
+    types: Annotated[str, "fastapi_param"] = Query(
         "case,note,attachment,intended_parent",
         description="Comma-separated entity types to search",
     ),
-    limit: int = Query(20, ge=1, le=100, description="Max results"),
-    offset: int = Query(0, ge=0, description="Pagination offset"),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    limit: Annotated[int, "fastapi_param"] = Query(20, ge=1, le=100, description="Max results"),
+    offset: Annotated[int, "fastapi_param"] = Query(0, ge=0, description="Pagination offset"),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """
     Global search across surrogates, notes, attachments, and intended parents.
 

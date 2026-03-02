@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 class NoteCreate(BaseModel):
     """Request to add a note."""
 
-    body: str = Field(..., min_length=2, max_length=4000)
+    body: str = Field(min_length=2, max_length=4000)
 
 
 class NoteRead(BaseModel):

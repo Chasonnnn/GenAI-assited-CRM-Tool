@@ -911,9 +911,8 @@ def list_surrogates(
         )
         owner_clause = None
         if user_id:
-            owner_clause = (
-                (Surrogate.owner_type == OwnerType.USER.value)
-                & (Surrogate.owner_id == user_id)
+            owner_clause = (Surrogate.owner_type == OwnerType.USER.value) & (
+                Surrogate.owner_id == user_id
             )
         stage_clause_args = [
             Surrogate.stage_id.is_(None),
@@ -940,8 +939,8 @@ def list_surrogates(
     if role_filter == Role.INTAKE_SPECIALIST.value or role_filter == Role.INTAKE_SPECIALIST:
         # Intake specialists see owned surrogates + surrogates they moved to approved.
         if user_id:
-            owned_clause = (
-                (Surrogate.owner_type == OwnerType.USER.value) & (Surrogate.owner_id == user_id)
+            owned_clause = (Surrogate.owner_type == OwnerType.USER.value) & (
+                Surrogate.owner_id == user_id
             )
             followed_ids = (
                 select(SurrogateStatusHistory.surrogate_id)
@@ -1113,14 +1112,11 @@ def list_claim_queue(
         Surrogate.owner_id == pool_queue.id,
         Surrogate.stage_id == approved_stage.id,
     )
-    query = (
-        base_query.options(
-            joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
-            joinedload(Surrogate.owner_user).load_only(User.display_name),
-            joinedload(Surrogate.owner_queue).load_only(Queue.name),
-        )
-        .order_by(Surrogate.updated_at.desc())
-    )
+    query = base_query.options(
+        joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
+        joinedload(Surrogate.owner_user).load_only(User.display_name),
+        joinedload(Surrogate.owner_queue).load_only(Queue.name),
+    ).order_by(Surrogate.updated_at.desc())
 
     total = base_query.count()
     offset = (page - 1) * per_page
@@ -1151,14 +1147,11 @@ def list_unassigned_queue(
         Surrogate.owner_type == OwnerType.QUEUE.value,
         Surrogate.owner_id == default_queue.id,
     )
-    query = (
-        base_query.options(
-            joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
-            joinedload(Surrogate.owner_user).load_only(User.display_name),
-            joinedload(Surrogate.owner_queue).load_only(Queue.name),
-        )
-        .order_by(Surrogate.updated_at.desc())
-    )
+    query = base_query.options(
+        joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
+        joinedload(Surrogate.owner_user).load_only(User.display_name),
+        joinedload(Surrogate.owner_queue).load_only(Queue.name),
+    ).order_by(Surrogate.updated_at.desc())
 
     total = base_query.count()
     offset = (page - 1) * per_page

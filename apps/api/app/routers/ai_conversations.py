@@ -1,7 +1,8 @@
 """AI conversation history routes."""
 
 import uuid
-from typing import Any
+from typing import Annotated
+
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -20,9 +21,9 @@ router = APIRouter()
 def get_conversation(
     entity_type: str,
     entity_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USE)),
-) -> dict[str, Any]:
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
+) -> dict[str, object]:
     """Get conversation history for an entity."""
     from app.services import ai_chat_service, surrogate_service, task_service
 
@@ -124,9 +125,9 @@ def get_conversation(
 @limiter.limit("120/minute")
 def get_global_conversation(
     request: Request,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USE)),
-) -> dict[str, Any]:
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
+) -> dict[str, object]:
     """Get global conversation history for the current user.
 
     Global conversations use entity_type='global' and entity_id=user_id.
@@ -184,9 +185,11 @@ def get_global_conversation(
 def get_all_conversations(
     entity_type: str,
     entity_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_CONVERSATIONS_VIEW_ALL)),
-) -> dict[str, Any]:
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.AI_CONVERSATIONS_VIEW_ALL)
+    ),
+) -> dict[str, object]:
     """Get all users' conversations for an entity (developer only, for audit)."""
     from app.services import ai_service
 

@@ -1,5 +1,7 @@
 """Router for status change request approval workflow."""
 
+from typing import Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -84,10 +86,10 @@ def list_pending_requests(
     entity_type: str | None = None,
     page: int = 1,
     per_page: int = 20,
-    session: UserSession = Depends(
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["status_change_requests"].actions["view_requests"])
     ),
-    db: Session = Depends(get_db),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     List pending status change requests (admin only).
@@ -157,10 +159,10 @@ def list_pending_requests(
 )
 def get_request(
     request_id: UUID,
-    session: UserSession = Depends(
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["status_change_requests"].actions["view_requests"])
     ),
-    db: Session = Depends(get_db),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get a status change request by ID."""
     details = status_change_request_service.get_request_with_details(
@@ -212,10 +214,10 @@ def get_request(
 )
 def approve_request(
     request_id: UUID,
-    session: UserSession = Depends(
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["status_change_requests"].actions["approve_requests"])
     ),
-    db: Session = Depends(get_db),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Approve a pending status change request.
@@ -271,10 +273,10 @@ def approve_request(
 def reject_request(
     request_id: UUID,
     data: RejectRequest | None = None,
-    session: UserSession = Depends(
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["status_change_requests"].actions["approve_requests"])
     ),
-    db: Session = Depends(get_db),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Reject a pending status change request.
@@ -330,10 +332,10 @@ def reject_request(
 )
 def cancel_request(
     request_id: UUID,
-    session: UserSession = Depends(
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["surrogates"].actions["change_status"])
     ),
-    db: Session = Depends(get_db),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Cancel a pending status change request.

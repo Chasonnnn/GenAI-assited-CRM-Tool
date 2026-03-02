@@ -1,8 +1,11 @@
 """Tasks router - API endpoints for task management."""
 
+from typing import Annotated
+
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
@@ -28,7 +31,11 @@ from app.schemas.task import (
 from app.services import audit_service, task_service
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
-router = APIRouter(dependencies=[Depends(require_permission(POLICIES["tasks"].default))])
+router = APIRouter(
+    dependencies=[Depends(require_permission(POLICIES["tasks"].default))],
+    prefix="/tasks",
+    tags=["tasks"],
+)
 
 
 def _check_task_surrogate_access(task, session: "UserSession", db: Session) -> None:
@@ -47,20 +54,30 @@ def _check_task_surrogate_access(task, session: "UserSession", db: Session) -> N
 @router.get("", response_model=TaskListResponse)
 def list_tasks(
     request: Request,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-    page: int = Query(1, ge=1),
-    per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
-    q: str | None = Query(None, description="Search in title and description"),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    page: Annotated[int, "fastapi_param"] = Query(1, ge=1),
+    per_page: Annotated[int, "fastapi_param"] = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
+    q: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="Search in title and description"
+    ),
     owner_id: UUID | None = None,
     surrogate_id: UUID | None = None,
     intended_parent_id: UUID | None = None,
-    pipeline_id: UUID | None = Query(None, description="Filter tasks by pipeline UUID"),
+    pipeline_id: Annotated[UUID | None, "fastapi_param"] = Query(
+        None, description="Filter tasks by pipeline UUID"
+    ),
     is_completed: bool | None = None,
     task_type: TaskType | None = None,
-    status: str | None = Query(None, description="Filter by task status (comma-separated)"),
-    due_before: str | None = Query(None, description="Due date before (YYYY-MM-DD)"),
-    due_after: str | None = Query(None, description="Due date after (YYYY-MM-DD)"),
+    status: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="Filter by task status (comma-separated)"
+    ),
+    due_before: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="Due date before (YYYY-MM-DD)"
+    ),
+    due_after: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="Due date after (YYYY-MM-DD)"
+    ),
     my_tasks: bool = False,
     exclude_approvals: bool = False,
 ):
@@ -100,8 +117,10 @@ def list_tasks(
 def create_task(
     request: Request,
     data: TaskCreate,
-    session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["create"])),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["tasks"].actions["create"])
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Create a new task (respects surrogate access control)."""
     from app.core.surrogate_access import check_surrogate_access
@@ -162,8 +181,8 @@ def create_task(
 def get_task(
     task_id: UUID,
     request: Request,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get task by ID (respects role-based case access)."""
     task = task_service.get_task(db, task_id, session.org_id)
@@ -199,8 +218,10 @@ def update_task(
     request: Request,
     task_id: UUID,
     data: TaskUpdate,
-    session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["edit"])),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["tasks"].actions["edit"])
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Update task.
@@ -254,8 +275,10 @@ def update_task(
 def complete_task(
     request: Request,
     task_id: UUID,
-    session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["edit"])),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["tasks"].actions["edit"])
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Mark task as completed.
@@ -304,8 +327,10 @@ def complete_task(
 def uncomplete_task(
     request: Request,
     task_id: UUID,
-    session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["edit"])),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["tasks"].actions["edit"])
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Mark task as not completed (respects role-based case access)."""
     task = task_service.get_task(db, task_id, session.org_id)
@@ -350,8 +375,10 @@ def uncomplete_task(
 def bulk_complete_tasks(
     request: Request,
     data: BulkTaskComplete,
-    session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["edit"])),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["tasks"].actions["edit"])
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Mark multiple tasks as completed.
@@ -383,9 +410,11 @@ def bulk_complete_tasks(
 def delete_task(
     task_id: UUID,
     request: Request,
-    session: UserSession = Depends(require_permission(POLICIES["tasks"].actions["delete"])),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["tasks"].actions["delete"])
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> Response:
     """
     Delete task.
 
@@ -446,8 +475,8 @@ def resolve_workflow_approval(
     request: Request,
     task_id: UUID,
     data: WorkflowApprovalResolve,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Approve or deny a workflow approval task.

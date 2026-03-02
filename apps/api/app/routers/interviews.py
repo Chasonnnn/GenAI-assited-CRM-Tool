@@ -9,11 +9,23 @@ Endpoints:
 - Export (PDF, JSON)
 """
 
+from typing import Annotated
+
 import asyncio
 from collections.abc import AsyncIterator
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
+
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session
@@ -117,8 +129,8 @@ def _check_admin_only(session: UserSession):
 @router.get("/surrogates/{surrogate_id}/interviews", response_model=list[InterviewListItem])
 def list_interviews(
     surrogate_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """List all interviews for a surrogate."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
@@ -139,8 +151,8 @@ def list_interviews(
 def create_interview(
     surrogate_id: UUID,
     data: InterviewCreate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Create a new interview for a surrogate."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
@@ -172,8 +184,8 @@ def create_interview(
 @router.get("/interviews/{interview_id}", response_model=InterviewRead)
 def get_interview(
     interview_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get interview details."""
     interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
@@ -188,8 +200,8 @@ def get_interview(
 def update_interview(
     interview_id: UUID,
     data: InterviewUpdate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Update an interview (with auto-versioning for transcript changes)."""
     interview, case = _check_interview_access(db, session.org_id, interview_id, session)
@@ -218,9 +230,9 @@ def update_interview(
 )
 def delete_interview(
     interview_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> Response:
     """Delete an interview (admin+ only)."""
     interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
     _check_admin_only(session)
@@ -241,8 +253,8 @@ def delete_interview(
 )
 def list_versions(
     interview_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """List all versions of an interview transcript."""
     interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
@@ -258,8 +270,8 @@ def list_versions(
 def get_version(
     interview_id: UUID,
     version: int,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get specific version content."""
     interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
@@ -277,10 +289,10 @@ def get_version(
 )
 def get_version_diff(
     interview_id: UUID,
-    v1: int = Query(..., ge=1),
-    v2: int = Query(..., ge=1),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    v1: Annotated[int, "fastapi_param"] = Query(ge=1),
+    v2: Annotated[int, "fastapi_param"] = Query(ge=1),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get diff between two versions."""
     interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
@@ -303,8 +315,8 @@ def get_version_diff(
 def restore_version(
     interview_id: UUID,
     version: int,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Restore interview transcript to a previous version."""
     interview, case = _check_interview_access(db, session.org_id, interview_id, session)
@@ -332,8 +344,8 @@ def restore_version(
 @router.get("/interviews/{interview_id}/notes", response_model=list[InterviewNoteRead])
 def list_notes(
     interview_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """List all notes for an interview."""
     interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
@@ -351,8 +363,8 @@ def list_notes(
 def create_note(
     interview_id: UUID,
     data: InterviewNoteCreate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Create a note on an interview (with optional anchor)."""
     interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
@@ -380,8 +392,8 @@ def update_note(
     interview_id: UUID,
     note_id: UUID,
     data: InterviewNoteUpdate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Update a note."""
     interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
@@ -403,9 +415,9 @@ def update_note(
 def delete_note(
     interview_id: UUID,
     note_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> Response:
     """Delete a note."""
     interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
 
@@ -426,8 +438,8 @@ def delete_note(
 def resolve_note(
     interview_id: UUID,
     note_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Mark a note as resolved."""
     _check_interview_access(db, session.org_id, interview_id, session)
@@ -449,8 +461,8 @@ def resolve_note(
 def unresolve_note(
     interview_id: UUID,
     note_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Re-open a resolved note."""
     _check_interview_access(db, session.org_id, interview_id, session)
@@ -475,8 +487,8 @@ def unresolve_note(
 )
 def list_attachments(
     interview_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """List all attachments linked to an interview."""
     interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
@@ -496,9 +508,9 @@ def list_attachments(
 async def upload_attachment(
     interview_id: UUID,
     request: Request,
-    file: UploadFile = File(...),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    file: Annotated[UploadFile, "fastapi_param"] = File(),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Upload a new attachment and link it to the interview."""
     interview, case = _check_interview_access(db, session.org_id, interview_id, session)
@@ -557,8 +569,8 @@ async def upload_attachment(
 def link_existing_attachment(
     interview_id: UUID,
     attachment_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Link an existing attachment to the interview."""
     interview, case = _check_interview_access(db, session.org_id, interview_id, session)
@@ -586,9 +598,9 @@ def link_existing_attachment(
 def unlink_attachment(
     interview_id: UUID,
     attachment_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> Response:
     """Unlink an attachment from the interview (case_manager+ only)."""
     interview, case = _check_interview_access(db, session.org_id, interview_id, session)
 
@@ -624,8 +636,8 @@ async def request_transcription(
     interview_id: UUID,
     attachment_id: UUID,
     data: TranscriptionRequest | None = None,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Request AI transcription for an audio/video attachment (sync)."""
     from app.services import transcription_service
@@ -679,8 +691,8 @@ async def request_transcription(
 def get_transcription_status(
     interview_id: UUID,
     attachment_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get transcription status for an attachment."""
     interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
@@ -711,8 +723,8 @@ def get_transcription_status(
 )
 async def summarize_interview(
     interview_id: UUID,
-    session: UserSession = Depends(require_permission(P.AI_USE)),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Generate AI summary of a single interview."""
     interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
@@ -736,8 +748,8 @@ async def summarize_interview(
 )
 async def summarize_interview_stream(
     interview_id: UUID,
-    session: UserSession = Depends(require_permission(P.AI_USE)),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> StreamingResponse:
     """Stream AI summary of a single interview via SSE."""
     from app.services import ai_interview_service
@@ -883,8 +895,8 @@ async def summarize_interview_stream(
 )
 async def summarize_all_interviews(
     surrogate_id: UUID,
-    session: UserSession = Depends(require_permission(P.AI_USE)),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Generate AI summary of all interviews for a surrogate."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
@@ -912,8 +924,8 @@ async def summarize_all_interviews(
 )
 async def summarize_all_interviews_stream(
     surrogate_id: UUID,
-    session: UserSession = Depends(require_permission(P.AI_USE)),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> StreamingResponse:
     """Stream AI summary of all interviews via SSE."""
     from app.services import ai_interview_service
@@ -1089,10 +1101,10 @@ Notes:
 @router.get("/interviews/{interview_id}/export")
 def export_interview(
     interview_id: UUID,
-    format: str = Query("pdf", pattern="^(pdf|json)$"),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    format: Annotated[str, "fastapi_param"] = Query("pdf", pattern="^(pdf|json)$"),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Export single interview as PDF or JSON."""
     interview, _ = _check_interview_access(db, session.org_id, interview_id, session)
 
@@ -1151,10 +1163,10 @@ def export_interview(
 @router.get("/surrogates/{surrogate_id}/interviews/export")
 def export_all_interviews(
     surrogate_id: UUID,
-    format: str = Query("pdf", pattern="^(pdf|json)$"),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    format: Annotated[str, "fastapi_param"] = Query("pdf", pattern="^(pdf|json)$"),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Export all interviews for a surrogate as PDF or JSON."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
     if not surrogate:

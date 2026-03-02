@@ -1,6 +1,7 @@
 """AI usage analytics routes."""
 
-from typing import Any
+from typing import Annotated
+
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -15,9 +16,9 @@ router = APIRouter()
 @router.get("/usage/summary")
 def get_usage_summary(
     days: int = 30,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USAGE_VIEW)),
-) -> dict[str, Any]:
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USAGE_VIEW)),
+) -> dict[str, object]:
     """Get organization usage summary."""
     from app.services import ai_usage_service
 
@@ -27,9 +28,9 @@ def get_usage_summary(
 @router.get("/usage/by-model")
 def get_usage_by_model(
     days: int = 30,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USAGE_VIEW)),
-) -> dict[str, Any]:
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USAGE_VIEW)),
+) -> dict[str, object]:
     """Get usage breakdown by AI model."""
     from app.services import ai_usage_service
 
@@ -39,9 +40,9 @@ def get_usage_by_model(
 @router.get("/usage/daily")
 def get_daily_usage(
     days: int = 30,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USAGE_VIEW)),
-) -> dict[str, Any]:
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USAGE_VIEW)),
+) -> dict[str, object]:
     """Get daily usage breakdown."""
     from app.services import ai_usage_service
 
@@ -52,9 +53,9 @@ def get_daily_usage(
 def get_top_users(
     days: int = 30,
     limit: int = 10,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USAGE_VIEW)),
-) -> dict[str, Any]:
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USAGE_VIEW)),
+) -> dict[str, object]:
     """Get top users by AI usage."""
     from app.services import ai_usage_service
 
@@ -64,9 +65,9 @@ def get_top_users(
 @router.get("/usage/me")
 def get_my_usage(
     days: int = 30,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
-) -> dict[str, Any]:
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> dict[str, object]:
     """Get current user's AI usage."""
     from app.services import ai_usage_service
 

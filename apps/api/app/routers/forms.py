@@ -1,9 +1,21 @@
 """Form builder and submission review endpoints."""
 
+from typing import Annotated
+
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, File, Form, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    File,
+    Form,
+    UploadFile,
+)
+
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -187,8 +199,8 @@ def _intake_link_read(link, intake_url: str | None = None) -> FormIntakeLinkRead
     dependencies=[Depends(require_permission(POLICIES["forms"].default))],
 )
 def list_forms(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     forms = form_service.list_forms(db, session.org_id)
     default_form_id = form_service.ensure_default_surrogate_application_form(
@@ -215,8 +227,8 @@ class FormTemplateUseRequest(BaseModel):
     dependencies=[Depends(require_permission(POLICIES["forms"].default))],
 )
 def list_form_templates(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """List published platform form templates visible to this org."""
     from app.services import platform_template_service
@@ -242,8 +254,8 @@ def list_form_templates(
 )
 def get_form_template(
     template_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     from app.services import platform_template_service
 
@@ -274,9 +286,9 @@ def get_form_template(
 )
 def remove_form_template_from_library(
     template_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> Response:
     """Hide a published platform form template from this org's library."""
     from app.services import platform_template_service
 
@@ -307,8 +319,8 @@ def remove_form_template_from_library(
 def use_form_template(
     template_id: UUID,
     body: FormTemplateUseRequest,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Create a draft form from a platform template."""
     from app.services import platform_template_service
@@ -357,8 +369,8 @@ def use_form_template(
 )
 def create_form(
     body: FormCreate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     form = form_service.create_form(
         db=db,
@@ -400,8 +412,8 @@ def list_mapping_options():
 )
 def get_form(
     form_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     form = form_service.get_form(db, session.org_id, form_id)
     if not form:
@@ -425,8 +437,8 @@ def get_form(
 def update_form(
     form_id: UUID,
     body: FormUpdate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     form = form_service.get_form(db, session.org_id, form_id)
     if not form:
@@ -461,9 +473,9 @@ def update_form(
 )
 def delete_form(
     form_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     form = form_service.get_form(db, session.org_id, form_id)
     if not form:
         raise HTTPException(status_code=404, detail="Form not found")
@@ -481,8 +493,8 @@ def delete_form(
 )
 def set_default_surrogate_application_form(
     form_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     try:
         form = form_service.set_default_surrogate_application_form(
@@ -508,20 +520,17 @@ def set_default_surrogate_application_form(
 def update_form_delivery_settings(
     form_id: UUID,
     body: FormDeliverySettingsUpdate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     form = form_service.get_form(db, session.org_id, form_id)
     if not form:
         raise HTTPException(status_code=404, detail="Form not found")
 
-    if (
-        body.default_application_email_template_id is not None
-        and not email_service.get_template(
-            db,
-            body.default_application_email_template_id,
-            session.org_id,
-        )
+    if body.default_application_email_template_id is not None and not email_service.get_template(
+        db,
+        body.default_application_email_template_id,
+        session.org_id,
     ):
         raise HTTPException(status_code=404, detail="Email template not found")
 
@@ -552,9 +561,9 @@ def update_form_delivery_settings(
     ],
 )
 def upload_form_logo(
-    file: UploadFile = File(...),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    file: Annotated[UploadFile, "fastapi_param"] = File(),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     try:
         logo = form_service.upload_form_logo(
@@ -586,8 +595,8 @@ def upload_form_logo(
 )
 def publish_form(
     form_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     form = form_service.get_form(db, session.org_id, form_id)
     if not form:
@@ -628,8 +637,8 @@ def publish_form(
 )
 def list_mappings(
     form_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     form = form_service.get_form(db, session.org_id, form_id)
     if not form:
@@ -652,8 +661,8 @@ def list_mappings(
 def set_mappings(
     form_id: UUID,
     body: FormFieldMappingsUpdate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     form = form_service.get_form(db, session.org_id, form_id)
     if not form:
@@ -688,8 +697,8 @@ def set_mappings(
 def create_submission_token(
     form_id: UUID,
     body: FormTokenRequest,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
 
@@ -701,9 +710,9 @@ def create_submission_token(
 )
 def list_form_intake_links(
     form_id: UUID,
-    include_inactive: bool = Query(False),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    include_inactive: Annotated[bool, "fastapi_param"] = Query(False),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     form = form_service.get_form(db, session.org_id, form_id)
     if not form:
@@ -750,8 +759,8 @@ def list_form_intake_links(
 def create_form_intake_link(
     form_id: UUID,
     body: FormIntakeLinkCreate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Shared intake is disabled")
@@ -794,8 +803,8 @@ def create_form_intake_link(
 def update_form_intake_link(
     link_id: UUID,
     body: FormIntakeLinkUpdate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Shared intake is disabled")
@@ -833,8 +842,8 @@ def update_form_intake_link(
 )
 def rotate_form_intake_link(
     link_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Shared intake is disabled")
@@ -864,8 +873,8 @@ def send_form_intake_link(
     form_id: UUID,
     link_id: UUID,
     body: FormIntakeLinkSendRequest,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Shared intake is disabled")
@@ -934,8 +943,8 @@ def send_submission_token(
     form_id: UUID,
     token_id: UUID,
     body: FormTokenSendRequest,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
 
@@ -947,12 +956,12 @@ def send_submission_token(
 )
 def list_form_submissions(
     form_id: UUID,
-    status: str | None = Query(default=None),
-    match_status: str | None = Query(default=None),
-    source_mode: str | None = Query(default=None),
-    limit: int = Query(default=200, ge=1, le=1000),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    status: Annotated[str | None, "fastapi_param"] = Query(default=None),
+    match_status: Annotated[str | None, "fastapi_param"] = Query(default=None),
+    source_mode: Annotated[str | None, "fastapi_param"] = Query(default=None),
+    limit: Annotated[int, "fastapi_param"] = Query(default=200, ge=1, le=1000),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     form = form_service.get_form(db, session.org_id, form_id)
     if not form:
@@ -983,8 +992,8 @@ def get_surrogate_submission(
     form_id: UUID,
     surrogate_id: UUID,
     request: Request,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     form = form_service.get_form(db, session.org_id, form_id)
     if not form:
@@ -1020,8 +1029,8 @@ def get_surrogate_submission(
 def get_surrogate_draft_status(
     form_id: UUID,
     surrogate_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     form = form_service.get_form(db, session.org_id, form_id)
     if not form:
@@ -1051,9 +1060,9 @@ def get_surrogate_draft_status(
 def list_submissions(
     form_id: UUID,
     request: Request,
-    status_filter: str | None = Query(None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    status_filter: Annotated[str | None, "fastapi_param"] = Query(None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     form = form_service.get_form(db, session.org_id, form_id)
     if not form:
@@ -1089,8 +1098,8 @@ def list_submissions(
 )
 def list_submission_match_candidates(
     submission_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
@@ -1123,8 +1132,8 @@ def list_submission_match_candidates(
 def resolve_submission_match(
     submission_id: UUID,
     body: FormSubmissionMatchResolveRequest,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
@@ -1134,7 +1143,9 @@ def resolve_submission_match(
         surrogate = surrogate_service.get_surrogate(db, session.org_id, body.surrogate_id)
         if not surrogate:
             raise HTTPException(status_code=404, detail="Surrogate not found")
-        check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+        check_surrogate_access(
+            surrogate, session.role, session.user_id, db=db, org_id=session.org_id
+        )
 
     try:
         submission, outcome = form_intake_service.resolve_submission_match(
@@ -1172,8 +1183,8 @@ def resolve_submission_match(
 def retry_submission_match(
     submission_id: UUID,
     body: FormSubmissionMatchRetryRequest,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
@@ -1213,8 +1224,8 @@ def retry_submission_match(
 )
 def get_intake_lead(
     lead_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     lead = form_intake_service.get_intake_lead(db, org_id=session.org_id, lead_id=lead_id)
     if not lead:
@@ -1246,8 +1257,8 @@ def get_intake_lead(
 def promote_intake_lead(
     lead_id: UUID,
     body: IntakeLeadPromoteRequest,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     lead = form_intake_service.get_intake_lead(db, org_id=session.org_id, lead_id=lead_id)
     if not lead:
@@ -1283,8 +1294,8 @@ def promote_intake_lead(
 def approve_submission(
     submission_id: UUID,
     body: FormSubmissionStatusUpdate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
@@ -1322,8 +1333,8 @@ def approve_submission(
 def reject_submission(
     submission_id: UUID,
     body: FormSubmissionStatusUpdate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
@@ -1361,8 +1372,8 @@ def reject_submission(
 def update_submission_answers(
     submission_id: UUID,
     body: FormSubmissionAnswersUpdate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Update submission answers and sync mapped surrogate fields."""
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
@@ -1402,8 +1413,8 @@ def download_submission_file(
     submission_id: UUID,
     file_id: UUID,
     request: Request,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
@@ -1471,12 +1482,12 @@ def download_submission_file(
         Depends(require_csrf_header),
     ],
 )
-async def upload_submission_file(
+def upload_submission_file(
     submission_id: UUID,
-    file: UploadFile = File(...),
-    field_key: str | None = Form(default=None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    file: Annotated[UploadFile, "fastapi_param"] = File(),
+    field_key: Annotated[str | None, "fastapi_param"] = Form(default=None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Upload a file to an existing submission (edit mode)."""
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
@@ -1525,9 +1536,9 @@ async def upload_submission_file(
 def delete_submission_file(
     submission_id: UUID,
     file_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Soft-delete a file from a submission (edit mode)."""
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
@@ -1569,9 +1580,9 @@ def delete_submission_file(
 )
 def export_submission_pdf(
     submission_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Export a submission as PDF."""
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:

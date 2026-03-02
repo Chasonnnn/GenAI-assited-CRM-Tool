@@ -6,7 +6,8 @@ Provides surrogate statistics, trends, and Meta performance metrics.
 
 from datetime import datetime, timezone
 from uuid import UUID
-from typing import Literal, Optional
+from typing import Literal, Optional, Annotated
+
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
@@ -121,10 +122,12 @@ class PerformanceByUserResponse(BaseModel):
 
 @router.get("/summary", response_model=AnalyticsSummary)
 def get_analytics_summary(
-    from_date: Optional[str] = Query(None, description="ISO date string"),
-    to_date: Optional[str] = Query(None, description="ISO date string"),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(
+        None, description="ISO date string"
+    ),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(None, description="ISO date string"),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get high-level analytics summary."""
     from app.services import analytics_service
@@ -136,12 +139,16 @@ def get_analytics_summary(
 
 @router.get("/surrogates/by-status", response_model=list[StatusCount])
 def get_surrogates_by_status(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    pipeline_id: UUID | None = Query(None, description="Filter by pipeline UUID"),
-    owner_id: UUID | None = Query(None, description="Filter by owner UUID"),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    pipeline_id: Annotated[UUID | None, "fastapi_param"] = Query(
+        None, description="Filter by pipeline UUID"
+    ),
+    owner_id: Annotated[UUID | None, "fastapi_param"] = Query(
+        None, description="Filter by owner UUID"
+    ),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get surrogate counts grouped by status."""
     if (
@@ -168,8 +175,8 @@ def get_surrogates_by_status(
 
 @router.get("/surrogates/by-assignee", response_model=list[AssigneeCount])
 def get_surrogates_by_assignee(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get surrogate counts grouped by owner (user-owned surrogates only)."""
     from app.services import analytics_service
@@ -180,13 +187,17 @@ def get_surrogates_by_assignee(
 
 @router.get("/surrogates/trend", response_model=list[TrendPoint])
 def get_surrogates_trend(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    period: Literal["day", "week", "month"] = Query("day"),
-    pipeline_id: UUID | None = Query(None, description="Filter by pipeline UUID"),
-    owner_id: UUID | None = Query(None, description="Filter by owner UUID"),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    period: Annotated[Literal["day", "week", "month"], "fastapi_param"] = Query("day"),
+    pipeline_id: Annotated[UUID | None, "fastapi_param"] = Query(
+        None, description="Filter by pipeline UUID"
+    ),
+    owner_id: Annotated[UUID | None, "fastapi_param"] = Query(
+        None, description="Filter by owner UUID"
+    ),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get surrogate creation trend over time."""
     if (
@@ -211,10 +222,10 @@ def get_surrogates_trend(
 
 @router.get("/meta/performance", response_model=MetaPerformance)
 def get_meta_performance(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Get Meta Lead Ads performance metrics.
@@ -332,8 +343,8 @@ class MetaCampaignListItem(BaseModel):
 
 @router.get("/meta/ad-accounts")
 def get_meta_ad_accounts(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get list of configured ad accounts for filter dropdown."""
     data = analytics_service.get_meta_ad_accounts(db, session.org_id)
@@ -342,11 +353,13 @@ def get_meta_ad_accounts(
 
 @router.get("/meta/spend/totals", response_model=SpendTotalsResponse)
 def get_spend_totals(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    ad_account_id: Optional[str] = Query(None, description="Filter by ad account UUID"),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    ad_account_id: Annotated[Optional[str], "fastapi_param"] = Query(
+        None, description="Filter by ad account UUID"
+    ),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> SpendTotalsResponse:
     """
     Get spend totals with sync status.
@@ -371,11 +384,11 @@ def get_spend_totals(
 
 @router.get("/meta/spend/by-campaign")
 def get_spend_by_campaign(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    ad_account_id: Optional[str] = Query(None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    ad_account_id: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get spend aggregated by campaign from stored data."""
     from uuid import UUID as _UUID
@@ -395,14 +408,14 @@ def get_spend_by_campaign(
 
 @router.get("/meta/spend/by-breakdown")
 def get_spend_by_breakdown(
-    breakdown_type: Literal["publisher_platform", "platform_position", "age", "region"] = Query(
-        ..., description="Breakdown dimension"
-    ),
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    ad_account_id: Optional[str] = Query(None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    breakdown_type: Annotated[
+        Literal["publisher_platform", "platform_position", "age", "region"], "fastapi_param"
+    ] = Query(description="Breakdown dimension"),
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    ad_account_id: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """
     Get spend aggregated by breakdown dimension.
@@ -431,12 +444,14 @@ def get_spend_by_breakdown(
 
 @router.get("/meta/spend/trend")
 def get_spend_trend(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    ad_account_id: Optional[str] = Query(None),
-    campaign_external_id: Optional[str] = Query(None, description="Filter by campaign"),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    ad_account_id: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    campaign_external_id: Annotated[Optional[str], "fastapi_param"] = Query(
+        None, description="Filter by campaign"
+    ),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get daily spend time series from stored data."""
     from uuid import UUID as _UUID
@@ -457,10 +472,10 @@ def get_spend_trend(
 
 @router.get("/meta/forms")
 def get_form_performance(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """
     Get form performance metrics.
@@ -481,10 +496,10 @@ def get_form_performance(
 
 @router.get("/meta/platforms")
 def get_meta_platform_breakdown(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get Meta platform distribution from lead data."""
     start, end = analytics_service.parse_date_range(from_date, to_date)
@@ -500,10 +515,10 @@ def get_meta_platform_breakdown(
 
 @router.get("/meta/ads")
 def get_meta_ad_performance(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get Meta ad performance grouped by ad ID."""
     start, end = analytics_service.parse_date_range(from_date, to_date)
@@ -519,9 +534,9 @@ def get_meta_ad_performance(
 
 @router.get("/meta/campaigns")
 def get_meta_campaign_list(
-    ad_account_id: Optional[str] = Query(None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    ad_account_id: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get list of synced campaigns for filter dropdown."""
     from uuid import UUID as _UUID
@@ -543,11 +558,11 @@ def get_meta_campaign_list(
 
 @router.get("/surrogates/by-state")
 def get_surrogates_by_state(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    source: Optional[str] = Query(None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    source: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get surrogate count by US state for map visualization."""
     from app.services import analytics_service
@@ -565,10 +580,10 @@ def get_surrogates_by_state(
 
 @router.get("/surrogates/by-source")
 def get_surrogates_by_source(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get surrogate count by lead source."""
     from app.services import analytics_service
@@ -582,10 +597,10 @@ def get_surrogates_by_source(
 
 @router.get("/funnel")
 def get_conversion_funnel(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get conversion funnel data."""
     from app.services import analytics_service
@@ -599,10 +614,10 @@ def get_conversion_funnel(
 
 @router.get("/kpis")
 def get_kpis(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get summary KPIs for dashboard cards."""
     from app.services import analytics_service
@@ -616,8 +631,8 @@ def get_kpis(
 
 @router.get("/campaigns")
 def get_campaigns(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get campaigns for filter dropdown."""
     from app.services import analytics_service
@@ -628,11 +643,11 @@ def get_campaigns(
 
 @router.get("/funnel/compare")
 def get_funnel_compare(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    ad_id: Optional[str] = Query(None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    ad_id: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get funnel with optional campaign filter for comparison."""
     from app.services import analytics_service
@@ -650,11 +665,11 @@ def get_funnel_compare(
 
 @router.get("/surrogates/by-state/compare")
 def get_surrogates_by_state_compare(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    ad_id: Optional[str] = Query(None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    ad_id: Annotated[Optional[str], "fastapi_param"] = Query(None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> dict:
     """Get surrogates by state with optional campaign filter."""
     from app.services import analytics_service
@@ -677,14 +692,18 @@ def get_surrogates_by_state_compare(
 
 @router.get("/performance/by-user", response_model=PerformanceByUserResponse)
 def get_performance_by_user(
-    from_date: Optional[str] = Query(None, description="Start date (ISO format)"),
-    to_date: Optional[str] = Query(None, description="End date (ISO format)"),
-    mode: Literal["cohort", "activity"] = Query(
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(
+        None, description="Start date (ISO format)"
+    ),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(
+        None, description="End date (ISO format)"
+    ),
+    mode: Annotated[Literal["cohort", "activity"], "fastapi_param"] = Query(
         "cohort",
         description="cohort: surrogates created in range; activity: status changes in range",
     ),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> PerformanceByUserResponse:
     """
     Get individual user performance metrics.
@@ -755,12 +774,16 @@ class ActivityFeedResponse(BaseModel):
 
 @router.get("/activity-feed", response_model=ActivityFeedResponse)
 def get_activity_feed(
-    limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    activity_type: Optional[str] = Query(None, description="Filter by activity type"),
-    user_id: Optional[str] = Query(None, description="Filter by actor user ID"),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    limit: Annotated[int, "fastapi_param"] = Query(20, ge=1, le=100),
+    offset: Annotated[int, "fastapi_param"] = Query(0, ge=0),
+    activity_type: Annotated[Optional[str], "fastapi_param"] = Query(
+        None, description="Filter by activity type"
+    ),
+    user_id: Annotated[Optional[str], "fastapi_param"] = Query(
+        None, description="Filter by actor user ID"
+    ),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> ActivityFeedResponse:
     """
     Get org-wide activity feed.
@@ -802,11 +825,15 @@ def get_activity_feed(
 
 @router.get("/export/pdf")
 async def export_analytics_pdf(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-    from_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    to_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    from_date: Annotated[Optional[str], "fastapi_param"] = Query(
+        None, description="Start date (YYYY-MM-DD)"
+    ),
+    to_date: Annotated[Optional[str], "fastapi_param"] = Query(
+        None, description="End date (YYYY-MM-DD)"
+    ),
+) -> object:
     """
     Export analytics data as a PDF report.
 

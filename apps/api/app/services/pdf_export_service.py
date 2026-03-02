@@ -397,7 +397,7 @@ def _generate_submission_html(
     <div class="header">
         <h1>{html.escape(surrogate_name)}</h1>
         <div class="subtitle">{html.escape(title)} • {datetime.now().strftime("%B %d, %Y")}{" • " + html.escape(org_name) if org_name else ""}</div>
-        {f'<div class="note">{html.escape(_render_profile_template(header_note))}</div>' if header_note else ''}
+        {f'<div class="note">{html.escape(_render_profile_template(header_note))}</div>' if header_note else ""}
     </div>
     
     {sections_html}
@@ -841,9 +841,7 @@ def export_profile_pdf(
     hidden_fields = set(profile_data.get("hidden_fields") or [])
     answers = profile_data.get("merged_view") or {}
     effective_name = (
-        profile_data.get("header_name_override")
-        or answers.get("full_name")
-        or surrogate_name
+        profile_data.get("header_name_override") or answers.get("full_name") or surrogate_name
     )
 
     base_submission_id = profile_data.get("base_submission_id")

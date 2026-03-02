@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+
+from fastapi import APIRouter, Depends, HTTPException, Response
+
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -18,6 +20,8 @@ from app.services import (
     zapier_outbound_service,
 )
 from app.services.webhooks import zapier as zapier_webhook_service
+
+csrf_header_dependency = require_csrf_header
 
 router = APIRouter(prefix="/integrations/zapier", tags=["zapier"])
 
@@ -123,8 +127,10 @@ class ZapierFieldPasteResponse(BaseModel):
 
 @router.get("/settings", response_model=ZapierSettingsResponse)
 def get_settings(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
 ):
     settings = zapier_settings_service.get_or_create_settings(db, session.org_id)
     inbound_webhooks = zapier_settings_service.list_inbound_webhooks(db, session.org_id)
@@ -133,9 +139,11 @@ def get_settings(
 
 @router.post("/settings/rotate-secret", response_model=RotateSecretResponse)
 def rotate_secret(
-    _csrf: None = Depends(require_csrf_header),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
 ):
     settings, secret = zapier_settings_service.rotate_webhook_secret(db, session.org_id)
     inbound = zapier_settings_service.get_primary_inbound_webhook(db, session.org_id)
@@ -155,9 +163,11 @@ def rotate_secret(
 @router.post("/webhooks", response_model=ZapierInboundWebhookCreateResponse)
 def create_inbound_webhook(
     data: ZapierInboundWebhookCreateRequest,
-    _csrf: None = Depends(require_csrf_header),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
 ):
     zapier_settings_service.get_or_create_settings(db, session.org_id)
     inbound, secret = zapier_settings_service.create_inbound_webhook(
@@ -175,9 +185,11 @@ def create_inbound_webhook(
 @router.post("/webhooks/{webhook_id}/rotate-secret", response_model=RotateSecretResponse)
 def rotate_inbound_secret(
     webhook_id: str,
-    _csrf: None = Depends(require_csrf_header),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
 ):
     try:
         inbound, secret = zapier_settings_service.rotate_inbound_webhook_secret(
@@ -196,9 +208,11 @@ def rotate_inbound_secret(
 def update_inbound_webhook(
     webhook_id: str,
     data: ZapierInboundWebhookUpdateRequest,
-    _csrf: None = Depends(require_csrf_header),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
 ):
     try:
         inbound = zapier_settings_service.update_inbound_webhook(
@@ -223,10 +237,12 @@ def update_inbound_webhook(
 @router.delete("/webhooks/{webhook_id}", status_code=204)
 def delete_inbound_webhook(
     webhook_id: str,
-    _csrf: None = Depends(require_csrf_header),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
-):
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
+) -> Response:
     try:
         zapier_settings_service.delete_inbound_webhook(db, session.org_id, webhook_id)
     except LookupError as exc:
@@ -238,9 +254,11 @@ def delete_inbound_webhook(
 @router.post("/settings/outbound", response_model=ZapierSettingsResponse)
 def update_outbound_settings(
     data: ZapierOutboundSettingsUpdate,
-    _csrf: None = Depends(require_csrf_header),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
 ):
     try:
         settings = zapier_settings_service.update_outbound_settings(
@@ -263,9 +281,11 @@ def update_outbound_settings(
 @router.post("/test-lead", response_model=ZapierTestLeadResponse)
 def send_test_lead(
     data: ZapierTestLeadRequest,
-    _csrf: None = Depends(require_csrf_header),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
 ):
     form_id = data.form_id
     if not form_id:
@@ -294,9 +314,11 @@ def send_test_lead(
 @router.post("/field-paste", response_model=ZapierFieldPasteResponse)
 def parse_field_paste(
     data: ZapierFieldPasteRequest,
-    _csrf: None = Depends(require_csrf_header),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
 ):
     paste = data.paste.strip()
     if not paste:
@@ -360,9 +382,11 @@ def parse_field_paste(
 @router.post("/test-outbound", response_model=ZapierOutboundTestResponse)
 def send_outbound_test(
     data: ZapierOutboundTestRequest,
-    _csrf: None = Depends(require_csrf_header),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.INTEGRATIONS_MANAGE)),
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
 ):
     settings = zapier_settings_service.get_or_create_settings(db, session.org_id)
     if not settings or not settings.outbound_webhook_url:

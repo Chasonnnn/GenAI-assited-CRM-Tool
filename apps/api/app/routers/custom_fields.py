@@ -1,8 +1,11 @@
 """Custom field endpoints for org-scoped field definitions."""
 
+from typing import Annotated
+
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
+
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
@@ -21,8 +24,8 @@ router = APIRouter(
 
 @router.get("", response_model=list[CustomFieldRead])
 def list_custom_fields(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     fields = custom_field_service.list_custom_fields(db, session.org_id)
     return fields
@@ -36,8 +39,8 @@ def list_custom_fields(
 )
 def create_custom_field(
     body: CustomFieldCreate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     try:
         field = custom_field_service.create_custom_field(
@@ -62,8 +65,8 @@ def create_custom_field(
 def update_custom_field(
     field_id: UUID,
     body: CustomFieldUpdate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     field = custom_field_service.get_custom_field(db, session.org_id, field_id)
     if not field:
@@ -85,9 +88,9 @@ def update_custom_field(
 )
 def delete_custom_field(
     field_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> Response:
     field = custom_field_service.get_custom_field(db, session.org_id, field_id)
     if not field:
         raise HTTPException(status_code=404, detail="Custom field not found")

@@ -7,10 +7,13 @@ Internal authenticated endpoints for staff to manage:
 - Appointment approval/management
 """
 
+from typing import Annotated
+
 from datetime import date, timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+
 from sqlalchemy.orm import Session
 
 from app.core.deps import (
@@ -50,7 +53,11 @@ from app.services import (
 )
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
-router = APIRouter(dependencies=[Depends(require_permission(POLICIES["appointments"].default))])
+router = APIRouter(
+    dependencies=[Depends(require_permission(POLICIES["appointments"].default))],
+    prefix="/appointments",
+    tags=["appointments"],
+)
 
 
 # =============================================================================
@@ -125,9 +132,9 @@ def _link_to_read(link, base_url: str = "") -> BookingLinkRead:
 
 @router.get("/types", response_model=list[AppointmentTypeRead])
 def list_appointment_types(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-    active_only: bool = Query(True),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    active_only: Annotated[bool, "fastapi_param"] = Query(True),
 ):
     """List appointment types for the current user."""
     types = appointment_service.list_appointment_types(
@@ -147,8 +154,8 @@ def list_appointment_types(
 )
 def create_appointment_type(
     data: AppointmentTypeCreate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Create a new appointment type."""
     try:
@@ -181,8 +188,8 @@ def create_appointment_type(
 def update_appointment_type(
     type_id: UUID,
     data: AppointmentTypeUpdate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Update an appointment type."""
     appt_type = appointment_service.get_appointment_type(db, type_id, session.org_id)
@@ -208,9 +215,9 @@ def update_appointment_type(
 )
 def deactivate_appointment_type(
     type_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> Response:
     """Deactivate an appointment type (soft delete)."""
     appt_type = appointment_service.get_appointment_type(db, type_id, session.org_id)
     if not appt_type:
@@ -230,8 +237,8 @@ def deactivate_appointment_type(
 
 @router.get("/availability", response_model=list[AvailabilityRuleRead])
 def get_availability_rules(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get availability rules for the current user."""
     rules = appointment_service.get_availability_rules(
@@ -249,8 +256,8 @@ def get_availability_rules(
 )
 def set_availability_rules(
     data: AvailabilityRulesSet,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Replace all availability rules for the current user."""
     try:
@@ -273,8 +280,8 @@ def set_availability_rules(
 
 @router.get("/overrides", response_model=list[AvailabilityOverrideRead])
 def get_availability_overrides(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     date_start: date | None = None,
     date_end: date | None = None,
 ):
@@ -297,8 +304,8 @@ def get_availability_overrides(
 )
 def create_availability_override(
     data: AvailabilityOverrideCreate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Create or update an availability override."""
     from datetime import time as dt_time
@@ -329,9 +336,9 @@ def create_availability_override(
 )
 def delete_availability_override(
     override_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> Response:
     """Delete an availability override."""
     success = appointment_service.delete_availability_override(
         db=db,
@@ -351,8 +358,8 @@ def delete_availability_override(
 
 @router.get("/booking-link", response_model=BookingLinkRead)
 def get_booking_link(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get or create booking link for the current user."""
     link = appointment_service.get_or_create_booking_link(
@@ -371,8 +378,8 @@ def get_booking_link(
     dependencies=[Depends(require_csrf_header)],
 )
 def regenerate_booking_link(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Return the current booking link (slug rotation disabled)."""
     link = appointment_service.regenerate_booking_link(
@@ -395,8 +402,8 @@ def regenerate_booking_link(
 
 @router.get("/booking-preview", response_model=PublicBookingPageRead)
 def get_booking_preview(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Preview booking page data for the current user."""
     user = user_service.get_user_by_id(db, session.user_id)
@@ -429,11 +436,13 @@ def get_booking_preview(
 @router.get("/booking-preview/slots", response_model=AvailableSlotsResponse)
 def get_booking_preview_slots(
     appointment_type_id: UUID,
-    date_start: date = Query(..., description="Start date (YYYY-MM-DD)"),
-    date_end: date = Query(None, description="End date (defaults to start + 7 days)"),
-    client_timezone: str | None = Query(None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    date_start: Annotated[date, "fastapi_param"] = Query(description="Start date (YYYY-MM-DD)"),
+    date_end: Annotated[date, "fastapi_param"] = Query(
+        None, description="End date (defaults to start + 7 days)"
+    ),
+    client_timezone: Annotated[str | None, "fastapi_param"] = Query(None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Preview available slots for the current user's booking page."""
     appt_type = appointment_service.get_appointment_type(db, appointment_type_id, session.org_id)
@@ -482,10 +491,10 @@ def get_booking_preview_slots(
 @router.get("", response_model=AppointmentListResponse)
 def list_appointments(
     request: Request,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
-    page: int = Query(1, ge=1),
-    per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    page: Annotated[int, "fastapi_param"] = Query(1, ge=1),
+    per_page: Annotated[int, "fastapi_param"] = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
     status: str | None = None,
     date_start: date | None = None,
     date_end: date | None = None,
@@ -542,8 +551,8 @@ def list_appointments(
 def get_appointment(
     appointment_id: UUID,
     request: Request,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get appointment details."""
     appt = appointment_service.get_appointment(db, appointment_id, session.org_id)
@@ -576,8 +585,8 @@ def get_appointment(
 def update_appointment_link(
     appointment_id: UUID,
     data: AppointmentLinkUpdate,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Update surrogate/intended parent linkage for an appointment."""
     from app.core.surrogate_access import check_surrogate_access
@@ -624,8 +633,8 @@ def update_appointment_link(
 )
 def approve_appointment(
     appointment_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Approve a pending appointment."""
     appt = appointment_service.get_appointment(db, appointment_id, session.org_id)
@@ -656,11 +665,13 @@ def approve_appointment(
 @router.get("/{appointment_id}/reschedule/slots", response_model=AvailableSlotsResponse)
 def get_reschedule_slots(
     appointment_id: UUID,
-    date_start: date = Query(..., description="Start date (YYYY-MM-DD)"),
-    date_end: date = Query(None, description="End date (defaults to start date)"),
-    client_timezone: str | None = Query(None),
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    date_start: Annotated[date, "fastapi_param"] = Query(description="Start date (YYYY-MM-DD)"),
+    date_end: Annotated[date, "fastapi_param"] = Query(
+        None, description="End date (defaults to start date)"
+    ),
+    client_timezone: Annotated[str | None, "fastapi_param"] = Query(None),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get available slots for rescheduling an appointment (staff action)."""
     appt = appointment_service.get_appointment(db, appointment_id, session.org_id)
@@ -695,8 +706,8 @@ def get_reschedule_slots(
 def reschedule_appointment(
     appointment_id: UUID,
     data: AppointmentReschedule,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Reschedule an appointment (staff action)."""
     appt = appointment_service.get_appointment(db, appointment_id, session.org_id)
@@ -734,8 +745,8 @@ def reschedule_appointment(
 def cancel_appointment(
     appointment_id: UUID,
     data: AppointmentCancel,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Cancel an appointment (staff action)."""
     appt = appointment_service.get_appointment(db, appointment_id, session.org_id)

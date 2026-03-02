@@ -1,5 +1,7 @@
 """Surrogate status change routes."""
 
+from typing import Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -25,10 +27,10 @@ router = APIRouter()
 def change_status(
     surrogate_id: UUID,
     data: SurrogateStatusChange,
-    session: UserSession = Depends(
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["surrogates"].actions["change_status"])
     ),
-    db: Session = Depends(get_db),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Change surrogate stage (records history, respects access control)."""
     from datetime import date

@@ -44,8 +44,8 @@ def list_tickets(
     surrogate_id: UUID | None = None,
     needs_review: bool | None = None,
     q: str | None = None,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> TicketListResponse:
     """List tickets with cursor pagination + inbox filters."""
     page = ticketing_service.list_tickets(
@@ -66,7 +66,9 @@ def list_tickets(
             id=ticket.id,
             ticket_code=ticket.ticket_code,
             status=ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status),
-            priority=ticket.priority.value if hasattr(ticket.priority, "value") else str(ticket.priority),
+            priority=ticket.priority.value
+            if hasattr(ticket.priority, "value")
+            else str(ticket.priority),
             subject=ticket.subject,
             requester_email=ticket.requester_email,
             requester_name=ticket.requester_name,
@@ -89,8 +91,10 @@ def list_tickets(
 
 @router.get("/send-identities", response_model=TicketSendIdentityResponse)
 def list_send_identities(
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["tickets"].actions["reply"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["tickets"].actions["reply"])
+    ),
 ) -> TicketSendIdentityResponse:
     """List available Gmail sender identities for the current user."""
     identities = ticketing_service.list_send_identities(db, user_id=session.user_id)
@@ -100,8 +104,8 @@ def list_send_identities(
 @router.get("/{ticket_id}", response_model=TicketDetailResponse)
 def get_ticket_detail(
     ticket_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> TicketDetailResponse:
     """Return ticket detail timeline and metadata."""
     payload = ticketing_service.get_ticket_detail(
@@ -120,8 +124,10 @@ def get_ticket_detail(
 def patch_ticket(
     ticket_id: UUID,
     data: TicketPatchRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["tickets"].actions["edit"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["tickets"].actions["edit"])
+    ),
 ) -> TicketListItem:
     """Update status/priority/assignment."""
     ticket = ticketing_service.patch_ticket(
@@ -138,7 +144,9 @@ def patch_ticket(
         id=ticket.id,
         ticket_code=ticket.ticket_code,
         status=ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status),
-        priority=ticket.priority.value if hasattr(ticket.priority, "value") else str(ticket.priority),
+        priority=ticket.priority.value
+        if hasattr(ticket.priority, "value")
+        else str(ticket.priority),
         subject=ticket.subject,
         requester_email=ticket.requester_email,
         requester_name=ticket.requester_name,
@@ -164,8 +172,10 @@ def patch_ticket(
 def reply_ticket(
     ticket_id: UUID,
     data: TicketReplyRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["tickets"].actions["reply"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["tickets"].actions["reply"])
+    ),
 ) -> TicketSendResult:
     """Send threaded reply via Gmail."""
     payload = ticketing_service.reply_to_ticket(
@@ -190,8 +200,10 @@ def reply_ticket(
 )
 def compose_ticket(
     data: TicketComposeRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["tickets"].actions["reply"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["tickets"].actions["reply"])
+    ),
 ) -> TicketSendResult:
     """Compose a new outbound ticket message."""
     payload = ticketing_service.compose_ticket(
@@ -218,8 +230,10 @@ def compose_ticket(
 def add_ticket_note(
     ticket_id: UUID,
     data: TicketNoteCreateRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(POLICIES["tickets"].actions["edit"])),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["tickets"].actions["edit"])
+    ),
 ) -> TicketNoteRead:
     """Add an internal ticket note."""
     note = ticketing_service.add_ticket_note(
@@ -247,8 +261,8 @@ def add_ticket_note(
 def link_ticket_surrogate(
     ticket_id: UUID,
     data: TicketLinkSurrogateRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["tickets"].actions["link_surrogates"])
     ),
 ) -> TicketListItem:
@@ -265,7 +279,9 @@ def link_ticket_surrogate(
         id=ticket.id,
         ticket_code=ticket.ticket_code,
         status=ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status),
-        priority=ticket.priority.value if hasattr(ticket.priority, "value") else str(ticket.priority),
+        priority=ticket.priority.value
+        if hasattr(ticket.priority, "value")
+        else str(ticket.priority),
         subject=ticket.subject,
         requester_email=ticket.requester_email,
         requester_name=ticket.requester_name,
@@ -287,8 +303,8 @@ def link_ticket_surrogate(
 def download_ticket_attachment(
     ticket_id: UUID,
     attachment_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> dict[str, str]:
     """Return secure signed URL for ticket attachment download."""
     url = ticketing_service.get_ticket_attachment_download_url(

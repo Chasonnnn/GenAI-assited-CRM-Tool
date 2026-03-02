@@ -1,5 +1,7 @@
 """Dashboard router - API endpoints for dashboard widgets."""
 
+from typing import Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, HTTPException
@@ -109,12 +111,20 @@ class AttentionResponse(BaseModel):
 @router.get("/upcoming", response_model=UpcomingResponse)
 def get_upcoming(
     request: Request,
-    days: int = Query(7, ge=1, le=14, description="Number of days to look ahead"),
-    include_overdue: bool = Query(True, description="Include overdue tasks"),
-    assignee_id: UUID | None = Query(None, description="Filter upcoming items by assignee"),
-    pipeline_id: UUID | None = Query(None, description="Filter by pipeline UUID"),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    days: Annotated[int, "fastapi_param"] = Query(
+        7, ge=1, le=14, description="Number of days to look ahead"
+    ),
+    include_overdue: Annotated[bool, "fastapi_param"] = Query(
+        True, description="Include overdue tasks"
+    ),
+    assignee_id: Annotated[UUID | None, "fastapi_param"] = Query(
+        None, description="Filter upcoming items by assignee"
+    ),
+    pipeline_id: Annotated[UUID | None, "fastapi_param"] = Query(
+        None, description="Filter by pipeline UUID"
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> UpcomingResponse:
     """
     Get user's upcoming tasks and meetings for dashboard.
@@ -169,15 +179,23 @@ def get_upcoming(
 @router.get("/attention", response_model=AttentionResponse)
 def get_attention(
     request: Request,
-    days_unreached: int = Query(
+    days_unreached: Annotated[int, "fastapi_param"] = Query(
         7, ge=1, le=30, description="Days without contact or updates for unreached leads"
     ),
-    days_stuck: int = Query(14, ge=1, le=60, description="Days in same stage for stuck surrogates"),
-    pipeline_id: UUID | None = Query(None, description="Filter by pipeline UUID"),
-    assignee_id: UUID | None = Query(None, description="Filter by assignee UUID"),
-    limit: int = Query(5, ge=1, le=20, description="Max items per category"),
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    days_stuck: Annotated[int, "fastapi_param"] = Query(
+        14, ge=1, le=60, description="Days in same stage for stuck surrogates"
+    ),
+    pipeline_id: Annotated[UUID | None, "fastapi_param"] = Query(
+        None, description="Filter by pipeline UUID"
+    ),
+    assignee_id: Annotated[UUID | None, "fastapi_param"] = Query(
+        None, description="Filter by assignee UUID"
+    ),
+    limit: Annotated[int, "fastapi_param"] = Query(
+        5, ge=1, le=20, description="Max items per category"
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> AttentionResponse:
     """
     Get items needing attention for dashboard KPI.

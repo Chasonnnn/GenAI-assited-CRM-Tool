@@ -1,7 +1,10 @@
 """Queue management API endpoints."""
 
+from typing import Annotated
+
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
+
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -28,6 +31,8 @@ from app.services.queue_service import (
 
 router = APIRouter(
     dependencies=[Depends(require_permission(POLICIES["surrogates"].actions["assign"]))],
+    prefix="/queues",
+    tags=["queues"],
 )
 
 
@@ -37,7 +42,7 @@ router = APIRouter(
 
 
 class QueueCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=100)
     description: str | None = Field(None, max_length=500)
 
 
@@ -70,7 +75,7 @@ class QueueMemberResponse(BaseModel):
 
 
 class QueueMemberAdd(BaseModel):
-    user_id: UUID = Field(..., description="User ID to add to queue")
+    user_id: UUID = Field(description="User ID to add to queue")
 
 
 class ClaimRequest(BaseModel):
@@ -80,11 +85,11 @@ class ClaimRequest(BaseModel):
 
 
 class ReleaseRequest(BaseModel):
-    queue_id: UUID = Field(..., description="Queue to release case to")
+    queue_id: UUID = Field(description="Queue to release case to")
 
 
 class AssignToQueueRequest(BaseModel):
-    queue_id: UUID = Field(..., description="Queue to assign case to")
+    queue_id: UUID = Field(description="Queue to assign case to")
 
 
 # =============================================================================
@@ -94,8 +99,8 @@ class AssignToQueueRequest(BaseModel):
 
 @router.get("", response_model=list[QueueResponse])
 def list_queues(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     include_inactive: bool = False,
 ):
     """List all queues for the organization."""
@@ -106,8 +111,8 @@ def list_queues(
 @router.get("/{queue_id}", response_model=QueueResponse)
 def get_queue(
     queue_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get a specific queue."""
     queue = queue_service.get_queue(db, session.org_id, queue_id)
@@ -124,8 +129,10 @@ def get_queue(
 )
 def create_queue(
     data: QueueCreate,
-    session: UserSession = Depends(require_permission(POLICIES["queues"].default)),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["queues"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Create a new queue."""
 
@@ -145,8 +152,10 @@ def create_queue(
 def update_queue(
     queue_id: UUID,
     data: QueueUpdate,
-    session: UserSession = Depends(require_permission(POLICIES["queues"].default)),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["queues"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Update a queue."""
 
@@ -174,9 +183,11 @@ def update_queue(
 )
 def delete_queue(
     queue_id: UUID,
-    session: UserSession = Depends(require_permission(POLICIES["queues"].default)),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["queues"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> Response:
     """Soft-delete a queue (set inactive)."""
 
     try:
@@ -193,13 +204,13 @@ def delete_queue(
 
 @router.post(
     "/surrogates/{surrogate_id}/claim",
-    response_model=dict,
+    response_model=dict[str, object],
     dependencies=[Depends(require_csrf_header)],
 )
 def claim_surrogate(
     surrogate_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Claim a surrogate from a queue.
@@ -225,14 +236,14 @@ def claim_surrogate(
 
 @router.post(
     "/surrogates/{surrogate_id}/release",
-    response_model=dict,
+    response_model=dict[str, object],
     dependencies=[Depends(require_csrf_header)],
 )
 def release_surrogate(
     surrogate_id: UUID,
     data: ReleaseRequest,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Release a surrogate back to a queue.
@@ -254,14 +265,14 @@ def release_surrogate(
 
 @router.post(
     "/surrogates/{surrogate_id}/assign",
-    response_model=dict,
+    response_model=dict[str, object],
     dependencies=[Depends(require_csrf_header)],
 )
 def assign_surrogate_to_queue(
     surrogate_id: UUID,
     data: AssignToQueueRequest,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Assign a surrogate to a queue.
@@ -288,8 +299,10 @@ def assign_surrogate_to_queue(
 @router.get("/{queue_id}/members", response_model=list[QueueMemberResponse])
 def list_queue_members(
     queue_id: UUID,
-    session: UserSession = Depends(require_permission(POLICIES["queues"].default)),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["queues"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """List members of a queue."""
     queue = queue_service.get_queue(db, session.org_id, queue_id)
@@ -318,8 +331,10 @@ def list_queue_members(
 def add_queue_member(
     queue_id: UUID,
     data: QueueMemberAdd,
-    session: UserSession = Depends(require_permission(POLICIES["queues"].default)),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["queues"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Add a user to a queue."""
 
@@ -357,9 +372,11 @@ def add_queue_member(
 def remove_queue_member(
     queue_id: UUID,
     user_id: UUID,
-    session: UserSession = Depends(require_permission(POLICIES["queues"].default)),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["queues"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> Response:
     """Remove a user from a queue."""
 
     try:

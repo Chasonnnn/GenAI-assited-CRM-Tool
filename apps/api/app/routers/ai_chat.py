@@ -4,7 +4,8 @@ import asyncio
 import logging
 import uuid
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, Annotated
+
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
@@ -39,7 +40,7 @@ class ChatRequest(BaseModel):
     entity_type: str | None = Field(None, pattern="^(case|surrogate|task|global)$")
     entity_id: uuid.UUID | None = None
     conversation_id: uuid.UUID | None = None
-    message: str = Field(..., min_length=1, max_length=10000)
+    message: str = Field(min_length=1, max_length=10000)
 
 
 class ChatResponseModel(BaseModel):
@@ -130,8 +131,8 @@ def _prepare_chat_request(
 def chat(
     request: Request,  # Required by limiter
     body: ChatRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
 ) -> ChatResponseModel:
     """Send a message to the AI assistant.
 
@@ -172,8 +173,8 @@ def chat(
 async def chat_stream(
     request: Request,  # Required by limiter
     body: ChatRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(require_permission(P.AI_USE)),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
 ) -> StreamingResponse:
     """Stream messages from the AI assistant via SSE."""
     from app.services import ai_chat_service

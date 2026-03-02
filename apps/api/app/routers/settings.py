@@ -1,5 +1,7 @@
 """Settings endpoints for organization and user preferences."""
 
+from typing import Annotated
+
 import io
 import logging
 import mimetypes
@@ -62,8 +64,8 @@ class OrgSettingsUpdate(BaseModel):
 
 @router.get("/organization", response_model=OrgSettingsRead)
 def get_org_settings(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get organization settings."""
     org = org_service.get_org_by_id(db, session.org_id)
@@ -89,8 +91,10 @@ def get_org_settings(
 def update_org_settings(
     body: OrgSettingsUpdate,
     request: Request,
-    session: UserSession = Depends(require_permission(POLICIES["org_settings"].default)),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["org_settings"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Update organization settings.
@@ -156,8 +160,8 @@ MAX_SOCIAL_LINKS = 6
 class SocialLinkItem(BaseModel):
     """A social link with platform name and URL."""
 
-    platform: str = Field(..., min_length=1, max_length=50)
-    url: str = Field(..., max_length=500)
+    platform: str = Field(min_length=1, max_length=50)
+    url: str = Field(max_length=500)
 
     @field_validator("platform")
     @classmethod
@@ -268,8 +272,8 @@ class SignaturePreviewResponse(BaseModel):
 
 @router.get("/organization/signature", response_model=OrgSignatureRead)
 def get_org_signature(
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Get organization signature settings (read-only for non-admin users).
@@ -309,8 +313,10 @@ def get_org_signature(
 def update_org_signature(
     body: OrgSignatureUpdate,
     request: Request,
-    session: UserSession = Depends(require_permission(POLICIES["org_settings"].default)),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["org_settings"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Update organization signature settings.
@@ -411,8 +417,8 @@ def update_org_signature(
 def get_org_signature_preview(
     template: str | None = None,
     mode: str | None = None,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Get rendered HTML preview of organization signature.
@@ -552,10 +558,10 @@ def _delete_logo_from_storage(logo_url: str) -> None:
 
 
 @router.get("/organization/signature/logo/local/{storage_key:path}")
-async def get_org_logo_local(
+def get_org_logo_local(
     storage_key: str,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Serve org signature logo from local storage (dev only)."""
     from fastapi.responses import FileResponse
 
@@ -594,9 +600,11 @@ async def get_org_logo_local(
 async def upload_org_logo(
     request: Request,
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-    session: UserSession = Depends(require_permission(POLICIES["org_settings"].default)),
-    db: Session = Depends(get_db),
+    file: Annotated[UploadFile, "fastapi_param"] = File(),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["org_settings"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """
     Upload organization signature logo.
@@ -707,12 +715,14 @@ async def upload_org_logo(
     "/organization/signature/logo",
     dependencies=[Depends(require_csrf_header)],
 )
-async def delete_org_logo(
+def delete_org_logo(
     request: Request,
     background_tasks: BackgroundTasks,
-    session: UserSession = Depends(require_permission(POLICIES["org_settings"].default)),
-    db: Session = Depends(get_db),
-):
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["org_settings"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """
     Delete organization signature logo.
 

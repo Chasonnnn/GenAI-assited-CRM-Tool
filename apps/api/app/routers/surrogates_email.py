@@ -1,6 +1,7 @@
 """Surrogate email routes."""
 
 from __future__ import annotations
+from typing import Annotated
 
 import logging
 import os
@@ -54,10 +55,10 @@ class SendEmailResponse(BaseModel):
     "/{surrogate_id:uuid}/template-variables",
     response_model=dict[str, str],
 )
-async def get_surrogate_template_variables(
+def get_surrogate_template_variables(
     surrogate_id: UUID,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get resolved email template variables for surrogate preview."""
     from app.services import email_service
@@ -79,15 +80,21 @@ async def get_surrogate_template_variables(
 async def send_surrogate_email(
     surrogate_id: UUID,
     data: SendEmailRequest,
-    session: UserSession = Depends(get_current_session),
-    db: Session = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Send email to surrogate contact using template.
 
     Keeps legacy provider behavior (auto/gmail/resend) and writes ticketing
     metadata on successful Gmail sends.
     """
-    from app.services import email_composition_service, email_service, gmail_service, oauth_service, org_service
+    from app.services import (
+        email_composition_service,
+        email_service,
+        gmail_service,
+        oauth_service,
+        org_service,
+    )
 
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
     if not surrogate:
@@ -278,8 +285,8 @@ async def send_surrogate_email(
 )
 def list_surrogate_emails(
     surrogate_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> SurrogateTicketEmailListResponse:
     """List ticket/email history linked to a surrogate."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
@@ -299,7 +306,9 @@ def list_surrogate_emails(
                 id=ticket.id,
                 ticket_code=ticket.ticket_code,
                 subject=ticket.subject,
-                status=ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status),
+                status=ticket.status.value
+                if hasattr(ticket.status, "value")
+                else str(ticket.status),
                 priority=ticket.priority.value
                 if hasattr(ticket.priority, "value")
                 else str(ticket.priority),
@@ -319,8 +328,8 @@ def list_surrogate_emails(
 )
 def list_surrogate_email_contacts(
     surrogate_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> SurrogateEmailContactListResponse:
     """List surrogate contact emails (system + manual)."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
@@ -341,7 +350,9 @@ def list_surrogate_email_contacts(
                 surrogate_id=contact.surrogate_id,
                 email=contact.email,
                 email_domain=contact.email_domain,
-                source=contact.source.value if hasattr(contact.source, "value") else str(contact.source),
+                source=contact.source.value
+                if hasattr(contact.source, "value")
+                else str(contact.source),
                 label=contact.label,
                 contact_type=contact.contact_type,
                 is_active=contact.is_active,
@@ -357,13 +368,16 @@ def list_surrogate_email_contacts(
 @router.post(
     "/{surrogate_id:uuid}/email-contacts",
     response_model=SurrogateEmailContactRead,
-    dependencies=[Depends(require_csrf_header), Depends(require_permission(POLICIES["tickets"].actions["link_surrogates"]))],
+    dependencies=[
+        Depends(require_csrf_header),
+        Depends(require_permission(POLICIES["tickets"].actions["link_surrogates"])),
+    ],
 )
 def create_surrogate_email_contact(
     surrogate_id: UUID,
     data: SurrogateEmailContactCreateRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> SurrogateEmailContactRead:
     """Add manual surrogate email contact."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
@@ -399,14 +413,17 @@ def create_surrogate_email_contact(
 @router.patch(
     "/{surrogate_id:uuid}/email-contacts/{contact_id:uuid}",
     response_model=SurrogateEmailContactRead,
-    dependencies=[Depends(require_csrf_header), Depends(require_permission(POLICIES["tickets"].actions["link_surrogates"]))],
+    dependencies=[
+        Depends(require_csrf_header),
+        Depends(require_permission(POLICIES["tickets"].actions["link_surrogates"])),
+    ],
 )
 def patch_surrogate_email_contact(
     surrogate_id: UUID,
     contact_id: UUID,
     data: SurrogateEmailContactPatchRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> SurrogateEmailContactRead:
     """Edit manual surrogate email contact."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
@@ -442,13 +459,16 @@ def patch_surrogate_email_contact(
 
 @router.delete(
     "/{surrogate_id:uuid}/email-contacts/{contact_id:uuid}",
-    dependencies=[Depends(require_csrf_header), Depends(require_permission(POLICIES["tickets"].actions["link_surrogates"]))],
+    dependencies=[
+        Depends(require_csrf_header),
+        Depends(require_permission(POLICIES["tickets"].actions["link_surrogates"])),
+    ],
 )
 def delete_surrogate_email_contact(
     surrogate_id: UUID,
     contact_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> dict[str, bool]:
     """Deactivate manual surrogate email contact."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)

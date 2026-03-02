@@ -7,6 +7,8 @@ Unauthenticated endpoints for clients to:
 - Reschedule/cancel via tokens
 """
 
+from typing import Annotated
+
 from datetime import date, timedelta
 from uuid import UUID
 
@@ -34,7 +36,7 @@ from app.services import (
 )
 from app.core.config import settings
 
-router = APIRouter()
+router = APIRouter(prefix="/book", tags=["booking"])
 
 
 # =============================================================================
@@ -104,8 +106,8 @@ def _appointment_to_public_read(appt, db: Session) -> dict:
 def get_booking_page(
     request: Request,
     public_slug: str,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """
     Get public booking page data.
 
@@ -151,11 +153,13 @@ def get_available_slots(
     request: Request,
     public_slug: str,
     appointment_type_id: UUID,
-    date_start: date = Query(..., description="Start date (YYYY-MM-DD)"),
-    date_end: date = Query(None, description="End date (defaults to start + 7 days)"),
-    client_timezone: str | None = Query(None),
-    db: Session = Depends(get_db),
-):
+    date_start: Annotated[date, "fastapi_param"] = Query(description="Start date (YYYY-MM-DD)"),
+    date_end: Annotated[date, "fastapi_param"] = Query(
+        None, description="End date (defaults to start + 7 days)"
+    ),
+    client_timezone: Annotated[str | None, "fastapi_param"] = Query(None),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """
     Get available time slots for booking.
 
@@ -217,8 +221,8 @@ def create_booking(
     public_slug: str,
     data: AppointmentCreate,
     request: Request,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """
     Submit a booking request.
 
@@ -280,8 +284,8 @@ def get_appointment_for_manage(
     request: Request,
     org_id: UUID,
     token: str,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Get appointment details for unified self-service manage page."""
     appt = appointment_service.get_appointment_by_manage_token(db, org_id, token)
     if not appt:
@@ -297,8 +301,8 @@ def reschedule_by_manage_token(
     token: str,
     data: AppointmentReschedule,
     request: Request,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Reschedule from the unified self-service manage flow."""
     appt = appointment_service.get_appointment_by_manage_token(db, org_id, token)
     if not appt:
@@ -333,8 +337,8 @@ def cancel_by_manage_token(
     token: str,
     data: AppointmentCancel,
     request: Request,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Cancel from the unified self-service manage flow."""
     appt = appointment_service.get_appointment_by_manage_token(db, org_id, token)
     if not appt:
@@ -367,8 +371,8 @@ def get_appointment_for_reschedule(
     request: Request,
     org_id: UUID,
     token: str,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Get appointment details for reschedule form."""
     appt = appointment_service.get_appointment_by_token(db, org_id, token, "reschedule")
     if not appt:
@@ -383,11 +387,13 @@ def get_reschedule_slots(
     request: Request,
     org_id: UUID,
     token: str,
-    date_start: date = Query(..., description="Start date (YYYY-MM-DD)"),
-    date_end: date = Query(None, description="End date (defaults to start date)"),
-    client_timezone: str | None = Query(None),
-    db: Session = Depends(get_db),
-):
+    date_start: Annotated[date, "fastapi_param"] = Query(description="Start date (YYYY-MM-DD)"),
+    date_end: Annotated[date, "fastapi_param"] = Query(
+        None, description="End date (defaults to start date)"
+    ),
+    client_timezone: Annotated[str | None, "fastapi_param"] = Query(None),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """
     Get available time slots for rescheduling.
 
@@ -453,8 +459,8 @@ def reschedule_by_token(
     token: str,
     data: AppointmentReschedule,
     request: Request,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Reschedule an appointment using self-service token."""
     appt = appointment_service.get_appointment_by_token(db, org_id, token, "reschedule")
     if not appt:
@@ -486,8 +492,8 @@ def get_appointment_for_cancel(
     request: Request,
     org_id: UUID,
     token: str,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Get appointment details for cancel confirmation."""
     appt = appointment_service.get_appointment_by_token(db, org_id, token, "cancel")
     if not appt:
@@ -503,8 +509,8 @@ def cancel_by_token(
     token: str,
     data: AppointmentCancel,
     request: Request,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     """Cancel an appointment using self-service token."""
     appt = appointment_service.get_appointment_by_token(db, org_id, token, "cancel")
     if not appt:

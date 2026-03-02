@@ -438,7 +438,9 @@ def apply_archive_change(
     for sid in matching_ids:
         surrogate = surrogate_service.get_surrogate(db, org_id, sid)
         if not surrogate:
-            failed.append(SurrogateMassEditArchiveFailure(surrogate_id=sid, reason="Surrogate not found"))
+            failed.append(
+                SurrogateMassEditArchiveFailure(surrogate_id=sid, reason="Surrogate not found")
+            )
             continue
         if surrogate.is_archived:
             failed.append(

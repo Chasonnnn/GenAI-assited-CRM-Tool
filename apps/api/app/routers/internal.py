@@ -5,6 +5,8 @@ Protected by X-Internal-Secret header.
 Call from external cron (Render/Railway/GH Actions).
 """
 
+from typing import Annotated
+
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Header, HTTPException
@@ -37,7 +39,7 @@ from app.services import (
 router = APIRouter(prefix="/internal/scheduled", tags=["internal"])
 
 
-def verify_internal_secret(x_internal_secret: str = Header(...)):
+def verify_internal_secret(x_internal_secret: str = Header()):
     """Verify the internal secret header."""
     expected = settings.INTERNAL_SECRET if hasattr(settings, "INTERNAL_SECRET") else None
     if not expected:
@@ -58,7 +60,7 @@ class TokenCheckResponse(BaseModel):
 
 
 @router.post("/token-check", response_model=TokenCheckResponse)
-def check_meta_tokens(x_internal_secret: str = Header(...)):
+def check_meta_tokens(x_internal_secret: Annotated[str, "fastapi_param"] = Header()):
     """
     Daily sweep for expiring/expired Meta tokens.
 
@@ -244,7 +246,7 @@ class WorkflowSweepResponse(BaseModel):
 
 @router.post("/workflow-sweep", response_model=WorkflowSweepResponse)
 def workflow_sweep(
-    x_internal_secret: str = Header(...),
+    x_internal_secret: Annotated[str, "fastapi_param"] = Header(),
     sweep_type: str = "all",
 ):
     """
@@ -294,7 +296,7 @@ class WorkflowApprovalExpiryResponse(BaseModel):
 
 
 @router.post("/workflow-approval-expiry", response_model=WorkflowApprovalExpiryResponse)
-def workflow_approval_expiry(x_internal_secret: str = Header(...)):
+def workflow_approval_expiry(x_internal_secret: Annotated[str, "fastapi_param"] = Header()):
     """
     Schedule workflow approval expiry sweeps for all organizations.
 
@@ -339,7 +341,7 @@ class GoogleCalendarSyncScheduleResponse(BaseModel):
 
 
 @router.post("/google-calendar-sync", response_model=GoogleCalendarSyncScheduleResponse)
-def google_calendar_sync_schedule(x_internal_secret: str = Header(...)):
+def google_calendar_sync_schedule(x_internal_secret: Annotated[str, "fastapi_param"] = Header()):
     """
     Schedule Google Calendar reconciliation jobs for all connected users.
 
@@ -370,7 +372,7 @@ class DataPurgeScheduleResponse(BaseModel):
 
 
 @router.post("/data-purge", response_model=DataPurgeScheduleResponse)
-def data_purge_schedule(x_internal_secret: str = Header(...)):
+def data_purge_schedule(x_internal_secret: Annotated[str, "fastapi_param"] = Header()):
     """Schedule data purge jobs for all organizations."""
     verify_internal_secret(x_internal_secret)
 
@@ -412,7 +414,7 @@ class ContactRemindersResponse(BaseModel):
 
 
 @router.post("/task-notifications", response_model=TaskNotificationsResponse)
-def task_notifications_sweep(x_internal_secret: str = Header(...)):
+def task_notifications_sweep(x_internal_secret: Annotated[str, "fastapi_param"] = Header()):
     """
     Daily sweep for task due/overdue notifications.
 
@@ -493,7 +495,7 @@ def task_notifications_sweep(x_internal_secret: str = Header(...)):
 
 
 @router.post("/contact-reminders", response_model=ContactRemindersResponse)
-def contact_reminders_sweep(x_internal_secret: str = Header(...)):
+def contact_reminders_sweep(x_internal_secret: Annotated[str, "fastapi_param"] = Header()):
     """
     Daily sweep for contact reminder notifications.
 
@@ -519,7 +521,7 @@ class MetaHierarchySyncResponse(BaseModel):
 
 
 @router.post("/meta-hierarchy-sync", response_model=MetaHierarchySyncResponse)
-def meta_hierarchy_sync(x_internal_secret: str = Header(...)):
+def meta_hierarchy_sync(x_internal_secret: Annotated[str, "fastapi_param"] = Header()):
     """
     Schedule Meta hierarchy sync jobs for all active ad accounts.
 
@@ -563,7 +565,7 @@ class MetaSpendSyncResponse(BaseModel):
 
 @router.post("/meta-spend-sync", response_model=MetaSpendSyncResponse)
 def meta_spend_sync(
-    x_internal_secret: str = Header(...),
+    x_internal_secret: Annotated[str, "fastapi_param"] = Header(),
     sync_type: str = "daily",
 ):
     """
@@ -617,7 +619,7 @@ class SubscriptionSweepResponse(BaseModel):
 
 
 @router.post("/subscription-sweep", response_model=SubscriptionSweepResponse)
-def subscription_sweep(x_internal_secret: str = Header(...)):
+def subscription_sweep(x_internal_secret: Annotated[str, "fastapi_param"] = Header()):
     """
     Auto-extend expired subscriptions with auto_renew enabled.
 
@@ -667,7 +669,7 @@ class MetaFormsSyncResponse(BaseModel):
 
 
 @router.post("/meta-forms-sync", response_model=MetaFormsSyncResponse)
-def meta_forms_sync(x_internal_secret: str = Header(...)):
+def meta_forms_sync(x_internal_secret: Annotated[str, "fastapi_param"] = Header()):
     """
     Schedule Meta forms sync jobs for all active page mappings.
 

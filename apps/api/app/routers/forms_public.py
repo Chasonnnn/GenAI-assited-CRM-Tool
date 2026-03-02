@@ -1,5 +1,7 @@
 """Public form endpoints for applicants."""
 
+from typing import Annotated
+
 import json
 import os
 from uuid import UUID
@@ -53,7 +55,12 @@ def _schema_or_none(schema_json: dict | None) -> FormSchema | None:
 
 @router.get("/{org_id}/logos/{logo_id}")
 @limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
-def get_form_logo(request: Request, org_id: UUID, logo_id: UUID, db: Session = Depends(get_db)):
+def get_form_logo(
+    request: Request,
+    org_id: UUID,
+    logo_id: UUID,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     logo = form_service.get_form_logo_by_id(db, org_id, logo_id)
     if not logo:
         raise HTTPException(status_code=404, detail="Logo not found")
@@ -75,7 +82,9 @@ def get_form_logo(request: Request, org_id: UUID, logo_id: UUID, db: Session = D
 
 @router.get("/{org_id}/signature-logo")
 @limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
-def get_org_signature_logo(request: Request, org_id: UUID, db: Session = Depends(get_db)):
+def get_org_signature_logo(
+    request: Request, org_id: UUID, db: Annotated[Session, "fastapi_param"] = Depends(get_db)
+) -> object:
     org = org_service.get_org_by_id(db, org_id)
     if not org or not org.signature_logo_url:
         raise HTTPException(status_code=404, detail="Logo not found")
@@ -89,11 +98,17 @@ def get_org_signature_logo(request: Request, org_id: UUID, db: Session = Depends
 
 @router.get("/{token}", response_model=FormPublicRead)
 @limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
-def get_public_form(request: Request, token: str, db: Session = Depends(get_db)):
+def get_public_form(
+    request: Request, token: str, db: Annotated[Session, "fastapi_param"] = Depends(get_db)
+):
     raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
+
+
 @router.get("/{token}/draft", response_model=FormDraftPublicRead)
 @limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_DRAFTS}/minute")
-def get_public_form_draft(request: Request, token: str, db: Session = Depends(get_db)):
+def get_public_form_draft(
+    request: Request, token: str, db: Annotated[Session, "fastapi_param"] = Depends(get_db)
+):
     raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
 
 
@@ -103,7 +118,7 @@ def upsert_public_form_draft(
     token: str,
     body: FormDraftUpsertRequest,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
 
@@ -113,27 +128,29 @@ def upsert_public_form_draft(
 def delete_public_form_draft(
     token: str,
     request: Request,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
 
 
 @router.post("/{token}/submit", response_model=FormSubmissionPublicResponse)
 @limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_FORMS}/minute")
-async def submit_public_form(
+def submit_public_form(
     token: str,
     request: Request,
-    answers: str = Form(...),
-    files: list[UploadFile] | None = File(default=None),
-    file_field_keys: str | None = Form(default=None),
-    db: Session = Depends(get_db),
+    answers: Annotated[str, "fastapi_param"] = Form(),
+    files: Annotated[list[UploadFile] | None, "fastapi_param"] = File(default=None),
+    file_field_keys: Annotated[str | None, "fastapi_param"] = Form(default=None),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
 
 
 @router.get("/intake/{slug}", response_model=FormIntakePublicRead)
 @limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
-def get_shared_public_form(request: Request, slug: str, db: Session = Depends(get_db)):
+def get_shared_public_form(
+    request: Request, slug: str, db: Annotated[Session, "fastapi_param"] = Depends(get_db)
+):
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Form not found")
 
@@ -171,7 +188,7 @@ def get_shared_public_form_draft(
     request: Request,
     slug: str,
     draft_session_id: str,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Draft not found")
@@ -199,7 +216,7 @@ def lookup_shared_public_form_draft(
     request: Request,
     slug: str,
     body: FormIntakeDraftLookupRequest,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Form not found")
@@ -233,7 +250,7 @@ def upsert_shared_public_form_draft(
     slug: str,
     draft_session_id: str,
     body: FormDraftUpsertRequest,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Form not found")
@@ -268,7 +285,7 @@ def restore_shared_public_form_draft(
     slug: str,
     draft_session_id: str,
     body: FormIntakeDraftRestoreRequest,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Form not found")
@@ -305,8 +322,8 @@ def delete_shared_public_form_draft(
     request: Request,
     slug: str,
     draft_session_id: str,
-    db: Session = Depends(get_db),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> object:
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Draft not found")
 
@@ -325,13 +342,13 @@ def delete_shared_public_form_draft(
 
 @router.post("/intake/{slug}/submit", response_model=FormSubmissionSharedResponse)
 @limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_FORMS}/minute")
-async def submit_shared_public_form(
+def submit_shared_public_form(
     slug: str,
     request: Request,
-    answers: str = Form(...),
-    files: list[UploadFile] | None = File(default=None),
-    file_field_keys: str | None = Form(default=None),
-    db: Session = Depends(get_db),
+    answers: Annotated[str, "fastapi_param"] = Form(),
+    files: Annotated[list[UploadFile] | None, "fastapi_param"] = File(default=None),
+    file_field_keys: Annotated[str | None, "fastapi_param"] = Form(default=None),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Form not found")

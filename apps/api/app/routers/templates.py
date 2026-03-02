@@ -1,5 +1,7 @@
 """Template API router - REST endpoints for workflow templates."""
 
+from typing import Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -35,8 +37,8 @@ router = APIRouter(
 @router.get("", response_model=list[TemplateListItem])
 def list_templates(
     category: str | None = None,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """List available templates (global + org-specific)."""
     templates = template_service.list_templates(
@@ -53,7 +55,7 @@ def list_templates(
 
 
 @router.get("/categories")
-def get_template_categories():
+def get_template_categories() -> object:
     """Get available template categories."""
     return {"categories": TEMPLATE_CATEGORIES}
 
@@ -61,8 +63,8 @@ def get_template_categories():
 @router.get("/{template_id}", response_model=TemplateRead)
 def get_template(
     template_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get a template by ID."""
     template = template_service.get_template(db, template_id, session.org_id)
@@ -81,8 +83,8 @@ def get_template(
 @router.post("", response_model=TemplateRead, dependencies=[Depends(require_csrf_header)])
 def create_template(
     data: TemplateCreate,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """Create a new org-specific template."""
     try:
@@ -114,8 +116,8 @@ def create_template(
 )
 def create_template_from_workflow(
     data: TemplateFromWorkflow,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """Create a template from an existing workflow."""
     try:
@@ -145,8 +147,8 @@ def create_template_from_workflow(
 def use_template(
     template_id: UUID,
     data: UseTemplateRequest,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """Create a workflow from a template.
 
@@ -189,9 +191,9 @@ def use_template(
 @router.delete("/{template_id}", dependencies=[Depends(require_csrf_header)])
 def delete_template(
     template_id: UUID,
-    db: Session = Depends(get_db),
-    session: UserSession = Depends(get_current_session),
-):
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> object:
     """Delete an org-specific template (cannot delete global templates)."""
     deleted = template_service.delete_template(db, session.org_id, template_id)
     if not deleted:
