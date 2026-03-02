@@ -339,40 +339,45 @@ def _emit_mutation_fallback_audit(request: Request, status_code: int | None) -> 
         "has_query_params": bool(request.query_params),
     }
 
-    db = SessionLocal()
-    try:
+    def _emit_with_db(db_session) -> bool:
+        from app.db.models import Organization, User
         from app.services import audit_service
 
+        org = db_session.get(Organization, session.org_id)
+        if org is None:
+            return False
+
+        actor_user_id = session.user_id
+        if db_session.get(User, actor_user_id) is None:
+            # Degrade to system actor if user row is not visible in this session.
+            actor_user_id = None
+
         audit_service.log_event(
-            db=db,
+            db=db_session,
             org_id=session.org_id,
             event_type=AuditEventType.API_MUTATION_FALLBACK,
-            actor_user_id=session.user_id,
+            actor_user_id=actor_user_id,
             target_type="api_route",
             details=details,
             request=request,
         )
-        db.commit()
+        db_session.commit()
+        return True
+
+    request_db = getattr(request.state, "request_db", None)
+    if request_db is not None:
+        try:
+            if _emit_with_db(request_db):
+                return
+        except Exception:
+            # Keep fallback audit best-effort and avoid impacting request lifecycle.
+            pass
+
+    db = SessionLocal()
+    try:
+        _emit_with_db(db)
     except Exception:
         db.rollback()
-        request_db = getattr(request.state, "request_db", None)
-        if request_db is not None:
-            try:
-                from app.services import audit_service
-
-                audit_service.log_event(
-                    db=request_db,
-                    org_id=session.org_id,
-                    event_type=AuditEventType.API_MUTATION_FALLBACK,
-                    actor_user_id=session.user_id,
-                    target_type="api_route",
-                    details=details,
-                    request=request,
-                )
-                request_db.commit()
-                return
-            except Exception:
-                pass
         logging.exception("Mutation fallback audit logging failed")
     finally:
         db.close()

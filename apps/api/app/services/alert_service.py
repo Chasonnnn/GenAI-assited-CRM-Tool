@@ -138,6 +138,13 @@ def record_alert_isolated(
     """
     db = SessionLocal()
     try:
+        from app.db.models import Organization
+
+        if db.get(Organization, org_id) is None:
+            # In isolated sessions (especially tests), org rows may be in an uncommitted
+            # outer transaction and not visible here. Skip noisy FK failures.
+            return None
+
         alert = create_or_update_alert(
             db=db,
             org_id=org_id,
