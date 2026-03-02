@@ -83,6 +83,20 @@ function getQueueName(
     return "queue"
 }
 
+function getUserDisplayName(
+    details: Record<string, unknown>,
+    nameKey: "to_user_name" | "from_user_name",
+    idKey: "to_user_id" | "from_user_id"
+): string {
+    if (typeof details[nameKey] === "string") {
+        const userName = details[nameKey].trim()
+        if (userName) return userName
+    }
+
+    if (details[idKey]) return `user ${String(details[idKey])}`
+    return "user"
+}
+
 function formatActivityDetails(type: string, details: Record<string, unknown>): string {
     const aiPrefix = details?.source === "ai" ? "AI-generated" : ""
     const withAiPrefix = (detail: string) => (aiPrefix ? `${aiPrefix} · ${detail}` : detail)
@@ -108,13 +122,20 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
             }
             return aiOnly()
         case "assigned":
-            return aiPrefix
-                ? withAiPrefix(details.from_user_id ? "Reassigned" : "Assigned to user")
-                : details.from_user_id
-                  ? "Reassigned"
-                  : "Assigned to user"
+            {
+                const toUser = getUserDisplayName(details, "to_user_name", "to_user_id")
+                const hasPreviousAssignee = Boolean(details.from_user_id || details.from_user_name)
+                if (hasPreviousAssignee) {
+                    const fromUser = getUserDisplayName(details, "from_user_name", "from_user_id")
+                    return withAiPrefix(`Reassigned from ${fromUser} to ${toUser}`)
+                }
+                return withAiPrefix(`Assigned to ${toUser}`)
+            }
         case "unassigned":
-            return aiPrefix ? withAiPrefix("Removed assignment") : "Removed assignment"
+            {
+                const fromUser = getUserDisplayName(details, "from_user_name", "from_user_id")
+                return withAiPrefix(`Removed assignment from ${fromUser}`)
+            }
         case "surrogate_assigned_to_queue": {
             const toQueue = getQueueName(details, "to_queue_name", "to_queue_id")
             return withAiPrefix(`Assigned to ${toQueue}`)

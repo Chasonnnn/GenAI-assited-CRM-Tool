@@ -138,6 +138,32 @@ describe("SurrogateHistoryTab", () => {
         ).not.toBeInTheDocument()
     })
 
+    it("renders assigned activity with clear from/to user names", () => {
+        render(
+            <SurrogateHistoryTab
+                activities={[
+                    {
+                        id: "a-assigned",
+                        activity_type: "assigned",
+                        actor_name: "Janet Zhu",
+                        created_at: "2026-03-01T20:27:00Z",
+                        details: {
+                            from_user_id: "71f5b271-8f48-4a88-bdc5-2b53f6b8fbd4",
+                            from_user_name: "Cam Lee",
+                            to_user_id: "5db7dfe0-c52b-4f58-a4b5-2fef9441bdb5",
+                            to_user_name: "Niki Torres",
+                        },
+                    },
+                ]}
+                formatDateTime={formatDateTime}
+            />
+        )
+
+        expect(screen.getByText("Assigned")).toBeInTheDocument()
+        expect(screen.getByText(/janet zhu/i)).toBeInTheDocument()
+        expect(screen.getByText(/reassigned from cam lee to niki torres/i)).toBeInTheDocument()
+    })
+
     it("formats edited height and weight like overview", () => {
         render(
             <SurrogateHistoryTab

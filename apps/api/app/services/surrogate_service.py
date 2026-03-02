@@ -1399,7 +1399,7 @@ def list_surrogate_activity(
     per_page: int,
 ) -> tuple[list[dict], int]:
     """List activity log items for a case."""
-    from app.db.models import EmailTemplate, Queue, SurrogateActivityLog, User
+    from app.db.models import EmailTemplate, Membership, Queue, SurrogateActivityLog, User
 
     filters = [
         SurrogateActivityLog.surrogate_id == surrogate_id,
@@ -1425,6 +1425,7 @@ def list_surrogate_activity(
     )
 
     queue_ids: set[UUID] = set()
+    user_ids: set[UUID] = set()
     template_ids: set[UUID] = set()
     for row in rows:
         details = row.SurrogateActivityLog.details
@@ -1448,6 +1449,15 @@ def list_surrogate_activity(
                 except (TypeError, ValueError):
                     pass
 
+        for key in ("to_user_id", "from_user_id"):
+            user_id = details.get(key)
+            if not user_id:
+                continue
+            try:
+                user_ids.add(UUID(str(user_id)))
+            except (TypeError, ValueError):
+                continue
+
         template_id = details.get("template_id")
         if template_id:
             try:
@@ -1466,6 +1476,19 @@ def list_surrogate_activity(
             .all()
         )
         queue_name_by_id = {str(queue_id): name for queue_id, name in queue_rows}
+
+    user_name_by_id: dict[str, str] = {}
+    if user_ids:
+        user_rows = (
+            db.query(User.id, User.display_name)
+            .join(Membership, Membership.user_id == User.id)
+            .filter(
+                Membership.organization_id == org_id,
+                User.id.in_(user_ids),
+            )
+            .all()
+        )
+        user_name_by_id = {str(user_id): display_name for user_id, display_name in user_rows}
 
     template_name_by_id: dict[str, str] = {}
     if template_ids:
@@ -1508,6 +1531,16 @@ def list_surrogate_activity(
             template_name = template_name_by_id.get(str(template_id)) if template_id else None
             if template_name:
                 details["template_name"] = template_name
+
+            to_user_id = details.get("to_user_id")
+            to_user_name = user_name_by_id.get(str(to_user_id)) if to_user_id else None
+            if to_user_name:
+                details["to_user_name"] = to_user_name
+
+            from_user_id = details.get("from_user_id")
+            from_user_name = user_name_by_id.get(str(from_user_id)) if from_user_id else None
+            if from_user_name:
+                details["from_user_name"] = from_user_name
 
         items.append(
             {

@@ -9,7 +9,7 @@ from sqlalchemy import event
 from sqlalchemy.orm import Query, joinedload
 
 from app.db.enums import Role
-from app.db.models import EmailTemplate, Queue, Surrogate, SurrogateActivityLog
+from app.db.models import EmailTemplate, Membership, Queue, Surrogate, SurrogateActivityLog, User
 from app.routers.surrogates_shared import _surrogate_to_read
 from app.schemas.surrogate import SurrogateCreate
 from app.services import pipeline_service, queue_service, surrogate_service
@@ -353,6 +353,76 @@ def test_list_surrogate_activity_includes_queue_names(db, test_org, test_user):
     )
     assert queue_activity is not None
     assert queue_activity["details"]["to_queue_name"] == queue.name
+
+
+def test_list_surrogate_activity_includes_assignment_user_names(db, test_org, test_user):
+    surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(
+            full_name="Activity User Name",
+            email=f"activity-user-name-{uuid4().hex[:8]}@example.com",
+        ),
+    )
+
+    assignee = User(
+        id=uuid4(),
+        email=f"assignee-{uuid4().hex[:8]}@example.com",
+        display_name="Assignment Target",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(assignee)
+    db.flush()
+
+    db.add(
+        Membership(
+            id=uuid4(),
+            user_id=assignee.id,
+            organization_id=test_org.id,
+            role=Role.CASE_MANAGER,
+            is_active=True,
+        )
+    )
+    db.flush()
+
+    db.add(
+        SurrogateActivityLog(
+            surrogate_id=surrogate.id,
+            organization_id=test_org.id,
+            activity_type="assigned",
+            actor_user_id=test_user.id,
+            details={
+                "from_user_id": str(test_user.id),
+                "to_user_id": str(assignee.id),
+            },
+        )
+    )
+    db.flush()
+
+    items, total = surrogate_service.list_surrogate_activity(
+        db=db,
+        org_id=test_org.id,
+        surrogate_id=surrogate.id,
+        page=1,
+        per_page=20,
+    )
+
+    assert total >= 1
+    assigned_activity = next(
+        (
+            item
+            for item in items
+            if item["activity_type"] == "assigned"
+            and isinstance(item["details"], dict)
+            and item["details"].get("to_user_id") == str(assignee.id)
+        ),
+        None,
+    )
+    assert assigned_activity is not None
+    assert assigned_activity["details"]["from_user_name"] == test_user.display_name
+    assert assigned_activity["details"]["to_user_name"] == assignee.display_name
 
 
 def test_list_surrogate_activity_includes_template_name(db, test_org, test_user):
