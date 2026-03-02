@@ -25,9 +25,10 @@ import {
   MailIcon,
   EyeIcon,
   LinkIcon,
+  LightbulbIcon,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { getOrgSettings, updateProfile, updateOrgSettings } from "@/lib/api/settings"
+import { getOrgSettings, updateProfile, updateOrgSettings, getIntelligentSuggestionSettings, updateIntelligentSuggestionSettings, type IntelligentSuggestionSettings } from "@/lib/api/settings"
 import {
   useOrgSignature,
   useUpdateOrgSignature,
@@ -965,6 +966,253 @@ function OrganizationBrandingSection() {
   )
 }
 
+function IntelligentSuggestionsSection() {
+  const [settings, setSettings] = useState<IntelligentSuggestionSettings | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadSettings = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await getIntelligentSuggestionSettings()
+      setSettings(response)
+    } catch (loadError) {
+      console.error("Failed to load intelligent suggestion settings:", loadError)
+      setError("Unable to load settings. Please retry.")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadSettings()
+  }, [loadSettings])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2Icon className="size-6 animate-spin text-muted-foreground motion-reduce:animate-none" aria-hidden="true" />
+      </div>
+    )
+  }
+
+  if (!settings) {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-destructive">{error ?? "Unable to load settings."}</p>
+        <Button variant="outline" onClick={loadSettings}>
+          Retry
+        </Button>
+      </div>
+    )
+  }
+
+  const setNumberField = (
+    key:
+      | "new_unread_business_days"
+      | "meeting_outcome_business_days"
+      | "stuck_business_days"
+      | "digest_hour_local",
+    rawValue: string,
+    min: number,
+    max: number,
+  ) => {
+    const parsed = Number.parseInt(rawValue, 10)
+    const fallback = settings[key]
+    const normalized = Number.isFinite(parsed) ? parsed : fallback
+    const clamped = Math.min(max, Math.max(min, normalized))
+    setSettings((prev) => (prev ? { ...prev, [key]: clamped } : prev))
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      const updated = await updateIntelligentSuggestionSettings(settings)
+      setSettings(updated)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+      toast.success("Intelligent suggestion rules updated")
+    } catch (saveError) {
+      console.error("Failed to save intelligent suggestion settings:", saveError)
+      setError("Unable to save settings. Please try again.")
+      toast.error("Failed to save intelligent suggestion settings")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const rulesDisabled = !settings.enabled
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="font-medium flex items-center gap-2">
+          <LightbulbIcon className="size-4" aria-hidden="true" />
+          Intelligent Suggestions
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Configure rule thresholds and digest timing for lead attention suggestions.
+        </p>
+      </div>
+
+      {error && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between rounded-lg border border-border p-4">
+          <div>
+            <p className="font-medium">Enable Intelligent Suggestions</p>
+            <p className="text-sm text-muted-foreground">
+              Turn all intelligent suggestion rules on or off for your organization.
+            </p>
+          </div>
+          <Switch
+            checked={settings.enabled}
+            onCheckedChange={(checked) => setSettings((prev) => (prev ? { ...prev, enabled: checked } : prev))}
+          />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-lg border border-border p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="font-medium">New unread stale leads</p>
+              <Switch
+                disabled={rulesDisabled}
+                checked={settings.new_unread_enabled}
+                onCheckedChange={(checked) =>
+                  setSettings((prev) => (prev ? { ...prev, new_unread_enabled: checked } : prev))
+                }
+              />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Suggest when a lead in New Unread has no updates for N business days.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="new-unread-days">Business days</Label>
+              <Input
+                id="new-unread-days"
+                type="number"
+                min={1}
+                max={30}
+                disabled={rulesDisabled || !settings.new_unread_enabled}
+                value={settings.new_unread_business_days}
+                onChange={(e) => setNumberField("new_unread_business_days", e.target.value, 1, 30)}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="font-medium">Meeting outcome follow-up</p>
+              <Switch
+                disabled={rulesDisabled}
+                checked={settings.meeting_outcome_enabled}
+                onCheckedChange={(checked) =>
+                  setSettings((prev) => (prev ? { ...prev, meeting_outcome_enabled: checked } : prev))
+                }
+              />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Suggest when meeting outcomes are missing after N business days.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="meeting-outcome-days">Business days</Label>
+              <Input
+                id="meeting-outcome-days"
+                type="number"
+                min={1}
+                max={30}
+                disabled={rulesDisabled || !settings.meeting_outcome_enabled}
+                value={settings.meeting_outcome_business_days}
+                onChange={(e) => setNumberField("meeting_outcome_business_days", e.target.value, 1, 30)}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border p-4 space-y-3 md:col-span-2">
+            <div className="flex items-center justify-between">
+              <p className="font-medium">Stuck pre-approval leads</p>
+              <Switch
+                disabled={rulesDisabled}
+                checked={settings.stuck_enabled}
+                onCheckedChange={(checked) =>
+                  setSettings((prev) => (prev ? { ...prev, stuck_enabled: checked } : prev))
+                }
+              />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Suggest when pre-approval leads have no updates for N business days.
+            </p>
+            <div className="space-y-2 max-w-xs">
+              <Label htmlFor="stuck-days">Business days</Label>
+              <Input
+                id="stuck-days"
+                type="number"
+                min={1}
+                max={60}
+                disabled={rulesDisabled || !settings.stuck_enabled}
+                value={settings.stuck_business_days}
+                onChange={(e) => setNumberField("stuck_business_days", e.target.value, 1, 60)}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-border p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="font-medium">Daily digest notifications</p>
+            <Switch
+              disabled={rulesDisabled}
+              checked={settings.daily_digest_enabled}
+              onCheckedChange={(checked) =>
+                setSettings((prev) => (prev ? { ...prev, daily_digest_enabled: checked } : prev))
+              }
+            />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Send a daily digest to users when suggestions are available.
+          </p>
+          <div className="space-y-2 max-w-xs">
+            <Label htmlFor="digest-hour">Digest hour (local org time, 0-23)</Label>
+            <Input
+              id="digest-hour"
+              type="number"
+              min={0}
+              max={23}
+              disabled={rulesDisabled || !settings.daily_digest_enabled}
+              value={settings.digest_hour_local}
+              onChange={(e) => setNumberField("digest_hour_local", e.target.value, 0, 23)}
+            />
+          </div>
+        </div>
+      </div>
+
+      <Button onClick={handleSave} disabled={saving}>
+        {saving ? (
+          <>
+            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+            Saving…
+          </>
+        ) : saved ? (
+          <>
+            <CheckIcon className="mr-2 size-4" aria-hidden="true" />
+            Saved!
+          </>
+        ) : (
+          "Save Intelligent Suggestion Rules"
+        )}
+      </Button>
+    </div>
+  )
+}
+
 // =============================================================================
 // Main Settings Page
 // =============================================================================
@@ -976,15 +1224,19 @@ export default function SettingsPage() {
 
   const isAdmin = user?.role === "admin" || user?.role === "developer"
 
-  type SettingsTab = "general" | "email-signature"
+  type SettingsTab = "general" | "email-signature" | "intelligent-suggestions"
   const urlTabParam = searchParams.get("tab")
-  const urlTab: SettingsTab =
-    isAdmin && urlTabParam === "email-signature" ? "email-signature" : "general"
+  const urlTab: SettingsTab = isAdmin
+    && (urlTabParam === "email-signature" || urlTabParam === "intelligent-suggestions")
+    ? urlTabParam
+    : "general"
   const activeTab: SettingsTab = urlTab
 
   const handleTabChange = (value: string) => {
-    const nextTab: SettingsTab =
-      isAdmin && value === "email-signature" ? "email-signature" : "general"
+    const nextTab: SettingsTab = isAdmin
+      && (value === "email-signature" || value === "intelligent-suggestions")
+      ? value
+      : "general"
 
     const nextParams = new URLSearchParams(searchParams.toString())
     if (nextTab === "general") {
@@ -1015,6 +1267,12 @@ export default function SettingsPage() {
               <TabsTrigger value="email-signature" className="flex items-center gap-2">
                 <MailIcon className="size-4" aria-hidden="true" />
                 Email Signature
+              </TabsTrigger>
+            )}
+            {isAdmin && (
+              <TabsTrigger value="intelligent-suggestions" className="flex items-center gap-2">
+                <LightbulbIcon className="size-4" aria-hidden="true" />
+                Intelligent Suggestions
               </TabsTrigger>
             )}
           </TabsList>
@@ -1085,6 +1343,27 @@ export default function SettingsPage() {
 
                     {/* Social Links */}
                     <SocialLinksSection />
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+          )}
+
+          {isAdmin && (
+            <TabsContent value="intelligent-suggestions">
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <LightbulbIcon className="size-5" aria-hidden="true" />
+                      Intelligent Suggestion Rules
+                    </CardTitle>
+                    <CardDescription>
+                      Configure org-wide intelligent suggestion thresholds and digest behavior.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <IntelligentSuggestionsSection />
                   </CardContent>
                 </Card>
               </div>

@@ -26,6 +26,20 @@ export interface UpdateOrgRequest {
     email?: string;
 }
 
+export interface IntelligentSuggestionSettings {
+    enabled: boolean;
+    new_unread_enabled: boolean;
+    new_unread_business_days: number;
+    meeting_outcome_enabled: boolean;
+    meeting_outcome_business_days: number;
+    stuck_enabled: boolean;
+    stuck_business_days: number;
+    daily_digest_enabled: boolean;
+    digest_hour_local: number;
+}
+
+export type UpdateIntelligentSuggestionSettingsRequest = Partial<IntelligentSuggestionSettings>;
+
 // =============================================================================
 // Profile Types
 // =============================================================================
@@ -68,6 +82,16 @@ export async function getOrgSettings(): Promise<OrgSettings> {
 
 export async function updateOrgSettings(data: UpdateOrgRequest): Promise<OrgSettings> {
     return api.patch<OrgSettings>('/settings/organization', data);
+}
+
+export async function getIntelligentSuggestionSettings(): Promise<IntelligentSuggestionSettings> {
+    return api.get<IntelligentSuggestionSettings>('/settings/intelligent-suggestions');
+}
+
+export async function updateIntelligentSuggestionSettings(
+    data: UpdateIntelligentSuggestionSettingsRequest
+): Promise<IntelligentSuggestionSettings> {
+    return api.patch<IntelligentSuggestionSettings>('/settings/intelligent-suggestions', data);
 }
 
 // =============================================================================

@@ -48,6 +48,8 @@ vi.mock('@/lib/auth-context', () => ({
 const mockGetOrgSettings = vi.fn()
 const mockUpdateOrgSettings = vi.fn()
 const mockUpdateProfile = vi.fn()
+const mockGetIntelligentSuggestionSettings = vi.fn()
+const mockUpdateIntelligentSuggestionSettings = vi.fn()
 
 vi.mock('@/lib/api/settings', async (importOriginal) => {
     const actual = await importOriginal<typeof import('@/lib/api/settings')>()
@@ -56,6 +58,8 @@ vi.mock('@/lib/api/settings', async (importOriginal) => {
         getOrgSettings: () => mockGetOrgSettings(),
         updateOrgSettings: (payload: unknown) => mockUpdateOrgSettings(payload),
         updateProfile: (payload: unknown) => mockUpdateProfile(payload),
+        getIntelligentSuggestionSettings: () => mockGetIntelligentSuggestionSettings(),
+        updateIntelligentSuggestionSettings: (payload: unknown) => mockUpdateIntelligentSuggestionSettings(payload),
     }
 })
 
@@ -70,6 +74,7 @@ vi.mock('@/lib/hooks/use-notifications', () => ({
             task_reminders: true,
             appointments: true,
             contact_reminder: true,
+            intelligent_suggestion_digest: true,
             status_change_decisions: true,
             approval_timeouts: true,
             security_alerts: true,
@@ -168,6 +173,18 @@ describe('SettingsPage', () => {
         })
         mockUpdateOrgSettings.mockResolvedValue({})
         mockUpdateProfile.mockResolvedValue({})
+        mockGetIntelligentSuggestionSettings.mockResolvedValue({
+            enabled: true,
+            new_unread_enabled: true,
+            new_unread_business_days: 1,
+            meeting_outcome_enabled: true,
+            meeting_outcome_business_days: 1,
+            stuck_enabled: true,
+            stuck_business_days: 5,
+            daily_digest_enabled: true,
+            digest_hour_local: 9,
+        })
+        mockUpdateIntelligentSuggestionSettings.mockResolvedValue({})
     })
 
     it('renders general tab by default', () => {
@@ -192,6 +209,11 @@ describe('SettingsPage', () => {
         expect(await screen.findByText('Organization Branding')).toBeInTheDocument()
         expect(screen.queryByText('Organization Info')).not.toBeInTheDocument()
         expect(screen.queryByText('Signature Branding')).not.toBeInTheDocument()
+    })
+
+    it('shows intelligent suggestions tab for admin roles', () => {
+        render(<SettingsPage />)
+        expect(screen.getByText('Intelligent Suggestions')).toBeInTheDocument()
     })
 
     // Note: Pipeline version history test removed - pipelines moved to dedicated /settings/pipelines page

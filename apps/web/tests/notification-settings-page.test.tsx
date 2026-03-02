@@ -22,6 +22,7 @@ vi.mock("@/lib/hooks/use-notifications", () => ({
             task_reminders: true,
             appointments: true,
             contact_reminder: true,
+            intelligent_suggestion_digest: true,
             status_change_decisions: true,
             approval_timeouts: true,
             security_alerts: true,
@@ -40,6 +41,7 @@ describe("NotificationSettingsPage", () => {
 
         expect(screen.getByText("In-app Notifications")).toBeInTheDocument()
         expect(screen.getByText("Contact Reminders")).toBeInTheDocument()
+        expect(screen.getByText("Intelligent Suggestions Digest")).toBeInTheDocument()
         expect(screen.getByText("Status Change Decisions")).toBeInTheDocument()
         expect(screen.getByText("Approval Timeouts")).toBeInTheDocument()
         expect(screen.getByText("Security Alerts")).toBeInTheDocument()
