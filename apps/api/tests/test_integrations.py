@@ -197,6 +197,11 @@ async def test_google_calendar_callback_happy_path_saves_integration(
             "access_token": "calendar-access-token",
             "refresh_token": "calendar-refresh-token",
             "expires_in": 3600,
+            "scope": (
+                "https://www.googleapis.com/auth/calendar.events "
+                "https://www.googleapis.com/auth/tasks "
+                "https://www.googleapis.com/auth/userinfo.email"
+            ),
         }
 
     async def fake_get_user_info(access_token: str):
@@ -259,6 +264,8 @@ async def test_google_calendar_callback_happy_path_saves_integration(
     )
     assert integration is not None
     assert integration.account_email == "calendaruser@test.com"
+    assert isinstance(integration.granted_scopes, list)
+    assert "https://www.googleapis.com/auth/tasks" in integration.granted_scopes
     assert watch_calls == [test_auth.user.id]
     assert appointment_sync_calls == [(test_auth.user.id, test_auth.org.id)]
     assert task_sync_calls == [(test_auth.user.id, test_auth.org.id)]

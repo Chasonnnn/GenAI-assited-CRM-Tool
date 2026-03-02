@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.db.enums import JobType
 from app.db.models import Job, Membership, Organization, UserIntegration
 from app.services import calendar_service, job_service
+from app.services import google_tasks_sync_service
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,11 @@ def schedule_google_calendar_sync_jobs(
     watch_bucket = int(now.timestamp()) // watch_bucket_seconds
 
     connected = (
-        db.query(UserIntegration.user_id, Membership.organization_id)
+        db.query(
+            UserIntegration.user_id,
+            Membership.organization_id,
+            UserIntegration.granted_scopes,
+        )
         .join(Membership, Membership.user_id == UserIntegration.user_id)
         .join(Organization, Organization.id == Membership.organization_id)
         .filter(
@@ -56,13 +61,13 @@ def schedule_google_calendar_sync_jobs(
 
     # De-dupe by user to guard against accidental duplicate rows.
     seen_users = set()
-    targets: list[tuple[str, str]] = []
-    for user_id, org_id in connected:
+    targets: list[tuple[str, str, object]] = []
+    for user_id, org_id, granted_scopes in connected:
         key = str(user_id)
         if key in seen_users:
             continue
         seen_users.add(key)
-        targets.append((str(user_id), str(org_id)))
+        targets.append((str(user_id), str(org_id), granted_scopes))
 
     connected_users = len(targets)
     jobs_created = 0
@@ -72,7 +77,7 @@ def schedule_google_calendar_sync_jobs(
     watch_jobs_created = 0
     watch_duplicates_skipped = 0
 
-    for user_id, org_id in targets:
+    for user_id, org_id, granted_scopes in targets:
         try:
             idempotency_key = f"google-calendar-sync:{user_id}:{sync_bucket}"
             existing = db.query(Job).filter(Job.idempotency_key == idempotency_key).first()
@@ -101,35 +106,38 @@ def schedule_google_calendar_sync_jobs(
             )
             raise
 
-        try:
-            task_idempotency_key = f"google-tasks-sync:{user_id}:{sync_bucket}"
-            task_existing = (
-                db.query(Job).filter(Job.idempotency_key == task_idempotency_key).first()
-            )
-            if task_existing:
-                task_duplicates_skipped += 1
-            else:
-                task_run_at = now + timedelta(seconds=(UUID(user_id).int % 120))
-                job_service.schedule_job(
-                    db=db,
-                    job_type=JobType.GOOGLE_TASKS_SYNC,
-                    org_id=UUID(org_id),
-                    payload={"user_id": user_id},
-                    run_at=task_run_at,
-                    idempotency_key=task_idempotency_key,
-                )
-                task_jobs_created += 1
-        except IntegrityError:
-            db.rollback()
+        if google_tasks_sync_service.scopes_known_to_exclude_google_tasks(granted_scopes):
             task_duplicates_skipped += 1
-        except Exception:
-            db.rollback()
-            logger.exception(
-                "Failed to enqueue google tasks sync job for user=%s org=%s",
-                user_id,
-                org_id,
-            )
-            raise
+        else:
+            try:
+                task_idempotency_key = f"google-tasks-sync:{user_id}:{sync_bucket}"
+                task_existing = (
+                    db.query(Job).filter(Job.idempotency_key == task_idempotency_key).first()
+                )
+                if task_existing:
+                    task_duplicates_skipped += 1
+                else:
+                    task_run_at = now + timedelta(seconds=(UUID(user_id).int % 120))
+                    job_service.schedule_job(
+                        db=db,
+                        job_type=JobType.GOOGLE_TASKS_SYNC,
+                        org_id=UUID(org_id),
+                        payload={"user_id": user_id},
+                        run_at=task_run_at,
+                        idempotency_key=task_idempotency_key,
+                    )
+                    task_jobs_created += 1
+            except IntegrityError:
+                db.rollback()
+                task_duplicates_skipped += 1
+            except Exception:
+                db.rollback()
+                logger.exception(
+                    "Failed to enqueue google tasks sync job for user=%s org=%s",
+                    user_id,
+                    org_id,
+                )
+                raise
 
         try:
             watch_idempotency_key = f"google-calendar-watch-refresh:{user_id}:{watch_bucket}"
