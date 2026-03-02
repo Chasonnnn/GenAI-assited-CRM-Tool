@@ -35,6 +35,33 @@ def _ensure_intelligent_schema(db) -> None:
     db.execute(
         text(
             """
+            CREATE TABLE IF NOT EXISTS org_intelligent_suggestion_rules (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                template_key VARCHAR(100) NOT NULL,
+                name VARCHAR(200) NOT NULL,
+                rule_kind VARCHAR(50) NOT NULL CHECK (rule_kind IN ('stage_inactivity', 'meeting_outcome_missing')),
+                stage_slug VARCHAR(100),
+                business_days INTEGER NOT NULL DEFAULT 1 CHECK (business_days BETWEEN 1 AND 60),
+                enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
+    )
+    db.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS idx_intel_rules_org_enabled
+            ON org_intelligent_suggestion_rules (organization_id, enabled)
+            """
+        )
+    )
+    db.execute(
+        text(
+            """
             ALTER TABLE user_notification_settings
             ADD COLUMN IF NOT EXISTS intelligent_suggestion_digest BOOLEAN NOT NULL DEFAULT TRUE
             """
@@ -72,6 +99,67 @@ async def test_intelligent_suggestion_settings_defaults_and_update(authed_client
     assert patched_payload["stuck_business_days"] == 7
     assert patched_payload["digest_hour_local"] == 11
     assert patched_payload["daily_digest_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_intelligent_suggestion_templates_and_rule_crud(
+    authed_client,
+    db,
+    default_stage,
+):
+    _ensure_intelligent_schema(db)
+
+    templates_response = await authed_client.get("/settings/intelligent-suggestions/templates")
+    assert templates_response.status_code == 200, templates_response.text
+    templates = templates_response.json()
+    template_keys = {template["template_key"] for template in templates}
+    assert "stage_followup_custom" in template_keys
+    assert "meeting_outcome_missing" in template_keys
+
+    rules_response = await authed_client.get("/settings/intelligent-suggestions/rules")
+    assert rules_response.status_code == 200, rules_response.text
+    initial_rules = rules_response.json()
+    assert len(initial_rules) >= 3
+
+    create_response = await authed_client.post(
+        "/settings/intelligent-suggestions/rules",
+        json={
+            "template_key": "stage_followup_custom",
+            "name": "Custom stage check",
+            "stage_slug": default_stage.slug,
+            "business_days": 4,
+            "enabled": True,
+        },
+    )
+    assert create_response.status_code == 200, create_response.text
+    created_rule = create_response.json()
+    assert created_rule["template_key"] == "stage_followup_custom"
+    assert created_rule["stage_slug"] == default_stage.slug
+    assert created_rule["business_days"] == 4
+    assert created_rule["enabled"] is True
+
+    rule_id = created_rule["id"]
+    update_response = await authed_client.patch(
+        f"/settings/intelligent-suggestions/rules/{rule_id}",
+        json={
+            "name": "Custom stage check (updated)",
+            "business_days": 6,
+            "enabled": False,
+        },
+    )
+    assert update_response.status_code == 200, update_response.text
+    updated_rule = update_response.json()
+    assert updated_rule["name"] == "Custom stage check (updated)"
+    assert updated_rule["business_days"] == 6
+    assert updated_rule["enabled"] is False
+
+    delete_response = await authed_client.delete(f"/settings/intelligent-suggestions/rules/{rule_id}")
+    assert delete_response.status_code == 204, delete_response.text
+
+    rules_after_delete = await authed_client.get("/settings/intelligent-suggestions/rules")
+    assert rules_after_delete.status_code == 200, rules_after_delete.text
+    remaining_ids = {rule["id"] for rule in rules_after_delete.json()}
+    assert rule_id not in remaining_ids
 
 
 @pytest.mark.asyncio

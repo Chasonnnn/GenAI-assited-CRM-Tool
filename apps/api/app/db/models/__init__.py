@@ -61,7 +61,10 @@ from app.db.models.integrations import (
     ZapierWebhookSettings,
 )
 from app.db.models.intended_parents import IntendedParent, IntendedParentStatusHistory
-from app.db.models.intelligent_suggestions import OrgIntelligentSuggestionSettings
+from app.db.models.intelligent_suggestions import (
+    OrgIntelligentSuggestionRule,
+    OrgIntelligentSuggestionSettings,
+)
 from app.db.models.jobs import ExportJob, Job
 from app.db.models.matches import Match, MatchEvent
 from app.db.models.meta import (
@@ -187,6 +190,7 @@ __all__ = [
     "IntendedParent",
     "IntendedParentStatusHistory",
     "OrgIntelligentSuggestionSettings",
+    "OrgIntelligentSuggestionRule",
     "InterviewAttachment",
     "InterviewNote",
     "InterviewTranscriptVersion",

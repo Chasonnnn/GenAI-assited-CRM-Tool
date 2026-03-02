@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, time, timezone
+from datetime import datetime, time, timedelta, timezone
 from typing import Iterable
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -21,7 +21,9 @@ from app.db.models import (
     Appointment,
     Membership,
     Organization,
+    OrgIntelligentSuggestionRule,
     OrgIntelligentSuggestionSettings,
+    Pipeline,
     PipelineStage,
     Surrogate,
     SurrogateActivityLog,
@@ -61,6 +63,189 @@ INTELLIGENT_RULE_KEYS = (
     FILTER_INTELLIGENT_MEETING_OUTCOME,
     FILTER_INTELLIGENT_STUCK_PREAPPROVAL,
 )
+
+RULE_KIND_STAGE_INACTIVITY = "stage_inactivity"
+RULE_KIND_MEETING_OUTCOME_MISSING = "meeting_outcome_missing"
+
+TEMPLATE_NEW_UNREAD_FOLLOWUP = "new_unread_followup"
+TEMPLATE_STAGE_FOLLOWUP_CUSTOM = "stage_followup_custom"
+TEMPLATE_PREAPPROVAL_STUCK = "preapproval_stuck"
+TEMPLATE_MEETING_OUTCOME_MISSING = "meeting_outcome_missing"
+
+STAGE_FOLLOWUP_TEMPLATE_DEFS = [
+    {
+        "template_key": TEMPLATE_NEW_UNREAD_FOLLOWUP,
+        "name": "New unread follow-up",
+        "description": "No updates after X business days in New Unread.",
+        "default_stage_slug": "new_unread",
+        "default_business_days": 1,
+        "is_default": True,
+    },
+    {
+        "template_key": "contacted_followup",
+        "name": "Contacted follow-up",
+        "description": "No updates after X business days in Contacted.",
+        "default_stage_slug": "contacted",
+        "default_business_days": 2,
+        "is_default": False,
+    },
+    {
+        "template_key": "qualified_followup",
+        "name": "Qualified follow-up",
+        "description": "No updates after X business days in Qualified.",
+        "default_stage_slug": "qualified",
+        "default_business_days": 2,
+        "is_default": False,
+    },
+    {
+        "template_key": "interview_scheduled_followup",
+        "name": "Interview scheduled follow-up",
+        "description": "No updates after X business days in Interview Scheduled.",
+        "default_stage_slug": "interview_scheduled",
+        "default_business_days": 1,
+        "is_default": False,
+    },
+    {
+        "template_key": "application_submitted_followup",
+        "name": "Application submitted follow-up",
+        "description": "No updates after X business days in Application Submitted.",
+        "default_stage_slug": "application_submitted",
+        "default_business_days": 2,
+        "is_default": False,
+    },
+    {
+        "template_key": "under_review_followup",
+        "name": "Under review follow-up",
+        "description": "No updates after X business days in Under Review.",
+        "default_stage_slug": "under_review",
+        "default_business_days": 3,
+        "is_default": False,
+    },
+    {
+        "template_key": "approved_followup",
+        "name": "Approved follow-up",
+        "description": "No updates after X business days in Approved.",
+        "default_stage_slug": "approved",
+        "default_business_days": 3,
+        "is_default": False,
+    },
+    {
+        "template_key": "ready_to_match_followup",
+        "name": "Ready to match follow-up",
+        "description": "No updates after X business days in Ready to Match.",
+        "default_stage_slug": "ready_to_match",
+        "default_business_days": 3,
+        "is_default": False,
+    },
+    {
+        "template_key": "matched_followup",
+        "name": "Matched follow-up",
+        "description": "No updates after X business days in Matched.",
+        "default_stage_slug": "matched",
+        "default_business_days": 5,
+        "is_default": False,
+    },
+    {
+        "template_key": "medical_clearance_followup",
+        "name": "Medical clearance follow-up",
+        "description": "No updates after X business days in Medical Clearance Passed.",
+        "default_stage_slug": "medical_clearance_passed",
+        "default_business_days": 3,
+        "is_default": False,
+    },
+    {
+        "template_key": "legal_clearance_followup",
+        "name": "Legal clearance follow-up",
+        "description": "No updates after X business days in Legal Clearance Passed.",
+        "default_stage_slug": "legal_clearance_passed",
+        "default_business_days": 3,
+        "is_default": False,
+    },
+    {
+        "template_key": "transfer_cycle_followup",
+        "name": "Transfer cycle follow-up",
+        "description": "No updates after X business days in Transfer Cycle.",
+        "default_stage_slug": "transfer_cycle",
+        "default_business_days": 4,
+        "is_default": False,
+    },
+    {
+        "template_key": "second_hcg_followup",
+        "name": "Second HCG follow-up",
+        "description": "No updates after X business days in Second HCG Confirmed.",
+        "default_stage_slug": "second_hcg_confirmed",
+        "default_business_days": 4,
+        "is_default": False,
+    },
+    {
+        "template_key": "heartbeat_followup",
+        "name": "Heartbeat follow-up",
+        "description": "No updates after X business days in Heartbeat Confirmed.",
+        "default_stage_slug": "heartbeat_confirmed",
+        "default_business_days": 5,
+        "is_default": False,
+    },
+    {
+        "template_key": "ob_care_followup",
+        "name": "OB care follow-up",
+        "description": "No updates after X business days in OB Care Established.",
+        "default_stage_slug": "ob_care_established",
+        "default_business_days": 5,
+        "is_default": False,
+    },
+    {
+        "template_key": "anatomy_scan_followup",
+        "name": "Anatomy scan follow-up",
+        "description": "No updates after X business days in Anatomy Scanned.",
+        "default_stage_slug": "anatomy_scanned",
+        "default_business_days": 7,
+        "is_default": False,
+    },
+]
+
+RULE_TEMPLATES = [
+    {
+        "template_key": TEMPLATE_STAGE_FOLLOWUP_CUSTOM,
+        "name": "Custom stage follow-up",
+        "description": "No updates after X business days at a selected stage.",
+        "rule_kind": RULE_KIND_STAGE_INACTIVITY,
+        "default_stage_slug": "new_unread",
+        "default_business_days": 2,
+        "is_default": False,
+    },
+    *[
+        {
+            "template_key": template["template_key"],
+            "name": template["name"],
+            "description": template["description"],
+            "rule_kind": RULE_KIND_STAGE_INACTIVITY,
+            "default_stage_slug": template["default_stage_slug"],
+            "default_business_days": template["default_business_days"],
+            "is_default": template["is_default"],
+        }
+        for template in STAGE_FOLLOWUP_TEMPLATE_DEFS
+    ],
+    {
+        "template_key": TEMPLATE_PREAPPROVAL_STUCK,
+        "name": "Pre-approval stuck",
+        "description": "No updates after X business days across intake pre-approval stages.",
+        "rule_kind": RULE_KIND_STAGE_INACTIVITY,
+        "default_stage_slug": None,
+        "default_business_days": 5,
+        "is_default": True,
+    },
+    {
+        "template_key": TEMPLATE_MEETING_OUTCOME_MISSING,
+        "name": "Meeting outcome missing",
+        "description": "Interview outcome still missing X business days after a meeting.",
+        "rule_kind": RULE_KIND_MEETING_OUTCOME_MISSING,
+        "default_stage_slug": None,
+        "default_business_days": 1,
+        "is_default": True,
+    },
+]
+
+RULE_TEMPLATE_MAP = {template["template_key"]: template for template in RULE_TEMPLATES}
 
 DEFAULTS = {
     "enabled": True,
@@ -161,7 +346,259 @@ def update_settings(
     return settings
 
 
-def _new_unread_stale_ids(
+def list_rule_templates() -> list[dict]:
+    return [dict(template) for template in RULE_TEMPLATES]
+
+
+def serialize_rule(rule: OrgIntelligentSuggestionRule) -> dict:
+    return {
+        "id": str(rule.id),
+        "organization_id": str(rule.organization_id),
+        "template_key": rule.template_key,
+        "name": rule.name,
+        "rule_kind": rule.rule_kind,
+        "stage_slug": rule.stage_slug,
+        "business_days": rule.business_days,
+        "enabled": rule.enabled,
+        "sort_order": rule.sort_order,
+        "created_at": rule.created_at,
+        "updated_at": rule.updated_at,
+    }
+
+
+def _stage_slug_exists_for_org(db: Session, org_id: UUID, stage_slug: str) -> bool:
+    return (
+        db.query(PipelineStage.id)
+        .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
+        .filter(
+            Pipeline.organization_id == org_id,
+            PipelineStage.slug == stage_slug,
+            PipelineStage.is_active.is_(True),
+        )
+        .first()
+        is not None
+    )
+
+
+def _validate_rule_payload(
+    db: Session,
+    *,
+    org_id: UUID,
+    template_key: str,
+    rule_kind: str,
+    stage_slug: str | None,
+) -> None:
+    template = RULE_TEMPLATE_MAP.get(template_key)
+    if not template:
+        raise ValueError("Unknown template_key")
+
+    if rule_kind != template["rule_kind"]:
+        raise ValueError("rule_kind does not match template")
+
+    if rule_kind == RULE_KIND_STAGE_INACTIVITY:
+        if template_key == TEMPLATE_PREAPPROVAL_STUCK:
+            return
+        if not stage_slug:
+            raise ValueError("stage_slug is required for stage inactivity rules")
+        if not _stage_slug_exists_for_org(db, org_id, stage_slug):
+            raise ValueError("stage_slug is not valid for this organization")
+    else:
+        # Meeting outcome rules ignore stage.
+        if stage_slug:
+            raise ValueError("stage_slug is not allowed for meeting outcome rules")
+
+
+def _default_rules_from_settings(
+    settings: OrgIntelligentSuggestionSettings,
+) -> list[dict]:
+    return [
+        {
+            "template_key": TEMPLATE_NEW_UNREAD_FOLLOWUP,
+            "name": "New unread follow-up",
+            "rule_kind": RULE_KIND_STAGE_INACTIVITY,
+            "stage_slug": "new_unread",
+            "business_days": settings.new_unread_business_days,
+            "enabled": settings.new_unread_enabled,
+            "sort_order": 0,
+        },
+        {
+            "template_key": TEMPLATE_MEETING_OUTCOME_MISSING,
+            "name": "Meeting outcome missing",
+            "rule_kind": RULE_KIND_MEETING_OUTCOME_MISSING,
+            "stage_slug": None,
+            "business_days": settings.meeting_outcome_business_days,
+            "enabled": settings.meeting_outcome_enabled,
+            "sort_order": 1,
+        },
+        {
+            "template_key": TEMPLATE_PREAPPROVAL_STUCK,
+            "name": "Pre-approval stuck",
+            "rule_kind": RULE_KIND_STAGE_INACTIVITY,
+            "stage_slug": None,
+            "business_days": settings.stuck_business_days,
+            "enabled": settings.stuck_enabled,
+            "sort_order": 2,
+        },
+    ]
+
+
+def _ensure_default_rules(db: Session, org_id: UUID) -> None:
+    existing_count = (
+        db.query(func.count(OrgIntelligentSuggestionRule.id))
+        .filter(OrgIntelligentSuggestionRule.organization_id == org_id)
+        .scalar()
+        or 0
+    )
+    if existing_count > 0:
+        return
+
+    settings = get_or_create_settings(db, org_id)
+    for payload in _default_rules_from_settings(settings):
+        db.add(
+            OrgIntelligentSuggestionRule(
+                organization_id=org_id,
+                template_key=payload["template_key"],
+                name=payload["name"],
+                rule_kind=payload["rule_kind"],
+                stage_slug=payload["stage_slug"],
+                business_days=payload["business_days"],
+                enabled=payload["enabled"],
+                sort_order=payload["sort_order"],
+            )
+        )
+    db.commit()
+
+
+def list_rules(db: Session, organization_id: UUID) -> list[OrgIntelligentSuggestionRule]:
+    _ensure_default_rules(db, organization_id)
+    return (
+        db.query(OrgIntelligentSuggestionRule)
+        .filter(OrgIntelligentSuggestionRule.organization_id == organization_id)
+        .order_by(OrgIntelligentSuggestionRule.sort_order.asc(), OrgIntelligentSuggestionRule.created_at.asc())
+        .all()
+    )
+
+
+def create_rule(db: Session, organization_id: UUID, payload: dict) -> OrgIntelligentSuggestionRule:
+    template_key = str(payload.get("template_key") or "").strip()
+    template = RULE_TEMPLATE_MAP.get(template_key)
+    if not template:
+        raise ValueError("Unknown template_key")
+
+    rule_kind = str(payload.get("rule_kind") or template["rule_kind"]).strip()
+    stage_slug = payload.get("stage_slug")
+    if isinstance(stage_slug, str):
+        stage_slug = stage_slug.strip() or None
+    business_days = int(payload.get("business_days") or template["default_business_days"])
+    enabled = bool(payload.get("enabled", True))
+    name = str(payload.get("name") or template["name"]).strip() or template["name"]
+
+    _validate_rule_payload(
+        db,
+        org_id=organization_id,
+        template_key=template_key,
+        rule_kind=rule_kind,
+        stage_slug=stage_slug,
+    )
+
+    if business_days < 1 or business_days > 60:
+        raise ValueError("business_days must be between 1 and 60")
+
+    max_sort = (
+        db.query(func.max(OrgIntelligentSuggestionRule.sort_order))
+        .filter(OrgIntelligentSuggestionRule.organization_id == organization_id)
+        .scalar()
+    )
+    sort_order = int(max_sort or 0) + 1
+
+    rule = OrgIntelligentSuggestionRule(
+        organization_id=organization_id,
+        template_key=template_key,
+        name=name,
+        rule_kind=rule_kind,
+        stage_slug=stage_slug,
+        business_days=business_days,
+        enabled=enabled,
+        sort_order=sort_order,
+    )
+    db.add(rule)
+    db.commit()
+    db.refresh(rule)
+    return rule
+
+
+def update_rule(
+    db: Session,
+    organization_id: UUID,
+    rule_id: UUID,
+    updates: dict,
+) -> OrgIntelligentSuggestionRule:
+    rule = (
+        db.query(OrgIntelligentSuggestionRule)
+        .filter(
+            OrgIntelligentSuggestionRule.id == rule_id,
+            OrgIntelligentSuggestionRule.organization_id == organization_id,
+        )
+        .first()
+    )
+    if not rule:
+        raise ValueError("Rule not found")
+
+    template_key = str(updates.get("template_key") or rule.template_key).strip()
+    rule_kind = str(updates.get("rule_kind") or rule.rule_kind).strip()
+    stage_slug = updates.get("stage_slug", rule.stage_slug)
+    if isinstance(stage_slug, str):
+        stage_slug = stage_slug.strip() or None
+
+    _validate_rule_payload(
+        db,
+        org_id=organization_id,
+        template_key=template_key,
+        rule_kind=rule_kind,
+        stage_slug=stage_slug,
+    )
+
+    if "business_days" in updates:
+        business_days = int(updates["business_days"])
+        if business_days < 1 or business_days > 60:
+            raise ValueError("business_days must be between 1 and 60")
+        rule.business_days = business_days
+
+    if "enabled" in updates:
+        rule.enabled = bool(updates["enabled"])
+    if "name" in updates:
+        next_name = str(updates["name"] or "").strip()
+        if not next_name:
+            raise ValueError("name cannot be empty")
+        rule.name = next_name
+    if "sort_order" in updates:
+        rule.sort_order = int(updates["sort_order"])
+
+    rule.template_key = template_key
+    rule.rule_kind = rule_kind
+    rule.stage_slug = stage_slug
+
+    db.commit()
+    db.refresh(rule)
+    return rule
+
+
+def delete_rule(db: Session, organization_id: UUID, rule_id: UUID) -> None:
+    rule = (
+        db.query(OrgIntelligentSuggestionRule)
+        .filter(
+            OrgIntelligentSuggestionRule.id == rule_id,
+            OrgIntelligentSuggestionRule.organization_id == organization_id,
+        )
+        .first()
+    )
+    if not rule:
+        raise ValueError("Rule not found")
+    db.delete(rule)
+    db.commit()
+
+
+def _stage_inactivity_ids(
     db: Session,
     *,
     org_id: UUID,
@@ -170,6 +607,8 @@ def _new_unread_stale_ids(
     threshold_business_days: int,
     now_utc: datetime,
     org_tz: str,
+    stage_slug: str | None,
+    template_key: str,
 ) -> set[UUID]:
     last_activity_subquery = (
         select(func.max(SurrogateActivityLog.created_at))
@@ -190,10 +629,16 @@ def _new_unread_stale_ids(
         .filter(
             Surrogate.organization_id == org_id,
             Surrogate.is_archived.is_(False),
-            PipelineStage.slug == "new_unread",
             *_strict_owner_filters(user_role, user_id),
         )
     )
+
+    if template_key == TEMPLATE_PREAPPROVAL_STUCK and stage_slug is None:
+        query = query.filter(PipelineStage.slug.in_(INTAKE_PREAPPROVAL_STAGE_SLUGS))
+    elif stage_slug:
+        query = query.filter(PipelineStage.slug == stage_slug)
+    else:
+        return set()
 
     matched: set[UUID] = set()
     for surrogate_id, last_activity_at in query.all():
@@ -280,56 +725,6 @@ def _meeting_outcome_missing_ids(
         if (
             _business_days_elapsed(
                 start_at_utc=latest_meeting_at,
-                end_at_utc=now_utc,
-                timezone_name=org_tz,
-            )
-            >= threshold_business_days
-        ):
-            matched.add(surrogate_id)
-    return matched
-
-
-def _stuck_preapproval_ids(
-    db: Session,
-    *,
-    org_id: UUID,
-    user_id: UUID,
-    user_role: Role | str,
-    threshold_business_days: int,
-    now_utc: datetime,
-    org_tz: str,
-) -> set[UUID]:
-    last_activity_subquery = (
-        select(func.max(SurrogateActivityLog.created_at))
-        .where(
-            SurrogateActivityLog.organization_id == org_id,
-            SurrogateActivityLog.surrogate_id == Surrogate.id,
-        )
-        .correlate(Surrogate)
-        .scalar_subquery()
-    )
-    last_activity_col = func.coalesce(last_activity_subquery, Surrogate.created_at).label(
-        "last_activity_at"
-    )
-
-    query = (
-        db.query(Surrogate.id, last_activity_col)
-        .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
-        .filter(
-            Surrogate.organization_id == org_id,
-            Surrogate.is_archived.is_(False),
-            PipelineStage.slug.in_(INTAKE_PREAPPROVAL_STAGE_SLUGS),
-            *_strict_owner_filters(user_role, user_id),
-        )
-    )
-
-    matched: set[UUID] = set()
-    for surrogate_id, last_activity_at in query.all():
-        if last_activity_at is None:
-            continue
-        if (
-            _business_days_elapsed(
-                start_at_utc=last_activity_at,
                 end_at_utc=now_utc,
                 timezone_name=org_tz,
             )
@@ -433,6 +828,51 @@ def _attention_stuck_ids(
     return {row[0] for row in rows}
 
 
+def _rule_ids_for_user(
+    db: Session,
+    *,
+    org_id: UUID,
+    user_id: UUID,
+    user_role: Role | str,
+    now_utc: datetime,
+) -> tuple[list[OrgIntelligentSuggestionRule], dict[UUID, set[UUID]]]:
+    settings = get_or_create_settings(db, org_id)
+    if not settings.enabled:
+        return [], {}
+
+    org_tz = db.query(Organization.timezone).filter(Organization.id == org_id).scalar() or "UTC"
+    rules = [rule for rule in list_rules(db, org_id) if rule.enabled]
+
+    results: dict[UUID, set[UUID]] = {}
+    for rule in rules:
+        if rule.rule_kind == RULE_KIND_STAGE_INACTIVITY:
+            results[rule.id] = _stage_inactivity_ids(
+                db,
+                org_id=org_id,
+                user_id=user_id,
+                user_role=user_role,
+                threshold_business_days=rule.business_days,
+                now_utc=now_utc,
+                org_tz=org_tz,
+                stage_slug=rule.stage_slug,
+                template_key=rule.template_key,
+            )
+        elif rule.rule_kind == RULE_KIND_MEETING_OUTCOME_MISSING:
+            results[rule.id] = _meeting_outcome_missing_ids(
+                db,
+                org_id=org_id,
+                user_id=user_id,
+                user_role=user_role,
+                threshold_business_days=rule.business_days,
+                now_utc=now_utc,
+                org_tz=org_tz,
+            )
+        else:
+            results[rule.id] = set()
+
+    return rules, results
+
+
 def get_intelligent_rule_ids(
     db: Session,
     *,
@@ -443,45 +883,30 @@ def get_intelligent_rule_ids(
     now_utc: datetime | None = None,
 ) -> set[UUID]:
     now_utc = now_utc or datetime.now(timezone.utc)
-    org_tz = (
-        db.query(Organization.timezone).filter(Organization.id == org_id).scalar()
-        or "UTC"
+    rules, results = _rule_ids_for_user(
+        db,
+        org_id=org_id,
+        user_id=user_id,
+        user_role=user_role,
+        now_utc=now_utc,
     )
-    settings = get_or_create_settings(db, org_id)
-    if not settings.enabled:
+    if not rules:
         return set()
 
-    if rule_key == FILTER_INTELLIGENT_NEW_UNREAD and settings.new_unread_enabled:
-        return _new_unread_stale_ids(
-            db,
-            org_id=org_id,
-            user_id=user_id,
-            user_role=user_role,
-            threshold_business_days=settings.new_unread_business_days,
-            now_utc=now_utc,
-            org_tz=org_tz,
-        )
-    if rule_key == FILTER_INTELLIGENT_MEETING_OUTCOME and settings.meeting_outcome_enabled:
-        return _meeting_outcome_missing_ids(
-            db,
-            org_id=org_id,
-            user_id=user_id,
-            user_role=user_role,
-            threshold_business_days=settings.meeting_outcome_business_days,
-            now_utc=now_utc,
-            org_tz=org_tz,
-        )
-    if rule_key == FILTER_INTELLIGENT_STUCK_PREAPPROVAL and settings.stuck_enabled:
-        return _stuck_preapproval_ids(
-            db,
-            org_id=org_id,
-            user_id=user_id,
-            user_role=user_role,
-            threshold_business_days=settings.stuck_business_days,
-            now_utc=now_utc,
-            org_tz=org_tz,
-        )
-    return set()
+    matched: set[UUID] = set()
+    for rule in rules:
+        rule_ids = results.get(rule.id, set())
+        if rule_key == FILTER_INTELLIGENT_NEW_UNREAD:
+            if rule.template_key == TEMPLATE_NEW_UNREAD_FOLLOWUP or rule.stage_slug == "new_unread":
+                matched.update(rule_ids)
+        elif rule_key == FILTER_INTELLIGENT_MEETING_OUTCOME:
+            if rule.rule_kind == RULE_KIND_MEETING_OUTCOME_MISSING:
+                matched.update(rule_ids)
+        elif rule_key == FILTER_INTELLIGENT_STUCK_PREAPPROVAL:
+            if rule.template_key == TEMPLATE_PREAPPROVAL_STUCK:
+                matched.update(rule_ids)
+
+    return matched
 
 
 def get_intelligent_summary(
@@ -492,26 +917,40 @@ def get_intelligent_summary(
     user_role: Role | str,
     now_utc: datetime | None = None,
 ) -> dict:
+    now_utc = now_utc or datetime.now(timezone.utc)
     counts = {rule_key: 0 for rule_key in INTELLIGENT_RULE_KEYS}
     settings = get_or_create_settings(db, org_id)
     if not settings.enabled:
-        return {"total": 0, "counts": counts}
+        return {"total": 0, "counts": counts, "rules": []}
 
-    for rule_key in INTELLIGENT_RULE_KEYS:
-        counts[rule_key] = len(
-            get_intelligent_rule_ids(
-                db,
-                org_id=org_id,
-                user_id=user_id,
-                user_role=user_role,
-                rule_key=rule_key,
-                now_utc=now_utc,
-            )
-        )
+    rules, results = _rule_ids_for_user(
+        db,
+        org_id=org_id,
+        user_id=user_id,
+        user_role=user_role,
+        now_utc=now_utc,
+    )
+
+    for rule in rules:
+        rule_ids = results.get(rule.id, set())
+        if rule.template_key == TEMPLATE_NEW_UNREAD_FOLLOWUP or rule.stage_slug == "new_unread":
+            counts[FILTER_INTELLIGENT_NEW_UNREAD] += len(rule_ids)
+        if rule.rule_kind == RULE_KIND_MEETING_OUTCOME_MISSING:
+            counts[FILTER_INTELLIGENT_MEETING_OUTCOME] += len(rule_ids)
+        if rule.template_key == TEMPLATE_PREAPPROVAL_STUCK:
+            counts[FILTER_INTELLIGENT_STUCK_PREAPPROVAL] += len(rule_ids)
+
+    total = len({sid for ids in results.values() for sid in ids})
+    rule_summaries = []
+    for rule in rules:
+        serialized = serialize_rule(rule)
+        serialized["match_count"] = len(results.get(rule.id, set()))
+        rule_summaries.append(serialized)
 
     return {
-        "total": sum(counts.values()),
+        "total": total,
         "counts": counts,
+        "rules": rule_summaries,
     }
 
 
@@ -527,19 +966,16 @@ def get_dynamic_filter_surrogate_ids(
     now_utc = now_utc or datetime.now(timezone.utc)
 
     if dynamic_filter == FILTER_INTELLIGENT_ANY:
-        matched: set[UUID] = set()
-        for rule_key in INTELLIGENT_RULE_KEYS:
-            matched.update(
-                get_intelligent_rule_ids(
-                    db,
-                    org_id=org_id,
-                    user_id=user_id,
-                    user_role=user_role,
-                    rule_key=rule_key,
-                    now_utc=now_utc,
-                )
-            )
-        return matched
+        rules, results = _rule_ids_for_user(
+            db,
+            org_id=org_id,
+            user_id=user_id,
+            user_role=user_role,
+            now_utc=now_utc,
+        )
+        if not rules:
+            return set()
+        return {sid for ids in results.values() for sid in ids}
 
     if dynamic_filter in INTELLIGENT_RULE_KEYS:
         return get_intelligent_rule_ids(

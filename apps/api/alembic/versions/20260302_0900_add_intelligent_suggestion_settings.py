@@ -134,8 +134,81 @@ def upgrade() -> None:
             ),
         )
 
+    if not _has_table("org_intelligent_suggestion_rules"):
+        op.create_table(
+            "org_intelligent_suggestion_rules",
+            sa.Column(
+                "id",
+                postgresql.UUID(as_uuid=True),
+                server_default=sa.text("gen_random_uuid()"),
+                nullable=False,
+            ),
+            sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column("template_key", sa.String(length=100), nullable=False),
+            sa.Column("name", sa.String(length=200), nullable=False),
+            sa.Column("rule_kind", sa.String(length=50), nullable=False),
+            sa.Column("stage_slug", sa.String(length=100), nullable=True),
+            sa.Column(
+                "business_days",
+                sa.Integer(),
+                server_default=sa.text("1"),
+                nullable=False,
+            ),
+            sa.Column(
+                "enabled",
+                sa.Boolean(),
+                server_default=sa.text("true"),
+                nullable=False,
+            ),
+            sa.Column(
+                "sort_order",
+                sa.Integer(),
+                server_default=sa.text("0"),
+                nullable=False,
+            ),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.text("now()"),
+                nullable=False,
+            ),
+            sa.Column(
+                "updated_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.text("now()"),
+                nullable=False,
+            ),
+            sa.CheckConstraint(
+                "business_days BETWEEN 1 AND 60",
+                name="ck_intel_rule_business_days",
+            ),
+            sa.CheckConstraint(
+                "rule_kind IN ('stage_inactivity', 'meeting_outcome_missing')",
+                name="ck_intel_rule_kind",
+            ),
+            sa.ForeignKeyConstraint(
+                ["organization_id"],
+                ["organizations.id"],
+                ondelete="CASCADE",
+            ),
+            sa.PrimaryKeyConstraint("id"),
+        )
+        op.create_index(
+            "idx_intel_rules_org_enabled",
+            "org_intelligent_suggestion_rules",
+            ["organization_id", "enabled"],
+            unique=False,
+        )
+
 
 def downgrade() -> None:
+    if _has_table("org_intelligent_suggestion_rules"):
+        op.drop_index(
+            "idx_intel_rules_org_enabled",
+            table_name="org_intelligent_suggestion_rules",
+        )
+        op.drop_table("org_intelligent_suggestion_rules")
+
     if _has_column("user_notification_settings", "intelligent_suggestion_digest"):
         op.drop_column("user_notification_settings", "intelligent_suggestion_digest")
 
