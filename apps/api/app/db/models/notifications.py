@@ -110,6 +110,9 @@ class UserNotificationSettings(Base):
     contact_reminder: Mapped[bool] = mapped_column(
         default=True, server_default=text("true")
     )  # Contact attempt reminders
+    intelligent_suggestion_digest: Mapped[bool] = mapped_column(
+        default=True, server_default=text("true")
+    )  # Daily intelligent suggestions digest
     status_change_decisions: Mapped[bool] = mapped_column(
         default=True, server_default=text("true")
     )  # Approval/rejection outcomes

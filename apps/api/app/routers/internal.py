@@ -25,6 +25,7 @@ from app.db.enums import (
 from app.services import (
     alert_service,
     contact_reminder_service,
+    intelligent_suggestions_service,
     job_service,
     meta_admin_service,
     meta_oauth_service,
@@ -413,6 +414,13 @@ class ContactRemindersResponse(BaseModel):
     errors: list[dict]
 
 
+class IntelligentSuggestionsSweepResponse(BaseModel):
+    orgs_processed: int
+    users_checked: int
+    notifications_created: int
+    errors: list[dict]
+
+
 @router.post("/task-notifications", response_model=TaskNotificationsResponse)
 def task_notifications_sweep(x_internal_secret: Annotated[str, "fastapi_param"] = Header()):
     """
@@ -508,6 +516,21 @@ def contact_reminders_sweep(x_internal_secret: Annotated[str, "fastapi_param"] =
         results = contact_reminder_service.process_contact_reminder_jobs(db)
 
     return ContactRemindersResponse(**results)
+
+
+@router.post("/intelligent-suggestions", response_model=IntelligentSuggestionsSweepResponse)
+def intelligent_suggestions_sweep(x_internal_secret: Annotated[str, "fastapi_param"] = Header()):
+    """
+    Daily sweep for intelligent suggestion digest notifications.
+
+    Called by external cron (daily recommended).
+    """
+    verify_internal_secret(x_internal_secret)
+
+    with SessionLocal() as db:
+        results = intelligent_suggestions_service.process_daily_digest_for_all_orgs(db)
+
+    return IntelligentSuggestionsSweepResponse(**results)
 
 
 # =============================================================================

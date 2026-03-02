@@ -24,7 +24,12 @@ from app.schemas.surrogate import (
     SurrogateStatusHistoryRead,
 )
 from app.schemas.task import TaskListItem
-from app.services import org_service, surrogate_service, user_service
+from app.services import (
+    intelligent_suggestions_service,
+    org_service,
+    surrogate_service,
+    user_service,
+)
 from app.utils.pagination import DEFAULT_PER_PAGE, MAX_PER_PAGE
 
 from .surrogates_shared import _surrogate_to_list_item, _surrogate_to_read
@@ -39,6 +44,12 @@ class SurrogateCaseDetailsExportView(BaseModel):
     tasks: list[TaskListItem]
     show_medical: bool
     show_pregnancy: bool
+
+
+class IntelligentSuggestionSummaryRead(BaseModel):
+    total: int
+    counts: dict[str, int]
+    has_suggestions: bool
 
 
 @router.get("/stats", response_model=SurrogateStats)
@@ -135,6 +146,10 @@ def list_surrogates(
     owner_type: str | None = Query(None, pattern="^(user|queue)$"),
     created_from: str | None = Query(None, description="Filter by creation date from (ISO format)"),
     created_to: str | None = Query(None, description="Filter by creation date to (ISO format)"),
+    dynamic_filter: str | None = Query(
+        None,
+        description="Dynamic filter key (intelligent suggestions / dashboard attention)",
+    ),
     sort_by: str | None = Query(None, description="Column to sort by"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort direction"),
 ) -> SurrogateListResponse:
@@ -172,6 +187,7 @@ def list_surrogates(
             created_from=created_from,
             created_to=created_to,
             exclude_stage_types=exclude_stage_types if exclude_stage_types else None,
+            dynamic_filter=dynamic_filter,
             sort_by=sort_by,
             sort_order=sort_order,
             include_total=include_total,
@@ -209,6 +225,7 @@ def list_surrogates(
             "q_type": q_type,
             "created_from": created_from,
             "created_to": created_to,
+            "dynamic_filter": dynamic_filter,
         },
     )
     db.commit()
@@ -223,6 +240,29 @@ def list_surrogates(
         per_page=per_page,
         pages=pages,
         next_cursor=next_cursor,
+    )
+
+
+@router.get(
+    "/intelligent-suggestions/summary",
+    response_model=IntelligentSuggestionSummaryRead,
+)
+def get_intelligent_suggestions_summary(
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    summary = intelligent_suggestions_service.get_intelligent_summary(
+        db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        user_role=session.role.value,
+    )
+    total = int(summary.get("total", 0))
+    counts = summary.get("counts", {})
+    return IntelligentSuggestionSummaryRead(
+        total=total,
+        counts=counts,
+        has_suggestions=total > 0,
     )
 
 

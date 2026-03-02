@@ -65,6 +65,7 @@ class NotificationSettingsRead(BaseModel):
     task_reminders: bool
     appointments: bool
     contact_reminder: bool
+    intelligent_suggestion_digest: bool
     status_change_decisions: bool
     approval_timeouts: bool
     security_alerts: bool
@@ -81,6 +82,7 @@ class NotificationSettingsUpdate(BaseModel):
     task_reminders: bool | None = None
     appointments: bool | None = None
     contact_reminder: bool | None = None
+    intelligent_suggestion_digest: bool | None = None
     status_change_decisions: bool | None = None
     approval_timeouts: bool | None = None
     security_alerts: bool | None = None

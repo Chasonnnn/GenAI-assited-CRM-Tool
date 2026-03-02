@@ -852,6 +852,7 @@ def list_surrogates(
     created_from: str | None = None,  # ISO date string
     created_to: str | None = None,  # ISO date string
     exclude_stage_types: list[str] | None = None,  # Permission-based stage filter
+    dynamic_filter: str | None = None,
     sort_by: str | None = None,
     sort_order: str = "desc",
     include_total: bool = True,
@@ -867,6 +868,7 @@ def list_surrogates(
         created_from: Filter by creation date from (ISO format YYYY-MM-DD)
         created_to: Filter by creation date to (ISO format YYYY-MM-DD)
         exclude_stage_types: Stage types to exclude (e.g. ['post_approval'] for users without permission)
+        dynamic_filter: Dynamic filter key (intelligent suggestions / attention links)
         sort_by: Column to sort by (surrogate_number, full_name, state, race, source, created_at)
         sort_order: Sort direction ('asc' or 'desc')
         include_total: Whether to include total count in response
@@ -921,6 +923,26 @@ def list_surrogates(
         if owner_clause is not None:
             stage_clause_args.append(owner_clause)
         filter_clauses.append(or_(*stage_clause_args))
+
+    if dynamic_filter:
+        from app.services import intelligent_suggestions_service
+
+        if dynamic_filter not in intelligent_suggestions_service.ALLOWED_DYNAMIC_FILTERS:
+            raise ValueError(f"Invalid dynamic_filter: {dynamic_filter}")
+        if not user_id:
+            filter_clauses.append(Surrogate.id.is_(None))
+        else:
+            dynamic_ids = intelligent_suggestions_service.get_dynamic_filter_surrogate_ids(
+                db,
+                org_id=org_id,
+                user_id=user_id,
+                user_role=role_filter or "",
+                dynamic_filter=dynamic_filter,
+            )
+            if dynamic_ids:
+                filter_clauses.append(Surrogate.id.in_(dynamic_ids))
+            else:
+                filter_clauses.append(Surrogate.id.is_(None))
 
     # Owner-type filter
     if owner_type:

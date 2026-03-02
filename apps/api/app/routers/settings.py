@@ -24,6 +24,7 @@ from app.core.deps import (
 from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.services import (
+    intelligent_suggestions_service,
     media_service,
     org_service,
     signature_template_service,
@@ -144,6 +145,77 @@ def update_org_settings(
         phone=getattr(org, "phone", None),
         email=getattr(org, "contact_email", None),
     )
+
+
+class IntelligentSuggestionSettingsRead(BaseModel):
+    enabled: bool
+    new_unread_enabled: bool
+    new_unread_business_days: int
+    meeting_outcome_enabled: bool
+    meeting_outcome_business_days: int
+    stuck_enabled: bool
+    stuck_business_days: int
+    daily_digest_enabled: bool
+    digest_hour_local: int
+
+
+class IntelligentSuggestionSettingsUpdate(BaseModel):
+    enabled: bool | None = None
+    new_unread_enabled: bool | None = None
+    new_unread_business_days: int | None = Field(None, ge=1, le=30)
+    meeting_outcome_enabled: bool | None = None
+    meeting_outcome_business_days: int | None = Field(None, ge=1, le=30)
+    stuck_enabled: bool | None = None
+    stuck_business_days: int | None = Field(None, ge=1, le=60)
+    daily_digest_enabled: bool | None = None
+    digest_hour_local: int | None = Field(None, ge=0, le=23)
+
+
+@router.get(
+    "/intelligent-suggestions",
+    response_model=IntelligentSuggestionSettingsRead,
+)
+def get_intelligent_suggestion_settings(
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["org_settings"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    settings = intelligent_suggestions_service.get_or_create_settings(db, session.org_id)
+    payload = intelligent_suggestions_service.serialize_settings(settings)
+    return IntelligentSuggestionSettingsRead(**payload)
+
+
+@router.patch(
+    "/intelligent-suggestions",
+    response_model=IntelligentSuggestionSettingsRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def update_intelligent_suggestion_settings(
+    body: IntelligentSuggestionSettingsUpdate,
+    request: Request,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["org_settings"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    updates = body.model_dump(exclude_unset=True)
+    settings = intelligent_suggestions_service.update_settings(db, session.org_id, updates)
+    if updates:
+        from app.services import audit_service
+
+        audit_service.log_settings_changed(
+            db=db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            setting_area="intelligent_suggestions",
+            changes=updates,
+            request=request,
+        )
+        db.commit()
+
+    payload = intelligent_suggestions_service.serialize_settings(settings)
+    return IntelligentSuggestionSettingsRead(**payload)
 
 
 # =============================================================================
