@@ -189,10 +189,11 @@ def _rewrite_workflow_trigger_configs(conn) -> None:
             updated.pop("from_stage_slug", None)
 
             if updated != trigger_config:
+                stmt = sa.text(
+                    f"UPDATE {table_name} SET trigger_config = :trigger_config WHERE id = :id"  # noqa: S608
+                ).bindparams(sa.bindparam("trigger_config", type_=sa.JSON()))
                 conn.execute(
-                    sa.text(
-                        f"UPDATE {table_name} SET trigger_config = :trigger_config WHERE id = :id"  # noqa: S608
-                    ),
+                    stmt,
                     {
                         "id": row["id"],
                         "trigger_config": updated,
@@ -262,8 +263,11 @@ def _rewrite_campaign_filters(conn) -> None:
         if updates:
             assignments = ", ".join(f"{key} = :{key}" for key in updates)
             params = {"id": row["id"], **updates}
+            stmt = sa.text(f"UPDATE campaigns SET {assignments} WHERE id = :id")  # noqa: S608
+            for key in updates:
+                stmt = stmt.bindparams(sa.bindparam(key, type_=sa.JSON()))
             conn.execute(
-                sa.text(f"UPDATE campaigns SET {assignments} WHERE id = :id"),  # noqa: S608
+                stmt,
                 params,
             )
 
@@ -277,14 +281,15 @@ def _rewrite_zapier_mappings(conn) -> None:
         mapping = row["outbound_event_mapping"]
         normalized = _normalize_event_mapping(mapping)
         if normalized != mapping:
+            stmt = sa.text(
+                """
+                UPDATE zapier_webhook_settings
+                SET outbound_event_mapping = :outbound_event_mapping
+                WHERE id = :id
+                """
+            ).bindparams(sa.bindparam("outbound_event_mapping", type_=sa.JSON()))
             conn.execute(
-                sa.text(
-                    """
-                    UPDATE zapier_webhook_settings
-                    SET outbound_event_mapping = :outbound_event_mapping
-                    WHERE id = :id
-                    """
-                ),
+                stmt,
                 {
                     "id": row["id"],
                     "outbound_event_mapping": normalized,
@@ -541,10 +546,11 @@ def downgrade() -> None:
                     }
                 )
         if reverted:
+            stmt = sa.text(
+                "UPDATE zapier_webhook_settings SET outbound_event_mapping = :mapping WHERE id = :id"
+            ).bindparams(sa.bindparam("mapping", type_=sa.JSON()))
             conn.execute(
-                sa.text(
-                    "UPDATE zapier_webhook_settings SET outbound_event_mapping = :mapping WHERE id = :id"
-                ),
+                stmt,
                 {"id": row["id"], "mapping": reverted},
             )
 
