@@ -1,5 +1,6 @@
 "use client"
 
+import { useId } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -33,6 +34,8 @@ function AttachmentsSection({
     onRequestTranscription,
     transcribingAttachmentId,
 }: AttachmentsSectionProps) {
+    const uploadInputId = useId()
+
     return (
         <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
@@ -40,6 +43,8 @@ function AttachmentsSection({
                 {canUpload && (
                     <>
                         <input
+                            id={uploadInputId}
+                            name="interview_attachments_upload"
                             ref={uploadInputRef}
                             type="file"
                             className="hidden"

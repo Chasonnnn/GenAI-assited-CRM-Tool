@@ -192,6 +192,7 @@ export function SurrogateApplicationTab({
     const uploadFileMutation = useUploadSubmissionFile()
     const deleteFileMutation = useDeleteSubmissionFile()
     const fileInputRef = React.useRef<HTMLInputElement>(null)
+    const fileInputId = React.useId()
     const [deletingFileId, setDeletingFileId] = React.useState<string | null>(null)
     const [isEditMode, setIsEditMode] = React.useState(false)
     const [isExporting, setIsExporting] = React.useState(false)
@@ -1287,6 +1288,8 @@ export function SurrogateApplicationTab({
                                                 </NativeSelect>
                                             )}
                                             <input
+                                                id={fileInputId}
+                                                name="surrogate_submission_upload"
                                                 ref={fileInputRef}
                                                 type="file"
                                                 className="hidden"

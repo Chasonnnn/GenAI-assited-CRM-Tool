@@ -4,7 +4,7 @@
  * UploadFileDialog - Dialog for uploading files to Surrogate or IP from Match detail page
  */
 
-import { useState, useRef } from "react"
+import { useState, useRef, useId } from "react"
 import {
     Dialog,
     DialogContent,
@@ -38,6 +38,7 @@ export function UploadFileDialog({
     const [target, setTarget] = useState<"surrogate" | "ip">("surrogate")
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const fileInputId = useId()
 
     const handleSubmit = async () => {
         if (!selectedFile) return
@@ -112,8 +113,10 @@ export function UploadFileDialog({
 
                     {/* File selection */}
                     <div className="space-y-2">
-                        <Label>File</Label>
+                        <Label htmlFor={fileInputId}>File</Label>
                         <input
+                            id={fileInputId}
+                            name="match_upload_file"
                             type="file"
                             ref={fileInputRef}
                             onChange={handleFileSelect}

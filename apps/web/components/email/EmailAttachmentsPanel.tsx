@@ -81,6 +81,7 @@ function EmailAttachmentsPanel({ surrogateId, onSelectionChange, hideUI = false 
     const { data: attachments = [], isLoading } = useAttachments(surrogateId)
     const uploadMutation = useUploadAttachment()
     const fileInputRef = React.useRef<HTMLInputElement | null>(null)
+    const fileInputId = React.useId()
 
     const [selectedAttachmentIds, setSelectedAttachmentIds] = React.useState<string[]>([])
     const [uploadError, setUploadError] = React.useState<string | null>(null)
@@ -208,7 +209,7 @@ function EmailAttachmentsPanel({ surrogateId, onSelectionChange, hideUI = false 
         <div className="grid gap-3">
             <div className="flex items-start justify-between gap-3">
                 <div>
-                    <Label>Attachments</Label>
+                    <Label htmlFor={fileInputId}>Attachments</Label>
                     <p className="text-xs text-muted-foreground mt-1">
                         Drag files into the message body, or pick files from your device.
                     </p>
@@ -223,6 +224,8 @@ function EmailAttachmentsPanel({ surrogateId, onSelectionChange, hideUI = false 
                     Attach files
                 </Button>
                 <input
+                    id={fileInputId}
+                    name="email_attachments"
                     ref={fileInputRef}
                     type="file"
                     multiple

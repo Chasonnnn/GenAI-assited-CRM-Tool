@@ -2455,6 +2455,8 @@ export default function FormBuilderPage() {
                                     )}
                                     <div className="flex items-center gap-2">
                                         <input
+                                            id="form-logo-upload"
+                                            name="form_logo_upload"
                                             ref={logoInputRef}
                                             type="file"
                                             accept="image/png,image/jpeg"

@@ -89,6 +89,8 @@ function StageEditor({
 
                         <div className="flex items-center gap-2">
                             <input
+                                id={`stage-color-${stage.id}`}
+                                name={`stage-color-${stage.id}`}
                                 type="color"
                                 value={stage.color}
                                 onChange={(e) => updateStage(index, "color", e.target.value)}

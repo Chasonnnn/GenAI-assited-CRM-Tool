@@ -229,6 +229,8 @@ function SignaturePhotoField({
                         </AvatarFallback>
                     </Avatar>
                     <input
+                        id="signature-photo-upload"
+                        name="signature_photo_upload"
                         type="file"
                         ref={fileInputRef}
                         onChange={handleFileChange}

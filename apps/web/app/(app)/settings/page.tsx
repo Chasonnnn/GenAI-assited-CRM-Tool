@@ -145,6 +145,8 @@ function ProfileSection() {
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
           <input
+            id="profile-avatar-upload"
+            name="profile_avatar_upload"
             type="file"
             ref={fileInputRef}
             onChange={handleAvatarUpload}
@@ -777,6 +779,8 @@ function OrganizationBrandingSection() {
           )}
           <div>
             <input
+              id="org-logo-upload"
+              name="org_logo_upload"
               type="file"
               ref={fileInputRef}
               onChange={handleLogoUpload}

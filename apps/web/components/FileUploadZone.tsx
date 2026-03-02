@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback, useId, useState } from "react"
 import { useDropzone } from "react-dropzone"
 import { Upload, File, Loader2, X, Download, Trash2, AlertTriangle, CheckCircle2, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -81,6 +81,7 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
     const [error, setError] = useState<string | null>(null)
     const [liveMessage, setLiveMessage] = useState("")
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+    const dropzoneInputId = useId()
 
     const { data: attachments = [], isLoading } = useAttachments(surrogateId)
     const uploadMutation = useUploadAttachment()
@@ -191,7 +192,12 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                         : "border-muted-foreground/25 hover:border-primary/50"
                 )}
             >
-                <input {...getInputProps()} />
+                <input
+                    {...getInputProps({
+                        id: dropzoneInputId,
+                        name: "surrogate_attachments",
+                    })}
+                />
                 <Upload className="size-8 mx-auto mb-2 text-muted-foreground" aria-hidden="true" />
                 {isDragActive ? (
                     <p className="text-sm text-primary">Drop files here...</p>

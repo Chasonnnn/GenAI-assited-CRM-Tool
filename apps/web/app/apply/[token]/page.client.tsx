@@ -234,6 +234,7 @@ function FileUploadZone({
 }) {
     const [isDragging, setIsDragging] = React.useState(false)
     const inputRef = React.useRef<HTMLInputElement>(null)
+    const inputId = React.useId()
 
     const maxSizeBytes = maxFileSizeBytes || 10 * 1024 * 1024
     const acceptedTypes = allowedMimeTypes && allowedMimeTypes.length > 0 ? allowedMimeTypes : null
@@ -332,6 +333,8 @@ function FileUploadZone({
                     Up to {maxFiles} files for this field, {(maxSizeBytes / (1024 * 1024)).toFixed(0)}MB each
                 </p>
                 <input
+                    id={inputId}
+                    name="public_form_file_upload"
                     ref={inputRef}
                     type="file"
                     multiple
@@ -1144,6 +1147,8 @@ export default function PublicApplicationForm({ token, previewKey }: PublicAppli
                                                     </Label>
                                                     {column.type === "select" ? (
                                                         <select
+                                                            id={`${field.key}-${rowIndex}-${column.key}`}
+                                                            name={`${field.key}[${rowIndex}][${column.key}]`}
                                                             className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm"
                                                             value={String(row[column.key] ?? "")}
                                                             onChange={(e) =>

@@ -982,6 +982,8 @@ export default function PlatformSystemEmailTemplatePage() {
                                 )}
                                 <div>
                                     <input
+                                        id="platform-branding-logo-upload"
+                                        name="platform_branding_logo_upload"
                                         type="file"
                                         ref={logoFileInputRef}
                                         onChange={handleLogoUpload}
