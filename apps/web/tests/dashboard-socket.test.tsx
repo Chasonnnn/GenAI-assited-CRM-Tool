@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, act } from '@testing-library/react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useDashboardSocket } from '@/lib/hooks/use-dashboard-socket'
 
 vi.mock('@/lib/auth-context', () => ({
@@ -69,5 +70,28 @@ describe('useDashboardSocket', () => {
         })
 
         expect(errorSpy).not.toHaveBeenCalled()
+    })
+
+    it('invalidates all surrogate stats queries on stats updates', () => {
+        render(<DashboardSocketHarness />)
+
+        const ws = MockWebSocket.instances[0]
+        if (!ws) {
+            throw new Error('WebSocket instance was not created')
+        }
+
+        const queryClient = vi.mocked(useQueryClient).mock.results.at(-1)?.value
+        if (!queryClient) {
+            throw new Error('Query client mock was not initialized')
+        }
+
+        act(() => {
+            ws.emitMessage(JSON.stringify({ type: 'stats_update', data: { total: 123 } }))
+        })
+
+        expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['surrogates', 'stats'],
+            refetchType: 'active',
+        })
     })
 })
