@@ -282,6 +282,76 @@ async def test_zoom_webhook_dedupes_event_id(client, db, test_org, test_user, mo
 
 
 @pytest.mark.asyncio
+async def test_zoom_webhook_duplicate_does_not_rollback_session(
+    client, db, test_org, test_user, monkeypatch
+):
+    secret = "test-zoom-secret"
+    monkeypatch.setattr(settings, "ZOOM_WEBHOOK_SECRET", secret, raising=False)
+
+    appt = Appointment(
+        id=uuid4(),
+        organization_id=test_org.id,
+        user_id=test_user.id,
+        client_name="Test Client",
+        client_email="client@example.com",
+        client_phone="555-111-2222",
+        client_timezone="America/New_York",
+        scheduled_start=datetime.now(timezone.utc),
+        scheduled_end=datetime.now(timezone.utc),
+        duration_minutes=30,
+        meeting_mode="zoom",
+        status=AppointmentStatus.CONFIRMED.value,
+        zoom_meeting_id="123456789",
+        reschedule_token="r",
+        cancel_token="c",
+    )
+    db.add(appt)
+    db.flush()
+
+    rollback_calls = 0
+    original_rollback = db.rollback
+
+    def rollback_spy():
+        nonlocal rollback_calls
+        rollback_calls += 1
+        return original_rollback()
+
+    monkeypatch.setattr(db, "rollback", rollback_spy)
+
+    payload = {
+        "event": "meeting.started",
+        "event_ts": "evt_dup_rollback",
+        "payload": {"object": {"id": 123456789}},
+    }
+    body = json.dumps(payload)
+    timestamp = str(int(time.time()))
+    signature = _sign_zoom(secret, timestamp, body)
+
+    res1 = await client.post(
+        "/webhooks/zoom",
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "x-zm-request-timestamp": timestamp,
+            "x-zm-signature": signature,
+        },
+    )
+    res2 = await client.post(
+        "/webhooks/zoom",
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "x-zm-request-timestamp": timestamp,
+            "x-zm-signature": signature,
+        },
+    )
+
+    assert res1.status_code == 200
+    assert res2.status_code == 200
+    assert rollback_calls == 0
+
+
+@pytest.mark.asyncio
 async def test_zoom_webhook_rejects_oversized_payload(client, monkeypatch):
     monkeypatch.setattr(settings, "ZOOM_WEBHOOK_SECRET", "test-zoom-secret", raising=False)
 
