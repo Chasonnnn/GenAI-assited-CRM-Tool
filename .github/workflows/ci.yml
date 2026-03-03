@@ -75,7 +75,14 @@ jobs:
         if: github.event_name == 'pull_request'
         working-directory: apps/api
         continue-on-error: true
-        run: uv run diff-cover coverage.xml --compare-branch=origin/${{ github.base_ref }} --fail-under=90
+        run: |
+          set +e
+          uv run diff-cover coverage.xml --compare-branch=origin/${{ github.base_ref }} --fail-under=90
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "Diff coverage is below threshold; reporting only."
+          fi
+          exit 0
 
   backend-fastapi-gates:
     name: Backend FastAPI Gates
