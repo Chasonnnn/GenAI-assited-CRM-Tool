@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Loader2Icon, UsersIcon, CheckCircleIcon, XCircleIcon, ArrowRightIcon, PlusIcon, SearchIcon, AlertCircleIcon } from "lucide-react"
-import { useMatches, useCreateMatch, type MatchStatus, type MatchListItem } from "@/lib/hooks/use-matches"
+import { useMatches, useMatchStats, useCreateMatch, type MatchStatus, type MatchListItem } from "@/lib/hooks/use-matches"
 import { useSurrogates } from "@/lib/hooks/use-surrogates"
 import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
 import { formatDistanceToNow } from "date-fns"
@@ -329,10 +329,7 @@ export default function MatchesPage() {
         return () => clearTimeout(timer)
     }, [search])
 
-    const { data: proposedData } = useMatches({ status: 'proposed' })
-    const { data: reviewingData } = useMatches({ status: 'reviewing' })
-    const { data: acceptedData } = useMatches({ status: 'accepted' })
-    const { data: rejectedData } = useMatches({ status: 'rejected' })
+    const { data: statsData } = useMatchStats()
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-6">
@@ -354,25 +351,25 @@ export default function MatchesPage() {
             <div className="grid gap-4 md:grid-cols-4">
                 <Card>
                     <CardContent className="pt-6">
-                        <div className="text-2xl font-bold">{proposedData?.total || 0}</div>
+                        <div className="text-2xl font-bold">{statsData?.by_status?.proposed || 0}</div>
                         <p className="text-xs text-muted-foreground">Proposed</p>
                     </CardContent>
                 </Card>
                 <Card>
                     <CardContent className="pt-6">
-                        <div className="text-2xl font-bold">{reviewingData?.total || 0}</div>
+                        <div className="text-2xl font-bold">{statsData?.by_status?.reviewing || 0}</div>
                         <p className="text-xs text-muted-foreground">Under Review</p>
                     </CardContent>
                 </Card>
                 <Card>
                     <CardContent className="pt-6">
-                        <div className="text-2xl font-bold text-green-600">{acceptedData?.total || 0}</div>
+                        <div className="text-2xl font-bold text-green-600">{statsData?.by_status?.accepted || 0}</div>
                         <p className="text-xs text-muted-foreground">Accepted</p>
                     </CardContent>
                 </Card>
                 <Card>
                     <CardContent className="pt-6">
-                        <div className="text-2xl font-bold text-red-600">{rejectedData?.total || 0}</div>
+                        <div className="text-2xl font-bold text-red-600">{statsData?.by_status?.rejected || 0}</div>
                         <p className="text-xs text-muted-foreground">Rejected</p>
                     </CardContent>
                 </Card>
