@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.22](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.21...surrogacy-crm-platform-v0.90.22) (2026-03-03)
+
+
+### Bug Fixes
+
+* allow managed personal templates to send test emails ([8a3f718](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8a3f7180f76214ef06743c8f2775667ed49e72f3))
+* dedupe zoom webhooks without rolling back session ([2c33fb8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2c33fb84181ed53351a15774c22bee37146a73e6))
+* exclude recently active leads from unreached attention ([7d9909f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7d9909f0780ce700da43b52f16f56dc87374de37))
+
 ## [0.90.21](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.20...surrogacy-crm-platform-v0.90.21) (2026-03-03)
 
 
