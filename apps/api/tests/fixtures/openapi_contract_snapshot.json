@@ -1647,6 +1647,12 @@
       "422"
     ]
   },
+  "/intended-parents/created-dates": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
   "/intended-parents/stats": {
     "GET": [
       "200"
@@ -2949,6 +2955,12 @@
     ]
   },
   "/surrogates/claim-queue": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/created-dates": {
     "GET": [
       "200",
       "422"

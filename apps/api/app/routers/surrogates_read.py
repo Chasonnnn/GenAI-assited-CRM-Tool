@@ -262,6 +262,55 @@ def list_surrogates(
     )
 
 
+@router.get("/created-dates", response_model=list[str])
+def list_surrogate_created_dates(
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    stage_id: UUID | None = None,
+    source: SurrogateSource | None = None,
+    owner_id: UUID | None = None,
+    q: str | None = Query(None, max_length=100),
+    include_archived: bool = False,
+    queue_id: UUID | None = None,
+    owner_type: str | None = Query(None, pattern="^(user|queue)$"),
+    dynamic_filter: str | None = Query(
+        None,
+        description="Dynamic filter key (intelligent suggestions / dashboard attention)",
+    ),
+):
+    """List distinct surrogate created_at dates for the current filter context."""
+    from app.services import permission_service
+
+    exclude_stage_types = []
+    if not permission_service.check_permission(
+        db,
+        session.org_id,
+        session.user_id,
+        session.role.value,
+        "view_post_approval_surrogates",
+    ):
+        exclude_stage_types.append("post_approval")
+
+    try:
+        return surrogate_service.list_surrogate_created_dates(
+            db=db,
+            org_id=session.org_id,
+            stage_id=stage_id,
+            source=source,
+            owner_id=owner_id,
+            q=q,
+            include_archived=include_archived,
+            role_filter=session.role,
+            user_id=session.user_id,
+            owner_type=owner_type,
+            queue_id=queue_id,
+            exclude_stage_types=exclude_stage_types if exclude_stage_types else None,
+            dynamic_filter=dynamic_filter,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get(
     "/intelligent-suggestions/summary",
     response_model=IntelligentSuggestionSummaryRead,

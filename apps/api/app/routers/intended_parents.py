@@ -102,6 +102,36 @@ def get_stats(
     return ip_service.get_ip_stats(db, org_id=session.org_id)
 
 
+@router.get("/created-dates", response_model=list[str])
+def list_created_dates(
+    status: Annotated[list[str], "fastapi_param"] = Query(
+        None, description="Filter by status (multi-select)"
+    ),
+    state: str | None = None,
+    budget_min: Decimal | None = None,
+    budget_max: Decimal | None = None,
+    q: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="Search name/number or exact email/phone"
+    ),
+    owner_id: UUID | None = None,
+    include_archived: bool = False,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+):
+    """List distinct created_at dates for the current intended parent filter context."""
+    return ip_service.list_intended_parent_created_dates(
+        db=db,
+        org_id=session.org_id,
+        status=status,
+        state=state,
+        budget_min=budget_min,
+        budget_max=budget_max,
+        q=q,
+        owner_id=owner_id,
+        include_archived=include_archived,
+    )
+
+
 # =============================================================================
 # CRUD
 # =============================================================================

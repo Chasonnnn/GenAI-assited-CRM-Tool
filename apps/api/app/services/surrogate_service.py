@@ -834,6 +834,189 @@ def _attach_last_activity_to_surrogates(
         surrogate.last_activity_at = activity_by_surrogate_id.get(surrogate.id)
 
 
+def _build_surrogate_filter_clauses(
+    db: Session,
+    org_id: UUID,
+    *,
+    stage_id: UUID | None = None,
+    source: SurrogateSource | None = None,
+    owner_id: UUID | None = None,
+    q: str | None = None,
+    include_archived: bool = False,
+    role_filter: str | None = None,
+    user_id: UUID | None = None,
+    owner_type: str | None = None,
+    queue_id: UUID | None = None,
+    exclude_stage_types: list[str] | None = None,
+    dynamic_filter: str | None = None,
+) -> list:
+    from app.db.enums import OwnerType as OwnerTypeEnum
+    from app.db.enums import Role as RoleEnum
+    from app.db.enums import SurrogateStatus
+    from app.db.models import PipelineStage, SurrogateStatusHistory
+
+    filter_clauses = [Surrogate.organization_id == org_id]
+
+    if not include_archived:
+        filter_clauses.append(Surrogate.is_archived.is_(False))
+
+    if exclude_stage_types:
+        excluded_stage_ids = (
+            db.query(PipelineStage.id)
+            .filter(
+                PipelineStage.stage_type.in_(exclude_stage_types),
+            )
+            .scalar_subquery()
+        )
+        owner_clause = None
+        if user_id:
+            owner_clause = (Surrogate.owner_type == OwnerTypeEnum.USER.value) & (
+                Surrogate.owner_id == user_id
+            )
+        stage_clause_args = [
+            Surrogate.stage_id.is_(None),
+            ~Surrogate.stage_id.in_(excluded_stage_ids),
+        ]
+        if owner_clause is not None:
+            stage_clause_args.append(owner_clause)
+        filter_clauses.append(or_(*stage_clause_args))
+
+    if dynamic_filter:
+        from app.services import intelligent_suggestions_service
+
+        if dynamic_filter not in intelligent_suggestions_service.ALLOWED_DYNAMIC_FILTERS:
+            raise ValueError(f"Invalid dynamic_filter: {dynamic_filter}")
+        if not user_id:
+            filter_clauses.append(Surrogate.id.is_(None))
+        else:
+            dynamic_ids = intelligent_suggestions_service.get_dynamic_filter_surrogate_ids(
+                db,
+                org_id=org_id,
+                user_id=user_id,
+                user_role=role_filter or "",
+                dynamic_filter=dynamic_filter,
+            )
+            if dynamic_ids:
+                filter_clauses.append(Surrogate.id.in_(dynamic_ids))
+            else:
+                filter_clauses.append(Surrogate.id.is_(None))
+
+    if owner_type:
+        filter_clauses.append(Surrogate.owner_type == owner_type)
+
+    if queue_id:
+        filter_clauses.extend(
+            [
+                Surrogate.owner_id == queue_id,
+                Surrogate.owner_type == OwnerTypeEnum.QUEUE.value,
+            ]
+        )
+
+    if role_filter == RoleEnum.INTAKE_SPECIALIST.value or role_filter == RoleEnum.INTAKE_SPECIALIST:
+        if user_id:
+            owned_clause = (Surrogate.owner_type == OwnerTypeEnum.USER.value) & (
+                Surrogate.owner_id == user_id
+            )
+            followed_ids = (
+                select(SurrogateStatusHistory.surrogate_id)
+                .join(PipelineStage, SurrogateStatusHistory.to_stage_id == PipelineStage.id)
+                .where(
+                    SurrogateStatusHistory.organization_id == org_id,
+                    SurrogateStatusHistory.changed_by_user_id == user_id,
+                    PipelineStage.slug == SurrogateStatus.APPROVED.value,
+                )
+            )
+            filter_clauses.append(or_(owned_clause, Surrogate.id.in_(followed_ids)))
+        else:
+            filter_clauses.append(Surrogate.id.is_(None))
+
+    if stage_id:
+        filter_clauses.append(Surrogate.stage_id == stage_id)
+
+    if source:
+        filter_clauses.append(Surrogate.source == source.value)
+
+    if owner_id:
+        filter_clauses.extend(
+            [
+                Surrogate.owner_type == OwnerTypeEnum.USER.value,
+                Surrogate.owner_id == owner_id,
+            ]
+        )
+
+    if q:
+        normalized_text = normalize_search_text(q)
+        normalized_identifier = normalize_identifier(q)
+        search_filters = []
+        if normalized_text:
+            escaped_text = escape_like_string(normalized_text)
+            search_filters.append(
+                Surrogate.full_name_normalized.ilike(f"%{escaped_text}%", escape="\\")
+            )
+        if normalized_identifier:
+            escaped_identifier = escape_like_string(normalized_identifier)
+            search_filters.append(
+                Surrogate.surrogate_number_normalized.ilike(f"%{escaped_identifier}%", escape="\\")
+            )
+        if "@" in q:
+            try:
+                search_filters.append(Surrogate.email_hash == hash_email(q))
+            except Exception as exc:
+                logger.debug("surrogate_search_email_hash_failed", exc_info=exc)
+        try:
+            normalized_phone = normalize_phone(q)
+            search_filters.append(Surrogate.phone_hash == hash_phone(normalized_phone))
+        except Exception as exc:
+            logger.debug("surrogate_search_phone_hash_failed", exc_info=exc)
+        if search_filters:
+            filter_clauses.append(or_(*search_filters))
+
+    return filter_clauses
+
+
+def list_surrogate_created_dates(
+    db: Session,
+    org_id: UUID,
+    *,
+    stage_id: UUID | None = None,
+    source: SurrogateSource | None = None,
+    owner_id: UUID | None = None,
+    q: str | None = None,
+    include_archived: bool = False,
+    role_filter: str | None = None,
+    user_id: UUID | None = None,
+    owner_type: str | None = None,
+    queue_id: UUID | None = None,
+    exclude_stage_types: list[str] | None = None,
+    dynamic_filter: str | None = None,
+) -> list[str]:
+    """List distinct created_at dates (YYYY-MM-DD) for current surrogate filter context."""
+    filter_clauses = _build_surrogate_filter_clauses(
+        db,
+        org_id,
+        stage_id=stage_id,
+        source=source,
+        owner_id=owner_id,
+        q=q,
+        include_archived=include_archived,
+        role_filter=role_filter,
+        user_id=user_id,
+        owner_type=owner_type,
+        queue_id=queue_id,
+        exclude_stage_types=exclude_stage_types,
+        dynamic_filter=dynamic_filter,
+    )
+
+    rows = (
+        db.query(func.date(Surrogate.created_at).label("created_date"))
+        .filter(*filter_clauses)
+        .distinct()
+        .order_by(func.date(Surrogate.created_at).asc())
+        .all()
+    )
+    return [row.created_date.isoformat() for row in rows if row.created_date is not None]
+
+
 def list_surrogates(
     db: Session,
     org_id: UUID,

@@ -1,6 +1,6 @@
 """Intended Parent service - business logic for IP CRUD and status management."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import TypedDict
 from uuid import UUID
@@ -27,43 +27,25 @@ from app.utils.normalization import (
 logger = logging.getLogger(__name__)
 
 # =============================================================================
-# CRUD Operations
+# Query Helpers
 # =============================================================================
 
 
-class StatusChangeResult(TypedDict):
-    """Result of a status change operation."""
+def _parse_created_before_filter(value: str) -> tuple[datetime, bool]:
+    """Parse created_before value.
 
-    status: str  # 'applied' or 'pending_approval'
-    intended_parent: IntendedParent | None
-    request_id: UUID | None
-    message: str | None
-
-
-def generate_intended_parent_number(db: Session, org_id: UUID) -> str:
+    Returns:
+        (parsed_datetime, is_date_only)
     """
-    Generate next sequential intended parent number for org (I10001+).
-
-    Uses atomic INSERT...ON CONFLICT for race-condition-free counter increment.
-    """
-    result = db.execute(
-        text("""
-            INSERT INTO org_counters (organization_id, counter_type, current_value)
-            VALUES (:org_id, 'intended_parent_number', 10001)
-            ON CONFLICT (organization_id, counter_type)
-            DO UPDATE SET current_value = org_counters.current_value + 1,
-                          updated_at = now()
-            RETURNING current_value
-        """),
-        {"org_id": org_id},
-    ).scalar_one_or_none()
-    if result is None:
-        raise RuntimeError("Failed to generate intended parent number")
-
-    return f"I{result:05d}"
+    normalized = value.strip()
+    if "T" not in normalized:
+        parsed_date = date.fromisoformat(normalized)
+        return datetime.combine(parsed_date + timedelta(days=1), time(0, 0, 0)), True
+    parsed_datetime = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+    return parsed_datetime, False
 
 
-def list_intended_parents(
+def _build_intended_parent_query(
     db: Session,
     org_id: UUID,
     *,
@@ -76,18 +58,7 @@ def list_intended_parents(
     include_archived: bool = False,
     created_after: str | None = None,
     created_before: str | None = None,
-    page: int = 1,
-    per_page: int = 20,
-    sort_by: str | None = None,
-    sort_order: str = "desc",
-) -> tuple[list[IntendedParent], int]:
-    """
-    List intended parents with filters and pagination.
-
-    Returns (items, total_count).
-    """
-    from sqlalchemy import asc, desc
-
+):
     query = db.query(IntendedParent).filter(IntendedParent.organization_id == org_id)
 
     # Archive filter
@@ -151,10 +122,92 @@ def list_intended_parents(
             logger.debug("ip_filter_invalid_created_after")
     if created_before:
         try:
-            before_date = datetime.fromisoformat(created_before.replace("Z", "+00:00"))
-            query = query.filter(IntendedParent.created_at <= before_date)
+            before_date, is_date_only = _parse_created_before_filter(created_before)
+            if is_date_only:
+                query = query.filter(IntendedParent.created_at < before_date)
+            else:
+                query = query.filter(IntendedParent.created_at <= before_date)
         except (ValueError, AttributeError):
-            pass
+            logger.debug("ip_filter_invalid_created_before")
+
+    return query
+
+
+# =============================================================================
+# CRUD Operations
+# =============================================================================
+
+
+class StatusChangeResult(TypedDict):
+    """Result of a status change operation."""
+
+    status: str  # 'applied' or 'pending_approval'
+    intended_parent: IntendedParent | None
+    request_id: UUID | None
+    message: str | None
+
+
+def generate_intended_parent_number(db: Session, org_id: UUID) -> str:
+    """
+    Generate next sequential intended parent number for org (I10001+).
+
+    Uses atomic INSERT...ON CONFLICT for race-condition-free counter increment.
+    """
+    result = db.execute(
+        text("""
+            INSERT INTO org_counters (organization_id, counter_type, current_value)
+            VALUES (:org_id, 'intended_parent_number', 10001)
+            ON CONFLICT (organization_id, counter_type)
+            DO UPDATE SET current_value = org_counters.current_value + 1,
+                          updated_at = now()
+            RETURNING current_value
+        """),
+        {"org_id": org_id},
+    ).scalar_one_or_none()
+    if result is None:
+        raise RuntimeError("Failed to generate intended parent number")
+
+    return f"I{result:05d}"
+
+
+def list_intended_parents(
+    db: Session,
+    org_id: UUID,
+    *,
+    status: list[str] | None = None,
+    state: str | None = None,
+    budget_min: Decimal | None = None,
+    budget_max: Decimal | None = None,
+    q: str | None = None,
+    owner_id: UUID | None = None,
+    include_archived: bool = False,
+    created_after: str | None = None,
+    created_before: str | None = None,
+    page: int = 1,
+    per_page: int = 20,
+    sort_by: str | None = None,
+    sort_order: str = "desc",
+) -> tuple[list[IntendedParent], int]:
+    """
+    List intended parents with filters and pagination.
+
+    Returns (items, total_count).
+    """
+    from sqlalchemy import asc, desc
+
+    query = _build_intended_parent_query(
+        db,
+        org_id,
+        status=status,
+        state=state,
+        budget_min=budget_min,
+        budget_max=budget_max,
+        q=q,
+        owner_id=owner_id,
+        include_archived=include_archived,
+        created_after=created_after,
+        created_before=created_before,
+    )
 
     # Get total count before pagination
     total = query.count()
@@ -181,6 +234,40 @@ def list_intended_parents(
     items = query.offset(offset).limit(per_page).all()
 
     return items, total
+
+
+def list_intended_parent_created_dates(
+    db: Session,
+    org_id: UUID,
+    *,
+    status: list[str] | None = None,
+    state: str | None = None,
+    budget_min: Decimal | None = None,
+    budget_max: Decimal | None = None,
+    q: str | None = None,
+    owner_id: UUID | None = None,
+    include_archived: bool = False,
+) -> list[str]:
+    """List distinct created_at dates (YYYY-MM-DD) for current filtered context."""
+    query = _build_intended_parent_query(
+        db,
+        org_id,
+        status=status,
+        state=state,
+        budget_min=budget_min,
+        budget_max=budget_max,
+        q=q,
+        owner_id=owner_id,
+        include_archived=include_archived,
+    )
+
+    rows = (
+        query.with_entities(func.date(IntendedParent.created_at).label("created_date"))
+        .distinct()
+        .order_by(func.date(IntendedParent.created_at).asc())
+        .all()
+    )
+    return [row.created_date.isoformat() for row in rows if row.created_date is not None]
 
 
 def list_intended_parents_for_session(
