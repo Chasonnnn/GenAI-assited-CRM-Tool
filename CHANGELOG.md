@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.21](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.20...surrogacy-crm-platform-v0.90.21) (2026-03-03)
+
+
+### Bug Fixes
+
+* allow cross-origin public form logo embedding ([df35fb5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/df35fb50239b3ef533b77a4dbc9b618ccdbe51c4))
+
 ## [0.90.20](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.19...surrogacy-crm-platform-v0.90.20) (2026-03-03)
 
 
