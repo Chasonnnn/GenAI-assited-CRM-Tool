@@ -324,7 +324,7 @@ export default function FormsListPage() {
             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <div className="flex h-16 items-center justify-between px-6">
                     <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="icon" onClick={() => router.push("/automation")}>
+                        <Button variant="ghost" size="icon" onClick={() => router.push("/automation")} aria-label="Back to automation">
                             <ArrowLeftIcon className="size-4" />
                         </Button>
                         <h1 className="text-2xl font-semibold">Form Builder</h1>

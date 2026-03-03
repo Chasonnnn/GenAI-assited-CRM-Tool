@@ -1047,7 +1047,7 @@ export default function PlatformWorkflowTemplatePage() {
 
             <div className="flex h-16 items-center justify-between border-b border-stone-200 bg-white px-6 dark:border-stone-800 dark:bg-stone-900">
                 <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={() => router.push("/ops/templates?tab=workflows")}>
+                    <Button variant="ghost" size="icon" onClick={() => router.push("/ops/templates?tab=workflows")} aria-label="Back to templates">
                         <ArrowLeftIcon className="size-5" />
                     </Button>
                     <Input
