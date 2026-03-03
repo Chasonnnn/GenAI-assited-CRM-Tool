@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.19](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.18...surrogacy-crm-platform-v0.90.19) (2026-03-03)
+
+
+### Features
+
+* add configurable intelligent suggestion workflow rules ([fe9996e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fe9996eae4fb574db0c2f8f016ae7dc2002607a0))
+* add intelligent suggestion admin and notification settings ([13c89b5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/13c89b56d40f64102e09e96c397a00253db4e753))
+* add intelligent suggestion backend rules and scheduling ([49168f8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/49168f883fbc4301d57a8b9c228f67e060833c12))
+* add URL-driven dynamic surrogate filters ([aae5207](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/aae5207d56dba8e8d6ef07a1fb602d1a95e21bb3))
+* add workflow-style intelligent suggestion rule management UI ([4a281ff](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4a281ff6bf469d555981371fd5f06c9a29c54c33))
+
+
+### Bug Fixes
+
+* **api:** align stats and trend date windows with timezone ([ec18ce6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ec18ce68f10ba7a8476fd79a4227cf527cb2ebf6))
+* include date-only to_date in surrogate trend ([62cbe15](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/62cbe15913b4d119a335a6ef5a790d01b4dd8037))
+* make google tasks sync scope-aware ([a1064ab](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a1064ab06987246cfbabaa0b082b19ce26bcb925))
+* merge alembic heads for intelligent suggestions ([48c8293](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/48c82939bc8378180e7ad580a5a11121c7e0b14c))
+* requeue missing attachment scan jobs on download ([185068b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/185068b8b709584fdb00d076dd68c6fe30539ddf))
+* **web:** apply dashboard filters to surrogates trend ([46ac27f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/46ac27f503008c998905f595732c59b651b892f9))
+* **web:** improve dashboard control labeling and filter history ([aaf3824](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/aaf382463487074de24107b5b51c74d59ea6490b))
+* **web:** invalidate keyed stats queries on socket updates ([eb931aa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/eb931aa21ce0ba493f07a1e36383dc6926f88993))
+* **web:** stabilize offline fetch interception ([f69dc0f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f69dc0fee73ab554308df28f0bfd186cf44076c7))
+
 ## [0.90.18](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.17...surrogacy-crm-platform-v0.90.18) (2026-03-02)
 
 
