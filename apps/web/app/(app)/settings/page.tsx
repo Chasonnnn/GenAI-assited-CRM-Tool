@@ -1303,12 +1303,22 @@ function IntelligentSuggestionsSection() {
 
   const renderRuleDescription = (rule: IntelligentSuggestionRule) => {
     if (rule.rule_kind === "meeting_outcome_missing") {
-      return `Meeting outcome missing for ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"}`
+      return `Passed scheduled meeting ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"} but no outcome logged`
     }
     if (rule.template_key === "preapproval_stuck") {
       return `No updates in intake pre-approval stages for ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"}`
     }
     return `${formatStageLabel(rule.stage_slug)} has no updates for ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"}`
+  }
+
+  const formatRuleStageLabel = (rule: IntelligentSuggestionRule) => {
+    if (rule.rule_kind === "meeting_outcome_missing") {
+      return "All Stages Applied"
+    }
+    if (rule.template_key === "preapproval_stuck") {
+      return "Intake Pre-approval Stages"
+    }
+    return formatStageLabel(rule.stage_slug)
   }
 
   const renderStageInput = (
@@ -1321,7 +1331,12 @@ function IntelligentSuggestionsSection() {
       return (
         <Select value={value} onValueChange={onChange} disabled={disabled}>
           <SelectTrigger id={id}>
-            <SelectValue placeholder="Select stage" />
+            <SelectValue placeholder="Select stage">
+              {(selected: string | null) => {
+                if (!selected) return "Select stage"
+                return stageLabelBySlug.get(selected) ?? selected.replaceAll("_", " ")
+              }}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {stageOptions.map((option) => (
@@ -1350,16 +1365,6 @@ function IntelligentSuggestionsSection() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="font-medium flex items-center gap-2">
-          <LightbulbIcon className="size-4" aria-hidden="true" />
-          Intelligent Suggestions
-        </h3>
-        <p className="text-sm text-muted-foreground">
-          Configure workflow-style rule templates, stage thresholds, and digest timing.
-        </p>
-      </div>
-
       {error && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
           {error}
@@ -1413,7 +1418,12 @@ function IntelligentSuggestionsSection() {
                   disabled={ruleSaving || templates.length === 0}
                 >
                   <SelectTrigger id="new-rule-template">
-                    <SelectValue placeholder="Select template" />
+                    <SelectValue placeholder="Select template">
+                      {(selected: string | null) => {
+                        if (!selected) return "Select template"
+                        return templateByKey.get(selected)?.name ?? selected.replaceAll("_", " ")
+                      }}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {templates.map((template) => (
@@ -1538,7 +1548,7 @@ function IntelligentSuggestionsSection() {
 
                 <div className="grid gap-3 text-sm md:grid-cols-3">
                   <p><span className="font-medium">Template:</span> {template?.name ?? rule.template_key}</p>
-                  <p><span className="font-medium">Stage:</span> {formatStageLabel(rule.stage_slug)}</p>
+                  <p><span className="font-medium">Stage:</span> {formatRuleStageLabel(rule)}</p>
                   <p><span className="font-medium">Priority:</span> {rule.sort_order}</p>
                 </div>
 
