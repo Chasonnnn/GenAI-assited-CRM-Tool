@@ -432,3 +432,105 @@ async def test_test_send_personal_template_only_owner_can_send(db, test_org, mon
             json={"to_email": "test@example.com"},
         )
         assert res.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_test_send_personal_template_allows_manage_permission_override(
+    db, test_org, monkeypatch
+):
+    owner = User(
+        id=uuid.uuid4(),
+        email=f"owner-{uuid.uuid4().hex[:8]}@test.com",
+        display_name="Owner",
+        token_version=1,
+        is_active=True,
+    )
+    manager = User(
+        id=uuid.uuid4(),
+        email=f"manager-{uuid.uuid4().hex[:8]}@test.com",
+        display_name="Manager",
+        token_version=1,
+        is_active=True,
+    )
+    db.add_all([owner, manager])
+    db.flush()
+    db.add_all(
+        [
+            Membership(
+                id=uuid.uuid4(),
+                user_id=owner.id,
+                organization_id=test_org.id,
+                role=Role.CASE_MANAGER.value,
+                is_active=True,
+            ),
+            Membership(
+                id=uuid.uuid4(),
+                user_id=manager.id,
+                organization_id=test_org.id,
+                role=Role.ADMIN.value,
+                is_active=True,
+            ),
+            UserIntegration(
+                id=uuid.uuid4(),
+                user_id=manager.id,
+                integration_type="gmail",
+                access_token_encrypted="test",
+                refresh_token_encrypted=None,
+                token_expires_at=None,
+                account_email="manager@gmail.com",
+                current_version=1,
+            ),
+        ]
+    )
+    db.commit()
+
+    template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        created_by_user_id=owner.id,
+        name="Owner Personal Template",
+        subject="Hello {{full_name}}",
+        body="<p>Hello</p>",
+        scope="personal",
+        owner_user_id=owner.id,
+        is_active=True,
+    )
+    db.add(template)
+    db.commit()
+
+    called: dict[str, object] = {}
+
+    async def fake_send_email_logged(
+        *,
+        db,
+        org_id,
+        user_id,
+        to,
+        subject,
+        body,
+        html,
+        template_id=None,
+        surrogate_id=None,
+        idempotency_key=None,
+        headers=None,
+        ignore_opt_out=False,
+    ):
+        called["user_id"] = user_id
+        _ = ignore_opt_out
+        return {"success": True, "message_id": "gmail_mgr_123", "email_log_id": str(uuid.uuid4())}
+
+    from app.services import gmail_service
+
+    monkeypatch.setattr(gmail_service, "send_email_logged", fake_send_email_logged)
+
+    async with authed_client_for_user(db, manager, test_org.id, Role.ADMIN) as client:
+        res = await client.post(
+            f"/email-templates/{template.id}/test",
+            json={"to_email": "external-test@example.com"},
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["success"] is True
+        assert data["provider_used"] == "gmail"
+        assert data["message_id"] == "gmail_mgr_123"
+        assert called["user_id"] == str(manager.id)

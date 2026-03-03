@@ -541,7 +541,7 @@ async def send_test_email(
     """Send a test email for a given template.
 
     - Org templates require manage_email_templates permission.
-    - Personal templates can only be test-sent by the owner (no admin override).
+    - Personal templates can be test-sent by the owner or users with manage_email_templates.
     """
     from app.services import email_test_send_service, permission_service
 
@@ -564,18 +564,22 @@ async def send_test_email(
             ),
         )
 
+    manage_perm = POLICIES["email_templates"].actions["manage"]
+    perm_key = manage_perm.value if hasattr(manage_perm, "value") else str(manage_perm)
+    has_manage_permission = permission_service.check_permission(
+        db, session.org_id, session.user_id, session.role.value, perm_key
+    )
+
     # Authorization based on scope
     if template.scope == "org":
-        manage_perm = POLICIES["email_templates"].actions["manage"]
-        perm_key = manage_perm.value if hasattr(manage_perm, "value") else str(manage_perm)
-        if not permission_service.check_permission(
-            db, session.org_id, session.user_id, session.role.value, perm_key
-        ):
+        if not has_manage_permission:
             raise HTTPException(status_code=403, detail=f"Missing permission: {perm_key}")
     else:
-        if template.owner_user_id != session.user_id:
+        is_owner = template.owner_user_id == session.user_id
+        if not is_owner and not has_manage_permission:
             raise HTTPException(
-                status_code=403, detail="You can only send tests for your templates"
+                status_code=403,
+                detail="You can only send tests for your templates unless you can manage email templates",
             )
 
     from app.services import email_composition_service

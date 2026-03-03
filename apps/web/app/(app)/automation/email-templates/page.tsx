@@ -1349,6 +1349,7 @@ export default function EmailTemplatesPage() {
                             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                                 {personalTemplates.map((template) => {
                                     const isOwner = template.owner_user_id === user?.user_id
+                                    const canSendPersonalTest = isOwner || canManageEmailTemplates
                                     return (
                                         <TemplateCard
                                             key={template.id}
@@ -1356,7 +1357,7 @@ export default function EmailTemplatesPage() {
                                             isReadOnly={!isOwner && !isAdmin}
                                             canCopy={false}
                                             canShare={isOwner}
-                                            canSendTest={isOwner}
+                                            canSendTest={canSendPersonalTest}
                                             canDelete={isOwner}
                                             onEdit={() => handleOpenModal(template)}
                                             onDelete={() => handleDelete(template.id)}

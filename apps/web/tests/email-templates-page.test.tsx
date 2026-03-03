@@ -363,6 +363,31 @@ describe("EmailTemplatesPage", () => {
         }
     )
 
+    it.each(["admin", "developer"] as const)(
+        "shows send test action for %s on non-owned personal templates",
+        async (role) => {
+            mockUseAuth.mockReturnValue({
+                user: {
+                    user_id: "user_1",
+                    role,
+                    email: "admin@example.com",
+                    display_name: "Admin",
+                    org_name: "Test Org",
+                    ai_enabled: false,
+                },
+            })
+            personalTemplatesFixture = [OTHER_USER_PERSONAL_TEMPLATE]
+
+            render(<EmailTemplatesPage />)
+
+            const triggers = document.querySelectorAll('[data-slot="dropdown-menu-trigger"]')
+            expect(triggers.length).toBeGreaterThan(0)
+            fireEvent.click(triggers[0] as HTMLElement)
+
+            expect(await screen.findByText("Send test email")).toBeInTheDocument()
+        }
+    )
+
     it("does not show inactive personal templates", () => {
         personalTemplatesFixture = [{
             ...PERSONAL_TEMPLATE,
