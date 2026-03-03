@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.20](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.19...surrogacy-crm-platform-v0.90.20) (2026-03-03)
+
+
+### Features
+
+* add context-aware created_at date range filtering ([98e1573](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/98e1573dc8d58a7cacde8519e5f01c927dc0d8a4))
+* add created_at date availability endpoints for filters ([d065073](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d065073f5a521519de664ea23d0e5b5e67d74e70))
+
+
+### Bug Fixes
+
+* polish intelligent suggestion rules settings copy and labels ([706bacd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/706bacd75337e331f3a9b1aa2174488bc52b0008))
+* use Annotated for surrogate created-dates query params ([031ea66](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/031ea661c5e6f750c0947736fa48a4d5e3f1f84a))
+
 ## [0.90.19](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.18...surrogacy-crm-platform-v0.90.19) (2026-03-03)
 
 
