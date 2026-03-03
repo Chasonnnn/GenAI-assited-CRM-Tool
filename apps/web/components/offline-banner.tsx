@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { WifiOff } from "lucide-react"
 
 /**
@@ -14,6 +14,11 @@ import { WifiOff } from "lucide-react"
  */
 export function OfflineBanner() {
     const [isOffline, setIsOffline] = useState(false)
+    const isOfflineRef = useRef(isOffline)
+
+    useEffect(() => {
+        isOfflineRef.current = isOffline
+    }, [isOffline])
 
     // Track online/offline events
     useEffect(() => {
@@ -41,19 +46,22 @@ export function OfflineBanner() {
         window.fetch = async (...args) => {
             try {
                 const response = await originalFetch(...args)
-                // Successful fetch - clear offline state
-                if (isOffline) {
+                // Successful fetch - clear offline state.
+                if (isOfflineRef.current) {
+                    isOfflineRef.current = false
                     setIsOffline(false)
                 }
                 return response
             } catch (error) {
-                // Network error - likely offline
+                // Network error - likely offline.
                 if (
                     error instanceof TypeError &&
                     (error.message.includes("Failed to fetch") ||
                         error.message.includes("NetworkError") ||
-                        error.message.includes("Network request failed"))
+                        error.message.includes("Network request failed")) &&
+                    !isOfflineRef.current
                 ) {
+                    isOfflineRef.current = true
                     setIsOffline(true)
                 }
                 throw error
@@ -63,7 +71,7 @@ export function OfflineBanner() {
         return () => {
             window.fetch = originalFetch
         }
-    }, [isOffline])
+    }, [])
 
     if (!isOffline) {
         return null

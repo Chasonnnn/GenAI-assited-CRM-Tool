@@ -21,6 +21,21 @@ export type {
     SurrogateStatusHistory,
 };
 
+export const DYNAMIC_SURROGATE_FILTERS = [
+    'intelligent_any',
+    'intelligent_new_unread_stale',
+    'intelligent_meeting_outcome_missing',
+    'intelligent_stuck_preapproval',
+    'attention_unreached',
+    'attention_stuck',
+] as const;
+
+export type DynamicSurrogateFilter = (typeof DYNAMIC_SURROGATE_FILTERS)[number];
+
+export const isDynamicSurrogateFilter = (value: string | null): value is DynamicSurrogateFilter => {
+    return value !== null && DYNAMIC_SURROGATE_FILTERS.includes(value as DynamicSurrogateFilter);
+};
+
 // Query params for listing surrogates
 export interface SurrogateListParams {
     page?: number;
@@ -36,6 +51,7 @@ export interface SurrogateListParams {
     owner_type?: 'user' | 'queue';  // Filter by owner type
     created_from?: string;  // ISO date string
     created_to?: string;    // ISO date string
+    dynamic_filter?: DynamicSurrogateFilter;
     sort_by?: string;       // Column to sort by
     sort_order?: 'asc' | 'desc';  // Sort direction
 }
@@ -56,6 +72,15 @@ export interface SurrogateStats {
 export interface SurrogateStatsParams {
     pipeline_id?: string;
     owner_id?: string;
+    from_date?: string;
+    to_date?: string;
+    timezone?: string;
+}
+
+export interface IntelligentSuggestionSummary {
+    total: number;
+    counts: Record<string, number>;
+    has_suggestions: boolean;
 }
 
 // Create surrogate payload
@@ -192,6 +217,9 @@ export function getSurrogateStats(params: SurrogateStatsParams = {}): Promise<Su
     const searchParams = new URLSearchParams();
     if (params.pipeline_id) searchParams.set('pipeline_id', params.pipeline_id);
     if (params.owner_id) searchParams.set('owner_id', params.owner_id);
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+    if (params.timezone) searchParams.set('timezone', params.timezone);
     const query = searchParams.toString();
     return api.get<SurrogateStats>(`/surrogates/stats${query ? `?${query}` : ''}`);
 }
@@ -214,11 +242,16 @@ export function getSurrogates(params: SurrogateListParams = {}): Promise<Surroga
     if (params.owner_type) searchParams.set('owner_type', params.owner_type);
     if (params.created_from) searchParams.set('created_from', params.created_from);
     if (params.created_to) searchParams.set('created_to', params.created_to);
+    if (params.dynamic_filter) searchParams.set('dynamic_filter', params.dynamic_filter);
     if (params.sort_by) searchParams.set('sort_by', params.sort_by);
     if (params.sort_order) searchParams.set('sort_order', params.sort_order);
 
     const query = searchParams.toString();
     return api.get<SurrogateListResponse>(`/surrogates${query ? `?${query}` : ''}`);
+}
+
+export function getIntelligentSuggestionSummary(): Promise<IntelligentSuggestionSummary> {
+    return api.get<IntelligentSuggestionSummary>('/surrogates/intelligent-suggestions/summary');
 }
 
 export interface UnassignedQueueParams {

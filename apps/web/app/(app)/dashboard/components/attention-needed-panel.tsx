@@ -30,6 +30,7 @@ import {
     type UpcomingTask,
     type UpcomingMeeting,
 } from "@/lib/hooks/use-dashboard"
+import type { DynamicSurrogateFilter } from "@/lib/api/surrogates"
 import { useDashboardFilters } from "../context/dashboard-filters"
 import { formatLocalDate } from "@/lib/utils/date"
 
@@ -73,8 +74,9 @@ export function AttentionNeededPanel() {
         return `/tasks?${params.toString()}`
     }
 
-    const buildSurrogatesUrl = () => {
+    const buildSurrogatesUrl = (dynamicFilter: DynamicSurrogateFilter) => {
         const params = new URLSearchParams()
+        params.set("dynamic_filter", dynamicFilter)
         if (filters.assigneeId) params.set("owner_id", filters.assigneeId)
         return `/surrogates${params.toString() ? `?${params.toString()}` : ""}`
     }
@@ -169,7 +171,7 @@ export function AttentionNeededPanel() {
                                 <PopoverContent align="end" className="w-56 p-2">
                                     <div className="space-y-1">
                                         <Link
-                                            href={buildSurrogatesUrl()}
+                                            href={buildSurrogatesUrl("attention_unreached")}
                                             className="flex items-center justify-between rounded-md px-2 py-2 text-sm hover:bg-muted"
                                         >
                                             <span>Unreached leads</span>
@@ -183,7 +185,7 @@ export function AttentionNeededPanel() {
                                             <ChevronRightIcon className="size-4 text-muted-foreground" />
                                         </Link>
                                         <Link
-                                            href={buildSurrogatesUrl()}
+                                            href={buildSurrogatesUrl("attention_stuck")}
                                             className="flex items-center justify-between rounded-md px-2 py-2 text-sm hover:bg-muted"
                                         >
                                             <span>Stuck surrogates</span>
@@ -239,7 +241,7 @@ export function AttentionNeededPanel() {
                                                     title="Unreached leads (7+ days)"
                                                     description="No contact in 7+ days"
                                                     count={unreachedCount}
-                                                    href={buildSurrogatesUrl()}
+                                                    href={buildSurrogatesUrl("attention_unreached")}
                                                     countBadgeClass={COUNT_BADGE_CLASS}
                                                 />
                                             )}
@@ -265,7 +267,7 @@ export function AttentionNeededPanel() {
                                                     title="Stuck surrogates (30+ days)"
                                                     description="In stage for 30+ days"
                                                     count={stuckCount}
-                                                    href={buildSurrogatesUrl()}
+                                                    href={buildSurrogatesUrl("attention_stuck")}
                                                     countBadgeClass={COUNT_BADGE_CLASS}
                                                 />
                                             )}

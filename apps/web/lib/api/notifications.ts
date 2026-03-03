@@ -31,6 +31,7 @@ export interface NotificationSettings {
     task_reminders: boolean
     appointments: boolean
     contact_reminder: boolean
+    intelligent_suggestion_digest: boolean
     status_change_decisions: boolean
     approval_timeouts: boolean
     security_alerts: boolean

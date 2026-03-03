@@ -379,6 +379,9 @@ async def google_calendar_callback(
         tokens = await oauth_service.exchange_google_calendar_code(
             code, settings.GOOGLE_CALENDAR_REDIRECT_URI
         )
+        granted_scopes = [
+            scope.strip() for scope in str(tokens.get("scope", "")).split(" ") if scope.strip()
+        ] or None
         user_info = await oauth_service.get_google_calendar_user_info(tokens["access_token"])
 
         oauth_service.save_integration(
@@ -389,6 +392,7 @@ async def google_calendar_callback(
             refresh_token=tokens.get("refresh_token"),
             expires_in=tokens.get("expires_in"),
             account_email=user_info.get("email"),
+            granted_scopes=granted_scopes,
         )
 
         # Best-effort push-channel registration + initial reconciliation.

@@ -89,8 +89,12 @@ export function useDashboardSocket(enabled: boolean = true) {
 
                 const message = parsed as WebSocketMessage
                 if (message.type === 'stats_update') {
-                    // Update React Query cache with new stats
-                    queryClient.setQueryData(surrogateKeys.stats(), message.data)
+                    // Stats payloads are org-wide; invalidate all keyed variants so
+                    // owner/date filtered queries refetch with their own params.
+                    queryClient.invalidateQueries({
+                        queryKey: surrogateKeys.stats(),
+                        refetchType: 'active',
+                    })
                 }
             };
 

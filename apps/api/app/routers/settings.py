@@ -8,6 +8,7 @@ import mimetypes
 import os
 import re
 import uuid as uuid_lib
+from datetime import datetime
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
@@ -24,6 +25,7 @@ from app.core.deps import (
 from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.services import (
+    intelligent_suggestions_service,
     media_service,
     org_service,
     signature_template_service,
@@ -144,6 +146,254 @@ def update_org_settings(
         phone=getattr(org, "phone", None),
         email=getattr(org, "contact_email", None),
     )
+
+
+class IntelligentSuggestionSettingsRead(BaseModel):
+    enabled: bool
+    new_unread_enabled: bool
+    new_unread_business_days: int
+    meeting_outcome_enabled: bool
+    meeting_outcome_business_days: int
+    stuck_enabled: bool
+    stuck_business_days: int
+    daily_digest_enabled: bool
+    digest_hour_local: int
+
+
+class IntelligentSuggestionSettingsUpdate(BaseModel):
+    enabled: bool | None = None
+    new_unread_enabled: bool | None = None
+    new_unread_business_days: int | None = Field(None, ge=1, le=30)
+    meeting_outcome_enabled: bool | None = None
+    meeting_outcome_business_days: int | None = Field(None, ge=1, le=30)
+    stuck_enabled: bool | None = None
+    stuck_business_days: int | None = Field(None, ge=1, le=60)
+    daily_digest_enabled: bool | None = None
+    digest_hour_local: int | None = Field(None, ge=0, le=23)
+
+
+class IntelligentSuggestionTemplateRead(BaseModel):
+    template_key: str
+    name: str
+    description: str
+    rule_kind: str
+    default_stage_slug: str | None
+    default_business_days: int
+    is_default: bool
+
+
+class IntelligentSuggestionRuleRead(BaseModel):
+    id: str
+    organization_id: str
+    template_key: str
+    name: str
+    rule_kind: str
+    stage_slug: str | None
+    business_days: int
+    enabled: bool
+    sort_order: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class IntelligentSuggestionRuleCreate(BaseModel):
+    template_key: str
+    name: str | None = None
+    rule_kind: str | None = None
+    stage_slug: str | None = None
+    business_days: int | None = Field(None, ge=1, le=60)
+    enabled: bool = True
+
+
+class IntelligentSuggestionRuleUpdate(BaseModel):
+    name: str | None = None
+    stage_slug: str | None = None
+    business_days: int | None = Field(None, ge=1, le=60)
+    enabled: bool | None = None
+    sort_order: int | None = None
+
+
+@router.get(
+    "/intelligent-suggestions",
+    response_model=IntelligentSuggestionSettingsRead,
+)
+def get_intelligent_suggestion_settings(
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["org_settings"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    settings = intelligent_suggestions_service.get_or_create_settings(db, session.org_id)
+    payload = intelligent_suggestions_service.serialize_settings(settings)
+    return IntelligentSuggestionSettingsRead(**payload)
+
+
+@router.patch(
+    "/intelligent-suggestions",
+    response_model=IntelligentSuggestionSettingsRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def update_intelligent_suggestion_settings(
+    body: IntelligentSuggestionSettingsUpdate,
+    request: Request,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["org_settings"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    updates = body.model_dump(exclude_unset=True)
+    settings = intelligent_suggestions_service.update_settings(db, session.org_id, updates)
+    if updates:
+        from app.services import audit_service
+
+        audit_service.log_settings_changed(
+            db=db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            setting_area="intelligent_suggestions",
+            changes=updates,
+            request=request,
+        )
+        db.commit()
+
+    payload = intelligent_suggestions_service.serialize_settings(settings)
+    return IntelligentSuggestionSettingsRead(**payload)
+
+
+@router.get(
+    "/intelligent-suggestions/templates",
+    response_model=list[IntelligentSuggestionTemplateRead],
+)
+def list_intelligent_suggestion_templates(
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["org_settings"].default)
+    ),
+):
+    _ = session
+    templates = intelligent_suggestions_service.list_rule_templates()
+    return [IntelligentSuggestionTemplateRead(**template) for template in templates]
+
+
+@router.get(
+    "/intelligent-suggestions/rules",
+    response_model=list[IntelligentSuggestionRuleRead],
+)
+def list_intelligent_suggestion_rules(
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["org_settings"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    rules = intelligent_suggestions_service.list_rules(db, session.org_id)
+    return [
+        IntelligentSuggestionRuleRead(**intelligent_suggestions_service.serialize_rule(rule))
+        for rule in rules
+    ]
+
+
+@router.post(
+    "/intelligent-suggestions/rules",
+    response_model=IntelligentSuggestionRuleRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def create_intelligent_suggestion_rule(
+    body: IntelligentSuggestionRuleCreate,
+    request: Request,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["org_settings"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    from app.services import audit_service
+
+    try:
+        rule = intelligent_suggestions_service.create_rule(
+            db,
+            session.org_id,
+            body.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    audit_service.log_settings_changed(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        setting_area="intelligent_suggestions_rule",
+        changes={"action": "create", "rule_id": str(rule.id)},
+        request=request,
+    )
+    db.commit()
+    return IntelligentSuggestionRuleRead(**intelligent_suggestions_service.serialize_rule(rule))
+
+
+@router.patch(
+    "/intelligent-suggestions/rules/{rule_id}",
+    response_model=IntelligentSuggestionRuleRead,
+    dependencies=[Depends(require_csrf_header)],
+)
+def update_intelligent_suggestion_rule(
+    rule_id: uuid_lib.UUID,
+    body: IntelligentSuggestionRuleUpdate,
+    request: Request,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["org_settings"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    from app.services import audit_service
+
+    try:
+        rule = intelligent_suggestions_service.update_rule(
+            db,
+            session.org_id,
+            rule_id,
+            body.model_dump(exclude_unset=True),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    audit_service.log_settings_changed(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        setting_area="intelligent_suggestions_rule",
+        changes={"action": "update", "rule_id": str(rule.id)},
+        request=request,
+    )
+    db.commit()
+    return IntelligentSuggestionRuleRead(**intelligent_suggestions_service.serialize_rule(rule))
+
+
+@router.delete(
+    "/intelligent-suggestions/rules/{rule_id}",
+    status_code=204,
+    dependencies=[Depends(require_csrf_header)],
+)
+def delete_intelligent_suggestion_rule(
+    rule_id: uuid_lib.UUID,
+    request: Request,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["org_settings"].default)
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> None:
+    from app.services import audit_service
+
+    try:
+        intelligent_suggestions_service.delete_rule(db, session.org_id, rule_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    audit_service.log_settings_changed(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        setting_area="intelligent_suggestions_rule",
+        changes={"action": "delete", "rule_id": str(rule_id)},
+        request=request,
+    )
+    db.commit()
 
 
 # =============================================================================

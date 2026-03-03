@@ -118,7 +118,7 @@ async def test_google_tasks_sync_job_handler_imports_task_in_async_context(
 
     async def fake_list_google_task_lists(access_token):
         assert access_token == "token"
-        return [{"id": "@default"}]
+        return [{"id": "@default"}], None
 
     async def fake_list_google_tasks(access_token, task_list_id):
         assert access_token == "token"

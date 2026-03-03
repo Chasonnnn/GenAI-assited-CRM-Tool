@@ -23,6 +23,10 @@ const buildTasksHref = (focus?: string) => {
 }
 
 export function getNotificationHref(notification: NotificationRouteInput): string {
+    if (notification.type === "intelligent_suggestion_digest") {
+        return "/surrogates?dynamic_filter=intelligent_any"
+    }
+
     if (APPROVAL_NOTIFICATION_TYPES.has(notification.type)) {
         return buildTasksHref("approvals")
     }

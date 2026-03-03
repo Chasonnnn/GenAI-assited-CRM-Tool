@@ -15,8 +15,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import event
 
 from app.core.config import settings
-from app.db.enums import AuditEventType, JobType
-from app.db.models import Attachment
+from app.db.enums import AuditEventType, JobStatus, JobType
+from app.db.models import Attachment, Job
 from app.services import storage_client
 from app.services import audit_service, job_service
 
@@ -502,16 +502,53 @@ def upload_attachment(
 
     # Enqueue virus scan job if scanning is enabled
     if scan_enabled:
-        job_service.enqueue_job(
+        ensure_attachment_scan_job(
             db=db,
             org_id=org_id,
-            job_type=JobType.ATTACHMENT_SCAN,
-            payload={"attachment_id": str(attachment_id)},
-            run_at=datetime.now(timezone.utc),
+            attachment_id=attachment_id,
             commit=False,
         )
 
     return attachment
+
+
+def ensure_attachment_scan_job(
+    db: Session,
+    org_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    *,
+    commit: bool = False,
+) -> bool:
+    """
+    Ensure a pending/running scan job exists for the attachment.
+
+    Returns:
+        True when a new job is enqueued; False when a matching job already exists.
+    """
+    attachment_id_str = str(attachment_id)
+    in_flight_jobs = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == org_id,
+            Job.job_type == JobType.ATTACHMENT_SCAN.value,
+            Job.status.in_([JobStatus.PENDING.value, JobStatus.RUNNING.value]),
+        )
+        .all()
+    )
+    for job in in_flight_jobs:
+        payload = job.payload or {}
+        if payload.get("attachment_id") == attachment_id_str:
+            return False
+
+    job_service.enqueue_job(
+        db=db,
+        org_id=org_id,
+        job_type=JobType.ATTACHMENT_SCAN,
+        payload={"attachment_id": attachment_id_str},
+        run_at=datetime.now(timezone.utc),
+        commit=commit,
+    )
+    return True
 
 
 def list_attachments(

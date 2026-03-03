@@ -197,6 +197,12 @@ function NotificationsSettingsCard() {
             description: "Follow-up reminders for assigned surrogates",
         },
         {
+            key: "intelligent_suggestion_digest",
+            icon: RefreshCw,
+            title: "Intelligent Suggestions Digest",
+            description: "Daily digest for suggested leads needing attention",
+        },
+        {
             key: "status_change_decisions",
             icon: ListChecks,
             title: "Status Change Decisions",

@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, date, timezone
 from typing import Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import func, text, exists, and_, select, case, literal, or_
 from sqlalchemy.orm import Session, aliased
@@ -149,6 +150,7 @@ def get_surrogates_trend(
     source: str | None = None,
     owner_id: uuid.UUID | None = None,
     pipeline_id: uuid.UUID | None = None,
+    timezone_name: str | None = None,
     group_by: str = "day",  # day, week, month
 ) -> list[dict[str, Any]]:
     """Get new surrogates created over time."""
@@ -157,13 +159,26 @@ def get_surrogates_trend(
     if not start:
         start = end - timedelta(days=30)
 
+    normalized_timezone_name: str | None = None
+    if timezone_name:
+        try:
+            normalized_timezone_name = ZoneInfo(timezone_name).key
+        except ZoneInfoNotFoundError:
+            normalized_timezone_name = None
+
+    timestamp_column = (
+        func.timezone(normalized_timezone_name, Surrogate.created_at)
+        if normalized_timezone_name
+        else Surrogate.created_at
+    )
+
     # Group by time period
     if group_by == "week":
-        date_trunc = func.date_trunc("week", Surrogate.created_at)
+        date_trunc = func.date_trunc("week", timestamp_column)
     elif group_by == "month":
-        date_trunc = func.date_trunc("month", Surrogate.created_at)
+        date_trunc = func.date_trunc("month", timestamp_column)
     else:
-        date_trunc = func.date(Surrogate.created_at)
+        date_trunc = func.date(timestamp_column)
 
     results = db.query(
         date_trunc.label("period"),
@@ -210,13 +225,22 @@ def get_cached_surrogates_trend(
     group_by: str = "day",
     pipeline_id: uuid.UUID | None = None,
     owner_id: uuid.UUID | None = None,
+    timezone_name: str | None = None,
 ) -> list[dict[str, Any]]:
+    normalized_timezone_name: str | None = None
+    if timezone_name:
+        try:
+            normalized_timezone_name = ZoneInfo(timezone_name).key
+        except ZoneInfoNotFoundError:
+            normalized_timezone_name = None
+
     params = {
         "start": start.isoformat(),
         "end": end.isoformat(),
         "group_by": group_by,
         "pipeline_id": str(pipeline_id) if pipeline_id else None,
         "owner_id": str(owner_id) if owner_id else None,
+        "timezone_name": normalized_timezone_name,
     }
     return _get_or_compute_snapshot(
         db,
@@ -231,6 +255,7 @@ def get_cached_surrogates_trend(
             group_by=group_by,
             pipeline_id=pipeline_id,
             owner_id=owner_id,
+            timezone_name=normalized_timezone_name,
         ),
         range_start=start,
         range_end=end,

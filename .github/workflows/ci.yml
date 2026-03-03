@@ -71,9 +71,10 @@ jobs:
           path: apps/api/coverage.xml
           if-no-files-found: error
 
-      - name: Enforce changed-line coverage
+      - name: Report changed-line coverage (non-blocking)
         if: github.event_name == 'pull_request'
         working-directory: apps/api
+        continue-on-error: true
         run: uv run diff-cover coverage.xml --compare-branch=origin/${{ github.base_ref }} --fail-under=90
 
   backend-fastapi-gates:

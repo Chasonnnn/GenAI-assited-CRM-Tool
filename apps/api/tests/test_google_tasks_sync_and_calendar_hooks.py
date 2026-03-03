@@ -171,11 +171,28 @@ async def test_google_list_helpers(monkeypatch):
 
     monkeypatch.setattr(google_tasks_sync_service, "_google_request", _fake_request)
 
-    lists = await google_tasks_sync_service._list_google_task_lists("tok")
+    lists, list_error = await google_tasks_sync_service._list_google_task_lists("tok")
+    assert list_error is None
     assert [item["id"] for item in lists] == ["L1", "L2"]
 
     tasks = await google_tasks_sync_service._list_google_tasks("tok", "L1")
     assert [item["id"] for item in tasks] == ["T1", "T2"]
+
+
+@pytest.mark.asyncio
+async def test_google_task_lists_returns_error_tuple_for_insufficient_scopes(monkeypatch):
+    async def _fake_request(*, access_token, method, path, params=None, json_body=None):
+        del access_token, method, params, json_body
+        if path == "/users/@me/lists":
+            return 403, {"error": {"message": "Request had insufficient authentication scopes."}}
+        return 500, None
+
+    monkeypatch.setattr(google_tasks_sync_service, "_google_request", _fake_request)
+
+    lists, list_error = await google_tasks_sync_service._list_google_task_lists("tok")
+    assert lists == []
+    assert list_error is not None
+    assert list_error["status_code"] == 403
 
 
 @pytest.mark.asyncio
@@ -268,6 +285,43 @@ def test_sync_platform_task_wrappers(monkeypatch, db):
         task, datetime(2026, 1, 3, tzinfo=timezone.utc)
     )
     assert remote_newer is True
+
+
+@pytest.mark.asyncio
+async def test_sync_google_tasks_marks_scope_missing_after_403(db, test_auth, monkeypatch):
+    from app.db.models import UserIntegration
+
+    integration = UserIntegration(
+        user_id=test_auth.user.id,
+        integration_type="google_calendar",
+        access_token_encrypted="token-1",
+        refresh_token_encrypted="token-2",
+        granted_scopes=None,
+    )
+    db.add(integration)
+    db.commit()
+
+    async def _token(*_args, **_kwargs):
+        return "tok"
+
+    async def _fake_request(*, access_token, method, path, params=None, json_body=None):
+        del access_token, method, params, json_body
+        if path == "/users/@me/lists":
+            return 403, {"error": {"message": "Request had insufficient authentication scopes."}}
+        return 500, None
+
+    monkeypatch.setattr(google_tasks_sync_service.oauth_service, "get_access_token_async", _token)
+    monkeypatch.setattr(google_tasks_sync_service, "_google_request", _fake_request)
+
+    changed = await google_tasks_sync_service.sync_google_tasks_for_user_async(
+        db,
+        user_id=test_auth.user.id,
+        org_id=test_auth.org.id,
+    )
+    assert changed == 0
+
+    db.refresh(integration)
+    assert integration.granted_scopes == []
 
 
 def test_calendar_watch_helper_functions(monkeypatch):

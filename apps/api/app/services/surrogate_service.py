@@ -852,6 +852,7 @@ def list_surrogates(
     created_from: str | None = None,  # ISO date string
     created_to: str | None = None,  # ISO date string
     exclude_stage_types: list[str] | None = None,  # Permission-based stage filter
+    dynamic_filter: str | None = None,
     sort_by: str | None = None,
     sort_order: str = "desc",
     include_total: bool = True,
@@ -867,6 +868,7 @@ def list_surrogates(
         created_from: Filter by creation date from (ISO format YYYY-MM-DD)
         created_to: Filter by creation date to (ISO format YYYY-MM-DD)
         exclude_stage_types: Stage types to exclude (e.g. ['post_approval'] for users without permission)
+        dynamic_filter: Dynamic filter key (intelligent suggestions / attention links)
         sort_by: Column to sort by (surrogate_number, full_name, state, race, source, created_at)
         sort_order: Sort direction ('asc' or 'desc')
         include_total: Whether to include total count in response
@@ -921,6 +923,26 @@ def list_surrogates(
         if owner_clause is not None:
             stage_clause_args.append(owner_clause)
         filter_clauses.append(or_(*stage_clause_args))
+
+    if dynamic_filter:
+        from app.services import intelligent_suggestions_service
+
+        if dynamic_filter not in intelligent_suggestions_service.ALLOWED_DYNAMIC_FILTERS:
+            raise ValueError(f"Invalid dynamic_filter: {dynamic_filter}")
+        if not user_id:
+            filter_clauses.append(Surrogate.id.is_(None))
+        else:
+            dynamic_ids = intelligent_suggestions_service.get_dynamic_filter_surrogate_ids(
+                db,
+                org_id=org_id,
+                user_id=user_id,
+                user_role=role_filter or "",
+                dynamic_filter=dynamic_filter,
+            )
+            if dynamic_ids:
+                filter_clauses.append(Surrogate.id.in_(dynamic_ids))
+            else:
+                filter_clauses.append(Surrogate.id.is_(None))
 
     # Owner-type filter
     if owner_type:
@@ -1205,6 +1227,8 @@ def hard_delete_surrogate(
 def get_surrogate_stats(
     db: Session,
     org_id: UUID,
+    start: datetime | None = None,
+    end: datetime | None = None,
     pipeline_id: UUID | None = None,
     owner_id: UUID | None = None,
 ) -> dict:
@@ -1230,6 +1254,10 @@ def get_surrogate_stats(
         Surrogate.organization_id == org_id,
         Surrogate.is_archived.is_(False),
     ]
+    if start:
+        surrogate_filters.append(Surrogate.created_at >= start)
+    if end:
+        surrogate_filters.append(Surrogate.created_at < end)
     if owner_id:
         surrogate_filters.extend(
             [
@@ -1252,21 +1280,28 @@ def get_surrogate_stats(
         )
 
     pending_tasks_stmt = select(func.count(Task.id)).select_from(Task).where(*task_filters)
-    if pipeline_id:
+    needs_task_surrogate_join = pipeline_id is not None or start is not None or end is not None
+    if needs_task_surrogate_join:
         # Prevent implicit correlation with the outer Surrogate query.
         surrogate_for_tasks = aliased(Surrogate)
-        stage_for_tasks = aliased(PipelineStage)
-        pending_tasks_stmt = (
-            pending_tasks_stmt.join(
-                surrogate_for_tasks, Task.surrogate_id == surrogate_for_tasks.id
-            )
-            .join(stage_for_tasks, surrogate_for_tasks.stage_id == stage_for_tasks.id)
-            .where(
-                surrogate_for_tasks.organization_id == org_id,
-                surrogate_for_tasks.is_archived.is_(False),
+        pending_tasks_stmt = pending_tasks_stmt.join(
+            surrogate_for_tasks, Task.surrogate_id == surrogate_for_tasks.id
+        ).where(
+            surrogate_for_tasks.organization_id == org_id,
+            surrogate_for_tasks.is_archived.is_(False),
+        )
+        if start:
+            pending_tasks_stmt = pending_tasks_stmt.where(surrogate_for_tasks.created_at >= start)
+        if end:
+            pending_tasks_stmt = pending_tasks_stmt.where(surrogate_for_tasks.created_at < end)
+
+        if pipeline_id:
+            stage_for_tasks = aliased(PipelineStage)
+            pending_tasks_stmt = pending_tasks_stmt.join(
+                stage_for_tasks, surrogate_for_tasks.stage_id == stage_for_tasks.id
+            ).where(
                 stage_for_tasks.pipeline_id == pipeline_id,
             )
-        )
     pending_tasks_subq = pending_tasks_stmt.scalar_subquery()
 
     # Aggregate counts in a single query to reduce DB round trips.

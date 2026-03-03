@@ -107,6 +107,7 @@ export function StageChart() {
                     <CardTitle className="text-base font-semibold">Pipeline Distribution</CardTitle>
                     <ToggleGroup
                         value={[viewMode]}
+                        aria-label="Pipeline distribution view mode"
                         onValueChange={(value) => {
                             const nextValue = Array.isArray(value) ? value[0] : value
                             if (nextValue === "count" || nextValue === "percent") {

@@ -1736,6 +1736,12 @@
       "422"
     ]
   },
+  "/internal/scheduled/intelligent-suggestions": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/internal/scheduled/meta-forms-sync": {
     "POST": [
       "200",
@@ -2662,6 +2668,39 @@
       "422"
     ]
   },
+  "/settings/intelligent-suggestions": {
+    "GET": [
+      "200"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/intelligent-suggestions/rules": {
+    "GET": [
+      "200"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/intelligent-suggestions/rules/{rule_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/intelligent-suggestions/templates": {
+    "GET": [
+      "200"
+    ]
+  },
   "/settings/invites": {
     "GET": [
       "200"
@@ -2981,6 +3020,11 @@
     "POST": [
       "200",
       "422"
+    ]
+  },
+  "/surrogates/intelligent-suggestions/summary": {
+    "GET": [
+      "200"
     ]
   },
   "/surrogates/mass-edit/archive": {

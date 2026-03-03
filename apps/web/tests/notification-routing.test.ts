@@ -32,4 +32,14 @@ describe("getNotificationHref", () => {
 
         expect(href).toBe("/tasks?filter=my_tasks")
     })
+
+    it("routes intelligent suggestion digests to dynamic surrogate filter", () => {
+        const href = getNotificationHref({
+            type: "intelligent_suggestion_digest",
+            entity_type: null,
+            entity_id: null,
+        })
+
+        expect(href).toBe("/surrogates?dynamic_filter=intelligent_any")
+    })
 })

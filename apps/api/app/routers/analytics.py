@@ -190,6 +190,9 @@ def get_surrogates_trend(
     from_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
     to_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
     period: Annotated[Literal["day", "week", "month"], "fastapi_param"] = Query("day"),
+    timezone_name: Annotated[
+        Optional[str], "fastapi_param"
+    ] = Query(None, alias="timezone", description="IANA timezone name"),
     pipeline_id: Annotated[UUID | None, "fastapi_param"] = Query(
         None, description="Filter by pipeline UUID"
     ),
@@ -207,7 +210,12 @@ def get_surrogates_trend(
     ):
         raise HTTPException(status_code=403, detail="Not authorized to view other users' analytics")
 
-    start, end = analytics_service.parse_date_range(from_date, to_date)
+    start, end = analytics_service.parse_date_range(
+        from_date,
+        to_date,
+        inclusive_date_end=True,
+        timezone_name=timezone_name,
+    )
     data = analytics_service.get_cached_surrogates_trend(
         db,
         session.org_id,
@@ -216,6 +224,7 @@ def get_surrogates_trend(
         group_by=period,
         pipeline_id=pipeline_id,
         owner_id=owner_id,
+        timezone_name=timezone_name,
     )
     return [TrendPoint(**item) for item in data]
 

@@ -131,7 +131,7 @@ export function DashboardFiltersProvider({ children }: DashboardFiltersProviderP
         const newUrl = nextQuery ? `/dashboard?${nextQuery}` : "/dashboard"
         const currentUrl = currentQuery ? `/dashboard?${currentQuery}` : "/dashboard"
         if (newUrl === currentUrl) return
-        router.replace(newUrl, { scroll: false })
+        router.push(newUrl, { scroll: false })
     }, [router, searchParams])
 
     // Set date range

@@ -20,6 +20,81 @@ logger = logging.getLogger(__name__)
 
 GOOGLE_TASKS_API_BASE = "https://tasks.googleapis.com/tasks/v1"
 GOOGLE_DEFAULT_TASKLIST_ID = "@default"
+GOOGLE_TASKS_SCOPES = {
+    "https://www.googleapis.com/auth/tasks",
+    "https://www.googleapis.com/auth/tasks.readonly",
+}
+
+
+def _normalize_scopes(scopes: object) -> set[str]:
+    if not isinstance(scopes, list):
+        return set()
+    return {str(scope).strip() for scope in scopes if str(scope).strip()}
+
+
+def integration_has_google_tasks_scope(integration: object | None) -> bool:
+    """Return whether a Google integration has tasks scope."""
+    if integration is None:
+        return False
+    scopes = _normalize_scopes(getattr(integration, "granted_scopes", None))
+    return bool(scopes.intersection(GOOGLE_TASKS_SCOPES))
+
+
+def scopes_known_to_exclude_google_tasks(granted_scopes: object) -> bool:
+    """
+    Return True if scopes are explicitly known and exclude Google Tasks.
+
+    If scopes are missing/null (legacy rows), returns False to preserve behavior.
+    """
+    if not isinstance(granted_scopes, list):
+        return False
+    scopes = _normalize_scopes(granted_scopes)
+    if not scopes:
+        return True
+    return not bool(scopes.intersection(GOOGLE_TASKS_SCOPES))
+
+
+def integration_scope_known_to_exclude_google_tasks(integration: object | None) -> bool:
+    """
+    Return True if scopes are explicitly known and exclude Google Tasks.
+
+    If scopes are missing/null (legacy rows), returns False to preserve behavior.
+    """
+    if integration is None:
+        return False
+    raw_scopes = getattr(integration, "granted_scopes", None)
+    return scopes_known_to_exclude_google_tasks(raw_scopes)
+
+
+def _is_insufficient_scope_error(status_code: int, payload: dict[str, Any] | None) -> bool:
+    if status_code != 403:
+        return False
+    if not payload or not isinstance(payload.get("error"), dict):
+        return False
+    message = payload["error"].get("message")
+    if not isinstance(message, str):
+        return False
+    lowered = message.lower()
+    return (
+        "insufficient authentication scopes" in lowered
+        or "insufficientpermissions" in lowered
+        or "insufficient permissions" in lowered
+    )
+
+
+def _mark_integration_missing_google_tasks_scope(integration: object) -> bool:
+    """
+    Persist explicit "no tasks scope" so schedulers can skip noisy retries.
+
+    Returns True when granted_scopes changed.
+    """
+    current = getattr(integration, "granted_scopes", None)
+    scopes = _normalize_scopes(current)
+    filtered = sorted(scope for scope in scopes if scope not in GOOGLE_TASKS_SCOPES)
+    if current == filtered:
+        return False
+    integration.granted_scopes = filtered
+    return True
 
 
 def _to_utc(value: datetime | None) -> datetime | None:
@@ -134,7 +209,9 @@ async def _google_request(
     return response.status_code, payload
 
 
-async def _list_google_task_lists(access_token: str) -> list[dict[str, Any]]:
+async def _list_google_task_lists(
+    access_token: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     results: list[dict[str, Any]] = []
     page_token: str | None = None
 
@@ -149,7 +226,7 @@ async def _list_google_task_lists(access_token: str) -> list[dict[str, Any]]:
             params=params,
         )
         if status_code != 200:
-            return results
+            return results, {"status_code": status_code, "payload": payload}
 
         for item in payload.get("items", []) if payload else []:
             if isinstance(item, dict) and item.get("id"):
@@ -160,8 +237,8 @@ async def _list_google_task_lists(access_token: str) -> list[dict[str, Any]]:
             break
 
     if not results:
-        return [{"id": GOOGLE_DEFAULT_TASKLIST_ID}]
-    return results
+        return [{"id": GOOGLE_DEFAULT_TASKLIST_ID}], None
+    return results, None
 
 
 async def _list_google_tasks(access_token: str, task_list_id: str) -> list[dict[str, Any]]:
@@ -335,11 +412,34 @@ def _task_can_be_deleted_from_google_signal(task: Task) -> bool:
 
 
 async def _sync_google_tasks_for_user_async(db: Session, *, user_id: UUID, org_id: UUID) -> int:
+    integration = oauth_service.get_user_integration(db, user_id, "google_calendar")
+    if not integration:
+        return 0
+    if integration_scope_known_to_exclude_google_tasks(integration):
+        logger.info(
+            "Skipping Google Tasks sync due to missing tasks scope user=%s org=%s",
+            user_id,
+            org_id,
+        )
+        return 0
+
     token = await oauth_service.get_access_token_async(db, user_id, "google_calendar")
     if not token:
         return 0
 
-    task_lists = await _list_google_task_lists(token)
+    task_lists, list_error = await _list_google_task_lists(token)
+    if list_error:
+        status_code = int(list_error.get("status_code") or 0)
+        payload = list_error.get("payload")
+        if _is_insufficient_scope_error(status_code, payload):
+            if _mark_integration_missing_google_tasks_scope(integration):
+                db.commit()
+            logger.warning(
+                "Google Tasks sync disabled (insufficient scopes) user=%s org=%s; reconnect Google Calendar integration",
+                user_id,
+                org_id,
+            )
+        return 0
     if not task_lists:
         return 0
 
@@ -486,6 +586,8 @@ def sync_google_tasks_for_user(db: Session, *, user_id: UUID, org_id: UUID) -> i
     integration = oauth_service.get_user_integration(db, user_id, "google_calendar")
     if not integration:
         return 0
+    if integration_scope_known_to_exclude_google_tasks(integration):
+        return 0
 
     coro = _sync_google_tasks_for_user_async(db, user_id=user_id, org_id=org_id)
     try:
@@ -505,6 +607,8 @@ async def sync_google_tasks_for_user_async(db: Session, *, user_id: UUID, org_id
     """Async-safe inbound sync from Google Tasks to platform tasks."""
     integration = oauth_service.get_user_integration(db, user_id, "google_calendar")
     if not integration:
+        return 0
+    if integration_scope_known_to_exclude_google_tasks(integration):
         return 0
 
     try:

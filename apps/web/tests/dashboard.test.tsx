@@ -220,6 +220,30 @@ describe('DashboardPage', () => {
         expect(await screen.findByText('View surrogates')).toBeInTheDocument()
     })
 
+    it('links attention surrogate cards to dynamic filters', async () => {
+        mockUseAttention.mockReturnValue({
+            data: {
+                unreached_leads: [{ id: 's1', surrogate_number: 'S10001', stage_label: 'New', days_since_contact: 9, created_at: new Date().toISOString() }],
+                unreached_count: 1,
+                overdue_tasks: [],
+                overdue_count: 0,
+                stuck_surrogates: [{ id: 's2', surrogate_number: 'S10002', stage_label: 'Contacted', days_in_stage: 35, last_stage_change: new Date().toISOString() }],
+                stuck_count: 1,
+                total_count: 2,
+            },
+            isLoading: false,
+            isError: false,
+        })
+
+        render(<DashboardPage />)
+
+        const unreachedLink = await screen.findByText('Unreached leads (7+ days)')
+        expect(unreachedLink.closest('a')).toHaveAttribute('href', '/surrogates?dynamic_filter=attention_unreached')
+
+        const stuckLink = await screen.findByText('Stuck surrogates (30+ days)')
+        expect(stuckLink.closest('a')).toHaveAttribute('href', '/surrogates?dynamic_filter=attention_stuck')
+    })
+
     it('shows filter-empty state for pipeline distribution when range filters exclude all', async () => {
         mockUseSearchParams.mockReturnValue(new URLSearchParams('range=week'))
 
@@ -227,6 +251,29 @@ describe('DashboardPage', () => {
 
         expect(await screen.findByText('No surrogates match your filters')).toBeInTheDocument()
         expect(await screen.findByText('Reset filters')).toBeInTheDocument()
+    })
+
+    it('uses consistent dashboard filters for all trend queries', async () => {
+        mockUseSearchParams.mockReturnValue(new URLSearchParams('range=week&assignee=user-1'))
+        mockUseSurrogatesTrend.mockClear()
+
+        render(<DashboardPage />)
+
+        await screen.findByText('Surrogates Trend')
+
+        const trendCalls = mockUseSurrogatesTrend.mock.calls.map((call) => call[0] as Record<string, unknown>)
+        expect(trendCalls.length).toBeGreaterThan(0)
+
+        for (const params of trendCalls) {
+            expect(params.owner_id).toBe('user-1')
+            expect(typeof params.timezone).toBe('string')
+            expect((params.timezone as string).length).toBeGreaterThan(0)
+        }
+
+        const fromDates = new Set(trendCalls.map((params) => params.from_date))
+        const toDates = new Set(trendCalls.map((params) => params.to_date))
+        expect(fromDates.size).toBe(1)
+        expect(toDates.size).toBe(1)
     })
 
     it('formats KPI deltas without percent when values drop to zero', () => {

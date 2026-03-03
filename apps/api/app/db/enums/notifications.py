@@ -34,6 +34,9 @@ class NotificationType(str, Enum):
     # Contact attempt reminders
     CONTACT_REMINDER = "contact_reminder"  # Reminder to follow up on case
 
+    # Intelligent suggestion digest
+    INTELLIGENT_SUGGESTION_DIGEST = "intelligent_suggestion_digest"
+
     # Interview notifications
     INTERVIEW_TRANSCRIPTION_COMPLETED = "interview_transcription_completed"
 
