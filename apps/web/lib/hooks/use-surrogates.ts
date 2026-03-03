@@ -4,7 +4,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as surrogatesApi from '../api/surrogates';
-import type { SurrogateListParams } from '../api/surrogates';
+import type { SurrogateCreatedDatesParams, SurrogateListParams } from '../api/surrogates';
 
 // Query keys
 export const surrogateKeys = {
@@ -13,6 +13,8 @@ export const surrogateKeys = {
     list: (params: SurrogateListParams) => [...surrogateKeys.lists(), params] as const,
     stats: () => [...surrogateKeys.all, 'stats'] as const,
     intelligentSummary: () => [...surrogateKeys.all, 'intelligent-summary'] as const,
+    createdDates: (params: SurrogateCreatedDatesParams) =>
+        [...surrogateKeys.all, 'created-dates', params] as const,
     unassignedQueue: () => [...surrogateKeys.all, 'unassigned-queue'] as const,
     unassignedQueueList: (params: surrogatesApi.UnassignedQueueParams) =>
         [...surrogateKeys.unassignedQueue(), params] as const,
@@ -43,6 +45,18 @@ export function useIntelligentSuggestionSummary(options: { enabled?: boolean } =
         queryFn: surrogatesApi.getIntelligentSuggestionSummary,
         staleTime: 30 * 1000,
         enabled: options.enabled ?? true,
+    });
+}
+
+export function useSurrogateCreatedDates(
+    params: SurrogateCreatedDatesParams = {},
+    options: { enabled?: boolean } = {},
+) {
+    return useQuery({
+        queryKey: surrogateKeys.createdDates(params),
+        queryFn: () => surrogatesApi.getSurrogateCreatedDates(params),
+        enabled: options.enabled ?? true,
+        staleTime: 30 * 1000,
     });
 }
 

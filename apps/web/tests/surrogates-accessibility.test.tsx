@@ -43,6 +43,7 @@ const mockUseAssignees = vi.fn()
 const mockUseBulkAssign = vi.fn()
 const mockUseBulkArchive = vi.fn()
 const mockUseIntelligentSuggestionSummary = vi.fn()
+const mockUseSurrogateCreatedDates = vi.fn()
 const mockUseQueues = vi.fn()
 
 vi.mock('@/lib/hooks/use-surrogates', () => ({
@@ -55,6 +56,7 @@ vi.mock('@/lib/hooks/use-surrogates', () => ({
     useBulkAssign: () => mockUseBulkAssign(),
     useBulkArchive: () => mockUseBulkArchive(),
     useIntelligentSuggestionSummary: () => mockUseIntelligentSuggestionSummary(),
+    useSurrogateCreatedDates: (...args: unknown[]) => mockUseSurrogateCreatedDates(...args),
     useSurrogateActivity: () => ({ data: { items: [] } }),
     useSurrogateHistory: () => ({ data: [] }),
 }))
@@ -137,6 +139,7 @@ describe('SurrogatesPage Accessibility', () => {
         mockUseIntelligentSuggestionSummary.mockReturnValue({
             data: { total: 0, counts: {}, has_suggestions: false },
         })
+        mockUseSurrogateCreatedDates.mockReturnValue({ data: [] })
         mockUseQueues.mockReturnValue({ data: [] })
         mockUseCreateSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseUpdateSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })

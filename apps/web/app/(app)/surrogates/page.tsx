@@ -18,7 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { PaginationJump } from "@/components/ui/pagination-jump"
 import { MoreVerticalIcon, SearchIcon, XIcon, Loader2Icon, ArchiveIcon, UserPlusIcon, UsersIcon, UploadIcon, PlusIcon } from "lucide-react"
 import { SortableTableHead } from "@/components/ui/sortable-table-head"
-import { useSurrogates, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurrogate, useAssignees, useBulkAssign, useBulkArchive, useCreateSurrogate, useIntelligentSuggestionSummary } from "@/lib/hooks/use-surrogates"
+import { useSurrogates, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurrogate, useAssignees, useBulkAssign, useBulkArchive, useCreateSurrogate, useIntelligentSuggestionSummary, useSurrogateCreatedDates } from "@/lib/hooks/use-surrogates"
 import { useQueues } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
@@ -511,6 +511,19 @@ export default function SurrogatesPage() {
     const hasIntelligentSuggestions = intelligentSuggestionCount > 0
     const activeDynamicFilterLabel = dynamicFilter ? DYNAMIC_FILTER_LABELS[dynamicFilter] : null
 
+    const createdDateFilters = {
+        ...(dynamicFilter ? { dynamic_filter: dynamicFilter } : {}),
+        ...(stageFilter === "all" ? {} : { stage_id: stageFilter }),
+        ...(sourceFilter === "all" ? {} : { source: sourceFilter }),
+        ...(debouncedSearch ? { q: debouncedSearch } : {}),
+        ...(queueFilter === "all" ? {} : { queue_id: queueFilter }),
+        ...(urlOwnerId ? { owner_id: urlOwnerId } : {}),
+    } as const
+
+    const { data: availableCreatedDateKeys } = useSurrogateCreatedDates(createdDateFilters, {
+        enabled: !isDynamicFilterMode,
+    })
+
     const { data, isLoading, isError, error, refetch } = useSurrogates({
         page,
         per_page: perPage,
@@ -749,6 +762,7 @@ export default function SurrogatesPage() {
                             onPresetChange={handlePresetChange}
                             customRange={customRange}
                             onCustomRangeChange={handleCustomRangeChange}
+                            availableDateKeys={availableCreatedDateKeys ?? []}
                         />
                     </div>
 

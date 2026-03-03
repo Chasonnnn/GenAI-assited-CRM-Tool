@@ -45,6 +45,7 @@ import { SortableTableHead } from "@/components/ui/sortable-table-head"
 import {
     useIntendedParents,
     useIntendedParentStats,
+    useIntendedParentCreatedDates,
     useCreateIntendedParent,
 } from "@/lib/hooks/use-intended-parents"
 import type { IntendedParentStatus, IntendedParentListItem } from "@/lib/types/intended-parent"
@@ -298,6 +299,10 @@ export default function IntendedParentsPage() {
         ...(sortBy ? { sort_by: sortBy } : {}),
     }
     const { data, isLoading, isError, refetch } = useIntendedParents(filters)
+    const { data: availableCreatedDateKeys } = useIntendedParentCreatedDates({
+        ...(debouncedSearch ? { q: debouncedSearch } : {}),
+        ...(statusFilter !== "all" ? { status: [statusFilter] } : {}),
+    })
     const { data: stats } = useIntendedParentStats()
     const createMutation = useCreateIntendedParent()
 
@@ -428,6 +433,7 @@ export default function IntendedParentsPage() {
                         onPresetChange={handlePresetChange}
                         customRange={customRange}
                         onCustomRangeChange={handleCustomRangeChange}
+                        availableDateKeys={availableCreatedDateKeys ?? []}
                     />
                     <div className="flex-1" />
                     <div className="relative w-full max-w-sm">

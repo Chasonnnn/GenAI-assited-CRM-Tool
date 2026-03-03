@@ -34,6 +34,16 @@ export interface IntendedParentFilters {
     sort_order?: 'asc' | 'desc'
 }
 
+export interface IntendedParentCreatedDatesFilters {
+    status?: string[]
+    state?: string
+    budget_min?: number
+    budget_max?: number
+    q?: string
+    owner_id?: string
+    include_archived?: boolean
+}
+
 // List with filters
 export async function listIntendedParents(
     filters: IntendedParentFilters = {}
@@ -64,6 +74,28 @@ export async function listIntendedParents(
 // Stats
 export async function getIntendedParentStats(): Promise<IntendedParentStats> {
     return api.get<IntendedParentStats>('/intended-parents/stats')
+}
+
+export async function getIntendedParentCreatedDates(
+    filters: IntendedParentCreatedDatesFilters = {}
+): Promise<string[]> {
+    const params = new URLSearchParams()
+
+    if (filters.status?.length) {
+        filters.status.forEach(s => params.append('status', s))
+    }
+    if (filters.state) params.set('state', filters.state)
+    if (filters.budget_min !== undefined) params.set('budget_min', String(filters.budget_min))
+    if (filters.budget_max !== undefined) params.set('budget_max', String(filters.budget_max))
+    if (filters.q) params.set('q', filters.q)
+    if (filters.owner_id) params.set('owner_id', filters.owner_id)
+    if (filters.include_archived) params.set('include_archived', 'true')
+
+    const queryString = params.toString()
+    const url = queryString
+        ? `/intended-parents/created-dates?${queryString}`
+        : '/intended-parents/created-dates'
+    return api.get<string[]>(url)
 }
 
 // CRUD

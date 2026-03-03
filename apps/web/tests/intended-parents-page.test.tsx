@@ -28,9 +28,11 @@ vi.mock('@/components/ui/date-range-picker', () => ({
 }))
 
 const mockUseIntendedParents = vi.fn()
+const mockUseIntendedParentCreatedDates = vi.fn()
 
 vi.mock('@/lib/hooks/use-intended-parents', () => ({
     useIntendedParents: (filters: unknown) => mockUseIntendedParents(filters),
+    useIntendedParentCreatedDates: (filters: unknown) => mockUseIntendedParentCreatedDates(filters),
     useIntendedParentStats: () => ({
         data: { total: 1, by_status: { new: 1, ready_to_match: 0, matched: 0, delivered: 0 } },
     }),
@@ -42,6 +44,7 @@ describe('IntendedParentsPage', () => {
         mockSearchParams.delete('page')
         mockSearchParams.delete('status')
         mockSearchParams.delete('q')
+        mockUseIntendedParentCreatedDates.mockReturnValue({ data: [] })
         mockUseIntendedParents.mockReturnValue({
             data: {
                 items: [

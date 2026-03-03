@@ -83,6 +83,17 @@ export interface IntelligentSuggestionSummary {
     has_suggestions: boolean;
 }
 
+export interface SurrogateCreatedDatesParams {
+    stage_id?: string;
+    source?: SurrogateSource;
+    owner_id?: string;
+    q?: string;
+    include_archived?: boolean;
+    queue_id?: string;
+    owner_type?: 'user' | 'queue';
+    dynamic_filter?: DynamicSurrogateFilter;
+}
+
 // Create surrogate payload
 export interface SurrogateCreatePayload {
     full_name: string;
@@ -252,6 +263,23 @@ export function getSurrogates(params: SurrogateListParams = {}): Promise<Surroga
 
 export function getIntelligentSuggestionSummary(): Promise<IntelligentSuggestionSummary> {
     return api.get<IntelligentSuggestionSummary>('/surrogates/intelligent-suggestions/summary');
+}
+
+export function getSurrogateCreatedDates(
+    params: SurrogateCreatedDatesParams = {}
+): Promise<string[]> {
+    const searchParams = new URLSearchParams();
+    if (params.stage_id) searchParams.set('stage_id', params.stage_id);
+    if (params.source) searchParams.set('source', params.source);
+    if (params.owner_id) searchParams.set('owner_id', params.owner_id);
+    if (params.q) searchParams.set('q', params.q);
+    if (params.include_archived) searchParams.set('include_archived', 'true');
+    if (params.queue_id) searchParams.set('queue_id', params.queue_id);
+    if (params.owner_type) searchParams.set('owner_type', params.owner_type);
+    if (params.dynamic_filter) searchParams.set('dynamic_filter', params.dynamic_filter);
+
+    const query = searchParams.toString();
+    return api.get<string[]>(`/surrogates/created-dates${query ? `?${query}` : ''}`);
 }
 
 export interface UnassignedQueueParams {

@@ -13,6 +13,7 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
+import { formatLocalDate } from "@/lib/utils/date"
 
 export type DateRangePreset = 'all' | 'today' | 'week' | 'month' | 'custom'
 
@@ -26,6 +27,7 @@ interface DateRangePickerProps {
     onPresetChange: (preset: DateRangePreset) => void
     customRange?: DateRange
     onCustomRangeChange?: (range: DateRange) => void
+    availableDateKeys?: string[]
     className?: string
     ariaLabel?: string
 }
@@ -43,6 +45,7 @@ export function DateRangePicker({
     onPresetChange,
     customRange,
     onCustomRangeChange,
+    availableDateKeys,
     className,
     ariaLabel,
 }: DateRangePickerProps) {
@@ -55,9 +58,14 @@ export function DateRangePicker({
 
     // Reset local range when opening calendar
     const handleShowCalendar = () => {
-        setLocalRange({ from: undefined, to: undefined })
+        setLocalRange({ from: customRange?.from, to: customRange?.to })
         setShowCalendar(true)
     }
+
+    const availableDateSet = React.useMemo(() => {
+        if (!availableDateKeys?.length) return null
+        return new Set(availableDateKeys)
+    }, [availableDateKeys])
 
     const handlePresetSelect = (newPreset: DateRangePreset) => {
         if (newPreset === 'custom') {
@@ -90,17 +98,6 @@ export function DateRangePicker({
         }
 
         setLocalRange(newRange)
-
-        // Only close when BOTH dates are selected
-        if (newRange.from && newRange.to) {
-            onCustomRangeChange?.(newRange)
-            onPresetChange('custom')
-            // Small delay so user can see the final selection
-            setTimeout(() => {
-                setOpen(false)
-                setShowCalendar(false)
-            }, 300)
-        }
     }
 
     const handleApply = () => {
@@ -199,6 +196,11 @@ export function DateRangePicker({
                             mode="range"
                             selected={localRange}
                             onSelect={handleRangeSelect}
+                            disabled={
+                                availableDateSet
+                                    ? (date) => !availableDateSet.has(formatLocalDate(date))
+                                    : undefined
+                            }
                             numberOfMonths={2}
                             defaultMonth={localRange.from || new Date()}
                             className="rounded-md border shadow-sm"
@@ -206,8 +208,10 @@ export function DateRangePicker({
                         <div className="mt-3 flex items-center justify-between border-t pt-3">
                             <div className="text-xs text-muted-foreground">
                                 {localRange.from && localRange.to
-                                    ? 'Range selected! Click Apply or it will auto-apply.'
-                                    : 'Click start date, then end date'}
+                                    ? 'Range selected. Click Apply.'
+                                    : availableDateSet
+                                        ? 'Select from available created dates only'
+                                        : 'Click start date, then end date'}
                             </div>
                             <Button
                                 size="sm"

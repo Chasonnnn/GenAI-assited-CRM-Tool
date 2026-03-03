@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
     listIntendedParents,
     getIntendedParent,
+    getIntendedParentCreatedDates,
     getIntendedParentStats,
     createIntendedParent,
     updateIntendedParent,
@@ -17,6 +18,7 @@ import {
     listIntendedParentNotes,
     createIntendedParentNote,
     deleteIntendedParentNote,
+    IntendedParentCreatedDatesFilters,
     IntendedParentFilters,
 } from '@/lib/api/intended-parents'
 import type {
@@ -34,6 +36,8 @@ export const intendedParentKeys = {
     details: () => [...intendedParentKeys.all, 'detail'] as const,
     detail: (id: string) => [...intendedParentKeys.details(), id] as const,
     stats: () => [...intendedParentKeys.all, 'stats'] as const,
+    createdDates: (filters: IntendedParentCreatedDatesFilters) =>
+        [...intendedParentKeys.all, 'created-dates', filters] as const,
     history: (id: string) => [...intendedParentKeys.all, 'history', id] as const,
     notes: (id: string) => [...intendedParentKeys.all, 'notes', id] as const,
 }
@@ -51,6 +55,18 @@ export function useIntendedParentStats() {
     return useQuery({
         queryKey: intendedParentKeys.stats(),
         queryFn: getIntendedParentStats,
+    })
+}
+
+export function useIntendedParentCreatedDates(
+    filters: IntendedParentCreatedDatesFilters = {},
+    options: { enabled?: boolean } = {},
+) {
+    return useQuery({
+        queryKey: intendedParentKeys.createdDates(filters),
+        queryFn: () => getIntendedParentCreatedDates(filters),
+        enabled: options.enabled ?? true,
+        staleTime: 30 * 1000,
     })
 }
 
