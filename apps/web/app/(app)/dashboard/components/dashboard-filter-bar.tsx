@@ -76,14 +76,21 @@ export function DashboardFilterBar({
                     onPresetChange={setDateRange}
                     customRange={filters.customRange}
                     onCustomRangeChange={setCustomRange}
+                    ariaLabel="Filter by date range"
                 />
 
                 <Select
+                    name="dashboard_assignee_filter"
                     value={filters.assigneeId ?? (isAdmin ? "all" : user?.user_id ?? "all")}
                     onValueChange={(value) => setAssigneeId(value && value !== "all" ? value : undefined)}
                     disabled={!isAdmin && !user?.user_id}
                 >
-                    <SelectTrigger className="w-full sm:w-[180px]" size="sm">
+                    <SelectTrigger
+                        id="dashboard-assignee-filter"
+                        aria-label="Filter by assignee"
+                        className="w-full sm:w-[180px]"
+                        size="sm"
+                    >
                     <SelectValue placeholder="All assignees">
                         {(value: string | null) => {
                                 if (!value || value === "all") return isAdmin ? "All Assignees" : "Mine"

@@ -141,6 +141,7 @@ export function TrendChart() {
                     <CardTitle className="text-base font-semibold">Surrogates Trend</CardTitle>
                     <ToggleGroup
                         value={[period]}
+                        aria-label="Surrogates trend period"
                         onValueChange={(value) => {
                             const nextValue = Array.isArray(value) ? value[0] : value
                             if (nextValue === "day" || nextValue === "week" || nextValue === "month") {
