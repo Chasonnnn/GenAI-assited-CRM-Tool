@@ -370,6 +370,50 @@ class TestCasesTrend:
         assert response.status_code == 200
         assert response.json() == [{"date": day, "count": 2}]
 
+    @pytest.mark.asyncio
+    async def test_trend_date_only_range_uses_requested_timezone(
+        self,
+        authed_client,
+        db,
+        test_org,
+        test_user,
+        analytics_pipeline_stages,
+    ):
+        """Date-only ranges should be interpreted in the provided timezone."""
+        stage = analytics_pipeline_stages["new_unread"]
+        local_day = date(2026, 1, 15)
+        created_at = datetime(2026, 1, 16, 2, 0, tzinfo=timezone.utc)
+        email = "trend-timezone@example.com"
+        normalized_email = normalize_email(email)
+        phone = "555-1200"
+        db.add(
+            Surrogate(
+                id=uuid.uuid4(),
+                organization_id=test_org.id,
+                stage_id=stage.id,
+                full_name="Trend Timezone",
+                status_label=stage.label,
+                email=normalized_email,
+                email_hash=hash_email(normalized_email),
+                phone=phone,
+                phone_hash=hash_phone(phone),
+                source="website",
+                surrogate_number="S12999",
+                created_by_user_id=test_user.id,
+                owner_type="user",
+                owner_id=test_user.id,
+                created_at=created_at,
+            )
+        )
+        db.flush()
+
+        day = local_day.isoformat()
+        response = await authed_client.get(
+            f"/analytics/surrogates/trend?from_date={day}&to_date={day}&period=day&timezone=America/New_York"
+        )
+        assert response.status_code == 200
+        assert response.json() == [{"date": day, "count": 1}]
+
 
 class TestMetaPerformance:
     """Tests for GET /analytics/meta/performance"""

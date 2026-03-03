@@ -321,3 +321,13 @@ class TestCaseStatsEndpoint:
         """Stats endpoint requires authentication."""
         response = await client.get("/surrogates/stats")
         assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_stats_endpoint_respects_date_range_filters(self, authed_client, cases_for_stats):
+        """Stats endpoint should apply date range filters when provided."""
+        target_day = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
+        response = await authed_client.get(
+            f"/surrogates/stats?from_date={target_day}&to_date={target_day}"
+        )
+        assert response.status_code == 200
+        assert response.json()["total"] == 0

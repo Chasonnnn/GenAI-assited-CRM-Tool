@@ -7,6 +7,7 @@ import json
 import uuid
 from datetime import datetime, timedelta, date, timezone
 from typing import Any, Callable
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy.orm import Session
 
@@ -162,27 +163,35 @@ def parse_date_range(
     to_date: str | None,
     default_days: int = 30,
     inclusive_date_end: bool = False,
+    timezone_name: str | None = None,
 ) -> tuple[datetime, datetime]:
     """Parse ISO date strings to a datetime range with defaults."""
+    requested_tz = timezone.utc
+    if timezone_name:
+        try:
+            requested_tz = ZoneInfo(timezone_name)
+        except ZoneInfoNotFoundError:
+            requested_tz = timezone.utc
+
     def _parse_bound(value: str, *, is_end: bool) -> datetime:
         raw = value.strip().replace("Z", "+00:00")
         is_date_only = "T" not in raw and " " not in raw
 
         if is_date_only:
-            parsed = datetime.combine(
+            parsed_local = datetime.combine(
                 date.fromisoformat(raw),
                 datetime.min.time(),
-                tzinfo=timezone.utc,
+                tzinfo=requested_tz,
             )
             if is_end and inclusive_date_end:
-                parsed += timedelta(days=1)
-            return parsed
+                parsed_local += timedelta(days=1)
+            return parsed_local.astimezone(timezone.utc)
 
         parsed = datetime.fromisoformat(raw)
 
         if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed
+            parsed = parsed.replace(tzinfo=requested_tz)
+        return parsed.astimezone(timezone.utc)
 
     if to_date:
         end = _parse_bound(to_date, is_end=True)

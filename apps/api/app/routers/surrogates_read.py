@@ -25,6 +25,7 @@ from app.schemas.surrogate import (
 )
 from app.schemas.task import TaskListItem
 from app.services import (
+    analytics_service,
     intelligent_suggestions_service,
     org_service,
     surrogate_service,
@@ -56,6 +57,15 @@ class IntelligentSuggestionSummaryRead(BaseModel):
 def get_surrogate_stats(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    from_date: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="ISO date or datetime string"
+    ),
+    to_date: Annotated[str | None, "fastapi_param"] = Query(
+        None, description="ISO date or datetime string"
+    ),
+    timezone_name: Annotated[
+        str | None, "fastapi_param"
+    ] = Query(None, alias="timezone", description="IANA timezone name"),
     pipeline_id: Annotated[UUID | None, "fastapi_param"] = Query(
         None, description="Filter by pipeline UUID"
     ),
@@ -71,9 +81,18 @@ def get_surrogate_stats(
     ):
         raise HTTPException(status_code=403, detail="Not authorized to view other users' stats")
 
+    start, end = analytics_service.parse_date_range(
+        from_date,
+        to_date,
+        inclusive_date_end=True,
+        timezone_name=timezone_name,
+    )
+
     stats = surrogate_service.get_surrogate_stats(
         db,
         session.org_id,
+        start=start if from_date or to_date else None,
+        end=end if from_date or to_date else None,
         pipeline_id=pipeline_id,
         owner_id=owner_id,
     )
