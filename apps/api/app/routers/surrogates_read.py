@@ -269,11 +269,11 @@ def list_surrogate_created_dates(
     stage_id: UUID | None = None,
     source: SurrogateSource | None = None,
     owner_id: UUID | None = None,
-    q: str | None = Query(None, max_length=100),
+    q: Annotated[str | None, "fastapi_param"] = Query(None, max_length=100),
     include_archived: bool = False,
     queue_id: UUID | None = None,
-    owner_type: str | None = Query(None, pattern="^(user|queue)$"),
-    dynamic_filter: str | None = Query(
+    owner_type: Annotated[str | None, "fastapi_param"] = Query(None, pattern="^(user|queue)$"),
+    dynamic_filter: Annotated[str | None, "fastapi_param"] = Query(
         None,
         description="Dynamic filter key (intelligent suggestions / dashboard attention)",
     ),
