@@ -318,6 +318,17 @@ def _to_outcome_class(status_code: int) -> str:
     return "success"
 
 
+def _resource_policy_for_path(path: str) -> str:
+    # Public form and logo assets are embedded from separate app/tenant origins.
+    if path.startswith("/forms/public/"):
+        return "cross-origin"
+    if path.startswith("/settings/organization/signature/logo/local/"):
+        return "cross-origin"
+    if path.startswith("/platform/email/branding/logo/local/"):
+        return "cross-origin"
+    return "same-origin"
+
+
 def _emit_mutation_fallback_audit(request: Request, status_code: int | None) -> None:
     if status_code is None:
         return
@@ -495,7 +506,7 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     # Mitigate Spectre vulnerabilities
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
-    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Resource-Policy"] = _resource_policy_for_path(request.url.path)
 
     # Content Security Policy
     # In dev, allow unsafe-inline/eval for Swagger UI.
