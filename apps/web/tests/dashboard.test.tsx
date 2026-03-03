@@ -253,6 +253,29 @@ describe('DashboardPage', () => {
         expect(await screen.findByText('Reset filters')).toBeInTheDocument()
     })
 
+    it('uses consistent dashboard filters for all trend queries', async () => {
+        mockUseSearchParams.mockReturnValue(new URLSearchParams('range=week&assignee=user-1'))
+        mockUseSurrogatesTrend.mockClear()
+
+        render(<DashboardPage />)
+
+        await screen.findByText('Surrogates Trend')
+
+        const trendCalls = mockUseSurrogatesTrend.mock.calls.map((call) => call[0] as Record<string, unknown>)
+        expect(trendCalls.length).toBeGreaterThan(0)
+
+        for (const params of trendCalls) {
+            expect(params.owner_id).toBe('user-1')
+            expect(typeof params.timezone).toBe('string')
+            expect((params.timezone as string).length).toBeGreaterThan(0)
+        }
+
+        const fromDates = new Set(trendCalls.map((params) => params.from_date))
+        const toDates = new Set(trendCalls.map((params) => params.to_date))
+        expect(fromDates.size).toBe(1)
+        expect(toDates.size).toBe(1)
+    })
+
     it('formats KPI deltas without percent when values drop to zero', () => {
         mockUseSurrogateStats.mockReturnValue({
             data: {

@@ -46,12 +46,19 @@ function DashboardContent() {
     const queryClient = useQueryClient()
     const { getDateParams, filters } = useDashboardFilters()
     const dateParams = getDateParams()
+    const browserTimezone = useMemo(
+        () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        [],
+    )
     const statsParams = {
+        ...dateParams,
+        timezone: browserTimezone,
         ...(filters.assigneeId ? { owner_id: filters.assigneeId } : {}),
     }
     const trendParams = {
         period: "day" as const,
         ...dateParams,
+        timezone: browserTimezone,
         ...(filters.assigneeId ? { owner_id: filters.assigneeId } : {}),
     }
     const statusParams = {

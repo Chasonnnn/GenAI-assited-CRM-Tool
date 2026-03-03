@@ -19,6 +19,7 @@ import { useSurrogateStats } from "@/lib/hooks/use-surrogates"
 import { subDays, subWeeks, subMonths } from "date-fns"
 import { formatLocalDate, parseDateInput, startOfLocalDay } from "@/lib/utils/date"
 import { ApiError } from "@/lib/api"
+import { useDashboardFilters } from "../context/dashboard-filters"
 
 type TrendPeriod = "day" | "week" | "month"
 
@@ -36,6 +37,11 @@ const MAX_TREND_POINTS = 30
 
 export function TrendChart() {
     const [period, setPeriod] = useState<TrendPeriod>("day")
+    const { filters, getDateParams } = useDashboardFilters()
+    const browserTimezone = useMemo(
+        () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        [],
+    )
 
     const dateParams = useMemo(() => {
         const today = startOfLocalDay()
@@ -50,15 +56,26 @@ export function TrendChart() {
             default:
                 fromDate = subDays(today, MAX_TREND_POINTS - 1)
         }
-        return {
+        const fallbackDateParams = {
             from_date: formatLocalDate(fromDate),
             to_date: formatLocalDate(today),
         }
-    }, [period])
+        if (filters.dateRange === "all") {
+            return fallbackDateParams
+        }
+
+        const dashboardDateParams = getDateParams()
+        return {
+            from_date: dashboardDateParams.from_date ?? fallbackDateParams.from_date,
+            to_date: dashboardDateParams.to_date ?? fallbackDateParams.to_date,
+        }
+    }, [period, filters.dateRange, getDateParams])
 
     const trendParams = {
         period,
         ...dateParams,
+        timezone: browserTimezone,
+        ...(filters.assigneeId ? { owner_id: filters.assigneeId } : {}),
     }
     const { data, isLoading, isError, error, refetch } = useSurrogatesTrend(trendParams)
     const orgStatsQuery = useSurrogateStats()
@@ -108,8 +125,14 @@ export function TrendChart() {
         params.set("range", "custom")
         params.set("from", dateParams.from_date)
         params.set("to", dateParams.to_date)
+        if (filters.assigneeId) {
+            params.set("owner_id", filters.assigneeId)
+        }
         return `/surrogates?${params.toString()}`
     }
+
+    const rangeLabel =
+        filters.dateRange === "all" ? `last ${trendWindowLabels[period]}` : "selected range"
 
     return (
         <Card className="h-full flex flex-col gap-0 p-0">
@@ -135,7 +158,7 @@ export function TrendChart() {
                     </ToggleGroup>
                 </div>
                 <CardDescription className="text-sm text-muted-foreground mb-4">
-                    {periodLabels[period]} new surrogates (last {trendWindowLabels[period]})
+                    {periodLabels[period]} new surrogates ({rangeLabel})
                     {totalCount > 0 && ` (${totalCount} total)`}
                 </CardDescription>
             </CardHeader>
@@ -192,7 +215,9 @@ export function TrendChart() {
                         ) : (
                             <>
                                 <h4 className="font-medium text-foreground">
-                                    No new surrogates in the last {trendWindowLabels[period]}
+                                    {filters.dateRange === "all"
+                                        ? `No new surrogates in the last ${trendWindowLabels[period]}`
+                                        : "No new surrogates in the selected range"}
                                 </h4>
                                 <p className="text-sm text-muted-foreground mt-1 mb-4">
                                     Review existing surrogates or switch the trend view.

@@ -55,6 +55,7 @@ export interface TrendParams extends DateRangeParams {
     period?: 'day' | 'week' | 'month';
     pipeline_id?: string;
     owner_id?: string;
+    timezone?: string;
 }
 
 // API Functions
@@ -89,6 +90,7 @@ export async function getSurrogatesTrend(params: TrendParams = {}): Promise<Tren
     if (params.period) searchParams.set('period', params.period);
     if (params.pipeline_id) searchParams.set('pipeline_id', params.pipeline_id);
     if (params.owner_id) searchParams.set('owner_id', params.owner_id);
+    if (params.timezone) searchParams.set('timezone', params.timezone);
 
     const query = searchParams.toString();
     return api.get<TrendPoint[]>(`/analytics/surrogates/trend${query ? `?${query}` : ''}`);

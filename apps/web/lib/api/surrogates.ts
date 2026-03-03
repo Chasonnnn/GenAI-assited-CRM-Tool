@@ -72,6 +72,9 @@ export interface SurrogateStats {
 export interface SurrogateStatsParams {
     pipeline_id?: string;
     owner_id?: string;
+    from_date?: string;
+    to_date?: string;
+    timezone?: string;
 }
 
 export interface IntelligentSuggestionSummary {
@@ -214,6 +217,9 @@ export function getSurrogateStats(params: SurrogateStatsParams = {}): Promise<Su
     const searchParams = new URLSearchParams();
     if (params.pipeline_id) searchParams.set('pipeline_id', params.pipeline_id);
     if (params.owner_id) searchParams.set('owner_id', params.owner_id);
+    if (params.from_date) searchParams.set('from_date', params.from_date);
+    if (params.to_date) searchParams.set('to_date', params.to_date);
+    if (params.timezone) searchParams.set('timezone', params.timezone);
     const query = searchParams.toString();
     return api.get<SurrogateStats>(`/surrogates/stats${query ? `?${query}` : ''}`);
 }
