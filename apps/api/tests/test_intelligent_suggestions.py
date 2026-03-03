@@ -7,7 +7,7 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.core.encryption import hash_email
 from app.db.enums import OwnerType, SurrogateSource
-from app.db.models import Surrogate
+from app.db.models import Surrogate, SurrogateActivityLog
 
 
 def _ensure_intelligent_schema(db) -> None:
@@ -215,6 +215,74 @@ async def test_surrogates_dynamic_filter_new_unread_stale(
     ids = {item["id"] for item in data["items"]}
     assert str(stale.id) in ids
     assert str(fresh.id) not in ids
+
+
+@pytest.mark.asyncio
+async def test_surrogates_dynamic_filter_attention_unreached_excludes_recent_activity(
+    authed_client,
+    db,
+    test_org,
+    default_stage,
+    test_user,
+):
+    _ensure_intelligent_schema(db)
+    now = datetime.now(timezone.utc)
+
+    stale = Surrogate(
+        id=uuid.uuid4(),
+        surrogate_number="S91003",
+        organization_id=test_org.id,
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
+        source=SurrogateSource.MANUAL.value,
+        owner_type=OwnerType.USER.value,
+        owner_id=test_user.id,
+        full_name="Attention Stale",
+        email="attention-stale@example.com",
+        email_hash=hash_email("attention-stale@example.com"),
+        created_at=now - timedelta(days=10),
+        updated_at=now - timedelta(days=10),
+        last_contacted_at=None,
+    )
+    recently_active = Surrogate(
+        id=uuid.uuid4(),
+        surrogate_number="S91004",
+        organization_id=test_org.id,
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
+        source=SurrogateSource.MANUAL.value,
+        owner_type=OwnerType.USER.value,
+        owner_id=test_user.id,
+        full_name="Attention Recent Activity",
+        email="attention-recent@example.com",
+        email_hash=hash_email("attention-recent@example.com"),
+        created_at=now - timedelta(days=10),
+        updated_at=now - timedelta(days=10),
+        last_contacted_at=None,
+    )
+    db.add_all([stale, recently_active])
+    db.flush()
+    db.add(
+        SurrogateActivityLog(
+            surrogate_id=recently_active.id,
+            organization_id=test_org.id,
+            activity_type="note_added",
+            actor_user_id=test_user.id,
+            details={"text": "Recent touchpoint"},
+            created_at=now - timedelta(days=1),
+        )
+    )
+    db.flush()
+
+    response = await authed_client.get(
+        "/surrogates",
+        params={"dynamic_filter": "attention_unreached"},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    ids = {item["id"] for item in data["items"]}
+    assert str(stale.id) in ids
+    assert str(recently_active.id) not in ids
 
 
 @pytest.mark.asyncio

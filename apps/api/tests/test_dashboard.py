@@ -13,7 +13,7 @@ from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.security import create_session_token
 from app.db.enums import OwnerType, Role, SurrogateSource
-from app.db.models import Membership, Surrogate, User
+from app.db.models import Membership, Surrogate, SurrogateActivityLog, User
 from app.main import app
 from app.services import session_service
 
@@ -261,6 +261,63 @@ async def test_attention_unreached_excludes_recent_updates(db, test_org, default
             last_contacted_at=None,
         )
         db.add_all([stale, recent_created, recent_updated])
+        db.flush()
+
+        response = await client.get("/dashboard/attention")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["unreached_count"] == 1
+        assert {item["id"] for item in data["unreached_leads"]} == {str(stale.id)}
+
+
+@pytest.mark.asyncio
+async def test_attention_unreached_excludes_recent_activity_logs(db, test_org, default_stage):
+    async with role_client(db, test_org, Role.CASE_MANAGER) as (client, user):
+        now = datetime.now(timezone.utc)
+        stale = Surrogate(
+            id=uuid.uuid4(),
+            surrogate_number="S20010",
+            organization_id=test_org.id,
+            stage_id=default_stage.id,
+            status_label=default_stage.label,
+            source=SurrogateSource.MANUAL.value,
+            owner_type=OwnerType.USER.value,
+            owner_id=user.id,
+            full_name="Truly Stale Lead",
+            email="truly-stale@example.com",
+            email_hash=hash_email("truly-stale@example.com"),
+            created_at=now - timedelta(days=10),
+            updated_at=now - timedelta(days=10),
+            last_contacted_at=None,
+        )
+        recently_active = Surrogate(
+            id=uuid.uuid4(),
+            surrogate_number="S20011",
+            organization_id=test_org.id,
+            stage_id=default_stage.id,
+            status_label=default_stage.label,
+            source=SurrogateSource.MANUAL.value,
+            owner_type=OwnerType.USER.value,
+            owner_id=user.id,
+            full_name="Recently Active Lead",
+            email="recent-activity@example.com",
+            email_hash=hash_email("recent-activity@example.com"),
+            created_at=now - timedelta(days=10),
+            updated_at=now - timedelta(days=10),
+            last_contacted_at=None,
+        )
+        db.add_all([stale, recently_active])
+        db.flush()
+        db.add(
+            SurrogateActivityLog(
+                surrogate_id=recently_active.id,
+                organization_id=test_org.id,
+                activity_type="note_added",
+                actor_user_id=user.id,
+                details={"text": "Follow-up note"},
+                created_at=now - timedelta(days=1),
+            )
+        )
         db.flush()
 
         response = await client.get("/dashboard/attention")

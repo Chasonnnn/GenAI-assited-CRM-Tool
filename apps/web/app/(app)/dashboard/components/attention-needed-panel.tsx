@@ -239,7 +239,7 @@ export function AttentionNeededPanel() {
                                                     iconBg="bg-amber-500/10"
                                                     iconColor="text-amber-600"
                                                     title="Unreached leads (7+ days)"
-                                                    description="No contact in 7+ days"
+                                                    description="No contact or activity in 7+ days"
                                                     count={unreachedCount}
                                                     href={buildSurrogatesUrl("attention_unreached")}
                                                     countBadgeClass={COUNT_BADGE_CLASS}

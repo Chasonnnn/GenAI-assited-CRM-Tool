@@ -763,16 +763,34 @@ def _attention_unreached_ids(
 ) -> set[UUID]:
     cutoff = now_utc - timedelta(days=7)
     owner_filters = _attention_owner_filters(db, org_id=org_id, user_id=user_id, user_role=user_role)
+    latest_activity_subquery = (
+        db.query(
+            SurrogateActivityLog.surrogate_id.label("surrogate_id"),
+            func.max(SurrogateActivityLog.created_at).label("last_activity_at"),
+        )
+        .filter(SurrogateActivityLog.organization_id == org_id)
+        .group_by(SurrogateActivityLog.surrogate_id)
+        .subquery()
+    )
+    last_touch_at = func.coalesce(
+        latest_activity_subquery.c.last_activity_at,
+        Surrogate.updated_at,
+        Surrogate.created_at,
+    )
     rows = (
         db.query(Surrogate.id)
         .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
+        .outerjoin(
+            latest_activity_subquery,
+            latest_activity_subquery.c.surrogate_id == Surrogate.id,
+        )
         .filter(
             Surrogate.organization_id == org_id,
             Surrogate.is_archived.is_(False),
             PipelineStage.stage_type == "intake",
             PipelineStage.order <= 2,
             Surrogate.created_at < cutoff,
-            Surrogate.updated_at < cutoff,
+            last_touch_at < cutoff,
             or_(Surrogate.last_contacted_at.is_(None), Surrogate.last_contacted_at < cutoff),
             *owner_filters,
         )
