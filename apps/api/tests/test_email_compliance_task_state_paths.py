@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 
 from app.db.enums import TaskType
-from app.db.models import AuditLog, EmailTemplate
+from app.db.models import EmailTemplate
 from app.schemas.task import TaskCreate, TaskUpdate
 from app.services import compliance_service, email_service, task_service
 

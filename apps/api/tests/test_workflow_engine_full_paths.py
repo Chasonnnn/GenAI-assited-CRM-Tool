@@ -7,7 +7,6 @@ from uuid import uuid4
 import pytest
 
 from app.db.enums import (
-    AppointmentStatus,
     OwnerType,
     Role,
     TaskStatus,
@@ -21,8 +20,6 @@ from app.db.models import (
     AutomationWorkflow,
     EmailTemplate,
     Membership,
-    Organization,
-    Queue,
     Task,
     User,
     UserWorkflowPreference,

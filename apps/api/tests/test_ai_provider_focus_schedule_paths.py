@@ -1,20 +1,16 @@
 from __future__ import annotations
 
-import asyncio
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
 
 from app.routers.ai_schedule import ParseScheduleRequest
 from app.services import ai_provider
 from app.services.ai_provider import (
     ChatMessage,
     ChatResponse,
-    ChatStreamChunk,
     VertexWIFConfig,
     VertexWIFCredentials,
 )

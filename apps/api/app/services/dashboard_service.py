@@ -8,7 +8,7 @@ import threading
 
 import anyio
 
-from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.websocket import send_ws_to_org
@@ -393,30 +393,21 @@ def get_attention_items(
     # -------------------------------------------------------------------------
     stuck_cutoff = now - timedelta(days=days_stuck)
 
-    # Correlated subquery for each surrogate's latest stage change.
-    # Uses NOT EXISTS to avoid a full-table GROUP BY over history.
-    latest_history = SurrogateStatusHistory.__table__.alias("latest_history")
-    newer_history = SurrogateStatusHistory.__table__.alias("newer_history")
+    # Pre-aggregate latest stage change for each surrogate
     latest_change_subquery = (
-        select(latest_history.c.changed_at)
-        .where(
-            latest_history.c.organization_id == org_id,
-            latest_history.c.surrogate_id == Surrogate.id,
-            latest_history.c.to_stage_id.is_not(None),
-            ~exists(
-                select(1).where(
-                    newer_history.c.organization_id == org_id,
-                    newer_history.c.surrogate_id == latest_history.c.surrogate_id,
-                    newer_history.c.to_stage_id.is_not(None),
-                    newer_history.c.changed_at > latest_history.c.changed_at,
-                )
-            ),
+        db.query(
+            SurrogateStatusHistory.surrogate_id,
+            func.max(SurrogateStatusHistory.changed_at).label("changed_at"),
         )
-        .limit(1)
-        .scalar_subquery()
+        .filter(
+            SurrogateStatusHistory.organization_id == org_id,
+            SurrogateStatusHistory.to_stage_id.is_not(None),
+        )
+        .group_by(SurrogateStatusHistory.surrogate_id)
+        .subquery()
     )
 
-    last_change_col = func.coalesce(latest_change_subquery, Surrogate.created_at)
+    last_change_col = func.coalesce(latest_change_subquery.c.changed_at, Surrogate.created_at)
     stuck_query = (
         db.query(
             Surrogate,
@@ -424,6 +415,10 @@ def get_attention_items(
             last_change_col.label("last_change"),
         )
         .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
+        .outerjoin(
+            latest_change_subquery,
+            Surrogate.id == latest_change_subquery.c.surrogate_id,
+        )
         .filter(
             Surrogate.organization_id == org_id,
             Surrogate.is_archived.is_(False),
@@ -454,6 +449,10 @@ def get_attention_items(
     stuck_total_query = (
         db.query(func.count(Surrogate.id))
         .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
+        .outerjoin(
+            latest_change_subquery,
+            Surrogate.id == latest_change_subquery.c.surrogate_id,
+        )
         .filter(
             Surrogate.organization_id == org_id,
             Surrogate.is_archived.is_(False),

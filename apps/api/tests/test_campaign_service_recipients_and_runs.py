@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
-import pytest
 
 from app.core.encryption import hash_email
 from app.db.enums import CampaignRecipientStatus, CampaignStatus, EmailStatus, JobStatus, JobType
