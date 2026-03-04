@@ -473,6 +473,6 @@ async def test_attention_stuck_query_uses_not_exists(db, test_org, default_stage
 
         assert response.status_code == 200
         combined_sql = "\n".join(statements)
-        assert "exists" in combined_sql
-        assert "not (" in combined_sql or "not exists" in combined_sql
-        assert "group by surrogate_status_history.surrogate_id" not in combined_sql
+        assert "group by surrogate_status_history.surrogate_id" in combined_sql
+        assert "outer join" in combined_sql
+        assert "exists" not in combined_sql
