@@ -1399,6 +1399,7 @@ export function SurrogateApplicationTab({
                                                         className="h-8 w-8"
                                                         disabled={file.quarantined}
                                                         onClick={() => handleDownloadFile(file.id)}
+                                                        aria-label={`Download ${file.filename}`}
                                                     >
                                                         <DownloadIcon className="h-4 w-4" />
                                                     </Button>
@@ -1410,6 +1411,7 @@ export function SurrogateApplicationTab({
                                                             className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                                             onClick={() => handleDeleteFile(file.id, file.filename)}
                                                             disabled={isDeleting}
+                                                            aria-label={`Delete ${file.filename}`}
                                                         >
                                                             {isDeleting ? (
                                                                 <Loader2Icon className="h-4 w-4 animate-spin" />
