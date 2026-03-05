@@ -94,9 +94,7 @@ def upgrade() -> None:
             server_default=sa.text("'surrogate_application'"),
         ),
     )
-    op.execute(
-        sa.text("UPDATE forms SET purpose = 'surrogate_application' WHERE purpose IS NULL")
-    )
+    op.execute(sa.text("UPDATE forms SET purpose = 'surrogate_application' WHERE purpose IS NULL"))
     _create_index_if_missing(
         "idx_forms_org_purpose_status",
         "forms",
@@ -153,7 +151,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     if _has_index("organizations", "idx_organizations_default_surrogate_application_form"):
-        op.drop_index("idx_organizations_default_surrogate_application_form", table_name="organizations")
+        op.drop_index(
+            "idx_organizations_default_surrogate_application_form", table_name="organizations"
+        )
     if _has_foreign_key("organizations", "fk_organizations_default_surrogate_application_form"):
         op.drop_constraint(
             "fk_organizations_default_surrogate_application_form",

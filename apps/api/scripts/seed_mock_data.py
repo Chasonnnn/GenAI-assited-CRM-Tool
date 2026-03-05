@@ -1069,7 +1069,11 @@ def create_matches(
     for target_status in targets:
         created = False
         for _ in range(120):
-            pool = accepted_surrogates if target_status == MatchStatus.ACCEPTED.value else general_surrogates
+            pool = (
+                accepted_surrogates
+                if target_status == MatchStatus.ACCEPTED.value
+                else general_surrogates
+            )
             if target_status == MatchStatus.ACCEPTED.value:
                 pool = [s for s in pool if s.id not in used_accepted_surrogates]
             if not pool:
@@ -1242,7 +1246,8 @@ def _build_summary(db, org_id: UUID, users_by_role: dict[str, User]) -> dict:
     return {
         "org_id": str(org_id),
         "surrogates_total": int(
-            db.query(func.count(Surrogate.id)).filter(Surrogate.organization_id == org_id).scalar() or 0
+            db.query(func.count(Surrogate.id)).filter(Surrogate.organization_id == org_id).scalar()
+            or 0
         ),
         "surrogate_status_history_total": int(
             db.query(func.count(SurrogateStatusHistory.id))

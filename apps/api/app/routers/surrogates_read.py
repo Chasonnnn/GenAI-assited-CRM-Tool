@@ -63,9 +63,9 @@ def get_surrogate_stats(
     to_date: Annotated[str | None, "fastapi_param"] = Query(
         None, description="ISO date or datetime string"
     ),
-    timezone_name: Annotated[
-        str | None, "fastapi_param"
-    ] = Query(None, alias="timezone", description="IANA timezone name"),
+    timezone_name: Annotated[str | None, "fastapi_param"] = Query(
+        None, alias="timezone", description="IANA timezone name"
+    ),
     pipeline_id: Annotated[UUID | None, "fastapi_param"] = Query(
         None, description="Filter by pipeline UUID"
     ),

@@ -79,7 +79,9 @@ def _create_user_with_membership(
 
 
 def test_cli_create_org_rejects_invalid_slug(monkeypatch, _cli_db, _echo_log):
-    monkeypatch.setattr(_cli_db.org_service, "validate_slug", lambda _slug: (_ for _ in ()).throw(ValueError("bad")))
+    monkeypatch.setattr(
+        _cli_db.org_service, "validate_slug", lambda _slug: (_ for _ in ()).throw(ValueError("bad"))
+    )
     _cli_db.create_org.callback(
         name="Acme Corp",
         slug="bad slug",
@@ -107,7 +109,9 @@ def test_cli_create_org_admin_equals_developer(monkeypatch, db, _cli_db):
         return _create_org(session, slug=slug, name=name)
 
     monkeypatch.setattr(_cli_db.org_service, "create_org", _fake_create_org)
-    monkeypatch.setattr(_cli_db.org_service, "get_org_portal_base_url", lambda _org: "https://acme.test")
+    monkeypatch.setattr(
+        _cli_db.org_service, "get_org_portal_base_url", lambda _org: "https://acme.test"
+    )
 
     _cli_db.create_org.callback(
         name="Acme Corp",
@@ -128,7 +132,9 @@ def test_cli_create_org_success_with_developer_invite(monkeypatch, db, _cli_db):
         return _create_org(session, slug=slug, name=name)
 
     monkeypatch.setattr(_cli_db.org_service, "create_org", _fake_create_org)
-    monkeypatch.setattr(_cli_db.org_service, "get_org_portal_base_url", lambda _org: "https://acme.test")
+    monkeypatch.setattr(
+        _cli_db.org_service, "get_org_portal_base_url", lambda _org: "https://acme.test"
+    )
 
     _cli_db.create_org.callback(
         name="Acme Corp",
@@ -186,7 +192,9 @@ def test_cli_revoke_sessions_updates_token_version(db, _cli_db):
 
 
 def test_cli_update_meta_page_token_rejects_missing_encryption(monkeypatch, _cli_db, _echo_log):
-    monkeypatch.setattr(_cli_db, "SessionLocal", lambda: (_ for _ in ()).throw(AssertionError("should not open DB")))
+    monkeypatch.setattr(
+        _cli_db, "SessionLocal", lambda: (_ for _ in ()).throw(AssertionError("should not open DB"))
+    )
     from app import cli as cli_module
     from app.core import encryption
 
@@ -285,8 +293,12 @@ def test_cli_replay_failed_jobs_paths(monkeypatch, _cli_db, _echo_log):
         SimpleNamespace(id=uuid4(), job_type="gmail_sync", attempts=1, max_attempts=3),
     ]
 
-    monkeypatch.setattr(_cli_db.job_service, "list_dead_letter_jobs", lambda *args, **kwargs: fake_jobs)
-    monkeypatch.setattr(_cli_db.job_service, "replay_failed_jobs", lambda *args, **kwargs: fake_jobs[:1])
+    monkeypatch.setattr(
+        _cli_db.job_service, "list_dead_letter_jobs", lambda *args, **kwargs: fake_jobs
+    )
+    monkeypatch.setattr(
+        _cli_db.job_service, "replay_failed_jobs", lambda *args, **kwargs: fake_jobs[:1]
+    )
 
     _cli_db.replay_failed_jobs_cli.callback(
         org_id="not-a-uuid",
@@ -321,7 +333,9 @@ def test_transcript_storage_inline_and_offloaded(monkeypatch):
     from app.services import transcript_storage_service as svc
 
     uploaded: dict[str, bytes] = {}
-    monkeypatch.setattr(svc, "_upload_file", lambda key, content: uploaded.__setitem__(key, content))
+    monkeypatch.setattr(
+        svc, "_upload_file", lambda key, content: uploaded.__setitem__(key, content)
+    )
 
     interview_id = uuid4()
 
@@ -344,12 +358,16 @@ def test_transcript_storage_load_and_delete_paths(monkeypatch):
     monkeypatch.setattr(svc, "_download_file", lambda _key: json.dumps(payload).encode("utf-8"))
     assert svc.load_transcript(None, None, "transcripts/1/v1.json") == ("<p>loaded</p>", "fallback")
 
-    monkeypatch.setattr(svc, "_download_file", lambda _key: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(
+        svc, "_download_file", lambda _key: (_ for _ in ()).throw(RuntimeError("boom"))
+    )
     assert svc.load_transcript(None, "text-only", "transcripts/1/v1.json") == (None, "text-only")
 
     monkeypatch.setattr(svc, "_delete_file", lambda _key: None)
     assert svc.delete_transcript("transcripts/1/v1.json") is True
-    monkeypatch.setattr(svc, "_delete_file", lambda _key: (_ for _ in ()).throw(RuntimeError("fail")))
+    monkeypatch.setattr(
+        svc, "_delete_file", lambda _key: (_ for _ in ()).throw(RuntimeError("fail"))
+    )
     assert svc.delete_transcript("transcripts/1/v1.json") is False
     assert svc.delete_transcript("") is False
 
@@ -404,7 +422,9 @@ def test_transcript_storage_s3_backend_paths(monkeypatch):
     svc._upload_file("transcripts/x/v1.json", b"abc")
     assert svc._download_file("transcripts/x/v1.json")
     svc._delete_file("transcripts/x/v1.json")
-    deleted = svc.cleanup_old_versions(uuid.UUID("00000000-0000-0000-0000-0000000000aa"), keep_versions=[2])
+    deleted = svc.cleanup_old_versions(
+        uuid.UUID("00000000-0000-0000-0000-0000000000aa"), keep_versions=[2]
+    )
     assert deleted == 1
     assert any(call[0] == "put" for call in calls)
     assert any(call[0] == "delete" for call in calls)

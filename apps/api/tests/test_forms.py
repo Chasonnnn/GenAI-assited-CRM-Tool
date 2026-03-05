@@ -7,8 +7,19 @@ from datetime import date
 import pytest
 
 from app.core.encryption import hash_email, hash_phone
-from app.db.models import AutomationWorkflow, EmailTemplate, FormIntakeLink, FormSubmission, Surrogate
-from app.utils.normalization import normalize_email, normalize_name, normalize_phone, normalize_search_text
+from app.db.models import (
+    AutomationWorkflow,
+    EmailTemplate,
+    FormIntakeLink,
+    FormSubmission,
+    Surrogate,
+)
+from app.utils.normalization import (
+    normalize_email,
+    normalize_name,
+    normalize_phone,
+    normalize_search_text,
+)
 
 
 def _create_surrogate(
@@ -107,7 +118,12 @@ async def test_form_submission_approval_updates_surrogate(
                 "title": "Basics",
                 "fields": [
                     {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
-                    {"key": "date_of_birth", "label": "Date of Birth", "type": "date", "required": True},
+                    {
+                        "key": "date_of_birth",
+                        "label": "Date of Birth",
+                        "type": "date",
+                        "required": True,
+                    },
                     {"key": "phone", "label": "Phone", "type": "text", "required": True},
                     {"key": "email", "label": "Email", "type": "email", "required": True},
                 ],
@@ -176,9 +192,7 @@ async def test_form_submission_approval_updates_surrogate(
 
 
 @pytest.mark.asyncio
-async def test_publish_form_auto_generates_default_shared_intake_link(
-    authed_client, db, test_org
-):
+async def test_publish_form_auto_generates_default_shared_intake_link(authed_client, db, test_org):
     schema = {
         "pages": [
             {
@@ -373,7 +387,12 @@ async def test_auto_match_keeps_new_submission_ambiguous_when_surrogate_already_
                 "title": "Basics",
                 "fields": [
                     {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
-                    {"key": "date_of_birth", "label": "Date of Birth", "type": "date", "required": True},
+                    {
+                        "key": "date_of_birth",
+                        "label": "Date of Birth",
+                        "type": "date",
+                        "required": True,
+                    },
                     {"key": "phone", "label": "Phone", "type": "text", "required": True},
                     {"key": "email", "label": "Email", "type": "email", "required": True},
                 ],
@@ -425,7 +444,9 @@ async def test_auto_match_keeps_new_submission_ambiguous_when_surrogate_already_
     assert second_payload["surrogate_id"] is None
 
     second_submission = (
-        db.query(FormSubmission).filter(FormSubmission.id == uuid.UUID(second_payload["id"])).first()
+        db.query(FormSubmission)
+        .filter(FormSubmission.id == uuid.UUID(second_payload["id"]))
+        .first()
     )
     assert second_submission is not None
     assert second_submission.surrogate_id is None
@@ -634,7 +655,12 @@ async def test_public_form_requires_file_fields(
                 "title": "Docs",
                 "fields": [
                     {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
-                    {"key": "date_of_birth", "label": "Date of Birth", "type": "date", "required": True},
+                    {
+                        "key": "date_of_birth",
+                        "label": "Date of Birth",
+                        "type": "date",
+                        "required": True,
+                    },
                     {"key": "phone", "label": "Phone", "type": "text", "required": True},
                     {"key": "email", "label": "Email", "type": "email", "required": True},
                     {
@@ -642,7 +668,7 @@ async def test_public_form_requires_file_fields(
                         "label": "Supporting Documents",
                         "type": "file",
                         "required": True,
-                    }
+                    },
                 ],
             }
         ]
@@ -682,7 +708,12 @@ async def test_form_mapping_allows_extended_surrogate_fields(
                 "title": "Insurance",
                 "fields": [
                     {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
-                    {"key": "date_of_birth", "label": "Date of Birth", "type": "date", "required": True},
+                    {
+                        "key": "date_of_birth",
+                        "label": "Date of Birth",
+                        "type": "date",
+                        "required": True,
+                    },
                     {"key": "phone", "label": "Phone", "type": "text", "required": True},
                     {"key": "email", "label": "Email", "type": "email", "required": True},
                     {
@@ -690,7 +721,7 @@ async def test_form_mapping_allows_extended_surrogate_fields(
                         "label": "Insurance Company",
                         "type": "text",
                         "required": False,
-                    }
+                    },
                 ],
             }
         ]
@@ -777,7 +808,10 @@ async def test_dedicated_token_creation_endpoint_returns_gone_after_retirement(
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     schema = {
         "pages": [
-            {"title": "Basics", "fields": [{"key": "full_name", "label": "Full Name", "type": "text"}]}
+            {
+                "title": "Basics",
+                "fields": [{"key": "full_name", "label": "Full Name", "type": "text"}],
+            }
         ]
     }
 
@@ -809,7 +843,10 @@ async def test_dedicated_token_send_endpoint_returns_gone_after_retirement(
 ):
     schema = {
         "pages": [
-            {"title": "Basics", "fields": [{"key": "full_name", "label": "Full Name", "type": "text"}]}
+            {
+                "title": "Basics",
+                "fields": [{"key": "full_name", "label": "Full Name", "type": "text"}],
+            }
         ]
     }
 
@@ -853,7 +890,10 @@ async def test_default_surrogate_application_form_reconciles_on_purpose_change(
 ):
     schema = {
         "pages": [
-            {"title": "Basics", "fields": [{"key": "full_name", "label": "Full Name", "type": "text"}]}
+            {
+                "title": "Basics",
+                "fields": [{"key": "full_name", "label": "Full Name", "type": "text"}],
+            }
         ]
     }
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.services import ticketing_service
@@ -44,7 +43,7 @@ def _multipart_email_bytes() -> bytes:
         b"<p>HTML body text.</p>\r\n"
         b"--frontier\r\n"
         b"Content-Type: application/pdf\r\n"
-        b"Content-Disposition: attachment; filename=\"doc.pdf\"\r\n"
+        b'Content-Disposition: attachment; filename="doc.pdf"\r\n'
         b"\r\n"
         b"%PDF-1.4\r\n"
         b"--frontier--\r\n"
@@ -108,7 +107,13 @@ def test_outbound_header_and_idempotency_helpers():
 
 def test_process_occurrence_parse_happy_path(db, test_org, monkeypatch):
     from app.db.enums import EmailOccurrenceState
-    from app.db.models import EmailMessage, EmailMessageAttachment, EmailMessageContent, EmailMessageOccurrence, EmailRawBlob
+    from app.db.models import (
+        EmailMessage,
+        EmailMessageAttachment,
+        EmailMessageContent,
+        EmailMessageOccurrence,
+        EmailRawBlob,
+    )
 
     mailbox = _make_mailbox(db, org_id=test_org.id, email_address="parse@example.com")
     raw_bytes = _multipart_email_bytes()
@@ -134,7 +139,9 @@ def test_process_occurrence_parse_happy_path(db, test_org, monkeypatch):
     db.add(occurrence)
     db.commit()
 
-    monkeypatch.setattr(ticketing_service.attachment_service, "load_file_bytes", lambda _key: raw_bytes)
+    monkeypatch.setattr(
+        ticketing_service.attachment_service, "load_file_bytes", lambda _key: raw_bytes
+    )
     monkeypatch.setattr(
         ticketing_service.attachment_service,
         "store_file",

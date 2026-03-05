@@ -43,6 +43,7 @@ from app.services.attachment_service import (
     register_storage_cleanup_on_rollback,
     store_file,
     strip_exif_data,
+    sanitize_csv,
 )
 from app.services.import_transformers import transform_height_flexible
 from app.services import job_service
@@ -801,6 +802,7 @@ def add_submission_file(
 
     checksum = calculate_checksum(file.file)
     processed_file = strip_exif_data(file.file, validated_content_type)
+    processed_file = sanitize_csv(processed_file, validated_content_type)
     ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename else ""
     suffix = f".{ext}" if ext else ""
     storage_key = (
@@ -1602,6 +1604,7 @@ def _store_submission_file(
 
     checksum = calculate_checksum(file.file)
     processed_file = strip_exif_data(file.file, resolved_content_type)
+    processed_file = sanitize_csv(processed_file, resolved_content_type)
     ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename else ""
     suffix = f".{ext}" if ext else ""
     storage_key = (

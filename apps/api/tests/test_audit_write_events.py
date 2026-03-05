@@ -417,7 +417,9 @@ async def test_surrogate_write_routes_emit_semantic_audit_events(authed_client, 
 
 
 @pytest.mark.asyncio
-async def test_intended_parent_write_routes_emit_semantic_audit_events(authed_client, db, test_auth):
+async def test_intended_parent_write_routes_emit_semantic_audit_events(
+    authed_client, db, test_auth
+):
     create_response = await authed_client.post(
         "/intended-parents",
         json={"full_name": "IP One", "email": "ip-one@test.com"},

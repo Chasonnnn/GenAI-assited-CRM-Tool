@@ -153,7 +153,9 @@ async def test_intelligent_suggestion_templates_and_rule_crud(
     assert updated_rule["business_days"] == 6
     assert updated_rule["enabled"] is False
 
-    delete_response = await authed_client.delete(f"/settings/intelligent-suggestions/rules/{rule_id}")
+    delete_response = await authed_client.delete(
+        f"/settings/intelligent-suggestions/rules/{rule_id}"
+    )
     assert delete_response.status_code == 204, delete_response.text
 
     rules_after_delete = await authed_client.get("/settings/intelligent-suggestions/rules")
@@ -334,6 +336,7 @@ async def test_intelligent_suggestions_summary_endpoint(
 @pytest.mark.asyncio
 async def test_internal_scheduled_intelligent_suggestions(monkeypatch, client):
     from app.routers import internal as internal_router
+
     monkeypatch.setattr(settings, "INTERNAL_SECRET", "internal-secret-test")
 
     monkeypatch.setattr(

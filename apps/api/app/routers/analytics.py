@@ -190,9 +190,9 @@ def get_surrogates_trend(
     from_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
     to_date: Annotated[Optional[str], "fastapi_param"] = Query(None),
     period: Annotated[Literal["day", "week", "month"], "fastapi_param"] = Query("day"),
-    timezone_name: Annotated[
-        Optional[str], "fastapi_param"
-    ] = Query(None, alias="timezone", description="IANA timezone name"),
+    timezone_name: Annotated[Optional[str], "fastapi_param"] = Query(
+        None, alias="timezone", description="IANA timezone name"
+    ),
     pipeline_id: Annotated[UUID | None, "fastapi_param"] = Query(
         None, description="Filter by pipeline UUID"
     ),

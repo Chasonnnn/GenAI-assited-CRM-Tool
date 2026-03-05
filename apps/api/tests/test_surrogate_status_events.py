@@ -417,7 +417,9 @@ def test_status_change_dedupes_converted_stage_updates(monkeypatch, db, test_org
     assert jobs[0].payload["data"]["event_name"] == "Converted"
 
 
-def test_status_change_dedupes_using_configured_bucket_mapping(monkeypatch, db, test_org, test_user):
+def test_status_change_dedupes_using_configured_bucket_mapping(
+    monkeypatch, db, test_org, test_user
+):
     from app.services import zapier_settings_service
 
     settings = zapier_settings_service.get_or_create_settings(db, test_org.id)

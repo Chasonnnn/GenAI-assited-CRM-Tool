@@ -89,10 +89,7 @@ def _check_post_approval_access(
         return
 
     # Owners can always view their own surrogates even after post-approval
-    if (
-        surrogate.owner_type == OwnerType.USER.value
-        and surrogate.owner_id == user_id
-    ):
+    if surrogate.owner_type == OwnerType.USER.value and surrogate.owner_id == user_id:
         return
 
     # Check permission

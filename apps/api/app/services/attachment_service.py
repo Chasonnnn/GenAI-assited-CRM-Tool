@@ -316,6 +316,54 @@ def strip_exif_data(file: BinaryIO, content_type: str) -> BinaryIO:
         raise ValueError("Failed to sanitize image file") from exc
 
 
+def sanitize_csv(file: BinaryIO, content_type: str) -> BinaryIO:
+    """
+    Sanitize CSV files to prevent CSV Injection (Formula Injection).
+
+    Returns the same file object if not a CSV.
+    Raises ValueError when CSV processing fails to ensure uploads fail closed.
+    """
+    if content_type not in ("text/csv", "application/csv", "application/vnd.ms-excel"):
+        return file
+
+    try:
+        import csv
+        from io import BytesIO, StringIO
+
+        file.seek(0)
+        # Try decoding with utf-8 first, fallback to latin-1
+        content_bytes = file.read()
+        try:
+            content_str = content_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            content_str = content_bytes.decode("latin-1")
+
+        # Parse CSV
+        reader = csv.reader(StringIO(content_str))
+
+        output_str = StringIO()
+        writer = csv.writer(output_str)
+
+        dangerous_prefixes = ("=", "+", "-", "@")
+
+        for row in reader:
+            sanitized_row = []
+            for cell in row:
+                if cell and cell.startswith(dangerous_prefixes):
+                    sanitized_row.append(f"'{cell}")
+                else:
+                    sanitized_row.append(cell)
+            writer.writerow(sanitized_row)
+
+        output_bytes = BytesIO(output_str.getvalue().encode("utf-8"))
+        return output_bytes
+
+    except csv.Error as exc:
+        raise ValueError("Invalid CSV file structure") from exc
+    except Exception as exc:
+        raise ValueError("Failed to sanitize CSV file") from exc
+
+
 def generate_signed_url(storage_key: str, expires_in_seconds: int | None = None) -> str:
     """Generate signed download URL."""
     backend = _get_storage_backend()
@@ -450,6 +498,9 @@ def upload_attachment(
 
     # Strip EXIF data from images for privacy
     processed_file = strip_exif_data(file, normalized_content_type)
+
+    # Sanitize CSV files to prevent formula injection
+    processed_file = sanitize_csv(processed_file, normalized_content_type)
 
     # Generate storage key
     attachment_id = uuid.uuid4()

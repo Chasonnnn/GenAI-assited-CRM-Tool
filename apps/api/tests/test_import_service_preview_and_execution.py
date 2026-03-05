@@ -37,7 +37,9 @@ def test_import_csv_detection_and_hash_helpers():
     assert encoding == "utf-16"
     assert delimiter == "\t"
 
-    parsed_headers, parsed_rows = import_service.parse_csv_file("full_name,email\nBob,bob@example.com\n")
+    parsed_headers, parsed_rows = import_service.parse_csv_file(
+        "full_name,email\nBob,bob@example.com\n"
+    )
     assert parsed_headers == ["full_name", "email"]
     assert parsed_rows == [["Bob", "bob@example.com"]]
 

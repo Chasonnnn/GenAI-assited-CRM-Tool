@@ -34,7 +34,9 @@ class _AsyncClientFactory:
         return await self._handler(method="GET", url=url, headers=headers, params=params, json=None)
 
     async def post(self, url, headers=None, params=None, json=None):
-        return await self._handler(method="POST", url=url, headers=headers, params=params, json=json)
+        return await self._handler(
+            method="POST", url=url, headers=headers, params=params, json=json
+        )
 
 
 @pytest.mark.asyncio
@@ -92,7 +94,9 @@ async def test_calendar_busy_slots_success_failure_and_exception(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr(calendar_service.httpx, "AsyncClient", lambda *args, **kwargs: _ExplodingClient())
+    monkeypatch.setattr(
+        calendar_service.httpx, "AsyncClient", lambda *args, **kwargs: _ExplodingClient()
+    )
     busy = await calendar_service.get_google_busy_slots(
         access_token="tok",
         calendar_id="primary",
@@ -208,6 +212,7 @@ async def test_calendar_user_wrappers_and_appointment_helpers(monkeypatch, db):
         "get_user_integration",
         lambda *_args, **_kwargs: SimpleNamespace(id=uuid4()),
     )
+
     async def _no_token(*_args, **_kwargs):
         return None
 
@@ -225,7 +230,9 @@ async def test_calendar_user_wrappers_and_appointment_helpers(monkeypatch, db):
 
     async def _events(*_args, **kwargs):
         if kwargs.get("calendar_id") == "primary":
-            return [{"id": "evt1", "start": now, "end": now + timedelta(minutes=30), "summary": "One"}]
+            return [
+                {"id": "evt1", "start": now, "end": now + timedelta(minutes=30), "summary": "One"}
+            ]
         return [{"id": "evt1", "start": now, "end": now + timedelta(minutes=30), "summary": "Dup"}]
 
     async def _calendar_ids(*_args, **_kwargs):

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 import pytest
 
-from app.db.models import Membership, UserIntegration
+from app.db.models import UserIntegration
 from app.services import oauth_service
 
 
@@ -25,7 +24,9 @@ class _HTTPResponse:
 
 
 class _AsyncClient:
-    def __init__(self, post_payload: dict | None = None, get_payload: dict | None = None, fail: bool = False):
+    def __init__(
+        self, post_payload: dict | None = None, get_payload: dict | None = None, fail: bool = False
+    ):
         self._post_payload = post_payload or {"access_token": "a1"}
         self._get_payload = get_payload or {"email": "user@example.com"}
         self._fail = fail
@@ -204,6 +205,7 @@ def test_oauth_refresh_token_failure_alert(monkeypatch, db, test_user):
     db.commit()
 
     alerts: list[tuple[str, str]] = []
+
     def _run_async_fail(coro):
         coro.close()
         raise RuntimeError("refresh failed")
@@ -212,7 +214,9 @@ def test_oauth_refresh_token_failure_alert(monkeypatch, db, test_user):
     monkeypatch.setattr(
         oauth_service,
         "_create_token_refresh_alert",
-        lambda _db, user_id, integration_type, error_msg: alerts.append((integration_type, error_msg)),
+        lambda _db, user_id, integration_type, error_msg: alerts.append(
+            (integration_type, error_msg)
+        ),
     )
     ok = oauth_service.refresh_token(db, integration, "gmail")
     assert ok is False
@@ -248,7 +252,11 @@ async def test_oauth_refresh_token_async_and_alert_paths(monkeypatch, db, test_u
 
     monkeypatch.setattr(oauth_service, "refresh_google_calendar_token", _refresh_boom)
     alerts: list[str] = []
-    monkeypatch.setattr(oauth_service, "_create_token_refresh_alert", lambda *args, **kwargs: alerts.append("alerted"))
+    monkeypatch.setattr(
+        oauth_service,
+        "_create_token_refresh_alert",
+        lambda *args, **kwargs: alerts.append("alerted"),
+    )
     ok = await oauth_service.refresh_token_async(db, integration, "google_calendar")
     assert ok is False
     assert alerts == ["alerted"]

@@ -94,8 +94,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     conn = op.get_bind()
     conn.execute(
-        sa.text(
-            "DELETE FROM workflow_templates WHERE is_global IS TRUE AND name = :name"
-        ),
+        sa.text("DELETE FROM workflow_templates WHERE is_global IS TRUE AND name = :name"),
         {"name": TEMPLATE_NAME},
     )

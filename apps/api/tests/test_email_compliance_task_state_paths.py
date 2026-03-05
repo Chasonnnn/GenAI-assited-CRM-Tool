@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 
 from app.db.enums import TaskType
-from app.db.models import AuditLog, EmailTemplate
+from app.db.models import EmailTemplate
 from app.schemas.task import TaskCreate, TaskUpdate
 from app.services import compliance_service, email_service, task_service
 
@@ -38,7 +38,9 @@ def test_compliance_masking_and_redaction_helpers():
 
     assert compliance_service._csv_safe("=SUM(A1:A3)").startswith("'=")
     assert compliance_service._serialize_value({"a": 1}) == '{"a":1}'
-    assert compliance_service._serialize_json_value({"t": datetime(2026, 1, 2, tzinfo=timezone.utc)})["t"].startswith("2026-01-02")
+    assert compliance_service._serialize_json_value(
+        {"t": datetime(2026, 1, 2, tzinfo=timezone.utc)}
+    )["t"].startswith("2026-01-02")
 
 
 def test_compliance_build_export_rows_and_storage_helpers(monkeypatch, tmp_path, db, test_org):
@@ -80,8 +82,12 @@ def test_compliance_build_export_rows_and_storage_helpers(monkeypatch, tmp_path,
             created_at=now,
         ),
     ]
-    monkeypatch.setattr(compliance_service, "_resolve_actor_names", lambda _db, _logs: {actor_id: "Actor"})
-    rows, meta = compliance_service._build_export_rows(db, logs, redact_mode=compliance_service.REDACT_MODE_REDACTED)
+    monkeypatch.setattr(
+        compliance_service, "_resolve_actor_names", lambda _db, _logs: {actor_id: "Actor"}
+    )
+    rows, meta = compliance_service._build_export_rows(
+        db, logs, redact_mode=compliance_service.REDACT_MODE_REDACTED
+    )
     assert len(rows) == 2
     assert meta["chain_contiguous"] is True
     assert rows[0]["actor_name"].startswith("A.")
@@ -102,14 +108,22 @@ def test_email_template_sanitization_and_lifecycle(monkeypatch, db, test_org, te
     version_calls: list[dict] = []
     monkeypatch.setattr(
         "app.services.version_service.create_version",
-        lambda **kwargs: version_calls.append(kwargs) or SimpleNamespace(version=kwargs.get("payload", {}).get("version", 1)),
+        lambda **kwargs: (
+            version_calls.append(kwargs)
+            or SimpleNamespace(version=kwargs.get("payload", {}).get("version", 1))
+        ),
     )
-    monkeypatch.setattr("app.services.version_service.check_version", lambda current, expected: None)
+    monkeypatch.setattr(
+        "app.services.version_service.check_version", lambda current, expected: None
+    )
 
     cleaned = email_service.sanitize_template_html("<script>alert(1)</script><p><br></p>")
     assert "script" not in cleaned.lower()
     assert "&nbsp;" in cleaned
-    assert email_service._normalize_from_email("  Sender <sender@example.com> ") == "Sender <sender@example.com>"
+    assert (
+        email_service._normalize_from_email("  Sender <sender@example.com> ")
+        == "Sender <sender@example.com>"
+    )
     with pytest.raises(ValueError, match="Invalid from_email"):
         email_service._normalize_from_email("bad-email")
 

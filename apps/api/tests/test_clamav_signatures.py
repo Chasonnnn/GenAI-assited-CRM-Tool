@@ -74,7 +74,9 @@ def test_upload_archive_uses_put_object_with_static_body(monkeypatch, tmp_path):
 
     monkeypatch.setattr(storage_client, "get_s3_client", lambda: StubClient())
 
-    clamav_signature_service._upload_archive("test-bucket", "clamav/signatures.tar.gz", str(sig_dir))
+    clamav_signature_service._upload_archive(
+        "test-bucket", "clamav/signatures.tar.gz", str(sig_dir)
+    )
 
     assert captured["Bucket"] == "test-bucket"
     assert captured["Key"] == "clamav/signatures.tar.gz"
@@ -120,9 +122,7 @@ def test_upload_archive_retries_with_auto_region_on_signature_mismatch(monkeypat
     assert captured["Key"] == "clamav/signatures.tar.gz"
 
 
-def test_upload_archive_retries_with_s3_signature_after_auto_region_failure(
-    monkeypatch, tmp_path
-):
+def test_upload_archive_retries_with_s3_signature_after_auto_region_failure(monkeypatch, tmp_path):
     sig_dir = tmp_path / "clamav"
     sig_dir.mkdir()
     (sig_dir / "main.cvd").write_bytes(b"main-signature")

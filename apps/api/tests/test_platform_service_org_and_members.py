@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -37,7 +36,9 @@ def test_platform_validation_and_hash_helpers(monkeypatch):
 def test_platform_support_session_create_and_revoke(monkeypatch, db, test_org, test_user):
     audit_calls: list[str] = []
 
-    monkeypatch.setattr(platform_service, "create_support_session_token", lambda **kwargs: "support-token")
+    monkeypatch.setattr(
+        platform_service, "create_support_session_token", lambda **kwargs: "support-token"
+    )
     monkeypatch.setattr(platform_service.session_service, "create_session", lambda **kwargs: None)
     monkeypatch.setattr(
         platform_service,
@@ -63,7 +64,9 @@ def test_platform_support_session_create_and_revoke(monkeypatch, db, test_org, t
     assert session_data["org_id"] == str(test_org.id)
     assert "support_session.create" in audit_calls
 
-    support_session = db.query(SupportSession).filter(SupportSession.actor_user_id == test_user.id).first()
+    support_session = (
+        db.query(SupportSession).filter(SupportSession.actor_user_id == test_user.id).first()
+    )
     assert support_session is not None
 
     revoked = platform_service.revoke_support_session(
@@ -95,7 +98,9 @@ def test_platform_member_list_update_and_mfa_reset(monkeypatch, db, test_org, te
         lambda **kwargs: actions.append(kwargs["action"]),
     )
     monkeypatch.setattr(platform_service.mfa_service, "disable_mfa", lambda db, user: None)
-    monkeypatch.setattr(platform_service.session_service, "revoke_all_user_sessions", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        platform_service.session_service, "revoke_all_user_sessions", lambda *args, **kwargs: None
+    )
 
     members = platform_service.list_members(db, test_org.id)
     assert members

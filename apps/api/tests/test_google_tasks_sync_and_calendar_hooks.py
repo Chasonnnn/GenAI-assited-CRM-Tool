@@ -33,20 +33,26 @@ class _AsyncClientFactory:
         return False
 
     async def request(self, method, url, headers=None, params=None, json=None):
-        return await self._handler(method=method, url=url, headers=headers, params=params, json=json)
+        return await self._handler(
+            method=method, url=url, headers=headers, params=params, json=json
+        )
 
     async def get(self, url, headers=None, params=None):
         return await self._handler(method="GET", url=url, headers=headers, params=params, json=None)
 
     async def post(self, url, headers=None, params=None, json=None, timeout=None):
         del timeout
-        return await self._handler(method="POST", url=url, headers=headers, params=params, json=json)
+        return await self._handler(
+            method="POST", url=url, headers=headers, params=params, json=json
+        )
 
     async def put(self, url, headers=None, params=None, json=None):
         return await self._handler(method="PUT", url=url, headers=headers, params=params, json=json)
 
     async def delete(self, url, headers=None, params=None):
-        return await self._handler(method="DELETE", url=url, headers=headers, params=params, json=None)
+        return await self._handler(
+            method="DELETE", url=url, headers=headers, params=params, json=None
+        )
 
 
 def _make_task(**overrides) -> Task:
@@ -85,17 +91,23 @@ def test_google_task_helper_conversions():
     assert google_tasks_sync_service._to_google_datetime(aware).endswith("Z")
     assert google_tasks_sync_service._encode_google_id("a/b c") == "a%2Fb%20c"
 
-    due_date, due_time = google_tasks_sync_service._google_due_to_task_fields("2026-01-05T00:00:00Z")
+    due_date, due_time = google_tasks_sync_service._google_due_to_task_fields(
+        "2026-01-05T00:00:00Z"
+    )
     assert due_date == date(2026, 1, 5)
     assert due_time is None
 
-    due_date, due_time = google_tasks_sync_service._google_due_to_task_fields("2026-01-05T09:45:00Z")
+    due_date, due_time = google_tasks_sync_service._google_due_to_task_fields(
+        "2026-01-05T09:45:00Z"
+    )
     assert due_date == date(2026, 1, 5)
     assert due_time == time(9, 45)
 
 
 def test_google_task_payload_and_sync_predicates():
-    task = _make_task(is_completed=True, completed_at=datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc))
+    task = _make_task(
+        is_completed=True, completed_at=datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
+    )
     payload = google_tasks_sync_service._build_google_task_payload(task)
     assert payload["status"] == "completed"
     assert "due" in payload
@@ -232,6 +244,7 @@ async def test_google_upsert_delete_and_access_paths(monkeypatch, db):
         "get_user_integration",
         lambda *_args, **_kwargs: SimpleNamespace(id=uuid4()),
     )
+
     def _run_probe_ok(coro, timeout=20):
         del timeout
         coro.close()
@@ -262,6 +275,7 @@ def test_sync_platform_task_wrappers(monkeypatch, db):
         "get_user_integration",
         lambda *_args, **_kwargs: SimpleNamespace(id=uuid4()),
     )
+
     def _run_async_success(coro, timeout=30):
         del timeout
         coro.close()
@@ -273,6 +287,7 @@ def test_sync_platform_task_wrappers(monkeypatch, db):
     assert task.google_task_list_id == "default"
 
     task.google_task_id = "remote-1"
+
     def _run_async_fail(coro, timeout=30):
         del timeout
         coro.close()
@@ -326,21 +341,32 @@ async def test_sync_google_tasks_marks_scope_missing_after_403(db, test_auth, mo
 
 def test_calendar_watch_helper_functions(monkeypatch):
     monkeypatch.setattr(calendar_service.settings, "API_BASE_URL", "https://api.example.com")
-    assert calendar_service._calendar_events_endpoint("primary").endswith("/calendars/primary/events")
+    assert calendar_service._calendar_events_endpoint("primary").endswith(
+        "/calendars/primary/events"
+    )
     assert "/events/" in calendar_service._calendar_event_endpoint("primary", "evt 1")
     assert calendar_service._channel_stop_endpoint().endswith("/channels/stop")
-    assert calendar_service._google_calendar_webhook_address() == "https://api.example.com/webhooks/google-calendar"
+    assert (
+        calendar_service._google_calendar_webhook_address()
+        == "https://api.example.com/webhooks/google-calendar"
+    )
 
     exp = calendar_service._parse_google_watch_expiration("1735689600000")
     assert exp is not None
     assert calendar_service._parse_google_watch_expiration("bad") is None
-    assert calendar_service._watch_is_fresh(datetime.now(timezone.utc) + timedelta(days=1), renew_before=timedelta(hours=1))
+    assert calendar_service._watch_is_fresh(
+        datetime.now(timezone.utc) + timedelta(days=1), renew_before=timedelta(hours=1)
+    )
     assert calendar_service._watch_is_fresh(None, renew_before=timedelta(hours=1)) is False
 
 
 def test_calendar_verify_watch_token(monkeypatch):
-    monkeypatch.setattr(calendar_service.oauth_service, "decrypt_token", lambda value: f"plain:{value}")
-    monkeypatch.setattr(calendar_service, "verify_secret", lambda provided, expected: provided == expected)
+    monkeypatch.setattr(
+        calendar_service.oauth_service, "decrypt_token", lambda value: f"plain:{value}"
+    )
+    monkeypatch.setattr(
+        calendar_service, "verify_secret", lambda provided, expected: provided == expected
+    )
     assert calendar_service.verify_watch_channel_token("enc", "plain:enc") is True
     assert calendar_service.verify_watch_channel_token("enc", "wrong") is False
     assert calendar_service.verify_watch_channel_token(None, "x") is False
@@ -391,16 +417,24 @@ async def test_calendar_watch_stateful_flows(monkeypatch, db):
         google_calendar_watch_expires_at=datetime.now(timezone.utc) + timedelta(hours=12),
         updated_at=None,
     )
-    monkeypatch.setattr(calendar_service.oauth_service, "get_user_integration", lambda *_args, **_kwargs: integration)
+    monkeypatch.setattr(
+        calendar_service.oauth_service,
+        "get_user_integration",
+        lambda *_args, **_kwargs: integration,
+    )
+
     async def _token(*_args, **_kwargs):
         return "tok"
 
     monkeypatch.setattr(calendar_service, "get_google_access_token", _token)
+
     async def _stop_channel(**kwargs):
         return True
 
     monkeypatch.setattr(calendar_service, "_post_google_channel_stop", _stop_channel)
-    monkeypatch.setattr(calendar_service.oauth_service, "encrypt_token", lambda value: f"enc:{value}")
+    monkeypatch.setattr(
+        calendar_service.oauth_service, "encrypt_token", lambda value: f"enc:{value}"
+    )
 
     renewed = await calendar_service.ensure_google_calendar_watch(
         db=db,
@@ -447,7 +481,9 @@ async def test_calendar_event_crud_and_meet(monkeypatch):
                     {
                         "id": "meet-1",
                         "conferenceData": {
-                            "entryPoints": [{"entryPointType": "video", "uri": "https://meet.google.com/abc"}]
+                            "entryPoints": [
+                                {"entryPointType": "video", "uri": "https://meet.google.com/abc"}
+                            ]
                         },
                     },
                 )

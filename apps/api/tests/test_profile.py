@@ -8,7 +8,12 @@ import pytest
 
 from app.core.encryption import hash_email, hash_phone
 from app.db.models import Surrogate
-from app.utils.normalization import normalize_email, normalize_name, normalize_phone, normalize_search_text
+from app.utils.normalization import (
+    normalize_email,
+    normalize_name,
+    normalize_phone,
+    normalize_search_text,
+)
 
 
 def _create_surrogate(db, org_id, user_id, stage):
@@ -46,7 +51,12 @@ async def _create_form_and_submission(authed_client, surrogate: Surrogate, label
                 "title": "Basics",
                 "fields": [
                     {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
-                    {"key": "date_of_birth", "label": "Date of Birth", "type": "date", "required": True},
+                    {
+                        "key": "date_of_birth",
+                        "label": "Date of Birth",
+                        "type": "date",
+                        "required": True,
+                    },
                     {"key": "phone", "label": "Phone", "type": "text", "required": True},
                     {"key": "email", "label": "Email", "type": "email", "required": True},
                 ],

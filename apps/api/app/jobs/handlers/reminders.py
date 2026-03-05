@@ -18,7 +18,9 @@ def _coerce_notification_type(raw_type: str | None) -> NotificationType:
     try:
         return NotificationType(raw_type)
     except ValueError:
-        logger.warning("Unknown reminder notification type '%s'; defaulting to contact_reminder", raw_type)
+        logger.warning(
+            "Unknown reminder notification type '%s'; defaulting to contact_reminder", raw_type
+        )
         return NotificationType.CONTACT_REMINDER
 
 

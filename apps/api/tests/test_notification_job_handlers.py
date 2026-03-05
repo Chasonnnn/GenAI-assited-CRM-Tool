@@ -18,7 +18,9 @@ async def test_process_notification_uses_notification_service_create_notificatio
         captured["kwargs"] = kwargs
         return None
 
-    monkeypatch.setattr("app.services.notification_service.create_notification", fake_create_notification)
+    monkeypatch.setattr(
+        "app.services.notification_service.create_notification", fake_create_notification
+    )
 
     job = SimpleNamespace(
         id=uuid4(),
@@ -53,7 +55,9 @@ async def test_process_reminder_uses_notification_service_create_notification(mo
         captured["kwargs"] = kwargs
         return None
 
-    monkeypatch.setattr("app.services.notification_service.create_notification", fake_create_notification)
+    monkeypatch.setattr(
+        "app.services.notification_service.create_notification", fake_create_notification
+    )
 
     job = SimpleNamespace(
         id=uuid4(),

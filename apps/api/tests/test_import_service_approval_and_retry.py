@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from uuid import uuid4
 
 import pytest
 
@@ -149,7 +148,9 @@ def test_run_import_execution_and_inline_retry_paths(db, test_org, test_user, mo
         return import_service.ImportResult()
 
     monkeypatch.setattr(import_service, "execute_import", _fake_execute_import)
-    monkeypatch.setattr(import_service, "execute_import_with_mappings", _fake_execute_import_with_mappings)
+    monkeypatch.setattr(
+        import_service, "execute_import_with_mappings", _fake_execute_import_with_mappings
+    )
 
     import_service.run_import_execution(
         db=db,

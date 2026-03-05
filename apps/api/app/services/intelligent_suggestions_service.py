@@ -474,7 +474,10 @@ def list_rules(db: Session, organization_id: UUID) -> list[OrgIntelligentSuggest
     return (
         db.query(OrgIntelligentSuggestionRule)
         .filter(OrgIntelligentSuggestionRule.organization_id == organization_id)
-        .order_by(OrgIntelligentSuggestionRule.sort_order.asc(), OrgIntelligentSuggestionRule.created_at.asc())
+        .order_by(
+            OrgIntelligentSuggestionRule.sort_order.asc(),
+            OrgIntelligentSuggestionRule.created_at.asc(),
+        )
         .all()
     )
 
@@ -693,29 +696,27 @@ def _meeting_outcome_missing_ids(
         .where(
             SurrogateActivityLog.organization_id == org_id,
             SurrogateActivityLog.surrogate_id == Surrogate.id,
-            SurrogateActivityLog.activity_type == SurrogateActivityType.INTERVIEW_OUTCOME_LOGGED.value,
+            SurrogateActivityLog.activity_type
+            == SurrogateActivityType.INTERVIEW_OUTCOME_LOGGED.value,
         )
         .correlate(Surrogate)
         .scalar_subquery()
     )
 
-    query = (
-        db.query(
-            Surrogate.id,
-            latest_meeting_subquery.label("latest_meeting_at"),
-            latest_outcome_subquery.label("latest_outcome_at"),
-        )
-        .filter(
-            Surrogate.organization_id == org_id,
-            Surrogate.is_archived.is_(False),
-            latest_meeting_subquery.is_not(None),
-            latest_meeting_subquery <= now_utc,
-            or_(
-                latest_outcome_subquery.is_(None),
-                latest_outcome_subquery <= latest_meeting_subquery,
-            ),
-            *_strict_owner_filters(user_role, user_id),
-        )
+    query = db.query(
+        Surrogate.id,
+        latest_meeting_subquery.label("latest_meeting_at"),
+        latest_outcome_subquery.label("latest_outcome_at"),
+    ).filter(
+        Surrogate.organization_id == org_id,
+        Surrogate.is_archived.is_(False),
+        latest_meeting_subquery.is_not(None),
+        latest_meeting_subquery <= now_utc,
+        or_(
+            latest_outcome_subquery.is_(None),
+            latest_outcome_subquery <= latest_meeting_subquery,
+        ),
+        *_strict_owner_filters(user_role, user_id),
     )
 
     matched: set[UUID] = set()
@@ -762,7 +763,9 @@ def _attention_unreached_ids(
     now_utc: datetime,
 ) -> set[UUID]:
     cutoff = now_utc - timedelta(days=7)
-    owner_filters = _attention_owner_filters(db, org_id=org_id, user_id=user_id, user_role=user_role)
+    owner_filters = _attention_owner_filters(
+        db, org_id=org_id, user_id=user_id, user_role=user_role
+    )
     latest_activity_subquery = (
         db.query(
             SurrogateActivityLog.surrogate_id.label("surrogate_id"),
@@ -807,7 +810,9 @@ def _attention_stuck_ids(
     user_role: Role | str,
     now_utc: datetime,
 ) -> set[UUID]:
-    owner_filters = _attention_owner_filters(db, org_id=org_id, user_id=user_id, user_role=user_role)
+    owner_filters = _attention_owner_filters(
+        db, org_id=org_id, user_id=user_id, user_role=user_role
+    )
     cutoff = now_utc - timedelta(days=30)
 
     latest_history = SurrogateStatusHistory.__table__.alias("latest_history")

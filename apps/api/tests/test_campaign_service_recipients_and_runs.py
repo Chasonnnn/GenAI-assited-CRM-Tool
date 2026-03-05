@@ -4,11 +4,18 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
-import pytest
 
 from app.core.encryption import hash_email
 from app.db.enums import CampaignRecipientStatus, CampaignStatus, EmailStatus, JobStatus, JobType
-from app.db.models import Campaign, CampaignRecipient, CampaignRun, EmailSuppression, EmailTemplate, Job, Surrogate
+from app.db.models import (
+    Campaign,
+    CampaignRecipient,
+    CampaignRun,
+    EmailSuppression,
+    EmailTemplate,
+    Job,
+    Surrogate,
+)
 from app.services import campaign_service
 from app.utils.normalization import normalize_email
 
@@ -27,7 +34,9 @@ def _create_template(db, org_id: UUID) -> EmailTemplate:
     return template
 
 
-def _create_campaign(db, org_id: UUID, user_id: UUID, template_id: UUID, *, status: str = CampaignStatus.DRAFT.value) -> Campaign:
+def _create_campaign(
+    db, org_id: UUID, user_id: UUID, template_id: UUID, *, status: str = CampaignStatus.DRAFT.value
+) -> Campaign:
     campaign = Campaign(
         id=uuid4(),
         organization_id=org_id,
@@ -64,7 +73,16 @@ def _create_run(db, org_id: UUID, campaign_id: UUID, *, status: str = "running")
     return run
 
 
-def _create_surrogate(db, *, org_id: UUID, user_id: UUID, stage_id: UUID, status_label: str, email: str | None, name: str) -> Surrogate:
+def _create_surrogate(
+    db,
+    *,
+    org_id: UUID,
+    user_id: UUID,
+    stage_id: UUID,
+    status_label: str,
+    email: str | None,
+    name: str,
+) -> Surrogate:
     normalized = normalize_email(email) if email else None
     surrogate = Surrogate(
         id=uuid4(),
@@ -86,8 +104,12 @@ def _create_surrogate(db, *, org_id: UUID, user_id: UUID, stage_id: UUID, status
 
 def test_campaign_enqueue_send_now_and_scheduled(monkeypatch, db, test_org, test_user):
     template = _create_template(db, test_org.id)
-    campaign_now = _create_campaign(db, test_org.id, test_user.id, template.id, status=CampaignStatus.DRAFT.value)
-    campaign_later = _create_campaign(db, test_org.id, test_user.id, template.id, status=CampaignStatus.DRAFT.value)
+    campaign_now = _create_campaign(
+        db, test_org.id, test_user.id, template.id, status=CampaignStatus.DRAFT.value
+    )
+    campaign_later = _create_campaign(
+        db, test_org.id, test_user.id, template.id, status=CampaignStatus.DRAFT.value
+    )
     campaign_later.scheduled_at = datetime.now(timezone.utc) + timedelta(hours=2)
     db.commit()
 
@@ -109,7 +131,10 @@ def test_campaign_enqueue_send_now_and_scheduled(monkeypatch, db, test_org, test
 
     queued_job = (
         db.query(Job)
-        .filter(Job.job_type == JobType.CAMPAIGN_SEND.value, Job.payload["campaign_id"].astext == str(campaign_now.id))
+        .filter(
+            Job.job_type == JobType.CAMPAIGN_SEND.value,
+            Job.payload["campaign_id"].astext == str(campaign_now.id),
+        )
         .first()
     )
     assert queued_job is not None
@@ -129,7 +154,9 @@ def test_campaign_enqueue_send_now_and_scheduled(monkeypatch, db, test_org, test
 
 def test_campaign_retry_queue_and_cancel(monkeypatch, db, test_org, test_user):
     template = _create_template(db, test_org.id)
-    campaign = _create_campaign(db, test_org.id, test_user.id, template.id, status=CampaignStatus.SENDING.value)
+    campaign = _create_campaign(
+        db, test_org.id, test_user.id, template.id, status=CampaignStatus.SENDING.value
+    )
     run = _create_run(db, test_org.id, campaign.id, status="running")
     recipient = CampaignRecipient(
         id=uuid4(),
@@ -165,11 +192,7 @@ def test_campaign_retry_queue_and_cancel(monkeypatch, db, test_org, test_user):
     assert msg == "Retry already queued"
     assert existing_job_id == job_id
 
-    pending_job = (
-        db.query(Job)
-        .filter(Job.id == existing_job_id)
-        .first()
-    )
+    pending_job = db.query(Job).filter(Job.id == existing_job_id).first()
     assert pending_job is not None
     pending_job.status = JobStatus.PENDING.value
     db.add(pending_job)
@@ -181,15 +204,31 @@ def test_campaign_retry_queue_and_cancel(monkeypatch, db, test_org, test_user):
     assert pending_job.status == JobStatus.FAILED.value
 
 
-def test_execute_campaign_run_with_duplicates_and_suppression(monkeypatch, db, test_org, test_user, default_stage):
+def test_execute_campaign_run_with_duplicates_and_suppression(
+    monkeypatch, db, test_org, test_user, default_stage
+):
     template = _create_template(db, test_org.id)
-    campaign = _create_campaign(db, test_org.id, test_user.id, template.id, status=CampaignStatus.SENDING.value)
+    campaign = _create_campaign(
+        db, test_org.id, test_user.id, template.id, status=CampaignStatus.SENDING.value
+    )
     run = _create_run(db, test_org.id, campaign.id, status="running")
 
     recipients = [
-        SimpleNamespace(id=uuid4(), email="alpha@example.com", full_name="Alpha", first_name="Alpha"),
-        SimpleNamespace(id=uuid4(), email="alpha@example.com", full_name="Duplicate Alpha", first_name="Duplicate"),
-        SimpleNamespace(id=uuid4(), email="suppressed@example.com", full_name="Suppressed", first_name="Suppressed"),
+        SimpleNamespace(
+            id=uuid4(), email="alpha@example.com", full_name="Alpha", first_name="Alpha"
+        ),
+        SimpleNamespace(
+            id=uuid4(),
+            email="alpha@example.com",
+            full_name="Duplicate Alpha",
+            first_name="Duplicate",
+        ),
+        SimpleNamespace(
+            id=uuid4(),
+            email="suppressed@example.com",
+            full_name="Suppressed",
+            first_name="Suppressed",
+        ),
         SimpleNamespace(id=uuid4(), email=None, full_name="No Email", first_name="No"),
     ]
     db.add(
@@ -225,22 +264,48 @@ def test_execute_campaign_run_with_duplicates_and_suppression(monkeypatch, db, t
         lambda session, org_id, recipient_type, filters: _FakeQuery(recipients),
     )
     monkeypatch.setattr(campaign_service, "_load_existing_recipients", lambda *args, **kwargs: {})
-    monkeypatch.setattr(campaign_service, "_load_suppressed_emails", lambda *args, **kwargs: {"suppressed@example.com"})
-    monkeypatch.setattr("app.services.org_service.get_org_by_id", lambda *_args, **_kwargs: SimpleNamespace(slug="acme"))
-    monkeypatch.setattr("app.services.org_service.get_org_portal_base_url", lambda *_args, **_kwargs: "https://acme.example.com")
-    monkeypatch.setattr("app.services.email_composition_service.strip_legacy_unsubscribe_placeholders", lambda body: body)
+    monkeypatch.setattr(
+        campaign_service,
+        "_load_suppressed_emails",
+        lambda *args, **kwargs: {"suppressed@example.com"},
+    )
+    monkeypatch.setattr(
+        "app.services.org_service.get_org_by_id",
+        lambda *_args, **_kwargs: SimpleNamespace(slug="acme"),
+    )
+    monkeypatch.setattr(
+        "app.services.org_service.get_org_portal_base_url",
+        lambda *_args, **_kwargs: "https://acme.example.com",
+    )
+    monkeypatch.setattr(
+        "app.services.email_composition_service.strip_legacy_unsubscribe_placeholders",
+        lambda body: body,
+    )
     monkeypatch.setattr(
         "app.services.email_composition_service.compose_template_email_html",
         lambda **kwargs: kwargs["rendered_body_html"],
     )
-    monkeypatch.setattr("app.services.tracking_service.generate_tracking_token", lambda: "tracking-token")
-    monkeypatch.setattr("app.services.tracking_service.prepare_email_for_tracking", lambda body, token: f"{body}-{token}")
+    monkeypatch.setattr(
+        "app.services.tracking_service.generate_tracking_token", lambda: "tracking-token"
+    )
+    monkeypatch.setattr(
+        "app.services.tracking_service.prepare_email_for_tracking",
+        lambda body, token: f"{body}-{token}",
+    )
 
-    monkeypatch.setattr("app.services.email_service.build_surrogate_template_variables", lambda db, entity: {"full_name": entity.full_name})
-    monkeypatch.setattr("app.services.email_service.render_template", lambda subject, body, variables: (subject, body))
+    monkeypatch.setattr(
+        "app.services.email_service.build_surrogate_template_variables",
+        lambda db, entity: {"full_name": entity.full_name},
+    )
+    monkeypatch.setattr(
+        "app.services.email_service.render_template",
+        lambda subject, body, variables: (subject, body),
+    )
 
     def _send_email(**kwargs):
-        return SimpleNamespace(id=uuid4(), status=EmailStatus.PENDING.value), SimpleNamespace(id=uuid4())
+        return SimpleNamespace(id=uuid4(), status=EmailStatus.PENDING.value), SimpleNamespace(
+            id=uuid4()
+        )
 
     monkeypatch.setattr("app.services.email_service.send_email", _send_email)
 
@@ -257,12 +322,18 @@ def test_execute_campaign_run_with_duplicates_and_suppression(monkeypatch, db, t
     assert any(r.recipient_email == "alpha@example.com" for r in recipients)
     assert any(r.skip_reason == "duplicate_email" for r in recipients)
     assert any(r.skip_reason == "suppressed" for r in recipients)
-    assert campaign.status in {CampaignStatus.SENDING.value, CampaignStatus.FAILED.value, CampaignStatus.COMPLETED.value}
+    assert campaign.status in {
+        CampaignStatus.SENDING.value,
+        CampaignStatus.FAILED.value,
+        CampaignStatus.COMPLETED.value,
+    }
 
 
 def test_execute_campaign_run_completed_short_circuit(db, test_org, test_user):
     template = _create_template(db, test_org.id)
-    campaign = _create_campaign(db, test_org.id, test_user.id, template.id, status=CampaignStatus.COMPLETED.value)
+    campaign = _create_campaign(
+        db, test_org.id, test_user.id, template.id, status=CampaignStatus.COMPLETED.value
+    )
     run = _create_run(db, test_org.id, campaign.id, status="completed")
     run.sent_count = 2
     run.delivered_count = 1
@@ -287,9 +358,13 @@ def test_execute_campaign_run_completed_short_circuit(db, test_org, test_user):
     }
 
 
-def test_retry_failed_campaign_run_updates_recipients(monkeypatch, db, test_org, test_user, default_stage):
+def test_retry_failed_campaign_run_updates_recipients(
+    monkeypatch, db, test_org, test_user, default_stage
+):
     template = _create_template(db, test_org.id)
-    campaign = _create_campaign(db, test_org.id, test_user.id, template.id, status=CampaignStatus.FAILED.value)
+    campaign = _create_campaign(
+        db, test_org.id, test_user.id, template.id, status=CampaignStatus.FAILED.value
+    )
     run = _create_run(db, test_org.id, campaign.id, status="failed")
 
     entity = _create_surrogate(
@@ -314,20 +389,43 @@ def test_retry_failed_campaign_run_updates_recipients(monkeypatch, db, test_org,
     db.commit()
 
     monkeypatch.setattr(campaign_service, "_load_suppressed_emails", lambda *args, **kwargs: set())
-    monkeypatch.setattr("app.services.org_service.get_org_by_id", lambda *_args, **_kwargs: SimpleNamespace(slug="acme"))
-    monkeypatch.setattr("app.services.org_service.get_org_portal_base_url", lambda *_args, **_kwargs: "https://acme.example.com")
-    monkeypatch.setattr("app.services.email_composition_service.strip_legacy_unsubscribe_placeholders", lambda body: body)
+    monkeypatch.setattr(
+        "app.services.org_service.get_org_by_id",
+        lambda *_args, **_kwargs: SimpleNamespace(slug="acme"),
+    )
+    monkeypatch.setattr(
+        "app.services.org_service.get_org_portal_base_url",
+        lambda *_args, **_kwargs: "https://acme.example.com",
+    )
+    monkeypatch.setattr(
+        "app.services.email_composition_service.strip_legacy_unsubscribe_placeholders",
+        lambda body: body,
+    )
     monkeypatch.setattr(
         "app.services.email_composition_service.compose_template_email_html",
         lambda **kwargs: kwargs["rendered_body_html"],
     )
-    monkeypatch.setattr("app.services.tracking_service.generate_tracking_token", lambda: "retry-token")
-    monkeypatch.setattr("app.services.tracking_service.prepare_email_for_tracking", lambda body, token: f"{body}-{token}")
-    monkeypatch.setattr("app.services.email_service.build_surrogate_template_variables", lambda db, entity: {"full_name": entity.full_name})
-    monkeypatch.setattr("app.services.email_service.render_template", lambda subject, body, variables: (subject, body))
+    monkeypatch.setattr(
+        "app.services.tracking_service.generate_tracking_token", lambda: "retry-token"
+    )
+    monkeypatch.setattr(
+        "app.services.tracking_service.prepare_email_for_tracking",
+        lambda body, token: f"{body}-{token}",
+    )
+    monkeypatch.setattr(
+        "app.services.email_service.build_surrogate_template_variables",
+        lambda db, entity: {"full_name": entity.full_name},
+    )
+    monkeypatch.setattr(
+        "app.services.email_service.render_template",
+        lambda subject, body, variables: (subject, body),
+    )
     monkeypatch.setattr(
         "app.services.email_service.send_email",
-        lambda **kwargs: (SimpleNamespace(id=uuid4(), status=EmailStatus.PENDING.value), SimpleNamespace(id=uuid4())),
+        lambda **kwargs: (
+            SimpleNamespace(id=uuid4(), status=EmailStatus.PENDING.value),
+            SimpleNamespace(id=uuid4()),
+        ),
     )
 
     result = campaign_service.retry_failed_campaign_run(
@@ -344,7 +442,9 @@ def test_retry_failed_campaign_run_updates_recipients(monkeypatch, db, test_org,
 
 def test_campaign_run_listing_helpers(db, test_org, test_user):
     template = _create_template(db, test_org.id)
-    campaign = _create_campaign(db, test_org.id, test_user.id, template.id, status=CampaignStatus.SENDING.value)
+    campaign = _create_campaign(
+        db, test_org.id, test_user.id, template.id, status=CampaignStatus.SENDING.value
+    )
     run = _create_run(db, test_org.id, campaign.id, status="running")
     recipient = CampaignRecipient(
         id=uuid4(),

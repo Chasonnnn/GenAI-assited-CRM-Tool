@@ -7,7 +7,6 @@ from uuid import uuid4
 import pytest
 
 from app.db.enums import (
-    AppointmentStatus,
     OwnerType,
     Role,
     TaskStatus,
@@ -21,8 +20,6 @@ from app.db.models import (
     AutomationWorkflow,
     EmailTemplate,
     Membership,
-    Organization,
-    Queue,
     Task,
     User,
     UserWorkflowPreference,
@@ -121,7 +118,9 @@ def test_workflow_action_normalization_and_trigger_config_validation():
     )
     assert len(normalized) == 2
 
-    with pytest.raises(ValueError, match="auto_match_submission must be placed before create_intake_lead"):
+    with pytest.raises(
+        ValueError, match="auto_match_submission must be placed before create_intake_lead"
+    ):
         workflow_service._normalize_actions_for_trigger(
             WorkflowTriggerType.FORM_SUBMITTED,
             [
@@ -130,14 +129,24 @@ def test_workflow_action_normalization_and_trigger_config_validation():
             ],
         )
 
-    workflow_service._validate_trigger_config(WorkflowTriggerType.STATUS_CHANGED, {"from_stage_id": None, "to_stage_id": None})
+    workflow_service._validate_trigger_config(
+        WorkflowTriggerType.STATUS_CHANGED, {"from_stage_id": None, "to_stage_id": None}
+    )
     workflow_service._validate_trigger_config(WorkflowTriggerType.SCHEDULED, {"cron": "0 9 * * 1"})
     workflow_service._validate_trigger_config(WorkflowTriggerType.TASK_DUE, {"hours_before": 24})
     workflow_service._validate_trigger_config(WorkflowTriggerType.INACTIVITY, {"days": 7})
-    workflow_service._validate_trigger_config(WorkflowTriggerType.SURROGATE_UPDATED, {"fields": ["status_label"]})
-    workflow_service._validate_trigger_config(WorkflowTriggerType.FORM_STARTED, {"form_id": str(uuid4())})
-    workflow_service._validate_trigger_config(WorkflowTriggerType.FORM_SUBMITTED, {"form_id": str(uuid4())})
-    workflow_service._validate_trigger_config(WorkflowTriggerType.INTAKE_LEAD_CREATED, {"form_id": str(uuid4())})
+    workflow_service._validate_trigger_config(
+        WorkflowTriggerType.SURROGATE_UPDATED, {"fields": ["status_label"]}
+    )
+    workflow_service._validate_trigger_config(
+        WorkflowTriggerType.FORM_STARTED, {"form_id": str(uuid4())}
+    )
+    workflow_service._validate_trigger_config(
+        WorkflowTriggerType.FORM_SUBMITTED, {"form_id": str(uuid4())}
+    )
+    workflow_service._validate_trigger_config(
+        WorkflowTriggerType.INTAKE_LEAD_CREATED, {"form_id": str(uuid4())}
+    )
 
     with pytest.raises(Exception):
         workflow_service._validate_trigger_config(WorkflowTriggerType.SCHEDULED, {})
@@ -187,7 +196,11 @@ def test_workflow_action_config_validation_branches(db, test_org, test_user):
         workflow_service._validate_action_config(
             db,
             org_id=test_org.id,
-            action={"action_type": "assign_surrogate", "owner_type": OwnerType.QUEUE.value, "owner_id": uuid4()},
+            action={
+                "action_type": "assign_surrogate",
+                "owner_type": OwnerType.QUEUE.value,
+                "owner_id": uuid4(),
+            },
             workflow_scope="org",
             owner_user_id=test_user.id,
         )
@@ -299,50 +312,68 @@ def test_workflow_engine_core_trigger_matching_and_finders(db, test_org, test_us
     db.commit()
 
     # trigger() early-return guards
-    assert engine.trigger(
-        db=db,
-        trigger_type=WorkflowTriggerType.STATUS_CHANGED,
-        entity_type="surrogate",
-        entity_id=uuid4(),
-        event_data={},
-        org_id=test_org.id,
-        depth=MAX_DEPTH,
-    ) == []
+    assert (
+        engine.trigger(
+            db=db,
+            trigger_type=WorkflowTriggerType.STATUS_CHANGED,
+            entity_type="surrogate",
+            entity_id=uuid4(),
+            event_data={},
+            org_id=test_org.id,
+            depth=MAX_DEPTH,
+        )
+        == []
+    )
 
-    assert engine.trigger(
-        db=db,
-        trigger_type=WorkflowTriggerType.STATUS_CHANGED,
-        entity_type="surrogate",
-        entity_id=uuid4(),
-        event_data={},
-        org_id=test_org.id,
-        depth=2,
-        source=WorkflowEventSource.WORKFLOW,
-    ) == []
+    assert (
+        engine.trigger(
+            db=db,
+            trigger_type=WorkflowTriggerType.STATUS_CHANGED,
+            entity_type="surrogate",
+            entity_id=uuid4(),
+            event_data={},
+            org_id=test_org.id,
+            depth=2,
+            source=WorkflowEventSource.WORKFLOW,
+        )
+        == []
+    )
 
     # _trigger_matches branches
-    assert engine._trigger_matches(
-        wf_org,
-        WorkflowTriggerType.STATUS_CHANGED,
-        {"new_stage_id": str(uuid4())},
-    ) is False
+    assert (
+        engine._trigger_matches(
+            wf_org,
+            WorkflowTriggerType.STATUS_CHANGED,
+            {"new_stage_id": str(uuid4())},
+        )
+        is False
+    )
     wf_org.trigger_config = {"fields": ["status_label"]}
-    assert engine._trigger_matches(
-        wf_org,
-        WorkflowTriggerType.SURROGATE_UPDATED,
-        {"changed_fields": ["status_label"]},
-    ) is True
+    assert (
+        engine._trigger_matches(
+            wf_org,
+            WorkflowTriggerType.SURROGATE_UPDATED,
+            {"changed_fields": ["status_label"]},
+        )
+        is True
+    )
     wf_org.trigger_config = {"form_id": str(uuid4())}
-    assert engine._trigger_matches(
-        wf_org,
-        WorkflowTriggerType.FORM_SUBMITTED,
-        {"form_id": str(uuid4())},
-    ) is False
-    assert engine._trigger_matches(
-        wf_org,
-        WorkflowTriggerType.SCHEDULED,
-        {},
-    ) is True
+    assert (
+        engine._trigger_matches(
+            wf_org,
+            WorkflowTriggerType.FORM_SUBMITTED,
+            {"form_id": str(uuid4())},
+        )
+        is False
+    )
+    assert (
+        engine._trigger_matches(
+            wf_org,
+            WorkflowTriggerType.SCHEDULED,
+            {},
+        )
+        is True
+    )
 
     # _find_matching_workflows scope filtering
     wf_personal.trigger_config = {}
@@ -413,12 +444,9 @@ def test_workflow_engine_core_rate_limit_dedupe_and_conditions(db, test_org, tes
     assert engine._evaluate_conditions([], "AND", dummy) is True
     assert engine._evaluate_condition(WorkflowConditionOperator.EQUALS.value, "x", "x") is True
     assert engine._evaluate_condition(WorkflowConditionOperator.NOT_EQUALS.value, "x", "y") is True
+    assert engine._evaluate_condition(WorkflowConditionOperator.CONTAINS.value, "abc", "b") is True
     assert (
-        engine._evaluate_condition(WorkflowConditionOperator.CONTAINS.value, "abc", "b") is True
-    )
-    assert (
-        engine._evaluate_condition(WorkflowConditionOperator.NOT_CONTAINS.value, "abc", "z")
-        is True
+        engine._evaluate_condition(WorkflowConditionOperator.NOT_CONTAINS.value, "abc", "z") is True
     )
     assert engine._evaluate_condition(WorkflowConditionOperator.IS_EMPTY.value, "", None) is True
     assert (
@@ -432,9 +460,7 @@ def test_workflow_engine_core_rate_limit_dedupe_and_conditions(db, test_org, tes
     assert (
         engine._evaluate_condition(WorkflowConditionOperator.GREATER_THAN.value, "5", "4") is True
     )
-    assert (
-        engine._evaluate_condition(WorkflowConditionOperator.LESS_THAN.value, "2", "3") is True
-    )
+    assert engine._evaluate_condition(WorkflowConditionOperator.LESS_THAN.value, "2", "3") is True
     assert engine._evaluate_condition("unknown", "a", "b") is False
 
 
@@ -533,8 +559,8 @@ def test_workflow_engine_resolve_approval_context_fallbacks(db, test_org, test_u
     assert error is None
 
     # Surrogate owned by queue with approval requirement -> explicit error.
-    adapter.get_related_surrogate = (
-        lambda *_args, **_kwargs: SimpleNamespace(owner_type=OwnerType.QUEUE.value, owner_id=None)
+    adapter.get_related_surrogate = lambda *_args, **_kwargs: SimpleNamespace(
+        owner_type=OwnerType.QUEUE.value, owner_id=None
     )  # type: ignore[method-assign]
     _surrogate, _owner, error = engine._resolve_approval_context(
         db=db,

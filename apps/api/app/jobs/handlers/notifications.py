@@ -17,7 +17,9 @@ def _coerce_notification_type(raw_type: str | None) -> NotificationType:
     try:
         return NotificationType(raw_type)
     except ValueError:
-        logger.warning("Unknown notification type '%s'; defaulting to workflow_notification", raw_type)
+        logger.warning(
+            "Unknown notification type '%s'; defaulting to workflow_notification", raw_type
+        )
         return NotificationType.WORKFLOW_NOTIFICATION
 
 
