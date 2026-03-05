@@ -3,8 +3,9 @@
 import { useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "@/components/app-link"
+import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -321,10 +322,11 @@ export default function IntendedParentDetailPage() {
                             {STATUS_LABELS[ip.status]}
                         </Badge>
                         <DropdownMenu>
-                            <DropdownMenuTrigger className="inline-flex items-center justify-center size-10 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground">
-                                <span className="inline-flex items-center justify-center">
-                                    <MoreVerticalIcon className="size-4" />
-                                </span>
+                            <DropdownMenuTrigger
+                                className={cn(buttonVariants({ variant: "outline", size: "icon" }), "size-10")}
+                                aria-label={`Actions for intended parent ${ip.full_name}`}
+                            >
+                                <MoreVerticalIcon className="size-4" />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={handleEdit}>Edit</DropdownMenuItem>

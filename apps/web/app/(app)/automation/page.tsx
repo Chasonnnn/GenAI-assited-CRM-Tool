@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -1589,11 +1590,11 @@ export default function AutomationPage() {
                                                     aria-label={`Toggle workflow ${workflow.name}`}
                                                 />
                                                 <DropdownMenu>
-                                                    <DropdownMenuTrigger>
-                                                        <span className="inline-flex items-center justify-center size-8 p-0 rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer">
-                                                            <MoreVerticalIcon className="size-4" />
-                                                            <span className="sr-only">Open menu</span>
-                                                        </span>
+                                                    <DropdownMenuTrigger
+                                                        className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "size-8")}
+                                                        aria-label={`Actions for workflow ${workflow.name}`}
+                                                    >
+                                                        <MoreVerticalIcon className="size-4" />
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
                                                         <DropdownMenuItem onClick={() => handleEdit(workflow.id)} disabled={!canEdit}>

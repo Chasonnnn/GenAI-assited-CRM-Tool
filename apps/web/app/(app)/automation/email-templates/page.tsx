@@ -3,8 +3,9 @@
 import * as React from "react"
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { cn } from "@/lib/utils"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -439,10 +440,11 @@ function TemplateCard({
                     </div>
                     {!isReadOnly && (
                         <DropdownMenu>
-                            <DropdownMenuTrigger>
-                                <span className="inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground size-8 shrink-0 cursor-pointer">
-                                    <MoreVerticalIcon className="size-4" />
-                                </span>
+                            <DropdownMenuTrigger
+                                className={cn(buttonVariants({ variant: "outline", size: "icon" }), "size-8 shrink-0")}
+                                aria-label={`Actions for template ${template.name}`}
+                            >
+                                <MoreVerticalIcon className="size-4" />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                                 {canSendTest && (
