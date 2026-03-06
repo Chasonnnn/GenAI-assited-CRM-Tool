@@ -20,6 +20,7 @@ from app.core.deps import (
     require_csrf_header,
     require_permission,
 )
+from app.core.rate_limit import limiter
 from app.core.encryption import encrypt_token
 from app.core.policies import POLICIES
 from app.core.security import (
@@ -149,6 +150,7 @@ class DisconnectResponse(BaseModel):
     response_model=MetaOAuthConnectResponse,
     dependencies=[Depends(require_permission(POLICIES["meta_leads"].default))],
 )
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def meta_connect(
     request: Request,
     response: Response,
@@ -192,6 +194,7 @@ def meta_connect(
 
 
 @router.get("/callback")
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 async def meta_callback(
     request: Request,
     code: str,
