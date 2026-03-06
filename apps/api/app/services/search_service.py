@@ -287,20 +287,21 @@ def _global_search_unified(
             if branch_limit <= 0:
                 return stmt.limit(0)
 
+            # Apply ORDER BY and LIMIT to the inner statement to prevent intermediate materialization
+            stmt = stmt.order_by(
+                stmt.selected_columns.rank.desc(), stmt.selected_columns.created_at.desc()
+            ).limit(branch_limit)
+
             branch = stmt.subquery()
-            return (
-                select(
-                    branch.c.entity_type,
-                    branch.c.entity_id,
-                    branch.c.title,
-                    branch.c.snippet,
-                    branch.c.rank,
-                    cast(branch.c.surrogate_id, surrogate_table.c.id.type).label("surrogate_id"),
-                    branch.c.surrogate_name,
-                    branch.c.created_at,
-                )
-                .order_by(branch.c.rank.desc(), branch.c.created_at.desc())
-                .limit(branch_limit)
+            return select(
+                branch.c.entity_type,
+                branch.c.entity_id,
+                branch.c.title,
+                branch.c.snippet,
+                branch.c.rank,
+                cast(branch.c.surrogate_id, surrogate_table.c.id.type).label("surrogate_id"),
+                branch.c.surrogate_name,
+                branch.c.created_at,
             )
 
         surrogate_access_filter = _build_surrogate_access_filter(
