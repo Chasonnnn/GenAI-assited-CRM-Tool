@@ -1,11 +1,3 @@
-## 2025-05-20 - DropdownMenuTrigger Accessibility Pattern
-**Learning:** `DropdownMenuTrigger` in this codebase (shadcn/ui) renders a button by default. Wrapping a styled `span` inside it for visual customization creates semantic issues (nested clickable elements if not careful) and misses accessibility features.
-**Action:** Apply `buttonVariants` and `aria-label` directly to `DropdownMenuTrigger` instead of nesting styled elements.
-
-## 2025-05-20 - Dynamic Icon Button Accessibility
-**Learning:** In lists of items (like file attachments), icon-only buttons (download, delete) often lack context. Adding 'aria-label' with the item name (e.g., "Delete report.pdf" instead of just "Delete") is critical for screen reader users to know *which* item they are acting on.
-**Action:** Always include dynamic context in 'aria-label' for repeated action buttons in lists.
-
-## 2025-05-20 - Table Checkbox Accessibility
-**Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
-**Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+## 2025-05-20 - Inline Field Keyboard Accessibility
+**Learning:** Custom interactive components acting as inputs (like `InlineEditField` and `InlineDateField`) that use a `div` as a trigger need explicit keyboard focus styles (`focus-visible:ring-2`, etc.) when `tabIndex={0}` is present, otherwise keyboard users have no visual indication of focus.
+**Action:** Always verify that elements with `tabIndex={0}` have explicit `focus-visible` styles, especially when they act as pseudo-inputs.
