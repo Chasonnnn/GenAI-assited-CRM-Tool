@@ -287,21 +287,33 @@ def _global_search_unified(
             if branch_limit <= 0:
                 return stmt.limit(0)
 
-            branch = stmt.subquery()
-            return (
-                select(
-                    branch.c.entity_type,
-                    branch.c.entity_id,
-                    branch.c.title,
-                    branch.c.snippet,
-                    branch.c.rank,
-                    cast(branch.c.surrogate_id, surrogate_table.c.id.type).label("surrogate_id"),
-                    branch.c.surrogate_name,
-                    branch.c.created_at,
-                )
-                .order_by(branch.c.rank.desc(), branch.c.created_at.desc())
-                .limit(branch_limit)
+            # ⚡ Bolt Optimization:
+            # We push ORDER BY and LIMIT down into the base query branch *before* it gets unioned.
+            # By using stmt.with_only_columns() and stmt.order_by() instead of wrapping the
+            # statement in a .subquery() first, we avoid creating an outer SELECT layer in SQL.
+            # This allows PostgreSQL's query planner to natively optimize the top-N sort on the
+            # base tables (often using indexes) rather than materializing a subquery virtual table.
+            # Impact: Reduces memory usage and execution time for global search, particularly
+            # when searching large datasets with many text matches across all entity tables.
+
+            # We must cast the selected surrogate_id to match the Surrogate table's ID type (UUID)
+            # because some branches return literal(None) which Postgres might treat as text/unknown
+            # and fail the UNION ALL.
+            stmt = stmt.with_only_columns(
+                stmt.selected_columns.entity_type,
+                stmt.selected_columns.entity_id,
+                stmt.selected_columns.title,
+                stmt.selected_columns.snippet,
+                stmt.selected_columns.rank,
+                cast(stmt.selected_columns.surrogate_id, surrogate_table.c.id.type).label("surrogate_id"),
+                stmt.selected_columns.surrogate_name,
+                stmt.selected_columns.created_at,
             )
+
+            return stmt.order_by(
+                stmt.selected_columns.rank.desc(),
+                stmt.selected_columns.created_at.desc(),
+            ).limit(branch_limit)
 
         surrogate_access_filter = _build_surrogate_access_filter(
             role,

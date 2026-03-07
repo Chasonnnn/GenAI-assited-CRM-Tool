@@ -1,0 +1,4 @@
+
+## 2025-05-20 - Global Search Subquery Optimization
+**Learning:** In SQLAlchemy 2.0, when generating queries with `UNION ALL`, wrapping `SELECT` statements with `.subquery()` and then applying limits creates a redundant outer layer (`SELECT * FROM (...)`). Postgres performs better with top-N sorts (using indexes and limiting materialization) when the base query has `ORDER BY` and `LIMIT` directly applied, rather than through a wrapper subquery. Moreover, some union elements may be `literal(None)`, requiring explicit `cast(..., type)` (e.g., `UUID`) on the selected column so that types match across the union.
+**Action:** Use `stmt.with_only_columns(...)` with `stmt.selected_columns` and `cast` instead of a wrapper subquery. Apply `.order_by().limit()` directly to this modified statement to push limits natively onto the base query before unioning.
