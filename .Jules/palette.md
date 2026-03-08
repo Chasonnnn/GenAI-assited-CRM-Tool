@@ -9,3 +9,6 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+## 2025-05-20 - SurrogateApplicationTab Icon Button Accessibility
+**Learning:** Icon-only buttons (Edit, Cancel, Download, Delete) in file attachments and profile field rows often lack accessible names. This makes them difficult for screen reader users to use since there's no context on *which* item they are acting on.
+**Action:** Always include dynamic context in 'aria-label' for repeated action buttons in lists, such as `aria-label={`Download ${file.filename}`}`.

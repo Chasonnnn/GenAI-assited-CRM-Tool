@@ -1223,6 +1223,7 @@ export function SurrogateApplicationTab({
                                                                             variant="ghost"
                                                                             className="h-7 w-7 p-0"
                                                                             onClick={cancelEditing}
+                                                                            aria-label={`Cancel editing ${field.label}`}
                                                                         >
                                                                             <XIcon className="h-3.5 w-3.5" />
                                                                         </Button>
@@ -1244,6 +1245,7 @@ export function SurrogateApplicationTab({
                                                                                 variant="ghost"
                                                                                 className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                                                                                 onClick={() => setEditingField(field.key)}
+                                                                                aria-label={`Edit ${field.label}`}
                                                                             >
                                                                                 <PencilIcon className="h-3 w-3" />
                                                                             </Button>
@@ -1399,6 +1401,7 @@ export function SurrogateApplicationTab({
                                                         className="h-8 w-8"
                                                         disabled={file.quarantined}
                                                         onClick={() => handleDownloadFile(file.id)}
+                                                        aria-label={`Download ${file.filename}`}
                                                     >
                                                         <DownloadIcon className="h-4 w-4" />
                                                     </Button>
@@ -1410,6 +1413,7 @@ export function SurrogateApplicationTab({
                                                             className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                                             onClick={() => handleDeleteFile(file.id, file.filename)}
                                                             disabled={isDeleting}
+                                                            aria-label={`Delete ${file.filename}`}
                                                         >
                                                             {isDeleting ? (
                                                                 <Loader2Icon className="h-4 w-4 animate-spin" />
