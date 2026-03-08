@@ -10,6 +10,15 @@ from httpx import AsyncClient
 from app.services.meta_oauth_service import REQUIRED_SCOPES, PaginatedResult
 
 
+@pytest.fixture
+def rate_limiter_reset():
+    from app.core.rate_limit import limiter
+
+    limiter.reset()
+    yield
+    limiter.reset()
+
+
 @pytest.mark.asyncio
 async def test_meta_oauth_connect_sets_state_cookie_and_returns_auth_url(
     authed_client: AsyncClient, monkeypatch
@@ -176,6 +185,58 @@ async def test_meta_oauth_callback_creates_connection(
     assert connection.meta_user_name == "Meta User"
     assert decrypt_token(connection.access_token_encrypted) == "long-token"
     assert set(connection.granted_scopes) >= REQUIRED_SCOPES
+
+
+@pytest.mark.asyncio
+async def test_meta_oauth_connect_rate_limited(
+    authed_client: AsyncClient, monkeypatch, rate_limiter_reset
+):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "META_APP_ID", "test-meta-app-id")
+    monkeypatch.setattr(
+        settings,
+        "META_OAUTH_REDIRECT_URI",
+        "https://test/integrations/meta/callback",
+        raising=False,
+    )
+
+    for _ in range(5):
+        response = await authed_client.get("/integrations/meta/connect")
+        assert response.status_code == 200
+
+    blocked = await authed_client.get("/integrations/meta/connect")
+    assert blocked.status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_meta_oauth_callback_rate_limited(
+    authed_client: AsyncClient, monkeypatch, rate_limiter_reset
+):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "META_APP_ID", "test-meta-app-id")
+    monkeypatch.setattr(
+        settings,
+        "META_OAUTH_REDIRECT_URI",
+        "https://test/integrations/meta/callback",
+        raising=False,
+    )
+
+    for _ in range(5):
+        response = await authed_client.get(
+            "/integrations/meta/callback",
+            params={"code": "dummy", "state": "dummy"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 302
+
+    blocked = await authed_client.get(
+        "/integrations/meta/callback",
+        params={"code": "dummy", "state": "dummy"},
+        follow_redirects=False,
+    )
+    assert blocked.status_code == 429
 
 
 @pytest.mark.asyncio
