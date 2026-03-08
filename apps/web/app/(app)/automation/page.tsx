@@ -1589,12 +1589,19 @@ export default function AutomationPage() {
                                                     aria-label={`Toggle workflow ${workflow.name}`}
                                                 />
                                                 <DropdownMenu>
-                                                    <DropdownMenuTrigger>
-                                                        <span className="inline-flex items-center justify-center size-8 p-0 rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer">
-                                                            <MoreVerticalIcon className="size-4" />
-                                                            <span className="sr-only">Open menu</span>
-                                                        </span>
-                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuTrigger
+                                                        render={
+                                                            <Button
+                                                                type="button"
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="size-8"
+                                                                aria-label={`Actions for workflow ${workflow.name}`}
+                                                            >
+                                                                <MoreVerticalIcon className="size-4" />
+                                                            </Button>
+                                                        }
+                                                    />
                                                     <DropdownMenuContent align="end">
                                                         <DropdownMenuItem onClick={() => handleEdit(workflow.id)} disabled={!canEdit}>
                                                             Edit

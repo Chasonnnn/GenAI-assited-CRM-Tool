@@ -49,6 +49,32 @@ describe("Inline field accessibility", () => {
         expect(screen.getByRole("button", { name: "Edit Start Date" })).toBeInTheDocument()
     })
 
+    it("adds focus-visible styles to inline display triggers", () => {
+        render(
+            <div>
+                <InlineEditField
+                    value="test@example.com"
+                    label="Email"
+                    onSave={vi.fn().mockResolvedValue(undefined)}
+                />
+                <InlineDateField
+                    value="2026-01-05"
+                    label="Start Date"
+                    onSave={vi.fn().mockResolvedValue(undefined)}
+                />
+            </div>
+        )
+
+        expect(screen.getByRole("button", { name: "Edit Email" })).toHaveClass(
+            "focus-visible:ring-2",
+            "focus-visible:ring-ring"
+        )
+        expect(screen.getByRole("button", { name: "Edit Start Date" })).toHaveClass(
+            "focus-visible:ring-2",
+            "focus-visible:ring-ring"
+        )
+    })
+
     it("hides decorative pencil icons from screen readers", () => {
         const { container } = render(
             <div>

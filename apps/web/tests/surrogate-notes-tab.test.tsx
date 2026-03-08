@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { render } from "@testing-library/react"
+import { render, screen } from "@testing-library/react"
 
 import { Tabs } from "@/components/ui/tabs"
 import { SurrogateNotesTab } from "@/components/surrogates/tabs/SurrogateNotesTab"
@@ -39,5 +39,29 @@ describe("SurrogateNotesTab", () => {
             ([props]) => Boolean((props as { enableEmojiPicker?: boolean }).enableEmojiPicker)
         )
         expect(hasEmojiEnabled).toBe(true)
+    })
+
+    it("adds an aria-label to note delete actions", () => {
+        render(
+            <Tabs defaultValue="notes">
+                <SurrogateNotesTab
+                    surrogateId="sur_1"
+                    notes={[
+                        {
+                            id: "note_1",
+                            author_name: "Nina Admin",
+                            created_at: "2026-01-01T00:00:00Z",
+                            body: "<p>Hello</p>",
+                        },
+                    ]}
+                    onAddNote={vi.fn()}
+                    isSubmitting={false}
+                    onDeleteNote={vi.fn()}
+                    formatDateTime={() => "now"}
+                />
+            </Tabs>
+        )
+
+        expect(screen.getByRole("button", { name: "Delete note by Nina Admin" })).toBeInTheDocument()
     })
 })

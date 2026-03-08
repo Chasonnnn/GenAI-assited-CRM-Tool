@@ -296,8 +296,13 @@ export default function IntendedParentDetailPage() {
             <div className="border-b border-border bg-background/95 backdrop-blur">
                 <div className="flex h-16 items-center justify-between px-6">
                     <div className="flex items-center gap-4">
-                        <Link href="/intended-parents" className="inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground size-9">
+                        <Link
+                            href="/intended-parents"
+                            aria-label="Back to intended parents"
+                            className="inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground size-9"
+                        >
                             <ArrowLeftIcon className="size-5" />
+                            <span className="sr-only">Back to intended parents</span>
                         </Link>
                         <div>
                             <h1 className="text-2xl font-semibold">{ip.full_name}</h1>
@@ -321,10 +326,11 @@ export default function IntendedParentDetailPage() {
                             {STATUS_LABELS[ip.status]}
                         </Badge>
                         <DropdownMenu>
-                            <DropdownMenuTrigger className="inline-flex items-center justify-center size-10 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground">
-                                <span className="inline-flex items-center justify-center">
-                                    <MoreVerticalIcon className="size-4" />
-                                </span>
+                            <DropdownMenuTrigger
+                                aria-label={`Actions for ${ip.full_name}`}
+                                className="inline-flex items-center justify-center size-10 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+                            >
+                                <MoreVerticalIcon className="size-4" />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={handleEdit}>Edit</DropdownMenuItem>

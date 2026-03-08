@@ -61,4 +61,13 @@ describe('IntendedParentDetailPage', () => {
         expect(screen.getByText('Bob Parent')).toBeInTheDocument()
         expect(screen.getAllByText('bob@example.com').length).toBeGreaterThan(0)
     })
+
+    it("adds accessible labels to the back link and actions menu", () => {
+        render(<IntendedParentDetailPage />)
+
+        expect(screen.getByRole("link", { name: "Back to intended parents" })).toBeInTheDocument()
+        expect(
+            screen.getByRole("button", { name: "Actions for Bob Parent" })
+        ).toBeInTheDocument()
+    })
 })

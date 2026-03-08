@@ -439,11 +439,19 @@ function TemplateCard({
                     </div>
                     {!isReadOnly && (
                         <DropdownMenu>
-                            <DropdownMenuTrigger>
-                                <span className="inline-flex items-center justify-center rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground size-8 shrink-0 cursor-pointer">
-                                    <MoreVerticalIcon className="size-4" />
-                                </span>
-                            </DropdownMenuTrigger>
+                            <DropdownMenuTrigger
+                                render={
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        className="size-8 shrink-0"
+                                        aria-label={`Actions for ${template.name}`}
+                                    >
+                                        <MoreVerticalIcon className="size-4" />
+                                    </Button>
+                                }
+                            />
                             <DropdownMenuContent align="end">
                                 {canSendTest && (
                                     <>

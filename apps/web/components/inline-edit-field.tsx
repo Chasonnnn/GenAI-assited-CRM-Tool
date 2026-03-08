@@ -107,7 +107,7 @@ export function InlineEditField({
         return (
             <div
                 className={cn(
-                    "group flex items-center gap-1 cursor-pointer rounded px-1 -mx-1 hover:bg-muted/50 transition-colors",
+                    "group flex items-center gap-1 cursor-pointer rounded px-1 -mx-1 hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                     displayClassName
                 )}
                 onClick={handleStartEdit}

@@ -833,6 +833,7 @@ export default function AIAssistantPage() {
                                                                     variant="outline"
                                                                     onClick={() => handleReject(action.approval_id)}
                                                                     disabled={rejectAction.isPending}
+                                                                    aria-label={`Reject action ${action.action_type.replace(/_/g, " ")}`}
                                                                 >
                                                                     <XIcon className="h-4 w-4" />
                                                                 </Button>

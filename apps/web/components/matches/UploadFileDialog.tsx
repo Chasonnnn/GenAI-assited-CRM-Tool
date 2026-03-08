@@ -138,6 +138,7 @@ export function UploadFileDialog({
                                     variant="ghost"
                                     size="sm"
                                     onClick={handleClearFile}
+                                    aria-label={`Remove selected file ${selectedFile.name}`}
                                     className="flex-shrink-0"
                                 >
                                     <XIcon className="size-4" />

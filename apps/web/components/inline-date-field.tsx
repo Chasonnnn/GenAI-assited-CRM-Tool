@@ -119,7 +119,7 @@ export function InlineDateField({
         return (
             <div
                 className={cn(
-                    "group flex items-center gap-1 rounded px-1 -mx-1 transition-colors",
+                    "group flex items-center gap-1 rounded px-1 -mx-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                     !disabled && "cursor-pointer hover:bg-muted/50",
                     disabled && "opacity-50 cursor-not-allowed",
                     displayClassName

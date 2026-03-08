@@ -81,6 +81,16 @@ describe('AIAssistantPage', () => {
         expect(await screen.findByText('approved')).toBeInTheDocument()
     })
 
+    it("adds an accessible label to reject action buttons", async () => {
+        render(<AIAssistantPage />)
+
+        const input = screen.getByRole("textbox")
+        fireEvent.change(input, { target: { value: "Summarize this workflow" } })
+        fireEvent.keyDown(input, { key: "Enter", shiftKey: false })
+
+        expect(await screen.findByRole("button", { name: /reject action/i })).toBeInTheDocument()
+    })
+
     it('shows global-only mode without raw selector values and records history', async () => {
         render(<AIAssistantPage />)
 

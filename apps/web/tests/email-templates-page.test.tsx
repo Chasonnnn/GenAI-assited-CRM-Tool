@@ -247,6 +247,16 @@ describe("EmailTemplatesPage", () => {
         expect(await screen.findByLabelText("To email")).toBeInTheDocument()
     })
 
+    it("labels organization template action menus with template context", async () => {
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+
+        expect(
+            await screen.findByRole("button", { name: "Actions for Org Template" })
+        ).toBeInTheDocument()
+    })
+
     it("clamps long subjects on template cards", () => {
         render(<EmailTemplatesPage />)
 

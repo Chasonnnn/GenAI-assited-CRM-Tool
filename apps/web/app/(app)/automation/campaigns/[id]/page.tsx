@@ -365,7 +365,12 @@ export default function CampaignDetailPage() {
             <div className="border-b bg-card">
                 <div className="flex items-center justify-between p-6">
                     <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="icon-sm" render={<Link href="/automation/campaigns" />}>
+                        <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="Back to campaigns"
+                            render={<Link href="/automation/campaigns" />}
+                        >
                             <ArrowLeftIcon className="size-4" />
                         </Button>
                         <div>

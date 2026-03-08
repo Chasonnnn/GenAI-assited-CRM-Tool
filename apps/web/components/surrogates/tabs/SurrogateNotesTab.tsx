@@ -86,6 +86,7 @@ export function SurrogateNotesTab({
                                                         size="icon"
                                                         className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
                                                         onClick={() => onDeleteNote(note.id)}
+                                                        aria-label={`Delete note by ${note.author_name || "Unknown"}`}
                                                     >
                                                         <TrashIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
                                                     </Button>

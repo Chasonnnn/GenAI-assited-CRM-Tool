@@ -341,6 +341,7 @@ export default function AIWorkflowBuilderPage() {
                         <Button
                             variant="ghost"
                             size="icon-sm"
+                            aria-label={mode === "email_template" ? "Back to email templates" : "Back to workflows"}
                             render={<Link href={backHref} />}
                         >
                             <ArrowLeftIcon className="size-4" />
