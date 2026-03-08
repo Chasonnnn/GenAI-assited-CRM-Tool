@@ -15,7 +15,7 @@ RUN echo "cache_bust=${CACHE_BUST}" > /dev/null
 COPY --from=uv /uv /usr/local/bin/uv
 
 # Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -40,7 +40,7 @@ RUN echo "cache_bust=${CACHE_BUST}" > /dev/null
 
 # Install runtime dependencies only
 RUN groupadd -r clamav && useradd -r -g clamav -s /usr/sbin/nologin clamav
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
     clamav \

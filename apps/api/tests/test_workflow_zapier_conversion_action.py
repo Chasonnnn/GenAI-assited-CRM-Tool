@@ -254,3 +254,92 @@ def test_status_changed_workflow_send_zapier_conversion_event_uses_configured_bu
     assert job is not None
     assert job.payload["data"]["stage_key"] == "new_unread"
     assert job.payload["data"]["event_name"] == "Qualified"
+
+
+def test_status_changed_workflow_conversion_event_fans_out_to_zapier_and_meta_dataset(
+    db, test_org, test_user
+):
+    from app.services import meta_crm_dataset_settings_service, zapier_settings_service
+
+    pre_qualified = _get_stage(db, test_org.id, "pre_qualified")
+    lead = _create_meta_lead(db, test_org.id)
+    surrogate = _create_meta_surrogate(db, test_org.id, test_user.id)
+    surrogate.meta_lead_id = lead.id
+    surrogate.meta_form_id = lead.meta_form_id
+    surrogate.stage_id = pre_qualified.id
+    surrogate.status_label = pre_qualified.label
+    db.commit()
+
+    zapier_settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    zapier_settings.outbound_webhook_url = "https://hooks.zapier.com/hooks/catch/123/abc"
+    zapier_settings.outbound_enabled = True
+    zapier_settings.outbound_event_mapping = [
+        {"stage_key": "pre_qualified", "event_name": "Qualified", "enabled": True}
+    ]
+
+    meta_settings = meta_crm_dataset_settings_service.get_or_create_settings(db, test_org.id)
+    meta_settings.dataset_id = "1428122951556949"
+    meta_settings.access_token_encrypted = meta_crm_dataset_settings_service.encrypt_access_token(
+        "meta-token"
+    )
+    meta_settings.enabled = True
+    meta_settings.crm_name = "Surrogacy Force CRM"
+    meta_settings.event_mapping = [
+        {"stage_key": "pre_qualified", "event_name": "Qualified", "enabled": True}
+    ]
+    db.commit()
+
+    workflow = AutomationWorkflow(
+        id=uuid4(),
+        organization_id=test_org.id,
+        name="Status -> all conversion transports",
+        trigger_type=WorkflowTriggerType.STATUS_CHANGED.value,
+        trigger_config={},
+        conditions=[],
+        condition_logic="AND",
+        actions=[{"action_type": "send_zapier_conversion_event"}],
+        is_enabled=True,
+        is_system_workflow=False,
+        created_by_user_id=test_user.id,
+    )
+    db.add(workflow)
+    db.commit()
+
+    executions = engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.STATUS_CHANGED,
+        entity_type="surrogate",
+        entity_id=surrogate.id,
+        event_data={
+            "old_stage_id": None,
+            "new_stage_id": str(pre_qualified.id),
+            "old_stage_key": None,
+            "new_stage_key": pre_qualified.stage_key,
+        },
+        org_id=test_org.id,
+    )
+
+    assert len(executions) == 1
+    assert executions[0].status == WorkflowExecutionStatus.SUCCESS.value
+    assert executions[0].actions_executed[0]["queued"] is True
+    assert executions[0].actions_executed[0]["transport_results"]["zapier"]["queued"] is True
+    assert executions[0].actions_executed[0]["transport_results"]["meta_crm_dataset"]["queued"] is True
+
+    assert (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.ZAPIER_STAGE_EVENT.value,
+        )
+        .count()
+        == 1
+    )
+    assert (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.META_CRM_DATASET_EVENT.value,
+        )
+        .count()
+        == 1
+    )

@@ -236,6 +236,110 @@ class ZapierOutboundEvent(Base):
     )
 
 
+class MetaCrmDatasetSettings(Base):
+    """
+    Org-level direct Meta CRM dataset configuration.
+
+    Stores the dataset ID and encrypted access token used to post
+    lead-stage events directly to Meta's Conversions API.
+    """
+
+    __tablename__ = "meta_crm_dataset_settings"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
+    dataset_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    access_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("false"), nullable=False)
+    crm_name: Mapped[str] = mapped_column(
+        String(120), server_default=text("'Surrogacy Force CRM'"), nullable=False
+    )
+    send_hashed_pii: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )
+    event_mapping: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    test_event_code: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+
+    organization: Mapped["Organization"] = relationship()
+
+
+class MetaCrmDatasetEvent(Base):
+    """
+    Durable event log for direct Meta CRM dataset delivery.
+
+    Tracks queued, delivered, failed, and skipped lead-stage events.
+    """
+
+    __tablename__ = "meta_crm_dataset_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+    source: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'automatic'")
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    event_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    lead_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    stage_key: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    stage_slug: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    stage_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    surrogate_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+    delivered_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+
+    organization: Mapped["Organization"] = relationship()
+
+    __table_args__ = (
+        Index("idx_meta_crm_dataset_events_org_created", "organization_id", "created_at"),
+        Index(
+            "idx_meta_crm_dataset_events_org_status",
+            "organization_id",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "uq_meta_crm_dataset_events_job_id",
+            "job_id",
+            unique=True,
+            postgresql_where=text("job_id IS NOT NULL"),
+        ),
+    )
+
+
 class UserIntegration(Base):
     """
     Per-user OAuth integrations.

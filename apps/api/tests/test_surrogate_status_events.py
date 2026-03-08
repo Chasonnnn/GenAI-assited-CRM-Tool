@@ -214,6 +214,202 @@ def test_status_change_enqueues_zapier_stage_event(monkeypatch, db, test_org, te
     assert data["meta_campaign_id"] == "camp_123"
 
 
+def test_status_change_enqueues_meta_crm_dataset_stage_event(
+    monkeypatch, db, test_org, test_user
+):
+    from app.services import meta_crm_dataset_settings_service
+
+    settings = meta_crm_dataset_settings_service.get_or_create_settings(db, test_org.id)
+    settings.dataset_id = "1428122951556949"
+    settings.access_token_encrypted = meta_crm_dataset_settings_service.encrypt_access_token(
+        "meta-token"
+    )
+    settings.enabled = True
+    settings.crm_name = "Surrogacy Force CRM"
+    settings.event_mapping = [
+        {"stage_key": "pre_qualified", "event_name": "Qualified", "enabled": True}
+    ]
+    db.commit()
+
+    lead = _create_meta_lead(db, test_org.id)
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, source=SurrogateSource.META)
+    surrogate.meta_lead_id = lead.id
+    surrogate.meta_form_id = lead.meta_form_id
+    db.commit()
+
+    new_stage = _get_stage(db, test_org.id, "pre_qualified")
+
+    monkeypatch.setattr(surrogate_events, "_maybe_send_capi_event", lambda *_args, **_kwargs: None)
+    from app.services import notification_facade, workflow_triggers
+
+    monkeypatch.setattr(
+        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
+
+    event_kwargs = _event_kwargs(surrogate, new_stage, user_id=test_user.id)
+    event_kwargs["db"] = db
+    surrogate_events.handle_status_changed(**event_kwargs)
+
+    job = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.META_CRM_DATASET_EVENT.value,
+        )
+        .order_by(Job.created_at.desc())
+        .first()
+    )
+    assert job is not None
+    event_data = job.payload["body"]["data"][0]
+    assert event_data["event_name"] == "Qualified"
+    assert event_data["custom_data"]["event_source"] == "crm"
+    assert event_data["custom_data"]["lead_event_source"] == "Surrogacy Force CRM"
+    assert event_data["user_data"]["lead_id"] == lead.meta_lead_id
+
+
+def test_meta_surrogate_creation_enqueues_initial_conversion_events(db, test_org, test_user):
+    from app.db.enums import JobType
+    from app.services import meta_crm_dataset_settings_service, surrogate_events, zapier_settings_service
+
+    zapier_settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    zapier_settings.outbound_webhook_url = "https://hooks.zapier.com/hooks/catch/123/abc"
+    zapier_settings.outbound_enabled = True
+    zapier_settings.outbound_event_mapping = [
+        {"stage_key": "new_unread", "event_name": "Lead", "enabled": True}
+    ]
+
+    meta_settings = meta_crm_dataset_settings_service.get_or_create_settings(db, test_org.id)
+    meta_settings.dataset_id = "1428122951556949"
+    meta_settings.access_token_encrypted = meta_crm_dataset_settings_service.encrypt_access_token(
+        "meta-token"
+    )
+    meta_settings.enabled = True
+    meta_settings.crm_name = "Surrogacy Force CRM"
+    meta_settings.event_mapping = [
+        {"stage_key": "new_unread", "event_name": "Lead", "enabled": True}
+    ]
+    db.commit()
+
+    lead = _create_meta_lead(db, test_org.id)
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, source=SurrogateSource.META)
+    surrogate.meta_lead_id = lead.id
+    surrogate.meta_form_id = lead.meta_form_id
+    db.commit()
+
+    surrogate_events.handle_surrogate_created(db=db, surrogate=surrogate)
+
+    assert (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.ZAPIER_STAGE_EVENT.value,
+        )
+        .count()
+        == 1
+    )
+    assert (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.META_CRM_DATASET_EVENT.value,
+        )
+        .count()
+        == 1
+    )
+
+
+def test_status_change_enqueues_meta_crm_dataset_event(monkeypatch, db, test_org, test_user):
+    from app.services import meta_crm_dataset_settings_service, zapier_settings_service
+
+    meta_settings = meta_crm_dataset_settings_service.get_or_create_settings(db, test_org.id)
+    meta_settings.dataset_id = "1428122951556949"
+    meta_settings.access_token_encrypted = meta_crm_dataset_settings_service.encrypt_secret(
+        "dataset-secret"
+    )
+    meta_settings.enabled = True
+    meta_settings.crm_name = "Surrogacy Force CRM"
+    meta_settings.send_hashed_pii = True
+    meta_settings.event_mapping = [
+        {"stage_key": "pre_qualified", "event_name": "Qualified", "enabled": True}
+    ]
+
+    zapier_settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    zapier_settings.outbound_webhook_url = "https://hooks.zapier.com/hooks/catch/123/abc"
+    zapier_settings.outbound_enabled = True
+    zapier_settings.outbound_event_mapping = [
+        {"stage_key": "pre_qualified", "event_name": "Qualified", "enabled": True}
+    ]
+    db.commit()
+
+    lead = _create_meta_lead(db, test_org.id)
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, source=SurrogateSource.META)
+    surrogate.meta_lead_id = lead.id
+    surrogate.meta_form_id = lead.meta_form_id
+    surrogate.meta_ad_external_id = "ad_123"
+    db.commit()
+
+    new_stage = _get_stage(db, test_org.id, "pre_qualified")
+
+    monkeypatch.setattr(surrogate_events, "_maybe_send_capi_event", lambda *_args, **_kwargs: None)
+    from app.services import notification_facade, workflow_triggers
+
+    monkeypatch.setattr(
+        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
+
+    event_kwargs = _event_kwargs(surrogate, new_stage, user_id=test_user.id)
+    event_kwargs["db"] = db
+    surrogate_events.handle_status_changed(**event_kwargs)
+
+    jobs = (
+        db.query(Job)
+        .filter(Job.organization_id == test_org.id)
+        .order_by(Job.created_at.asc())
+        .all()
+    )
+    job_types = [job.job_type for job in jobs]
+    assert JobType.ZAPIER_STAGE_EVENT.value in job_types
+    assert JobType.META_CRM_DATASET_EVENT.value in job_types
+
+
+def test_meta_lead_conversion_enqueues_initial_meta_crm_dataset_event(db, test_org, test_user):
+    from app.db.enums import JobType
+    from app.services import meta_crm_dataset_settings_service, meta_lead_service
+
+    settings = meta_crm_dataset_settings_service.get_or_create_settings(db, test_org.id)
+    settings.dataset_id = "1428122951556949"
+    settings.access_token_encrypted = meta_crm_dataset_settings_service.encrypt_secret(
+        "dataset-secret"
+    )
+    settings.enabled = True
+    settings.crm_name = "Surrogacy Force CRM"
+    settings.event_mapping = [{"stage_key": "new_unread", "event_name": "Lead", "enabled": True}]
+    db.commit()
+
+    meta_lead = _create_meta_lead(db, test_org.id)
+
+    surrogate, error = meta_lead_service.convert_to_surrogate(db, meta_lead, user_id=test_user.id)
+
+    assert error is None
+    assert surrogate is not None
+
+    job = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.META_CRM_DATASET_EVENT.value,
+        )
+        .order_by(Job.created_at.desc())
+        .first()
+    )
+    assert job is not None
+    payload = job.payload["body"]["data"][0]
+    assert payload["event_name"] == "Lead"
+    assert payload["user_data"]["lead_id"] == meta_lead.meta_lead_id
+
+
 def test_status_change_skips_zapier_event_without_meta_lead(monkeypatch, db, test_org, test_user):
     from app.services import zapier_settings_service
 

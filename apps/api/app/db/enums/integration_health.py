@@ -8,6 +8,7 @@ class IntegrationType(str, Enum):
 
     META_LEADS = "meta_leads"
     META_CAPI = "meta_capi"
+    META_CRM_DATASET = "meta_crm_dataset"
     META_HIERARCHY = "meta_hierarchy"  # Hierarchy sync health
     META_SPEND = "meta_spend"  # Spend sync health
     META_FORMS = "meta_forms"  # Forms sync health

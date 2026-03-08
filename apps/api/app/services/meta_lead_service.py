@@ -320,6 +320,11 @@ def convert_to_surrogate(
         meta_lead.conversion_error = None
 
         db.commit()
+        db.refresh(surrogate)
+
+        from app.services import surrogate_events
+
+        surrogate_events.handle_surrogate_created(db=db, surrogate=surrogate)
 
         return surrogate, None
 
@@ -437,6 +442,11 @@ def convert_to_surrogate_with_mapping(
         meta_lead.unmapped_fields = unmapped_fields or None
 
         db.commit()
+        db.refresh(surrogate)
+
+        from app.services import surrogate_events
+
+        surrogate_events.handle_surrogate_created(db=db, surrogate=surrogate)
 
         if unmapped_fields and unknown_column_behavior != "ignore":
             _notify_unmapped_fields(db, meta_lead)

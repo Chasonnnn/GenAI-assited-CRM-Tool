@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent, within, act } from '@testing-library/react'
 import IntegrationsPage from '../app/(app)/settings/integrations/page'
 
 const mockUseAuth = vi.fn()
@@ -25,6 +25,13 @@ const mockZapierOutboundTest = vi.fn()
 const mockRetryZapierOutboundEvent = vi.fn()
 const mockZapierFieldPaste = vi.fn()
 const mockZapierInboundDelete = vi.fn()
+const mockMetaConnectUrl = vi.fn()
+const mockDisconnectMetaConnection = vi.fn()
+const mockUpdateMetaAdAccount = vi.fn()
+const mockDeleteMetaAdAccount = vi.fn()
+const mockUpdateMetaCrmDatasetSettings = vi.fn()
+const mockMetaCrmDatasetOutboundTest = vi.fn()
+const mockRetryMetaCrmDatasetEvent = vi.fn()
 const mockUpdateAISettings = vi.fn()
 const mockTestAIKey = vi.fn()
 const mockAcceptConsent = vi.fn()
@@ -77,6 +84,21 @@ const recommendedZapierMapping = [
     { stage_key: 'disqualified', event_name: 'Not Qualified', enabled: true, bucket: 'not_qualified' },
 ]
 
+const createMetaCrmDatasetSettingsData = () => ({
+    dataset_id: '1428122951556949',
+    access_token_configured: true,
+    enabled: true,
+    crm_name: 'Surrogacy Force CRM',
+    send_hashed_pii: true,
+    event_mapping: [
+        { stage_key: 'new_unread', event_name: 'Lead', enabled: true, bucket: null },
+        { stage_key: 'pre_qualified', event_name: 'Qualified', enabled: true, bucket: 'qualified' },
+        { stage_key: 'matched', event_name: 'Converted', enabled: true, bucket: 'converted' },
+        { stage_key: 'disqualified', event_name: 'Not Qualified', enabled: true, bucket: 'not_qualified' },
+    ],
+    test_event_code: 'TEST123',
+})
+
 let zapierSettingsData = createZapierSettingsData()
 let zapierEventsSummaryData = {
     total_count: 3,
@@ -106,6 +128,66 @@ let zapierEventsData = {
             stage_label: 'Pre Qualified',
             attempts: 3,
             last_error: 'Webhook timeout',
+            created_at: '2026-03-07T18:00:00Z',
+            updated_at: '2026-03-07T18:05:00Z',
+            delivered_at: null,
+            last_attempt_at: '2026-03-07T18:05:00Z',
+            can_retry: true,
+        },
+    ],
+    total: 1,
+}
+let metaFormsData = [
+    {
+        id: 'meta-form-1',
+        form_external_id: 'zapier-abc',
+        form_name: 'Zapier Intake',
+        page_id: 'zapier',
+        page_name: null,
+        mapping_status: 'mapped',
+        current_version_id: 'ver-1',
+        mapping_version_id: 'ver-1',
+        mapping_updated_at: '2026-03-01T00:00:00Z',
+        mapping_updated_by_name: 'Admin',
+        is_active: true,
+        synced_at: '2026-03-01T00:00:00Z',
+        unconverted_leads: 0,
+        total_leads: 0,
+        last_lead_at: null,
+    },
+]
+let metaConnectionsData = []
+let metaAdAccountsData = []
+let metaCrmDatasetSettingsData = createMetaCrmDatasetSettingsData()
+let metaCrmDatasetEventsSummaryData = {
+    total_count: 4,
+    queued_count: 1,
+    delivered_count: 1,
+    failed_count: 1,
+    skipped_count: 1,
+    actionable_skipped_count: 1,
+    failure_rate: 0.25,
+    skipped_rate: 0.25,
+    failure_rate_alert: true,
+    skipped_rate_alert: false,
+    warning_messages: ['Failure rate is elevated for direct Meta CRM dataset events.'],
+    window_hours: 24,
+}
+let metaCrmDatasetEventsData = {
+    items: [
+        {
+            id: 'meta-event-1',
+            source: 'automatic',
+            status: 'failed',
+            reason: null,
+            event_id: 'meta_evt_1',
+            event_name: 'Qualified',
+            lead_id: '1559954882011881',
+            stage_key: 'pre_qualified',
+            stage_label: 'Pre Qualified',
+            surrogate_id: 'surrogate-1',
+            attempts: 2,
+            last_error: 'Unsupported post request',
             created_at: '2026-03-07T18:00:00Z',
             updated_at: '2026-03-07T18:05:00Z',
             delivered_at: null,
@@ -227,8 +309,47 @@ vi.mock('@/lib/hooks/use-zapier', () => ({
     useDeleteZapierInboundWebhook: () => ({ mutateAsync: mockZapierInboundDelete, isPending: false }),
 }))
 
+vi.mock('@/lib/hooks/use-meta-oauth', () => ({
+    useMetaConnections: () => ({ data: metaConnectionsData, isLoading: false }),
+    useMetaConnectUrl: () => ({ mutateAsync: mockMetaConnectUrl, isPending: false }),
+    useDisconnectMetaConnection: () => ({ mutateAsync: mockDisconnectMetaConnection, isPending: false }),
+}))
+
+vi.mock('@/lib/hooks/use-admin-meta', () => ({
+    useAdminMetaAdAccounts: () => ({ data: metaAdAccountsData, isLoading: false }),
+    useUpdateMetaAdAccount: () => ({ mutateAsync: mockUpdateMetaAdAccount, isPending: false }),
+    useDeleteMetaAdAccount: () => ({ mutateAsync: mockDeleteMetaAdAccount, isPending: false }),
+}))
+
+vi.mock('@/lib/hooks/use-meta-crm-dataset', () => ({
+    useMetaCrmDatasetSettings: () => ({
+        data: metaCrmDatasetSettingsData,
+        isLoading: false,
+    }),
+    useUpdateMetaCrmDatasetSettings: () => ({
+        mutateAsync: mockUpdateMetaCrmDatasetSettings,
+        isPending: false,
+    }),
+    useMetaCrmDatasetOutboundTest: () => ({
+        mutateAsync: mockMetaCrmDatasetOutboundTest,
+        isPending: false,
+    }),
+    useMetaCrmDatasetEventsSummary: () => ({
+        data: metaCrmDatasetEventsSummaryData,
+        isLoading: false,
+    }),
+    useMetaCrmDatasetEvents: () => ({
+        data: metaCrmDatasetEventsData,
+        isLoading: false,
+    }),
+    useRetryMetaCrmDatasetEvent: () => ({
+        mutateAsync: mockRetryMetaCrmDatasetEvent,
+        isPending: false,
+    }),
+}))
+
 vi.mock('@/lib/hooks/use-meta-forms', () => ({
-    useMetaForms: () => ({ data: [], isLoading: false }),
+    useMetaForms: () => ({ data: metaFormsData, isLoading: false }),
 }))
 
 describe('IntegrationsPage', () => {
@@ -262,6 +383,66 @@ describe('IntegrationsPage', () => {
                     stage_label: 'Pre Qualified',
                     attempts: 3,
                     last_error: 'Webhook timeout',
+                    created_at: '2026-03-07T18:00:00Z',
+                    updated_at: '2026-03-07T18:05:00Z',
+                    delivered_at: null,
+                    last_attempt_at: '2026-03-07T18:05:00Z',
+                    can_retry: true,
+                },
+            ],
+            total: 1,
+        }
+        metaFormsData = [
+            {
+                id: 'meta-form-1',
+                form_external_id: 'zapier-abc',
+                form_name: 'Zapier Intake',
+                page_id: 'zapier',
+                page_name: null,
+                mapping_status: 'mapped',
+                current_version_id: 'ver-1',
+                mapping_version_id: 'ver-1',
+                mapping_updated_at: '2026-03-01T00:00:00Z',
+                mapping_updated_by_name: 'Admin',
+                is_active: true,
+                synced_at: '2026-03-01T00:00:00Z',
+                unconverted_leads: 0,
+                total_leads: 0,
+                last_lead_at: null,
+            },
+        ]
+        metaConnectionsData = []
+        metaAdAccountsData = []
+        metaCrmDatasetSettingsData = createMetaCrmDatasetSettingsData()
+        metaCrmDatasetEventsSummaryData = {
+            total_count: 4,
+            queued_count: 1,
+            delivered_count: 1,
+            failed_count: 1,
+            skipped_count: 1,
+            actionable_skipped_count: 1,
+            failure_rate: 0.25,
+            skipped_rate: 0.25,
+            failure_rate_alert: true,
+            skipped_rate_alert: false,
+            warning_messages: ['Failure rate is elevated for direct Meta CRM dataset events.'],
+            window_hours: 24,
+        }
+        metaCrmDatasetEventsData = {
+            items: [
+                {
+                    id: 'meta-event-1',
+                    source: 'automatic',
+                    status: 'failed',
+                    reason: null,
+                    event_id: 'meta_evt_1',
+                    event_name: 'Qualified',
+                    lead_id: '1559954882011881',
+                    stage_key: 'pre_qualified',
+                    stage_label: 'Pre Qualified',
+                    surrogate_id: 'surrogate-1',
+                    attempts: 2,
+                    last_error: 'Unsupported post request',
                     created_at: '2026-03-07T18:00:00Z',
                     updated_at: '2026-03-07T18:05:00Z',
                     delivered_at: null,
@@ -319,6 +500,13 @@ describe('IntegrationsPage', () => {
         mockRetryZapierOutboundEvent.mockReset()
         mockZapierFieldPaste.mockReset()
         mockZapierInboundDelete.mockReset()
+        mockMetaConnectUrl.mockReset()
+        mockDisconnectMetaConnection.mockReset()
+        mockUpdateMetaAdAccount.mockReset()
+        mockDeleteMetaAdAccount.mockReset()
+        mockUpdateMetaCrmDatasetSettings.mockReset()
+        mockMetaCrmDatasetOutboundTest.mockReset()
+        mockRetryMetaCrmDatasetEvent.mockReset()
     })
 
     it('renders integration health and can refresh', () => {
@@ -418,6 +606,25 @@ describe('IntegrationsPage', () => {
         })
     })
 
+    it('uses the active zapier form when sending a test lead', async () => {
+        mockZapierTestLead.mockResolvedValue({
+            status: 'converted',
+            duplicate: false,
+            meta_lead_id: 'lead-1',
+            surrogate_id: 'surrogate-1',
+            message: 'Stored',
+        })
+
+        render(<IntegrationsPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('button', { name: /send test lead/i }))
+
+        expect(mockZapierTestLead).toHaveBeenCalledWith({ form_id: 'zapier-abc' })
+    })
+
     it('shows zapier monitoring and retries failed events', async () => {
         mockRetryZapierOutboundEvent.mockResolvedValue({
             ...zapierEventsData.items[0],
@@ -439,6 +646,89 @@ describe('IntegrationsPage', () => {
         fireEvent.click(within(dialog).getByRole('button', { name: /retry/i }))
 
         expect(mockRetryZapierOutboundEvent).toHaveBeenCalledWith({ eventId: 'event-1' })
+    })
+
+    it('loads and saves Meta CRM dataset settings in the Meta dialog', async () => {
+        mockUpdateMetaCrmDatasetSettings.mockResolvedValue({
+            ...metaCrmDatasetSettingsData,
+            crm_name: 'EWI CRM',
+            test_event_code: 'TEST999',
+        })
+
+        render(<IntegrationsPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: /configure meta/i }))
+
+        const dialog = screen.getByRole('dialog')
+        expect(within(dialog).getByRole('tab', { name: /configuration/i })).toBeInTheDocument()
+        expect(within(dialog).getByDisplayValue('1428122951556949')).toBeInTheDocument()
+        expect(within(dialog).getByDisplayValue('Surrogacy Force CRM')).toBeInTheDocument()
+        expect(within(dialog).getByLabelText(/meta crm dataset access token/i)).toHaveAttribute('placeholder', '•••••••• (set)')
+
+        fireEvent.change(within(dialog).getByLabelText(/crm name/i), {
+            target: { value: 'EWI CRM' },
+        })
+        fireEvent.change(within(dialog).getByLabelText(/meta crm dataset access token/i), {
+            target: { value: 'meta-access-token-123' },
+        })
+        fireEvent.change(within(dialog).getByLabelText(/test event code/i), {
+            target: { value: 'TEST999' },
+        })
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: /save crm dataset settings/i }))
+        })
+
+        expect(mockUpdateMetaCrmDatasetSettings).toHaveBeenCalledWith(expect.objectContaining({
+            dataset_id: '1428122951556949',
+            access_token: 'meta-access-token-123',
+            enabled: true,
+            crm_name: 'EWI CRM',
+            send_hashed_pii: true,
+            test_event_code: 'TEST999',
+        }))
+    })
+
+    it('sends Meta CRM dataset tests and retries failed monitoring events', async () => {
+        mockMetaCrmDatasetOutboundTest.mockResolvedValue({
+            status: 'queued',
+            event_name: 'Lead',
+            event_id: 'meta_evt_test',
+            lead_id: '1559954882011881',
+        })
+        mockRetryMetaCrmDatasetEvent.mockResolvedValue({
+            ...metaCrmDatasetEventsData.items[0],
+            status: 'queued',
+            can_retry: false,
+        })
+
+        render(<IntegrationsPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: /configure meta/i }))
+
+        const dialog = screen.getByRole('dialog')
+        fireEvent.change(within(dialog).getByLabelText(/real meta lead id/i), {
+            target: { value: '1559954882011881' },
+        })
+        fireEvent.change(within(dialog).getByLabelText(/click id \(fbc\)/i), {
+            target: { value: 'fb.1.1772942400.real-click-id' },
+        })
+        fireEvent.click(within(dialog).getByRole('button', { name: /send meta crm test event/i }))
+
+        expect(mockMetaCrmDatasetOutboundTest).toHaveBeenCalledWith({
+            stage_key: 'new_unread',
+            lead_id: '1559954882011881',
+            fbc: 'fb.1.1772942400.real-click-id',
+            test_event_code: 'TEST123',
+        })
+
+        fireEvent.click(within(dialog).getByRole('tab', { name: /monitoring/i }))
+
+        expect(within(dialog).getByText('Failure rate is elevated for direct Meta CRM dataset events.')).toBeInTheDocument()
+        expect(within(dialog).getByText('Unsupported post request')).toBeInTheDocument()
+
+        fireEvent.click(within(dialog).getByRole('button', { name: /retry/i }))
+
+        expect(mockRetryMetaCrmDatasetEvent).toHaveBeenCalledWith({ eventId: 'meta-event-1' })
     })
 
     it('shows last sync and triggers sync now for connected Google Calendar', () => {

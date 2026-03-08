@@ -65,6 +65,7 @@ from app.routers import (
     journey,
     mailboxes,
     matches,
+    meta_crm_dataset,
     meta_oauth,
     meta_forms,
     metadata,
@@ -610,6 +611,7 @@ app.include_router(dashboard.router)
 
 # User Integrations (Gmail, Zoom OAuth)
 app.include_router(integrations.router)
+app.include_router(meta_crm_dataset.router)
 app.include_router(mailboxes.router)
 app.include_router(tickets.router)
 

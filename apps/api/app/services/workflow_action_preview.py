@@ -157,7 +157,7 @@ def _preview_send_notification(db: Session, action: dict, entity: Any) -> str:
 
 def _preview_send_zapier_conversion_event(db: Session, action: dict, entity: Any) -> str:
     """Preview for send_zapier_conversion_event action."""
-    return "Queue Zapier conversion event for critical stage changes"
+    return "Queue conversion events for enabled outbound transports"
 
 
 def _preview_update_field(db: Session, action: dict, entity: Any) -> str:

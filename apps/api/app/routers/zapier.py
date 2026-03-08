@@ -172,6 +172,12 @@ class ZapierFieldPasteResponse(BaseModel):
     mapping_url: str
 
 
+def _is_zapier_form(form) -> bool:
+    page_id = (getattr(form, "page_id", None) or "").strip().lower()
+    form_external_id = (getattr(form, "form_external_id", None) or "").strip().lower()
+    return page_id == "zapier" or form_external_id.startswith("zapier-")
+
+
 @router.get("/settings", response_model=ZapierSettingsResponse)
 def get_settings(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
@@ -336,15 +342,20 @@ def send_test_lead(
 ):
     form_id = data.form_id
     if not form_id:
-        forms = meta_form_mapping_service.list_active_forms(db, session.org_id)
+        forms = [
+            form
+            for form in meta_form_mapping_service.list_active_forms(db, session.org_id)
+            if _is_zapier_form(form)
+        ]
         if not forms:
             raise HTTPException(
-                status_code=400, detail="No Meta lead forms found for this organization."
+                status_code=400,
+                detail="No active Zapier forms found for this organization.",
             )
         if len(forms) > 1:
             raise HTTPException(
                 status_code=400,
-                detail="form_id is required when multiple Meta lead forms exist.",
+                detail="form_id is required when multiple active Zapier forms exist.",
             )
         form_id = forms[0].form_external_id
 

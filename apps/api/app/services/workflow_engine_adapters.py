@@ -667,31 +667,15 @@ class DefaultWorkflowDomainAdapter:
         db: Session,
         entity: Surrogate,
     ) -> dict:
-        """Queue a Zapier conversion event for critical surrogate stages."""
-        from app.services import zapier_outbound_service, zapier_settings_service
-
-        settings = zapier_settings_service.get_settings(db, entity.organization_id)
-        if not settings or not settings.outbound_enabled:
-            return {
-                "success": True,
-                "queued": False,
-                "skipped": True,
-                "description": "Skipped Zapier conversion event: outbound webhook is disabled.",
-            }
-        if not settings.outbound_webhook_url:
-            return {
-                "success": True,
-                "queued": False,
-                "skipped": True,
-                "description": "Skipped Zapier conversion event: outbound webhook URL is missing.",
-            }
+        """Queue conversion events for every enabled outbound transport."""
+        from app.services import meta_crm_dataset_service, zapier_outbound_service
 
         if not entity.stage_id:
             return {
                 "success": True,
                 "queued": False,
                 "skipped": True,
-                "description": "Skipped Zapier conversion event: surrogate has no current stage.",
+                "description": "Skipped conversion event: surrogate has no current stage.",
             }
 
         stage = db.query(PipelineStage).filter(PipelineStage.id == entity.stage_id).first()
@@ -700,46 +684,68 @@ class DefaultWorkflowDomainAdapter:
                 "success": True,
                 "queued": False,
                 "skipped": True,
-                "description": "Skipped Zapier conversion event: stage not found.",
+                "description": "Skipped conversion event: stage not found.",
             }
 
-        mapping = zapier_settings_service.normalize_event_mapping(settings.outbound_event_mapping)
-        if not zapier_settings_service.resolve_meta_stage_bucket(stage.stage_key, mapping):
-            return {
-                "success": True,
-                "queued": False,
-                "skipped": True,
-                "description": "Skipped Zapier conversion event: stage is not conversion-critical.",
-            }
+        effective_at = datetime.now(timezone.utc)
+        transport_results = {
+            "zapier": zapier_outbound_service.enqueue_stage_event(
+                db=db,
+                surrogate=entity,
+                stage_key=stage.stage_key,
+                stage_slug=stage.slug,
+                stage_id=str(stage.id),
+                stage_label=stage.label,
+                effective_at=effective_at,
+                source="workflow",
+            ),
+            "meta_crm_dataset": meta_crm_dataset_service.enqueue_stage_event(
+                db=db,
+                surrogate=entity,
+                stage_key=stage.stage_key,
+                stage_slug=stage.slug,
+                stage_id=str(stage.id),
+                stage_label=stage.label,
+                effective_at=effective_at,
+                source="workflow",
+            ),
+        }
 
-        enqueue_result = zapier_outbound_service.enqueue_stage_event(
-            db=db,
-            surrogate=entity,
-            stage_key=stage.stage_key,
-            stage_slug=stage.slug,
-            stage_id=str(stage.id),
-            stage_label=stage.label,
-            effective_at=datetime.now(timezone.utc),
-            source="workflow",
-        )
-        if enqueue_result.get("queued"):
-            event_name = str(enqueue_result.get("event_name") or "Lead")
+        queued_results = [result for result in transport_results.values() if result.get("queued")]
+        if queued_results:
+            event_name = str(queued_results[0].get("event_name") or "Lead")
+            queued_transports = [
+                name for name, result in transport_results.items() if result.get("queued")
+            ]
             return {
                 "success": True,
                 "queued": True,
                 "event_name": event_name,
-                "description": f"Queued Zapier conversion event '{event_name}'.",
+                "transport_results": transport_results,
+                "description": "Queued conversion event via "
+                + ", ".join(queued_transports)
+                + f" ('{event_name}').",
             }
 
-        reason = str(enqueue_result.get("reason") or "not_queued")
-        if reason == "enqueue_failed":
+        failed_transports = [
+            name
+            for name, result in transport_results.items()
+            if result.get("reason") == "enqueue_failed"
+        ]
+        if failed_transports:
             return {
                 "success": False,
                 "queued": False,
-                "error": "Failed to enqueue Zapier conversion event job.",
+                "transport_results": transport_results,
+                "error": "Failed to enqueue conversion event for "
+                + ", ".join(failed_transports)
+                + ".",
             }
 
         reason_labels = {
+            "disabled": "direct Meta CRM dataset is disabled",
+            "missing_dataset_id": "direct Meta CRM dataset id is missing",
+            "missing_access_token": "direct Meta CRM dataset access token is missing",
             "unmapped_stage": "stage is not mapped in outbound settings",
             "not_meta_source": "surrogate source is not Meta",
             "missing_meta_lead_fk": "surrogate is missing a linked Meta lead",
@@ -747,15 +753,23 @@ class DefaultWorkflowDomainAdapter:
             "missing_meta_lead_id": "linked Meta lead is missing lead id",
             "stale_meta_lead": "linked Meta lead is older than 90 days",
             "duplicate": "duplicate event already queued",
-            "outbound_disabled": "outbound webhook is disabled",
-            "missing_webhook_url": "outbound webhook URL is missing",
+            "outbound_disabled": "Zapier outbound webhook is disabled",
+            "missing_webhook_url": "Zapier outbound webhook URL is missing",
         }
-        reason_text = reason_labels.get(reason, reason.replace("_", " "))
+        reason_text = "; ".join(
+            f"{transport_name}: "
+            + reason_labels.get(
+                str(result.get("reason") or "not_queued"),
+                str(result.get("reason") or "not_queued").replace("_", " "),
+            )
+            for transport_name, result in transport_results.items()
+        )
         return {
             "success": True,
             "queued": False,
             "skipped": True,
-            "description": f"Skipped Zapier conversion event: {reason_text}.",
+            "transport_results": transport_results,
+            "description": f"Skipped conversion event: {reason_text}.",
         }
 
     def _action_promote_intake_lead(

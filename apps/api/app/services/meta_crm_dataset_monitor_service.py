@@ -1,4 +1,4 @@
-"""Monitoring helpers for outbound Zapier conversion events."""
+"""Monitoring helpers for direct Meta CRM dataset outbound events."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.db.enums import JobStatus
-from app.db.models import ZapierOutboundEvent
+from app.db.models import MetaCrmDatasetEvent
 from app.db.session import SessionLocal
 from app.services import job_service
 
@@ -34,7 +34,7 @@ def _persist_isolated(create_fn) -> None:
         db.commit()
     except Exception:
         db.rollback()
-        logger.exception("Failed to persist Zapier outbound monitoring event")
+        logger.exception("Failed to persist Meta CRM dataset monitoring event")
     finally:
         db.close()
 
@@ -48,7 +48,7 @@ def _persist(create_fn, *, db: Session | None = None) -> None:
         db.commit()
     except Exception:
         db.rollback()
-        logger.exception("Failed to persist Zapier outbound monitoring event")
+        logger.exception("Failed to persist Meta CRM dataset monitoring event")
 
 
 def _create_event_record(
@@ -68,9 +68,9 @@ def _create_event_record(
     surrogate_id: UUID | None = None,
     attempts: int = 0,
     last_error: str | None = None,
-) -> ZapierOutboundEvent:
+) -> MetaCrmDatasetEvent:
     now = _now_utc()
-    event = ZapierOutboundEvent(
+    event = MetaCrmDatasetEvent(
         organization_id=org_id,
         job_id=job_id,
         source=source,
@@ -91,6 +91,7 @@ def _create_event_record(
         delivered_at=now if status == "delivered" else None,
     )
     db.add(event)
+    db.flush()
     return event
 
 
@@ -140,9 +141,11 @@ def record_queued_event(
     stage_label: str | None = None,
     surrogate_id: UUID | None = None,
     db: Session | None = None,
-) -> None:
-    _persist(
-        lambda inner_db: _create_event_record(
+) -> MetaCrmDatasetEvent | None:
+    event_holder: dict[str, MetaCrmDatasetEvent] = {}
+
+    def _create(inner_db: Session) -> None:
+        event_holder["event"] = _create_event_record(
             inner_db,
             org_id=org_id,
             job_id=job_id,
@@ -155,16 +158,17 @@ def record_queued_event(
             stage_slug=stage_slug,
             stage_label=stage_label,
             surrogate_id=surrogate_id,
-        ),
-        db=db,
-    )
+        )
+
+    _persist(_create, db=db)
+    return event_holder.get("event")
 
 
 def mark_job_delivered(*, job_id: UUID, attempts: int, db: Session | None = None) -> None:
-    def _update(db: Session) -> None:
+    def _update(inner_db: Session) -> None:
         event = (
-            db.query(ZapierOutboundEvent)
-            .filter(ZapierOutboundEvent.job_id == job_id)
+            inner_db.query(MetaCrmDatasetEvent)
+            .filter(MetaCrmDatasetEvent.job_id == job_id)
             .first()
         )
         if not event:
@@ -188,10 +192,10 @@ def mark_job_failed(
     error_message: str,
     db: Session | None = None,
 ) -> None:
-    def _update(db: Session) -> None:
+    def _update(inner_db: Session) -> None:
         event = (
-            db.query(ZapierOutboundEvent)
-            .filter(ZapierOutboundEvent.job_id == job_id)
+            inner_db.query(MetaCrmDatasetEvent)
+            .filter(MetaCrmDatasetEvent.job_id == job_id)
             .first()
         )
         if not event:
@@ -213,13 +217,13 @@ def list_events(
     status: str | None = None,
     limit: int = 50,
     offset: int = 0,
-) -> tuple[list[ZapierOutboundEvent], int]:
-    query = db.query(ZapierOutboundEvent).filter(ZapierOutboundEvent.organization_id == org_id)
+) -> tuple[list[MetaCrmDatasetEvent], int]:
+    query = db.query(MetaCrmDatasetEvent).filter(MetaCrmDatasetEvent.organization_id == org_id)
     if status:
-        query = query.filter(ZapierOutboundEvent.status == status)
+        query = query.filter(MetaCrmDatasetEvent.status == status)
     total = query.count()
     items = (
-        query.order_by(ZapierOutboundEvent.created_at.desc())
+        query.order_by(MetaCrmDatasetEvent.created_at.desc())
         .offset(max(0, offset))
         .limit(max(1, min(limit, 200)))
         .all()
@@ -236,11 +240,11 @@ def get_summary(
     window_hours = max(1, min(window_hours, 24 * 30))
     cutoff = _now_utc() - timedelta(hours=window_hours)
     items = (
-        db.query(ZapierOutboundEvent)
+        db.query(MetaCrmDatasetEvent)
         .filter(
-            ZapierOutboundEvent.organization_id == org_id,
-            ZapierOutboundEvent.created_at >= cutoff,
-            ZapierOutboundEvent.source != "test",
+            MetaCrmDatasetEvent.organization_id == org_id,
+            MetaCrmDatasetEvent.created_at >= cutoff,
+            MetaCrmDatasetEvent.source != "test",
         )
         .all()
     )
@@ -270,9 +274,11 @@ def get_summary(
     )
     warning_messages: list[str] = []
     if failure_rate_alert:
-        warning_messages.append("Failure rate is elevated for Zapier outbound events.")
+        warning_messages.append("Failure rate is elevated for direct Meta CRM dataset events.")
     if skipped_rate_alert:
-        warning_messages.append("Skipped-event rate is elevated for Zapier outbound events.")
+        warning_messages.append(
+            "Skipped-event rate is elevated for direct Meta CRM dataset events."
+        )
 
     return {
         "window_hours": window_hours,
@@ -296,12 +302,12 @@ def retry_failed_event(
     org_id: UUID,
     event_id: UUID,
     reason: str | None = None,
-) -> ZapierOutboundEvent:
+) -> MetaCrmDatasetEvent:
     event = (
-        db.query(ZapierOutboundEvent)
+        db.query(MetaCrmDatasetEvent)
         .filter(
-            ZapierOutboundEvent.id == event_id,
-            ZapierOutboundEvent.organization_id == org_id,
+            MetaCrmDatasetEvent.id == event_id,
+            MetaCrmDatasetEvent.organization_id == org_id,
         )
         .first()
     )
@@ -312,11 +318,18 @@ def retry_failed_event(
     if event.job_id is None:
         raise ValueError("Failed event does not have a replayable job")
 
+    replay_job = job_service.get_job(db, org_id=org_id, job_id=event.job_id)
+    if replay_job is None:
+        raise ValueError("Replayable job not found")
+    if replay_job.status != JobStatus.FAILED.value:
+        replay_job.status = JobStatus.FAILED.value
+        replay_job.last_error = replay_job.last_error or event.last_error
+
     job_service.replay_failed_job(
         db,
         org_id=org_id,
         job_id=event.job_id,
-        reason=reason or "zapier_outbound_event_retry",
+        reason=reason or "meta_crm_dataset_event_retry",
         commit=False,
     )
 

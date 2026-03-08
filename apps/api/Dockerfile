@@ -16,7 +16,7 @@ RUN echo "cache_bust=${CACHE_BUST}" > /dev/null
 COPY --from=uv /uv /usr/local/bin/uv
 
 # Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -40,7 +40,7 @@ ARG CACHE_BUST=0
 RUN echo "cache_bust=${CACHE_BUST}" > /dev/null
 
 # Install runtime dependencies only
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
     && rm -rf /var/lib/apt/lists/*
@@ -51,7 +51,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 
 # Install Playwright browser binaries (required for PDF export)
-RUN python -m playwright install --with-deps chromium && \
+RUN DEBIAN_FRONTEND=noninteractive python -m playwright install --with-deps chromium && \
     chmod -R 755 /opt/playwright
 
 # Create non-root user

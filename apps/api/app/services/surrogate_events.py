@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 from uuid import UUID
 
@@ -80,7 +80,7 @@ def handle_status_changed(
             logger.debug("surrogate_ready_for_claim_notify_failed", exc_info=True)
 
     _maybe_send_capi_event(db, surrogate, old_slug or "", new_stage.slug)
-    _maybe_send_zapier_stage_event(
+    _dispatch_conversion_events(
         db,
         surrogate,
         new_stage_key=new_stage.stage_key,
@@ -175,6 +175,7 @@ def _maybe_send_zapier_stage_event(
     new_stage_id: str,
     new_stage_label: str | None,
     effective_at: datetime,
+    source: str = "automatic",
 ) -> None:
     """Send stage changes to Zapier when outbound integration is configured."""
     from app.services import zapier_outbound_service
@@ -188,6 +189,90 @@ def _maybe_send_zapier_stage_event(
             stage_id=new_stage_id,
             stage_label=new_stage_label,
             effective_at=effective_at,
+            source=source,
         )
     except Exception:
         return
+
+
+def _maybe_send_meta_crm_dataset_stage_event(
+    db: Session,
+    surrogate: Surrogate,
+    *,
+    new_stage_key: str,
+    new_stage_slug: str,
+    new_stage_id: str,
+    new_stage_label: str | None,
+    effective_at: datetime,
+    source: str = "automatic",
+) -> None:
+    """Send stage changes to the direct Meta CRM dataset integration when configured."""
+    from app.services import meta_crm_dataset_service
+
+    try:
+        meta_crm_dataset_service.enqueue_stage_event(
+            db=db,
+            surrogate=surrogate,
+            stage_key=new_stage_key,
+            stage_slug=new_stage_slug,
+            stage_id=new_stage_id,
+            stage_label=new_stage_label,
+            effective_at=effective_at,
+            source=source,
+        )
+    except Exception:
+        return
+
+
+def _dispatch_conversion_events(
+    db: Session,
+    surrogate: Surrogate,
+    *,
+    new_stage_key: str,
+    new_stage_slug: str,
+    new_stage_id: str,
+    new_stage_label: str | None,
+    effective_at: datetime,
+    source: str = "automatic",
+) -> None:
+    _maybe_send_zapier_stage_event(
+        db,
+        surrogate,
+        new_stage_key=new_stage_key,
+        new_stage_slug=new_stage_slug,
+        new_stage_id=new_stage_id,
+        new_stage_label=new_stage_label,
+        effective_at=effective_at,
+        source=source,
+    )
+    _maybe_send_meta_crm_dataset_stage_event(
+        db,
+        surrogate,
+        new_stage_key=new_stage_key,
+        new_stage_slug=new_stage_slug,
+        new_stage_id=new_stage_id,
+        new_stage_label=new_stage_label,
+        effective_at=effective_at,
+        source=source,
+    )
+
+
+def handle_surrogate_created(*, db: Session, surrogate: Surrogate) -> None:
+    """Emit initial outbound conversion events for Meta-sourced surrogates."""
+    if surrogate.source != SurrogateSource.META.value or not surrogate.stage_id:
+        return
+
+    stage = db.query(PipelineStage).filter(PipelineStage.id == surrogate.stage_id).first()
+    if not stage:
+        return
+
+    _maybe_send_capi_event(db, surrogate, "", stage.slug)
+    _dispatch_conversion_events(
+        db,
+        surrogate,
+        new_stage_key=stage.stage_key,
+        new_stage_slug=stage.slug,
+        new_stage_id=str(stage.id),
+        new_stage_label=stage.label,
+        effective_at=surrogate.created_at or datetime.now(timezone.utc),
+    )

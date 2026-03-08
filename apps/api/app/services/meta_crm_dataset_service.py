@@ -1,22 +1,35 @@
-"""Zapier outbound stage event service."""
+"""Direct Meta CRM dataset outbound delivery service."""
 
 from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 from uuid import UUID
 
+import httpx
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.stage_definitions import LABEL_OVERRIDES
 from app.db.enums import JobType, SurrogateSource
 from app.db.models import MetaLead, Surrogate
-from app.services import job_service, meta_capi, zapier_monitor_service, zapier_settings_service
+from app.services import (
+    job_service,
+    meta_capi,
+    meta_crm_dataset_monitor_service,
+    meta_crm_dataset_settings_service,
+    zapier_settings_service,
+)
 from app.utils.presentation import humanize_identifier
 
 logger = logging.getLogger(__name__)
+
+META_GRAPH_BASE_URL = "https://graph.facebook.com"
+HTTPX_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 MAX_META_LEAD_AGE = timedelta(days=90)
+FBC_CANDIDATE_KEYS = ("fbc", "meta_fbc", "click_id", "meta_click_id")
 
 
 def _now_utc() -> datetime:
@@ -49,8 +62,58 @@ def resolve_mapping_item(mapping: list[dict], stage_key: str) -> dict | None:
     return None
 
 
+def _normalize_json_key(value: str) -> str:
+    return value.lower().replace("-", "_").replace(" ", "_")
+
+
+def _coerce_string_scalar(value: object) -> str | None:
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    if isinstance(value, list):
+        for item in value:
+            coerced = _coerce_string_scalar(item)
+            if coerced:
+                return coerced
+    return None
+
+
+def _find_json_value_by_key(payload: object, candidate_keys: tuple[str, ...]) -> str | None:
+    normalized_keys = {_normalize_json_key(key) for key in candidate_keys}
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if _normalize_json_key(str(key)) in normalized_keys:
+                coerced = _coerce_string_scalar(value)
+                if coerced:
+                    return coerced
+        for value in payload.values():
+            nested = _find_json_value_by_key(value, candidate_keys)
+            if nested:
+                return nested
+    elif isinstance(payload, list):
+        for item in payload:
+            nested = _find_json_value_by_key(item, candidate_keys)
+            if nested:
+                return nested
+    return None
+
+
+def _normalize_meta_click_id(value: str | None) -> str | None:
+    normalized = (value or "").strip()
+    if not normalized or not normalized.startswith("fb."):
+        return None
+    return normalized
+
+
+def _resolve_meta_click_id(meta_lead: MetaLead) -> str | None:
+    return _normalize_meta_click_id(
+        _find_json_value_by_key(meta_lead.field_data_raw or {}, FBC_CANDIDATE_KEYS)
+        or _find_json_value_by_key(meta_lead.field_data or {}, FBC_CANDIDATE_KEYS)
+        or _find_json_value_by_key(meta_lead.raw_payload or {}, FBC_CANDIDATE_KEYS)
+    )
+
+
 def _resolve_dedupe_key(stage_key: str, mapping: list[dict]) -> str:
-    """Deduplicate funnel updates once per Meta status bucket."""
     bucket = zapier_settings_service.resolve_meta_stage_bucket(stage_key, mapping)
     return bucket or stage_key
 
@@ -68,7 +131,7 @@ def _skip_event(
     event_name: str | None = None,
     lead_id: str | None = None,
 ) -> dict[str, object]:
-    zapier_monitor_service.record_skipped_event(
+    meta_crm_dataset_monitor_service.record_skipped_event(
         db=db,
         org_id=surrogate.organization_id,
         source=source,
@@ -95,77 +158,43 @@ def build_stage_event_payload(
     lead_id: str,
     event_name: str,
     event_time: datetime,
-    stage_key: str,
-    stage_slug: str | None,
-    stage_id: str | None,
-    stage_label: str | None,
-    surrogate_id: str | None,
+    crm_name: str,
     include_hashed_pii: bool,
     email: str | None,
     phone: str | None,
-    meta_fields: dict | None = None,
+    fbc: str | None = None,
     event_id: str | None = None,
-    test_mode: bool = False,
+    test_event_code: str | None = None,
 ) -> dict:
-    payload = {
-        "event_id": event_id or f"zapier_stage:{lead_id}:{stage_key}",
-        "event_name": event_name,
-        "event_time": event_time.astimezone(timezone.utc).isoformat(),
-        "lead_id": lead_id,
-        "stage_key": stage_key,
-        "stage_slug": stage_slug,
-        "stage_id": stage_id,
-        "stage_label": stage_label,
-    }
-
-    if surrogate_id:
-        payload["surrogate_id"] = surrogate_id
-
-    if meta_fields:
-        payload.update({k: v for k, v in meta_fields.items() if v is not None})
-
+    user_data: dict[str, object] = {"lead_id": lead_id}
+    normalized_fbc = _normalize_meta_click_id(fbc)
+    if normalized_fbc:
+        user_data["fbc"] = normalized_fbc
     if include_hashed_pii:
-        user_data: dict[str, str] = {}
-        if email:
-            user_data["email_hash"] = meta_capi.hash_for_capi(email)
+        if email and "@" in email and "placeholder" not in email:
+            user_data["em"] = [meta_capi.hash_for_capi(email)]
         if phone:
-            user_data["phone_hash"] = meta_capi.hash_for_capi(phone)
-        if user_data:
-            payload["user_data"] = user_data
+            phone_digits = "".join(ch for ch in phone if ch.isdigit())
+            if len(phone_digits) >= 10:
+                user_data["ph"] = [meta_capi.hash_for_capi(phone_digits)]
 
-    if test_mode:
-        payload["test_mode"] = True
-
-    return payload
-
-
-def _extract_meta_fields(meta_lead: MetaLead, surrogate: Surrogate) -> dict[str, str | None]:
-    fields = meta_lead.field_data_raw or meta_lead.field_data or {}
-    return {
-        "meta_lead_id": meta_lead.meta_lead_id,
-        "meta_form_id": surrogate.meta_form_id or meta_lead.meta_form_id,
-        "meta_page_id": meta_lead.meta_page_id,
-        "meta_ad_id": surrogate.meta_ad_external_id
-        or fields.get("meta_ad_id")
-        or fields.get("ad_id"),
-        "meta_adset_id": surrogate.meta_adset_external_id
-        or fields.get("meta_adset_id")
-        or fields.get("adset_id")
-        or fields.get("ad_set_id"),
-        "meta_campaign_id": surrogate.meta_campaign_external_id
-        or fields.get("meta_campaign_id")
-        or fields.get("campaign_id"),
-        "meta_ad_name": fields.get("meta_ad_name") or fields.get("ad_name"),
-        "meta_adset_name": fields.get("meta_adset_name")
-        or fields.get("adset_name")
-        or fields.get("ad_set_name"),
-        "meta_campaign_name": fields.get("meta_campaign_name") or fields.get("campaign_name"),
-        "meta_form_name": fields.get("meta_form_name") or fields.get("form_name"),
-        "meta_page_name": fields.get("meta_page_name") or fields.get("page_name"),
-        "meta_platform": fields.get("meta_platform")
-        or fields.get("platform")
-        or fields.get("publisher_platform"),
+    event_payload = {
+        "event_name": event_name,
+        "event_time": int(event_time.astimezone(timezone.utc).timestamp()),
+        "action_source": "system_generated",
+        "custom_data": {
+            "event_source": "crm",
+            "lead_event_source": crm_name,
+        },
+        "user_data": user_data,
     }
+    if event_id:
+        event_payload["event_id"] = event_id
+
+    payload = {"data": [event_payload]}
+    if test_event_code:
+        payload["test_event_code"] = test_event_code
+    return payload
 
 
 def enqueue_stage_event(
@@ -179,7 +208,8 @@ def enqueue_stage_event(
     effective_at: datetime | None = None,
     source: str = "automatic",
 ) -> dict[str, object]:
-    """Enqueue a Zapier stage event if configured and applicable."""
+    del stage_id  # Direct Meta dataset payload uses event name + lead id, not stage ids.
+
     if surrogate.source != SurrogateSource.META.value:
         return _skip_event(
             db,
@@ -201,29 +231,39 @@ def enqueue_stage_event(
             stage_label=stage_label,
         )
 
-    settings = zapier_settings_service.get_settings(db, surrogate.organization_id)
-    if not settings or not settings.outbound_enabled:
+    settings_row = meta_crm_dataset_settings_service.get_settings(db, surrogate.organization_id)
+    if not settings_row or not settings_row.enabled:
         return _skip_event(
             db,
             surrogate=surrogate,
             source=source,
-            reason="outbound_disabled",
+            reason="disabled",
             stage_key=stage_key,
             stage_slug=stage_slug,
             stage_label=stage_label,
         )
-    if not settings.outbound_webhook_url:
+    if not settings_row.dataset_id:
         return _skip_event(
             db,
             surrogate=surrogate,
             source=source,
-            reason="missing_webhook_url",
+            reason="missing_dataset_id",
+            stage_key=stage_key,
+            stage_slug=stage_slug,
+            stage_label=stage_label,
+        )
+    if not settings_row.access_token_encrypted:
+        return _skip_event(
+            db,
+            surrogate=surrogate,
+            source=source,
+            reason="missing_access_token",
             stage_key=stage_key,
             stage_slug=stage_slug,
             stage_label=stage_label,
         )
 
-    mapping = zapier_settings_service.normalize_event_mapping(settings.outbound_event_mapping)
+    mapping = zapier_settings_service.normalize_event_mapping(settings_row.event_mapping)
     mapping_item = resolve_mapping_item(mapping, stage_key)
     if not mapping_item:
         return _skip_event(
@@ -291,47 +331,33 @@ def enqueue_stage_event(
             event_name=event_name,
             lead_id=meta_lead.meta_lead_id,
         )
-    meta_fields = _extract_meta_fields(meta_lead, surrogate)
+
     dedupe_key = _resolve_dedupe_key(stage_key, mapping)
-    event_id = f"zapier_stage:{meta_lead.meta_lead_id}:{dedupe_key}"
-    payload = build_stage_event_payload(
+    event_id = f"meta_crm_dataset:{meta_lead.meta_lead_id}:{dedupe_key}"
+    body = build_stage_event_payload(
         lead_id=meta_lead.meta_lead_id,
         event_name=event_name,
         event_time=event_time,
-        stage_key=stage_key,
-        stage_slug=stage_slug,
-        stage_id=stage_id,
-        stage_label=stage_label,
-        surrogate_id=str(surrogate.id),
-        include_hashed_pii=settings.outbound_send_hashed_pii,
+        crm_name=settings_row.crm_name or meta_crm_dataset_settings_service.DEFAULT_CRM_NAME,
+        include_hashed_pii=settings_row.send_hashed_pii,
         email=surrogate.email,
         phone=surrogate.phone,
-        meta_fields=meta_fields,
+        fbc=_resolve_meta_click_id(meta_lead),
         event_id=event_id,
     )
-
-    headers: dict[str, str] = {}
-    secret = zapier_settings_service.decrypt_webhook_secret(
-        settings.outbound_webhook_secret_encrypted
-    )
-    if secret:
-        headers["X-Webhook-Token"] = secret
-
     job_payload = {
-        "url": settings.outbound_webhook_url,
-        "headers": headers,
-        "data": payload,
-        "webhook_id": settings.webhook_id,
+        "settings_id": str(settings_row.id),
+        "dataset_id": settings_row.dataset_id,
+        "body": body,
     }
-    idempotency_key = f"zapier_stage:{meta_lead.meta_lead_id}:{dedupe_key}"
+    idempotency_key = event_id
 
     existing_job = job_service.get_job_by_idempotency_key(
-        db,
-        org_id=surrogate.organization_id,
-        idempotency_key=idempotency_key,
+        db, org_id=surrogate.organization_id, idempotency_key=idempotency_key
     )
     if existing_job:
         return _skip_event(
+            db,
             surrogate=surrogate,
             source=source,
             reason="duplicate",
@@ -347,11 +373,11 @@ def enqueue_stage_event(
         job = job_service.schedule_job(
             db=db,
             org_id=surrogate.organization_id,
-            job_type=JobType.ZAPIER_STAGE_EVENT,
+            job_type=JobType.META_CRM_DATASET_EVENT,
             payload=job_payload,
             idempotency_key=idempotency_key,
         )
-        zapier_monitor_service.record_queued_event(
+        meta_crm_dataset_monitor_service.record_queued_event(
             db=db,
             org_id=surrogate.organization_id,
             job_id=job.id,
@@ -374,7 +400,7 @@ def enqueue_stage_event(
         }
     except IntegrityError:
         db.rollback()
-        logger.info("Skipping duplicate Zapier stage event for key=%s", idempotency_key)
+        logger.info("Skipping duplicate Meta CRM dataset event for key=%s", idempotency_key)
         return _skip_event(
             db,
             surrogate=surrogate,
@@ -389,7 +415,7 @@ def enqueue_stage_event(
         ) | {"idempotency_key": idempotency_key}
     except Exception as exc:
         db.rollback()
-        logger.warning("Failed to enqueue Zapier stage event: %s", exc)
+        logger.warning("Failed to enqueue Meta CRM dataset event: %s", exc)
         return _skip_event(
             db,
             surrogate=surrogate,
@@ -411,58 +437,43 @@ def enqueue_test_event(
     stage_key: str,
     event_name: str,
     lead_id: str,
+    test_event_code: str | None,
     include_hashed_pii: bool,
-) -> dict:
-    settings = zapier_settings_service.get_settings(db, organization_id)
-    if not settings or not settings.outbound_webhook_url:
-        raise ValueError("Outbound webhook is not configured")
+    fbc: str | None = None,
+) -> dict[str, str]:
+    settings_row = meta_crm_dataset_settings_service.get_settings(db, organization_id)
+    if not settings_row or not settings_row.dataset_id:
+        raise ValueError("Meta CRM dataset is not configured")
+    if not settings_row.access_token_encrypted:
+        raise ValueError("Meta CRM dataset access token is not configured")
 
     event_time = _now_utc()
-    event_id = f"zapier_stage_test:{lead_id}:{stage_key}:{event_time.timestamp()}"
-    payload = build_stage_event_payload(
+    event_id = f"meta_crm_dataset_test:{lead_id}:{stage_key}:{event_time.timestamp()}"
+    body = build_stage_event_payload(
         lead_id=lead_id,
         event_name=event_name,
         event_time=event_time,
-        stage_key=stage_key,
-        stage_slug=stage_key,
-        stage_id=None,
-        stage_label=LABEL_OVERRIDES.get(stage_key, humanize_identifier(stage_key)),
-        surrogate_id=None,
+        crm_name=settings_row.crm_name or meta_crm_dataset_settings_service.DEFAULT_CRM_NAME,
         include_hashed_pii=include_hashed_pii,
-        email="zapier-test@example.com" if include_hashed_pii else None,
+        email="meta-crm-test@example.com" if include_hashed_pii else None,
         phone="+15551234567" if include_hashed_pii else None,
-        meta_fields={
-            "meta_form_id": "test_form",
-            "meta_campaign_id": "test_campaign",
-            "meta_ad_id": "test_ad",
-            "meta_platform": "facebook",
-        },
+        fbc=fbc,
         event_id=event_id,
-        test_mode=True,
+        test_event_code=test_event_code or settings_row.test_event_code,
     )
-
-    headers: dict[str, str] = {}
-    secret = zapier_settings_service.decrypt_webhook_secret(
-        settings.outbound_webhook_secret_encrypted
-    )
-    if secret:
-        headers["X-Webhook-Token"] = secret
-
-    job_payload = {
-        "url": settings.outbound_webhook_url,
-        "headers": headers,
-        "data": payload,
-        "webhook_id": settings.webhook_id,
-    }
-
     job = job_service.schedule_job(
         db=db,
         org_id=organization_id,
-        job_type=JobType.ZAPIER_STAGE_EVENT,
-        payload=job_payload,
+        job_type=JobType.META_CRM_DATASET_EVENT,
+        payload={
+            "settings_id": str(settings_row.id),
+            "dataset_id": settings_row.dataset_id,
+            "body": body,
+        },
         idempotency_key=event_id,
     )
-    zapier_monitor_service.record_queued_event(
+    meta_crm_dataset_monitor_service.record_queued_event(
+        db=db,
         org_id=organization_id,
         job_id=job.id,
         source="test",
@@ -474,5 +485,36 @@ def enqueue_test_event(
         stage_label=LABEL_OVERRIDES.get(stage_key, humanize_identifier(stage_key)),
         surrogate_id=None,
     )
-
     return {"event_id": event_id, "event_name": event_name, "lead_id": lead_id}
+
+
+async def process_job(db: Session, job) -> None:
+    payload = job.payload or {}
+    dataset_id = str(payload.get("dataset_id") or "").strip()
+    body = payload.get("body")
+    settings_id = payload.get("settings_id")
+    if not dataset_id or not isinstance(body, dict):
+        raise Exception("Missing dataset_id or body in job payload")
+
+    settings_row = None
+    if settings_id:
+        settings_row = meta_crm_dataset_settings_service.get_settings_by_id(db, settings_id)
+    if settings_row is None and job.organization_id:
+        settings_row = meta_crm_dataset_settings_service.get_settings(db, job.organization_id)
+    if settings_row is None:
+        raise Exception("Meta CRM dataset settings not found")
+
+    access_token = meta_crm_dataset_settings_service.decrypt_access_token(
+        settings_row.access_token_encrypted
+    )
+    if not access_token:
+        raise Exception("Meta CRM dataset access token is not configured")
+
+    url = (
+        f"{META_GRAPH_BASE_URL}/{settings.META_API_VERSION}/{dataset_id}/events"
+        f"?access_token={quote(access_token, safe='')}"
+    )
+    async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
+        response = await client.post(url, json=body)
+    if response.status_code != 200:
+        raise Exception(f"Meta CRM dataset error {response.status_code}: {response.text[:500]}")

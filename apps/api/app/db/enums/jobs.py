@@ -13,6 +13,7 @@ class JobType(str, Enum):
     META_LEAD_FETCH = "meta_lead_fetch"
     META_LEAD_REPROCESS_FORM = "meta_lead_reprocess_form"
     META_CAPI_EVENT = "meta_capi_event"
+    META_CRM_DATASET_EVENT = "meta_crm_dataset_event"
     META_HIERARCHY_SYNC = "meta_hierarchy_sync"  # Sync campaigns/adsets/ads
     META_SPEND_SYNC = "meta_spend_sync"  # Sync daily spend data
     META_FORM_SYNC = "meta_form_sync"  # Sync form metadata

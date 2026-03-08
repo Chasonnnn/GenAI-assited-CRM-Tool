@@ -79,6 +79,14 @@ import {
     useDisconnectMetaConnection,
 } from "@/lib/hooks/use-meta-oauth"
 import { useAdminMetaAdAccounts, useUpdateMetaAdAccount, useDeleteMetaAdAccount } from "@/lib/hooks/use-admin-meta"
+import {
+    useMetaCrmDatasetSettings,
+    useUpdateMetaCrmDatasetSettings,
+    useMetaCrmDatasetOutboundTest,
+    useMetaCrmDatasetEvents,
+    useMetaCrmDatasetEventsSummary,
+    useRetryMetaCrmDatasetEvent,
+} from "@/lib/hooks/use-meta-crm-dataset"
 import type { MetaAdAccount, MetaAdAccountUpdate } from "@/lib/api/admin-meta"
 import { getConnectionHealthStatus, parseMetaError, type MetaOAuthConnection } from "@/lib/api/meta-oauth"
 import {
@@ -96,6 +104,9 @@ import { formatRelativeTime } from "@/lib/formatters"
 import { CopyIcon, SendIcon, RotateCwIcon, ActivityIcon, PlusIcon } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { toast } from "sonner"
+import type {
+    MetaCrmDatasetEventMappingItem,
+} from "@/lib/api/meta-crm-dataset"
 import type {
     ZapierEventMappingItem,
     ZapierFieldPasteResponse,
@@ -1536,6 +1547,23 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
         }
     }, [settings])
 
+    useEffect(() => {
+        const activeZapierForms = metaForms.filter(
+            (form) =>
+                form.is_active &&
+                (form.page_id === "zapier" || form.form_external_id?.startsWith("zapier-"))
+        )
+        if (activeZapierForms.length !== 1) {
+            return
+        }
+        const [onlyForm] = activeZapierForms
+        const nextFormId = onlyForm?.form_external_id?.trim()
+        if (!nextFormId || testFormId.trim() === nextFormId) {
+            return
+        }
+        setTestFormId(nextFormId)
+    }, [metaForms, testFormId])
+
     const copyToClipboard = (text: string) => {
         navigator.clipboard
             .writeText(text)
@@ -1631,8 +1659,9 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
             } else {
                 toast.message(result.message ?? `Test lead stored with status: ${result.status}`)
             }
-        } catch {
-            toast.error("Failed to send test lead")
+        } catch (error) {
+            const message = error instanceof Error ? error.message : null
+            toast.error(message || "Failed to send test lead")
         }
     }
 
@@ -1727,7 +1756,9 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
     const isDialog = variant === "dialog"
     const containerClass = showHeading ? "border-t pt-6" : "space-y-4"
     const zapierForms = metaForms.filter(
-        (form) => form.page_id === "zapier" || form.form_external_id?.startsWith("zapier-")
+        (form) =>
+            form.is_active &&
+            (form.page_id === "zapier" || form.form_external_id?.startsWith("zapier-"))
     )
     const singleZapierForm = zapierForms.length === 1 ? zapierForms[0] : null
     const mappingHref = singleZapierForm
@@ -2073,15 +2104,20 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                         <div className="space-y-2">
                             <Label>Test Lead</Label>
                             <Input
-                                placeholder="Meta Form ID (optional if only one form)"
+                                placeholder="Zapier Form ID (optional if only one active Zapier form exists)"
                                 value={testFormId}
                                 onChange={(event) => setTestFormId(event.target.value)}
                                 name="zapier-test-form-id"
                                 autoComplete="off"
                             />
                             <p className="text-xs text-muted-foreground">
-                                Sends a dummy lead through the same mapping pipeline as Meta leads.
+                                Sends a dummy lead through the same inbound mapping pipeline as Zapier leads.
                             </p>
+                            {zapierForms.length === 1 ? (
+                                <p className="text-xs text-muted-foreground">
+                                    Defaulting to {zapierForms[0]?.form_name || zapierForms[0]?.form_external_id}.
+                                </p>
+                            ) : null}
                             <p className="text-xs text-muted-foreground">
                                 Mapping for Zapier leads is managed in Meta Lead Forms.{" "}
                                 <Link href="/settings/integrations/meta/forms" className="text-primary underline">
@@ -2332,6 +2368,562 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
     )
 }
 
+function MetaCrmDatasetMonitoringSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
+    const { data: summary, isLoading: summaryLoading } = useMetaCrmDatasetEventsSummary()
+    const { data: events, isLoading: eventsLoading } = useMetaCrmDatasetEvents({ limit: 20 })
+    const retryEvent = useRetryMetaCrmDatasetEvent()
+    const isDialog = variant === "dialog"
+
+    const handleRetry = async (eventId: string) => {
+        try {
+            await retryEvent.mutateAsync({ eventId })
+            toast.success("Retry queued")
+        } catch {
+            toast.error("Failed to retry Meta CRM dataset event")
+        }
+    }
+
+    if (summaryLoading || eventsLoading) {
+        return (
+            <div className="flex items-center justify-center py-8">
+                <Loader2Icon className="size-6 animate-spin text-muted-foreground motion-reduce:animate-none" aria-hidden="true" />
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-4">
+            <Alert>
+                <AlertTitle>Recent delivery health</AlertTitle>
+                <AlertDescription>
+                    Summary rates are calculated per organization over the last {summary?.window_hours ?? 24} hours and exclude manual test events.
+                </AlertDescription>
+            </Alert>
+
+            {summary?.warning_messages?.length ? (
+                <Alert variant="destructive">
+                    <AlertTriangleIcon className="size-4" aria-hidden="true" />
+                    <AlertTitle>Attention needed</AlertTitle>
+                    <AlertDescription className="space-y-1">
+                        {summary.warning_messages.map((message) => (
+                            <p key={message}>{message}</p>
+                        ))}
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+
+            <div className="grid gap-3 md:grid-cols-4">
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardDescription>Recent events</CardDescription>
+                        <CardTitle className="text-2xl">{summary?.total_count ?? 0}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-xs text-muted-foreground">
+                            {summary?.queued_count ?? 0} still queued
+                        </p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardDescription>Delivered</CardDescription>
+                        <CardTitle className="text-2xl">{summary?.delivered_count ?? 0}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-xs text-muted-foreground">
+                            Failure rate: {formatZapierRate(summary?.failure_rate ?? 0)}
+                        </p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardDescription>Failed</CardDescription>
+                        <CardTitle className="text-2xl">{summary?.failed_count ?? 0}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-xs text-muted-foreground">
+                            Retries available for terminal delivery failures
+                        </p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardDescription>Skipped</CardDescription>
+                        <CardTitle className="text-2xl">{summary?.skipped_count ?? 0}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-xs text-muted-foreground">
+                            Actionable skip rate: {formatZapierRate(summary?.skipped_rate ?? 0)}
+                        </p>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <Card>
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Recent direct Meta CRM dataset events</CardTitle>
+                    <CardDescription className="text-xs">
+                        Review delivery outcomes, skip reasons, Graph API errors, and replay failed jobs.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {!events?.items?.length ? (
+                        <p className="text-sm text-muted-foreground">
+                            No direct Meta CRM dataset events recorded yet.
+                        </p>
+                    ) : (
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Time</TableHead>
+                                    <TableHead>Source</TableHead>
+                                    <TableHead>Event</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Details</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {events.items.map((event) => (
+                                    <TableRow key={event.id}>
+                                        <TableCell className="text-xs text-muted-foreground">
+                                            {formatRelativeTime(event.created_at)}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="secondary">{formatZapierSource(event.source)}</Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="font-medium">{event.event_name || "Unmapped event"}</div>
+                                            <div className="text-xs text-muted-foreground">
+                                                {event.stage_label || event.stage_key || "No stage"}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant={ZAPIER_OUTBOUND_STATUS_BADGE[event.status].variant}>
+                                                {ZAPIER_OUTBOUND_STATUS_BADGE[event.status].label}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="max-w-xs">
+                                            <div className="space-y-1 text-xs text-muted-foreground">
+                                                <p>Lead: {event.lead_id || "—"}</p>
+                                                <p>
+                                                    {event.last_error
+                                                        || (event.reason ? formatZapierReason(event.reason) : "No issues recorded")}
+                                                </p>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handleRetry(event.id)}
+                                                disabled={!event.can_retry || retryEvent.isPending}
+                                                className={isDialog ? "" : "min-w-24"}
+                                            >
+                                                {retryEvent.isPending ? "Retrying…" : "Retry"}
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
+                </CardContent>
+            </Card>
+        </div>
+    )
+}
+
+function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
+    const { data: settings, isLoading } = useMetaCrmDatasetSettings()
+    const updateSettings = useUpdateMetaCrmDatasetSettings()
+    const sendOutboundTest = useMetaCrmDatasetOutboundTest()
+    const isDialog = variant === "dialog"
+    const [datasetId, setDatasetId] = useState("")
+    const [accessToken, setAccessToken] = useState("")
+    const [enabled, setEnabled] = useState(false)
+    const [crmName, setCrmName] = useState("Surrogacy Force CRM")
+    const [sendHashedPii, setSendHashedPii] = useState(false)
+    const [eventMapping, setEventMapping] = useState<MetaCrmDatasetEventMappingItem[]>([])
+    const [testEventCode, setTestEventCode] = useState("")
+    const [selectedStage, setSelectedStage] = useState("")
+    const [outboundTestLeadId, setOutboundTestLeadId] = useState("")
+    const [outboundTestFbc, setOutboundTestFbc] = useState("")
+
+    useEffect(() => {
+        if (!settings) return
+        setDatasetId(settings.dataset_id || "")
+        setAccessToken("")
+        setEnabled(Boolean(settings.enabled))
+        setCrmName(settings.crm_name || "Surrogacy Force CRM")
+        setSendHashedPii(Boolean(settings.send_hashed_pii))
+        setEventMapping(settings.event_mapping || [])
+        setTestEventCode(settings.test_event_code || "")
+        setSelectedStage((currentStage) => {
+            if (currentStage && settings.event_mapping?.some((item) => item.stage_key === currentStage)) {
+                return currentStage
+            }
+            return settings.event_mapping?.[0]?.stage_key || ""
+        })
+    }, [settings])
+
+    const handleSave = async () => {
+        try {
+            const payload: {
+                dataset_id: string | null
+                access_token?: string | null
+                enabled: boolean
+                crm_name: string
+                send_hashed_pii: boolean
+                event_mapping: MetaCrmDatasetEventMappingItem[]
+                test_event_code: string | null
+            } = {
+                dataset_id: datasetId.trim() || null,
+                enabled,
+                crm_name: crmName.trim() || "Surrogacy Force CRM",
+                send_hashed_pii: sendHashedPii,
+                event_mapping: eventMapping,
+                test_event_code: testEventCode.trim() || null,
+            }
+            const nextAccessToken = accessToken.trim()
+            if (nextAccessToken) {
+                payload.access_token = nextAccessToken
+            }
+            await updateSettings.mutateAsync(payload)
+            setAccessToken("")
+            toast.success("CRM dataset settings saved")
+        } catch (error) {
+            const message = error instanceof Error ? error.message : null
+            toast.error(message || "Failed to save CRM dataset settings")
+        }
+    }
+
+    const handleOutboundTest = async () => {
+        try {
+            const payload: {
+                stage_key?: string
+                lead_id?: string
+                fbc?: string | null
+                test_event_code?: string | null
+            } = {}
+            if (selectedStage) {
+                payload.stage_key = selectedStage
+            }
+            const leadId = outboundTestLeadId.trim()
+            if (leadId) {
+                payload.lead_id = leadId
+            }
+            const clickId = outboundTestFbc.trim()
+            if (clickId) {
+                payload.fbc = clickId
+            }
+            payload.test_event_code = testEventCode.trim() || null
+            const result = await sendOutboundTest.mutateAsync(payload)
+            toast.success(`Test event queued: ${result.event_name} for ${result.lead_id}`)
+        } catch (error) {
+            const message = error instanceof Error ? error.message : null
+            toast.error(message || "Failed to send Meta CRM dataset test event")
+        }
+    }
+
+    const applyRecommendedBucketMapping = () => {
+        setEventMapping((current) =>
+            current.map((item) => {
+                const recommendedBucket = ZAPIER_RECOMMENDED_BUCKET_BY_STAGE[item.stage_key]
+                if (!recommendedBucket) {
+                    return item
+                }
+                return {
+                    ...item,
+                    bucket: recommendedBucket,
+                    event_name: ZAPIER_BUCKET_EVENT_NAME[recommendedBucket],
+                    enabled: true,
+                }
+            })
+        )
+        toast.success("Applied recommended Meta CRM dataset stage mapping")
+    }
+
+    if (isLoading) {
+        return (
+            <Card>
+                <CardContent className="flex items-center justify-center py-8">
+                    <Loader2Icon className="size-6 animate-spin text-muted-foreground motion-reduce:animate-none" aria-hidden="true" />
+                </CardContent>
+            </Card>
+        )
+    }
+
+    return (
+        <Card>
+            <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                    <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900">
+                        <ServerIcon className="size-5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                    </div>
+                    <div>
+                        <CardTitle className="text-base">CRM Dataset</CardTitle>
+                        <CardDescription className="text-xs">
+                            Direct Meta Conversions API delivery using a dataset ID and access token.
+                        </CardDescription>
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+                <Alert>
+                    <AlertTitle>No Meta app required</AlertTitle>
+                    <AlertDescription>
+                        Use this direct CRM dataset path when you want Meta CRM conversion reporting without the legacy app-based OAuth flow.
+                    </AlertDescription>
+                </Alert>
+
+                <div className="flex items-center justify-between rounded-md border p-3">
+                    <div>
+                        <p className="text-sm font-medium">Enable direct CRM dataset delivery</p>
+                        <p className="text-xs text-muted-foreground">
+                            Send Meta lead stage changes directly to your dataset endpoint.
+                        </p>
+                    </div>
+                    <Switch
+                        checked={enabled}
+                        onCheckedChange={setEnabled}
+                        aria-label="Enable direct CRM dataset delivery"
+                    />
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                        <Label htmlFor="meta-crm-dataset-id">Dataset ID</Label>
+                        <Input
+                            id="meta-crm-dataset-id"
+                            value={datasetId}
+                            onChange={(event) => setDatasetId(event.target.value)}
+                            placeholder="1428122951556949"
+                            autoComplete="off"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="meta-crm-dataset-access-token">Meta CRM Dataset Access Token</Label>
+                        <Input
+                            id="meta-crm-dataset-access-token"
+                            type="password"
+                            value={accessToken}
+                            onChange={(event) => setAccessToken(event.target.value)}
+                            placeholder={settings?.access_token_configured ? "•••••••• (set)" : "Enter access token"}
+                            autoComplete="off"
+                        />
+                    </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                        <Label htmlFor="meta-crm-dataset-crm-name">CRM Name</Label>
+                        <Input
+                            id="meta-crm-dataset-crm-name"
+                            value={crmName}
+                            onChange={(event) => setCrmName(event.target.value)}
+                            placeholder="Surrogacy Force CRM"
+                            autoComplete="off"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="meta-crm-dataset-test-event-code">Test Event Code</Label>
+                        <Input
+                            id="meta-crm-dataset-test-event-code"
+                            value={testEventCode}
+                            onChange={(event) => setTestEventCode(event.target.value)}
+                            placeholder="Optional Meta test event code"
+                            autoComplete="off"
+                        />
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-between rounded-md border p-3">
+                    <div>
+                        <p className="text-sm font-medium">Include hashed PII for Meta CRM dataset</p>
+                        <p className="text-xs text-muted-foreground">
+                            Send hashed email and phone when available to improve match quality.
+                        </p>
+                    </div>
+                    <Switch
+                        checked={sendHashedPii}
+                        onCheckedChange={setSendHashedPii}
+                        aria-label="Include hashed PII for Meta CRM dataset"
+                    />
+                </div>
+
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                        <Label>Stage → Event Mapping</Label>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={applyRecommendedBucketMapping}
+                        >
+                            Apply Recommended Mapping
+                        </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        Map each internal surrogate stage to the Meta CRM event bucket you want to report.
+                    </p>
+                    <div className="space-y-2">
+                        {eventMapping.map((item, index) => (
+                            <div
+                                key={item.stage_key}
+                                className={`flex flex-col gap-2 rounded-md border p-3 ${isDialog ? "" : "md:flex-row md:items-center"}`}
+                            >
+                                <div className="w-32 text-sm font-medium">
+                                    {item.stage_key.replace(/_/g, " ")}
+                                </div>
+                                <Select
+                                    value={isZapierStageBucket(item.bucket) ? item.bucket : "__none__"}
+                                    onValueChange={(value) => {
+                                        const next = [...eventMapping]
+                                        const existing = next[index]
+                                        if (!existing) return
+                                        if (value === "__none__") {
+                                            next[index] = {
+                                                ...existing,
+                                                bucket: null,
+                                                enabled: false,
+                                            }
+                                        } else if (isZapierStageBucket(value)) {
+                                            next[index] = {
+                                                ...existing,
+                                                bucket: value,
+                                                event_name: ZAPIER_BUCKET_EVENT_NAME[value],
+                                                enabled: true,
+                                            }
+                                        }
+                                        setEventMapping(next)
+                                    }}
+                                >
+                                    <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-44"}>
+                                        <SelectValue placeholder="Bucket" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="__none__">Not Tracked</SelectItem>
+                                        {ZAPIER_BUCKET_OPTIONS.map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                                {option.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <Input
+                                    value={item.event_name}
+                                    onChange={(event) => {
+                                        const next = [...eventMapping]
+                                        const existing = next[index]
+                                        if (!existing) return
+                                        next[index] = { ...existing, event_name: event.target.value }
+                                        setEventMapping(next)
+                                    }}
+                                    placeholder="Event name"
+                                    name={`meta-crm-dataset-event-${item.stage_key}`}
+                                    autoComplete="off"
+                                    disabled={isZapierStageBucket(item.bucket)}
+                                />
+                                <div className="flex items-center gap-2">
+                                    <Switch
+                                        checked={item.enabled}
+                                        onCheckedChange={(checked) => {
+                                            const next = [...eventMapping]
+                                            const existing = next[index]
+                                            if (!existing) return
+                                            next[index] = { ...existing, enabled: checked }
+                                            setEventMapping(next)
+                                        }}
+                                        aria-label={`Enable ${item.stage_key} Meta CRM dataset event`}
+                                    />
+                                    <span className="text-xs text-muted-foreground">Enabled</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className={`flex flex-col gap-2 ${isDialog ? "" : "md:flex-row md:items-start"}`}>
+                    <Button onClick={handleSave} disabled={updateSettings.isPending}>
+                        {updateSettings.isPending ? (
+                            <>
+                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                Saving…
+                            </>
+                        ) : (
+                            "Save CRM Dataset Settings"
+                        )}
+                    </Button>
+                    <div className={isDialog ? "flex flex-col gap-2" : "flex flex-1 flex-col gap-2"}>
+                        <div className={isDialog ? "space-y-2" : "flex flex-col gap-2 md:max-w-sm"}>
+                            <Label htmlFor="meta-crm-dataset-test-lead-id">Real Meta Lead ID</Label>
+                            <Input
+                                id="meta-crm-dataset-test-lead-id"
+                                value={outboundTestLeadId}
+                                onChange={(event) => setOutboundTestLeadId(event.target.value)}
+                                placeholder="Use a real Meta lead ID for testing"
+                                autoComplete="off"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Meta CRM funnel updates generally only work for leads created within 90 days.
+                            </p>
+                        </div>
+                        <div className={isDialog ? "space-y-2" : "flex flex-col gap-2 md:max-w-sm"}>
+                            <Label htmlFor="meta-crm-dataset-test-fbc">Click ID (fbc)</Label>
+                            <Input
+                                id="meta-crm-dataset-test-fbc"
+                                value={outboundTestFbc}
+                                onChange={(event) => setOutboundTestFbc(event.target.value)}
+                                placeholder="Optional Meta click ID for better matching"
+                                autoComplete="off"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Send Meta click ID when you have it. This maps to <code>user_data.fbc</code>.
+                            </p>
+                        </div>
+                        <div className={isDialog ? "flex flex-col gap-2" : "flex flex-1 items-center gap-2"}>
+                            <Select
+                                value={selectedStage}
+                                onValueChange={(value) => setSelectedStage(value ?? "")}
+                            >
+                                <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-56"} aria-label="Select Meta CRM dataset stage">
+                                    <SelectValue placeholder="Select stage" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {eventMapping.map((item) => (
+                                        <SelectItem key={item.stage_key} value={item.stage_key}>
+                                            {item.stage_key.replace(/_/g, " ")}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Button
+                                variant="outline"
+                                onClick={handleOutboundTest}
+                                disabled={sendOutboundTest.isPending}
+                                className={isDialog ? "w-full" : undefined}
+                            >
+                                {sendOutboundTest.isPending ? (
+                                    <>
+                                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                        Sending…
+                                    </>
+                                ) : (
+                                    <>
+                                        <ActivityIcon className="mr-2 size-4" aria-hidden="true" />
+                                        Send Meta CRM Test Event
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
 // Connection health badge component for Meta dialog
 function ConnectionHealthBadge({ connection }: { connection: MetaOAuthConnection }) {
     const status = getConnectionHealthStatus(connection)
@@ -2510,154 +3102,176 @@ function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "di
                 <>
                     <h2 className="mb-4 text-lg font-semibold">Meta Integration</h2>
                     <p className="mb-4 text-sm text-muted-foreground">
-                        Connect Meta accounts to sync lead forms and conversions.
+                        Connect Meta accounts to sync lead forms, and configure direct CRM dataset delivery for Meta conversion reporting.
                     </p>
                 </>
             )}
+            <Tabs defaultValue="configuration" className="space-y-4">
+                <TabsList variant="line">
+                    <TabsTrigger value="configuration">Configuration</TabsTrigger>
+                    <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
+                </TabsList>
 
-            {/* Connections Card */}
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-                    <div>
-                        <CardTitle className="text-base">Connections</CardTitle>
-                        <CardDescription className="text-xs">
-                            Connect Meta accounts and manage assets for lead ads.
-                        </CardDescription>
+                <TabsContent value="configuration" className="space-y-4">
+                    <MetaCrmDatasetSection variant={variant} />
+
+                    <div className="space-y-4 border-t pt-4">
+                        <div className="space-y-2">
+                            <h3 className="text-base font-semibold">Legacy app-based Meta setup</h3>
+                            <p className="text-sm text-muted-foreground">
+                                These OAuth connections and ad-account CAPI settings are the legacy app-based integration path.
+                            </p>
+                        </div>
+
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                                <div>
+                                    <CardTitle className="text-base">Legacy Connections</CardTitle>
+                                    <CardDescription className="text-xs">
+                                        Connect Meta accounts and manage assets for lead ads through the legacy app-based flow.
+                                    </CardDescription>
+                                </div>
+                                <Button size="sm" onClick={handleConnectWithFacebook} disabled={connectUrlMutation.isPending}>
+                                    {connectUrlMutation.isPending ? (
+                                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                    ) : (
+                                        <FacebookIcon className="mr-2 size-4" aria-hidden="true" />
+                                    )}
+                                    Connect with Facebook
+                                </Button>
+                            </CardHeader>
+                            <CardContent>
+                                {connections.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">No legacy Meta connections yet. Connect with Facebook to get started.</p>
+                                ) : (
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Account</TableHead>
+                                                <TableHead>Status</TableHead>
+                                                <TableHead>Last validated</TableHead>
+                                                <TableHead className="text-right">Actions</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {connections.map((connection) => (
+                                                <TableRow key={connection.id}>
+                                                    <TableCell>
+                                                        <div className="font-medium">
+                                                            {connection.meta_user_name || "Meta user"}
+                                                        </div>
+                                                        <div className="text-xs text-muted-foreground">
+                                                            {connection.meta_user_id}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <ConnectionHealthBadge connection={connection} />
+                                                    </TableCell>
+                                                    <TableCell className="text-sm text-muted-foreground">
+                                                        {connection.last_validated_at
+                                                            ? formatRelativeTime(connection.last_validated_at, "—")
+                                                            : "—"}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => setDisconnectConnectionId(connection.id)}
+                                                            aria-label="Disconnect connection"
+                                                        >
+                                                            <UnlinkIcon className="size-4" aria-hidden="true" />
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                )}
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-base">Legacy Ad Accounts + CAPI</CardTitle>
+                                <CardDescription className="text-xs">
+                                    Configure legacy pixel-based CAPI settings and sync visibility.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {adAccounts.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">No legacy ad accounts connected yet.</p>
+                                ) : (
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Ad Account</TableHead>
+                                                <TableHead>Name</TableHead>
+                                                <TableHead>CAPI</TableHead>
+                                                <TableHead>Status</TableHead>
+                                                <TableHead className="text-right">Actions</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {adAccounts.map((account) => (
+                                                <TableRow key={account.id}>
+                                                    <TableCell className="font-mono text-xs">
+                                                        {account.ad_account_external_id}
+                                                    </TableCell>
+                                                    <TableCell>{account.ad_account_name || "—"}</TableCell>
+                                                    <TableCell>
+                                                        <Badge variant={account.capi_enabled ? "default" : "secondary"}>
+                                                            {account.capi_enabled ? "Enabled" : "Disabled"}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge variant={account.is_active ? "default" : "secondary"} className="gap-1">
+                                                            {account.is_active ? (
+                                                                <CheckCircleIcon className="size-3" aria-hidden="true" />
+                                                            ) : (
+                                                                <AlertTriangleIcon className="size-3" aria-hidden="true" />
+                                                            )}
+                                                            {account.is_active ? "Active" : "Inactive"}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => openEditAccount(account)}
+                                                            aria-label="Edit ad account"
+                                                        >
+                                                            <PencilIcon className="size-4" aria-hidden="true" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => handleDeleteAdAccount(account.id)}
+                                                            disabled={deleteAccountMutation.isPending}
+                                                            aria-label="Delete ad account"
+                                                        >
+                                                            <TrashIcon className="size-4" aria-hidden="true" />
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                )}
+                            </CardContent>
+                        </Card>
+
+                        <div className="flex justify-end">
+                            <Button render={<Link href="/settings/integrations/meta/forms" />} variant="outline" size="sm">
+                                Manage lead forms
+                            </Button>
+                        </div>
                     </div>
-                    <Button size="sm" onClick={handleConnectWithFacebook} disabled={connectUrlMutation.isPending}>
-                        {connectUrlMutation.isPending ? (
-                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                        ) : (
-                            <FacebookIcon className="mr-2 size-4" aria-hidden="true" />
-                        )}
-                        Connect with Facebook
-                    </Button>
-                </CardHeader>
-                <CardContent>
-                    {connections.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No connections yet. Connect with Facebook to get started.</p>
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Account</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Last validated</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {connections.map((connection) => (
-                                    <TableRow key={connection.id}>
-                                        <TableCell>
-                                            <div className="font-medium">
-                                                {connection.meta_user_name || "Meta user"}
-                                            </div>
-                                            <div className="text-xs text-muted-foreground">
-                                                {connection.meta_user_id}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <ConnectionHealthBadge connection={connection} />
-                                        </TableCell>
-                                        <TableCell className="text-sm text-muted-foreground">
-                                            {connection.last_validated_at
-                                                ? formatRelativeTime(connection.last_validated_at, "—")
-                                                : "—"}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => setDisconnectConnectionId(connection.id)}
-                                                aria-label="Disconnect connection"
-                                            >
-                                                <UnlinkIcon className="size-4" aria-hidden="true" />
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
-                </CardContent>
-            </Card>
+                </TabsContent>
 
-            {/* Ad Accounts Card */}
-            <Card>
-                <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Ad Accounts</CardTitle>
-                    <CardDescription className="text-xs">Configure CAPI settings and sync visibility.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {adAccounts.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No ad accounts connected yet.</p>
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Ad Account</TableHead>
-                                    <TableHead>Name</TableHead>
-                                    <TableHead>CAPI</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {adAccounts.map((account) => (
-                                    <TableRow key={account.id}>
-                                        <TableCell className="font-mono text-xs">
-                                            {account.ad_account_external_id}
-                                        </TableCell>
-                                        <TableCell>{account.ad_account_name || "—"}</TableCell>
-                                        <TableCell>
-                                            <Badge variant={account.capi_enabled ? "default" : "secondary"}>
-                                                {account.capi_enabled ? "Enabled" : "Disabled"}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant={account.is_active ? "default" : "secondary"} className="gap-1">
-                                                {account.is_active ? (
-                                                    <CheckCircleIcon className="size-3" aria-hidden="true" />
-                                                ) : (
-                                                    <AlertTriangleIcon className="size-3" aria-hidden="true" />
-                                                )}
-                                                {account.is_active ? "Active" : "Inactive"}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => openEditAccount(account)}
-                                                aria-label="Edit ad account"
-                                            >
-                                                <PencilIcon className="size-4" aria-hidden="true" />
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => handleDeleteAdAccount(account.id)}
-                                                disabled={deleteAccountMutation.isPending}
-                                                aria-label="Delete ad account"
-                                            >
-                                                <TrashIcon className="size-4" aria-hidden="true" />
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* Link to full page */}
-            <div className="flex justify-end">
-                <Button render={<Link href="/settings/integrations/meta/forms" />} variant="outline" size="sm">
-                    Manage lead forms
-                </Button>
-            </div>
+                <TabsContent value="monitoring">
+                    <MetaCrmDatasetMonitoringSection variant={variant} />
+                </TabsContent>
+            </Tabs>
 
             {/* Edit Ad Account Dialog */}
             <Dialog open={!!editAccount} onOpenChange={(open) => !open && setEditAccount(null)}>
@@ -2775,6 +3389,7 @@ export default function IntegrationsPage() {
     const { data: metaFormsData } = useMetaForms()
     const { data: metaConnectionsData } = useMetaConnections()
     const { data: metaAdAccountsData } = useAdminMetaAdAccounts()
+    const { data: metaCrmDatasetSettings, isLoading: metaCrmDatasetSettingsLoading } = useMetaCrmDatasetSettings()
     const metaForms = metaFormsData ?? []
     const metaConnections = metaConnectionsData ?? []
     const metaAdAccounts = metaAdAccountsData ?? []
@@ -2842,13 +3457,30 @@ export default function IntegrationsPage() {
     const metaConnectionsCount = metaConnections.length
     const metaFormsCount = metaForms.length
     const metaMappedFormsCount = metaForms.filter(f => f.mapping_status === "mapped").length
-    const metaConfigured = metaConnectionsCount > 0
-    const metaStatusLabel = metaConfigured ? "Connected" : "Not configured"
+    const metaCrmDatasetConfigured = Boolean(
+        metaCrmDatasetSettings?.dataset_id && metaCrmDatasetSettings.access_token_configured
+    )
+    const metaCrmDatasetActive = metaCrmDatasetConfigured && Boolean(metaCrmDatasetSettings?.enabled)
+    const metaConfigured = metaConnectionsCount > 0 || metaCrmDatasetConfigured
+    const metaStatusLabel = metaCrmDatasetActive
+        ? "Active"
+        : metaConfigured
+            ? "Configured"
+            : "Not configured"
     const metaStatusVariant = metaConfigured ? "default" : "secondary"
     const metaStatusIcon = metaConfigured ? CheckCircleIcon : AlertTriangleIcon
-    const metaDetail = metaConfigured
-        ? `${metaFormsCount} form${metaFormsCount === 1 ? "" : "s"} · ${metaConnectionsCount} connection${metaConnectionsCount === 1 ? "" : "s"}`
-        : "Connect Facebook to get started"
+    const metaDetailParts: string[] = []
+    if (metaCrmDatasetConfigured) {
+        metaDetailParts.push(metaCrmDatasetActive ? "CRM dataset enabled" : "CRM dataset configured")
+    }
+    if (metaConnectionsCount > 0 || metaFormsCount > 0) {
+        metaDetailParts.push(
+            `${metaFormsCount} form${metaFormsCount === 1 ? "" : "s"} · ${metaConnectionsCount} connection${metaConnectionsCount === 1 ? "" : "s"}`
+        )
+    }
+    const metaDetail = metaDetailParts.length > 0
+        ? metaDetailParts.join(" · ")
+        : "Connect Facebook or add a CRM dataset to get started"
     const AiStatusIcon = aiStatusIcon
     const EmailStatusIcon = emailStatusIcon
     const ZapierStatusIcon = zapierStatusIcon
@@ -3221,23 +3853,29 @@ export default function IntegrationsPage() {
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <div className="space-y-3">
-                                    <Badge variant={metaStatusVariant} className="w-fit flex items-center gap-1">
-                                        <MetaStatusIcon className="size-3" aria-hidden="true" />
-                                        {metaStatusLabel}
-                                    </Badge>
-                                    <p className="text-xs text-muted-foreground">
-                                        {metaDetail}
-                                    </p>
-                                    <Button
-                                        variant="outline"
-                                        className="w-full"
-                                        onClick={() => setMetaDialogOpen(true)}
-                                        disabled={!canManageOrganizationIntegrations}
-                                    >
-                                        {canManageOrganizationIntegrations ? "Configure Meta" : "Admin access required"}
-                                    </Button>
-                                </div>
+                                {metaCrmDatasetSettingsLoading ? (
+                                    <div className="flex items-center justify-center py-6">
+                                        <Loader2Icon className="size-5 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        <Badge variant={metaStatusVariant} className="w-fit flex items-center gap-1">
+                                            <MetaStatusIcon className="size-3" aria-hidden="true" />
+                                            {metaStatusLabel}
+                                        </Badge>
+                                        <p className="text-xs text-muted-foreground">
+                                            {metaDetail}
+                                        </p>
+                                        <Button
+                                            variant="outline"
+                                            className="w-full"
+                                            onClick={() => setMetaDialogOpen(true)}
+                                            disabled={!canManageOrganizationIntegrations}
+                                        >
+                                            {canManageOrganizationIntegrations ? "Configure Meta" : "Admin access required"}
+                                        </Button>
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                     </div>
@@ -3345,9 +3983,9 @@ export default function IntegrationsPage() {
                         <DialogHeader>
                             <div className="flex items-start justify-between gap-4">
                                 <div className="space-y-1">
-                                    <DialogTitle>Meta Lead Ads Configuration</DialogTitle>
+                                    <DialogTitle>Meta Lead Ads + CRM Dataset</DialogTitle>
                                     <DialogDescription>
-                                        Connect Meta accounts, manage ad accounts, and configure CAPI settings.
+                                        Configure direct CRM dataset delivery and manage the legacy app-based Meta setup.
                                     </DialogDescription>
                                 </div>
                                 <Badge variant={metaStatusVariant} className="mt-1 flex items-center gap-1">

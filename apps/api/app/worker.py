@@ -245,6 +245,13 @@ def _resolve_integration_keys(db, job, integration_type) -> list[str]:
         else:
             keys.append("outbound")
 
+    elif integration_type == IntegrationType.META_CRM_DATASET:
+        dataset_id = payload.get("dataset_id")
+        if dataset_id:
+            keys.append(str(dataset_id))
+        else:
+            keys.append("dataset")
+
     elif integration_type == IntegrationType.WORKER:
         mailbox_id = payload.get("mailbox_id")
         if mailbox_id:
@@ -284,12 +291,24 @@ def _record_job_success(db, job) -> None:
             )
         except Exception as e:
             logger.warning("Failed to mark Zapier outbound event delivered: %s", e)
+    if job.job_type == JobType.META_CRM_DATASET_EVENT.value:
+        try:
+            from app.services import meta_crm_dataset_monitor_service
+
+            meta_crm_dataset_monitor_service.mark_job_delivered(
+                db=db,
+                job_id=job.id,
+                attempts=job.attempts,
+            )
+        except Exception as e:
+            logger.warning("Failed to mark Meta CRM dataset event delivered: %s", e)
 
     # Map job types to integration types
     job_to_integration = {
         JobType.META_LEAD_FETCH.value: IntegrationType.META_LEADS,
         JobType.META_LEAD_REPROCESS_FORM.value: IntegrationType.META_LEADS,
         JobType.META_CAPI_EVENT.value: IntegrationType.META_CAPI,
+        JobType.META_CRM_DATASET_EVENT.value: IntegrationType.META_CRM_DATASET,
         JobType.META_HIERARCHY_SYNC.value: IntegrationType.META_HIERARCHY,
         JobType.META_SPEND_SYNC.value: IntegrationType.META_SPEND,
         JobType.META_FORM_SYNC.value: IntegrationType.META_FORMS,
@@ -345,6 +364,19 @@ def _record_job_failure(db, job, error_msg: str, exception: Exception | None = N
             )
         except Exception as e:
             logger.warning("Failed to mark Zapier outbound event failed: %s", e)
+    if job.job_type == JobType.META_CRM_DATASET_EVENT.value:
+        try:
+            from app.services import meta_crm_dataset_monitor_service
+
+            meta_crm_dataset_monitor_service.mark_job_failed(
+                db=db,
+                job_id=job.id,
+                job_status=job.status,
+                attempts=job.attempts,
+                error_message=error_msg,
+            )
+        except Exception as e:
+            logger.warning("Failed to mark Meta CRM dataset event failed: %s", e)
 
     if not job.organization_id:
         return
@@ -355,6 +387,7 @@ def _record_job_failure(db, job, error_msg: str, exception: Exception | None = N
             JobType.META_LEAD_FETCH.value: IntegrationType.META_LEADS,
             JobType.META_LEAD_REPROCESS_FORM.value: IntegrationType.META_LEADS,
             JobType.META_CAPI_EVENT.value: IntegrationType.META_CAPI,
+            JobType.META_CRM_DATASET_EVENT.value: IntegrationType.META_CRM_DATASET,
             JobType.META_HIERARCHY_SYNC.value: IntegrationType.META_HIERARCHY,
             JobType.META_SPEND_SYNC.value: IntegrationType.META_SPEND,
             JobType.META_FORM_SYNC.value: IntegrationType.META_FORMS,
@@ -399,6 +432,7 @@ def _record_job_failure(db, job, error_msg: str, exception: Exception | None = N
             alert_type_map = {
                 JobType.META_LEAD_FETCH.value: AlertType.META_FETCH_FAILED,
                 JobType.META_CAPI_EVENT.value: AlertType.META_API_ERROR,
+                JobType.META_CRM_DATASET_EVENT.value: AlertType.META_API_ERROR,
                 JobType.SEND_EMAIL.value: AlertType.EMAIL_SEND_FAILED,
                 JobType.CAMPAIGN_SEND.value: AlertType.EMAIL_SEND_FAILED,
                 JobType.WORKFLOW_EMAIL.value: AlertType.EMAIL_SEND_FAILED,

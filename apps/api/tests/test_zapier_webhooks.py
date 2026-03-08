@@ -7,14 +7,22 @@ from datetime import datetime, timezone
 import pytest
 
 
-def _create_mapped_meta_form(db, org_id, user_id: str | None, *, form_external_id: str = "form_1"):
+def _create_mapped_meta_form(
+    db,
+    org_id,
+    user_id: str | None,
+    *,
+    form_external_id: str = "form_1",
+    page_id: str = "page_123",
+    form_name: str = "Lead Form",
+):
     from app.db.models import MetaForm, MetaFormVersion
 
     form = MetaForm(
         organization_id=org_id,
-        page_id="page_123",
+        page_id=page_id,
         form_external_id=form_external_id,
-        form_name="Lead Form",
+        form_name=form_name,
     )
     db.add(form)
     db.flush()
@@ -458,6 +466,40 @@ async def test_zapier_test_endpoint_creates_test_lead(authed_client, db, test_or
     surrogate = db.get(Surrogate, body["surrogate_id"])
     assert surrogate is not None
     assert surrogate.import_metadata.get("zapier_test") is True
+
+
+@pytest.mark.asyncio
+async def test_zapier_test_endpoint_defaults_to_only_active_zapier_form(
+    authed_client, db, test_org, test_user
+):
+    from app.db.models import MetaLead
+
+    _create_mapped_meta_form(db, test_org.id, test_user.id, form_external_id="meta_form_primary")
+    zapier_form = _create_mapped_meta_form(
+        db,
+        test_org.id,
+        test_user.id,
+        form_external_id="zapier-webhook-1",
+        page_id="zapier",
+        form_name="Zapier Intake",
+    )
+
+    res = await authed_client.post("/integrations/zapier/test-lead", json={})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["status"] == "converted"
+
+    lead = (
+        db.query(MetaLead)
+        .filter(
+            MetaLead.organization_id == test_org.id,
+            MetaLead.meta_form_id == zapier_form.form_external_id,
+        )
+        .order_by(MetaLead.received_at.desc())
+        .first()
+    )
+    assert lead is not None
+    assert lead.field_data_raw.get("zapier_test") is True
 
 
 @pytest.mark.asyncio

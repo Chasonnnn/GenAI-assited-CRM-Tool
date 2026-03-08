@@ -37,6 +37,7 @@ JOB_HANDLERS: Mapping[str, JobHandler] = {
     JobType.META_LEAD_FETCH.value: meta.process_meta_lead_fetch,
     JobType.META_LEAD_REPROCESS_FORM.value: meta.process_meta_lead_reprocess_form,
     JobType.META_CAPI_EVENT.value: meta.process_meta_capi_event,
+    JobType.META_CRM_DATASET_EVENT.value: meta.process_meta_crm_dataset_event,
     JobType.WORKFLOW_EMAIL.value: email.process_workflow_email,
     JobType.WORKFLOW_SWEEP.value: workflows.process_workflow_sweep,
     JobType.CSV_IMPORT.value: imports.process_csv_import,

@@ -55,6 +55,8 @@ from app.db.models.form_intake import (
 )
 from app.db.models.integration_health import IntegrationErrorRollup, IntegrationHealth, SystemAlert
 from app.db.models.integrations import (
+    MetaCrmDatasetEvent,
+    MetaCrmDatasetSettings,
     ResendSettings,
     UserIntegration,
     ZapierInboundWebhook,
@@ -208,6 +210,8 @@ __all__ = [
     "MetaAdAccount",
     "MetaAdSet",
     "MetaCampaign",
+    "MetaCrmDatasetEvent",
+    "MetaCrmDatasetSettings",
     "MetaDailySpend",
     "MetaAdPlatformDaily",
     "MetaForm",

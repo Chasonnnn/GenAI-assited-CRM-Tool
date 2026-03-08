@@ -489,3 +489,10 @@ async def process_meta_form_sync(db, job) -> None:
     )
 
     # Note: Health recording handled centrally by _record_job_success
+
+
+async def process_meta_crm_dataset_event(db, job) -> None:
+    """Process a direct Meta CRM dataset outbound event."""
+    from app.services import meta_crm_dataset_service
+
+    await meta_crm_dataset_service.process_job(db, job)

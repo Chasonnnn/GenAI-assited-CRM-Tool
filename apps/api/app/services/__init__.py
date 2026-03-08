@@ -33,6 +33,9 @@ from app.services import note_service
 from app.services import task_service
 from app.services import ai_task_service
 from app.services import meta_lead_service
+from app.services import meta_crm_dataset_monitor_service
+from app.services import meta_crm_dataset_service
+from app.services import meta_crm_dataset_settings_service
 from app.services import status_change_request_service
 from app.services import intended_parent_status_service
 from app.services import form_submission_service
@@ -69,6 +72,9 @@ __all__ = [
     "task_service",
     "ai_task_service",
     "meta_lead_service",
+    "meta_crm_dataset_monitor_service",
+    "meta_crm_dataset_service",
+    "meta_crm_dataset_settings_service",
     "status_change_request_service",
     "intended_parent_status_service",
     "form_submission_service",
