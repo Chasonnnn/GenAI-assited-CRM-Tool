@@ -112,6 +112,22 @@ const mockUseWorkflowExecutions = vi.fn()
 const mockCreateWorkflow = { mutate: vi.fn(), isPending: false }
 const mockUpdateWorkflow = { mutate: vi.fn(), isPending: false }
 
+function getFirstElement<T>(items: T[], message: string): T {
+    const item = items[0]
+    if (!item) {
+        throw new Error(message)
+    }
+    return item
+}
+
+function getLastElement<T>(items: T[], message: string): T {
+    const item = items.at(-1)
+    if (!item) {
+        throw new Error(message)
+    }
+    return item
+}
+
 vi.mock('@/lib/hooks/use-workflows', () => ({
     useWorkflows: () => mockUseWorkflows(),
     useWorkflow: () => mockUseWorkflow(),
@@ -179,21 +195,27 @@ describe('AutomationPage', () => {
         render(<AutomationPage />)
 
         const createButtons = screen.getAllByRole('button', { name: /create workflow/i })
-        fireEvent.click(createButtons[createButtons.length - 1])
+        fireEvent.click(getLastElement(createButtons, 'Expected a create workflow button'))
 
         fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Surrogates'), { target: { value: 'Test Workflow' } })
-        fireEvent.change(screen.getAllByTestId('select')[0], { target: { value: 'surrogate_created' } })
+        fireEvent.change(
+            getFirstElement(screen.getAllByTestId('select'), 'Expected a trigger select'),
+            { target: { value: 'surrogate_created' } },
+        )
 
         fireEvent.click(screen.getByRole('button', { name: /next/i }))
         fireEvent.click(screen.getByRole('button', { name: /next/i }))
 
         fireEvent.click(screen.getByRole('button', { name: /add action/i }))
-        fireEvent.change(screen.getAllByTestId('select')[0], { target: { value: 'add_note' } })
+        fireEvent.change(
+            getFirstElement(screen.getAllByTestId('select'), 'Expected an action select'),
+            { target: { value: 'add_note' } },
+        )
         fireEvent.change(screen.getByPlaceholderText('Note content'), { target: { value: 'Test note' } })
 
         fireEvent.click(screen.getByRole('button', { name: /next/i }))
         const saveButtons = screen.getAllByRole('button', { name: /create workflow/i })
-        fireEvent.click(saveButtons[saveButtons.length - 1])
+        fireEvent.click(getLastElement(saveButtons, 'Expected a save workflow button'))
 
         expect(screen.getByText(/fix these errors/i)).toBeInTheDocument()
         expect(screen.getByText(/Action 1: title is required/i)).toBeInTheDocument()
