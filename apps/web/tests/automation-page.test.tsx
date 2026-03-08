@@ -58,9 +58,14 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
         children,
         render,
         ...props
-    }: { children?: ReactNode; render?: (props: ButtonHTMLAttributes<HTMLButtonElement>) => ReactNode } & ButtonHTMLAttributes<HTMLButtonElement>) => {
+    }: {
+        children?: ReactNode
+        render?:
+            | ((props: ButtonHTMLAttributes<HTMLButtonElement>) => ReactNode)
+            | ReactNode
+    } & ButtonHTMLAttributes<HTMLButtonElement>) => {
         if (render) {
-            return <>{render({ ...props })}</>
+            return typeof render === "function" ? <>{render({ ...props })}</> : <>{render}</>
         }
         return (
             <button type="button" {...props}>

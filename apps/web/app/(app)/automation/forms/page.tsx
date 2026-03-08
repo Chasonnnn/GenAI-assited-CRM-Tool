@@ -416,7 +416,7 @@ export default function FormsListPage() {
                                                                         variant="ghost"
                                                                         size="icon"
                                                                         className="h-8 w-8"
-                                                                        aria-label={`Actions for ${form.name}`}
+                                                                        aria-label={`Open menu for ${form.name}`}
                                                                         onClick={(e) => e.stopPropagation()}
                                                                     >
                                                                         <MoreVerticalIcon className="size-4" />
