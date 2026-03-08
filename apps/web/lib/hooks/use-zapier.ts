@@ -4,6 +4,10 @@ import * as zapierApi from '../api/zapier';
 export const zapierKeys = {
     all: ['zapier'] as const,
     settings: () => [...zapierKeys.all, 'settings'] as const,
+    outboundEventsSummary: (windowHours: number) =>
+        [...zapierKeys.all, 'outbound-events-summary', windowHours] as const,
+    outboundEvents: (params: zapierApi.ZapierOutboundEventsRequest) =>
+        [...zapierKeys.all, 'outbound-events', params] as const,
 };
 
 export function useZapierSettings() {
@@ -85,6 +89,37 @@ export function useZapierTestLead() {
 export function useZapierOutboundTest() {
     return useMutation({
         mutationFn: zapierApi.sendZapierOutboundTest,
+    });
+}
+
+export function useZapierOutboundEventsSummary(windowHours = 24) {
+    return useQuery({
+        queryKey: zapierKeys.outboundEventsSummary(windowHours),
+        queryFn: () => zapierApi.getZapierOutboundEventsSummary(windowHours),
+    });
+}
+
+export function useZapierOutboundEvents(params: zapierApi.ZapierOutboundEventsRequest = {}) {
+    return useQuery({
+        queryKey: zapierKeys.outboundEvents(params),
+        queryFn: () => zapierApi.getZapierOutboundEvents(params),
+    });
+}
+
+export function useRetryZapierOutboundEvent() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({
+            eventId,
+            payload,
+        }: {
+            eventId: string;
+            payload?: zapierApi.RetryZapierOutboundEventRequest;
+        }) => zapierApi.retryZapierOutboundEvent(eventId, payload),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: zapierKeys.outboundEventsSummary(24) });
+            queryClient.invalidateQueries({ queryKey: [...zapierKeys.all, 'outbound-events'] });
+        },
     });
 }
 

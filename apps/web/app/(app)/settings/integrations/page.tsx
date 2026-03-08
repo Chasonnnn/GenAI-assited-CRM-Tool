@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Textarea } from "@/components/ui/textarea"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -62,9 +63,12 @@ import {
     useZapierTestLead,
     useUpdateZapierOutboundSettings,
     useZapierOutboundTest,
+    useZapierOutboundEvents,
+    useZapierOutboundEventsSummary,
     useCreateZapierInboundWebhook,
     useRotateZapierInboundWebhook,
     useUpdateZapierInboundWebhook,
+    useRetryZapierOutboundEvent,
     useZapierFieldPaste,
     useDeleteZapierInboundWebhook,
 } from "@/lib/hooks/use-zapier"
@@ -95,6 +99,7 @@ import { toast } from "sonner"
 import type {
     ZapierEventMappingItem,
     ZapierFieldPasteResponse,
+    ZapierOutboundEvent,
     ZapierStageBucket,
 } from "@/lib/api/zapier"
 
@@ -212,6 +217,32 @@ function getZapierMappingHealth(eventMapping: ZapierEventMappingItem[] | null | 
         matched,
         isHealthy: matched === total && total > 0,
     }
+}
+
+const ZAPIER_OUTBOUND_STATUS_BADGE: Record<
+    ZapierOutboundEvent["status"],
+    { label: string; variant: "default" | "secondary" | "destructive" }
+> = {
+    queued: { label: "Queued", variant: "secondary" },
+    delivered: { label: "Delivered", variant: "default" },
+    failed: { label: "Failed", variant: "destructive" },
+    skipped: { label: "Skipped", variant: "secondary" },
+}
+
+function formatZapierRate(rate: number): string {
+    return `${Math.round(rate * 100)}%`
+}
+
+function formatZapierSource(source: string): string {
+    if (source === "automatic") return "Automatic"
+    if (source === "workflow") return "Workflow"
+    if (source === "test") return "Test"
+    return source.replace(/_/g, " ")
+}
+
+function formatZapierReason(reason: string | null | undefined): string {
+    if (!reason) return "—"
+    return reason.replace(/_/g, " ")
 }
 
 // AI provider options
@@ -1264,6 +1295,172 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
     )
 }
 
+function ZapierMonitoringSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
+    const { data: summary, isLoading: summaryLoading } = useZapierOutboundEventsSummary()
+    const { data: events, isLoading: eventsLoading } = useZapierOutboundEvents({ limit: 20 })
+    const retryOutboundEvent = useRetryZapierOutboundEvent()
+    const isDialog = variant === "dialog"
+
+    const handleRetry = async (eventId: string) => {
+        try {
+            await retryOutboundEvent.mutateAsync({ eventId })
+            toast.success("Retry queued")
+        } catch {
+            toast.error("Failed to retry outbound event")
+        }
+    }
+
+    if (summaryLoading || eventsLoading) {
+        return (
+            <div className="flex items-center justify-center py-8">
+                <Loader2Icon className="size-6 animate-spin text-muted-foreground motion-reduce:animate-none" aria-hidden="true" />
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-4">
+            <Alert>
+                <AlertTitle>Recent delivery health</AlertTitle>
+                <AlertDescription>
+                    Summary rates are calculated per organization over the last {summary?.window_hours ?? 24} hours and exclude manual test events.
+                </AlertDescription>
+            </Alert>
+
+            {summary?.warning_messages?.length ? (
+                <Alert variant="destructive">
+                    <AlertTriangleIcon className="size-4" aria-hidden="true" />
+                    <AlertTitle>Attention needed</AlertTitle>
+                    <AlertDescription className="space-y-1">
+                        {summary.warning_messages.map((message) => (
+                            <p key={message}>{message}</p>
+                        ))}
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+
+            <div className="grid gap-3 md:grid-cols-4">
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardDescription>Recent events</CardDescription>
+                        <CardTitle className="text-2xl">{summary?.total_count ?? 0}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-xs text-muted-foreground">
+                            {summary?.queued_count ?? 0} still queued
+                        </p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardDescription>Delivered</CardDescription>
+                        <CardTitle className="text-2xl">{summary?.delivered_count ?? 0}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-xs text-muted-foreground">
+                            Failure rate: {formatZapierRate(summary?.failure_rate ?? 0)}
+                        </p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardDescription>Failed</CardDescription>
+                        <CardTitle className="text-2xl">{summary?.failed_count ?? 0}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-xs text-muted-foreground">
+                            Retries available for terminal delivery failures
+                        </p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardDescription>Skipped</CardDescription>
+                        <CardTitle className="text-2xl">{summary?.skipped_count ?? 0}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-xs text-muted-foreground">
+                            Actionable skip rate: {formatZapierRate(summary?.skipped_rate ?? 0)}
+                        </p>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <Card>
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Recent outbound events</CardTitle>
+                    <CardDescription className="text-xs">
+                        Review delivery outcomes, skip reasons, and replay failed jobs.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {!events?.items?.length ? (
+                        <p className="text-sm text-muted-foreground">
+                            No outbound Zapier events recorded yet.
+                        </p>
+                    ) : (
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Time</TableHead>
+                                    <TableHead>Source</TableHead>
+                                    <TableHead>Event</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Details</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {events.items.map((event) => (
+                                    <TableRow key={event.id}>
+                                        <TableCell className="text-xs text-muted-foreground">
+                                            {formatRelativeTime(event.created_at)}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="secondary">{formatZapierSource(event.source)}</Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="font-medium">{event.event_name || "Unmapped event"}</div>
+                                            <div className="text-xs text-muted-foreground">
+                                                {event.stage_label || event.stage_key || "No stage"}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant={ZAPIER_OUTBOUND_STATUS_BADGE[event.status].variant}>
+                                                {ZAPIER_OUTBOUND_STATUS_BADGE[event.status].label}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="max-w-xs">
+                                            <div className="space-y-1 text-xs text-muted-foreground">
+                                                <p>Lead: {event.lead_id || "—"}</p>
+                                                <p>
+                                                    {event.last_error
+                                                        || (event.reason ? formatZapierReason(event.reason) : "No issues recorded")}
+                                                </p>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handleRetry(event.id)}
+                                                disabled={!event.can_retry || retryOutboundEvent.isPending}
+                                                className={isDialog ? "" : "min-w-24"}
+                                            >
+                                                {retryOutboundEvent.isPending ? "Retrying…" : "Retry"}
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
+                </CardContent>
+            </Card>
+        </div>
+    )
+}
+
 function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
     const { data: settings, isLoading } = useZapierSettings()
     const { data: metaForms = [], isLoading: metaFormsLoading } = useMetaForms()
@@ -1289,6 +1486,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
     const [sendHashedPii, setSendHashedPii] = useState(false)
     const [eventMapping, setEventMapping] = useState<ZapierEventMappingItem[]>([])
     const [selectedOutboundStage, setSelectedOutboundStage] = useState<string>('')
+    const [outboundTestLeadId, setOutboundTestLeadId] = useState('')
 
     useEffect(() => {
         if (!settings?.inbound_webhooks) return
@@ -1493,9 +1691,16 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
 
     const handleOutboundTest = async () => {
         try {
-            const payload = selectedOutboundStage ? { stage_key: selectedOutboundStage } : {}
+            const leadId = outboundTestLeadId.trim()
+            const payload: { stage_key?: string; lead_id?: string } = {}
+            if (selectedOutboundStage) {
+                payload.stage_key = selectedOutboundStage
+            }
+            if (leadId) {
+                payload.lead_id = leadId
+            }
             const result = await sendOutboundTest.mutateAsync(payload)
-            toast.success(`Test event queued: ${result.event_name}`)
+            toast.success(`Test event queued: ${result.event_name} for ${result.lead_id}`)
         } catch {
             toast.error("Failed to send outbound test event")
         }
@@ -1552,77 +1757,82 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                     </p>
                 </>
             )}
+            <Tabs defaultValue="configuration" className="space-y-4">
+                <TabsList variant="line">
+                    <TabsTrigger value="configuration">Configuration</TabsTrigger>
+                    <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
+                </TabsList>
+                <TabsContent value="configuration" className="space-y-4">
+                    {!metaFormsLoading && zapierForms.length > 0 && (
+                        <Alert>
+                            <AlertTitle>Zapier form detected</AlertTitle>
+                            <AlertDescription>
+                                We detected {zapierForms.length} Zapier form
+                                {zapierForms.length === 1 ? "" : "s"}. Map fields so inbound Zapier leads can
+                                convert automatically.{" "}
+                                <Link href={mappingHref} className="text-primary underline">
+                                    Manage mapping
+                                </Link>
+                            </AlertDescription>
+                        </Alert>
+                    )}
 
-            {!metaFormsLoading && zapierForms.length > 0 && (
-                <Alert>
-                    <AlertTitle>Zapier form detected</AlertTitle>
-                    <AlertDescription>
-                        We detected {zapierForms.length} Zapier form
-                        {zapierForms.length === 1 ? "" : "s"}. Map fields so inbound Zapier leads can
-                        convert automatically.{" "}
-                        <Link href={mappingHref} className="text-primary underline">
-                            Manage mapping
-                        </Link>
-                    </AlertDescription>
-                </Alert>
-            )}
-
-            <Card>
-                <CardHeader className="pb-3">
-                    <div className="flex items-center gap-3">
-                        <div className="flex size-10 items-center justify-center rounded-lg bg-indigo-100 dark:bg-indigo-900">
-                            <LinkIcon className="size-5 text-indigo-600 dark:text-indigo-400" aria-hidden="true" />
-                        </div>
-                        <div>
-                            <CardTitle className="text-base">Lead Intake Webhook</CardTitle>
-                            <CardDescription className="text-xs">
-                                Send a POST request with lead data when a new lead arrives.
-                            </CardDescription>
-                        </div>
-                    </div>
-                </CardHeader>
-
-                <CardContent className="space-y-6">
-                    <div className="space-y-4">
-                        <div
-                            className={`flex flex-col gap-3 ${isDialog ? "" : "md:flex-row md:items-center md:justify-between"}`}
-                            data-testid="zapier-inbound-header"
-                        >
-                            <div>
-                                <Label>Inbound Webhooks</Label>
-                                <p className="text-xs text-muted-foreground">
-                                    Create a webhook per Zapier flow or lead source.
-                                </p>
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <div className="flex items-center gap-3">
+                                <div className="flex size-10 items-center justify-center rounded-lg bg-indigo-100 dark:bg-indigo-900">
+                                    <LinkIcon className="size-5 text-indigo-600 dark:text-indigo-400" aria-hidden="true" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-base">Lead Intake Webhook</CardTitle>
+                                    <CardDescription className="text-xs">
+                                        Send a POST request with lead data when a new lead arrives.
+                                    </CardDescription>
+                                </div>
                             </div>
-                            <Button
-                                variant="outline"
-                                onClick={handleCreateInbound}
-                                disabled={createInboundWebhook.isPending}
-                            >
-                                {createInboundWebhook.isPending ? (
-                                    <>
-                                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                        Creating…
-                                    </>
-                                ) : (
-                                    <>
-                                        <PlusIcon className="mr-2 size-4" aria-hidden="true" />
-                                        Add webhook
-                                    </>
-                                )}
-                            </Button>
-                        </div>
+                        </CardHeader>
 
-                        {!settings?.inbound_webhooks?.length ? (
-                            <p className="text-xs text-muted-foreground">No inbound webhooks configured yet.</p>
-                        ) : (
+                        <CardContent className="space-y-6">
                             <div className="space-y-4">
-                                {settings.inbound_webhooks.map((webhook) => {
-                                    const secret = webhookSecrets[webhook.webhook_id]
-                                    const labelValue = labelDrafts[webhook.webhook_id] ?? ""
-                                    const canDelete = settings.inbound_webhooks.length > 1
-                                    return (
-                                    <div key={webhook.webhook_id} className="space-y-3 rounded-md border p-4">
+                                <div
+                                    className={`flex flex-col gap-3 ${isDialog ? "" : "md:flex-row md:items-center md:justify-between"}`}
+                                    data-testid="zapier-inbound-header"
+                                >
+                                    <div>
+                                        <Label>Inbound Webhooks</Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            Create a webhook per Zapier flow or lead source.
+                                        </p>
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        onClick={handleCreateInbound}
+                                        disabled={createInboundWebhook.isPending}
+                                    >
+                                        {createInboundWebhook.isPending ? (
+                                            <>
+                                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                                Creating…
+                                            </>
+                                        ) : (
+                                            <>
+                                                <PlusIcon className="mr-2 size-4" aria-hidden="true" />
+                                                Add webhook
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
+
+                                {!settings?.inbound_webhooks?.length ? (
+                                    <p className="text-xs text-muted-foreground">No inbound webhooks configured yet.</p>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {settings.inbound_webhooks.map((webhook) => {
+                                            const secret = webhookSecrets[webhook.webhook_id]
+                                            const labelValue = labelDrafts[webhook.webhook_id] ?? ""
+                                            const canDelete = settings.inbound_webhooks.length > 1
+                                            return (
+                                            <div key={webhook.webhook_id} className="space-y-3 rounded-md border p-4">
                                         <div className={`flex flex-col gap-3 ${isDialog ? "" : "md:flex-row md:items-start md:justify-between"}`}>
                                             <div className="flex-1 space-y-2">
                                                 <Label>Label</Label>
@@ -1778,12 +1988,12 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                                 </div>
                                             ) : null}
                                         </div>
+                                            </div>
+                                            )
+                                        })}
                                     </div>
-                                    )
-                                })}
+                                )}
                             </div>
-                        )}
-                    </div>
 
                     <div className="space-y-4 border-t pt-4">
                         <div className="space-y-2">
@@ -2058,7 +2268,22 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                     "Save Outbound Settings"
                                 )}
                             </Button>
-                            <div className={isDialog ? "flex flex-col gap-2" : "flex flex-1 items-center gap-2"}>
+                            <div className={isDialog ? "flex flex-col gap-2" : "flex flex-1 flex-col gap-2"}>
+                                <div className={isDialog ? "space-y-2" : "flex flex-col gap-2 md:max-w-sm"}>
+                                    <Label htmlFor="zapier-outbound-test-lead-id">Meta Lead ID (optional)</Label>
+                                    <Input
+                                        id="zapier-outbound-test-lead-id"
+                                        value={outboundTestLeadId}
+                                        onChange={(event) => setOutboundTestLeadId(event.target.value)}
+                                        placeholder="Use a real Meta lead ID for end-to-end testing"
+                                        name="zapier-outbound-test-lead-id"
+                                        autoComplete="off"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Real Meta funnel updates generally only work for leads created within 90 days.
+                                    </p>
+                                </div>
+                                <div className={isDialog ? "flex flex-col gap-2" : "flex flex-1 items-center gap-2"}>
                                 <Select
                                     value={selectedOutboundStage}
                                     onValueChange={(value) => setSelectedOutboundStage(value ?? '')}
@@ -2093,10 +2318,16 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                     )}
                                 </Button>
                             </div>
+                            </div>
                         </div>
-                    </div>
-                </CardContent>
-            </Card>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                <TabsContent value="monitoring">
+                    <ZapierMonitoringSection variant={variant} />
+                </TabsContent>
+            </Tabs>
         </div>
     )
 }

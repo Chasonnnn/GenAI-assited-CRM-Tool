@@ -22,6 +22,7 @@ const mockZapierInboundUpdate = vi.fn()
 const mockZapierTestLead = vi.fn()
 const mockZapierOutboundUpdate = vi.fn()
 const mockZapierOutboundTest = vi.fn()
+const mockRetryZapierOutboundEvent = vi.fn()
 const mockZapierFieldPaste = vi.fn()
 const mockZapierInboundDelete = vi.fn()
 const mockUpdateAISettings = vi.fn()
@@ -77,6 +78,43 @@ const recommendedZapierMapping = [
 ]
 
 let zapierSettingsData = createZapierSettingsData()
+let zapierEventsSummaryData = {
+    total_count: 3,
+    queued_count: 0,
+    delivered_count: 1,
+    failed_count: 1,
+    skipped_count: 1,
+    actionable_skipped_count: 1,
+    failure_rate: 0.5,
+    skipped_rate: 0.33,
+    failure_rate_alert: true,
+    skipped_rate_alert: false,
+    warning_messages: ['Failure rate is elevated for Zapier outbound events.'],
+    window_hours: 24,
+}
+let zapierEventsData = {
+    items: [
+        {
+            id: 'event-1',
+            source: 'automatic',
+            status: 'failed',
+            reason: null,
+            event_id: 'evt_1',
+            event_name: 'Qualified',
+            lead_id: 'lead-1',
+            stage_key: 'pre_qualified',
+            stage_label: 'Pre Qualified',
+            attempts: 3,
+            last_error: 'Webhook timeout',
+            created_at: '2026-03-07T18:00:00Z',
+            updated_at: '2026-03-07T18:05:00Z',
+            delivered_at: null,
+            last_attempt_at: '2026-03-07T18:05:00Z',
+            can_retry: true,
+        },
+    ],
+    total: 1,
+}
 
 const aiSettingsData = {
     is_enabled: true,
@@ -182,6 +220,9 @@ vi.mock('@/lib/hooks/use-zapier', () => ({
     useZapierTestLead: () => ({ mutateAsync: mockZapierTestLead, isPending: false }),
     useUpdateZapierOutboundSettings: () => ({ mutateAsync: mockZapierOutboundUpdate, isPending: false }),
     useZapierOutboundTest: () => ({ mutateAsync: mockZapierOutboundTest, isPending: false }),
+    useZapierOutboundEventsSummary: () => ({ data: zapierEventsSummaryData, isLoading: false }),
+    useZapierOutboundEvents: () => ({ data: zapierEventsData, isLoading: false }),
+    useRetryZapierOutboundEvent: () => ({ mutateAsync: mockRetryZapierOutboundEvent, isPending: false }),
     useZapierFieldPaste: () => ({ mutateAsync: mockZapierFieldPaste, isPending: false }),
     useDeleteZapierInboundWebhook: () => ({ mutateAsync: mockZapierInboundDelete, isPending: false }),
 }))
@@ -193,6 +234,43 @@ vi.mock('@/lib/hooks/use-meta-forms', () => ({
 describe('IntegrationsPage', () => {
     beforeEach(() => {
         zapierSettingsData = createZapierSettingsData()
+        zapierEventsSummaryData = {
+            total_count: 3,
+            queued_count: 0,
+            delivered_count: 1,
+            failed_count: 1,
+            skipped_count: 1,
+            actionable_skipped_count: 1,
+            failure_rate: 0.5,
+            skipped_rate: 0.33,
+            failure_rate_alert: true,
+            skipped_rate_alert: false,
+            warning_messages: ['Failure rate is elevated for Zapier outbound events.'],
+            window_hours: 24,
+        }
+        zapierEventsData = {
+            items: [
+                {
+                    id: 'event-1',
+                    source: 'automatic',
+                    status: 'failed',
+                    reason: null,
+                    event_id: 'evt_1',
+                    event_name: 'Qualified',
+                    lead_id: 'lead-1',
+                    stage_key: 'pre_qualified',
+                    stage_label: 'Pre Qualified',
+                    attempts: 3,
+                    last_error: 'Webhook timeout',
+                    created_at: '2026-03-07T18:00:00Z',
+                    updated_at: '2026-03-07T18:05:00Z',
+                    delivered_at: null,
+                    last_attempt_at: '2026-03-07T18:05:00Z',
+                    can_retry: true,
+                },
+            ],
+            total: 1,
+        }
         mockUseAuth.mockReturnValue({ user: { role: 'admin', user_id: 'u1' } })
         mockUseEffectivePermissions.mockReturnValue({
             data: { permissions: ['manage_integrations'] },
@@ -238,6 +316,7 @@ describe('IntegrationsPage', () => {
         mockZapierInboundCreate.mockReset()
         mockZapierInboundRotate.mockReset()
         mockZapierInboundUpdate.mockReset()
+        mockRetryZapierOutboundEvent.mockReset()
         mockZapierFieldPaste.mockReset()
         mockZapierInboundDelete.mockReset()
     })
@@ -308,6 +387,58 @@ describe('IntegrationsPage', () => {
         expect(within(dialog).getByTestId('zapier-mapping-health-dialog-badge')).toHaveTextContent('Mapping Needs Review')
         const inboundHeader = within(dialog).getByTestId('zapier-inbound-header')
         expect(inboundHeader.className).not.toContain('md:flex-row')
+    })
+
+    it('passes a real lead id to the outbound zapier test action', async () => {
+        zapierSettingsData = {
+            ...createZapierSettingsData(),
+            outbound_webhook_url: 'https://hooks.zapier.com/hooks/catch/123/abc',
+            outbound_enabled: true,
+        }
+        mockZapierOutboundTest.mockResolvedValue({
+            status: 'queued',
+            event_name: 'Lead',
+            event_id: 'evt_123',
+            lead_id: 'real-lead-123',
+        })
+
+        render(<IntegrationsPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+
+        const dialog = screen.getByRole('dialog')
+        fireEvent.change(within(dialog).getByLabelText(/meta lead id/i), {
+            target: { value: 'real-lead-123' },
+        })
+        fireEvent.click(within(dialog).getByRole('button', { name: /send test event/i }))
+
+        expect(mockZapierOutboundTest).toHaveBeenCalledWith({
+            stage_key: 'new_unread',
+            lead_id: 'real-lead-123',
+        })
+    })
+
+    it('shows zapier monitoring and retries failed events', async () => {
+        mockRetryZapierOutboundEvent.mockResolvedValue({
+            ...zapierEventsData.items[0],
+            status: 'queued',
+            can_retry: false,
+            attempts: 0,
+        })
+
+        render(<IntegrationsPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /monitoring/i }))
+
+        expect(within(dialog).getByText('Failure rate is elevated for Zapier outbound events.')).toBeInTheDocument()
+        expect(within(dialog).getByText('Webhook timeout')).toBeInTheDocument()
+
+        fireEvent.click(within(dialog).getByRole('button', { name: /retry/i }))
+
+        expect(mockRetryZapierOutboundEvent).toHaveBeenCalledWith({ eventId: 'event-1' })
     })
 
     it('shows last sync and triggers sync now for connected Google Calendar', () => {
