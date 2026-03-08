@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import MetaFormMappingPage from "../app/(app)/settings/integrations/meta/forms/[id]/page"
 
 const mockPush = vi.fn()
 const mockUseMetaFormMapping = vi.fn()
 const mockUseUpdateMetaFormMapping = vi.fn()
 const mockUseMetaFormUnconvertedLeads = vi.fn()
+const mockUseReconvertMetaFormLeads = vi.fn()
 const mockUseAiMapImport = vi.fn()
 
 vi.mock("next/navigation", () => ({
@@ -19,6 +20,7 @@ vi.mock("@/lib/hooks/use-meta-forms", () => ({
     useMetaFormMapping: (formId: string) => mockUseMetaFormMapping(formId),
     useUpdateMetaFormMapping: (formId: string) => mockUseUpdateMetaFormMapping(formId),
     useMetaFormUnconvertedLeads: (formId: string) => mockUseMetaFormUnconvertedLeads(formId),
+    useReconvertMetaFormLeads: (formId: string) => mockUseReconvertMetaFormLeads(formId),
 }))
 
 vi.mock("@/lib/hooks/use-import", () => ({
@@ -105,9 +107,21 @@ describe("MetaFormMappingPage", () => {
             mutateAsync: vi.fn(),
             isPending: false,
         })
+        mockUseReconvertMetaFormLeads.mockReturnValue({
+            mutateAsync: vi.fn().mockResolvedValue({
+                success: true,
+                queued_count: 1,
+                blocked_count: 1,
+                blocked_reasons: { duplicate_email: 1 },
+                message: "Queued 1 eligible lead(s) for reconversion.",
+            }),
+            isPending: false,
+        })
         mockUseMetaFormUnconvertedLeads.mockReturnValue({
             data: {
-                total: 1,
+                total: 2,
+                eligible_count: 1,
+                blocked_count: 1,
                 items: [
                     {
                         id: "lead-db-1",
@@ -120,6 +134,22 @@ describe("MetaFormMappingPage", () => {
                         received_at: "2026-03-08T01:00:00Z",
                         meta_created_time: "2026-03-08T00:30:00Z",
                         is_converted: false,
+                        reprocess_eligible: true,
+                        reprocess_block_reason: null,
+                    },
+                    {
+                        id: "lead-db-2",
+                        meta_lead_id: "lead_duplicate",
+                        status: "convert_failed",
+                        conversion_error: "duplicate key value violates unique constraint",
+                        full_name: "Duplicate Lead",
+                        email: "dupe@example.com",
+                        phone: null,
+                        received_at: "2026-03-08T02:00:00Z",
+                        meta_created_time: "2026-03-08T01:30:00Z",
+                        is_converted: false,
+                        reprocess_eligible: false,
+                        reprocess_block_reason: "duplicate_email",
                     },
                 ],
             },
@@ -136,7 +166,33 @@ describe("MetaFormMappingPage", () => {
 
         expect(screen.getByText(/reprocess queued/i)).toBeInTheDocument()
         expect(screen.getByText(/lead_failed/i)).toBeInTheDocument()
-        expect(screen.getByText(/missing required fields: phone_number/i)).toBeInTheDocument()
+        expect(screen.getByText(/1 eligible, 1 blocked/i)).toBeInTheDocument()
+        expect(screen.getAllByText(/eligible/i).length).toBeGreaterThan(0)
+        expect(screen.getAllByText(/blocked/i).length).toBeGreaterThan(0)
+        expect(screen.getByText(/duplicate email/i)).toBeInTheDocument()
         expect(screen.getAllByText(/failed@example.com/i).length).toBeGreaterThan(0)
+    })
+
+    it("queues eligible leads for reconversion with one click", async () => {
+        const mutateAsync = vi.fn().mockResolvedValue({
+            success: true,
+            queued_count: 1,
+            blocked_count: 1,
+            blocked_reasons: { duplicate_email: 1 },
+            message: "Queued 1 eligible lead(s) for reconversion.",
+        })
+        mockUseReconvertMetaFormLeads.mockReturnValue({
+            mutateAsync,
+            isPending: false,
+        })
+
+        render(<MetaFormMappingPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: /re-convert eligible leads/i }))
+
+        expect(mutateAsync).toHaveBeenCalledTimes(1)
+        expect(
+            await screen.findByText(/queued 1 eligible lead\(s\) for reconversion/i)
+        ).toBeInTheDocument()
     })
 })

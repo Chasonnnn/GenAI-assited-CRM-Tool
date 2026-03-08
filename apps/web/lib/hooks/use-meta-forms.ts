@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
     getMetaFormMapping,
+    reconvertMetaFormLeads,
     getMetaFormUnconvertedLeads,
     listMetaForms,
     syncMetaForms,
@@ -53,6 +54,18 @@ export function useUpdateMetaFormMapping(formId: string) {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: (payload: MetaFormMappingUpdate) => updateMetaFormMapping(formId, payload),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: metaFormsKeys.mapping(formId) })
+            queryClient.invalidateQueries({ queryKey: metaFormsKeys.list() })
+            queryClient.invalidateQueries({ queryKey: metaFormsKeys.unconvertedLeads(formId) })
+        },
+    })
+}
+
+export function useReconvertMetaFormLeads(formId: string) {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: () => reconvertMetaFormLeads(formId),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: metaFormsKeys.mapping(formId) })
             queryClient.invalidateQueries({ queryKey: metaFormsKeys.list() })

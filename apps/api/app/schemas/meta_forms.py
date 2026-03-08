@@ -79,6 +79,8 @@ class MetaFormUnconvertedLeadItem(BaseModel):
     phone: str | None = None
     conversion_error: str | None = None
     fetch_error: str | None = None
+    reprocess_eligible: bool = True
+    reprocess_block_reason: str | None = None
     received_at: datetime
     meta_created_time: datetime | None = None
 
@@ -88,6 +90,18 @@ class MetaFormUnconvertedLeadListResponse(BaseModel):
 
     items: list[MetaFormUnconvertedLeadItem]
     total: int
+    eligible_count: int = 0
+    blocked_count: int = 0
+
+
+class MetaFormReconvertResponse(BaseModel):
+    """Response after queueing eligible Meta leads for reconversion."""
+
+    success: bool
+    queued_count: int = 0
+    blocked_count: int = 0
+    blocked_reasons: dict[str, int] = Field(default_factory=dict)
+    message: str | None = None
 
 
 class MetaFormSyncRequest(BaseModel):

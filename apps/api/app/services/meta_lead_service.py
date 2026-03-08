@@ -5,19 +5,25 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
+from pydantic import ValidationError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.db.enums import SurrogateSource
+from app.db.enums import AlertSeverity, AlertType, SurrogateSource
 from app.db.models import MetaAd, MetaAdPlatformDaily, MetaForm, MetaLead, Organization, Surrogate
 from app.schemas.surrogate import SurrogateCreate
 from app.services import surrogate_service
 from app.services import custom_field_service
-from app.services.import_transformers import transform_height_flexible, transform_value
+from app.services.import_transformers import (
+    get_suggested_transformer,
+    transform_height_flexible,
+    transform_value,
+)
 from app.utils.datetime_parsing import parse_datetime_with_timezone
 from app.utils.normalization import normalize_phone, normalize_state
 
 logger = logging.getLogger(__name__)
+REQUIRED_CONVERSION_FIELDS = {"full_name", "email"}
 
 
 def store_meta_lead(
@@ -405,7 +411,7 @@ def convert_to_surrogate_with_mapping(
     row_data.setdefault("source", SurrogateSource.META.value)
 
     try:
-        surrogate_data = SurrogateCreate(**row_data)
+        surrogate_data, dropped_invalid_fields = _validate_surrogate_row_lenient(row_data)
         surrogate = surrogate_service.create_surrogate(
             db=db,
             org_id=meta_lead.organization_id,
@@ -413,6 +419,10 @@ def convert_to_surrogate_with_mapping(
             data=surrogate_data,
             created_at_override=created_at_override,
         )
+
+        if dropped_invalid_fields:
+            import_metadata = import_metadata or {}
+            import_metadata["dropped_invalid_fields"] = dropped_invalid_fields
 
         if tracking_fields:
             tracking_fields.update(import_metadata or {})
@@ -457,6 +467,7 @@ def convert_to_surrogate_with_mapping(
         meta_lead.conversion_error = str(e)[:500]
         meta_lead.unmapped_fields = unmapped_fields or None
         db.commit()
+        _record_conversion_failure_alert(meta_lead, e)
         return None, f"Conversion failed: {e}"
 
 
@@ -608,11 +619,41 @@ def _apply_mapping_rules(
 
 def _apply_transform(mapping: dict, value: str) -> object:
     transformation = mapping.get("transformation")
+    if not transformation and mapping.get("action") == "map":
+        field_name = mapping.get("surrogate_field")
+        if field_name:
+            transformation = get_suggested_transformer(field_name)
     if transformation:
         result = transform_value(transformation, value)
         if result.success:
             return result.value
     return value
+
+
+def _validate_surrogate_row_lenient(row_data: dict) -> tuple[SurrogateCreate, list[str]]:
+    try:
+        return SurrogateCreate(**row_data), []
+    except ValidationError as exc:
+        invalid_fields: set[str] = set()
+        has_required_error = False
+        for err in exc.errors():
+            loc = err.get("loc") or []
+            field = loc[0] if loc else None
+            if not isinstance(field, str):
+                continue
+            if field in REQUIRED_CONVERSION_FIELDS:
+                has_required_error = True
+            elif field in row_data:
+                invalid_fields.add(field)
+
+        if has_required_error or not invalid_fields:
+            raise
+
+        sanitized = dict(row_data)
+        for field in invalid_fields:
+            sanitized.pop(field, None)
+
+        return SurrogateCreate(**sanitized), sorted(invalid_fields)
 
 
 def _normalize_key(value: str) -> str:
@@ -722,6 +763,26 @@ def _notify_unmapped_fields(db: Session, meta_lead: MetaLead) -> None:
         )
     except Exception as exc:
         logger.warning(f"Failed to create mapping review task: {exc}")
+
+
+def _record_conversion_failure_alert(meta_lead: MetaLead, error: Exception) -> None:
+    from app.services import alert_service
+
+    form_key = meta_lead.meta_form_id or "unknown"
+    alert_service.record_alert_isolated(
+        org_id=meta_lead.organization_id,
+        alert_type=AlertType.META_CONVERT_FAILED,
+        severity=AlertSeverity.ERROR,
+        title=f"Meta lead conversion failed for form {form_key}",
+        message="A Meta lead failed conversion. Review the unconverted leads list for details.",
+        integration_key=f"meta_form:{form_key}",
+        error_class=type(error).__name__,
+        details={
+            "meta_lead_id": meta_lead.meta_lead_id,
+            "meta_form_id": meta_lead.meta_form_id,
+            "status": "convert_failed",
+        },
+    )
 
 
 # =============================================================================

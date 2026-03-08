@@ -4,17 +4,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.encryption import hash_email
 from app.core.constants import SYSTEM_USER_ID
 from app.db.enums import OwnerType, Role, TaskType
-from app.db.models import Membership, MetaAd, MetaForm, MetaFormVersion, MetaLead, Task
+from app.db.models import Membership, MetaAd, MetaForm, MetaFormVersion, MetaLead, Surrogate, Task
 from app.schemas.task import TaskCreate
 from app.services import import_detection_service, queue_service, task_service
+from app.utils.normalization import normalize_email
 
 
 META_SYSTEM_COLUMNS: list[tuple[str, str]] = [
@@ -24,6 +27,7 @@ META_SYSTEM_COLUMNS: list[tuple[str, str]] = [
     ("meta_platform", "Platform"),
 ]
 AUTO_SAFE_SCHEMA_KEYS = {"lead_id"}
+TEST_LEAD_PATTERN = re.compile(r"test lead:|dummy data", re.IGNORECASE)
 
 
 def _schema_keys(field_schema: list[dict[str, object]] | None) -> set[str]:
@@ -267,6 +271,80 @@ def list_unconverted_leads_for_form(
         .all()
     )
     return items, total
+
+
+def get_reprocess_eligibility_for_leads(
+    db: Session,
+    org_id: UUID,
+    leads: list[MetaLead],
+) -> tuple[dict[UUID, str | None], dict[str, int]]:
+    """Classify which unconverted leads are safe to reprocess automatically."""
+    email_hashes: dict[UUID, str] = {}
+    duplicate_hashes_within_batch: set[str] = set()
+    seen_hashes: set[str] = set()
+
+    for lead in leads:
+        email = _extract_lead_email(lead)
+        if not email:
+            continue
+        normalized = normalize_email(email)
+        if not normalized:
+            continue
+        email_hash = hash_email(normalized)
+        email_hashes[lead.id] = email_hash
+        if email_hash in seen_hashes:
+            duplicate_hashes_within_batch.add(email_hash)
+        else:
+            seen_hashes.add(email_hash)
+
+    existing_hashes: set[str] = set()
+    if email_hashes:
+        existing_hashes = set(
+            db.scalars(
+                select(Surrogate.email_hash).where(
+                    Surrogate.organization_id == org_id,
+                    Surrogate.is_archived.is_(False),
+                    Surrogate.email_hash.in_(set(email_hashes.values())),
+                )
+            ).all()
+        )
+
+    reasons_by_lead: dict[UUID, str | None] = {}
+    reason_counts: dict[str, int] = {}
+    for lead in leads:
+        reason: str | None = None
+        if _looks_like_test_lead(lead):
+            reason = "test_lead"
+        else:
+            email_hash = email_hashes.get(lead.id)
+            if email_hash and (email_hash in existing_hashes or email_hash in duplicate_hashes_within_batch):
+                reason = "duplicate_email"
+
+        reasons_by_lead[lead.id] = reason
+        if reason:
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+
+    return reasons_by_lead, reason_counts
+
+
+def get_reprocess_plan_for_form(
+    db: Session,
+    org_id: UUID,
+    form_external_id: str,
+) -> tuple[list[MetaLead], list[UUID], dict[UUID, str | None], dict[str, int]]:
+    leads = (
+        db.query(MetaLead)
+        .filter(
+            MetaLead.organization_id == org_id,
+            MetaLead.meta_form_id == form_external_id,
+            MetaLead.is_converted.is_(False),
+        )
+        .order_by(MetaLead.received_at.desc())
+        .all()
+    )
+    reasons_by_lead, reason_counts = get_reprocess_eligibility_for_leads(db, org_id, leads)
+    eligible_ids = [lead.id for lead in leads if reasons_by_lead.get(lead.id) is None]
+    return leads, eligible_ids, reasons_by_lead, reason_counts
 
 
 def build_mapping_preview(
@@ -627,3 +705,27 @@ def _generate_dummy_value(question: dict, idx: int) -> str:
         return str(first)
 
     return "Sample response"
+
+
+def _extract_lead_email(lead: MetaLead) -> str | None:
+    raw = lead.field_data_raw or lead.field_data or {}
+    value = raw.get("email")
+    if value in (None, ""):
+        return None
+    return str(value)
+
+
+def _looks_like_test_lead(lead: MetaLead) -> bool:
+    raw = lead.field_data_raw or lead.field_data or {}
+    candidates = [
+        lead.meta_lead_id,
+        raw.get("full_name"),
+        raw.get("name"),
+        raw.get("email"),
+        raw.get("phone"),
+        raw.get("phone_number"),
+    ]
+    haystack = " ".join(str(value) for value in candidates if value).strip()
+    if not haystack:
+        return False
+    return bool(TEST_LEAD_PATTERN.search(haystack))

@@ -135,6 +135,7 @@ async def process_meta_lead_reprocess_form(db, job) -> None:
 
     payload = job.payload or {}
     form_id = payload.get("form_id")
+    lead_ids = payload.get("lead_ids") or []
     if not form_id:
         raise Exception("Missing form_id in job payload")
 
@@ -145,18 +146,30 @@ async def process_meta_lead_reprocess_form(db, job) -> None:
     if form.mapping_status != "mapped" or form.mapping_version_id != form.current_version_id:
         raise Exception("Form mapping is not ready for reprocessing")
 
-    leads = (
-        db.query(MetaLead)
-        .filter(
-            MetaLead.organization_id == job.organization_id,
-            MetaLead.meta_form_id == form.form_external_id,
-            MetaLead.is_converted.is_(False),
-        )
-        .order_by(MetaLead.received_at.asc())
-        .all()
+    lead_query = db.query(MetaLead).filter(
+        MetaLead.organization_id == job.organization_id,
+        MetaLead.meta_form_id == form.form_external_id,
+        MetaLead.is_converted.is_(False),
+    )
+    if lead_ids:
+        parsed_lead_ids = [UUID(str(lead_id)) for lead_id in lead_ids]
+        lead_query = lead_query.filter(MetaLead.id.in_(parsed_lead_ids))
+
+    leads = lead_query.order_by(MetaLead.received_at.asc()).all()
+    eligibility_by_lead, _ = meta_form_mapping_service.get_reprocess_eligibility_for_leads(
+        db,
+        job.organization_id,
+        leads,
     )
 
     for lead in leads:
+        if eligibility_by_lead.get(lead.id):
+            logger.info(
+                "Skipping reconversion for lead %s: %s",
+                lead.meta_lead_id,
+                eligibility_by_lead[lead.id],
+            )
+            continue
         lead.status = "stored"
         db.commit()
         surrogate, error = meta_lead_service.convert_to_surrogate_with_mapping(

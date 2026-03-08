@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from app.services.import_transformers import transform_height_flexible
+from app.services.import_transformers import transform_height_flexible, transform_int_flexible
 
 
 def test_transform_height_flexible_interprets_feet_inches_shorthand() -> None:
@@ -43,3 +43,51 @@ def test_transform_height_flexible_interprets_feet_only_integer_with_trailing_sp
     result = transform_height_flexible("5 ")
     assert result.success is True
     assert result.value == Decimal("5.0")
+
+
+def test_transform_height_flexible_interprets_spelled_out_feet_inches() -> None:
+    result = transform_height_flexible("5 feet 4 inches")
+    assert result.success is True
+    assert result.value == Decimal("5.3")
+
+
+def test_transform_height_flexible_interprets_three_digit_feet_inches_shorthand() -> None:
+    result = transform_height_flexible("411")
+    assert result.success is True
+    assert result.value == Decimal("4.9")
+
+
+def test_transform_height_flexible_interprets_feet_units_without_inches_units() -> None:
+    result = transform_height_flexible("5ft 6")
+    assert result.success is True
+    assert result.value == Decimal("5.5")
+
+
+def test_transform_height_flexible_interprets_quote_before_feet_unit() -> None:
+    result = transform_height_flexible('4"ft 11')
+    assert result.success is True
+    assert result.value == Decimal("4.9")
+
+
+def test_transform_height_flexible_interprets_curly_quote_before_feet_unit() -> None:
+    result = transform_height_flexible("4”ft 11")
+    assert result.success is True
+    assert result.value == Decimal("4.9")
+
+
+def test_transform_height_flexible_interprets_inline_inch_suffix() -> None:
+    result = transform_height_flexible("5'3inch")
+    assert result.success is True
+    assert result.value == Decimal("5.3")
+
+
+def test_transform_int_flexible_interprets_common_word_counts() -> None:
+    assert transform_int_flexible("No").value == 0
+    assert transform_int_flexible("One").value == 1
+    assert transform_int_flexible("Five").value == 5
+
+
+def test_transform_int_flexible_extracts_wordy_delivery_count() -> None:
+    result = transform_int_flexible("Two vaginal deliveries")
+    assert result.success is True
+    assert result.value == 2

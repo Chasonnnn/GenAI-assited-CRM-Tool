@@ -15,6 +15,7 @@ from app.db.enums import JobType
 from app.schemas.auth import UserSession
 from app.schemas.meta_forms import (
     MetaFormMappingPreviewResponse,
+    MetaFormReconvertResponse,
     MetaFormMappingUpdateRequest,
     MetaFormMappingUpdateResponse,
     MetaFormSummary,
@@ -210,18 +211,28 @@ def update_meta_form_mapping(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     # Reprocess existing leads for this form
-    job_service.schedule_job(
-        db=db,
-        org_id=session.org_id,
-        job_type=JobType.META_LEAD_REPROCESS_FORM,
-        payload={"form_id": str(form.id)},
+    _, eligible_ids, _, _ = meta_form_mapping_service.get_reprocess_plan_for_form(
+        db,
+        session.org_id,
+        form.form_external_id,
     )
+    if eligible_ids:
+        job_service.schedule_job(
+            db=db,
+            org_id=session.org_id,
+            job_type=JobType.META_LEAD_REPROCESS_FORM,
+            payload={"form_id": str(form.id), "lead_ids": [str(lead_id) for lead_id in eligible_ids]},
+        )
 
     return MetaFormMappingUpdateResponse(
         success=True,
         mapping_status=form.mapping_status,
         mapping_version_id=form.mapping_version_id,
-        message="Mapping saved and reprocessing queued.",
+        message=(
+            "Mapping saved and eligible leads queued for reprocessing."
+            if eligible_ids
+            else "Mapping saved. No eligible leads were queued for reprocessing."
+        ),
     )
 
 
@@ -247,9 +258,71 @@ def list_unconverted_leads(
         limit=limit,
         offset=offset,
     )
+    all_unconverted, eligible_ids, reasons_by_lead, _ = meta_form_mapping_service.get_reprocess_plan_for_form(
+        db,
+        session.org_id,
+        form.form_external_id,
+    )
+    eligible_set = set(eligible_ids)
     return MetaFormUnconvertedLeadListResponse(
-        items=[_serialize_unconverted_lead(item) for item in items],
+        items=[
+            _serialize_unconverted_lead(
+                item,
+                reprocess_eligible=item.id in eligible_set,
+                reprocess_block_reason=reasons_by_lead.get(item.id),
+            )
+            for item in items
+        ],
         total=total,
+        eligible_count=len(eligible_ids),
+        blocked_count=max(len(all_unconverted) - len(eligible_ids), 0),
+    )
+
+
+@router.post(
+    "/{form_id}/reconvert",
+    response_model=MetaFormReconvertResponse,
+)
+def reconvert_meta_form_leads(
+    form_id: UUID,
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    form = meta_form_mapping_service.get_form(db, session.org_id, form_id)
+    if not form:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+    if form.mapping_status != "mapped" or form.mapping_version_id != form.current_version_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Form mapping is not ready for reconversion",
+        )
+
+    _, eligible_ids, _, reason_counts = meta_form_mapping_service.get_reprocess_plan_for_form(
+        db,
+        session.org_id,
+        form.form_external_id,
+    )
+
+    if eligible_ids:
+        job_service.schedule_job(
+            db=db,
+            org_id=session.org_id,
+            job_type=JobType.META_LEAD_REPROCESS_FORM,
+            payload={"form_id": str(form.id), "lead_ids": [str(lead_id) for lead_id in eligible_ids]},
+        )
+
+    blocked_count = sum(reason_counts.values())
+    return MetaFormReconvertResponse(
+        success=True,
+        queued_count=len(eligible_ids),
+        blocked_count=blocked_count,
+        blocked_reasons=reason_counts,
+        message=(
+            f"Queued {len(eligible_ids)} eligible lead(s) for reconversion."
+            if eligible_ids
+            else "No eligible leads were queued for reconversion."
+        ),
     )
 
 
@@ -265,7 +338,12 @@ def delete_meta_form(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
 
 
-def _serialize_unconverted_lead(lead) -> MetaFormUnconvertedLeadItem:
+def _serialize_unconverted_lead(
+    lead,
+    *,
+    reprocess_eligible: bool,
+    reprocess_block_reason: str | None,
+) -> MetaFormUnconvertedLeadItem:
     raw = lead.field_data_raw or lead.field_data or {}
     return MetaFormUnconvertedLeadItem(
         id=lead.id,
@@ -277,6 +355,8 @@ def _serialize_unconverted_lead(lead) -> MetaFormUnconvertedLeadItem:
         phone=raw.get("phone") or raw.get("phone_number"),
         conversion_error=lead.conversion_error,
         fetch_error=lead.fetch_error,
+        reprocess_eligible=reprocess_eligible,
+        reprocess_block_reason=reprocess_block_reason,
         received_at=lead.received_at,
         meta_created_time=lead.meta_created_time,
     )

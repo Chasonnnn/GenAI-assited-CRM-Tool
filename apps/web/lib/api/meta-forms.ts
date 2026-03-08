@@ -53,11 +53,23 @@ export interface MetaFormUnconvertedLead {
     received_at: string
     meta_created_time: string | null
     is_converted: boolean
+    reprocess_eligible: boolean
+    reprocess_block_reason: string | null
 }
 
 export interface MetaFormUnconvertedLeadsResponse {
     items: MetaFormUnconvertedLead[]
     total: number
+    eligible_count: number
+    blocked_count: number
+}
+
+export interface MetaFormReconvertResponse {
+    success: boolean
+    queued_count: number
+    blocked_count: number
+    blocked_reasons: Record<string, number>
+    message?: string
 }
 
 export async function listMetaForms(): Promise<MetaFormSummary[]> {
@@ -88,6 +100,12 @@ export async function getMetaFormUnconvertedLeads(
     return api.get<MetaFormUnconvertedLeadsResponse>(
         `/integrations/meta/forms/${formId}/unconverted-leads`
     )
+}
+
+export async function reconvertMetaFormLeads(
+    formId: string
+): Promise<MetaFormReconvertResponse> {
+    return api.post<MetaFormReconvertResponse>(`/integrations/meta/forms/${formId}/reconvert`, {})
 }
 
 export async function deleteMetaForm(formId: string): Promise<void> {

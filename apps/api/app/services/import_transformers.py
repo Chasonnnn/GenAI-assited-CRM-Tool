@@ -47,6 +47,21 @@ SOURCE_VALUE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"(other|others|misc|unknown)", re.IGNORECASE), "other"),
 ]
 
+SUPERSCRIPT_TRANSLATION = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹", "0123456789")
+NUMBER_WORDS: dict[str, int] = {
+    "zero": 0,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+}
+
 
 @dataclass
 class TransformOutput:
@@ -263,41 +278,71 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
         .replace("\u201c", '"')
         .replace("\u201d", '"')
         .replace("\u2033", '"')
+        .replace("′", "'")
+        .replace("″", '"')
+        .replace("½", " 1/2")
     )
     if re.match(r"^\d+,\d+$", value):
         value = value.replace(",", ".")
+    value = re.sub(r"\s+", " ", value).strip()
+
+    lowered = value.lower()
+    lowered = re.sub(r"(\d+)\s*['\"]\s*(ft|feet|foot)\b", r"\1 \2", lowered)
+
+    # Pattern: 411 => 4'11"
+    match = re.match(r"^([3-8])(\d{2})$", lowered)
+    if match:
+        feet = int(match.group(1))
+        inches = Decimal(match.group(2))
+        if inches < 12:
+            return _height_transform_result(feet, inches, warnings)
 
     # Pattern: 5'4" or 5'4 or 5' 4" or 5' 4 or 5 4
     # Require an explicit separator so plain "54" is not interpreted as 5'4.
     match = re.match(r"^(\d+)(?:\s*['\"]\s*|\s+)(\d+)\s*\"?\s*$", value)
     if match:
         feet = int(match.group(1))
-        inches = int(match.group(2))
-        if inches >= 12:
-            warnings.append(f"Inches value {inches} >= 12, may be incorrect")
-        decimal_feet = Decimal(str(feet)) + Decimal(str(inches)) / Decimal("12")
-        return TransformOutput(
-            value=decimal_feet.quantize(Decimal("0.1")),
-            success=True,
-            warnings=warnings,
-        )
+        inches = Decimal(match.group(2))
+        return _height_transform_result(feet, inches, warnings)
 
     # Pattern: 5ft 4in or 5 ft 4 in
     match = re.match(r"^(\d+)\s*ft\.?\s*(\d+)\s*in\.?\s*$", value, re.IGNORECASE)
     if match:
         feet = int(match.group(1))
-        inches = int(match.group(2))
-        if inches >= 12:
-            warnings.append(f"Inches value {inches} >= 12, may be incorrect")
-        decimal_feet = Decimal(str(feet)) + Decimal(str(inches)) / Decimal("12")
-        return TransformOutput(
-            value=decimal_feet.quantize(Decimal("0.1")),
-            success=True,
-            warnings=warnings,
-        )
+        inches = Decimal(match.group(2))
+        return _height_transform_result(feet, inches, warnings)
+
+    # Pattern: 5ft 6 / 5 feet 4 inches / 5 foot 4 / 5ft 2 1/2 inches
+    match = re.match(
+        r"^(\d+)\s*(?:ft|feet|foot)\.?\s*(?:and\s*)?(\d+(?:\s*(?:1/2|\.5))?)?\s*(?:in|inch|inches)?\.?\s*$",
+        lowered,
+        re.IGNORECASE,
+    )
+    if match:
+        feet = int(match.group(1))
+        inches = _parse_inches_component(match.group(2))
+        if inches is not None:
+            return _height_transform_result(feet, inches, warnings)
+
+    # Pattern: 5:3 / 4/11 / 5*3 / 5'5ft / 5"0'
+    match = re.match(
+        r"""^
+        (\d+)
+        \s*['"/:*]\s*
+        (\d+(?:\s*(?:1/2|\.5))?)
+        \s*(?:["']|in|inch|inches|ft)?\s*:?\s*$
+        """,
+        lowered,
+        re.IGNORECASE | re.VERBOSE,
+    )
+    if match:
+        feet = int(match.group(1))
+        inches = _parse_inches_component(match.group(2))
+        if inches is not None:
+            return _height_transform_result(feet, inches, warnings)
 
     # Pattern: 5ft (feet only)
-    match = re.match(r"^(\d+)\s*ft\.?\s*$", value, re.IGNORECASE)
+    match = re.match(r"^(\d+)\s*(?:ft|feet|foot)\.?\s*$", lowered, re.IGNORECASE)
     if match:
         feet = int(match.group(1))
         return TransformOutput(
@@ -329,6 +374,15 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
                 success=True,
                 warnings=warnings,
             )
+
+    # Pattern: feet.inches shorthand with half inch (5.2 1/2 => 5 ft 2.5 in)
+    match = re.match(r"^(\d+)\.(\d{1,2})\s*(?:1/2|\.5)$", lowered)
+    if match:
+        feet = int(match.group(1))
+        inches = Decimal(match.group(2)) + Decimal("0.5")
+        if Decimal("3") <= Decimal(str(feet)) <= Decimal("8") and inches < 12:
+            warnings.append(f"Interpreted '{value}' as feet/inches notation")
+            return _height_transform_result(feet, inches, warnings)
 
     # Pattern: feet.inches shorthand without unit (5.6 => 5 ft 6 in)
     match = re.match(r"^(\d+)\.(\d{1,2})$", value)
@@ -464,7 +518,24 @@ def transform_int_flexible(raw_value: str) -> TransformOutput:
     if lowered in {"na", "n/a", "none", "null"}:
         return TransformOutput(value=None, success=True, warnings=[])
 
-    cleaned = value.replace(",", "")
+    if lowered in {"no", "zero"}:
+        return TransformOutput(value=0, success=True, warnings=[])
+
+    translated = lowered.translate(SUPERSCRIPT_TRANSLATION)
+
+    word_match = re.search(
+        r"\b(" + "|".join(NUMBER_WORDS.keys()) + r")\b",
+        translated,
+        re.IGNORECASE,
+    )
+    if word_match:
+        return TransformOutput(
+            value=NUMBER_WORDS[word_match.group(1).lower()],
+            success=True,
+            warnings=[],
+        )
+
+    cleaned = translated.replace(",", "")
     match = re.search(r"-?\d+(?:\.\d+)?", cleaned)
     if not match:
         return TransformOutput(
@@ -719,3 +790,35 @@ FIELD_TRANSFORMERS: dict[str, str] = {
 def get_suggested_transformer(field_name: str) -> str | None:
     """Get the suggested transformer for a surrogate field."""
     return FIELD_TRANSFORMERS.get(field_name)
+
+
+def _parse_inches_component(raw_inches: str | None) -> Decimal | None:
+    if raw_inches is None:
+        return Decimal("0")
+
+    value = raw_inches.strip().lower()
+    if not value:
+        return Decimal("0")
+
+    match = re.match(r"^(\d+)\s*(?:1/2|\.5)$", value)
+    if match:
+        return Decimal(match.group(1)) + Decimal("0.5")
+
+    if re.match(r"^\d+(?:\.\d+)?$", value):
+        return Decimal(value)
+
+    return None
+
+
+def _height_transform_result(
+    feet: int, inches: Decimal, warnings: list[str]
+) -> TransformOutput:
+    local_warnings = list(warnings)
+    if inches >= 12:
+        local_warnings.append(f"Inches value {inches} >= 12, may be incorrect")
+    decimal_feet = Decimal(str(feet)) + inches / Decimal("12")
+    return TransformOutput(
+        value=decimal_feet.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP),
+        success=True,
+        warnings=local_warnings,
+    )

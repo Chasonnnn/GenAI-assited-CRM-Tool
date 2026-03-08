@@ -25,6 +25,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Loader2Icon, SparklesIcon, ArrowLeftIcon } from "lucide-react"
 import {
     useMetaFormMapping,
+    useReconvertMetaFormLeads,
     useMetaFormUnconvertedLeads,
     useUpdateMetaFormMapping,
 } from "@/lib/hooks/use-meta-forms"
@@ -65,12 +66,14 @@ export default function MetaFormMappingPage() {
     const { data: unconvertedLeadData, isLoading: unconvertedLeadsLoading } =
         useMetaFormUnconvertedLeads(formId, (data?.form.unconverted_leads || 0) > 0)
     const updateMutation = useUpdateMetaFormMapping(formId)
+    const reconvertMutation = useReconvertMetaFormLeads(formId)
     const aiMapMutation = useAiMapImport()
 
     const [mappings, setMappings] = useState<ColumnMappingDraft[]>([])
     const [unknownColumnBehavior, setUnknownColumnBehavior] = useState<UnknownColumnBehavior>("metadata")
     const [touchedColumns, setTouchedColumns] = useState<Set<string>>(new Set())
     const [error, setError] = useState<string>("")
+    const [reconvertMessage, setReconvertMessage] = useState<string>("")
 
     const columnLabels = useMemo(() => {
         const map = new Map<string, string>()
@@ -207,6 +210,27 @@ export default function MetaFormMappingPage() {
             })
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : "Failed to save mapping")
+        }
+    }
+
+    const handleReconvert = async () => {
+        setError("")
+        setReconvertMessage("")
+        try {
+            const result = await reconvertMutation.mutateAsync()
+            const blockedSummary = Object.entries(result.blocked_reasons || {})
+                .map(([reason, count]) => `${count} ${reason.replace(/_/g, " ")}`)
+                .join(", ")
+            setReconvertMessage(
+                [
+                    result.message || `Queued ${result.queued_count} lead(s) for reconversion.`,
+                    blockedSummary ? `Skipped ${blockedSummary}.` : "",
+                ]
+                    .filter(Boolean)
+                    .join(" ")
+            )
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Failed to queue reconversion")
         }
     }
 
@@ -490,10 +514,37 @@ export default function MetaFormMappingPage() {
                 {data.form.unconverted_leads > 0 && (
                     <Card className="overflow-hidden">
                         <CardHeader>
-                            <CardTitle>Unconverted Leads</CardTitle>
-                            <CardDescription>
-                                Saving will reprocess {data.form.unconverted_leads} unconverted lead(s).
-                            </CardDescription>
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                    <CardTitle>Unconverted Leads</CardTitle>
+                                    <CardDescription>
+                                        {unconvertedLeadData
+                                            ? `${unconvertedLeadData.eligible_count} eligible, ${unconvertedLeadData.blocked_count} blocked.`
+                                            : `Saving will reprocess ${data.form.unconverted_leads} unconverted lead(s).`}
+                                    </CardDescription>
+                                </div>
+                                <Button
+                                    size="sm"
+                                    onClick={handleReconvert}
+                                    disabled={
+                                        reconvertMutation.isPending ||
+                                        !unconvertedLeadData ||
+                                        unconvertedLeadData.eligible_count === 0
+                                    }
+                                >
+                                    {reconvertMutation.isPending ? (
+                                        <>
+                                            <Loader2Icon
+                                                className="mr-2 size-4 animate-spin motion-reduce:animate-none"
+                                                aria-hidden="true"
+                                            />
+                                            Queueing…
+                                        </>
+                                    ) : (
+                                        "Re-convert eligible leads"
+                                    )}
+                                </Button>
+                            </div>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <Alert>
@@ -502,6 +553,12 @@ export default function MetaFormMappingPage() {
                                     Review the current failure reasons below before saving a new mapping.
                                 </AlertDescription>
                             </Alert>
+                            {reconvertMessage && (
+                                <Alert>
+                                    <AlertTitle>Reconversion queued</AlertTitle>
+                                    <AlertDescription>{reconvertMessage}</AlertDescription>
+                                </Alert>
+                            )}
                             {unconvertedLeadsLoading ? (
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                     <Loader2Icon
@@ -519,6 +576,7 @@ export default function MetaFormMappingPage() {
                                                 <TableHead>Name</TableHead>
                                                 <TableHead>Email</TableHead>
                                                 <TableHead>Status</TableHead>
+                                                <TableHead>Retry</TableHead>
                                                 <TableHead>Reason</TableHead>
                                             </TableRow>
                                         </TableHeader>
@@ -533,8 +591,17 @@ export default function MetaFormMappingPage() {
                                                     <TableCell>
                                                         <Badge variant="secondary">{lead.status}</Badge>
                                                     </TableCell>
+                                                    <TableCell>
+                                                        {lead.reprocess_eligible ? (
+                                                            <Badge>Eligible</Badge>
+                                                        ) : (
+                                                            <Badge variant="outline">Blocked</Badge>
+                                                        )}
+                                                    </TableCell>
                                                     <TableCell className="text-sm text-muted-foreground">
-                                                        {lead.conversion_error || "Awaiting mapping"}
+                                                        {lead.reprocess_block_reason
+                                                            ? lead.reprocess_block_reason.replace(/_/g, " ")
+                                                            : lead.conversion_error || "Awaiting mapping"}
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
