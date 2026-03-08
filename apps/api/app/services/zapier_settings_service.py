@@ -26,6 +26,7 @@ QUALIFIED_BUCKET = "qualified"
 CONVERTED_BUCKET = "converted"
 LOST_BUCKET = "lost"
 NOT_QUALIFIED_BUCKET = "not_qualified"
+UNSUPPORTED_OUTBOUND_STAGE_KEYS = {"new_unread"}
 
 QUALIFIED_STAGE_KEYS = {
     "pre_qualified",
@@ -64,7 +65,6 @@ EVENT_NAME_BY_BUCKET = {
 }
 
 DEFAULT_EVENT_MAPPING = [
-    {"stage_key": "new_unread", "event_name": "Lead", "enabled": True, "bucket": None},
     {
         "stage_key": "pre_qualified",
         "event_name": QUALIFIED_EVENT_NAME,
@@ -224,6 +224,8 @@ def resolve_meta_stage_bucket(
     """Return a canonical funnel bucket for Meta CAPI-style webhook events."""
     normalized = canonicalize_stage_key(stage_key)
     if not normalized:
+        return None
+    if normalized in UNSUPPORTED_OUTBOUND_STAGE_KEYS:
         return None
 
     if mapping:
@@ -481,11 +483,11 @@ def normalize_event_mapping(mapping: list[dict] | None) -> list[dict]:
             continue
         stage_ref = str(item.get("stage_key") or item.get("stage_slug") or "").strip()
         stage_key = canonicalize_stage_key(stage_ref)
+        if not stage_key or stage_key in UNSUPPORTED_OUTBOUND_STAGE_KEYS:
+            continue
         event_name = str(item.get("event_name") or "").strip()
         bucket = _normalize_bucket(str(item.get("bucket") or "").strip())
         enabled = bool(item.get("enabled", True))
-        if not stage_key:
-            continue
         if not bucket:
             bucket = _normalize_bucket(event_name)
         if not bucket:

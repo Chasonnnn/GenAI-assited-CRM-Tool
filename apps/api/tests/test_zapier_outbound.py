@@ -29,6 +29,7 @@ async def test_zapier_outbound_settings_update(authed_client):
     assert data["outbound_webhook_url"] == payload["outbound_webhook_url"]
     assert data["outbound_secret_configured"] is True
     assert data["send_hashed_pii"] is True
+    assert all(m["stage_key"] != "new_unread" for m in data["event_mapping"])
     assert any(
         m["stage_key"] == "pre_qualified" and m["enabled"] for m in data["event_mapping"]
     )
@@ -261,12 +262,14 @@ def test_normalize_event_mapping_expands_meta_status_ranges():
 
     mapping = zapier_settings_service.normalize_event_mapping(
         [
+            {"stage_key": "new_unread", "event_name": "Lead", "enabled": True},
             {"stage_key": "pre_qualified", "event_name": "PreQualifiedLead", "enabled": True},
             {"stage_key": "matched", "event_name": "ConvertedLead", "enabled": True},
         ]
     )
     by_stage = {item["stage_key"]: item for item in mapping}
 
+    assert "new_unread" not in by_stage
     assert by_stage["pre_qualified"]["event_name"] == "Qualified"
     assert by_stage["pre_qualified"]["bucket"] == "qualified"
     assert by_stage["application_submitted"]["event_name"] == "Qualified"

@@ -265,6 +265,8 @@ def handle_surrogate_created(*, db: Session, surrogate: Surrogate) -> None:
     stage = db.query(PipelineStage).filter(PipelineStage.id == surrogate.stage_id).first()
     if not stage:
         return
+    if stage.stage_key == "new_unread":
+        return
 
     _maybe_send_capi_event(db, surrogate, "", stage.slug)
     _dispatch_conversion_events(

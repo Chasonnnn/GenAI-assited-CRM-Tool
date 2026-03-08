@@ -268,7 +268,9 @@ def test_status_change_enqueues_meta_crm_dataset_stage_event(
     assert event_data["user_data"]["lead_id"] == lead.meta_lead_id
 
 
-def test_meta_surrogate_creation_enqueues_initial_conversion_events(db, test_org, test_user):
+def test_meta_surrogate_creation_does_not_enqueue_new_unread_conversion_events(
+    db, test_org, test_user
+):
     from app.db.enums import JobType
     from app.services import meta_crm_dataset_settings_service, surrogate_events, zapier_settings_service
 
@@ -306,7 +308,7 @@ def test_meta_surrogate_creation_enqueues_initial_conversion_events(db, test_org
             Job.job_type == JobType.ZAPIER_STAGE_EVENT.value,
         )
         .count()
-        == 1
+        == 0
     )
     assert (
         db.query(Job)
@@ -315,7 +317,7 @@ def test_meta_surrogate_creation_enqueues_initial_conversion_events(db, test_org
             Job.job_type == JobType.META_CRM_DATASET_EVENT.value,
         )
         .count()
-        == 1
+        == 0
     )
 
 
@@ -374,7 +376,9 @@ def test_status_change_enqueues_meta_crm_dataset_event(monkeypatch, db, test_org
     assert JobType.META_CRM_DATASET_EVENT.value in job_types
 
 
-def test_meta_lead_conversion_enqueues_initial_meta_crm_dataset_event(db, test_org, test_user):
+def test_meta_lead_conversion_does_not_enqueue_initial_new_unread_meta_crm_dataset_event(
+    db, test_org, test_user
+):
     from app.db.enums import JobType
     from app.services import meta_crm_dataset_settings_service, meta_lead_service
 
@@ -395,19 +399,15 @@ def test_meta_lead_conversion_enqueues_initial_meta_crm_dataset_event(db, test_o
     assert error is None
     assert surrogate is not None
 
-    job = (
+    assert (
         db.query(Job)
         .filter(
             Job.organization_id == test_org.id,
             Job.job_type == JobType.META_CRM_DATASET_EVENT.value,
         )
-        .order_by(Job.created_at.desc())
-        .first()
+        .count()
+        == 0
     )
-    assert job is not None
-    payload = job.payload["body"]["data"][0]
-    assert payload["event_name"] == "Lead"
-    assert payload["user_data"]["lead_id"] == meta_lead.meta_lead_id
 
 
 def test_status_change_skips_zapier_event_without_meta_lead(monkeypatch, db, test_org, test_user):
