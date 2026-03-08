@@ -23,7 +23,11 @@ import {
 } from "@/components/ui/table"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Loader2Icon, SparklesIcon, ArrowLeftIcon } from "lucide-react"
-import { useMetaFormMapping, useUpdateMetaFormMapping } from "@/lib/hooks/use-meta-forms"
+import {
+    useMetaFormMapping,
+    useMetaFormUnconvertedLeads,
+    useUpdateMetaFormMapping,
+} from "@/lib/hooks/use-meta-forms"
 import { useAiMapImport } from "@/lib/hooks/use-import"
 import {
     applyUnknownColumnBehavior,
@@ -58,6 +62,8 @@ export default function MetaFormMappingPage() {
     const formId = params?.id as string
 
     const { data, isLoading } = useMetaFormMapping(formId)
+    const { data: unconvertedLeadData, isLoading: unconvertedLeadsLoading } =
+        useMetaFormUnconvertedLeads(formId, (data?.form.unconverted_leads || 0) > 0)
     const updateMutation = useUpdateMetaFormMapping(formId)
     const aiMapMutation = useAiMapImport()
 
@@ -482,12 +488,66 @@ export default function MetaFormMappingPage() {
                 </div>
 
                 {data.form.unconverted_leads > 0 && (
-                    <Alert>
-                        <AlertTitle>Reprocess queued</AlertTitle>
-                        <AlertDescription>
-                            Saving will reprocess {data.form.unconverted_leads} unconverted lead(s).
-                        </AlertDescription>
-                    </Alert>
+                    <Card className="overflow-hidden">
+                        <CardHeader>
+                            <CardTitle>Unconverted Leads</CardTitle>
+                            <CardDescription>
+                                Saving will reprocess {data.form.unconverted_leads} unconverted lead(s).
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <Alert>
+                                <AlertTitle>Reprocess queued</AlertTitle>
+                                <AlertDescription>
+                                    Review the current failure reasons below before saving a new mapping.
+                                </AlertDescription>
+                            </Alert>
+                            {unconvertedLeadsLoading ? (
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                    <Loader2Icon
+                                        className="size-4 animate-spin motion-reduce:animate-none"
+                                        aria-hidden="true"
+                                    />
+                                    Loading unconverted leads…
+                                </div>
+                            ) : unconvertedLeadData?.items.length ? (
+                                <div className="max-h-[360px] overflow-auto">
+                                    <Table>
+                                        <TableHeader className="sticky top-0 z-10 bg-background">
+                                            <TableRow>
+                                                <TableHead>Lead ID</TableHead>
+                                                <TableHead>Name</TableHead>
+                                                <TableHead>Email</TableHead>
+                                                <TableHead>Status</TableHead>
+                                                <TableHead>Reason</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {unconvertedLeadData.items.map((lead) => (
+                                                <TableRow key={lead.id}>
+                                                    <TableCell className="font-mono text-xs">
+                                                        {lead.meta_lead_id}
+                                                    </TableCell>
+                                                    <TableCell>{lead.full_name || "—"}</TableCell>
+                                                    <TableCell>{lead.email || "—"}</TableCell>
+                                                    <TableCell>
+                                                        <Badge variant="secondary">{lead.status}</Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-sm text-muted-foreground">
+                                                        {lead.conversion_error || "Awaiting mapping"}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            ) : (
+                                <p className="text-sm text-muted-foreground">
+                                    No unconverted leads are currently queued for this form.
+                                </p>
+                            )}
+                        </CardContent>
+                    </Card>
                 )}
             </div>
         </div>

@@ -575,6 +575,61 @@ async def test_zapier_webhook_stores_raw_payload_and_creates_form(client, db, te
 
 
 @pytest.mark.asyncio
+async def test_zapier_webhook_refreshes_form_schema_when_lead_id_appears_later(client, db, test_org):
+    from app.db.models import MetaForm, MetaFormVersion
+    from app.services import zapier_settings_service
+
+    settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    secret = zapier_settings_service.decrypt_webhook_secret(settings.webhook_secret_encrypted)
+
+    first_payload = {
+        "form_id": "zap_form_refresh",
+        "form_name": "Refresh Intake",
+        "field_data": [
+            {"name": "full_name", "values": ["Zapier User"]},
+            {"name": "email", "values": ["zapier@example.com"]},
+        ],
+    }
+    first_res = await client.post(
+        f"/webhooks/zapier/{settings.webhook_id}",
+        json=first_payload,
+        headers={"X-Webhook-Token": secret},
+    )
+    assert first_res.status_code == 200
+
+    second_payload = {
+        "lead_id": "lead_refresh_1",
+        "form_id": "zap_form_refresh",
+        "form_name": "Refresh Intake",
+        "field_data": [
+            {"name": "full_name", "values": ["Zapier User"]},
+            {"name": "email", "values": ["zapier@example.com"]},
+        ],
+    }
+    second_res = await client.post(
+        f"/webhooks/zapier/{settings.webhook_id}",
+        json=second_payload,
+        headers={"X-Webhook-Token": secret},
+    )
+    assert second_res.status_code == 200
+
+    form = (
+        db.query(MetaForm)
+        .filter(
+            MetaForm.organization_id == test_org.id,
+            MetaForm.form_external_id == "zap_form_refresh",
+        )
+        .first()
+    )
+    assert form is not None
+
+    version = db.get(MetaFormVersion, form.current_version_id)
+    assert version is not None
+    schema_keys = {item.get("key") for item in version.field_schema}
+    assert "lead_id" in schema_keys
+
+
+@pytest.mark.asyncio
 async def test_zapier_webhook_handles_dict_field_data(client, db, test_org):
     from app.db.models import MetaForm, MetaFormVersion, MetaLead
     from app.services import zapier_settings_service

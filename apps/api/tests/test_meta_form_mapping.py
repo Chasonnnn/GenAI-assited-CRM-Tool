@@ -135,6 +135,74 @@ async def test_meta_form_mapping_save_enqueues_reprocess_job(
     assert job.payload.get("form_id") == str(form.id)
 
 
+@pytest.mark.asyncio
+async def test_meta_form_mapping_unconverted_leads_endpoint_returns_failure_details(
+    authed_client: AsyncClient, db, test_org
+):
+    from app.db.models import MetaForm, MetaFormVersion, MetaLead
+
+    form = MetaForm(
+        organization_id=test_org.id,
+        page_id="page_failed",
+        form_external_id="form_failed",
+        form_name="Failed Lead Form",
+    )
+    db.add(form)
+    db.flush()
+
+    version = MetaFormVersion(
+        form_id=form.id,
+        version_number=1,
+        field_schema=[
+            {"key": "full_name", "type": "FULL_NAME", "label": "Full Name"},
+            {"key": "email", "type": "EMAIL", "label": "Email"},
+        ],
+        schema_hash="hash_failed",
+    )
+    db.add(version)
+    db.flush()
+    form.current_version_id = version.id
+
+    failed = MetaLead(
+        organization_id=test_org.id,
+        meta_lead_id="lead_failed",
+        meta_form_id="form_failed",
+        meta_page_id="page_failed",
+        field_data={"full_name": "Failed Lead", "email": "failed@example.com"},
+        field_data_raw={"full_name": "Failed Lead", "email": "failed@example.com"},
+        meta_created_time=datetime(2026, 2, 1, 14, 30, tzinfo=timezone.utc),
+        status="convert_failed",
+        conversion_error="Missing required fields: phone_number",
+    )
+    converted = MetaLead(
+        organization_id=test_org.id,
+        meta_lead_id="lead_converted",
+        meta_form_id="form_failed",
+        meta_page_id="page_failed",
+        field_data={"full_name": "Converted Lead", "email": "done@example.com"},
+        field_data_raw={"full_name": "Converted Lead", "email": "done@example.com"},
+        meta_created_time=datetime(2026, 2, 1, 15, 30, tzinfo=timezone.utc),
+        status="converted",
+        is_converted=True,
+    )
+    db.add_all([failed, converted])
+    db.commit()
+
+    response = await authed_client.get(f"/integrations/meta/forms/{form.id}/unconverted-leads")
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["total"] == 1
+    assert len(body["items"]) == 1
+    item = body["items"][0]
+    assert item["meta_lead_id"] == "lead_failed"
+    assert item["status"] == "convert_failed"
+    assert item["conversion_error"] == "Missing required fields: phone_number"
+    assert item["full_name"] == "Failed Lead"
+    assert item["email"] == "failed@example.com"
+    assert item["is_converted"] is False
+
+
 def test_meta_lead_mapping_creates_review_task_on_unmapped_fields(db, test_org, test_user):
     from app.db.enums import TaskType
     from app.db.models import MetaForm, MetaFormVersion, MetaLead, Task

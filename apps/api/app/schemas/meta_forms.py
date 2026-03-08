@@ -67,6 +67,29 @@ class MetaFormMappingUpdateResponse(BaseModel):
     message: str | None = None
 
 
+class MetaFormUnconvertedLeadItem(BaseModel):
+    """Unconverted lead details for a specific form."""
+
+    id: UUID
+    meta_lead_id: str
+    status: str
+    is_converted: bool
+    full_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    conversion_error: str | None = None
+    fetch_error: str | None = None
+    received_at: datetime
+    meta_created_time: datetime | None = None
+
+
+class MetaFormUnconvertedLeadListResponse(BaseModel):
+    """List response for unconverted leads on a form."""
+
+    items: list[MetaFormUnconvertedLeadItem]
+    total: int
+
+
 class MetaFormSyncRequest(BaseModel):
     """Request to sync forms."""
 

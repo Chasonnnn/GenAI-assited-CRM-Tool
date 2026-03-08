@@ -545,6 +545,10 @@ def process_zapier_payload(
             duplicate = True
 
     if lead_id:
+        field_data["lead_id"] = str(lead_id)
+        if "lead_id" not in field_keys:
+            field_keys.append("lead_id")
+        field_data_raw.setdefault("lead_id", str(lead_id))
         field_data_raw.setdefault("zapier_lead_id", str(lead_id))
 
     # Add tracking fields (meta_* keys for mapping rules)

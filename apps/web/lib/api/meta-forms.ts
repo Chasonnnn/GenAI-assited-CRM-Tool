@@ -42,6 +42,24 @@ export interface MetaFormMappingUpdate {
     unknown_column_behavior: 'ignore' | 'metadata' | 'warn'
 }
 
+export interface MetaFormUnconvertedLead {
+    id: string
+    meta_lead_id: string
+    status: string
+    conversion_error: string | null
+    full_name: string | null
+    email: string | null
+    phone: string | null
+    received_at: string
+    meta_created_time: string | null
+    is_converted: boolean
+}
+
+export interface MetaFormUnconvertedLeadsResponse {
+    items: MetaFormUnconvertedLead[]
+    total: number
+}
+
 export async function listMetaForms(): Promise<MetaFormSummary[]> {
     return api.get<MetaFormSummary[]>('/integrations/meta/forms')
 }
@@ -62,6 +80,14 @@ export async function updateMetaFormMapping(
     payload: MetaFormMappingUpdate
 ): Promise<{ success: boolean; message?: string }> {
     return api.put(`/integrations/meta/forms/${formId}/mapping`, payload)
+}
+
+export async function getMetaFormUnconvertedLeads(
+    formId: string
+): Promise<MetaFormUnconvertedLeadsResponse> {
+    return api.get<MetaFormUnconvertedLeadsResponse>(
+        `/integrations/meta/forms/${formId}/unconverted-leads`
+    )
 }
 
 export async function deleteMetaForm(formId: string): Promise<void> {

@@ -23,6 +23,32 @@ META_SYSTEM_COLUMNS: list[tuple[str, str]] = [
     ("meta_form_name", "Form name"),
     ("meta_platform", "Platform"),
 ]
+AUTO_SAFE_SCHEMA_KEYS = {"lead_id"}
+
+
+def _schema_keys(field_schema: list[dict[str, object]] | None) -> set[str]:
+    return {
+        str(key)
+        for item in (field_schema or [])
+        for key in [item.get("key") or item.get("name")]
+        if key
+    }
+
+
+def _should_preserve_mapping_for_schema_refresh(
+    form: MetaForm,
+    current_version: MetaFormVersion | None,
+    current_keys: set[str],
+    next_keys: set[str],
+) -> bool:
+    added_keys = next_keys - current_keys
+    return bool(
+        current_version
+        and form.mapping_status == "mapped"
+        and form.mapping_version_id == current_version.id
+        and added_keys
+        and added_keys.issubset(AUTO_SAFE_SCHEMA_KEYS)
+    )
 
 
 def get_form(db: Session, org_id: UUID, form_id: UUID) -> MetaForm | None:
@@ -136,25 +162,19 @@ def upsert_form_from_payload(
             MetaFormVersion.schema_hash == schema_hash,
         )
     )
+    key_set = _schema_keys(questions)
+    current = db.get(MetaFormVersion, form.current_version_id) if form.current_version_id else None
+    current_keys = _schema_keys(current.field_schema if current else None)
     if not existing_version:
-        key_set = {item.get("key") or item.get("name") for item in questions}
         versions = list(
             db.scalars(select(MetaFormVersion).where(MetaFormVersion.form_id == form.id)).all()
         )
-        current = (
-            db.get(MetaFormVersion, form.current_version_id) if form.current_version_id else None
-        )
         if current:
-            current_keys = {
-                item.get("key") or item.get("name") for item in (current.field_schema or [])
-            }
             if key_set.issubset(current_keys):
                 existing_version = current
         if not existing_version:
             for version in versions:
-                version_keys = {
-                    item.get("key") or item.get("name") for item in (version.field_schema or [])
-                }
+                version_keys = _schema_keys(version.field_schema)
                 if key_set.issubset(version_keys):
                     existing_version = version
                     break
@@ -178,9 +198,17 @@ def upsert_form_from_payload(
         db.flush()
         form.current_version_id = new_version.id
         if form.mapping_version_id and form.mapping_version_id != new_version.id:
-            form.mapping_status = "outdated"
+            if _should_preserve_mapping_for_schema_refresh(form, current, current_keys, key_set):
+                form.mapping_version_id = new_version.id
+            else:
+                form.mapping_status = "outdated"
     else:
         form.current_version_id = existing_version.id
+        if form.mapping_version_id and form.mapping_version_id != existing_version.id:
+            if _should_preserve_mapping_for_schema_refresh(form, current, current_keys, key_set):
+                form.mapping_version_id = existing_version.id
+            else:
+                form.mapping_status = "outdated"
 
     form.updated_at = datetime.now(timezone.utc)
     return form
@@ -212,6 +240,33 @@ def get_lead_stats(db: Session, org_id: UUID) -> dict[str, dict[str, object]]:
                 "last_lead_at": last_lead_at,
             }
     return stats
+
+
+def list_unconverted_leads_for_form(
+    db: Session,
+    org_id: UUID,
+    form_external_id: str,
+    *,
+    limit: int = 100,
+    offset: int = 0,
+) -> tuple[list[MetaLead], int]:
+    """Return unconverted leads and total count for a specific form."""
+    base_query = (
+        db.query(MetaLead)
+        .filter(
+            MetaLead.organization_id == org_id,
+            MetaLead.meta_form_id == form_external_id,
+            MetaLead.is_converted.is_(False),
+        )
+    )
+    total = base_query.count()
+    items = (
+        base_query.order_by(MetaLead.received_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    return items, total
 
 
 def build_mapping_preview(

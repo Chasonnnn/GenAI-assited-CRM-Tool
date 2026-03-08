@@ -5,7 +5,7 @@ from typing import Annotated
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,8 @@ from app.schemas.meta_forms import (
     MetaFormMappingUpdateRequest,
     MetaFormMappingUpdateResponse,
     MetaFormSummary,
+    MetaFormUnconvertedLeadItem,
+    MetaFormUnconvertedLeadListResponse,
     MetaFormSyncRequest,
 )
 from app.schemas.import_template import ColumnSuggestionResponse, ColumnMappingItem
@@ -223,6 +225,34 @@ def update_meta_form_mapping(
     )
 
 
+@router.get(
+    "/{form_id}/unconverted-leads",
+    response_model=MetaFormUnconvertedLeadListResponse,
+)
+def list_unconverted_leads(
+    form_id: UUID,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    form = meta_form_mapping_service.get_form(db, session.org_id, form_id)
+    if not form:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+
+    items, total = meta_form_mapping_service.list_unconverted_leads_for_form(
+        db,
+        session.org_id,
+        form.form_external_id,
+        limit=limit,
+        offset=offset,
+    )
+    return MetaFormUnconvertedLeadListResponse(
+        items=[_serialize_unconverted_lead(item) for item in items],
+        total=total,
+    )
+
+
 @router.delete("/{form_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_meta_form(
     form_id: UUID,
@@ -233,3 +263,20 @@ def delete_meta_form(
     deleted = meta_form_mapping_service.delete_form(db, session.org_id, form_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+
+
+def _serialize_unconverted_lead(lead) -> MetaFormUnconvertedLeadItem:
+    raw = lead.field_data_raw or lead.field_data or {}
+    return MetaFormUnconvertedLeadItem(
+        id=lead.id,
+        meta_lead_id=lead.meta_lead_id,
+        status=lead.status,
+        is_converted=bool(lead.is_converted),
+        full_name=raw.get("full_name") or raw.get("name"),
+        email=raw.get("email"),
+        phone=raw.get("phone") or raw.get("phone_number"),
+        conversion_error=lead.conversion_error,
+        fetch_error=lead.fetch_error,
+        received_at=lead.received_at,
+        meta_created_time=lead.meta_created_time,
+    )
