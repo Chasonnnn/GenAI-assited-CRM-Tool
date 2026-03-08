@@ -42,6 +42,7 @@ from app.services.attachment_service import (
     generate_signed_url,
     register_storage_cleanup_on_rollback,
     sanitize_upload_content,
+    strip_exif_data,
     store_file,
 )
 from app.services.import_transformers import transform_height_flexible

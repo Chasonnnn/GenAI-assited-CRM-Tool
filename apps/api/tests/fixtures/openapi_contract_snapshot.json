@@ -1577,6 +1577,24 @@
       "422"
     ]
   },
+  "/integrations/zapier/events": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/zapier/events/summary": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/zapier/events/{event_id}/retry": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/integrations/zapier/webhooks": {
     "POST": [
       "200",
