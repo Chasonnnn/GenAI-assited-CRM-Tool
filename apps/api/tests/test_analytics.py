@@ -620,7 +620,8 @@ def performance_pipeline_stages(db, test_org):
         ("ready_to_match", "Ready to Match", 4, "#F59E0B"),
         ("matched", "Matched", 5, "#22C55E"),
         ("application_submitted", "Application Submitted", 6, "#8B5CF6"),
-        ("lost", "Lost", 7, "#EF4444"),
+        ("on_hold", "On-Hold", 7, "#B4536A"),
+        ("lost", "Lost", 8, "#EF4444"),
     ]
 
     stages = {}
@@ -698,16 +699,20 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
     db.add(test_queue)
     db.flush()
 
-    # User 1: 3 cases - 2 reached application_submitted, 1 lost
-    for i in range(3):
+    # User 1: 4 cases - 2 reached application_submitted, 1 lost, 1 on_hold
+    for i in range(4):
         email = f"perf_user1_{i}@example.com"
         normalized_email = normalize_email(email)
         case = Surrogate(
             id=uuid.uuid4(),
             organization_id=test_org.id,
-            stage_id=stages["contacted"].id if i < 2 else stages["lost"].id,
+            stage_id=(
+                stages["contacted"].id
+                if i < 2
+                else stages["lost"].id if i == 2 else stages["on_hold"].id
+            ),
             full_name=f"User1 Case {i}",
-            status_label="Contacted" if i < 2 else "Lost",
+            status_label="Contacted" if i < 2 else "Lost" if i == 2 else "On-Hold",
             email=normalized_email,
             email_hash=hash_email(normalized_email),
             phone="555-0100",
@@ -742,8 +747,20 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
                     - timedelta(days=25 - list(stages.keys()).index(stage_slug)),
                 )
                 db.add(history)
-        else:  # Case 2 reached lost
+        elif i == 2:  # Case 2 reached lost
             for stage_slug in ["contacted", "pre_qualified", "lost"]:
+                history = SurrogateStatusHistory(
+                    id=uuid.uuid4(),
+                    surrogate_id=case.id,
+                    organization_id=test_org.id,
+                    to_stage_id=stages[stage_slug].id,
+                    changed_by_user_id=test_user.id,
+                    changed_at=datetime.now(timezone.utc)
+                    - timedelta(days=25 - list(stages.keys()).index(stage_slug)),
+                )
+                db.add(history)
+        else:  # Case 3 reached on_hold
+            for stage_slug in ["contacted", "pre_qualified", "on_hold"]:
                 history = SurrogateStatusHistory(
                     id=uuid.uuid4(),
                     surrogate_id=case.id,
@@ -858,6 +875,8 @@ class TestPerformanceByUser:
         assert "unassigned" in data
         assert data["mode"] == "cohort"
         assert isinstance(data["data"], list)
+        assert "on_hold" in data["data"][0]
+        assert "on_hold" in data["unassigned"]
 
     @pytest.mark.asyncio
     async def test_performance_user_metrics(self, authed_client, performance_cases, test_user):
@@ -873,11 +892,12 @@ class TestPerformanceByUser:
                 break
 
         assert user_data is not None
-        assert user_data["total_surrogates"] == 3
-        assert user_data["contacted"] == 3  # All 3 reached contacted
-        assert user_data["pre_qualified"] == 3  # All 3 reached pre-qualified
+        assert user_data["total_surrogates"] == 4
+        assert user_data["contacted"] == 4  # All 4 reached contacted
+        assert user_data["pre_qualified"] == 4  # All 4 reached pre-qualified
         assert user_data["application_submitted"] == 2  # 2 reached application_submitted
         assert user_data["lost"] == 1  # 1 lost (without application_submitted)
+        assert user_data["on_hold"] == 1  # 1 paused separately from lost
 
     @pytest.mark.asyncio
     async def test_lost_excludes_application_submitted(
@@ -909,6 +929,7 @@ class TestPerformanceByUser:
         data = response.json()
         unassigned = data["unassigned"]
         assert unassigned["total_surrogates"] == 1
+        assert unassigned["on_hold"] == 0
 
     @pytest.mark.asyncio
     async def test_conversion_rate_calculation(self, authed_client, performance_cases, test_user):
@@ -924,8 +945,8 @@ class TestPerformanceByUser:
                 break
 
         assert user_data is not None
-        # User 1: 2 application_submitted out of 3 total = 66.67%
-        expected_rate = (2 / 3) * 100
+        # User 1: 2 application_submitted out of 4 total = 50%
+        expected_rate = (2 / 4) * 100
         assert abs(user_data["conversion_rate"] - expected_rate) < 0.1
 
     @pytest.mark.asyncio

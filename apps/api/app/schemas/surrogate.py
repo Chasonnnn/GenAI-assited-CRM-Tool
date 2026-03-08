@@ -2,6 +2,7 @@
 
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, field_serializer
@@ -314,6 +315,10 @@ class SurrogateRead(BaseModel):
     surrogate_number: str
     stage_id: UUID
     status_label: str
+    paused_from_stage_id: UUID | None = None
+    paused_from_stage_slug: str | None = None
+    paused_from_stage_label: str | None = None
+    paused_from_stage_type: str | None = None
     source: SurrogateSource
     is_priority: bool
 
@@ -489,6 +494,7 @@ class SurrogateStatusChange(BaseModel):
     effective_at: datetime | None = Field(
         None, description="When the change actually occurred (optional, defaults to now)"
     )
+    on_hold_follow_up_months: Literal[1, 3, 6] | None = None
     delivery_baby_gender: str | None = Field(None, max_length=50)
     delivery_baby_weight: str | None = Field(None, max_length=50)
 

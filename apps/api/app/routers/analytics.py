@@ -84,6 +84,7 @@ class UserPerformanceData(BaseModel):
     ready_to_match: int
     matched: int
     application_submitted: int
+    on_hold: int
     lost: int
     conversion_rate: float
     avg_days_to_match: Optional[float]
@@ -100,6 +101,7 @@ class UnassignedPerformanceData(BaseModel):
     ready_to_match: int
     matched: int
     application_submitted: int
+    on_hold: int
     lost: int
 
 

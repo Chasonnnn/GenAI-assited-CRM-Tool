@@ -875,7 +875,13 @@ def _build_surrogate_filter_clauses(
             )
         stage_clause_args = [
             Surrogate.stage_id.is_(None),
-            ~Surrogate.stage_id.in_(excluded_stage_ids),
+            and_(
+                ~Surrogate.stage_id.in_(excluded_stage_ids),
+                or_(
+                    Surrogate.paused_from_stage_id.is_(None),
+                    ~Surrogate.paused_from_stage_id.in_(excluded_stage_ids),
+                ),
+            ),
         ]
         if owner_clause is not None:
             stage_clause_args.append(owner_clause)
@@ -1101,7 +1107,13 @@ def list_surrogates(
             )
         stage_clause_args = [
             Surrogate.stage_id.is_(None),
-            ~Surrogate.stage_id.in_(excluded_stage_ids),
+            and_(
+                ~Surrogate.stage_id.in_(excluded_stage_ids),
+                or_(
+                    Surrogate.paused_from_stage_id.is_(None),
+                    ~Surrogate.paused_from_stage_id.in_(excluded_stage_ids),
+                ),
+            ),
         ]
         if owner_clause is not None:
             stage_clause_args.append(owner_clause)

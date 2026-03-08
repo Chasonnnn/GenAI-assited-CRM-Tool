@@ -6,11 +6,18 @@ from sqlalchemy.orm.attributes import NO_VALUE
 
 from app.db.enums import OwnerType, SurrogateSource
 from app.schemas.surrogate import SurrogateListItem, SurrogateRead
-from app.services import queue_service, user_service
+from app.services import queue_service, surrogate_stage_context, user_service
 
 
 def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
     """Convert Surrogate model to SurrogateRead schema with joined user names."""
+    stage_context = surrogate_stage_context.get_stage_context(
+        db,
+        surrogate,
+        current_stage=surrogate.stage,
+    )
+    paused_from_stage = stage_context.paused_from_stage
+
     owner_name = None
     if surrogate.owner_type == OwnerType.USER.value:
         # Prefer an already eager-loaded relationship (avoids redundant queries in list contexts).
@@ -33,6 +40,10 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
         surrogate_number=surrogate.surrogate_number,
         stage_id=surrogate.stage_id,
         status_label=surrogate.status_label,
+        paused_from_stage_id=surrogate.paused_from_stage_id,
+        paused_from_stage_slug=paused_from_stage.slug if paused_from_stage else None,
+        paused_from_stage_label=paused_from_stage.label if paused_from_stage else None,
+        paused_from_stage_type=paused_from_stage.stage_type if paused_from_stage else None,
         source=SurrogateSource(surrogate.source),
         is_priority=surrogate.is_priority,
         owner_type=surrogate.owner_type,

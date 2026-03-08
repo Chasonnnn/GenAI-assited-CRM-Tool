@@ -4,8 +4,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from app.db.enums import Role
-from app.db.models import StatusChangeRequest, SurrogateStatusHistory
+from app.db.enums import OwnerType, Role, TaskType
+from app.db.models import StatusChangeRequest, SurrogateStatusHistory, Task
 from app.schemas.surrogate import SurrogateCreate
 from app.services import pipeline_service, surrogate_service, surrogate_status_service
 
@@ -145,3 +145,158 @@ def test_status_change_undo_within_grace_period_applies(db, test_org, test_user)
         .count()
     )
     assert request_count == 0
+
+
+def test_on_hold_requires_reason(db, test_org, test_user):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id)
+    on_hold_stage = _get_stage(db, test_org.id, "on_hold")
+
+    with pytest.raises(ValueError, match="Reason required"):
+        surrogate_status_service.change_status(
+            db=db,
+            surrogate=surrogate,
+            new_stage_id=on_hold_stage.id,
+            user_id=test_user.id,
+            user_role=Role.DEVELOPER,
+        )
+
+
+def test_on_hold_creates_follow_up_and_resume_cleans_up(db, test_org, test_user):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id)
+    new_unread_stage = _get_stage(db, test_org.id, "new_unread")
+    on_hold_stage = _get_stage(db, test_org.id, "on_hold")
+
+    surrogate.created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    db.commit()
+
+    effective_at = datetime(2026, 1, 31, 12, 0, tzinfo=ZoneInfo("America/Los_Angeles"))
+
+    applied = surrogate_status_service.change_status(
+        db=db,
+        surrogate=surrogate,
+        new_stage_id=on_hold_stage.id,
+        user_id=test_user.id,
+        user_role=Role.DEVELOPER,
+        reason="Waiting on family timing",
+        effective_at=effective_at,
+        on_hold_follow_up_months=1,
+    )
+    assert applied["status"] == "applied"
+
+    db.refresh(surrogate)
+    assert surrogate.stage_id == on_hold_stage.id
+    assert surrogate.paused_from_stage_id == new_unread_stage.id
+    assert surrogate.on_hold_follow_up_task_id is not None
+
+    follow_up_task = (
+        db.query(Task).filter(Task.id == surrogate.on_hold_follow_up_task_id).one_or_none()
+    )
+    assert follow_up_task is not None
+    assert follow_up_task.task_type == TaskType.FOLLOW_UP.value
+    assert follow_up_task.title == "On-Hold follow-up"
+    assert follow_up_task.owner_type == "user"
+    assert follow_up_task.owner_id == surrogate.owner_id
+    assert follow_up_task.due_date.isoformat() == "2026-02-28"
+    assert "Waiting on family timing" in (follow_up_task.description or "")
+    assert "New Unread" in (follow_up_task.description or "")
+
+    latest_history = (
+        db.query(SurrogateStatusHistory)
+        .filter(SurrogateStatusHistory.surrogate_id == surrogate.id)
+        .order_by(SurrogateStatusHistory.recorded_at.desc())
+        .first()
+    )
+    assert latest_history is not None
+    latest_history.recorded_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    db.commit()
+
+    resumed = surrogate_status_service.change_status(
+        db=db,
+        surrogate=surrogate,
+        new_stage_id=new_unread_stage.id,
+        user_id=test_user.id,
+        user_role=Role.DEVELOPER,
+    )
+    assert resumed["status"] == "applied"
+
+    db.refresh(surrogate)
+    assert surrogate.stage_id == new_unread_stage.id
+    assert surrogate.paused_from_stage_id is None
+    assert surrogate.on_hold_follow_up_task_id is None
+    assert db.query(Task).filter(Task.id == follow_up_task.id).one_or_none() is None
+
+
+def test_on_hold_follow_up_assigns_queue_owned_cases_to_actor(db, test_org, test_user):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id)
+    on_hold_stage = _get_stage(db, test_org.id, "on_hold")
+
+    surrogate.owner_type = OwnerType.QUEUE.value
+    surrogate.owner_id = uuid.uuid4()
+    surrogate.created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    db.commit()
+
+    surrogate_status_service.change_status(
+        db=db,
+        surrogate=surrogate,
+        new_stage_id=on_hold_stage.id,
+        user_id=test_user.id,
+        user_role=Role.DEVELOPER,
+        reason="Waiting on next outreach window",
+        effective_at=datetime(2026, 2, 1, 9, 0, tzinfo=ZoneInfo("America/Los_Angeles")),
+        on_hold_follow_up_months=3,
+    )
+
+    db.refresh(surrogate)
+    follow_up_task = (
+        db.query(Task).filter(Task.id == surrogate.on_hold_follow_up_task_id).one_or_none()
+    )
+    assert follow_up_task is not None
+    assert follow_up_task.owner_type == OwnerType.USER.value
+    assert follow_up_task.owner_id == test_user.id
+
+
+def test_leaving_on_hold_uses_paused_from_stage_for_regression_logic(db, test_org, test_user):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id)
+    contacted_stage = _get_stage(db, test_org.id, "contacted")
+    approved_stage = _get_stage(db, test_org.id, "approved")
+    on_hold_stage = _get_stage(db, test_org.id, "on_hold")
+
+    surrogate_status_service.change_status(
+        db=db,
+        surrogate=surrogate,
+        new_stage_id=contacted_stage.id,
+        user_id=test_user.id,
+        user_role=Role.DEVELOPER,
+    )
+    surrogate_status_service.change_status(
+        db=db,
+        surrogate=surrogate,
+        new_stage_id=on_hold_stage.id,
+        user_id=test_user.id,
+        user_role=Role.DEVELOPER,
+        reason="Paused before approval",
+    )
+
+    latest_history = (
+        db.query(SurrogateStatusHistory)
+        .filter(SurrogateStatusHistory.surrogate_id == surrogate.id)
+        .order_by(SurrogateStatusHistory.recorded_at.desc())
+        .first()
+    )
+    assert latest_history is not None
+    latest_history.recorded_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    db.commit()
+
+    applied = surrogate_status_service.change_status(
+        db=db,
+        surrogate=surrogate,
+        new_stage_id=approved_stage.id,
+        user_id=test_user.id,
+        user_role=Role.DEVELOPER,
+    )
+    assert applied["status"] == "applied"
+
+    db.refresh(surrogate)
+    assert surrogate.stage_id == approved_stage.id
+    assert surrogate.paused_from_stage_id is None
+    assert surrogate.on_hold_follow_up_task_id is None

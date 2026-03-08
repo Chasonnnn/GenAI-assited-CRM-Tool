@@ -11,6 +11,8 @@ from app.services import version_service
 from app.utils.presentation import humanize_identifier
 
 ENTITY_TYPE = "pipeline"
+VALID_STAGE_TYPES = {"intake", "post_approval", "paused", "terminal"}
+REQUIRED_SYSTEM_STAGE_KEYS = {"on_hold"}
 
 
 def _normalize_slug(value: str | None) -> str:
@@ -19,6 +21,65 @@ def _normalize_slug(value: str | None) -> str:
 
 def _normalize_stage_key(value: str | None) -> str:
     return canonicalize_stage_key(value)
+
+
+def _is_required_system_stage(stage_key: str | None) -> bool:
+    return _normalize_stage_key(stage_key) in REQUIRED_SYSTEM_STAGE_KEYS
+
+
+def _merge_required_stage_defs(stage_defs: list[dict]) -> list[dict]:
+    """Ensure required system stages exist in a sensible order."""
+    normalized_defs = [dict(stage) for stage in stage_defs]
+    existing_keys = {
+        _normalize_stage_key(stage.get("stage_key") or stage.get("slug")) for stage in normalized_defs
+    }
+
+    if "on_hold" not in existing_keys:
+        on_hold_def = next(
+            stage for stage in get_default_stage_defs() if stage["stage_key"] == "on_hold"
+        )
+        insert_at = next(
+            (
+                index
+                for index, stage in enumerate(normalized_defs)
+                if stage.get("stage_type") == "terminal"
+            ),
+            len(normalized_defs),
+        )
+        normalized_defs.insert(insert_at, dict(on_hold_def))
+
+    for order, stage in enumerate(normalized_defs, start=1):
+        stage["order"] = order
+
+    return normalized_defs
+
+
+def _merge_missing_stage_defs(
+    existing_stages: list[PipelineStage],
+    missing_defs: list[dict[str, object]],
+) -> list[PipelineStage | dict[str, object]]:
+    """Insert missing required stages while preserving terminal placement."""
+    ordered_items: list[PipelineStage | dict[str, object]] = sorted(
+        existing_stages,
+        key=lambda stage: stage.order,
+    )
+
+    for stage_def in missing_defs:
+        stage_key = _normalize_stage_key(stage_def.get("stage_key") or stage_def["slug"])
+        if stage_key == "on_hold":
+            insert_at = next(
+                (
+                    index
+                    for index, stage in enumerate(ordered_items)
+                    if isinstance(stage, PipelineStage) and stage.stage_type == "terminal"
+                ),
+                len(ordered_items),
+            )
+            ordered_items.insert(insert_at, stage_def)
+            continue
+        ordered_items.append(stage_def)
+
+    return ordered_items
 
 
 def _pipeline_payload(pipeline: Pipeline) -> dict:
@@ -144,8 +205,8 @@ def sync_missing_stages(
     Compares existing stages against DEFAULT_STAGE_ORDER and adds any missing ones.
     Returns count of stages added.
     """
-    # Get existing stage slugs
-    existing_stage_keys = {s.stage_key for s in pipeline.stages if not s.deleted_at}
+    active_stages = [stage for stage in pipeline.stages if not stage.deleted_at]
+    existing_stage_keys = {s.stage_key for s in active_stages}
 
     # Find missing stage keys
     default_defs = get_default_stage_defs()
@@ -158,21 +219,24 @@ def sync_missing_stages(
     if not missing:
         return 0
 
-    # Get max order from existing stages
-    max_order = max((s.order for s in pipeline.stages), default=0)
+    ordered_items = _merge_missing_stage_defs(active_stages, missing)
 
-    # Add missing stages
-    for i, stage_def in enumerate(missing):
+    for index, item in enumerate(ordered_items, start=1):
+        if isinstance(item, PipelineStage):
+            item.order = index
+            item.updated_at = datetime.now(timezone.utc)
+            continue
+
         db.add(
             PipelineStage(
                 pipeline_id=pipeline.id,
-                stage_key=_normalize_stage_key(stage_def.get("stage_key") or stage_def["slug"]),
-                slug=stage_def["slug"],
-                label=stage_def["label"],
-                color=stage_def["color"],
-                order=max_order + i + 1,  # Append after existing
-                stage_type=stage_def["stage_type"],
-                is_intake_stage=stage_def["stage_type"] == "intake",
+                stage_key=_normalize_stage_key(item.get("stage_key") or item["slug"]),
+                slug=item["slug"],
+                label=item["label"],
+                color=item["color"],
+                order=index,
+                stage_type=item["stage_type"],
+                is_intake_stage=item["stage_type"] == "intake",
                 is_active=True,
             )
         )
@@ -238,7 +302,7 @@ def create_pipeline(
     db.add(pipeline)
     db.flush()
 
-    stage_defs = stages or get_default_stage_defs()
+    stage_defs = _merge_required_stage_defs(stages or get_default_stage_defs())
     db.add_all(
         [
             PipelineStage(
@@ -599,7 +663,7 @@ def create_stage(
         raise ValueError("Slug cannot be empty")
 
     # Validate stage_type
-    if stage_type not in ("intake", "post_approval", "terminal"):
+    if stage_type not in VALID_STAGE_TYPES:
         raise ValueError(f"Invalid stage_type: {stage_type}")
 
     # Validate slug uniqueness
@@ -705,6 +769,9 @@ def delete_stage(
     Returns the number of cases migrated.
     Raises ValueError if migrate_to is invalid or same stage.
     """
+    if _is_required_system_stage(stage.stage_key):
+        raise ValueError(f"{stage.label} is a required system stage and cannot be deleted")
+
     if stage.id == migrate_to_stage_id:
         raise ValueError("Cannot migrate cases to the same stage")
 

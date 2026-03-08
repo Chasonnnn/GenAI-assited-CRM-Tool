@@ -848,6 +848,7 @@ PERFORMANCE_STAGE_SLUGS = [
     "ready_to_match",
     "matched",
     "application_submitted",
+    "on_hold",
     "lost",
 ]
 
@@ -983,6 +984,7 @@ def _get_cohort_performance(
             _count_distinct(_stage_condition(stage_ids.get("application_submitted"))).label(
                 "application_submitted"
             ),
+            _count_distinct(_stage_condition(stage_ids.get("on_hold"))).label("on_hold"),
             _count_distinct(lost_condition).label("lost"),
         )
         .select_from(Surrogate)
@@ -1015,6 +1017,7 @@ def _get_cohort_performance(
                 "ready_to_match": metrics.ready_to_match if metrics else 0,
                 "matched": metrics.matched if metrics else 0,
                 "application_submitted": metrics.application_submitted if metrics else 0,
+                "on_hold": metrics.on_hold if metrics else 0,
                 "lost": metrics.lost if metrics else 0,
                 "conversion_rate": conversion_rate,
                 "avg_days_to_match": None,
@@ -1046,6 +1049,7 @@ def _get_cohort_performance(
             _count_distinct(_stage_condition(stage_ids.get("application_submitted"))).label(
                 "application_submitted"
             ),
+            _count_distinct(_stage_condition(stage_ids.get("on_hold"))).label("on_hold"),
             _count_distinct(lost_condition).label("lost"),
         )
         .select_from(Surrogate)
@@ -1062,6 +1066,7 @@ def _get_cohort_performance(
         "ready_to_match": unassigned_row.ready_to_match if unassigned_row else 0,
         "matched": unassigned_row.matched if unassigned_row else 0,
         "application_submitted": unassigned_row.application_submitted if unassigned_row else 0,
+        "on_hold": unassigned_row.on_hold if unassigned_row else 0,
         "lost": unassigned_row.lost if unassigned_row else 0,
     }
 
@@ -1138,6 +1143,7 @@ def _get_activity_performance(
             _count_distinct(_stage_condition(stage_ids.get("application_submitted"))).label(
                 "application_submitted"
             ),
+            _count_distinct(_stage_condition(stage_ids.get("on_hold"))).label("on_hold"),
             _count_distinct(lost_condition).label("lost"),
         )
         .select_from(Surrogate)
@@ -1170,6 +1176,7 @@ def _get_activity_performance(
                 "ready_to_match": metrics.ready_to_match if metrics else 0,
                 "matched": metrics.matched if metrics else 0,
                 "application_submitted": metrics.application_submitted if metrics else 0,
+                "on_hold": metrics.on_hold if metrics else 0,
                 "lost": metrics.lost if metrics else 0,
                 "conversion_rate": conversion_rate,
                 "avg_days_to_match": None,
@@ -1201,6 +1208,7 @@ def _get_activity_performance(
             _count_distinct(_stage_condition(stage_ids.get("application_submitted"))).label(
                 "application_submitted"
             ),
+            _count_distinct(_stage_condition(stage_ids.get("on_hold"))).label("on_hold"),
             _count_distinct(lost_condition).label("lost"),
         )
         .select_from(Surrogate)
@@ -1217,6 +1225,7 @@ def _get_activity_performance(
         "ready_to_match": unassigned_row.ready_to_match if unassigned_row else 0,
         "matched": unassigned_row.matched if unassigned_row else 0,
         "application_submitted": unassigned_row.application_submitted if unassigned_row else 0,
+        "on_hold": unassigned_row.on_hold if unassigned_row else 0,
         "lost": unassigned_row.lost if unassigned_row else 0,
     }
 

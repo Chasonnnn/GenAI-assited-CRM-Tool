@@ -107,7 +107,7 @@ class StageCreate(BaseModel):
     slug: str = Field(min_length=1, max_length=50, pattern=r"^[a-z0-9_]+$")
     label: str = Field(min_length=1, max_length=100)
     color: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
-    stage_type: str = Field(pattern=r"^(intake|post_approval|terminal)$")
+    stage_type: str = Field(pattern=r"^(intake|post_approval|paused|terminal)$")
     order: int | None = None  # Auto-calculated if not provided
     expected_version: int | None = None  # Optional optimistic locking
 

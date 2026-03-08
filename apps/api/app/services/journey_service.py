@@ -511,8 +511,16 @@ def get_journey(
             stage_id_to_slug.get(entry.from_stage_id) if entry.from_stage_id else None
         ) or resolve_label_slug(entry.from_label_snapshot)
 
+    from app.services import surrogate_stage_context
+
+    current_stage = surrogate_stage_context.get_stage_context(
+        db,
+        surrogate,
+        current_stage=surrogate.stage,
+    ).effective_stage
+
     # Determine current state
-    current_stage_slug = surrogate.stage.slug if surrogate.stage else None
+    current_stage_slug = current_stage.slug if current_stage else None
     if not current_stage_slug and surrogate.status_label:
         current_stage_slug = resolve_label_slug(surrogate.status_label)
     is_terminal = current_stage_slug in TERMINAL_STAGE_SLUGS

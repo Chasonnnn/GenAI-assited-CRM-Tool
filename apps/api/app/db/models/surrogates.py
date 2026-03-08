@@ -38,6 +38,7 @@ if TYPE_CHECKING:
         Organization,
         PipelineStage,
         Queue,
+        Task,
         User,
     )
 
@@ -155,6 +156,16 @@ class Surrogate(Base):
         nullable=False,
     )
     status_label: Mapped[str] = mapped_column(String(100), nullable=False)
+    paused_from_stage_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("pipeline_stages.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    on_hold_follow_up_task_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tasks.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     source: Mapped[str] = mapped_column(
         String(20),
@@ -329,6 +340,12 @@ class Surrogate(Base):
     created_by: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
     archived_by: Mapped["User | None"] = relationship(foreign_keys=[archived_by_user_id])
     stage: Mapped["PipelineStage"] = relationship(foreign_keys=[stage_id])
+    paused_from_stage: Mapped["PipelineStage | None"] = relationship(
+        foreign_keys=[paused_from_stage_id]
+    )
+    on_hold_follow_up_task: Mapped["Task | None"] = relationship(
+        foreign_keys=[on_hold_follow_up_task_id]
+    )
 
     # Owner relationships for eager loading (fixes N+1 query)
     # These use custom join conditions since owner_id can point to either User or Queue

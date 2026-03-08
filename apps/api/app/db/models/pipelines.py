@@ -81,7 +81,7 @@ class PipelineStage(Base):
 
     - stage_key: Immutable semantic key, unique per pipeline
     - slug: Editable external identifier, unique per pipeline
-    - stage_type: Immutable, controls role access (intake/post_approval/terminal)
+    - stage_type: Immutable, controls role access (intake/post_approval/paused/terminal)
     - Soft-delete via is_active + deleted_at
     - Surrogates reference stage_id (FK)
     """
@@ -115,7 +115,7 @@ class PipelineStage(Base):
     slug: Mapped[str] = mapped_column(String(50), nullable=False)
     stage_type: Mapped[str] = mapped_column(
         String(20), nullable=False
-    )  # intake/post_approval/terminal
+    )  # intake/post_approval/paused/terminal
 
     # Editable
     label: Mapped[str] = mapped_column(String(100), nullable=False)

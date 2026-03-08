@@ -1,21 +1,23 @@
 """Surrogate status change helpers (apply + request + history + notifications)."""
 
-from datetime import datetime, time, timedelta, timezone
+import calendar
+from datetime import date, datetime, time, timedelta, timezone
 from typing import TypedDict
-from uuid import UUID
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.enums import ContactStatus, OwnerType, Role, SurrogateStatus
+from app.db.enums import ContactStatus, OwnerType, Role, SurrogateStatus, TaskType
 from app.db.models import (
     Organization,
     PipelineStage,
     StatusChangeRequest,
     Surrogate,
     SurrogateStatusHistory,
+    Task,
     User,
 )
 
@@ -87,6 +89,90 @@ def _get_org_user(db: Session, org_id: UUID, user_id: UUID | None) -> User | Non
     return membership.user if membership else None
 
 
+def _add_calendar_months(base_date: date, months: int) -> date:
+    month_index = base_date.month - 1 + months
+    year = base_date.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(base_date.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def _build_on_hold_follow_up_description(
+    *,
+    reason: str,
+    paused_from_stage: PipelineStage | None,
+) -> str:
+    paused_from_label = paused_from_stage.label if paused_from_stage else "Unknown"
+    return f"Paused from: {paused_from_label}\nReason: {reason}"
+
+
+def _create_on_hold_follow_up_task(
+    db: Session,
+    *,
+    surrogate: Surrogate,
+    paused_from_stage: PipelineStage | None,
+    actor_user_id: UUID | None,
+    reason: str,
+    effective_at: datetime,
+    org_timezone_str: str,
+    follow_up_months: int | None,
+) -> Task | None:
+    if not follow_up_months:
+        return None
+
+    owner_id = surrogate.owner_id if surrogate.owner_type == OwnerType.USER.value else actor_user_id
+    if not owner_id:
+        return None
+
+    due_date = _add_calendar_months(
+        effective_at.astimezone(ZoneInfo(org_timezone_str)).date(),
+        follow_up_months,
+    )
+    task = Task(
+        id=uuid4(),
+        organization_id=surrogate.organization_id,
+        surrogate_id=surrogate.id,
+        created_by_user_id=actor_user_id or surrogate.created_by_user_id or owner_id,
+        owner_type=OwnerType.USER.value,
+        owner_id=owner_id,
+        title="On-Hold follow-up",
+        description=_build_on_hold_follow_up_description(
+            reason=reason,
+            paused_from_stage=paused_from_stage,
+        ),
+        task_type=TaskType.FOLLOW_UP.value,
+        due_date=due_date,
+    )
+    db.add(task)
+    db.flush()
+    return task
+
+
+def _cleanup_on_hold_follow_up_task(
+    db: Session,
+    *,
+    surrogate: Surrogate,
+) -> Task | None:
+    task: Task | None = None
+    if surrogate.on_hold_follow_up_task_id:
+        task = (
+            db.query(Task)
+            .filter(
+                Task.id == surrogate.on_hold_follow_up_task_id,
+                Task.organization_id == surrogate.organization_id,
+            )
+            .one_or_none()
+        )
+        if task and not task.is_completed:
+            db.delete(task)
+        else:
+            task = None
+
+    surrogate.on_hold_follow_up_task_id = None
+    surrogate.paused_from_stage_id = None
+    return task
+
+
 def change_status(
     db: Session,
     surrogate: Surrogate,
@@ -95,6 +181,7 @@ def change_status(
     user_role: Role | None,
     reason: str | None = None,
     effective_at: datetime | None = None,
+    on_hold_follow_up_months: int | None = None,
     trigger_workflows: bool = True,
     *,
     emit_events: bool = False,
@@ -116,7 +203,7 @@ def change_status(
         StatusChangeResult with status='applied' or 'pending_approval'
     """
     from app.core.stage_rules import ROLE_STAGE_MUTATION
-    from app.services import pipeline_service
+    from app.services import pipeline_service, surrogate_stage_context
 
     now = datetime.now(timezone.utc)
     org_tz_str = _get_org_timezone(db, surrogate.organization_id)
@@ -124,10 +211,13 @@ def change_status(
 
     old_stage_id = surrogate.stage_id
     old_label = surrogate.status_label
-    old_stage = pipeline_service.get_stage_by_id(db, old_stage_id) if old_stage_id else None
-    old_slug = old_stage.slug if old_stage else None
-    old_order = old_stage.order if old_stage else 0
-    surrogate_pipeline_id = old_stage.pipeline_id if old_stage else None
+    stage_context = surrogate_stage_context.get_stage_context(db, surrogate)
+    current_stage = stage_context.current_stage
+    effective_old_stage = stage_context.effective_stage
+    paused_from_stage = stage_context.paused_from_stage
+    old_slug = current_stage.slug if current_stage else None
+    old_order = effective_old_stage.order if effective_old_stage else 0
+    surrogate_pipeline_id = current_stage.pipeline_id if current_stage else None
     if not surrogate_pipeline_id:
         surrogate_pipeline_id = pipeline_service.get_or_create_default_pipeline(
             db,
@@ -143,8 +233,20 @@ def change_status(
     if old_stage_id == new_stage.id:
         raise ValueError("Target stage is same as current stage")
 
+    if new_stage.slug != "on_hold" and on_hold_follow_up_months is not None:
+        raise ValueError("Follow-up timing is only allowed when moving to On-Hold")
+
+    if new_stage.slug == "on_hold" and not reason:
+        raise ValueError("Reason required when moving to On-Hold")
+
     is_backdated = (now - normalized_effective_at).total_seconds() > 1
-    is_regression = new_stage.order < old_order
+    is_resume_from_on_hold = bool(
+        current_stage
+        and current_stage.slug == "on_hold"
+        and paused_from_stage
+        and paused_from_stage.id == new_stage.id
+    )
+    is_regression = (not is_resume_from_on_hold) and new_stage.order < old_order
 
     if (normalized_effective_at - now).total_seconds() > 1:
         raise ValueError("Cannot set future date for stage change")
@@ -166,7 +268,9 @@ def change_status(
 
     allowed_types = set(rules["stage_types"])
     allowed_slugs = set(rules.get("extra_slugs", []))
-    if not is_regression:
+    if is_resume_from_on_hold:
+        pass
+    elif not is_regression:
         if new_stage.stage_type not in allowed_types and new_stage.slug not in allowed_slugs:
             if role_str == Role.INTAKE_SPECIALIST.value:
                 raise ValueError(f"Intake specialists cannot set stage to {new_stage.slug}")
@@ -205,6 +309,7 @@ def change_status(
                 db=db,
                 surrogate=surrogate,
                 new_stage=new_stage,
+                current_stage=current_stage,
                 old_stage_id=old_stage_id,
                 old_label=old_label,
                 old_slug=old_slug,
@@ -212,7 +317,10 @@ def change_status(
                 reason=reason,
                 effective_at=normalized_effective_at,
                 recorded_at=now,
+                org_timezone_str=org_tz_str,
                 is_undo=True,
+                paused_from_stage=effective_old_stage if new_stage.slug == "on_hold" else paused_from_stage,
+                on_hold_follow_up_months=on_hold_follow_up_months,
                 trigger_workflows=trigger_workflows,
             )
             if emit_events:
@@ -252,7 +360,7 @@ def change_status(
             request=request,
             surrogate=surrogate,
             target_stage_label=new_stage.label,
-            current_stage_label=old_label or "Unknown",
+            current_stage_label=effective_old_stage.label if effective_old_stage else old_label or "Unknown",
             requester_name=requester.display_name if requester else "Someone",
         )
 
@@ -272,6 +380,7 @@ def change_status(
         db=db,
         surrogate=surrogate,
         new_stage=new_stage,
+        current_stage=current_stage,
         old_stage_id=old_stage_id,
         old_label=old_label,
         old_slug=old_slug,
@@ -279,7 +388,10 @@ def change_status(
         reason=reason,
         effective_at=normalized_effective_at,
         recorded_at=now,
+        org_timezone_str=org_tz_str,
         is_undo=False,
+        paused_from_stage=effective_old_stage if new_stage.slug == "on_hold" else paused_from_stage,
+        on_hold_follow_up_months=on_hold_follow_up_months,
         trigger_workflows=trigger_workflows,
     )
     if emit_events:
@@ -293,6 +405,7 @@ def apply_status_change(
     db: Session,
     surrogate: Surrogate,
     new_stage: PipelineStage,
+    current_stage: PipelineStage | None,
     old_stage_id: UUID | None,
     old_label: str | None,
     old_slug: str | None,
@@ -300,11 +413,14 @@ def apply_status_change(
     reason: str | None,
     effective_at: datetime,
     recorded_at: datetime,
+    org_timezone_str: str | None = None,
     is_undo: bool = False,
     request_id: UUID | None = None,
     approved_by_user_id: UUID | None = None,
     approved_at: datetime | None = None,
     requested_at: datetime | None = None,
+    paused_from_stage: PipelineStage | None = None,
+    on_hold_follow_up_months: int | None = None,
     trigger_workflows: bool = True,
 ) -> StatusChangeResult:
     """
@@ -312,12 +428,36 @@ def apply_status_change(
 
     Called for non-regressions, undo within grace period, and approved regressions.
     """
+    resolved_org_timezone = org_timezone_str or _get_org_timezone(db, surrogate.organization_id)
+    deleted_follow_up_task = None
+    created_follow_up_task = None
+    leaving_on_hold = bool(current_stage and current_stage.slug == "on_hold" and new_stage.slug != "on_hold")
+
+    if leaving_on_hold:
+        deleted_follow_up_task = _cleanup_on_hold_follow_up_task(db, surrogate=surrogate)
+
     surrogate.stage_id = new_stage.id
     surrogate.status_label = new_stage.label
 
+    if new_stage.slug == "on_hold":
+        surrogate.paused_from_stage_id = paused_from_stage.id if paused_from_stage else old_stage_id
+        created_follow_up_task = _create_on_hold_follow_up_task(
+            db,
+            surrogate=surrogate,
+            paused_from_stage=paused_from_stage,
+            actor_user_id=user_id,
+            reason=reason or "",
+            effective_at=effective_at,
+            org_timezone_str=resolved_org_timezone,
+            follow_up_months=on_hold_follow_up_months,
+        )
+        surrogate.on_hold_follow_up_task_id = created_follow_up_task.id if created_follow_up_task else None
+
     # Update contact status if reached or leaving intake stage
     if surrogate.contact_status == ContactStatus.UNREACHED.value:
-        if new_stage.slug == SurrogateStatus.CONTACTED.value or new_stage.is_intake_stage is False:
+        if new_stage.slug == SurrogateStatus.CONTACTED.value or (
+            new_stage.is_intake_stage is False and new_stage.slug != "on_hold"
+        ):
             surrogate.contact_status = ContactStatus.REACHED.value
             if not surrogate.contacted_at:
                 surrogate.contacted_at = effective_at
@@ -344,6 +484,15 @@ def apply_status_change(
     db.add(history)
     db.commit()
     db.refresh(surrogate)
+
+    if deleted_follow_up_task is not None:
+        from app.services import task_service
+
+        task_service._delete_task_from_google_best_effort(db, deleted_follow_up_task)
+    if created_follow_up_task is not None:
+        from app.services import task_service
+
+        task_service._sync_task_to_google_best_effort(db, created_follow_up_task)
 
     from app.services import surrogate_events
 

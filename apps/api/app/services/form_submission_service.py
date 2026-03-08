@@ -606,6 +606,7 @@ def create_submission(
                         db=db,
                         surrogate=surrogate,
                         new_stage=target_stage,
+                        current_stage=current_stage,
                         old_stage_id=old_stage_id,
                         old_label=old_label,
                         old_slug=old_slug,

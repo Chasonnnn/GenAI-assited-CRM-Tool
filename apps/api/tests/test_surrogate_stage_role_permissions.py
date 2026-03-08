@@ -124,6 +124,28 @@ async def test_case_manager_can_change_from_post_approval_to_terminal(db, test_o
 
 
 @pytest.mark.asyncio
+async def test_case_manager_can_move_post_approval_case_to_on_hold(db, test_org):
+    ready_to_match_stage_id = _get_stage_id(db, test_org.id, "ready_to_match")
+    on_hold_stage_id = _get_stage_id(db, test_org.id, "on_hold")
+
+    async with _client_for_role(db, test_org.id, Role.CASE_MANAGER) as (_, client):
+        surrogate_id = await _create_surrogate(client, "Case Manager On Hold")
+
+        to_ready = await client.patch(
+            f"/surrogates/{surrogate_id}/status",
+            json={"stage_id": str(ready_to_match_stage_id)},
+        )
+        assert to_ready.status_code == 200, to_ready.text
+
+        to_on_hold = await client.patch(
+            f"/surrogates/{surrogate_id}/status",
+            json={"stage_id": str(on_hold_stage_id), "reason": "Waiting on availability"},
+        )
+        assert to_on_hold.status_code == 200, to_on_hold.text
+        assert to_on_hold.json()["status"] == "applied"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("terminal_slug", ["lost", "disqualified"])
 async def test_intake_can_change_to_terminal_stages(db, test_org, terminal_slug):
     terminal_stage_id = _get_stage_id(db, test_org.id, terminal_slug)
@@ -141,6 +163,21 @@ async def test_intake_can_change_to_terminal_stages(db, test_org, terminal_slug)
         detail = await client.get(f"/surrogates/{surrogate_id}")
         assert detail.status_code == 200, detail.text
         assert detail.json()["stage_id"] == str(terminal_stage_id)
+
+
+@pytest.mark.asyncio
+async def test_intake_can_move_case_to_on_hold(db, test_org):
+    on_hold_stage_id = _get_stage_id(db, test_org.id, "on_hold")
+
+    async with _client_for_role(db, test_org.id, Role.INTAKE_SPECIALIST) as (_, client):
+        surrogate_id = await _create_surrogate(client, "Intake On Hold")
+
+        to_on_hold = await client.patch(
+            f"/surrogates/{surrogate_id}/status",
+            json={"stage_id": str(on_hold_stage_id), "reason": "Paused for follow-up"},
+        )
+        assert to_on_hold.status_code == 200, to_on_hold.text
+        assert to_on_hold.json()["status"] == "applied"
 
 
 @pytest.mark.asyncio

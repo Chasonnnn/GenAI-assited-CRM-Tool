@@ -80,9 +80,9 @@ def _check_post_approval_access(
 
     Treats missing/null stage as non-post-approval (fail open for deleted stages).
     """
-    from app.services import pipeline_service, permission_service
+    from app.services import permission_service, surrogate_stage_context
 
-    stage = pipeline_service.get_stage_by_id(db, surrogate.stage_id)
+    stage = surrogate_stage_context.get_stage_context(db, surrogate).effective_stage
 
     # No stage or not post_approval = no restriction
     if not stage or stage.stage_type != "post_approval":

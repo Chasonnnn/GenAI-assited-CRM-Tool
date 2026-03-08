@@ -130,9 +130,12 @@ def approve_request(
         if not new_stage:
             raise ValueError("Target stage not found")
 
+        from app.services import surrogate_stage_context
+
         old_stage_id = surrogate.stage_id
         old_label = surrogate.status_label
-        old_stage = pipeline_service.get_stage_by_id(db, old_stage_id) if old_stage_id else None
+        stage_context = surrogate_stage_context.get_stage_context(db, surrogate)
+        old_stage = stage_context.current_stage
         old_slug = old_stage.slug if old_stage else None
 
         # Apply the change using the helper function
@@ -140,6 +143,7 @@ def approve_request(
             db=db,
             surrogate=surrogate,
             new_stage=new_stage,
+            current_stage=stage_context.current_stage,
             old_stage_id=old_stage_id,
             old_label=old_label,
             old_slug=old_slug,
@@ -152,6 +156,7 @@ def approve_request(
             approved_by_user_id=admin_user_id,
             approved_at=now,
             requested_at=request.requested_at,
+            paused_from_stage=stage_context.paused_from_stage,
         )
 
     elif request.entity_type == "intended_parent":
@@ -216,6 +221,7 @@ def approve_request(
             db=db,
             surrogate=surrogate,
             new_stage=ready_stage,
+            current_stage=old_stage,
             old_stage_id=old_stage_id,
             old_label=old_label,
             old_slug=old_slug,

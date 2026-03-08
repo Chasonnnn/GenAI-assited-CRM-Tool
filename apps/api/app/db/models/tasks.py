@@ -177,7 +177,7 @@ class Task(Base):
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
-    surrogate: Mapped["Surrogate | None"] = relationship()
+    surrogate: Mapped["Surrogate | None"] = relationship(foreign_keys=[surrogate_id])
     created_by: Mapped["User"] = relationship(foreign_keys=[created_by_user_id])
     completed_by: Mapped["User | None"] = relationship(foreign_keys=[completed_by_user_id])
     workflow_triggered_by: Mapped["User | None"] = relationship(

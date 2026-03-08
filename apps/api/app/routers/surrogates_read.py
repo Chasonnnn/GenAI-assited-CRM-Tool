@@ -523,7 +523,9 @@ def get_surrogate_export_view(
 
     surrogate_read = _surrogate_to_read(surrogate, db)
 
-    current_stage = pipeline_service.get_stage_by_id(db, surrogate.stage_id)
+    from app.services import surrogate_stage_context
+
+    current_stage = surrogate_stage_context.get_stage_context(db, surrogate).effective_stage
     ready_to_match_stage = None
     heartbeat_stage = None
     if current_stage:

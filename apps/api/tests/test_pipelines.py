@@ -6,13 +6,14 @@ from uuid import UUID
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.core.stage_definitions import get_default_stage_defs
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.security import create_session_token
 from app.db.enums import Role
-from app.db.models import Membership, PipelineStage, User
+from app.db.models import Membership, Pipeline, PipelineStage, User
 from app.main import app
-from app.services import session_service
+from app.services import pipeline_service, session_service
 
 
 @pytest.mark.asyncio
@@ -59,7 +60,8 @@ async def test_create_pipeline(authed_client: AsyncClient):
     data = response.json()
     assert data["name"] == "Test Pipeline"
     assert data["current_version"] == 1
-    assert len(data["stages"]) == 3
+    assert len(data["stages"]) == 4
+    assert any(stage["slug"] == "on_hold" for stage in data["stages"])
 
 
 @pytest.mark.asyncio
@@ -226,3 +228,59 @@ async def test_intake_can_get_default_pipeline(db, test_org):
         assert len(payload["stages"]) > 0
 
     app.dependency_overrides.clear()
+
+
+def test_sync_missing_stages_inserts_on_hold_before_terminal_stages(db, test_org, test_user):
+    pipeline = Pipeline(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name="Missing On Hold",
+        is_default=False,
+        current_version=1,
+    )
+    db.add(pipeline)
+    db.flush()
+
+    stage_defs = [stage for stage in get_default_stage_defs() if stage["slug"] != "on_hold"]
+    for stage_def in stage_defs:
+        db.add(
+            PipelineStage(
+                id=uuid.uuid4(),
+                pipeline_id=pipeline.id,
+                stage_key=stage_def["stage_key"],
+                slug=stage_def["slug"],
+                label=stage_def["label"],
+                color=stage_def["color"],
+                stage_type=stage_def["stage_type"],
+                order=stage_def["order"],
+                is_active=True,
+                is_intake_stage=stage_def["stage_type"] == "intake",
+            )
+        )
+    db.commit()
+    db.refresh(pipeline)
+
+    added = pipeline_service.sync_missing_stages(db, pipeline, test_user.id)
+    slugs = [stage.slug for stage in pipeline_service.get_stages(db, pipeline.id)]
+
+    assert added == 1
+    assert slugs.index("on_hold") < slugs.index("lost")
+    assert slugs.index("on_hold") < slugs.index("disqualified")
+
+
+@pytest.mark.asyncio
+async def test_required_on_hold_stage_cannot_be_deleted(authed_client):
+    default_response = await authed_client.get("/settings/pipelines/default")
+    assert default_response.status_code == 200, default_response.text
+    pipeline = default_response.json()
+
+    on_hold_stage = next(stage for stage in pipeline["stages"] if stage["slug"] == "on_hold")
+    lost_stage = next(stage for stage in pipeline["stages"] if stage["slug"] == "lost")
+
+    response = await authed_client.request(
+        "DELETE",
+        f"/settings/pipelines/{pipeline['id']}/stages/{on_hold_stage['id']}",
+        json={"migrate_to_stage_id": lost_stage["id"]},
+    )
+    assert response.status_code == 400
+    assert "required system stage" in response.json()["detail"].lower()

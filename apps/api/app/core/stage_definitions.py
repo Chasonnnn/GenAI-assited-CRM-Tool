@@ -15,6 +15,7 @@ DEFAULT_COLORS = {
     "application_submitted": "#8B5CF6",  # Violet
     "under_review": "#F59E0B",  # Amber
     "approved": "#22C55E",  # Green
+    "on_hold": "#B4536A",  # Muted brick
     "disqualified": "#EF4444",  # Red
     "lost": "#EF4444",  # Red
     # Stage B: Post-Approval (darker shades)
@@ -38,6 +39,7 @@ STAGE_TYPE_MAP = {
     "application_submitted": "intake",
     "under_review": "intake",
     "approved": "intake",
+    "on_hold": "paused",
     "ready_to_match": "post_approval",
     "matched": "post_approval",
     "medical_clearance_passed": "post_approval",
@@ -53,6 +55,7 @@ STAGE_TYPE_MAP = {
 }
 
 LABEL_OVERRIDES = {
+    "on_hold": "On-Hold",
     "pre_qualified": "Pre-Qualified",
     "second_hcg_confirmed": "Second hCG confirmed",
     "ready_to_match": "Ready to Match",
@@ -63,6 +66,8 @@ LABEL_OVERRIDES = {
 LEGACY_STAGE_KEY_ALIASES = {
     "qualified": "pre_qualified",
 }
+
+REQUIRED_SYSTEM_STAGE_KEYS = {"on_hold"}
 
 DEFAULT_STAGE_ORDER = [
     "new_unread",
@@ -82,6 +87,7 @@ DEFAULT_STAGE_ORDER = [
     "ob_care_established",
     "anatomy_scanned",
     "delivered",
+    "on_hold",
     "lost",
     "disqualified",
 ]
@@ -91,6 +97,11 @@ def canonicalize_stage_key(value: str | None) -> str:
     """Normalize old aliases to canonical immutable stage keys."""
     normalized = (value or "").strip().lower()
     return LEGACY_STAGE_KEY_ALIASES.get(normalized, normalized)
+
+
+def is_required_system_stage(stage_key_or_slug: str | None) -> bool:
+    """Return whether a stage key/slug is reserved for system workflows."""
+    return canonicalize_stage_key(stage_key_or_slug) in REQUIRED_SYSTEM_STAGE_KEYS
 
 
 def get_default_stage_defs() -> list[dict[str, object]]:
