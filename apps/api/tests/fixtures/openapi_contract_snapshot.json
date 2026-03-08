@@ -1543,6 +1543,12 @@
       "422"
     ]
   },
+  "/integrations/meta/forms/{form_id}/unconverted-leads": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
   "/integrations/meta/crm-dataset/events": {
     "GET": [
       "200",
