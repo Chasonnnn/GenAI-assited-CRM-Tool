@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.24](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.23...surrogacy-crm-platform-v0.90.24) (2026-03-08)
+
+
+### Features
+
+* add meta crm dataset outbound integration ([c635140](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c635140322f9078950582f5f6c6ba65d5908fe93))
+
 ## [0.90.23](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.22...surrogacy-crm-platform-v0.90.23) (2026-03-08)
 
 
