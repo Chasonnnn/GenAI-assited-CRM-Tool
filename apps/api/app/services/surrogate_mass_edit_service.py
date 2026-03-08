@@ -80,6 +80,12 @@ def _build_base_query(db: Session, org_id: UUID, filters: SurrogateMassEditStage
             Surrogate.owner_id == filters.queue_id,
         )
 
+    if filters.owner_id:
+        query = query.filter(
+            Surrogate.owner_type == OwnerType.USER.value,
+            Surrogate.owner_id == filters.owner_id,
+        )
+
     if filters.created_from:
         query = query.filter(Surrogate.created_at >= _created_from_dt(filters.created_from))
 

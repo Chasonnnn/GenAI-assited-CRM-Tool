@@ -249,6 +249,63 @@ async def test_mass_edit_stage_can_filter_by_race(authed_client, db, test_auth):
 
 
 @pytest.mark.asyncio
+async def test_mass_edit_stage_can_filter_by_owner_id(authed_client, db, test_auth):
+    disqualified_stage = _get_stage(db, test_auth.org.id, "disqualified")
+
+    other_user = User(
+        id=uuid.uuid4(),
+        email=f"mass-edit-owner-{uuid.uuid4().hex[:8]}@test.com",
+        display_name="Mass Edit Owner",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(other_user)
+    db.flush()
+    db.add(
+        Membership(
+            id=uuid.uuid4(),
+            user_id=other_user.id,
+            organization_id=test_auth.org.id,
+            role=Role.CASE_MANAGER.value,
+        )
+    )
+    db.flush()
+
+    target = await _create_surrogate(authed_client, state="CA")
+    control = await _create_surrogate(authed_client, state="CA")
+
+    target_row = db.query(Surrogate).filter(Surrogate.id == UUID(target["id"])).first()
+    control_row = db.query(Surrogate).filter(Surrogate.id == UUID(control["id"])).first()
+    assert target_row is not None and control_row is not None
+
+    target_row.owner_id = other_user.id
+    db.commit()
+
+    preview = await authed_client.post(
+        "/surrogates/mass-edit/stage/preview",
+        json={"filters": {"owner_id": str(other_user.id)}},
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["total"] == 1
+
+    apply_res = await authed_client.post(
+        "/surrogates/mass-edit/stage",
+        json={
+            "filters": {"owner_id": str(other_user.id)},
+            "stage_id": str(disqualified_stage.id),
+            "expected_total": 1,
+            "trigger_workflows": False,
+        },
+    )
+    assert apply_res.status_code == 200, apply_res.text
+
+    db.refresh(target_row)
+    db.refresh(control_row)
+    assert target_row.stage_id == disqualified_stage.id
+    assert control_row.stage_id != disqualified_stage.id
+
+
+@pytest.mark.asyncio
 async def test_mass_edit_stage_bmi_filter_uses_rounded_inches(authed_client, db, test_auth):
     disqualified_stage = _get_stage(db, test_auth.org.id, "disqualified")
 

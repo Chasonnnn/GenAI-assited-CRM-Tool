@@ -22,6 +22,7 @@ class SurrogateMassEditStageFilters(BaseModel):
     stage_ids: list[UUID] | None = None
     source: SurrogateSource | None = None
     queue_id: UUID | None = None
+    owner_id: UUID | None = None
     q: str | None = Field(None, max_length=100)
     include_archived: bool = False
 
