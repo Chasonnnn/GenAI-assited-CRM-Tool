@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 import pytest
 
-from app.db.models import Membership, UserIntegration
+from app.db.models import UserIntegration
 from app.services import oauth_service
 
 
