@@ -41,8 +41,8 @@ from app.services.attachment_service import (
     calculate_checksum,
     generate_signed_url,
     register_storage_cleanup_on_rollback,
+    sanitize_upload_content,
     store_file,
-    strip_exif_data,
 )
 from app.services.import_transformers import transform_height_flexible
 from app.services import job_service
@@ -97,7 +97,7 @@ _FORM_UPLOAD_EXTENSION_TO_MIME_TYPES: dict[str, tuple[str, ...]] = {
     "png": ("image/png",),
     "jpg": ("image/jpeg",),
     "jpeg": ("image/jpeg",),
-    "csv": ("text/csv", "application/csv"),
+    "csv": ("text/csv", "application/csv", "application/vnd.ms-excel"),
     "doc": ("application/msword",),
     "docx": ("application/vnd.openxmlformats-officedocument.wordprocessingml.document",),
     "xls": ("application/vnd.ms-excel",),
@@ -1600,8 +1600,8 @@ def _store_submission_file(
     file_size = file.file.tell()
     file.file.seek(0)
 
-    checksum = calculate_checksum(file.file)
-    processed_file = strip_exif_data(file.file, resolved_content_type)
+    processed_file = sanitize_upload_content(file.filename or "upload", resolved_content_type, file.file)
+    checksum = calculate_checksum(processed_file)
     ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename else ""
     suffix = f".{ext}" if ext else ""
     storage_key = (

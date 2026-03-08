@@ -1,6 +1,8 @@
 """Attachment service for file uploads with security features."""
 
+import csv
 import hashlib
+from io import BytesIO, StringIO
 import logging
 import os
 import shutil
@@ -66,7 +68,7 @@ EXTENSION_TO_MIME_TYPES: dict[str, tuple[str, ...]] = {
     "docx": ("application/vnd.openxmlformats-officedocument.wordprocessingml.document",),
     "xls": ("application/vnd.ms-excel",),
     "xlsx": ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",),
-    "csv": ("text/csv", "application/csv"),
+    "csv": ("text/csv", "application/csv", "application/vnd.ms-excel"),
     "mp4": ("video/mp4",),
     "mov": ("video/quicktime",),
 }
@@ -82,6 +84,8 @@ _EXECUTABLE_SIGNATURE_PREFIXES = (
     b"\xca\xfe\xba\xbe",  # Mach-O fat
     b"\xbe\xba\xfe\xca",  # Mach-O fat (reverse endian)
 )
+_CSV_MIME_TYPES = {"text/csv", "application/csv", "application/vnd.ms-excel"}
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@")
 
 
 # =============================================================================
@@ -138,6 +142,39 @@ def _normalize_content_type(content_type: str | None) -> str:
     if not raw:
         return "application/octet-stream"
     return raw.split(";", 1)[0].strip().lower() or "application/octet-stream"
+
+
+def _sanitize_csv_cell(value: str) -> str:
+    if value and value[0] in _CSV_FORMULA_PREFIXES:
+        return f"'{value}"
+    return value
+
+
+def sanitize_csv(file: BinaryIO) -> BinaryIO:
+    """Escape dangerous spreadsheet formulas in CSV uploads."""
+    try:
+        file.seek(0)
+        decoded = file.read().decode("utf-8-sig")
+        reader = csv.reader(StringIO(decoded, newline=""), strict=True)
+        output = StringIO(newline="")
+        writer = csv.writer(output, lineterminator="\r\n")
+        for row in reader:
+            writer.writerow([_sanitize_csv_cell(cell) for cell in row])
+    except (UnicodeDecodeError, csv.Error) as exc:
+        raise ValueError("Invalid CSV file") from exc
+
+    sanitized = BytesIO(output.getvalue().encode("utf-8"))
+    sanitized.seek(0)
+    return sanitized
+
+
+def sanitize_upload_content(filename: str, content_type: str, file: BinaryIO) -> BinaryIO:
+    """Apply content-specific sanitization before storage."""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    normalized_content_type = _normalize_content_type(content_type)
+    if ext == "csv" or normalized_content_type in _CSV_MIME_TYPES:
+        return sanitize_csv(file)
+    return strip_exif_data(file, normalized_content_type)
 
 
 def validate_file(
@@ -445,11 +482,10 @@ def upload_attachment(
     if head.startswith(_EXECUTABLE_SIGNATURE_PREFIXES):
         raise ValueError("Executable files are not allowed")
 
-    # Calculate checksum
-    checksum = calculate_checksum(file)
+    processed_file = sanitize_upload_content(filename, normalized_content_type, file)
 
-    # Strip EXIF data from images for privacy
-    processed_file = strip_exif_data(file, normalized_content_type)
+    # Calculate checksum
+    checksum = calculate_checksum(processed_file)
 
     # Generate storage key
     attachment_id = uuid.uuid4()
