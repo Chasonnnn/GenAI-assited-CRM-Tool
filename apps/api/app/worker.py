@@ -273,6 +273,18 @@ def _record_job_success(db, job) -> None:
     from app.services import ops_service
     from app.db.enums import IntegrationType
 
+    if job.job_type == JobType.ZAPIER_STAGE_EVENT.value:
+        try:
+            from app.services import zapier_monitor_service
+
+            zapier_monitor_service.mark_job_delivered(
+                db=db,
+                job_id=job.id,
+                attempts=job.attempts,
+            )
+        except Exception as e:
+            logger.warning("Failed to mark Zapier outbound event delivered: %s", e)
+
     # Map job types to integration types
     job_to_integration = {
         JobType.META_LEAD_FETCH.value: IntegrationType.META_LEADS,
@@ -319,6 +331,20 @@ def _record_job_failure(db, job, error_msg: str, exception: Exception | None = N
     """Record failed job for integration health and create alert if final failure."""
     from app.services import ops_service, alert_service
     from app.db.enums import IntegrationType, AlertType, AlertSeverity
+
+    if job.job_type == JobType.ZAPIER_STAGE_EVENT.value:
+        try:
+            from app.services import zapier_monitor_service
+
+            zapier_monitor_service.mark_job_failed(
+                db=db,
+                job_id=job.id,
+                job_status=job.status,
+                attempts=job.attempts,
+                error_message=error_msg,
+            )
+        except Exception as e:
+            logger.warning("Failed to mark Zapier outbound event failed: %s", e)
 
     if not job.organization_id:
         return

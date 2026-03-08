@@ -58,6 +58,7 @@ from app.db.models.integrations import (
     ResendSettings,
     UserIntegration,
     ZapierInboundWebhook,
+    ZapierOutboundEvent,
     ZapierWebhookSettings,
 )
 from app.db.models.intended_parents import IntendedParent, IntendedParentStatusHistory
@@ -233,6 +234,7 @@ __all__ = [
     "RequestMetricsRollup",
     "ResendSettings",
     "ZapierInboundWebhook",
+    "ZapierOutboundEvent",
     "ZapierWebhookSettings",
     "RolePermission",
     "StatusChangeRequest",

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -12,14 +12,34 @@ from sqlalchemy.orm import Session
 from app.core.stage_definitions import LABEL_OVERRIDES
 from app.db.enums import JobType, SurrogateSource
 from app.db.models import MetaLead, Surrogate
-from app.services import job_service, meta_capi, zapier_settings_service
+from app.services import job_service, meta_capi, zapier_monitor_service, zapier_settings_service
 from app.utils.presentation import humanize_identifier
 
 logger = logging.getLogger(__name__)
+MAX_META_LEAD_AGE = timedelta(days=90)
 
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _coerce_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _resolve_meta_lead_timestamp(meta_lead: MetaLead) -> datetime | None:
+    return _coerce_utc(meta_lead.meta_created_time) or _coerce_utc(meta_lead.received_at)
+
+
+def _is_meta_lead_within_reporting_window(meta_lead: MetaLead, *, event_time: datetime) -> bool:
+    lead_timestamp = _resolve_meta_lead_timestamp(meta_lead)
+    if lead_timestamp is None:
+        return True
+    return (event_time - lead_timestamp) <= MAX_META_LEAD_AGE
 
 
 def resolve_mapping_item(mapping: list[dict], stage_key: str) -> dict | None:
@@ -33,6 +53,39 @@ def _resolve_dedupe_key(stage_key: str, mapping: list[dict]) -> str:
     """Deduplicate funnel updates once per Meta status bucket."""
     bucket = zapier_settings_service.resolve_meta_stage_bucket(stage_key, mapping)
     return bucket or stage_key
+
+
+def _skip_event(
+    *,
+    surrogate: Surrogate,
+    source: str,
+    reason: str,
+    stage_key: str,
+    stage_slug: str | None,
+    stage_label: str | None,
+    event_id: str | None = None,
+    event_name: str | None = None,
+    lead_id: str | None = None,
+) -> dict[str, object]:
+    zapier_monitor_service.record_skipped_event(
+        org_id=surrogate.organization_id,
+        source=source,
+        reason=reason,
+        event_id=event_id,
+        event_name=event_name,
+        lead_id=lead_id,
+        stage_key=stage_key,
+        stage_slug=stage_slug,
+        stage_label=stage_label,
+        surrogate_id=surrogate.id,
+    )
+    return {
+        "queued": False,
+        "reason": reason,
+        "event_name": event_name,
+        "event_id": event_id,
+        "lead_id": lead_id,
+    }
 
 
 def build_stage_event_payload(
@@ -122,26 +175,69 @@ def enqueue_stage_event(
     stage_id: str | None = None,
     stage_label: str | None,
     effective_at: datetime | None = None,
+    source: str = "automatic",
 ) -> dict[str, object]:
     """Enqueue a Zapier stage event if configured and applicable."""
     if surrogate.source != SurrogateSource.META.value:
-        return {"queued": False, "reason": "not_meta_source"}
+        return _skip_event(
+            surrogate=surrogate,
+            source=source,
+            reason="not_meta_source",
+            stage_key=stage_key,
+            stage_slug=stage_slug,
+            stage_label=stage_label,
+        )
     if not surrogate.meta_lead_id:
-        return {"queued": False, "reason": "missing_meta_lead_fk"}
+        return _skip_event(
+            surrogate=surrogate,
+            source=source,
+            reason="missing_meta_lead_fk",
+            stage_key=stage_key,
+            stage_slug=stage_slug,
+            stage_label=stage_label,
+        )
 
     settings = zapier_settings_service.get_settings(db, surrogate.organization_id)
     if not settings or not settings.outbound_enabled:
-        return {"queued": False, "reason": "outbound_disabled"}
+        return _skip_event(
+            surrogate=surrogate,
+            source=source,
+            reason="outbound_disabled",
+            stage_key=stage_key,
+            stage_slug=stage_slug,
+            stage_label=stage_label,
+        )
     if not settings.outbound_webhook_url:
-        return {"queued": False, "reason": "missing_webhook_url"}
+        return _skip_event(
+            surrogate=surrogate,
+            source=source,
+            reason="missing_webhook_url",
+            stage_key=stage_key,
+            stage_slug=stage_slug,
+            stage_label=stage_label,
+        )
 
     mapping = zapier_settings_service.normalize_event_mapping(settings.outbound_event_mapping)
     mapping_item = resolve_mapping_item(mapping, stage_key)
     if not mapping_item:
-        return {"queued": False, "reason": "unmapped_stage"}
+        return _skip_event(
+            surrogate=surrogate,
+            source=source,
+            reason="unmapped_stage",
+            stage_key=stage_key,
+            stage_slug=stage_slug,
+            stage_label=stage_label,
+        )
     event_name = str(mapping_item.get("event_name") or "").strip()
     if not event_name:
-        return {"queued": False, "reason": "unmapped_stage"}
+        return _skip_event(
+            surrogate=surrogate,
+            source=source,
+            reason="unmapped_stage",
+            stage_key=stage_key,
+            stage_slug=stage_slug,
+            stage_label=stage_label,
+        )
 
     meta_lead = (
         db.query(MetaLead)
@@ -152,13 +248,41 @@ def enqueue_stage_event(
         .first()
     )
     if not meta_lead:
-        return {"queued": False, "reason": "missing_meta_lead"}
+        return _skip_event(
+            surrogate=surrogate,
+            source=source,
+            reason="missing_meta_lead",
+            stage_key=stage_key,
+            stage_slug=stage_slug,
+            stage_label=stage_label,
+            event_name=event_name,
+        )
     if not meta_lead.meta_lead_id:
-        return {"queued": False, "reason": "missing_meta_lead_id"}
+        return _skip_event(
+            surrogate=surrogate,
+            source=source,
+            reason="missing_meta_lead_id",
+            stage_key=stage_key,
+            stage_slug=stage_slug,
+            stage_label=stage_label,
+            event_name=event_name,
+        )
 
     event_time = effective_at or _now_utc()
+    if not _is_meta_lead_within_reporting_window(meta_lead, event_time=event_time):
+        return _skip_event(
+            surrogate=surrogate,
+            source=source,
+            reason="stale_meta_lead",
+            stage_key=stage_key,
+            stage_slug=stage_slug,
+            stage_label=stage_label,
+            event_name=event_name,
+            lead_id=meta_lead.meta_lead_id,
+        )
     meta_fields = _extract_meta_fields(meta_lead, surrogate)
     dedupe_key = _resolve_dedupe_key(stage_key, mapping)
+    event_id = f"zapier_stage:{meta_lead.meta_lead_id}:{dedupe_key}"
     payload = build_stage_event_payload(
         lead_id=meta_lead.meta_lead_id,
         event_name=event_name,
@@ -172,7 +296,7 @@ def enqueue_stage_event(
         email=surrogate.email,
         phone=surrogate.phone,
         meta_fields=meta_fields,
-        event_id=f"zapier_stage:{meta_lead.meta_lead_id}:{dedupe_key}",
+        event_id=event_id,
     )
 
     headers: dict[str, str] = {}
@@ -196,45 +320,74 @@ def enqueue_stage_event(
         idempotency_key=idempotency_key,
     )
     if existing_job:
-        return {
-            "queued": False,
-            "reason": "duplicate",
-            "event_name": event_name,
-            "idempotency_key": idempotency_key,
-        }
+        return _skip_event(
+            surrogate=surrogate,
+            source=source,
+            reason="duplicate",
+            stage_key=stage_key,
+            stage_slug=stage_slug,
+            stage_label=stage_label,
+            event_id=event_id,
+            event_name=event_name,
+            lead_id=meta_lead.meta_lead_id,
+        ) | {"idempotency_key": idempotency_key}
 
     try:
-        job_service.schedule_job(
+        job = job_service.schedule_job(
             db=db,
             org_id=surrogate.organization_id,
             job_type=JobType.ZAPIER_STAGE_EVENT,
             payload=job_payload,
             idempotency_key=idempotency_key,
         )
+        zapier_monitor_service.record_queued_event(
+            org_id=surrogate.organization_id,
+            job_id=job.id,
+            source=source,
+            event_id=event_id,
+            event_name=event_name,
+            lead_id=meta_lead.meta_lead_id,
+            stage_key=stage_key,
+            stage_slug=stage_slug,
+            stage_label=stage_label,
+            surrogate_id=surrogate.id,
+        )
         return {
             "queued": True,
             "reason": None,
             "event_name": event_name,
+            "event_id": event_id,
+            "lead_id": meta_lead.meta_lead_id,
             "idempotency_key": idempotency_key,
         }
     except IntegrityError:
         db.rollback()
         logger.info("Skipping duplicate Zapier stage event for key=%s", idempotency_key)
-        return {
-            "queued": False,
-            "reason": "duplicate",
-            "event_name": event_name,
-            "idempotency_key": idempotency_key,
-        }
+        return _skip_event(
+            surrogate=surrogate,
+            source=source,
+            reason="duplicate",
+            stage_key=stage_key,
+            stage_slug=stage_slug,
+            stage_label=stage_label,
+            event_id=event_id,
+            event_name=event_name,
+            lead_id=meta_lead.meta_lead_id,
+        ) | {"idempotency_key": idempotency_key}
     except Exception as exc:
         db.rollback()
         logger.warning("Failed to enqueue Zapier stage event: %s", exc)
-        return {
-            "queued": False,
-            "reason": "enqueue_failed",
-            "event_name": event_name,
-            "idempotency_key": idempotency_key,
-        }
+        return _skip_event(
+            surrogate=surrogate,
+            source=source,
+            reason="enqueue_failed",
+            stage_key=stage_key,
+            stage_slug=stage_slug,
+            stage_label=stage_label,
+            event_id=event_id,
+            event_name=event_name,
+            lead_id=meta_lead.meta_lead_id,
+        ) | {"idempotency_key": idempotency_key}
 
 
 def enqueue_test_event(
@@ -288,12 +441,24 @@ def enqueue_test_event(
         "webhook_id": settings.webhook_id,
     }
 
-    job_service.schedule_job(
+    job = job_service.schedule_job(
         db=db,
         org_id=organization_id,
         job_type=JobType.ZAPIER_STAGE_EVENT,
         payload=job_payload,
         idempotency_key=event_id,
     )
+    zapier_monitor_service.record_queued_event(
+        org_id=organization_id,
+        job_id=job.id,
+        source="test",
+        event_id=event_id,
+        event_name=event_name,
+        lead_id=lead_id,
+        stage_key=stage_key,
+        stage_slug=stage_key,
+        stage_label=LABEL_OVERRIDES.get(stage_key, humanize_identifier(stage_key)),
+        surrogate_id=None,
+    )
 
-    return {"event_id": event_id, "event_name": event_name}
+    return {"event_id": event_id, "event_name": event_name, "lead_id": lead_id}

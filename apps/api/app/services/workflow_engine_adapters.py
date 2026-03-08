@@ -720,6 +720,7 @@ class DefaultWorkflowDomainAdapter:
             stage_id=str(stage.id),
             stage_label=stage.label,
             effective_at=datetime.now(timezone.utc),
+            source="workflow",
         )
         if enqueue_result.get("queued"):
             event_name = str(enqueue_result.get("event_name") or "Lead")
@@ -744,6 +745,7 @@ class DefaultWorkflowDomainAdapter:
             "missing_meta_lead_fk": "surrogate is missing a linked Meta lead",
             "missing_meta_lead": "linked Meta lead record was not found",
             "missing_meta_lead_id": "linked Meta lead is missing lead id",
+            "stale_meta_lead": "linked Meta lead is older than 90 days",
             "duplicate": "duplicate event already queued",
             "outbound_disabled": "outbound webhook is disabled",
             "missing_webhook_url": "outbound webhook URL is missing",

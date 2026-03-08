@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
+
 import pytest
 
 
@@ -79,6 +82,68 @@ async def test_zapier_outbound_test_event_queues_job(authed_client, db, test_org
     assert job is not None
     assert job.payload["data"]["lead_id"] == "lead-test-1"
     assert job.payload["data"]["event_name"] == "Qualified"
+    assert data["lead_id"] == "lead-test-1"
+
+
+def test_enqueue_stage_event_skips_meta_leads_older_than_90_days(db, test_org, test_user):
+    from app.db.enums import JobType, SurrogateSource
+    from app.db.models import Job, MetaLead
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import surrogate_service, zapier_outbound_service, zapier_settings_service
+
+    meta_lead = MetaLead(
+        organization_id=test_org.id,
+        meta_lead_id=f"lead-{uuid4().hex[:8]}",
+        meta_form_id="form_1",
+        meta_page_id="page_1",
+        field_data={"email": "stale@example.com"},
+        field_data_raw={"email": "stale@example.com"},
+        received_at=datetime.now(timezone.utc) - timedelta(days=91),
+    )
+    db.add(meta_lead)
+    db.commit()
+    db.refresh(meta_lead)
+
+    surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(
+            full_name="Stale Meta Lead",
+            email="stale@example.com",
+            source=SurrogateSource.META,
+        ),
+    )
+    surrogate.meta_lead_id = meta_lead.id
+    surrogate.meta_form_id = meta_lead.meta_form_id
+
+    settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    settings.outbound_webhook_url = "https://hooks.zapier.com/hooks/catch/123/abc"
+    settings.outbound_enabled = True
+    settings.outbound_event_mapping = [
+        {"stage_key": "pre_qualified", "event_name": "Qualified", "bucket": "qualified", "enabled": True}
+    ]
+    db.commit()
+
+    result = zapier_outbound_service.enqueue_stage_event(
+        db,
+        surrogate,
+        stage_key="pre_qualified",
+        stage_slug="pre_qualified",
+        stage_label="Pre Qualified",
+    )
+
+    assert result["queued"] is False
+    assert result["reason"] == "stale_meta_lead"
+    assert (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.ZAPIER_STAGE_EVENT.value,
+        )
+        .count()
+        == 0
+    )
 
 
 def test_normalize_event_mapping_expands_meta_status_ranges():

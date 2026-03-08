@@ -12,6 +12,7 @@ from sqlalchemy import (
     Boolean,
     ForeignKey,
     Index,
+    Integer,
     String,
     TIMESTAMP,
     Text,
@@ -173,6 +174,65 @@ class ZapierInboundWebhook(Base):
     __table_args__ = (
         Index("idx_zapier_inbound_webhooks_webhook_id", "webhook_id", unique=True),
         Index("idx_zapier_inbound_webhooks_org_id", "organization_id"),
+    )
+
+
+class ZapierOutboundEvent(Base):
+    """
+    Durable event log for outbound Zapier conversion delivery.
+
+    Tracks skipped, queued, delivered, and failed events for monitoring and replay.
+    """
+
+    __tablename__ = "zapier_outbound_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+    source: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'automatic'")
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    event_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    lead_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    stage_key: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    stage_slug: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    stage_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    surrogate_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
+    )
+    delivered_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+
+    organization: Mapped["Organization"] = relationship()
+
+    __table_args__ = (
+        Index("idx_zapier_outbound_events_org_created", "organization_id", "created_at"),
+        Index("idx_zapier_outbound_events_org_status", "organization_id", "status", "created_at"),
+        Index(
+            "uq_zapier_outbound_events_job_id",
+            "job_id",
+            unique=True,
+            postgresql_where=text("job_id IS NOT NULL"),
+        ),
     )
 
 

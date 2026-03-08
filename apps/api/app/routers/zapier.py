@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Annotated
+from typing import Annotated, Literal
+from uuid import UUID
 
-
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -16,6 +16,7 @@ from app.core.permissions import PermissionKey as P
 from app.schemas.auth import UserSession
 from app.services import (
     meta_form_mapping_service,
+    zapier_monitor_service,
     zapier_settings_service,
     zapier_outbound_service,
 )
@@ -107,6 +108,52 @@ class ZapierOutboundTestResponse(BaseModel):
     status: str
     event_name: str
     event_id: str
+    lead_id: str
+
+
+class ZapierOutboundEventResponse(BaseModel):
+    id: UUID
+    source: str
+    status: str
+    reason: str | None = None
+    event_id: str | None = None
+    event_name: str | None = None
+    lead_id: str | None = None
+    stage_key: str | None = None
+    stage_slug: str | None = None
+    stage_label: str | None = None
+    surrogate_id: UUID | None = None
+    attempts: int
+    last_error: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    delivered_at: datetime | None = None
+    last_attempt_at: datetime | None = None
+    can_retry: bool
+
+
+class ZapierOutboundEventsResponse(BaseModel):
+    items: list[ZapierOutboundEventResponse]
+    total: int
+
+
+class ZapierOutboundEventsSummaryResponse(BaseModel):
+    window_hours: int
+    total_count: int
+    queued_count: int
+    delivered_count: int
+    failed_count: int
+    skipped_count: int
+    actionable_skipped_count: int
+    failure_rate: float
+    skipped_rate: float
+    failure_rate_alert: bool
+    skipped_rate_alert: bool
+    warning_messages: list[str]
+
+
+class ZapierRetryOutboundEventRequest(BaseModel):
+    reason: str | None = None
 
 
 class ZapierFieldPasteRequest(BaseModel):
@@ -407,7 +454,7 @@ def send_outbound_test(
     if not event_name:
         raise HTTPException(status_code=400, detail="Stage is not enabled for outbound events.")
 
-    lead_id = data.lead_id or f"zapier-test-{session.org_id}"
+    lead_id = (data.lead_id or "").strip() or f"zapier-test-{session.org_id}"
 
     result = zapier_outbound_service.enqueue_test_event(
         db,
@@ -418,6 +465,72 @@ def send_outbound_test(
         include_hashed_pii=settings.outbound_send_hashed_pii,
     )
     return ZapierOutboundTestResponse(status="queued", **result)
+
+
+@router.get("/events", response_model=ZapierOutboundEventsResponse)
+def list_outbound_events(
+    status: Annotated[
+        Literal["queued", "delivered", "failed", "skipped"] | None,
+        Query(),
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
+):
+    items, total = zapier_monitor_service.list_events(
+        db,
+        org_id=session.org_id,
+        status=status,
+        limit=limit,
+        offset=offset,
+    )
+    return ZapierOutboundEventsResponse(
+        items=[_serialize_outbound_event(item) for item in items],
+        total=total,
+    )
+
+
+@router.get("/events/summary", response_model=ZapierOutboundEventsSummaryResponse)
+def get_outbound_events_summary(
+    window_hours: Annotated[int, Query(ge=1, le=24 * 30)] = 24,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
+):
+    return ZapierOutboundEventsSummaryResponse(
+        **zapier_monitor_service.get_summary(
+            db,
+            org_id=session.org_id,
+            window_hours=window_hours,
+        )
+    )
+
+
+@router.post("/events/{event_id}/retry", response_model=ZapierOutboundEventResponse)
+def retry_outbound_event(
+    event_id: UUID,
+    data: ZapierRetryOutboundEventRequest,
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
+):
+    try:
+        event = zapier_monitor_service.retry_failed_event(
+            db,
+            org_id=session.org_id,
+            event_id=event_id,
+            reason=data.reason,
+        )
+    except ValueError as exc:
+        status_code = 404 if str(exc) == "Event not found" else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    return _serialize_outbound_event(event)
 
 
 def _serialize_settings(
@@ -450,4 +563,27 @@ def _serialize_settings(
         outbound_secret_configured=bool(settings.outbound_webhook_secret_encrypted),
         send_hashed_pii=bool(settings.outbound_send_hashed_pii),
         event_mapping=mapping,
+    )
+
+
+def _serialize_outbound_event(event) -> ZapierOutboundEventResponse:
+    return ZapierOutboundEventResponse(
+        id=event.id,
+        source=event.source,
+        status=event.status,
+        reason=event.reason,
+        event_id=event.event_id,
+        event_name=event.event_name,
+        lead_id=event.lead_id,
+        stage_key=event.stage_key,
+        stage_slug=event.stage_slug,
+        stage_label=event.stage_label,
+        surrogate_id=event.surrogate_id,
+        attempts=event.attempts,
+        last_error=event.last_error,
+        created_at=event.created_at,
+        updated_at=event.updated_at,
+        delivered_at=event.delivered_at,
+        last_attempt_at=event.last_attempt_at,
+        can_retry=event.status == "failed" and event.job_id is not None,
     )
