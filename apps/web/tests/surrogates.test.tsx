@@ -15,6 +15,8 @@ vi.mock('next/link', () => ({
 
 const mockSearchParams = new URLSearchParams()
 const mockRouterReplace = vi.fn()
+const mockMassEditStageModal = vi.fn()
+const mockUseAuth = vi.fn()
 
 // Mock Next.js navigation
 vi.mock('next/navigation', () => ({
@@ -26,6 +28,13 @@ vi.mock('next/navigation', () => ({
         push: vi.fn(),
         replace: mockRouterReplace,
     }),
+}))
+
+vi.mock('@/components/surrogates/MassEditStageModal', () => ({
+    MassEditStageModal: (props: unknown) => {
+        mockMassEditStageModal(props)
+        return null
+    },
 }))
 
 // Mock API hooks
@@ -60,7 +69,7 @@ vi.mock('@/lib/hooks/use-queues', () => ({
 
 // Mock Auth
 vi.mock('@/lib/auth-context', () => ({
-    useAuth: () => ({ user: { role: 'admin' } }),
+    useAuth: () => mockUseAuth(),
 }))
 
 // Mock UI components that might cause issues in JSDOM or are complex
@@ -94,6 +103,24 @@ describe('SurrogatesPage', () => {
         mockSearchParams.delete('q')
         mockSearchParams.delete('owner_id')
         mockSearchParams.delete('dynamic_filter')
+        mockSearchParams.delete('range')
+        mockSearchParams.delete('from')
+        mockSearchParams.delete('to')
+        mockUseSurrogates.mockReset()
+        mockUseArchiveSurrogate.mockReset()
+        mockUseRestoreSurrogate.mockReset()
+        mockUseUpdateSurrogate.mockReset()
+        mockUseCreateSurrogate.mockReset()
+        mockUseAssignees.mockReset()
+        mockUseBulkAssign.mockReset()
+        mockUseBulkArchive.mockReset()
+        mockUseIntelligentSuggestionSummary.mockReset()
+        mockUseSurrogateCreatedDates.mockReset()
+        mockUseQueues.mockReset()
+        mockRouterReplace.mockReset()
+        mockMassEditStageModal.mockReset()
+        mockUseAuth.mockReset()
+        mockUseAuth.mockReturnValue({ user: { role: 'admin', user_id: 'admin-1' } })
         mockUseArchiveSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseRestoreSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseUpdateSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
@@ -255,6 +282,104 @@ describe('SurrogatesPage', () => {
                 owner_id: 'user-123',
             })
         )
+    })
+
+    it('shows assignee filter for admin users only', () => {
+        mockUseAssignees.mockReturnValue({
+            data: [{ id: 'user-123', name: 'Case Manager A', role: 'case_manager' }],
+        })
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        const { rerender } = render(<SurrogatesPage />)
+        expect(screen.getByText('All Assignees')).toBeInTheDocument()
+
+        mockUseAuth.mockReturnValue({ user: { role: 'case_manager', user_id: 'cm-1' } })
+        rerender(<SurrogatesPage />)
+
+        expect(screen.queryByText('All Assignees')).not.toBeInTheDocument()
+    })
+
+    it('combines assignee and dynamic filters with other filters using AND semantics', () => {
+        mockSearchParams.set('owner_id', 'user-123')
+        mockSearchParams.set('dynamic_filter', 'attention_unreached')
+        mockSearchParams.set('stage', 'stage-1')
+        mockSearchParams.set('source', 'manual')
+        mockSearchParams.set('queue', 'queue-1')
+        mockSearchParams.set('q', 'alpha')
+        mockSearchParams.set('range', 'custom')
+        mockSearchParams.set('from', '2025-01-10')
+        mockSearchParams.set('to', '2025-01-15')
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        expect(mockUseSurrogates).toHaveBeenCalledWith(
+            expect.objectContaining({
+                owner_id: 'user-123',
+                dynamic_filter: 'attention_unreached',
+                stage_id: 'stage-1',
+                source: 'manual',
+                queue_id: 'queue-1',
+                q: 'alpha',
+                created_from: '2025-01-10',
+                created_to: '2025-01-15',
+            })
+        )
+        expect(mockUseSurrogateCreatedDates).toHaveBeenCalledWith(
+            expect.objectContaining({
+                owner_id: 'user-123',
+                dynamic_filter: 'attention_unreached',
+                stage_id: 'stage-1',
+                source: 'manual',
+                queue_id: 'queue-1',
+                q: 'alpha',
+            }),
+        )
+    })
+
+    it('passes owner_id into developer mass edit base filters', () => {
+        mockUseAuth.mockReturnValue({ user: { role: 'developer', user_id: 'dev-1' } })
+        mockSearchParams.set('owner_id', 'user-123')
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        expect(mockMassEditStageModal).toHaveBeenCalled()
+        const latestProps = mockMassEditStageModal.mock.calls.at(-1)?.[0] as {
+            baseFilters: Record<string, unknown>
+        }
+        expect(latestProps.baseFilters).toEqual(
+            expect.objectContaining({
+                owner_id: 'user-123',
+            })
+        )
+    })
+
+    it('shows Reset Filter when only owner_id is active and clears filters', () => {
+        mockSearchParams.set('owner_id', 'user-123')
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Reset Filter' }))
+
+        expect(mockRouterReplace).toHaveBeenCalledWith('/surrogates', { scroll: false })
     })
 
     it('applies dynamic_filter from URL params', () => {

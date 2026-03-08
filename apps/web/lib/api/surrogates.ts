@@ -482,6 +482,7 @@ export interface SurrogateMassEditStageFilters {
     stage_ids?: string[]; // Current stage filter
     source?: SurrogateSource;
     queue_id?: string;
+    owner_id?: string;
     q?: string;
     created_from?: string; // YYYY-MM-DD
     created_to?: string; // YYYY-MM-DD

@@ -194,12 +194,16 @@ export default function SurrogatesPage() {
     const urlFrom = searchParams.get("from")
     const urlTo = searchParams.get("to")
     const urlDynamicFilter = searchParams.get("dynamic_filter")
+    const { user } = useAuth()
+    const canFilterByAssignee = user?.role === "admin" || user?.role === "developer"
+    const effectiveUrlOwnerId = canFilterByAssignee ? urlOwnerId : null
 
     const [stageFilter, setStageFilter] = useState<string>(urlStage || "all")
     const [sourceFilter, setSourceFilter] = useState<SourceFilter>(
         isSourceFilter(urlSource) ? urlSource : "all"
     )
     const [queueFilter, setQueueFilter] = useState<string>(urlQueue || "all")
+    const [ownerFilter, setOwnerFilter] = useState<string>(effectiveUrlOwnerId || "all")
     const initialRange = isDateRangePreset(urlRange) ? urlRange : "all"
     const initialCustomRange = initialRange === "custom"
         ? {
@@ -226,7 +230,7 @@ export default function SurrogatesPage() {
         source: "manual" as SurrogateSource,
     })
     const perPage = 30
-    const { user } = useAuth()
+    const { data: assignees } = useAssignees()
     const createMutation = useCreateSurrogate()
     const { data: intelligentSummary } = useIntelligentSuggestionSummary()
     const [isFilterPending, startFilterTransition] = useTransition()
@@ -238,71 +242,79 @@ export default function SurrogatesPage() {
         source: SourceFilter,
         queue: string,
         search: string,
+        owner: string,
         currentPage: number,
         range: DateRangePreset,
         rangeDates: { from: Date | undefined; to: Date | undefined },
         activeDynamicFilter: DynamicSurrogateFilter | null,
     ) => {
         const newParams = new URLSearchParams(searchParams.toString())
+
         if (activeDynamicFilter) {
             newParams.set("dynamic_filter", activeDynamicFilter)
-            newParams.delete("stage")
-            newParams.delete("source")
-            newParams.delete("queue")
-            newParams.delete("q")
-            newParams.delete("range")
-            newParams.delete("from")
-            newParams.delete("to")
         } else {
             newParams.delete("dynamic_filter")
-            if (stage !== "all") {
-                newParams.set("stage", stage)
-            } else {
-                newParams.delete("stage")
-            }
-            if (source !== "all") {
-                newParams.set("source", source)
-            } else {
-                newParams.delete("source")
-            }
-            if (queue !== "all") {
-                newParams.set("queue", queue)
-            } else {
-                newParams.delete("queue")
-            }
-            if (search) {
-                newParams.set("q", search)
-            } else {
-                newParams.delete("q")
-            }
-            if (range !== "all") {
-                newParams.set("range", range)
-                if (range === "custom") {
-                    if (rangeDates.from) {
-                        newParams.set("from", formatLocalDate(rangeDates.from))
-                    } else {
-                        newParams.delete("from")
-                    }
-                    if (rangeDates.to) {
-                        newParams.set("to", formatLocalDate(rangeDates.to))
-                    } else {
-                        newParams.delete("to")
-                    }
+        }
+
+        if (stage !== "all") {
+            newParams.set("stage", stage)
+        } else {
+            newParams.delete("stage")
+        }
+
+        if (source !== "all") {
+            newParams.set("source", source)
+        } else {
+            newParams.delete("source")
+        }
+
+        if (queue !== "all") {
+            newParams.set("queue", queue)
+        } else {
+            newParams.delete("queue")
+        }
+
+        if (search) {
+            newParams.set("q", search)
+        } else {
+            newParams.delete("q")
+        }
+
+        if (owner !== "all") {
+            newParams.set("owner_id", owner)
+        } else {
+            newParams.delete("owner_id")
+        }
+
+        if (range !== "all") {
+            newParams.set("range", range)
+            if (range === "custom") {
+                if (rangeDates.from) {
+                    newParams.set("from", formatLocalDate(rangeDates.from))
                 } else {
                     newParams.delete("from")
+                }
+                if (rangeDates.to) {
+                    newParams.set("to", formatLocalDate(rangeDates.to))
+                } else {
                     newParams.delete("to")
                 }
             } else {
-                newParams.delete("range")
                 newParams.delete("from")
                 newParams.delete("to")
             }
+        } else {
+            newParams.delete("range")
+            newParams.delete("from")
+            newParams.delete("to")
         }
+
         if (currentPage > 1) {
             newParams.set("page", String(currentPage))
         } else {
             newParams.delete("page")
         }
+
         const nextQuery = newParams.toString()
         const currentQuery = searchParams.toString()
         if (nextQuery === currentQuery) return
@@ -317,32 +329,40 @@ export default function SurrogatesPage() {
         startFilterTransition(() => {
             setStageFilter(stage)
             setPage(1)
-            updateUrlParams(stage, sourceFilter, queueFilter, debouncedSearch, 1, dateRange, customRange, dynamicFilter)
+            updateUrlParams(stage, sourceFilter, queueFilter, debouncedSearch, ownerFilter, 1, dateRange, customRange, dynamicFilter)
         })
-    }, [sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange, dynamicFilter])
+    }, [sourceFilter, queueFilter, debouncedSearch, ownerFilter, updateUrlParams, dateRange, customRange, dynamicFilter])
 
     const handleSourceChange = useCallback((source: SourceFilter) => {
         startFilterTransition(() => {
             setSourceFilter(source)
             setPage(1)
-            updateUrlParams(stageFilter, source, queueFilter, debouncedSearch, 1, dateRange, customRange, dynamicFilter)
+            updateUrlParams(stageFilter, source, queueFilter, debouncedSearch, ownerFilter, 1, dateRange, customRange, dynamicFilter)
         })
-    }, [stageFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange, dynamicFilter])
+    }, [stageFilter, queueFilter, debouncedSearch, ownerFilter, updateUrlParams, dateRange, customRange, dynamicFilter])
 
     const handleQueueChange = useCallback((queue: string) => {
         startFilterTransition(() => {
             setQueueFilter(queue)
             setPage(1)
-            updateUrlParams(stageFilter, sourceFilter, queue, debouncedSearch, 1, dateRange, customRange, dynamicFilter)
+            updateUrlParams(stageFilter, sourceFilter, queue, debouncedSearch, ownerFilter, 1, dateRange, customRange, dynamicFilter)
         })
-    }, [stageFilter, sourceFilter, debouncedSearch, updateUrlParams, dateRange, customRange, dynamicFilter])
+    }, [stageFilter, sourceFilter, debouncedSearch, ownerFilter, updateUrlParams, dateRange, customRange, dynamicFilter])
+
+    const handleOwnerChange = useCallback((owner: string) => {
+        startFilterTransition(() => {
+            setOwnerFilter(owner)
+            setPage(1)
+            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, owner, 1, dateRange, customRange, dynamicFilter)
+        })
+    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange, dynamicFilter])
 
     const handlePageChange = useCallback((nextPage: number) => {
         startFilterTransition(() => {
             setPage(nextPage)
-            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, nextPage, dateRange, customRange, dynamicFilter)
+            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, ownerFilter, nextPage, dateRange, customRange, dynamicFilter)
         })
-    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange, dynamicFilter])
+    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, ownerFilter, updateUrlParams, dateRange, customRange, dynamicFilter])
 
     const handlePresetChange = useCallback((preset: DateRangePreset) => {
         startFilterTransition(() => {
@@ -351,9 +371,9 @@ export default function SurrogatesPage() {
                 setCustomRange({ from: undefined, to: undefined })
             }
             setPage(1)
-            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, 1, preset, preset === "custom" ? customRange : { from: undefined, to: undefined }, dynamicFilter)
+            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, ownerFilter, 1, preset, preset === "custom" ? customRange : { from: undefined, to: undefined }, dynamicFilter)
         })
-    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, updateUrlParams, customRange, dynamicFilter])
+    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, ownerFilter, updateUrlParams, customRange, dynamicFilter])
 
     const handleCustomRangeChange = useCallback((range: { from: Date | undefined; to: Date | undefined }) => {
         startFilterTransition(() => {
@@ -362,9 +382,9 @@ export default function SurrogatesPage() {
                 setDateRange("custom")
             }
             setPage(1)
-            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, 1, "custom", range, dynamicFilter)
+            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, ownerFilter, 1, "custom", range, dynamicFilter)
         })
-    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, dynamicFilter])
+    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, ownerFilter, updateUrlParams, dateRange, dynamicFilter])
 
     const handleIntelligentSuggestionToggle = useCallback(() => {
         startFilterTransition(() => {
@@ -377,6 +397,7 @@ export default function SurrogatesPage() {
                 sourceFilter,
                 queueFilter,
                 debouncedSearch,
+                ownerFilter,
                 1,
                 dateRange,
                 customRange,
@@ -388,6 +409,7 @@ export default function SurrogatesPage() {
         dateRange,
         debouncedSearch,
         dynamicFilter,
+        ownerFilter,
         queueFilter,
         sourceFilter,
         stageFilter,
@@ -414,15 +436,12 @@ export default function SurrogatesPage() {
             hasSyncedSearchRef.current = true
             return
         }
-        if (dynamicFilter) {
-            return
-        }
         const urlSearchValue = searchParams.get("q") || ""
         if (debouncedSearch !== urlSearchValue) {
             setPage(1)
-            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, 1, dateRange, customRange, dynamicFilter)
+            updateUrlParams(stageFilter, sourceFilter, queueFilter, debouncedSearch, ownerFilter, 1, dateRange, customRange, dynamicFilter)
         }
-    }, [debouncedSearch, searchParams, stageFilter, sourceFilter, queueFilter, updateUrlParams, dateRange, customRange, dynamicFilter])
+    }, [debouncedSearch, searchParams, stageFilter, sourceFilter, queueFilter, ownerFilter, updateUrlParams, dateRange, customRange, dynamicFilter])
 
     // Sync state when URL changes (back/forward)
     useEffect(() => {
@@ -434,48 +453,48 @@ export default function SurrogatesPage() {
             setDynamicFilter(nextDynamicFilter)
         }
 
-        if (!nextDynamicFilter) {
-            const nextStage = searchParams.get("stage") || "all"
-            if (nextStage !== stageFilter) {
-                setStageFilter(nextStage)
-            }
-            const nextSource = isSourceFilter(searchParams.get("source")) ? searchParams.get("source") as SourceFilter : "all"
-            if (nextSource !== sourceFilter) {
-                setSourceFilter(nextSource)
-            }
-            const nextQueue = searchParams.get("queue") || "all"
-            if (nextQueue !== queueFilter) {
-                setQueueFilter(nextQueue)
-            }
-            const nextSearch = searchParams.get("q") || ""
-            if (nextSearch !== searchQuery) {
-                setSearchQuery(nextSearch)
-            }
-            if (nextSearch !== debouncedSearch) {
-                setDebouncedSearch(nextSearch)
-            }
+        const nextStage = searchParams.get("stage") || "all"
+        if (nextStage !== stageFilter) {
+            setStageFilter(nextStage)
+        }
+        const nextSource = isSourceFilter(searchParams.get("source")) ? searchParams.get("source") as SourceFilter : "all"
+        if (nextSource !== sourceFilter) {
+            setSourceFilter(nextSource)
+        }
+        const nextQueue = searchParams.get("queue") || "all"
+        if (nextQueue !== queueFilter) {
+            setQueueFilter(nextQueue)
+        }
+        const nextOwner = canFilterByAssignee ? (searchParams.get("owner_id") || "all") : "all"
+        if (nextOwner !== ownerFilter) {
+            setOwnerFilter(nextOwner)
+        }
+        const nextSearch = searchParams.get("q") || ""
+        if (nextSearch !== searchQuery) {
+            setSearchQuery(nextSearch)
+        }
+        if (nextSearch !== debouncedSearch) {
+            setDebouncedSearch(nextSearch)
         }
 
         const nextPage = parsePageParam(searchParams.get("page"))
         if (nextPage !== page) {
             setPage(nextPage)
         }
-        if (!nextDynamicFilter) {
-            const nextRange = isDateRangePreset(searchParams.get("range")) ? searchParams.get("range") as DateRangePreset : "all"
-            if (nextRange !== dateRange) {
-                setDateRange(nextRange)
-            }
-            if (nextRange === "custom") {
-                const nextFrom = parseDateParam(searchParams.get("from"))
-                const nextTo = parseDateParam(searchParams.get("to"))
-                if (!datesEqual(nextFrom, customRange.from) || !datesEqual(nextTo, customRange.to)) {
-                    setCustomRange({ from: nextFrom, to: nextTo })
-                }
-            } else if (customRange.from || customRange.to) {
-                setCustomRange({ from: undefined, to: undefined })
-            }
+        const nextRange = isDateRangePreset(searchParams.get("range")) ? searchParams.get("range") as DateRangePreset : "all"
+        if (nextRange !== dateRange) {
+            setDateRange(nextRange)
         }
-    }, [currentQuery]) // eslint-disable-line react-hooks/exhaustive-deps
+        if (nextRange === "custom") {
+            const nextFrom = parseDateParam(searchParams.get("from"))
+            const nextTo = parseDateParam(searchParams.get("to"))
+            if (!datesEqual(nextFrom, customRange.from) || !datesEqual(nextTo, customRange.to)) {
+                setCustomRange({ from: nextFrom, to: nextTo })
+            }
+        } else if (customRange.from || customRange.to) {
+            setCustomRange({ from: undefined, to: undefined })
+        }
+    }, [canFilterByAssignee, currentQuery]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Convert date range to ISO strings
     const getDateRangeParams = () => {
@@ -501,11 +520,11 @@ export default function SurrogatesPage() {
         ...(stageFilter === "all" ? {} : { stage_ids: [stageFilter] }),
         ...(sourceFilter === "all" ? {} : { source: sourceFilter as SurrogateSource }),
         ...(queueFilter === "all" ? {} : { queue_id: queueFilter }),
+        ...(ownerFilter === "all" ? {} : { owner_id: ownerFilter }),
         ...(debouncedSearch ? { q: debouncedSearch } : {}),
         ...getDateRangeParams(),
     }
 
-    const isDynamicFilterMode = dynamicFilter !== null
     const isIntelligentDynamicFilter = dynamicFilter?.startsWith("intelligent_") ?? false
     const intelligentSuggestionCount = intelligentSummary?.total ?? 0
     const hasIntelligentSuggestions = intelligentSuggestionCount > 0
@@ -517,25 +536,22 @@ export default function SurrogatesPage() {
         ...(sourceFilter === "all" ? {} : { source: sourceFilter }),
         ...(debouncedSearch ? { q: debouncedSearch } : {}),
         ...(queueFilter === "all" ? {} : { queue_id: queueFilter }),
-        ...(urlOwnerId ? { owner_id: urlOwnerId } : {}),
+        ...(ownerFilter === "all" ? {} : { owner_id: ownerFilter }),
     } as const
 
-    const { data: availableCreatedDateKeys } = useSurrogateCreatedDates(createdDateFilters, {
-        enabled: !isDynamicFilterMode,
-    })
+    const { data: availableCreatedDateKeys } = useSurrogateCreatedDates(createdDateFilters)
 
     const { data, isLoading, isError, error, refetch } = useSurrogates({
         page,
         per_page: perPage,
         sort_order: sortOrder,
-        ...(urlOwnerId ? { owner_id: urlOwnerId } : {}),
-        ...(dynamicFilter ? { dynamic_filter: dynamicFilter } : {
-            ...getDateRangeParams(),
-            ...(stageFilter === "all" ? {} : { stage_id: stageFilter }),
-            ...(sourceFilter === "all" ? {} : { source: sourceFilter }),
-            ...(debouncedSearch ? { q: debouncedSearch } : {}),
-            ...(queueFilter === "all" ? {} : { queue_id: queueFilter }),
-        }),
+        ...getDateRangeParams(),
+        ...(stageFilter === "all" ? {} : { stage_id: stageFilter }),
+        ...(sourceFilter === "all" ? {} : { source: sourceFilter }),
+        ...(debouncedSearch ? { q: debouncedSearch } : {}),
+        ...(queueFilter === "all" ? {} : { queue_id: queueFilter }),
+        ...(ownerFilter === "all" ? {} : { owner_id: ownerFilter }),
+        ...(dynamicFilter ? { dynamic_filter: dynamicFilter } : {}),
         ...(sortBy ? { sort_by: sortBy } : {}),
     })
 
@@ -560,12 +576,13 @@ export default function SurrogatesPage() {
     const restoreMutation = useRestoreSurrogate()
     const updateMutation = useUpdateSurrogate()
 
-    const hasActiveFilters = dynamicFilter !== null || stageFilter !== "all" || sourceFilter !== "all" || queueFilter !== "all" || searchQuery !== "" || dateRange !== "all"
+    const hasActiveFilters = dynamicFilter !== null || stageFilter !== "all" || sourceFilter !== "all" || queueFilter !== "all" || ownerFilter !== "all" || searchQuery !== "" || dateRange !== "all"
 
     const resetFilters = useCallback(() => {
         setStageFilter("all")
         setSourceFilter("all")
         setQueueFilter("all")
+        setOwnerFilter("all")
         setDynamicFilter(null)
         setDateRange("all")
         setCustomRange({ from: undefined, to: undefined })
@@ -699,7 +716,6 @@ export default function SurrogatesPage() {
                     <Select
                         value={stageFilter}
                         onValueChange={(value) => handleStageChange(value || "all")}
-                        disabled={isDynamicFilterMode}
                     >
                         <SelectTrigger className="w-full sm:w-[180px]">
                             <SelectValue placeholder="All Stages">
@@ -725,7 +741,6 @@ export default function SurrogatesPage() {
                         onValueChange={(value) =>
                             handleSourceChange(isSourceFilter(value) ? value : "all")
                         }
-                        disabled={isDynamicFilterMode}
                     >
                         <SelectTrigger className="w-full sm:w-[180px]">
                             <SelectValue placeholder="All Sources">
@@ -756,22 +771,19 @@ export default function SurrogatesPage() {
                         </SelectContent>
                     </Select>
 
-                    <div className={cn(isDynamicFilterMode && "pointer-events-none opacity-60")}>
-                        <DateRangePicker
-                            preset={dateRange}
-                            onPresetChange={handlePresetChange}
-                            customRange={customRange}
-                            onCustomRangeChange={handleCustomRangeChange}
-                            availableDateKeys={availableCreatedDateKeys ?? []}
-                        />
-                    </div>
+                    <DateRangePicker
+                        preset={dateRange}
+                        onPresetChange={handlePresetChange}
+                        customRange={customRange}
+                        onCustomRangeChange={handleCustomRangeChange}
+                        availableDateKeys={availableCreatedDateKeys ?? []}
+                    />
 
                     {/* Queue Filter (case_manager+ only) */}
                     {canSeeQueues && queues && queues.length > 0 && (
                         <Select
                             value={queueFilter}
                             onValueChange={(value) => handleQueueChange(value || "all")}
-                            disabled={isDynamicFilterMode}
                         >
                             <SelectTrigger className="w-full sm:w-[180px]">
                                 <UsersIcon className="h-4 w-4 mr-2" />
@@ -792,22 +804,46 @@ export default function SurrogatesPage() {
                         </Select>
                     )}
 
+                    {canFilterByAssignee && (
+                        <Select
+                            value={ownerFilter}
+                            onValueChange={(value) => handleOwnerChange(value || "all")}
+                        >
+                            <SelectTrigger className="w-full sm:w-[180px]" aria-label="Filter by assignee">
+                                <SelectValue placeholder="All Assignees">
+                                    {(value: string | null) => {
+                                        if (!value || value === "all") return "All Assignees"
+                                        const assignee = assignees?.find((item) => item.id === value)
+                                        return assignee?.name ?? value
+                                    }}
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Assignees</SelectItem>
+                                {(assignees ?? []).map((assignee) => (
+                                    <SelectItem key={assignee.id} value={assignee.id}>
+                                        {assignee.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
+
                     <div className="relative w-full sm:ml-auto sm:w-[280px]">
                         <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
-                            placeholder={isDynamicFilterMode ? "Search disabled in dynamic filter mode" : "Search surrogates..."}
+                            placeholder="Search surrogates..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="pl-9"
                             aria-label="Search surrogates"
-                            disabled={isDynamicFilterMode}
                         />
                     </div>
 
                     {hasActiveFilters && (
                         <Button variant="ghost" onClick={resetFilters}>
                             <XIcon className="mr-2 size-4" />
-                            Reset
+                            Reset Filter
                         </Button>
                     )}
                 </div>
