@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.25](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.24...surrogacy-crm-platform-v0.90.25) (2026-03-08)
+
+
+### Bug Fixes
+
+* expose zapier funnel matching fields ([83c790a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/83c790a606a7d6c63fdf8e5c3ce3689549733ace))
+* surface meta form conversion blockers ([97d9a1d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/97d9a1d9d90e061535d95b60ee1f75751d060333))
+
 ## [0.90.24](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.23...surrogacy-crm-platform-v0.90.24) (2026-03-08)
 
 
