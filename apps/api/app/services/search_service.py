@@ -12,7 +12,7 @@ from typing import TypedDict
 from uuid import UUID
 
 from fastapi import Request
-from sqlalchemy import and_, cast, func, literal, or_, select, true, union_all
+from sqlalchemy import and_, func, literal, or_, select, true, union_all
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -287,21 +287,17 @@ def _global_search_unified(
             if branch_limit <= 0:
                 return stmt.limit(0)
 
-            branch = stmt.subquery()
-            return (
-                select(
-                    branch.c.entity_type,
-                    branch.c.entity_id,
-                    branch.c.title,
-                    branch.c.snippet,
-                    branch.c.rank,
-                    cast(branch.c.surrogate_id, surrogate_table.c.id.type).label("surrogate_id"),
-                    branch.c.surrogate_name,
-                    branch.c.created_at,
-                )
-                .order_by(branch.c.rank.desc(), branch.c.created_at.desc())
-                .limit(branch_limit)
-            )
+            selected_columns = stmt.selected_columns
+            return stmt.order_by(
+                selected_columns["rank"].desc(),
+                selected_columns["created_at"].desc(),
+            ).limit(branch_limit)
+
+        def _null_surrogate_id():
+            return literal(None, type_=surrogate_table.c.id.type).label("surrogate_id")
+
+        def _null_surrogate_name():
+            return literal(None, type_=surrogate_table.c.full_name.type).label("surrogate_name")
 
         surrogate_access_filter = _build_surrogate_access_filter(
             role,
@@ -493,8 +489,8 @@ def _global_search_unified(
                         ).label("title"),
                         note_snippet,
                         note_rank,
-                        literal(None).label("surrogate_id"),
-                        literal(None).label("surrogate_name"),
+                        _null_surrogate_id(),
+                        _null_surrogate_name(),
                         notes_table.c.created_at.label("created_at"),
                     )
                     .select_from(ip_note_from)
@@ -556,8 +552,8 @@ def _global_search_unified(
                         ),
                         literal("").label("snippet"),
                         attachment_rank,
-                        literal(None).label("surrogate_id"),
-                        literal(None).label("surrogate_name"),
+                        _null_surrogate_id(),
+                        _null_surrogate_name(),
                         attachments_table.c.created_at.label("created_at"),
                     )
                     .select_from(ip_attachment_from)
@@ -594,8 +590,8 @@ def _global_search_unified(
                             "snippet"
                         ),
                         literal(2.0).label("rank"),
-                        literal(None).label("surrogate_id"),
-                        literal(None).label("surrogate_name"),
+                        _null_surrogate_id(),
+                        _null_surrogate_name(),
                         ip_table.c.created_at.label("created_at"),
                     ).where(ip_table.c.organization_id == org_id, or_(*hash_filters))
                 )
@@ -614,8 +610,8 @@ def _global_search_unified(
                     ).label("title"),
                     func.coalesce(ip_table.c.intended_parent_number, literal("")).label("snippet"),
                     ip_rank,
-                    literal(None).label("surrogate_id"),
-                    literal(None).label("surrogate_name"),
+                    _null_surrogate_id(),
+                    _null_surrogate_name(),
                     ip_table.c.created_at.label("created_at"),
                 ).where(
                     ip_table.c.organization_id == org_id,
@@ -653,8 +649,8 @@ def _global_search_unified(
                             "snippet"
                         ),
                         literal(0.5).label("rank"),
-                        literal(None).label("surrogate_id"),
-                        literal(None).label("surrogate_name"),
+                        _null_surrogate_id(),
+                        _null_surrogate_name(),
                         ip_table.c.created_at.label("created_at"),
                     ).where(
                         ip_table.c.organization_id == org_id,

@@ -31,7 +31,9 @@ def test_global_search_uses_single_unified_query(db, test_org, test_user, monkey
     assert len(execute_calls) == 1
 
 
-def test_global_search_builds_union_all_query(db, test_org, test_user, monkeypatch):
+def test_global_search_applies_branch_limits_without_wrapper_subqueries(
+    db, test_org, test_user, monkeypatch
+):
     captured_statements: list[object] = []
     original_execute = db.execute
 
@@ -60,3 +62,4 @@ def test_global_search_builds_union_all_query(db, test_org, test_user, monkeypat
     sql = str(captured_statements[0]).upper()
     assert "UNION ALL" in sql
     assert sql.count("LIMIT") >= 2
+    assert "CAST(ANON_" not in sql

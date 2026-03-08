@@ -7,7 +7,7 @@ from typing import Iterable
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.db.enums import (
@@ -610,22 +610,29 @@ def _stage_inactivity_ids(
     stage_slug: str | None,
     template_key: str,
 ) -> set[UUID]:
-    last_activity_subquery = (
-        select(func.max(SurrogateActivityLog.created_at))
-        .where(
-            SurrogateActivityLog.organization_id == org_id,
-            SurrogateActivityLog.surrogate_id == Surrogate.id,
+    latest_activity_subquery = (
+        db.query(
+            SurrogateActivityLog.surrogate_id.label("surrogate_id"),
+            func.max(SurrogateActivityLog.created_at).label("last_activity_at"),
         )
-        .correlate(Surrogate)
-        .scalar_subquery()
+        .filter(SurrogateActivityLog.organization_id == org_id)
+        .group_by(SurrogateActivityLog.surrogate_id)
+        .subquery()
     )
-    last_activity_col = func.coalesce(last_activity_subquery, Surrogate.created_at).label(
+    last_activity_col = func.coalesce(
+        latest_activity_subquery.c.last_activity_at,
+        Surrogate.created_at,
+    ).label(
         "last_activity_at"
     )
 
     query = (
         db.query(Surrogate.id, last_activity_col)
         .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
+        .outerjoin(
+            latest_activity_subquery,
+            latest_activity_subquery.c.surrogate_id == Surrogate.id,
+        )
         .filter(
             Surrogate.organization_id == org_id,
             Surrogate.is_archived.is_(False),
@@ -672,10 +679,12 @@ def _meeting_outcome_missing_ids(
         Appointment.scheduled_start,
     )
     latest_meeting_subquery = (
-        select(func.max(meeting_anchor))
-        .where(
+        db.query(
+            Appointment.surrogate_id.label("surrogate_id"),
+            func.max(meeting_anchor).label("latest_meeting_at"),
+        )
+        .filter(
             Appointment.organization_id == org_id,
-            Appointment.surrogate_id == Surrogate.id,
             Appointment.surrogate_id.is_not(None),
             Appointment.status.in_(
                 [
@@ -685,34 +694,45 @@ def _meeting_outcome_missing_ids(
                 ]
             ),
         )
-        .correlate(Surrogate)
-        .scalar_subquery()
+        .group_by(Appointment.surrogate_id)
+        .subquery()
     )
     latest_outcome_subquery = (
-        select(func.max(SurrogateActivityLog.created_at))
-        .where(
+        db.query(
+            SurrogateActivityLog.surrogate_id.label("surrogate_id"),
+            func.max(SurrogateActivityLog.created_at).label("latest_outcome_at"),
+        )
+        .filter(
             SurrogateActivityLog.organization_id == org_id,
-            SurrogateActivityLog.surrogate_id == Surrogate.id,
             SurrogateActivityLog.activity_type == SurrogateActivityType.INTERVIEW_OUTCOME_LOGGED.value,
         )
-        .correlate(Surrogate)
-        .scalar_subquery()
+        .group_by(SurrogateActivityLog.surrogate_id)
+        .subquery()
     )
 
     query = (
         db.query(
             Surrogate.id,
-            latest_meeting_subquery.label("latest_meeting_at"),
-            latest_outcome_subquery.label("latest_outcome_at"),
+            latest_meeting_subquery.c.latest_meeting_at,
+            latest_outcome_subquery.c.latest_outcome_at,
+        )
+        .outerjoin(
+            latest_meeting_subquery,
+            latest_meeting_subquery.c.surrogate_id == Surrogate.id,
+        )
+        .outerjoin(
+            latest_outcome_subquery,
+            latest_outcome_subquery.c.surrogate_id == Surrogate.id,
         )
         .filter(
             Surrogate.organization_id == org_id,
             Surrogate.is_archived.is_(False),
-            latest_meeting_subquery.is_not(None),
-            latest_meeting_subquery <= now_utc,
+            latest_meeting_subquery.c.latest_meeting_at.is_not(None),
+            latest_meeting_subquery.c.latest_meeting_at <= now_utc,
             or_(
-                latest_outcome_subquery.is_(None),
-                latest_outcome_subquery <= latest_meeting_subquery,
+                latest_outcome_subquery.c.latest_outcome_at.is_(None),
+                latest_outcome_subquery.c.latest_outcome_at
+                <= latest_meeting_subquery.c.latest_meeting_at,
             ),
             *_strict_owner_filters(user_role, user_id),
         )
@@ -810,30 +830,29 @@ def _attention_stuck_ids(
     owner_filters = _attention_owner_filters(db, org_id=org_id, user_id=user_id, user_role=user_role)
     cutoff = now_utc - timedelta(days=30)
 
-    latest_history = SurrogateStatusHistory.__table__.alias("latest_history")
-    newer_history = SurrogateStatusHistory.__table__.alias("newer_history")
-    latest_change_subquery = (
-        select(latest_history.c.changed_at)
-        .where(
-            latest_history.c.organization_id == org_id,
-            latest_history.c.surrogate_id == Surrogate.id,
-            latest_history.c.to_stage_id.is_not(None),
-            ~exists(
-                select(1).where(
-                    newer_history.c.organization_id == org_id,
-                    newer_history.c.surrogate_id == latest_history.c.surrogate_id,
-                    newer_history.c.to_stage_id.is_not(None),
-                    newer_history.c.changed_at > latest_history.c.changed_at,
-                )
-            ),
+    latest_stage_change_subquery = (
+        db.query(
+            SurrogateStatusHistory.surrogate_id.label("surrogate_id"),
+            func.max(SurrogateStatusHistory.changed_at).label("last_change_at"),
         )
-        .limit(1)
-        .scalar_subquery()
+        .filter(
+            SurrogateStatusHistory.organization_id == org_id,
+            SurrogateStatusHistory.to_stage_id.is_not(None),
+        )
+        .group_by(SurrogateStatusHistory.surrogate_id)
+        .subquery()
     )
-    last_change_col = func.coalesce(latest_change_subquery, Surrogate.created_at)
+    last_change_col = func.coalesce(
+        latest_stage_change_subquery.c.last_change_at,
+        Surrogate.created_at,
+    )
     rows = (
         db.query(Surrogate.id)
         .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
+        .outerjoin(
+            latest_stage_change_subquery,
+            latest_stage_change_subquery.c.surrogate_id == Surrogate.id,
+        )
         .filter(
             Surrogate.organization_id == org_id,
             Surrogate.is_archived.is_(False),
