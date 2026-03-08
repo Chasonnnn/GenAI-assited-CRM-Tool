@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.26](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.25...surrogacy-crm-platform-v0.90.26) (2026-03-08)
+
+
+### Bug Fixes
+
+* harden meta lead reconversion ([a2685df](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a2685df90d891c21bc940c931948872bd2734b26))
+* isolate meta lead conversion failure recovery ([0c548d0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0c548d0f85a368bf8a2fa1d5bcde31c9bc1e65ef))
+* start outbound crm reporting at pre-qualified ([18889bc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/18889bcb82fb07ebb6947916333099944ff1940d))
+
 ## [0.90.25](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.24...surrogacy-crm-platform-v0.90.25) (2026-03-08)
 
 
