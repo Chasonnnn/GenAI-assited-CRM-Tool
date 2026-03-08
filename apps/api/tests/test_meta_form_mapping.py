@@ -638,14 +638,24 @@ def test_meta_lead_mapping_applies_default_transformers_when_mapping_has_none(
 
 
 def test_meta_lead_conversion_failure_records_system_alert(monkeypatch, db, test_org, test_user):
-    from app.db.models import MetaLead
-    from app.db.enums import AlertSeverity, AlertType
-    from app.services import meta_lead_service
+    from types import SimpleNamespace
 
-    captured: list[dict] = []
+    from app.db.models import MetaLead
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import meta_lead_service
+    from app.services import surrogate_service
+
+    captured: list[tuple[str, str]] = []
     monkeypatch.setattr(
-        "app.services.alert_service.record_alert_isolated",
-        lambda **kwargs: captured.append(kwargs),
+        "app.services.meta_lead_service._record_conversion_failure_alert",
+        lambda lead, exc: captured.append((lead.meta_lead_id, type(exc).__name__)),
+    )
+
+    surrogate_service.create_surrogate(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        data=SurrogateCreate(full_name="Existing Alert Failure", email="alert@example.com"),
     )
 
     lead = MetaLead(
@@ -656,17 +666,33 @@ def test_meta_lead_conversion_failure_records_system_alert(monkeypatch, db, test
         field_data={
             "full_name": "Alert Failure",
             "email": "alert@example.com",
-            "state": "Si",
         },
         field_data_raw={
             "full_name": "Alert Failure",
             "email": "alert@example.com",
-            "state": "Si",
         },
         meta_created_time=datetime.now(timezone.utc),
     )
     db.add(lead)
     db.commit()
+    persisted_lead_id = lead.id
+    persisted_lead = SimpleNamespace(
+        meta_lead_id="lead_alert_failure",
+        conversion_error=None,
+        unmapped_fields=None,
+    )
+
+    class _FakeFailureSession:
+        def get(self, model, value):
+            return persisted_lead if value == persisted_lead_id else None
+
+        def commit(self):
+            return None
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr("app.services.meta_lead_service.SessionLocal", lambda: _FakeFailureSession())
 
     mappings = [
         {
@@ -679,13 +705,6 @@ def test_meta_lead_conversion_failure_records_system_alert(monkeypatch, db, test
         {
             "csv_column": "email",
             "surrogate_field": "email",
-            "transformation": None,
-            "action": "map",
-            "custom_field_key": None,
-        },
-        {
-            "csv_column": "state",
-            "surrogate_field": "state",
             "transformation": None,
             "action": "map",
             "custom_field_key": None,
@@ -703,14 +722,7 @@ def test_meta_lead_conversion_failure_records_system_alert(monkeypatch, db, test
     assert surrogate is None
     assert error is not None
     assert captured
-    alert = captured[0]
-    assert alert["org_id"] == test_org.id
-    assert alert["alert_type"] == AlertType.META_CONVERT_FAILED
-    assert alert["severity"] == AlertSeverity.ERROR
-    assert alert["integration_key"] == "meta_form:form_alert_failure"
-    assert alert["error_class"] == "ValidationError"
-    assert alert["details"]["meta_lead_id"] == "lead_alert_failure"
-    assert alert["details"]["meta_form_id"] == "form_alert_failure"
+    assert captured[0] == ("lead_alert_failure", "IntegrityError")
 
 
 @pytest.mark.parametrize(

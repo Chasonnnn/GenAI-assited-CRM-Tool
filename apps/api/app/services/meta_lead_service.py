@@ -6,11 +6,12 @@ from decimal import Decimal
 from uuid import UUID
 
 from pydantic import ValidationError
-from sqlalchemy import func
+from sqlalchemy import func, inspect as sa_inspect
 from sqlalchemy.orm import Session
 
 from app.db.enums import AlertSeverity, AlertType, SurrogateSource
 from app.db.models import MetaAd, MetaAdPlatformDaily, MetaForm, MetaLead, Organization, Surrogate
+from app.db.session import SessionLocal
 from app.schemas.surrogate import SurrogateCreate
 from app.services import surrogate_service
 from app.services import custom_field_service
@@ -24,6 +25,46 @@ from app.utils.normalization import normalize_phone, normalize_state
 
 logger = logging.getLogger(__name__)
 REQUIRED_CONVERSION_FIELDS = {"full_name", "email"}
+
+
+def _mark_conversion_failed(
+    db: Session,
+    error: Exception,
+    *,
+    persisted_lead_id: UUID | None,
+    organization_id: UUID | None,
+    external_meta_lead_id: str | None,
+    unmapped_fields: dict | None = None,
+    emit_alert: bool = False,
+) -> None:
+    """Persist convert_failed state after a failed transaction."""
+    error_message = str(error)[:500]
+    db.rollback()
+
+    isolated = SessionLocal()
+    try:
+        persisted_lead = isolated.get(MetaLead, persisted_lead_id) if persisted_lead_id else None
+        if not persisted_lead and organization_id and external_meta_lead_id:
+            persisted_lead = (
+                isolated.query(MetaLead)
+                .filter(
+                    MetaLead.organization_id == organization_id,
+                    MetaLead.meta_lead_id == external_meta_lead_id,
+                )
+                .first()
+            )
+        if not persisted_lead:
+            return
+
+        persisted_lead.conversion_error = error_message
+        if unmapped_fields is not None:
+            persisted_lead.unmapped_fields = unmapped_fields or None
+        isolated.commit()
+
+        if emit_alert:
+            _record_conversion_failure_alert(persisted_lead, error)
+    finally:
+        isolated.close()
 
 
 def store_meta_lead(
@@ -257,6 +298,10 @@ def convert_to_surrogate(
         normalized_state = None  # Log but don't fail
 
     # Create surrogate
+    identity = sa_inspect(meta_lead).identity
+    persisted_lead_id = identity[0] if identity else None
+    organization_id = meta_lead.organization_id
+    external_meta_lead_id = meta_lead.meta_lead_id
     try:
         surrogate_data = SurrogateCreate(
             full_name=full_name,
@@ -335,8 +380,13 @@ def convert_to_surrogate(
         return surrogate, None
 
     except Exception as e:
-        meta_lead.conversion_error = str(e)[:500]
-        db.commit()
+        _mark_conversion_failed(
+            db,
+            e,
+            persisted_lead_id=persisted_lead_id,
+            organization_id=organization_id,
+            external_meta_lead_id=external_meta_lead_id,
+        )
         return None, f"Conversion failed: {e}"
 
 
@@ -409,6 +459,10 @@ def convert_to_surrogate_with_mapping(
         row_data["email"] = email
 
     row_data.setdefault("source", SurrogateSource.META.value)
+    identity = sa_inspect(meta_lead).identity
+    persisted_lead_id = identity[0] if identity else None
+    organization_id = meta_lead.organization_id
+    external_meta_lead_id = meta_lead.meta_lead_id
 
     try:
         surrogate_data, dropped_invalid_fields = _validate_surrogate_row_lenient(row_data)
@@ -464,10 +518,15 @@ def convert_to_surrogate_with_mapping(
         return surrogate, None
 
     except Exception as e:
-        meta_lead.conversion_error = str(e)[:500]
-        meta_lead.unmapped_fields = unmapped_fields or None
-        db.commit()
-        _record_conversion_failure_alert(meta_lead, e)
+        _mark_conversion_failed(
+            db,
+            e,
+            persisted_lead_id=persisted_lead_id,
+            organization_id=organization_id,
+            external_meta_lead_id=external_meta_lead_id,
+            unmapped_fields=unmapped_fields,
+            emit_alert=True,
+        )
         return None, f"Conversion failed: {e}"
 
 
