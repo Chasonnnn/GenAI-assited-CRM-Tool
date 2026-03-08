@@ -17,6 +17,7 @@ from app.utils.presentation import humanize_identifier
 
 logger = logging.getLogger(__name__)
 MAX_META_LEAD_AGE = timedelta(days=90)
+FBC_CANDIDATE_KEYS = ("fbc", "meta_fbc", "click_id", "meta_click_id")
 
 
 def _now_utc() -> datetime:
@@ -47,6 +48,57 @@ def resolve_mapping_item(mapping: list[dict], stage_key: str) -> dict | None:
         if item.get("stage_key") == stage_key and item.get("enabled", True):
             return item
     return None
+
+
+def _normalize_json_key(value: str) -> str:
+    return value.lower().replace("-", "_").replace(" ", "_")
+
+
+def _coerce_string_scalar(value: object) -> str | None:
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    if isinstance(value, list):
+        for item in value:
+            coerced = _coerce_string_scalar(item)
+            if coerced:
+                return coerced
+    return None
+
+
+def _find_json_value_by_key(payload: object, candidate_keys: tuple[str, ...]) -> str | None:
+    normalized_keys = {_normalize_json_key(key) for key in candidate_keys}
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if _normalize_json_key(str(key)) in normalized_keys:
+                coerced = _coerce_string_scalar(value)
+                if coerced:
+                    return coerced
+        for value in payload.values():
+            nested = _find_json_value_by_key(value, candidate_keys)
+            if nested:
+                return nested
+    elif isinstance(payload, list):
+        for item in payload:
+            nested = _find_json_value_by_key(item, candidate_keys)
+            if nested:
+                return nested
+    return None
+
+
+def _normalize_meta_click_id(value: str | None) -> str | None:
+    normalized = (value or "").strip()
+    if not normalized or not normalized.startswith("fb."):
+        return None
+    return normalized
+
+
+def _resolve_meta_click_id(meta_lead: MetaLead) -> str | None:
+    return _normalize_meta_click_id(
+        _find_json_value_by_key(meta_lead.field_data_raw or {}, FBC_CANDIDATE_KEYS)
+        or _find_json_value_by_key(meta_lead.field_data or {}, FBC_CANDIDATE_KEYS)
+        or _find_json_value_by_key(meta_lead.raw_payload or {}, FBC_CANDIDATE_KEYS)
+    )
 
 
 def _resolve_dedupe_key(stage_key: str, mapping: list[dict]) -> str:
@@ -104,14 +156,18 @@ def build_stage_event_payload(
     email: str | None,
     phone: str | None,
     meta_fields: dict | None = None,
+    fbc: str | None = None,
     event_id: str | None = None,
     test_mode: bool = False,
 ) -> dict:
     payload = {
         "event_id": event_id or f"zapier_stage:{lead_id}:{stage_key}",
         "event_name": event_name,
+        "lifecycle_stage_name": event_name,
+        "stage_in_sales_process": event_name,
         "event_time": event_time.astimezone(timezone.utc).isoformat(),
         "lead_id": lead_id,
+        "facebook_lead_id": lead_id,
         "stage_key": stage_key,
         "stage_slug": stage_slug,
         "stage_id": stage_id,
@@ -124,11 +180,18 @@ def build_stage_event_payload(
     if meta_fields:
         payload.update({k: v for k, v in meta_fields.items() if v is not None})
 
+    normalized_fbc = _normalize_meta_click_id(fbc)
+    if normalized_fbc:
+        payload["fbc"] = normalized_fbc
+        payload["facebook_click_id"] = normalized_fbc
+
     if include_hashed_pii:
         user_data: dict[str, str] = {}
         if email:
+            payload["customer_email"] = email
             user_data["email_hash"] = meta_capi.hash_for_capi(email)
         if phone:
+            payload["customer_phone_number"] = phone
             user_data["phone_hash"] = meta_capi.hash_for_capi(phone)
         if user_data:
             payload["user_data"] = user_data
@@ -307,6 +370,7 @@ def enqueue_stage_event(
         email=surrogate.email,
         phone=surrogate.phone,
         meta_fields=meta_fields,
+        fbc=_resolve_meta_click_id(meta_lead),
         event_id=event_id,
     )
 
@@ -437,6 +501,7 @@ def enqueue_test_event(
             "meta_ad_id": "test_ad",
             "meta_platform": "facebook",
         },
+        fbc="fb.1.1772952996.test-click-id",
         event_id=event_id,
         test_mode=True,
     )
