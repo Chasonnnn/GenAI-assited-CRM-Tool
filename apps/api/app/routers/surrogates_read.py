@@ -53,6 +53,18 @@ class IntelligentSuggestionSummaryRead(BaseModel):
     has_suggestions: bool
 
 
+def _require_owner_filter_access(session: UserSession, owner_id: UUID | None) -> None:
+    if (
+        owner_id
+        and owner_id != session.user_id
+        and session.role not in (Role.ADMIN, Role.DEVELOPER)
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Not authorized to view other users' surrogates",
+        )
+
+
 @router.get("/stats", response_model=SurrogateStats)
 def get_surrogate_stats(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
@@ -175,6 +187,8 @@ def list_surrogates(
     """List surrogates with filters and pagination."""
     from app.services import audit_service, permission_service
 
+    _require_owner_filter_access(session, owner_id)
+
     exclude_stage_types = []
     if not permission_service.check_permission(
         db,
@@ -280,6 +294,8 @@ def list_surrogate_created_dates(
 ):
     """List distinct surrogate created_at dates for the current filter context."""
     from app.services import permission_service
+
+    _require_owner_filter_access(session, owner_id)
 
     exclude_stage_types = []
     if not permission_service.check_permission(
