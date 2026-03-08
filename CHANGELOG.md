@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.23](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.22...surrogacy-crm-platform-v0.90.23) (2026-03-08)
+
+
+### Features
+
+* add assignee filter to surrogates ([fcc1786](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fcc1786239cde9a7755a4fb47305e3b4c0ab45e0))
+* add on-hold stage UI and reporting ([29b3583](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/29b35839333e7fdac4370271bfe34dc0a278cf8e))
+* add surrogate on-hold stage workflow ([fa33edc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fa33edccbaae06e5efc35e984d03f56cced42d9f))
+* add Zapier monitoring controls to integrations ([12132f9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/12132f9eacc2e5970bdaf9484467e995dba5a092))
+* add Zapier outbound delivery monitoring ([ccdb92f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ccdb92fe1840aa0de5da95427bd70e5b2527c50c))
+* support owner filters in surrogate mass edit ([d501d7e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d501d7e608f192a96508da5597f6b426466a1cfe))
+* Update pypdf dependency to version 6.7.5. ([6b95b01](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6b95b01f7b750fcb6276e1bba19c0a071d70615b))
+
+
+### Bug Fixes
+
+* improve icon-only control accessibility ([f55c8b7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f55c8b7b2122bc8903a238924677adbfa02371c9))
+* rate limit meta oauth routes ([d6edb5c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d6edb5cc95a37d836108e85b85d783ecd3d82091))
+* restore backend verification paths ([24db38d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/24db38db452a454738997104e13ec96349682936))
+* restrict surrogate owner filters by role ([5ebf867](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5ebf867b119deb6eb950ee98cae23d777a00fb25))
+* sanitize uploaded csv files ([d037307](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d037307c81d41d238801241e0d27850addf1ce8b))
+* stabilize automation menu tests ([c308705](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c30870565985086c7e864a727e3a4fa4aa955b7b))
+* use match stats on matches page ([c696ff9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c696ff9b703cdaf4f3b24d451b9f932a1d32649e))
+
+
+### Maintenance
+
+* clean backend test lint imports ([4a252ee](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4a252eefc8064d99d1eeebc7ce00d4d19ec2c0e2))
+
 ## [0.90.22](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.21...surrogacy-crm-platform-v0.90.22) (2026-03-03)
 
 
