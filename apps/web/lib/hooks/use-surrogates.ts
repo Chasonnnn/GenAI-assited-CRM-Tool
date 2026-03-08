@@ -168,9 +168,11 @@ export function useChangeSurrogateStatus() {
             }
             // Invalidate related queries
             queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
             queryClient.invalidateQueries({ queryKey: surrogateKeys.history(surrogateId) });
             queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
             queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
+            queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
         },
     });
 }

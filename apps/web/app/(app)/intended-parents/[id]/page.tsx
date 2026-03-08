@@ -200,6 +200,7 @@ export default function IntendedParentDetailPage() {
         stage_id: string
         reason?: string
         effective_at?: string
+        on_hold_follow_up_months?: 1 | 3 | 6 | null
     }): Promise<{ status: "applied" | "pending_approval"; request_id?: string }> => {
         if (!ip || !isIntendedParentStatus(data.stage_id)) {
             return { status: "applied" }

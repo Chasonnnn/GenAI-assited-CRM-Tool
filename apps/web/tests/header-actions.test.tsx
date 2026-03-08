@@ -10,6 +10,7 @@ const mockUseSurrogateDetailActions = vi.fn()
 const mockExportSurrogatePacketPdf = vi.fn()
 const mockToastSuccess = vi.fn()
 const mockToastError = vi.fn()
+const mockChangeStatus = vi.fn()
 
 vi.mock("@/components/ui/dropdown-menu", () => ({
     DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -91,6 +92,7 @@ describe("HeaderActions", () => {
                     { slug: "new_unread", stage_type: "intake", order: 1 },
                 ],
             ]),
+            effectiveStage: { slug: "new_unread", stage_type: "intake", order: 1 },
             stageOptions: [{ slug: "contacted", stage_type: "intake", order: 2 }],
             queues: [],
             assignees: [],
@@ -106,14 +108,17 @@ describe("HeaderActions", () => {
             openDialog: vi.fn(),
         })
         mockUseSurrogateDetailActions.mockReturnValue({
+            changeStatus: mockChangeStatus,
             claimSurrogate: vi.fn(),
             assignSurrogate: vi.fn(),
             archiveSurrogate: vi.fn(),
             restoreSurrogate: vi.fn(),
+            isChangeStatusPending: false,
             isClaimPending: false,
             isAssignPending: false,
             isReleasePending: false,
         })
+        mockChangeStatus.mockReset()
         mockExportSurrogatePacketPdf.mockReset()
         mockToastSuccess.mockReset()
         mockToastError.mockReset()
@@ -146,6 +151,7 @@ describe("HeaderActions", () => {
                     { slug: "new_unread", stage_type: "intake", order: 10 },
                 ],
             ]),
+            effectiveStage: { slug: "new_unread", stage_type: "intake", order: 10 },
             stageOptions: [{ slug: "contacted", stage_type: "intake", order: 2 }],
             queues: [],
             assignees: [],
@@ -183,6 +189,7 @@ describe("HeaderActions", () => {
                     { slug: "pre_qualified", stage_type: "intake", order: 3 },
                 ],
             ]),
+            effectiveStage: { slug: "pre_qualified", stage_type: "intake", order: 3 },
             stageOptions: [],
             queues: [],
             assignees: [],
@@ -220,6 +227,7 @@ describe("HeaderActions", () => {
                     { slug: "contacted", stage_type: "intake", order: 2 },
                 ],
             ]),
+            effectiveStage: { slug: "contacted", stage_type: "intake", order: 2 },
             stageOptions: [],
             queues: [],
             assignees: [],
@@ -257,6 +265,7 @@ describe("HeaderActions", () => {
                     { slug: "interview_scheduled", stage_type: "intake", order: 5 },
                 ],
             ]),
+            effectiveStage: { slug: "interview_scheduled", stage_type: "intake", order: 5 },
             stageOptions: [],
             queues: [],
             assignees: [],
@@ -270,6 +279,41 @@ describe("HeaderActions", () => {
 
         render(<HeaderActions />)
         expect(screen.getByRole("button", { name: /log interview outcome/i })).toBeInTheDocument()
+    })
+
+    it("shows Resume for On-Hold and sends the paused-from stage id", () => {
+        mockUseSurrogateDetailData.mockReturnValue({
+            surrogate: {
+                id: "s1",
+                stage_id: "stage_on_hold",
+                stage_slug: "on_hold",
+                paused_from_stage_id: "stage_new_unread",
+                owner_type: "user",
+                owner_id: "user1",
+                is_archived: false,
+                surrogate_number: "S123",
+                full_name: "Jane Doe",
+            },
+            stageById: new Map([
+                ["stage_on_hold", { slug: "on_hold", stage_type: "paused", order: 18 }],
+                ["stage_new_unread", { slug: "new_unread", stage_type: "intake", order: 1 }],
+            ]),
+            effectiveStage: { slug: "new_unread", stage_type: "intake", order: 1 },
+            stageOptions: [],
+            queues: [],
+            assignees: [],
+            canManageQueue: true,
+            canClaimSurrogate: false,
+            canChangeStage: true,
+            isInQueue: false,
+            isOwnedByUser: true,
+            zoomConnected: false,
+        })
+
+        render(<HeaderActions />)
+        fireEvent.click(screen.getByRole("button", { name: "Resume" }))
+
+        expect(mockChangeStatus).toHaveBeenCalledWith({ stage_id: "stage_new_unread" })
     })
 
     it("disables export action while request is in progress", async () => {

@@ -35,12 +35,14 @@ interface ChangeStageModalProps {
     onOpenChange: (open: boolean) => void
     stages: PipelineStage[]
     currentStageId: string
+    comparisonStageId?: string
     currentStageLabel: string
     entityLabel?: string
     onSubmit: (data: {
         stage_id: string
         reason?: string
         effective_at?: string // ISO datetime
+        on_hold_follow_up_months?: 1 | 3 | 6 | null
         delivery_baby_gender?: string | null
         delivery_baby_weight?: string | null
     }) => Promise<{ status: "applied" | "pending_approval"; request_id?: string }>
@@ -48,6 +50,7 @@ interface ChangeStageModalProps {
     deliveryFieldsEnabled?: boolean
     initialDeliveryBabyGender?: string | null
     initialDeliveryBabyWeight?: string | null
+    onHoldFollowUpAssigneeLabel?: string | null
 }
 
 export function ChangeStageModal({
@@ -55,6 +58,7 @@ export function ChangeStageModal({
     onOpenChange,
     stages,
     currentStageId,
+    comparisonStageId,
     currentStageLabel,
     entityLabel,
     onSubmit,
@@ -62,6 +66,7 @@ export function ChangeStageModal({
     deliveryFieldsEnabled = false,
     initialDeliveryBabyGender = null,
     initialDeliveryBabyWeight = null,
+    onHoldFollowUpAssigneeLabel = null,
 }: ChangeStageModalProps) {
     // State
     const [selectedStageId, setSelectedStageId] = useState<string | null>(null)
@@ -72,6 +77,7 @@ export function ChangeStageModal({
     const [datePickerOpen, setDatePickerOpen] = useState(false)
     const [deliveryBabyGender, setDeliveryBabyGender] = useState("")
     const [deliveryBabyWeight, setDeliveryBabyWeight] = useState("")
+    const [onHoldFollowUpMonths, setOnHoldFollowUpMonths] = useState<"none" | "1" | "3" | "6">("none")
 
     // Reset state when modal opens
     useEffect(() => {
@@ -83,6 +89,7 @@ export function ChangeStageModal({
             setReason("")
             setDeliveryBabyGender(initialDeliveryBabyGender ?? "")
             setDeliveryBabyWeight(initialDeliveryBabyWeight ?? "")
+            setOnHoldFollowUpMonths("none")
         }
     }, [open, initialDeliveryBabyGender, initialDeliveryBabyWeight])
 
@@ -91,6 +98,10 @@ export function ChangeStageModal({
         () => stages.find(s => s.id === currentStageId),
         [stages, currentStageId]
     )
+    const comparisonStage = useMemo(
+        () => stages.find((stage) => stage.id === (comparisonStageId ?? currentStageId)) ?? currentStage,
+        [stages, comparisonStageId, currentStageId, currentStage]
+    )
 
     // Get selected stage
     const selectedStage = useMemo(
@@ -98,13 +109,19 @@ export function ChangeStageModal({
         [stages, selectedStageId]
     )
     const isDeliveredStage = selectedStage?.slug === "delivered"
+    const isOnHoldStage = selectedStage?.slug === "on_hold"
     const showDeliveryFields = deliveryFieldsEnabled && isDeliveredStage
+
+    const isResumeSelection = useMemo(() => {
+        if (!selectedStage || !currentStage || !comparisonStage) return false
+        return currentStage.slug === "on_hold" && selectedStage.id === comparisonStage.id
+    }, [selectedStage, currentStage, comparisonStage])
 
     // Calculate if this is a regression (moving to earlier stage)
     const isRegression = useMemo(() => {
-        if (!selectedStage || !currentStage) return false
-        return selectedStage.order < currentStage.order
-    }, [selectedStage, currentStage])
+        if (!selectedStage || !comparisonStage) return false
+        return !isResumeSelection && selectedStage.order < comparisonStage.order
+    }, [selectedStage, comparisonStage, isResumeSelection])
 
     const hasTime = selectedTime.trim().length > 0
     const effectiveDateTime = useMemo(() => {
@@ -129,7 +146,7 @@ export function ChangeStageModal({
     }, [effectiveNow, selectedDate, hasTime, effectiveDateTime])
 
     // Check if reason is required
-    const reasonRequired = isRegression || isBackdated
+    const reasonRequired = isRegression || isBackdated || isOnHoldStage
 
     // Validation
     const canSubmit = useMemo(() => {
@@ -162,6 +179,7 @@ export function ChangeStageModal({
             stage_id: string
             reason?: string
             effective_at?: string
+            on_hold_follow_up_months?: 1 | 3 | 6 | null
             delivery_baby_gender?: string | null
             delivery_baby_weight?: string | null
         } = {
@@ -170,6 +188,9 @@ export function ChangeStageModal({
         const trimmedReason = reason.trim()
         if (trimmedReason) payload.reason = trimmedReason
         if (effective_at) payload.effective_at = effective_at
+        if (isOnHoldStage && onHoldFollowUpMonths !== "none") {
+            payload.on_hold_follow_up_months = Number(onHoldFollowUpMonths) as 1 | 3 | 6
+        }
         if (showDeliveryFields) {
             const trimmedGender = deliveryBabyGender.trim()
             const trimmedWeight = deliveryBabyWeight.trim()
@@ -190,8 +211,16 @@ export function ChangeStageModal({
     const label = entityLabel ?? "Stage"
 
     // Button text based on context
-    const submitButtonText = isRegression ? "Request Approval" : "Save Change"
-    const submitButtonLoadingText = isRegression ? "Requesting..." : "Saving..."
+    const submitButtonText = isResumeSelection
+        ? "Resume"
+        : isRegression
+            ? "Request Approval"
+            : "Save Change"
+    const submitButtonLoadingText = isResumeSelection
+        ? "Resuming..."
+        : isRegression
+            ? "Requesting..."
+            : "Saving..."
 
     // Filter active stages and sort by order
     const sortedStages = useMemo(
@@ -311,6 +340,70 @@ export function ChangeStageModal({
                                 <p className="text-xs text-muted-foreground">
                                     Leave blank to use now (today) or noon (past dates)
                                 </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {isOnHoldStage && (
+                        <div className="space-y-3 rounded-lg border border-muted/60 bg-muted/20 p-3">
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium text-foreground">
+                                    Follow-up reminder
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    Optional. If selected, we&apos;ll create an{" "}
+                                    <span className="font-medium text-foreground">
+                                        On-Hold follow-up
+                                    </span>{" "}
+                                    task assigned to {onHoldFollowUpAssigneeLabel ?? "the current owner"}.
+                                </p>
+                            </div>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                                {[
+                                    {
+                                        value: "none",
+                                        label: "No follow-up",
+                                        description: "Keep this paused without a reminder task.",
+                                    },
+                                    {
+                                        value: "1",
+                                        label: "1 month",
+                                        description: "Create a reminder one month from the effective date.",
+                                    },
+                                    {
+                                        value: "3",
+                                        label: "3 months",
+                                        description: "Create a reminder three months from the effective date.",
+                                    },
+                                    {
+                                        value: "6",
+                                        label: "6 months",
+                                        description: "Create a reminder six months from the effective date.",
+                                    },
+                                ].map((option) => {
+                                    const isSelected = onHoldFollowUpMonths === option.value
+                                    return (
+                                        <button
+                                            key={option.value}
+                                            type="button"
+                                            onClick={() => setOnHoldFollowUpMonths(option.value as "none" | "1" | "3" | "6")}
+                                            className={cn(
+                                                "rounded-lg border px-3 py-3 text-left transition-colors",
+                                                "hover:border-primary/40 hover:bg-background/80",
+                                                isSelected
+                                                    ? "border-primary bg-background shadow-sm"
+                                                    : "border-border/70 bg-background/40"
+                                            )}
+                                        >
+                                            <div className="text-sm font-medium text-foreground">
+                                                {option.label}
+                                            </div>
+                                            <div className="mt-1 text-xs text-muted-foreground">
+                                                {option.description}
+                                            </div>
+                                        </button>
+                                    )
+                                })}
                             </div>
                         </div>
                     )}

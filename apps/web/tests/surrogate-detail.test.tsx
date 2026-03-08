@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { SurrogateDetailLayoutClient } from '@/components/surrogates/detail/SurrogateDetailLayoutClient'
 import { SurrogateOverviewTab } from '@/components/surrogates/detail/tabs/SurrogateOverviewTab'
 import { SurrogateDetailHeader } from '@/components/surrogates/detail/SurrogateDetailHeader'
@@ -26,6 +26,12 @@ vi.mock('@/lib/auth-context', () => ({
 
 vi.mock('@/components/rich-text-editor', () => ({
     RichTextEditor: () => <div data-testid="rich-text-editor" />,
+}))
+
+vi.mock('@/components/surrogates/journey/SurrogateJourneyTab', () => ({
+    SurrogateJourneyTab: ({ surrogateId }: { surrogateId: string }) => (
+        <div>Journey timeline for {surrogateId}</div>
+    ),
 }))
 
 vi.mock('@/lib/hooks/use-user-integrations', () => ({
@@ -73,6 +79,10 @@ const baseSurrogateData = {
     stage_id: 's1',
     stage_slug: 'new_unread',
     stage_type: 'intake',
+    paused_from_stage_id: null,
+    paused_from_stage_slug: null,
+    paused_from_stage_label: null,
+    paused_from_stage_type: null,
     source: 'manual',
     email: 'jane@example.com',
     phone: null,
@@ -156,9 +166,11 @@ const baseSurrogateData = {
 const defaultPipelineStages = [
     { id: 's1', slug: 'new_unread', label: 'New Unread', color: '#3b82f6', stage_type: 'intake', order: 1, is_active: true },
     { id: 's2', slug: 'ready_to_match', label: 'Ready to Match', color: '#10b981', stage_type: 'post_approval', order: 10, is_active: true },
+    { id: 's2b', slug: 'matched', label: 'Matched', color: '#6366f1', stage_type: 'post_approval', order: 15, is_active: true },
     { id: 's3', slug: 'heartbeat_confirmed', label: 'Heartbeat Confirmed', color: '#f97316', stage_type: 'post_approval', order: 20, is_active: true },
-    { id: 's4', slug: 'lost', label: 'Lost', color: '#ef4444', stage_type: 'terminal', order: 90, is_active: true },
-    { id: 's5', slug: 'disqualified', label: 'Disqualified', color: '#dc2626', stage_type: 'terminal', order: 91, is_active: true },
+    { id: 's4', slug: 'on_hold', label: 'On-Hold', color: '#b4536a', stage_type: 'paused', order: 89, is_active: true },
+    { id: 's5', slug: 'lost', label: 'Lost', color: '#ef4444', stage_type: 'terminal', order: 90, is_active: true },
+    { id: 's6', slug: 'disqualified', label: 'Disqualified', color: '#dc2626', stage_type: 'terminal', order: 91, is_active: true },
 ]
 let mockPipelineStages = [...defaultPipelineStages]
 
@@ -254,6 +266,7 @@ describe('SurrogateDetailPage', () => {
         mockPush.mockReset()
         mockReplace.mockReset()
         mockSegment.value = null
+        mockChangeStatus.mockReset()
         mockClaimSurrogate.mockReset()
         mockReleaseSurrogate.mockReset()
         const clipboardWriteText = navigator.clipboard.writeText as unknown as { mockClear?: () => void }
@@ -392,6 +405,51 @@ describe('SurrogateDetailPage', () => {
 
         fireEvent.click(screen.getByRole("button", { name: "Back" }))
         expect(onBack).toHaveBeenCalled()
+    })
+
+    it('shows paused-from context in the detail header', () => {
+        render(
+            <SurrogateDetailHeader
+                surrogateNumber="S12345"
+                statusLabel="On-Hold"
+                statusColor="#B4536A"
+                pausedFromLabel="Ready to Match"
+                isArchived={false}
+                onBack={vi.fn()}
+            />
+        )
+
+        expect(
+            screen.getByText((_, element) => element?.textContent === 'Paused from: Ready to Match')
+        ).toBeInTheDocument()
+    })
+
+    it('shows paused-from context in the detail layout when detail payload omits stage_slug', () => {
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                status_label: 'On-Hold',
+                stage_id: 's4',
+                stage_slug: undefined,
+                stage_type: undefined,
+                paused_from_stage_id: 's2',
+                paused_from_stage_slug: 'ready_to_match',
+                paused_from_stage_label: 'Ready to Match',
+                paused_from_stage_type: 'post_approval',
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <div>Body</div>
+            </SurrogateDetailLayoutClient>
+        )
+
+        expect(
+            screen.getByText((_, element) => element?.textContent === 'Paused from: Ready to Match')
+        ).toBeInTheDocument()
     })
 
     it('shows formatted height and BMI in demographics when height and weight are set', () => {
@@ -545,9 +603,98 @@ describe('SurrogateDetailPage', () => {
         expect(screen.queryByText('Due Date:')).not.toBeInTheDocument()
     })
 
+    it('shows Resume action for surrogates currently on hold and resumes to paused-from stage', async () => {
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                status_label: 'On-Hold',
+                stage_id: 's4',
+                stage_slug: 'on_hold',
+                stage_type: 'paused',
+                paused_from_stage_id: 's2',
+                paused_from_stage_slug: 'ready_to_match',
+                paused_from_stage_label: 'Ready to Match',
+                paused_from_stage_type: 'post_approval',
+            },
+            isLoading: false,
+            error: null,
+        })
+        mockChangeStatus.mockReturnValue(new Promise(() => {}))
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Resume' }))
+
+        await waitFor(() => {
+            expect(mockChangeStatus).toHaveBeenCalledWith({
+                surrogateId: 'c1',
+                data: { stage_id: 's2' },
+            })
+        })
+    })
+
+    it('uses paused-from stage context for overview gating while on hold', () => {
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                status_label: 'On-Hold',
+                stage_id: 's4',
+                stage_slug: 'on_hold',
+                stage_type: 'paused',
+                paused_from_stage_id: 's1',
+                paused_from_stage_slug: 'new_unread',
+                paused_from_stage_label: 'New Unread',
+                paused_from_stage_type: 'intake',
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        expect(screen.queryByText('Medical Information')).not.toBeInTheDocument()
+        expect(screen.queryByText('Pregnancy Tracker')).not.toBeInTheDocument()
+    })
+
+    it('keeps journey hidden for on-hold surrogates paused before match', () => {
+        mockSegment.value = 'journey'
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                status_label: 'On-Hold',
+                stage_id: 's4',
+                stage_slug: 'on_hold',
+                stage_type: 'paused',
+                paused_from_stage_id: 's1',
+                paused_from_stage_slug: 'new_unread',
+                paused_from_stage_label: 'New Unread',
+                paused_from_stage_type: 'intake',
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateJourneyPage />
+            </SurrogateDetailLayoutClient>
+        )
+
+        expect(screen.getByText('No journey available yet')).toBeInTheDocument()
+        expect(screen.queryByText('Journey timeline for c1')).not.toBeInTheDocument()
+    })
+
     it.each([
-        { statusLabel: 'Disqualified', stageId: 's5', stageSlug: 'disqualified' as const },
-        { statusLabel: 'Lost', stageId: 's4', stageSlug: 'lost' as const },
+        { statusLabel: 'Disqualified', stageId: 's6', stageSlug: 'disqualified' as const },
+        { statusLabel: 'Lost', stageId: 's5', stageSlug: 'lost' as const },
     ])('hides Pregnancy Tracker for terminal stage: $statusLabel', ({ statusLabel, stageId, stageSlug }) => {
         mockUseSurrogate.mockReturnValueOnce({
             data: {

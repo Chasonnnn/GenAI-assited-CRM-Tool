@@ -77,12 +77,18 @@ export function Dialogs() {
                 onOpenChange={(open) => !open && closeDialog()}
                 stages={visibleStageOptions}
                 currentStageId={surrogate.stage_id}
+                comparisonStageId={surrogate.paused_from_stage_id ?? surrogate.stage_id}
                 currentStageLabel={statusLabel}
                 onSubmit={changeStatus}
                 isPending={isChangeStatusPending}
                 deliveryFieldsEnabled
                 initialDeliveryBabyGender={surrogate.delivery_baby_gender}
                 initialDeliveryBabyWeight={surrogate.delivery_baby_weight}
+                onHoldFollowUpAssigneeLabel={
+                    surrogate.owner_type === "user"
+                        ? surrogate.owner_name ?? "the current owner"
+                        : "you"
+                }
             />
         </>
     )

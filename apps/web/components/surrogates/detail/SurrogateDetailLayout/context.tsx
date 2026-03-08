@@ -25,6 +25,7 @@ import {
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { useAuth } from "@/lib/auth-context"
 import { ROLE_STAGE_VISIBILITY, type StageType } from "@/lib/constants/stages.generated"
+import { getSurrogateStageContext } from "@/lib/surrogate-stage-context"
 import {
     formatMeetingTimeForInvite,
     toLocalIsoDateTime,
@@ -84,6 +85,8 @@ export interface SurrogateDetailDataContextValue {
 
     // Derived data
     stage: PipelineStage | undefined
+    effectiveStage: PipelineStage | undefined
+    pausedFromStage: PipelineStage | undefined
     statusLabel: string
     statusColor: string
     stageOptions: PipelineStage[]
@@ -143,6 +146,7 @@ export interface SurrogateDetailActionsContextValue {
         stage_id: string
         reason?: string
         effective_at?: string
+        on_hold_follow_up_months?: 1 | 3 | 6 | null
         delivery_baby_gender?: string | null
         delivery_baby_weight?: string | null
     }) => Promise<{ status: "applied" | "pending_approval"; request_id?: string }>
@@ -336,15 +340,19 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
         () => stageOptions.find((stage) => stage.slug === "matched"),
         [stageOptions]
     )
+    const stageContext = useMemo(
+        () => getSurrogateStageContext(surrogateData ?? null, stageById),
+        [surrogateData, stageById]
+    )
 
     const canViewJourney = useMemo(() => {
-        if (!surrogateData || !matchedStage) return false
-        const currentStage = stageById.get(surrogateData.stage_id)
-        if (!currentStage) return false
-        return currentStage.order >= matchedStage.order
-    }, [surrogateData, matchedStage, stageById])
+        if (!stageContext.effectiveStage || !matchedStage) return false
+        return stageContext.effectiveStage.order >= matchedStage.order
+    }, [stageContext.effectiveStage, matchedStage])
 
-    const stage = surrogateData ? stageById.get(surrogateData.stage_id) : undefined
+    const stage = stageContext.currentStage
+    const effectiveStage = stageContext.effectiveStage
+    const pausedFromStage = stageContext.pausedFromStage
     const statusLabel = surrogateData?.status_label || stage?.label || "Unknown"
     const statusColor = stage?.color || "#6B7280"
     const noteCount = notes?.length ?? 0
@@ -436,6 +444,7 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
         stage_id: string
         reason?: string
         effective_at?: string
+        on_hold_follow_up_months?: 1 | 3 | 6 | null
         delivery_baby_gender?: string | null
         delivery_baby_weight?: string | null
     }): Promise<{ status: "applied" | "pending_approval"; request_id?: string }> => {
@@ -449,11 +458,15 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
             stage_id: string
             reason?: string
             effective_at?: string
+            on_hold_follow_up_months?: 1 | 3 | 6 | null
             delivery_baby_gender?: string | null
             delivery_baby_weight?: string | null
         } = { stage_id: data.stage_id }
         if (data.reason) payload.reason = data.reason
         if (data.effective_at) payload.effective_at = data.effective_at
+        if (data.on_hold_follow_up_months !== undefined) {
+            payload.on_hold_follow_up_months = data.on_hold_follow_up_months
+        }
         if (data.delivery_baby_gender !== undefined) {
             payload.delivery_baby_gender = data.delivery_baby_gender
         }
@@ -611,6 +624,8 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
         error: error || null,
 
         stage,
+        effectiveStage,
+        pausedFromStage,
         statusLabel,
         statusColor,
         stageOptions,
@@ -638,6 +653,8 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
         isLoading,
         error,
         stage,
+        effectiveStage,
+        pausedFromStage,
         statusLabel,
         statusColor,
         stageOptions,

@@ -25,7 +25,7 @@ interface TeamPerformanceTableProps {
     asOf?: string
 }
 
-type SortKey = "user_name" | "total_surrogates" | "contacted" | "pre_qualified" | "ready_to_match" | "matched" | "application_submitted" | "lost" | "conversion_rate" | "avg_days_to_match" | "avg_days_to_application_submitted"
+type SortKey = "user_name" | "total_surrogates" | "contacted" | "pre_qualified" | "ready_to_match" | "matched" | "application_submitted" | "on_hold" | "lost" | "conversion_rate" | "avg_days_to_match" | "avg_days_to_application_submitted"
 type SortDirection = "asc" | "desc"
 
 function SortDirectionIcon({
@@ -164,7 +164,7 @@ export function TeamPerformanceTable({
                 </div>
             </CardHeader>
             <CardContent className="p-0 overflow-x-auto">
-                <Table className="min-w-[900px]">
+                <Table className="min-w-[980px]">
                     <TableHeader>
                         <TableRow>
                             <TableHead>
@@ -249,6 +249,17 @@ export function TeamPerformanceTable({
                                     variant="ghost"
                                     size="sm"
                                     className="h-8 px-2 hover:bg-transparent"
+                                    onClick={() => handleSort("on_hold")}
+                                >
+                                    On-Hold
+                                    <SortDirectionIcon columnKey="on_hold" sortKey={sortKey} sortDirection={sortDirection} />
+                                </Button>
+                            </TableHead>
+                            <TableHead className="text-center">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 px-2 hover:bg-transparent"
                                     onClick={() => handleSort("lost")}
                                 >
                                     Lost
@@ -323,6 +334,13 @@ export function TeamPerformanceTable({
                                 </TableCell>
                                 <TableCell className="text-center">
                                     <span className={cn(
+                                        user.on_hold > 0 && "text-rose-700"
+                                    )}>
+                                        {user.on_hold}
+                                    </span>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                    <span className={cn(
                                         user.lost > 0 && "text-red-600"
                                     )}>
                                         {user.lost}
@@ -376,6 +394,9 @@ export function TeamPerformanceTable({
                                 </TableCell>
                                 <TableCell className="text-center text-muted-foreground">
                                     {unassigned.application_submitted}
+                                </TableCell>
+                                <TableCell className="text-center text-muted-foreground">
+                                    {unassigned.on_hold}
                                 </TableCell>
                                 <TableCell className="text-center text-muted-foreground">
                                     {unassigned.lost}

@@ -31,6 +31,10 @@ export interface SurrogateRead {
     surrogate_number: string;
     stage_id: string;
     status_label: string;
+    paused_from_stage_id?: string | null;
+    paused_from_stage_slug?: string | null;
+    paused_from_stage_label?: string | null;
+    paused_from_stage_type?: string | null;
     source: SurrogateSource;
     is_priority: boolean;
     owner_type: string;
@@ -117,6 +121,7 @@ export interface SurrogateStatusChange {
     stage_id: string;
     reason?: string | null;
     effective_at?: string | null;
+    on_hold_follow_up_months?: 1 | 3 | 6 | null;
     delivery_baby_gender?: string | null;
     delivery_baby_weight?: string | null;
 }

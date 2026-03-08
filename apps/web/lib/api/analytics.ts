@@ -255,6 +255,7 @@ export interface UserPerformanceData {
     ready_to_match: number;
     matched: number;
     application_submitted: number;
+    on_hold: number;
     lost: number;
     conversion_rate: number;
     avg_days_to_match: number | null;
@@ -269,6 +270,7 @@ export interface UnassignedPerformanceData {
     ready_to_match: number;
     matched: number;
     application_submitted: number;
+    on_hold: number;
     lost: number;
 }
 

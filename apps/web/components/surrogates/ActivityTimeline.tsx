@@ -302,19 +302,37 @@ function assignActivityToStage(
 // Windowing Logic
 // ============================================================================
 
-function getCurrentStageIndex(stageGroups: StageGroup[]): number {
-    const idx = stageGroups.findIndex((s) => s.isCurrent)
-    return idx >= 0 ? idx : 0 // Safe fallback to first stage
+function getStageIndexById(stageGroups: StageGroup[], stageId?: string | null): number {
+    if (!stageId) return 0
+    const idx = stageGroups.findIndex((stage) => stage.id === stageId)
+    return idx >= 0 ? idx : 0
 }
 
-function getVisibleStages(stageGroups: StageGroup[], showFullJourney: boolean): StageGroup[] {
+function getVisibleStages(
+    stageGroups: StageGroup[],
+    showFullJourney: boolean,
+    anchorStageId?: string | null,
+    currentStageId?: string | null
+): StageGroup[] {
     if (showFullJourney) return stageGroups
 
-    const currentIdx = getCurrentStageIndex(stageGroups)
-    // Clamp at edges: show fewer than 5 when near start/end
-    const startIdx = Math.max(0, currentIdx - VISIBLE_STAGE_RANGE)
-    const endIdx = Math.min(stageGroups.length, currentIdx + VISIBLE_STAGE_RANGE + 1)
-    return stageGroups.slice(startIdx, endIdx)
+    const collectVisibleIds = (centerIndex: number, target: Set<string>) => {
+        const startIdx = Math.max(0, centerIndex - VISIBLE_STAGE_RANGE)
+        const endIdx = Math.min(stageGroups.length, centerIndex + VISIBLE_STAGE_RANGE + 1)
+        for (const stage of stageGroups.slice(startIdx, endIdx)) {
+            target.add(stage.id)
+        }
+    }
+
+    const visibleIds = new Set<string>()
+    const anchorIdx = getStageIndexById(stageGroups, anchorStageId ?? currentStageId)
+    collectVisibleIds(anchorIdx, visibleIds)
+
+    if (currentStageId && currentStageId !== anchorStageId) {
+        collectVisibleIds(getStageIndexById(stageGroups, currentStageId), visibleIds)
+    }
+
+    return stageGroups.filter((stage) => visibleIds.has(stage.id))
 }
 
 // ============================================================================
@@ -325,7 +343,8 @@ function buildTimelineData(
     allPipelineStages: PipelineStage[],
     stageHistory: SurrogateStatusHistory[],
     activities: SurrogateActivity[],
-    currentStageId: string
+    currentStageId: string,
+    effectiveStageId?: string
 ): { stageGroups: StageGroup[] } {
     const stageLabelById = new Map(allPipelineStages.map((stage) => [stage.id, stage.label]))
 
@@ -383,7 +402,9 @@ function buildTimelineData(
         .filter((s) => s.is_active)
         .sort((a, b) => a.order - b.order)
     const currentStage = activeStages.find((s) => s.id === currentStageId)
-    const currentStageOrder = currentStage?.order ?? 0
+    const effectiveStage =
+        activeStages.find((stage) => stage.id === effectiveStageId) ?? currentStage
+    const currentStageOrder = effectiveStage?.order ?? currentStage?.order ?? 0
 
     // 7. Create StageGroup for ALL pipeline stages (preserve full story)
     const displayStages = activeStages.filter((stage) => {
@@ -406,8 +427,8 @@ function buildTimelineData(
             date: entryAt ? formatDistanceToNow(new Date(entryAt), { addSuffix: true }) : null,
             rawDate: entryAt,
             isCurrent: stage.id === currentStageId,
-            isCompleted: stage.order < currentStageOrder,
-            isUpcoming: stage.order > currentStageOrder,
+            isCompleted: stage.id !== currentStageId && stage.order < currentStageOrder,
+            isUpcoming: stage.id !== currentStageId && stage.order > currentStageOrder,
             isTerminal: isTerminalStage,
             transitionLabel: entryMeta?.transitionLabel ?? null,
             isBackdated: entryMeta?.isBackdated ?? false,
@@ -520,6 +541,7 @@ const TaskRow = memo(function TaskRow({ task, isOverdue = false }: { task: TaskL
 interface ActivityTimelineProps {
     surrogateId: string
     currentStageId: string
+    effectiveStageId?: string
     stages: PipelineStage[]
     activities?: SurrogateActivity[]
     tasks?: TaskListItem[]
@@ -531,6 +553,7 @@ const EMPTY_TASKS: TaskListItem[] = []
 export function ActivityTimeline({
     surrogateId,
     currentStageId,
+    effectiveStageId,
     stages,
     activities = EMPTY_ACTIVITIES,
     tasks = EMPTY_TASKS,
@@ -544,14 +567,14 @@ export function ActivityTimeline({
 
     // Memoize timeline building
     const { stageGroups } = useMemo(
-        () => buildTimelineData(stages, stageHistory, activities, currentStageId),
-        [stages, stageHistory, activities, currentStageId]
+        () => buildTimelineData(stages, stageHistory, activities, currentStageId, effectiveStageId),
+        [stages, stageHistory, activities, currentStageId, effectiveStageId]
     )
 
     // Apply windowing
     const visibleStages = useMemo(
-        () => getVisibleStages(stageGroups, showFullJourney),
-        [stageGroups, showFullJourney]
+        () => getVisibleStages(stageGroups, showFullJourney, effectiveStageId, currentStageId),
+        [stageGroups, showFullJourney, effectiveStageId, currentStageId]
     )
 
     const autoOpenStageIds = useMemo(

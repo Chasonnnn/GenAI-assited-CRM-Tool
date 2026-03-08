@@ -25,6 +25,7 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
         surrogate,
         isLoading,
         error,
+        pausedFromStage,
         statusLabel,
         statusColor,
         noteCount,
@@ -71,6 +72,11 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
                 surrogateNumber={surrogate.surrogate_number}
                 statusLabel={statusLabel}
                 statusColor={statusColor}
+                pausedFromLabel={
+                    surrogate.paused_from_stage_id
+                        ? surrogate.paused_from_stage_label ?? pausedFromStage?.label ?? null
+                        : null
+                }
                 isArchived={surrogate.is_archived}
                 onBack={navigateToList}
             >

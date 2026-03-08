@@ -53,6 +53,7 @@ export function HeaderActions() {
     const {
         surrogate,
         stageById,
+        effectiveStage,
         queues,
         assignees,
         canManageQueue,
@@ -64,10 +65,12 @@ export function HeaderActions() {
     } = useSurrogateDetailData()
     const { openDialog } = useSurrogateDetailDialogs()
     const {
+        changeStatus,
         claimSurrogate,
         assignSurrogate,
         archiveSurrogate,
         restoreSurrogate,
+        isChangeStatusPending,
         isClaimPending,
         isAssignPending,
         isReleasePending,
@@ -78,9 +81,11 @@ export function HeaderActions() {
 
     // Determine if log contact button should be shown
     const currentStage = stageById.get(surrogate.stage_id)
-    const isIntakeStage = currentStage?.stage_type === "intake"
-    const currentStageSlug = currentStage?.slug ?? surrogate.stage_slug
-    const currentStageIndex = getStageIndex(currentStageSlug)
+    const isOnHold = (currentStage?.slug ?? surrogate.stage_slug) === "on_hold"
+    const workflowStage = effectiveStage ?? currentStage
+    const isIntakeStage = workflowStage?.stage_type === "intake"
+    const workflowStageSlug = workflowStage?.slug ?? surrogate.paused_from_stage_slug ?? surrogate.stage_slug
+    const currentStageIndex = getStageIndex(workflowStageSlug)
     const isAtOrBeforeContacted =
         currentStageIndex !== null && CONTACTED_STAGE_INDEX >= 0
             ? currentStageIndex <= CONTACTED_STAGE_INDEX
@@ -94,13 +99,13 @@ export function HeaderActions() {
         surrogate.owner_type === "user" &&
         (isAssignee || canManageQueue) &&
         !surrogate.is_archived
-    const canLogContact = canLogInteraction && isAtOrBeforeContacted
-    const canLogInterviewOutcome = canLogInteraction && isAtOrAfterInterviewScheduled
+    const canLogContact = canLogInteraction && !isOnHold && isAtOrBeforeContacted
+    const canLogInterviewOutcome = canLogInteraction && !isOnHold && isAtOrAfterInterviewScheduled
 
     // Determine if propose match button should be shown
-    const isReadyToMatchStage = currentStage?.slug === "ready_to_match"
+    const isReadyToMatchStage = workflowStage?.slug === "ready_to_match"
     const isManagerRole = user?.role && ["case_manager", "admin", "developer"].includes(user.role)
-    const canProposeMatch = isManagerRole && isReadyToMatchStage && !surrogate.is_archived
+    const canProposeMatch = isManagerRole && !isOnHold && isReadyToMatchStage && !surrogate.is_archived
 
     const handleExport = async () => {
         setIsExporting(true)
@@ -120,11 +125,29 @@ export function HeaderActions() {
 
     return (
         <>
+            {isOnHold && surrogate.paused_from_stage_id && (
+                <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => changeStatus({ stage_id: surrogate.paused_from_stage_id as string })}
+                    disabled={surrogate.is_archived || !canChangeStage || isChangeStatusPending}
+                >
+                    {isChangeStatusPending ? (
+                        <>
+                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            Resuming...
+                        </>
+                    ) : (
+                        "Resume"
+                    )}
+                </Button>
+            )}
+
             <Button
                 variant="outline"
                 size="sm"
                 onClick={() => openDialog({ type: "change_stage" })}
-                disabled={surrogate.is_archived || !canChangeStage}
+                disabled={surrogate.is_archived || !canChangeStage || isChangeStatusPending}
             >
                 Change Stage
             </Button>

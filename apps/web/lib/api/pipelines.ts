@@ -5,7 +5,7 @@
 import { api } from '../api';
 
 // Types
-export type StageType = 'intake' | 'post_approval' | 'terminal';
+export type StageType = 'intake' | 'paused' | 'post_approval' | 'terminal';
 
 export interface PipelineStage {
     id: string;

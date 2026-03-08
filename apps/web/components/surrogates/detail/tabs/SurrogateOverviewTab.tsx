@@ -54,18 +54,25 @@ export function SurrogateOverviewTab() {
     }
 
     const currentStage = stageById.get(surrogateData.stage_id)
+    const pausedFromStage = surrogateData.paused_from_stage_id
+        ? stageById.get(surrogateData.paused_from_stage_id)
+        : undefined
+    const effectiveStage = pausedFromStage ?? currentStage
+    const effectiveStageOrder = effectiveStage?.order ?? null
+    const effectiveStageSlug =
+        effectiveStage?.slug ?? surrogateData.paused_from_stage_slug ?? surrogateData.stage_slug
     const isReadyToMatchOrLater = !!(
-        currentStage &&
+        effectiveStageOrder !== null &&
         readyToMatchStage &&
-        currentStage.order >= readyToMatchStage.order
+        effectiveStageOrder >= readyToMatchStage.order
     )
     const isHeartbeatConfirmedOrLater = !!(
-        currentStage &&
+        effectiveStageOrder !== null &&
         heartbeatStage &&
-        currentStage.order >= heartbeatStage.order
+        effectiveStageOrder >= heartbeatStage.order
     )
     const isTerminalIntakeOutcome = ["lost", "disqualified"].includes(
-        surrogateData.stage_slug ?? ""
+        effectiveStageSlug ?? ""
     )
 
     const copyEmail = () => {
@@ -248,6 +255,7 @@ export function SurrogateOverviewTab() {
                         stages={stageOptions}
                         activities={activityData?.items ?? []}
                         tasks={tasksData?.items ?? []}
+                        {...(effectiveStage?.id ? { effectiveStageId: effectiveStage.id } : {})}
                     />
 
                     <SurrogateOverviewCard title="Eligibility Checklist" icon={ClipboardCheckIcon}>
