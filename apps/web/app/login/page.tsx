@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ShieldCheck } from "lucide-react"
+import { ShieldCheck, Loader2 } from "lucide-react"
 import { getAuthApiBase } from "@/lib/auth-utils"
 
 export default function LoginPage() {
@@ -91,7 +91,11 @@ export default function LoginPage() {
             className="w-full font-semibold py-6 text-base rounded-full transition-all duration-300 bg-indigo-950 text-white hover:bg-indigo-900"
             disabled={isLoading}
           >
-            <ShieldCheck className="w-5 h-5 mr-2" />
+            {isLoading ? (
+              <Loader2 className="w-5 h-5 mr-2 animate-spin" aria-hidden="true" />
+            ) : (
+              <ShieldCheck className="w-5 h-5 mr-2" aria-hidden="true" />
+            )}
             {isLoading ? "Signing In..." : "Sign in with Google"}
           </Button>
 
