@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.27](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.26...surrogacy-crm-platform-v0.90.27) (2026-03-09)
+
+
+### Bug Fixes
+
+* prevent Duo dead end after MFA reset ([83fc353](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/83fc353a1c13066d01315e7894c68811d133cb88))
+
 ## [0.90.26](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.25...surrogacy-crm-platform-v0.90.26) (2026-03-08)
 
 
