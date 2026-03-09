@@ -272,10 +272,10 @@ export default function AgencyDetailPage() {
         setMfaResetting(member.id);
         try {
             await resetMemberMfa(orgId, member.id);
-            toast.success(`MFA reset for ${member.email}`);
+            toast.success(`MFA and Duo reset for ${member.email}`);
         } catch (error) {
             console.error('Failed to reset MFA:', error);
-            toast.error(getErrorMessage(error, 'Failed to reset MFA'));
+            toast.error(getErrorMessage(error, 'Failed to reset MFA and Duo enrollment'));
         } finally {
             setMfaResetting(null);
         }

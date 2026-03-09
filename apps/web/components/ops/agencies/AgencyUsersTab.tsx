@@ -94,17 +94,20 @@ export function AgencyUsersTab({
                                                         variant: "ghost",
                                                         size: "sm",
                                                     })}
+                                                    aria-label={`Reset MFA for ${member.email}`}
                                                 >
                                                     <ShieldOff className="size-4" />
                                                 </AlertDialogTrigger>
                                                 <AlertDialogContent>
                                                     <AlertDialogHeader>
-                                                        <AlertDialogTitle>Reset MFA?</AlertDialogTitle>
+                                                        <AlertDialogTitle>Reset MFA and Duo?</AlertDialogTitle>
                                                         <AlertDialogDescription>
-                                                            This will clear MFA enrollment for{" "}
+                                                            This will clear CRM MFA state and Duo enrollment
+                                                            for{" "}
                                                             <strong>{member.display_name}</strong> (
                                                             {member.email}). They will be required to set up
-                                                            MFA again on next login.
+                                                            MFA again on next login, and the reset may fail if
+                                                            Duo is unavailable.
                                                         </AlertDialogDescription>
                                                     </AlertDialogHeader>
                                                     <AlertDialogFooter>
