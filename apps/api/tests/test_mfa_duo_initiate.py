@@ -124,17 +124,22 @@ async def test_duo_callback_rate_limited_after_five_attempts(
 
 
 @pytest.mark.asyncio
-async def test_duo_initiate_requires_existing_duo_enrollment(authed_client, monkeypatch):
+async def test_duo_initiate_allows_duo_setup_for_unenrolled_users(authed_client, monkeypatch):
     from app.services import duo_service
 
     monkeypatch.setattr(duo_service, "is_available", lambda: True)
-    monkeypatch.setattr(
-        duo_service,
-        "create_auth_url",
-        lambda **_kwargs: pytest.fail("create_auth_url should not be called"),
-    )
+    captured = {}
+
+    def fake_create_auth_url(*, user_id, username, state, redirect_uri=None):
+        captured["user_id"] = user_id
+        captured["username"] = username
+        captured["redirect_uri"] = redirect_uri
+        return "https://duo.example.com/enroll"
+
+    monkeypatch.setattr(duo_service, "create_auth_url", fake_create_auth_url)
 
     response = await authed_client.post("/mfa/duo/initiate")
 
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Duo is not set up for this account. Use an authenticator app instead."
+    assert response.status_code == 200, response.text
+    assert response.json()["auth_url"] == "https://duo.example.com/enroll"
+    assert captured["username"]

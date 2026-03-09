@@ -78,11 +78,11 @@ describe("MFAPage", () => {
         })
     })
 
-    it("does not offer Duo when the user is not enrolled", () => {
+    it("offers Duo setup when the user is not enrolled", () => {
         render(<MFAPage />)
 
         expect(screen.queryByRole("button", { name: /continue with duo/i })).not.toBeInTheDocument()
-        expect(screen.queryByRole("button", { name: /set up duo/i })).not.toBeInTheDocument()
+        expect(screen.getByRole("button", { name: /set up duo/i })).toBeInTheDocument()
         expect(screen.getByRole("button", { name: /set up authenticator/i })).toBeInTheDocument()
     })
 })

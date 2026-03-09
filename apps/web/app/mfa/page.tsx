@@ -244,7 +244,7 @@ export default function MFAPage() {
     const duoEnrolled = duoStatus?.enrolled
     const mfaEnabled = mfaStatus?.mfa_enabled
     const totpEnabled = mfaStatus?.totp_enabled
-    const canUseDuo = Boolean(duoAvailable && duoEnrolled)
+    const canUseDuo = Boolean(duoAvailable)
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-muted/30 p-6">
@@ -272,9 +272,17 @@ export default function MFAPage() {
                                 <div className="rounded-lg border border-dashed p-4">
                                     <h3 className="text-sm font-semibold mb-1">Duo Security</h3>
                                     <p className="text-sm text-muted-foreground">
-                                        Duo is not set up for this account. Use an authenticator app to
-                                        continue.
+                                        Set up Duo for this account or use an authenticator app instead.
                                     </p>
+                                    <div className="mt-3">
+                                        <Button
+                                            onClick={handleDuo}
+                                            disabled={initiateDuo.isPending}
+                                            className="w-full"
+                                        >
+                                            {initiateDuo.isPending ? "Starting Duo..." : "Set up Duo"}
+                                        </Button>
+                                    </div>
                                 </div>
                             )}
 
@@ -333,7 +341,9 @@ export default function MFAPage() {
                                 >
                                     {initiateDuo.isPending
                                         ? "Starting Duo..."
-                                        : "Continue with Duo"}
+                                        : duoEnrolled
+                                          ? "Continue with Duo"
+                                          : "Set up Duo"}
                                 </Button>
                             )}
 

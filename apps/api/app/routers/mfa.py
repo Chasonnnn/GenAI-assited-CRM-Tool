@@ -584,12 +584,6 @@ def initiate_duo_auth(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if not user.duo_enrolled_at:
-        raise HTTPException(
-            status_code=400,
-            detail="Duo is not set up for this account. Use an authenticator app instead.",
-        )
-
     # Generate secure state token for CSRF protection
     state = generate_oauth_state()
 
