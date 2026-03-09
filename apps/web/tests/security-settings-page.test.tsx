@@ -1,51 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen } from "@testing-library/react"
-import MFAPage from "../app/mfa/page"
+import SecuritySettingsPage from "../app/(app)/settings/security/page"
 
-const mockUseAuth = vi.fn()
 const mockUseMFAStatus = vi.fn()
 const mockUseDuoStatus = vi.fn()
-const mockUseCompleteMFAChallenge = vi.fn()
 const mockUseInitiateDuoAuth = vi.fn()
-const mockReplace = vi.fn()
-
-vi.mock("@/lib/auth-context", () => ({
-    useAuth: () => mockUseAuth(),
-}))
+const mockUseRegenerateRecoveryCodes = vi.fn()
+const mockUseDisableMFA = vi.fn()
 
 vi.mock("@/lib/hooks/use-mfa", () => ({
     useMFAStatus: () => mockUseMFAStatus(),
     useDuoStatus: () => mockUseDuoStatus(),
-    useCompleteMFAChallenge: () => mockUseCompleteMFAChallenge(),
     useInitiateDuoAuth: () => mockUseInitiateDuoAuth(),
+    useRegenerateRecoveryCodes: () => mockUseRegenerateRecoveryCodes(),
+    useDisableMFA: () => mockUseDisableMFA(),
 }))
 
-vi.mock("next/navigation", () => ({
-    useRouter: () => ({
-        replace: mockReplace,
-        push: vi.fn(),
-        back: vi.fn(),
-        prefetch: vi.fn(),
-    }),
-}))
-
-describe("MFAPage", () => {
+describe("SecuritySettingsPage", () => {
     beforeEach(() => {
-        window.sessionStorage.clear()
-        mockReplace.mockReset()
-        mockUseAuth.mockReturnValue({
-            user: {
-                email: "user@example.com",
-                mfa_required: true,
-                mfa_verified: false,
-            },
-            isLoading: false,
-            refetch: vi.fn(),
-        })
         mockUseMFAStatus.mockReturnValue({
             data: {
                 mfa_enabled: false,
-                totp_enabled: false,
+                recovery_codes_remaining: 0,
             },
             isLoading: false,
         })
@@ -56,20 +32,23 @@ describe("MFAPage", () => {
             },
             isLoading: false,
         })
-        mockUseCompleteMFAChallenge.mockReturnValue({
+        mockUseInitiateDuoAuth.mockReturnValue({
             mutateAsync: vi.fn(),
             isPending: false,
         })
-        mockUseInitiateDuoAuth.mockReturnValue({
+        mockUseRegenerateRecoveryCodes.mockReturnValue({
+            mutateAsync: vi.fn(),
+            isPending: false,
+        })
+        mockUseDisableMFA.mockReturnValue({
             mutateAsync: vi.fn(),
             isPending: false,
         })
     })
 
-    it("offers Duo setup when the user is not enrolled", () => {
-        render(<MFAPage />)
+    it("shows Duo setup and removes authenticator setup copy", () => {
+        render(<SecuritySettingsPage />)
 
-        expect(screen.queryByRole("button", { name: /continue with duo/i })).not.toBeInTheDocument()
         expect(screen.getByRole("button", { name: /set up duo/i })).toBeInTheDocument()
         expect(screen.queryByRole("button", { name: /set up authenticator/i })).not.toBeInTheDocument()
         expect(screen.queryByText(/google authenticator/i)).not.toBeInTheDocument()

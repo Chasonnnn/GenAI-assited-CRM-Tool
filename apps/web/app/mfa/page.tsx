@@ -7,109 +7,18 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
-import {
-    CheckIcon,
-    CopyIcon,
-    KeyIcon,
-    Loader2Icon,
-    ShieldCheckIcon,
-    SmartphoneIcon,
-} from "lucide-react"
+import { Loader2Icon, ShieldCheckIcon } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import {
     useCompleteMFAChallenge,
     useDuoStatus,
     useInitiateDuoAuth,
     useMFAStatus,
-    useSetupTOTP,
-    useVerifyTOTPSetup,
 } from "@/lib/hooks/use-mfa"
 
 function hasAuthReturnToOpsCookie(): boolean {
     if (typeof document === "undefined") return false
     return document.cookie.split(";").some((c) => c.trim().startsWith("auth_return_to=ops"))
-}
-
-function QRCodeDisplay({ data }: { data: string }) {
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data)}`
-
-    return (
-        <div className="flex justify-center p-4 bg-white rounded-lg">
-            <img
-                src={qrUrl}
-                alt="TOTP QR Code"
-                width={200}
-                height={200}
-                className="rounded"
-            />
-        </div>
-    )
-}
-
-function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: () => void }) {
-    const [copied, setCopied] = useState(false)
-
-    const handleCopy = () => {
-        navigator.clipboard.writeText(codes.join("\n"))
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-    }
-
-    return (
-        <Dialog open={true} onOpenChange={onClose}>
-            <DialogContent className="max-w-md">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                        <KeyIcon className="size-5" />
-                        Recovery Codes
-                    </DialogTitle>
-                    <DialogDescription>
-                        Save these codes in a secure location. Each code can only be used once.
-                    </DialogDescription>
-                </DialogHeader>
-
-                <Alert variant="destructive" className="my-4">
-                    <AlertTitle>Important</AlertTitle>
-                    <AlertDescription>
-                        These codes will not be shown again. Save them now.
-                    </AlertDescription>
-                </Alert>
-
-                <div className="grid grid-cols-2 gap-2 p-4 bg-muted rounded-lg font-mono text-sm">
-                    {codes.map((code, i) => (
-                        <div key={i} className="p-2 bg-background rounded text-center">
-                            {code}
-                        </div>
-                    ))}
-                </div>
-
-                <DialogFooter className="gap-2">
-                    <Button variant="outline" onClick={handleCopy}>
-                        {copied ? (
-                            <>
-                                <CheckIcon className="size-4 mr-2" />
-                                Copied
-                            </>
-                        ) : (
-                            <>
-                                <CopyIcon className="size-4 mr-2" />
-                                Copy All
-                            </>
-                        )}
-                    </Button>
-                    <Button onClick={onClose}>I have saved these codes</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    )
 }
 
 export default function MFAPage() {
@@ -118,16 +27,11 @@ export default function MFAPage() {
     const { data: mfaStatus, isLoading: mfaLoading } = useMFAStatus()
     const { data: duoStatus } = useDuoStatus()
 
-    const setupTOTP = useSetupTOTP()
-    const verifyTOTP = useVerifyTOTPSetup()
     const completeMFA = useCompleteMFAChallenge()
     const initiateDuo = useInitiateDuoAuth()
 
-    const [setupData, setSetupData] = useState<{ secret: string; provisioning_uri: string } | null>(null)
-    const [setupCode, setSetupCode] = useState("")
     const [challengeCode, setChallengeCode] = useState("")
     const [errorMessage, setErrorMessage] = useState<string | null>(null)
-    const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null)
     const [showCodeEntry, setShowCodeEntry] = useState(false)
 
     useEffect(() => {
@@ -146,7 +50,6 @@ export default function MFAPage() {
 
     useEffect(() => {
         if (authLoading) return
-        if (recoveryCodes) return
         if (!user) {
             router.replace("/login")
             return
@@ -160,36 +63,7 @@ export default function MFAPage() {
             }
             router.replace("/")
         }
-    }, [authLoading, user, router, recoveryCodes])
-
-    const handleStartSetup = async () => {
-        setErrorMessage(null)
-        try {
-            const data = await setupTOTP.mutateAsync()
-            setSetupData(data)
-        } catch (error) {
-            console.error("Failed to start TOTP setup:", error)
-            setErrorMessage("Unable to start authenticator setup. Please try again.")
-        }
-    }
-
-    const handleVerifySetup = async () => {
-        if (!setupCode) return
-        setErrorMessage(null)
-        try {
-            const result = await verifyTOTP.mutateAsync(setupCode)
-            if (result.success) {
-                setRecoveryCodes(result.recovery_codes)
-                await completeMFA.mutateAsync(setupCode)
-                await refetch()
-                setSetupData(null)
-                setSetupCode("")
-            }
-        } catch (error) {
-            console.error("Verification failed:", error)
-            setErrorMessage("Verification failed. Please check the code and try again.")
-        }
-    }
+    }, [authLoading, user, router])
 
     const handleChallenge = async () => {
         if (!challengeCode) return
@@ -243,7 +117,6 @@ export default function MFAPage() {
     const duoAvailable = duoStatus?.available
     const duoEnrolled = duoStatus?.enrolled
     const mfaEnabled = mfaStatus?.mfa_enabled
-    const totpEnabled = mfaStatus?.totp_enabled
     const canUseDuo = Boolean(duoAvailable)
 
     return (
@@ -268,11 +141,11 @@ export default function MFAPage() {
 
                     {!mfaEnabled && (
                         <div className="space-y-4">
-                            {duoAvailable && !duoEnrolled && (
+                            {duoAvailable ? (
                                 <div className="rounded-lg border border-dashed p-4">
                                     <h3 className="text-sm font-semibold mb-1">Duo Security</h3>
                                     <p className="text-sm text-muted-foreground">
-                                        Set up Duo for this account or use an authenticator app instead.
+                                        Set up Duo for this account to continue.
                                     </p>
                                     <div className="mt-3">
                                         <Button
@@ -284,49 +157,14 @@ export default function MFAPage() {
                                         </Button>
                                     </div>
                                 </div>
-                            )}
-
-                            <div className="rounded-lg border border-dashed p-4">
-                                <h3 className="text-sm font-semibold mb-1 flex items-center gap-2">
-                                    <SmartphoneIcon className="size-4" />
-                                    Authenticator app
-                                </h3>
-                                <p className="text-sm text-muted-foreground">
-                                    Use Google Authenticator, Authy, or 1Password to scan a QR code.
-                                </p>
-                                <div className="mt-3">
-                                    <Button
-                                        onClick={handleStartSetup}
-                                        disabled={setupTOTP.isPending}
-                                        className="w-full"
-                                    >
-                                        {setupTOTP.isPending ? "Preparing..." : "Set up authenticator"}
-                                    </Button>
-                                </div>
-                            </div>
-
-                            {setupData && (
-                                <div className="space-y-4 rounded-lg border p-4">
-                                    <QRCodeDisplay data={setupData.provisioning_uri} />
-                                    <div className="space-y-2">
-                                        <Label htmlFor="setup-code">Authenticator code</Label>
-                                        <Input
-                                            id="setup-code"
-                                            placeholder="123456"
-                                            value={setupCode}
-                                            onChange={(event) => setSetupCode(event.target.value)}
-                                        />
-                                    </div>
-                                    <Button
-                                        onClick={handleVerifySetup}
-                                        disabled={verifyTOTP.isPending || completeMFA.isPending}
-                                        className="w-full"
-                                    >
-                                        {verifyTOTP.isPending || completeMFA.isPending
-                                            ? "Verifying..."
-                                            : "Verify and continue"}
-                                    </Button>
-                                </div>
+                            ) : (
+                                <Alert variant="destructive">
+                                    <AlertTitle>Duo unavailable</AlertTitle>
+                                    <AlertDescription>
+                                        Duo setup is temporarily unavailable. Please try again later or
+                                        contact support.
+                                    </AlertDescription>
+                                </Alert>
                             )}
                         </div>
                     )}
@@ -350,12 +188,10 @@ export default function MFAPage() {
                             {(showCodeEntry || !canUseDuo) && (
                                 <>
                                     <div className="space-y-2">
-                                        <Label htmlFor="challenge-code">
-                                            Authenticator or recovery code
-                                        </Label>
+                                        <Label htmlFor="challenge-code">Recovery code</Label>
                                         <Input
                                             id="challenge-code"
-                                            placeholder="123456 or recovery code"
+                                            placeholder="Enter recovery code"
                                             value={challengeCode}
                                             onChange={(event) => setChallengeCode(event.target.value)}
                                         />
@@ -377,35 +213,13 @@ export default function MFAPage() {
                                     onClick={() => setShowCodeEntry(true)}
                                     className="w-full"
                                 >
-                                    Use authenticator / recovery code instead
+                                    Use recovery code instead
                                 </Button>
-                            )}
-
-                            {!totpEnabled && duoEnrolled && (
-                                <p className="text-xs text-muted-foreground text-center">
-                                    Duo verification is enabled for your account.
-                                </p>
                             )}
                         </div>
                     )}
                 </CardContent>
             </Card>
-
-            {recoveryCodes && (
-                <RecoveryCodesDisplay
-                    codes={recoveryCodes}
-                    onClose={() => {
-                        setRecoveryCodes(null)
-                        const returnTo = sessionStorage.getItem("auth_return_to")
-                        if (returnTo === "ops") {
-                            sessionStorage.removeItem("auth_return_to")
-                            router.replace("/ops")
-                            return
-                        }
-                        router.replace("/")
-                    }}
-                />
-            )}
         </div>
     )
 }

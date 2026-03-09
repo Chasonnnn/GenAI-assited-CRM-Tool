@@ -1,11 +1,11 @@
 "use client"
 
 /**
- * Security Settings Page - MFA enrollment and management.
- * 
+ * Security Settings Page - Duo MFA enrollment and recovery management.
+ *
  * Features:
  * - MFA status display
- * - TOTP setup with QR code
+ * - Duo setup / verification handoff
  * - Recovery codes display
  * - MFA disable option
  */
@@ -13,16 +13,14 @@
 import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import {
     Dialog,
+    DialogFooter,
     DialogContent,
     DialogDescription,
     DialogHeader,
     DialogTitle,
-    DialogFooter,
 } from "@/components/ui/dialog"
 import {
     Alert,
@@ -30,36 +28,22 @@ import {
     AlertTitle,
 } from "@/components/ui/alert"
 import {
-    ShieldCheckIcon,
-    ShieldAlertIcon,
-    SmartphoneIcon,
-    KeyIcon,
-    CopyIcon,
-    CheckIcon,
-    Loader2Icon,
     AlertTriangleIcon,
+    CheckIcon,
+    CopyIcon,
+    KeyIcon,
+    Loader2Icon,
     RefreshCwIcon,
+    ShieldAlertIcon,
+    ShieldCheckIcon,
 } from "lucide-react"
-import { QRCodeSVG } from "qrcode.react"
 import {
-    useMFAStatus,
-    useSetupTOTP,
-    useVerifyTOTPSetup,
-    useRegenerateRecoveryCodes,
     useDisableMFA,
+    useDuoStatus,
+    useInitiateDuoAuth,
+    useMFAStatus,
+    useRegenerateRecoveryCodes,
 } from "@/lib/hooks/use-mfa"
-
-// =============================================================================
-// QR Code Component (using external library via script or simple display)
-// =============================================================================
-
-function QRCodeDisplay({ data }: { data: string }) {
-    return (
-        <div className="flex justify-center p-4 bg-white rounded-lg">
-            <QRCodeSVG value={data} size={200} includeMargin className="rounded" />
-        </div>
-    )
-}
 
 // =============================================================================
 // Recovery Codes Display
@@ -130,42 +114,24 @@ function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: ()
 
 export default function SecuritySettingsPage() {
     const { data: mfaStatus, isLoading: statusLoading } = useMFAStatus()
+    const { data: duoStatus } = useDuoStatus()
 
-    const [showSetupDialog, setShowSetupDialog] = useState(false)
     const [showDisableDialog, setShowDisableDialog] = useState(false)
     const [showRecoveryCodes, setShowRecoveryCodes] = useState<string[] | null>(null)
+    const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-    const [verificationCode, setVerificationCode] = useState("")
-    const [setupData, setSetupData] = useState<{ secret: string; provisioning_uri: string } | null>(null)
-
-    const setupTOTP = useSetupTOTP()
-    const verifyTOTP = useVerifyTOTPSetup()
+    const initiateDuo = useInitiateDuoAuth()
     const regenerateCodes = useRegenerateRecoveryCodes()
     const disableMFA = useDisableMFA()
 
-    const handleStartSetup = async () => {
-        setShowSetupDialog(true)
+    const handleStartDuo = async () => {
+        setErrorMessage(null)
         try {
-            const data = await setupTOTP.mutateAsync()
-            setSetupData(data)
+            const result = await initiateDuo.mutateAsync("app")
+            window.location.assign(result.auth_url)
         } catch (error) {
-            console.error("Failed to start TOTP setup:", error)
-        }
-    }
-
-    const handleVerifyCode = async () => {
-        if (!verificationCode) return
-
-        try {
-            const result = await verifyTOTP.mutateAsync(verificationCode)
-            if (result.success) {
-                setShowSetupDialog(false)
-                setSetupData(null)
-                setVerificationCode("")
-                setShowRecoveryCodes(result.recovery_codes)
-            }
-        } catch (error) {
-            console.error("Verification failed:", error)
+            console.error("Failed to start Duo setup:", error)
+            setErrorMessage("Unable to start Duo setup. Please try again.")
         }
     }
 
@@ -196,15 +162,16 @@ export default function SecuritySettingsPage() {
     }
 
     const mfaEnabled = mfaStatus?.mfa_enabled || false
-    const totpEnabled = mfaStatus?.totp_enabled || false
     const recoveryCodesRemaining = mfaStatus?.recovery_codes_remaining || 0
+    const duoAvailable = duoStatus?.available || false
+    const duoEnrolled = duoStatus?.enrolled || false
 
     return (
         <div className="container max-w-2xl py-8 space-y-6">
             <div>
                 <h1 className="text-2xl font-semibold">Security Settings</h1>
                 <p className="text-muted-foreground">
-                    Manage your account security and two-factor authentication.
+                    Manage your Duo enrollment and account recovery settings.
                 </p>
             </div>
 
@@ -227,31 +194,37 @@ export default function SecuritySettingsPage() {
                     <CardDescription>
                         {mfaEnabled
                             ? "Your account is protected with two-factor authentication."
-                            : "Add an extra layer of security to your account."}
+                            : "Set up Duo to finish enabling two-factor authentication."}
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                    {errorMessage && (
+                        <Alert variant="destructive">
+                            <AlertTriangleIcon className="size-4" aria-hidden="true" />
+                            <AlertTitle>Action needed</AlertTitle>
+                            <AlertDescription>{errorMessage}</AlertDescription>
+                        </Alert>
+                    )}
+
                     {!mfaEnabled ? (
                         <>
-                            <Alert>
+                            <Alert variant={duoAvailable ? "default" : "destructive"}>
                                 <AlertTriangleIcon className="size-4" aria-hidden="true" />
-                                <AlertTitle>MFA Required</AlertTitle>
+                                <AlertTitle>{duoAvailable ? "Duo Required" : "Duo Unavailable"}</AlertTitle>
                                 <AlertDescription>
-                                    Two-factor authentication is required for all users.
-                                    Please set up an authenticator app to continue.
+                                    {duoAvailable
+                                        ? "Two-factor authentication is required for all users. Please set up Duo to continue."
+                                        : "Duo is temporarily unavailable. Please try again later or contact support."}
                                 </AlertDescription>
                             </Alert>
-                            <Button onClick={handleStartSetup} disabled={setupTOTP.isPending}>
-                                {setupTOTP.isPending ? (
+                            <Button onClick={handleStartDuo} disabled={initiateDuo.isPending || !duoAvailable}>
+                                {initiateDuo.isPending ? (
                                     <>
                                         <Loader2Icon className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                        Setting up…
+                                        Starting Duo…
                                     </>
                                 ) : (
-                                    <>
-                                        <SmartphoneIcon className="size-4 mr-2" aria-hidden="true" />
-                                        Set Up Authenticator App
-                                    </>
+                                    "Set Up Duo"
                                 )}
                             </Button>
                         </>
@@ -259,17 +232,31 @@ export default function SecuritySettingsPage() {
                         <div className="space-y-4">
                             <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
                                 <div className="flex items-center gap-3">
-                                    <SmartphoneIcon className="size-5 text-muted-foreground" aria-hidden="true" />
+                                    <ShieldCheckIcon className="size-5 text-muted-foreground" aria-hidden="true" />
                                     <div>
-                                        <p className="font-medium">Authenticator App</p>
+                                        <p className="font-medium">Duo Security</p>
                                         <p className="text-sm text-muted-foreground">
-                                            {totpEnabled ? "Enabled" : "Not configured"}
+                                            {duoEnrolled ? "Configured" : "Setup required"}
                                         </p>
                                     </div>
                                 </div>
-                                <Badge variant={totpEnabled ? "default" : "secondary"}>
-                                    {totpEnabled ? "Active" : "Inactive"}
-                                </Badge>
+                                <div className="flex items-center gap-3">
+                                    <Badge variant={duoEnrolled ? "default" : "secondary"}>
+                                        {duoEnrolled ? "Active" : "Pending"}
+                                    </Badge>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleStartDuo}
+                                        disabled={initiateDuo.isPending || !duoAvailable}
+                                    >
+                                        {initiateDuo.isPending
+                                            ? "Starting Duo…"
+                                            : duoEnrolled
+                                              ? "Continue with Duo"
+                                              : "Set Up Duo"}
+                                    </Button>
+                                </div>
                             </div>
 
                             <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
@@ -316,75 +303,6 @@ export default function SecuritySettingsPage() {
                 </CardContent>
             </Card>
 
-            {/* TOTP Setup Dialog */}
-            <Dialog open={showSetupDialog} onOpenChange={setShowSetupDialog}>
-                <DialogContent className="max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>Set Up Authenticator App</DialogTitle>
-                        <DialogDescription>
-                            Scan this QR code with your authenticator app (Google Authenticator, Authy, 1Password, etc.)
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    {setupData ? (
-                        <div className="space-y-4">
-                            <QRCodeDisplay data={setupData.provisioning_uri} />
-
-                            <div className="space-y-2">
-                                <Label>Or enter this code manually:</Label>
-                                <code className="block p-2 bg-muted rounded text-sm text-center break-all">
-                                    {setupData.secret}
-                                </code>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="verification-code">
-                                    Enter the 6-digit code from your app:
-                                </Label>
-                                <Input
-                                    id="verification-code"
-                                    type="text"
-                                    inputMode="numeric"
-                                    pattern="[0-9]*"
-                                    maxLength={6}
-                                    placeholder="123456"
-                                    value={verificationCode}
-                                    onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))}
-                                    className="text-center text-lg tracking-widest"
-                                    name="verification-code"
-                                    autoComplete="one-time-code"
-                                />
-                            </div>
-
-                            <Button
-                                className="w-full"
-                                onClick={handleVerifyCode}
-                                disabled={verificationCode.length !== 6 || verifyTOTP.isPending}
-                            >
-                                {verifyTOTP.isPending ? (
-                                    <>
-                                        <Loader2Icon className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                        Verifying…
-                                    </>
-                                ) : (
-                                    "Verify and Enable"
-                                )}
-                            </Button>
-
-                            {verifyTOTP.isError && (
-                                <p className="text-sm text-destructive text-center">
-                                    Invalid code. Please try again.
-                                </p>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="flex items-center justify-center h-40">
-                            <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
-                        </div>
-                    )}
-                </DialogContent>
-            </Dialog>
-
             {/* Disable MFA Confirmation Dialog */}
             <Dialog open={showDisableDialog} onOpenChange={setShowDisableDialog}>
                 <DialogContent>
@@ -392,7 +310,7 @@ export default function SecuritySettingsPage() {
                         <DialogTitle>Disable Two-Factor Authentication?</DialogTitle>
                         <DialogDescription>
                             This will remove the security protection from your account.
-                            Since MFA is required, you will need to set it up again immediately.
+                            Since MFA is required, you will need to set up Duo again immediately.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
