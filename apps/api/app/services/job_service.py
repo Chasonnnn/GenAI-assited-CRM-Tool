@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.db.models import Job
@@ -97,28 +98,40 @@ def claim_pending_jobs(
         type_values = [jt.value if isinstance(jt, JobType) else str(jt) for jt in job_types if jt]
         if not type_values:
             return []
-    query = db.query(Job).filter(
+    query = select(Job.id).where(
         Job.status == JobStatus.PENDING.value,
         Job.run_at <= now,
     )
     if type_values:
-        query = query.filter(Job.job_type.in_(type_values))
-    query = query.order_by(Job.run_at).limit(limit)
+        query = query.where(Job.job_type.in_(type_values))
+    query = query.order_by(Job.run_at, Job.id).limit(limit)
     if getattr(db.get_bind(), "dialect", None) and db.get_bind().dialect.name == "postgresql":
         query = query.with_for_update(skip_locked=True)
 
-    jobs = query.all()
-    if not jobs:
+    claimed_ids = list(db.execute(query).scalars())
+    if not claimed_ids:
         return []
 
-    for job in jobs:
-        job.status = JobStatus.RUNNING.value
-        job.attempts += 1
+    db.execute(
+        update(Job)
+        .where(Job.id.in_(claimed_ids))
+        .values(
+            status=JobStatus.RUNNING.value,
+            attempts=Job.attempts + 1,
+        )
+        .execution_options(synchronize_session=False)
+    )
 
     db.commit()
-    for job in jobs:
-        db.refresh(job)
-    return jobs
+    db.expire_all()
+
+    claimed_jobs = (
+        db.query(Job)
+        .filter(Job.id.in_(claimed_ids))
+        .all()
+    )
+    claimed_by_id = {job.id: job for job in claimed_jobs}
+    return [claimed_by_id[job_id] for job_id in claimed_ids if job_id in claimed_by_id]
 
 
 def get_job(db: Session, job_id: UUID, org_id: UUID | None = None) -> Job | None:
