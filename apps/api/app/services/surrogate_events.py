@@ -23,6 +23,31 @@ def _get_org_user(db: Session, org_id: UUID, user_id: UUID | None):
     return membership.user if membership else None
 
 
+def _record_side_effect_failure(
+    *,
+    surrogate: Surrogate,
+    alert_type,
+    title: str,
+    integration_key: str,
+    exc: Exception,
+    details: dict | None = None,
+) -> None:
+    from app.db.enums import AlertSeverity
+    from app.services import alert_service
+
+    logger.exception(title)
+    alert_service.record_alert_isolated(
+        org_id=surrogate.organization_id,
+        alert_type=alert_type,
+        severity=AlertSeverity.ERROR,
+        title=title,
+        message=str(exc)[:500],
+        integration_key=integration_key,
+        error_class=type(exc).__name__,
+        details=details,
+    )
+
+
 def handle_status_changed(
     *,
     db: Session,
@@ -42,20 +67,37 @@ def handle_status_changed(
     trigger_workflows: bool = True,
 ) -> None:
     """Dispatch surrogate status change side effects."""
+    from app.db.enums import AlertType
     from app.services import notification_facade, queue_service, workflow_triggers
 
     actor = _get_org_user(db, surrogate.organization_id, user_id)
     actor_name = actor.display_name if actor else "Someone"
 
     if new_stage.slug != "application_submitted":
-        notification_facade.notify_surrogate_status_changed(
-            db=db,
-            surrogate=surrogate,
-            from_status=old_label,
-            to_status=new_stage.label,
-            actor_id=user_id or surrogate.created_by_user_id or surrogate.owner_id,
-            actor_name=actor_name,
-        )
+        try:
+            notification_facade.notify_surrogate_status_changed(
+                db=db,
+                surrogate=surrogate,
+                from_status=old_label,
+                to_status=new_stage.label,
+                actor_id=user_id or surrogate.created_by_user_id or surrogate.owner_id,
+                actor_name=actor_name,
+            )
+        except Exception as exc:
+            _record_side_effect_failure(
+                surrogate=surrogate,
+                alert_type=AlertType.NOTIFICATION_PUSH_FAILED,
+                title="Surrogate status notification failed",
+                integration_key="surrogate_status_changed",
+                exc=exc,
+                details={
+                    "surrogate_id": str(surrogate.id),
+                    "old_stage_id": str(old_stage_id) if old_stage_id else None,
+                    "new_stage_id": str(new_stage.id),
+                    "old_stage_slug": old_slug,
+                    "new_stage_slug": new_stage.slug,
+                },
+            )
 
     if new_stage.slug == "approved":
         try:
@@ -93,25 +135,42 @@ def handle_status_changed(
     if trigger_workflows:
         from app.services import pipeline_service
 
-        old_stage = pipeline_service.get_stage_by_id(db, old_stage_id) if old_stage_id else None
-        workflow_triggers.trigger_status_changed(
-            db=db,
-            surrogate=surrogate,
-            old_stage_id=old_stage_id,
-            new_stage_id=new_stage.id,
-            old_stage_slug=old_slug,
-            new_stage_slug=new_stage.slug,
-            old_stage_key=old_stage.stage_key if old_stage else None,
-            new_stage_key=new_stage.stage_key,
-            effective_at=effective_at,
-            recorded_at=recorded_at,
-            is_undo=is_undo,
-            request_id=request_id,
-            approved_by_user_id=approved_by_user_id,
-            approved_at=approved_at,
-            requested_at=requested_at,
-            changed_by_user_id=user_id,
-        )
+        try:
+            old_stage = pipeline_service.get_stage_by_id(db, old_stage_id) if old_stage_id else None
+            workflow_triggers.trigger_status_changed(
+                db=db,
+                surrogate=surrogate,
+                old_stage_id=old_stage_id,
+                new_stage_id=new_stage.id,
+                old_stage_slug=old_slug,
+                new_stage_slug=new_stage.slug,
+                old_stage_key=old_stage.stage_key if old_stage else None,
+                new_stage_key=new_stage.stage_key,
+                effective_at=effective_at,
+                recorded_at=recorded_at,
+                is_undo=is_undo,
+                request_id=request_id,
+                approved_by_user_id=approved_by_user_id,
+                approved_at=approved_at,
+                requested_at=requested_at,
+                changed_by_user_id=user_id,
+            )
+        except Exception as exc:
+            _record_side_effect_failure(
+                surrogate=surrogate,
+                alert_type=AlertType.WORKFLOW_EXECUTION_FAILED,
+                title="Surrogate status workflow trigger failed",
+                integration_key="surrogate_status_changed",
+                exc=exc,
+                details={
+                    "surrogate_id": str(surrogate.id),
+                    "old_stage_id": str(old_stage_id) if old_stage_id else None,
+                    "new_stage_id": str(new_stage.id),
+                    "old_stage_slug": old_slug,
+                    "new_stage_slug": new_stage.slug,
+                    "request_id": str(request_id) if request_id else None,
+                },
+            )
 
 
 def _maybe_send_capi_event(

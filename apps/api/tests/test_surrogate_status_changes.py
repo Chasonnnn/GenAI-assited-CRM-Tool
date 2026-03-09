@@ -5,7 +5,8 @@ import uuid
 
 import pytest
 
-from app.db.models import StatusChangeRequest, Surrogate, SurrogateStatusHistory
+from app.db.enums import OwnerType, Role
+from app.db.models import Membership, StatusChangeRequest, Surrogate, SurrogateStatusHistory, User
 from app.services import pipeline_service
 
 
@@ -232,3 +233,87 @@ async def test_surrogate_status_undo_within_grace_period_bypasses_approval(
     )
     assert undo_history is not None
     assert undo_history.is_undo is True
+
+
+@pytest.mark.asyncio
+async def test_surrogate_status_change_still_applies_when_notification_side_effect_fails(
+    authed_client, db, test_auth, monkeypatch
+):
+    surrogate = await _create_surrogate(authed_client)
+    target_stage = _get_stage(db, test_auth.org.id, "contacted")
+
+    owner = User(
+        id=uuid.uuid4(),
+        email=f"owner-{uuid.uuid4().hex[:8]}@example.com",
+        display_name="Owner User",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(owner)
+    db.flush()
+    db.add(
+        Membership(
+            id=uuid.uuid4(),
+            user_id=owner.id,
+            organization_id=test_auth.org.id,
+            role=Role.CASE_MANAGER,
+        )
+    )
+
+    surrogate_row = db.query(Surrogate).filter(Surrogate.id == UUID(surrogate["id"])).first()
+    assert surrogate_row is not None
+    surrogate_row.owner_type = OwnerType.USER.value
+    surrogate_row.owner_id = owner.id
+    db.commit()
+
+    from app.services import notification_facade, workflow_triggers
+
+    def raise_notification_error(*_args, **_kwargs):
+        raise RuntimeError("notification dispatch failed")
+
+    monkeypatch.setattr(
+        notification_facade,
+        "notify_surrogate_status_changed",
+        raise_notification_error,
+    )
+    monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
+
+    response = await authed_client.patch(
+        f"/surrogates/{surrogate['id']}/status",
+        json={"stage_id": str(target_stage.id)},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "applied"
+
+    db.refresh(surrogate_row)
+    assert surrogate_row.stage_id == target_stage.id
+
+
+@pytest.mark.asyncio
+async def test_surrogate_status_change_still_applies_when_workflow_trigger_fails(
+    authed_client, db, test_auth, monkeypatch
+):
+    surrogate = await _create_surrogate(authed_client)
+    target_stage = _get_stage(db, test_auth.org.id, "contacted")
+
+    from app.services import workflow_triggers
+
+    def raise_workflow_error(*_args, **_kwargs):
+        raise RuntimeError("workflow trigger failed")
+
+    monkeypatch.setattr(
+        workflow_triggers,
+        "trigger_status_changed",
+        raise_workflow_error,
+    )
+
+    response = await authed_client.patch(
+        f"/surrogates/{surrogate['id']}/status",
+        json={"stage_id": str(target_stage.id)},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "applied"
+
+    surrogate_row = db.query(Surrogate).filter(Surrogate.id == UUID(surrogate["id"])).first()
+    assert surrogate_row is not None
+    assert surrogate_row.stage_id == target_stage.id

@@ -1,6 +1,7 @@
 """Surrogate status change helpers (apply + request + history + notifications)."""
 
 import calendar
+import logging
 from datetime import date, datetime, time, timedelta, timezone
 from typing import TypedDict
 from uuid import UUID, uuid4
@@ -20,6 +21,8 @@ from app.db.models import (
     Task,
     User,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class StatusChangeResult(TypedDict):
@@ -355,14 +358,37 @@ def change_status(
         from app.services import notification_facade
 
         requester = _get_org_user(db, surrogate.organization_id, user_id)
-        notification_facade.notify_status_change_request_pending(
-            db=db,
-            request=request,
-            surrogate=surrogate,
-            target_stage_label=new_stage.label,
-            current_stage_label=effective_old_stage.label if effective_old_stage else old_label or "Unknown",
-            requester_name=requester.display_name if requester else "Someone",
-        )
+        try:
+            notification_facade.notify_status_change_request_pending(
+                db=db,
+                request=request,
+                surrogate=surrogate,
+                target_stage_label=new_stage.label,
+                current_stage_label=(
+                    effective_old_stage.label if effective_old_stage else old_label or "Unknown"
+                ),
+                requester_name=requester.display_name if requester else "Someone",
+            )
+        except Exception as exc:
+            from app.db.enums import AlertSeverity, AlertType
+            from app.services import alert_service
+
+            logger.exception("surrogate_status_regression_notify_failed")
+            alert_service.record_alert_isolated(
+                org_id=surrogate.organization_id,
+                alert_type=AlertType.NOTIFICATION_PUSH_FAILED,
+                severity=AlertSeverity.ERROR,
+                title="Surrogate status regression notification failed",
+                message=str(exc)[:500],
+                integration_key="surrogate_status_request",
+                error_class=type(exc).__name__,
+                details={
+                    "surrogate_id": str(surrogate.id),
+                    "request_id": str(request.id),
+                    "target_stage_id": str(new_stage.id),
+                    "target_stage_slug": new_stage.slug,
+                },
+            )
 
         result = StatusChangeResult(
             status="pending_approval",
