@@ -37,7 +37,7 @@ from app.core.deps import (
 )
 from app.core.csrf import set_csrf_cookie, CSRF_COOKIE_NAME, get_csrf_cookie
 from app.core.config import settings
-from app.services import platform_service, session_service, storage_client, storage_url_service
+from app.services import duo_admin_service, platform_service, session_service, storage_client, storage_url_service
 from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
 from app.db.enums import Role
 from app.schemas.platform_templates import (
@@ -737,6 +737,10 @@ def update_member(
 @router.post(
     "/orgs/{org_id}/members/{member_id}/mfa/reset",
     dependencies=[Depends(require_csrf_header)],
+    responses={
+        502: {"description": "Failed to reset Duo enrollment"},
+        503: {"description": "Duo Admin API unavailable"},
+    },
 )
 def reset_member_mfa(
     org_id: UUID,
@@ -754,6 +758,10 @@ def reset_member_mfa(
             actor_id=session.user_id,
             request=request,
         )
+    except duo_admin_service.DuoAdminConfigError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except duo_admin_service.DuoAdminAPIError as e:
+        raise HTTPException(status_code=502, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

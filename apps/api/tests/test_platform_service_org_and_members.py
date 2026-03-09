@@ -93,7 +93,16 @@ def test_platform_member_list_update_and_mfa_reset(monkeypatch, db, test_org, te
         "log_admin_action",
         lambda **kwargs: actions.append(kwargs["action"]),
     )
-    monkeypatch.setattr(platform_service.mfa_service, "disable_mfa", lambda db, user: None)
+    monkeypatch.setattr(
+        platform_service.duo_admin_service,
+        "reset_user_enrollment",
+        lambda **kwargs: SimpleNamespace(
+            duo_user_id=None,
+            actions=[],
+            deleted_user=False,
+        ),
+    )
+    monkeypatch.setattr(platform_service.mfa_service, "disable_mfa", lambda db, user, **kwargs: None)
     monkeypatch.setattr(platform_service.session_service, "revoke_all_user_sessions", lambda *args, **kwargs: None)
 
     members = platform_service.list_members(db, test_org.id)

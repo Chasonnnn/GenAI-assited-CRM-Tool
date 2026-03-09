@@ -87,3 +87,82 @@ async def test_platform_reset_mfa_clears_fields_and_revokes_sessions(
         .first()
     )
     assert log is not None
+
+
+@pytest.mark.asyncio
+async def test_platform_reset_mfa_returns_502_when_duo_reset_fails(
+    authed_client, db, test_user, test_org, monkeypatch
+):
+    from app.db.models import Membership
+    from app.services import duo_admin_service
+
+    test_user.is_platform_admin = True
+    now = datetime.now(timezone.utc)
+    test_user.mfa_enabled = True
+    test_user.duo_user_id = "duo-test-user"
+    test_user.duo_enrolled_at = now
+    db.commit()
+
+    membership = (
+        db.query(Membership)
+        .filter(
+            Membership.user_id == test_user.id,
+            Membership.organization_id == test_org.id,
+        )
+        .first()
+    )
+    assert membership is not None
+
+    def raise_duo_error(*args, **kwargs):
+        raise duo_admin_service.DuoAdminAPIError(
+            "Duo Admin API request failed",
+            step="delete_user",
+            status_code=504,
+        )
+
+    monkeypatch.setattr(duo_admin_service, "reset_user_enrollment", raise_duo_error)
+
+    response = await authed_client.post(
+        f"/platform/orgs/{test_org.id}/members/{membership.id}/mfa/reset"
+    )
+    assert response.status_code == 502
+
+    db.refresh(test_user)
+    assert test_user.mfa_enabled is True
+    assert test_user.duo_user_id == "duo-test-user"
+    assert test_user.duo_enrolled_at is not None
+
+
+@pytest.mark.asyncio
+async def test_platform_reset_mfa_returns_503_when_duo_admin_not_configured(
+    authed_client, db, test_user, test_org, monkeypatch
+):
+    from app.db.models import Membership
+    from app.services import duo_admin_service
+
+    test_user.is_platform_admin = True
+    now = datetime.now(timezone.utc)
+    test_user.mfa_enabled = True
+    test_user.duo_user_id = "duo-test-user"
+    test_user.duo_enrolled_at = now
+    db.commit()
+
+    membership = (
+        db.query(Membership)
+        .filter(
+            Membership.user_id == test_user.id,
+            Membership.organization_id == test_org.id,
+        )
+        .first()
+    )
+    assert membership is not None
+
+    def raise_duo_config(*args, **kwargs):
+        raise duo_admin_service.DuoAdminConfigError("Duo Admin API is not configured")
+
+    monkeypatch.setattr(duo_admin_service, "reset_user_enrollment", raise_duo_config)
+
+    response = await authed_client.post(
+        f"/platform/orgs/{test_org.id}/members/{membership.id}/mfa/reset"
+    )
+    assert response.status_code == 503

@@ -369,6 +369,10 @@ class Settings(BaseSettings):
     DUO_CLIENT_SECRET: str = ""  # Secret key from Duo Admin
     DUO_API_HOST: str = ""  # API hostname (api-XXXXX.duosecurity.com)
     DUO_REDIRECT_URI: str = ""
+    DUO_ADMIN_INTEGRATION_KEY: str = ""
+    DUO_ADMIN_SECRET_KEY: str = ""
+    DUO_ADMIN_API_HOST: str = ""
+    DUO_ADMIN_TIMEOUT_SECONDS: float = 10.0
 
     @property
     def duo_enabled(self) -> bool:
@@ -377,6 +381,20 @@ class Settings(BaseSettings):
             (self.DUO_CLIENT_ID or "").strip()
             and (self.DUO_CLIENT_SECRET or "").strip()
             and (self.DUO_API_HOST or "").strip()
+        )
+
+    @property
+    def duo_admin_host(self) -> str:
+        """Return the configured Duo Admin API host."""
+        return (self.DUO_ADMIN_API_HOST or self.DUO_API_HOST or "").strip()
+
+    @property
+    def duo_admin_enabled(self) -> bool:
+        """Check if Duo Admin API is configured."""
+        return bool(
+            (self.DUO_ADMIN_INTEGRATION_KEY or "").strip()
+            and (self.DUO_ADMIN_SECRET_KEY or "").strip()
+            and self.duo_admin_host
         )
 
     @property

@@ -27,9 +27,9 @@ from app.db.models import (
     SystemAlert,
     SupportSession,
 )
-from app.db.enums import Role, JobType
+from app.db.enums import AlertSeverity, AlertType, Role, JobType
 from app.core.security import create_support_session_token
-from app.services import mfa_service, session_service, job_service
+from app.services import alert_service, duo_admin_service, mfa_service, session_service, job_service
 from app.utils.normalization import escape_like_string
 from app.utils.presentation import humanize_identifier
 
@@ -959,7 +959,57 @@ def reset_member_mfa(
 
     user = membership.user
 
-    mfa_service.disable_mfa(db, user)
+    try:
+        duo_result = duo_admin_service.reset_user_enrollment(
+            username=user.email,
+            duo_user_id=user.duo_user_id,
+        )
+        logger.info(
+            "Duo enrollment reset completed for member MFA reset",
+            extra={
+                "org_id": str(org_id),
+                "member_id": str(member_id),
+                "target_user_id": str(user.id),
+                "target_email": user.email,
+                "duo_user_id": duo_result.duo_user_id,
+                "duo_actions": duo_result.actions,
+                "duo_deleted_user": duo_result.deleted_user,
+            },
+        )
+    except duo_admin_service.DuoAdminError as exc:
+        logger.warning(
+            "Failed to reset Duo enrollment during member MFA reset",
+            extra={
+                "org_id": str(org_id),
+                "member_id": str(member_id),
+                "target_user_id": str(user.id),
+                "target_email": user.email,
+                "duo_user_id": user.duo_user_id,
+                "duo_step": getattr(exc, "step", None),
+                "http_status": getattr(exc, "status_code", None),
+            },
+        )
+        alert_service.record_alert_isolated(
+            org_id=org_id,
+            alert_type=AlertType.INTEGRATION_API_ERROR,
+            severity=AlertSeverity.ERROR,
+            title="Duo MFA reset failed",
+            message=str(exc),
+            integration_key="duo_admin",
+            error_class=type(exc).__name__,
+            http_status=getattr(exc, "status_code", None),
+            details={
+                "member_id": str(member_id),
+                "target_user_id": str(user.id),
+                "target_email": user.email,
+                "duo_user_id": user.duo_user_id,
+                "step": getattr(exc, "step", None),
+                "duo_code": getattr(exc, "duo_code", None),
+            },
+        )
+        raise
+
+    mfa_service.disable_mfa(db, user, commit=False)
     user.token_version += 1
 
     log_admin_action(

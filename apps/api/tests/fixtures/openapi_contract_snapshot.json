@@ -2491,7 +2491,9 @@
   "/platform/orgs/{org_id}/members/{member_id}/mfa/reset": {
     "POST": [
       "200",
-      "422"
+      "422",
+      "502",
+      "503"
     ]
   },
   "/platform/orgs/{org_id}/purge": {

@@ -165,7 +165,7 @@ def complete_totp_setup(db: Session, user: User, code: str) -> Tuple[bool, list[
     return True, plaintext_codes
 
 
-def disable_mfa(db: Session, user: User) -> None:
+def disable_mfa(db: Session, user: User, *, commit: bool = True) -> None:
     """Disable MFA for a user (admin action or user re-setup)."""
     user.mfa_enabled = False
     user.totp_secret = None
@@ -174,7 +174,8 @@ def disable_mfa(db: Session, user: User) -> None:
     user.duo_enrolled_at = None
     user.mfa_recovery_codes = None
     # Keep mfa_required_at to track when enforcement started
-    db.commit()
+    if commit:
+        db.commit()
 
 
 # =============================================================================
