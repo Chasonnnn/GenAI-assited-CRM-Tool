@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.29](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.28...surrogacy-crm-platform-v0.90.29) (2026-03-09)
+
+
+### Bug Fixes
+
+* harden surrogate status side effects ([896ebf0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/896ebf0c29932b81e1b539804dc86fa074b65e88))
+* persist claimed jobs before worker handoff ([af5373f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/af5373f15f965a23e0ff92b9c02882cdb6689e62))
+* remove authenticator setup from mfa ui ([ad96424](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ad964248408b2af455fc88b19d34f7fd0ec96bef))
+
 ## [0.90.28](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.27...surrogacy-crm-platform-v0.90.28) (2026-03-09)
 
 
