@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import pytest
 
 
@@ -11,7 +13,7 @@ def rate_limiter_reset():
 
 
 @pytest.mark.asyncio
-async def test_duo_initiate_prefers_ops_return_to(authed_client, db, test_org, monkeypatch):
+async def test_duo_initiate_prefers_ops_return_to(authed_client, db, test_org, test_user, monkeypatch):
     from app.core.config import settings
     from app.services import duo_service
 
@@ -19,6 +21,7 @@ async def test_duo_initiate_prefers_ops_return_to(authed_client, db, test_org, m
     monkeypatch.setattr(settings, "ENV", "prod", raising=False)
     monkeypatch.setattr(settings, "FRONTEND_URL", "", raising=False)
     test_org.slug = "ewi"
+    test_user.duo_enrolled_at = datetime.now(timezone.utc)
     db.commit()
     monkeypatch.setattr(duo_service, "is_available", lambda: True)
 
@@ -39,7 +42,9 @@ async def test_duo_initiate_prefers_ops_return_to(authed_client, db, test_org, m
 
 
 @pytest.mark.asyncio
-async def test_duo_initiate_ignores_invalid_return_to(authed_client, db, test_org, monkeypatch):
+async def test_duo_initiate_ignores_invalid_return_to(
+    authed_client, db, test_org, test_user, monkeypatch
+):
     from app.core.config import settings
     from app.services import duo_service
 
@@ -47,6 +52,7 @@ async def test_duo_initiate_ignores_invalid_return_to(authed_client, db, test_or
     monkeypatch.setattr(settings, "ENV", "prod", raising=False)
     monkeypatch.setattr(settings, "FRONTEND_URL", "", raising=False)
     test_org.slug = "ewi"
+    test_user.duo_enrolled_at = datetime.now(timezone.utc)
     db.commit()
     monkeypatch.setattr(duo_service, "is_available", lambda: True)
 
@@ -69,11 +75,15 @@ async def test_duo_initiate_ignores_invalid_return_to(authed_client, db, test_or
 @pytest.mark.asyncio
 async def test_duo_initiate_rate_limited_after_five_attempts(
     authed_client,
+    db,
+    test_user,
     monkeypatch,
     rate_limiter_reset,
 ):
     from app.services import duo_service
 
+    test_user.duo_enrolled_at = datetime.now(timezone.utc)
+    db.commit()
     monkeypatch.setattr(duo_service, "is_available", lambda: True)
     monkeypatch.setattr(
         duo_service,
@@ -111,3 +121,20 @@ async def test_duo_callback_rate_limited_after_five_attempts(
         json={"code": "duo-code", "state": "state-1"},
     )
     assert blocked.status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_duo_initiate_requires_existing_duo_enrollment(authed_client, monkeypatch):
+    from app.services import duo_service
+
+    monkeypatch.setattr(duo_service, "is_available", lambda: True)
+    monkeypatch.setattr(
+        duo_service,
+        "create_auth_url",
+        lambda **_kwargs: pytest.fail("create_auth_url should not be called"),
+    )
+
+    response = await authed_client.post("/mfa/duo/initiate")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Duo is not set up for this account. Use an authenticator app instead."
