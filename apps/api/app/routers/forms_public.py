@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
+from app.core.client_ip import get_client_ip
 from app.core.config import settings
 from app.core.deps import get_db
 from app.core.rate_limit import limiter
@@ -385,7 +386,7 @@ def submit_shared_public_form(
         "campaign_name": intake_link.campaign_name,
         "event_name": intake_link.event_name,
         "utm": {**(intake_link.utm_defaults or {}), **utm_fields},
-        "client_ip": request.client.host if request.client else None,
+        "client_ip": get_client_ip(request),
         "user_agent": request.headers.get("user-agent"),
     }
     challenge_token = request.headers.get("x-intake-challenge")

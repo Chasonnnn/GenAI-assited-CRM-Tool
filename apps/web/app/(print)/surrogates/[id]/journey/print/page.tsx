@@ -1,8 +1,20 @@
+import type { Metadata } from "next"
+import { headers } from "next/headers"
+
 import { JourneyPrintView } from "@/components/surrogates/journey/JourneyPrintView"
 import type { JourneyResponse } from "@/lib/api/journey"
+import { buildServerApiHeaders } from "@/lib/server-api-headers"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
+export const metadata: Metadata = {
+    title: "Journey Print",
+    description: "Printable surrogate journey timeline.",
+    robots: {
+        index: false,
+        follow: false,
+    },
+}
 
 interface PageProps {
     params: Promise<{ id?: string | string[] }>
@@ -15,8 +27,12 @@ async function fetchJourneyForExport(
 ): Promise<JourneyResponse | null> {
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
     const url = `${apiBase}/journey/surrogates/${surrogateId}/export-view?export_token=${encodeURIComponent(exportToken)}`
+    const requestHeaders = await headers()
 
-    const response = await fetch(url, { cache: "no-store" })
+    const response = await fetch(url, {
+        cache: "no-store",
+        headers: buildServerApiHeaders(requestHeaders),
+    })
     if (!response.ok) {
         return null
     }

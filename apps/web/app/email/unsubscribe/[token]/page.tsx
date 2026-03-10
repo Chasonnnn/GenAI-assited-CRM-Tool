@@ -1,9 +1,20 @@
+import type { Metadata } from "next"
 import { headers } from "next/headers"
 import Link from "next/link"
 
-export const dynamic = "force-dynamic"
+import { buildServerApiHeaders } from "@/lib/server-api-headers"
 
-async function _processUnsubscribe(token: string) {
+export const dynamic = "force-dynamic"
+export const metadata: Metadata = {
+    title: "Email Unsubscribe",
+    description: "Manage email subscription preferences.",
+    robots: {
+        index: false,
+        follow: false,
+    },
+}
+
+async function _processUnsubscribe(token: string, requestHeaders: Headers) {
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
     const safeToken = encodeURIComponent(token || "")
     if (!safeToken) return
@@ -15,6 +26,7 @@ async function _processUnsubscribe(token: string) {
             method: "POST",
             // No cookies required; token is the auth.
             cache: "no-store",
+            headers: buildServerApiHeaders(requestHeaders),
         })
     } catch {
         // Ignore failures to avoid leaking availability details to recipients.
@@ -30,7 +42,7 @@ export default async function UnsubscribePage({
     const h = await headers()
     const orgName = h.get("x-org-name") || "Surrogacy Force"
 
-    await _processUnsubscribe(token)
+    await _processUnsubscribe(token, h)
 
     return (
         <main className="min-h-dvh bg-gradient-to-b from-background via-background to-muted/30 px-4 py-12">

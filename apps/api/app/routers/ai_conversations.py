@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import get_db, require_permission
 from app.core.permissions import PermissionKey as P
 from app.core.rate_limit import limiter
@@ -15,6 +16,7 @@ from app.db.enums import Role
 from app.schemas.auth import UserSession
 
 router = APIRouter()
+AI_CONVERSATION_LIMIT = f"{settings.RATE_LIMIT_AI_CONVERSATIONS}/minute"
 
 
 @router.get("/conversations/{entity_type}/{entity_id}")
@@ -122,7 +124,7 @@ def get_conversation(
 
 
 @router.get("/conversations/global")
-@limiter.limit("120/minute")
+@limiter.limit(AI_CONVERSATION_LIMIT)
 def get_global_conversation(
     request: Request,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),

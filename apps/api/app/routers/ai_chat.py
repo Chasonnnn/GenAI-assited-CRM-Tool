@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import (
     get_db,
     get_db_for_stream,
@@ -28,6 +29,7 @@ from app.utils.sse import format_sse, format_sse_comment, sse_preamble, STREAM_H
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+AI_CHAT_LIMIT = f"{settings.RATE_LIMIT_AI_CHAT}/minute"
 
 
 class ChatRequest(BaseModel):
@@ -127,7 +129,7 @@ def _prepare_chat_request(
     response_model=ChatResponseModel,
     dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
-@limiter.limit("60/minute")
+@limiter.limit(AI_CHAT_LIMIT)
 def chat(
     request: Request,  # Required by limiter
     body: ChatRequest,
@@ -169,7 +171,7 @@ def chat(
     "/chat/stream",
     dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
-@limiter.limit("60/minute")
+@limiter.limit(AI_CHAT_LIMIT)
 async def chat_stream(
     request: Request,  # Required by limiter
     body: ChatRequest,

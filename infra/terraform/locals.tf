@@ -56,6 +56,14 @@ locals {
     DB_AUTO_MIGRATE                 = tostring(var.db_auto_migrate)
   }, local.optional_env)
 
+  api_env = merge(local.common_env, {
+    TRUST_PROXY_HEADERS    = tostring(var.trust_proxy_headers)
+    TRUST_PROXY_HOSTS      = var.trust_proxy_hosts
+    RATE_LIMIT_AUTH        = tostring(var.rate_limit_auth)
+    RATE_LIMIT_API         = tostring(var.rate_limit_api)
+    RATE_LIMIT_PUBLIC_READ = tostring(var.rate_limit_public_read)
+  })
+
   common_secret_keys = [
     "DATABASE_URL",
     "REDIS_URL",

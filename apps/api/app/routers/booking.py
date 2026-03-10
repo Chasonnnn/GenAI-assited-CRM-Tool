@@ -37,6 +37,7 @@ from app.services import (
 from app.core.config import settings
 
 router = APIRouter(prefix="/book", tags=["booking"])
+PUBLIC_FORM_LIMIT = f"{settings.RATE_LIMIT_PUBLIC_FORMS}/minute"
 
 
 # =============================================================================
@@ -216,7 +217,7 @@ def get_available_slots(
 
 
 @router.post("/{public_slug}/book")
-@limiter.limit("10/minute")
+@limiter.limit(PUBLIC_FORM_LIMIT)
 def create_booking(
     public_slug: str,
     data: AppointmentCreate,
@@ -295,7 +296,7 @@ def get_appointment_for_manage(
 
 
 @router.post("/self-service/{org_id}/manage/{token}/reschedule")
-@limiter.limit("10/minute")
+@limiter.limit(PUBLIC_FORM_LIMIT)
 def reschedule_by_manage_token(
     org_id: UUID,
     token: str,
@@ -331,7 +332,7 @@ def reschedule_by_manage_token(
 
 
 @router.post("/self-service/{org_id}/manage/{token}/cancel")
-@limiter.limit("10/minute")
+@limiter.limit(PUBLIC_FORM_LIMIT)
 def cancel_by_manage_token(
     org_id: UUID,
     token: str,
@@ -453,7 +454,7 @@ def get_reschedule_slots(
 
 
 @router.post("/self-service/{org_id}/reschedule/{token}")
-@limiter.limit("10/minute")
+@limiter.limit(PUBLIC_FORM_LIMIT)
 def reschedule_by_token(
     org_id: UUID,
     token: str,
@@ -503,7 +504,7 @@ def get_appointment_for_cancel(
 
 
 @router.post("/self-service/{org_id}/cancel/{token}")
-@limiter.limit("10/minute")
+@limiter.limit(PUBLIC_FORM_LIMIT)
 def cancel_by_token(
     org_id: UUID,
     token: str,

@@ -16,6 +16,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import (
     get_db,
     require_ai_enabled,
@@ -41,6 +42,8 @@ from app.services.ai_email_template_service import (
 from app.utils.sse import format_sse, sse_preamble, STREAM_HEADERS
 
 router = APIRouter()
+AI_GENERATION_LIMIT = f"{settings.RATE_LIMIT_AI_GENERATION}/minute"
+AI_ANALYSIS_LIMIT = f"{settings.RATE_LIMIT_AI_ANALYSIS}/minute"
 
 
 class SummarizeSurrogateRequest(BaseModel):
@@ -105,7 +108,7 @@ class AnalyzeDashboardResponse(BaseModel):
     response_model=EmailTemplateGenerationResponse,
     dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
-@limiter.limit("10/minute")
+@limiter.limit(AI_GENERATION_LIMIT)
 def generate_email_template(
     request: Request,
     body: EmailTemplateGenerationRequest,
@@ -127,7 +130,7 @@ def generate_email_template(
     "/email-templates/generate/stream",
     dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
-@limiter.limit("10/minute")
+@limiter.limit(AI_GENERATION_LIMIT)
 async def generate_email_template_stream(
     request: Request,
     body: EmailTemplateGenerationRequest,
@@ -297,7 +300,7 @@ Highlight key qualifications and background while being professional and respect
     response_model=SummarizeSurrogateResponse,
     dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
-@limiter.limit("30/minute")
+@limiter.limit(AI_ANALYSIS_LIMIT)
 async def summarize_surrogate(
     request: Request,
     body: SummarizeSurrogateRequest,
@@ -460,7 +463,7 @@ Pending Tasks:
     "/summarize-surrogate/stream",
     dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
-@limiter.limit("30/minute")
+@limiter.limit(AI_ANALYSIS_LIMIT)
 async def summarize_surrogate_stream(
     request: Request,
     body: SummarizeSurrogateRequest,
@@ -653,7 +656,7 @@ Pending Tasks:
     response_model=DraftEmailResponse,
     dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
-@limiter.limit("30/minute")
+@limiter.limit(AI_ANALYSIS_LIMIT)
 async def draft_email(
     request: Request,
     body: DraftEmailRequest,
@@ -779,7 +782,7 @@ async def draft_email(
     "/draft-email/stream",
     dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
-@limiter.limit("30/minute")
+@limiter.limit(AI_ANALYSIS_LIMIT)
 async def draft_email_stream(
     request: Request,
     body: DraftEmailRequest,
@@ -937,7 +940,7 @@ async def draft_email_stream(
     response_model=AnalyzeDashboardResponse,
     dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
-@limiter.limit("10/minute")
+@limiter.limit(AI_GENERATION_LIMIT)
 async def analyze_dashboard(
     request: Request,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
@@ -1063,7 +1066,7 @@ async def analyze_dashboard(
     "/analyze-dashboard/stream",
     dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
-@limiter.limit("10/minute")
+@limiter.limit(AI_GENERATION_LIMIT)
 async def analyze_dashboard_stream(
     request: Request,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),

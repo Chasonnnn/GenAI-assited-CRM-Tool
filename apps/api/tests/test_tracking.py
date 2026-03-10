@@ -5,6 +5,8 @@ Tests token generation, link wrapping, pixel injection,
 and open/click event recording.
 """
 
+import pytest
+
 from app.services import tracking_service
 
 
@@ -414,3 +416,73 @@ def test_record_click_invalid_token(db):
         signature,
     )
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_track_open_uses_forwarded_client_ip(client, monkeypatch):
+    from app.core.config import settings
+
+    captured: dict[str, str | None] = {}
+
+    monkeypatch.setattr(settings, "TRUST_PROXY_HEADERS", True, raising=False)
+
+    def fake_record_open(*, db, token, ip_address=None, user_agent=None):
+        captured["token"] = token
+        captured["ip_address"] = ip_address
+        captured["user_agent"] = user_agent
+        return True
+
+    monkeypatch.setattr(tracking_service, "record_open", fake_record_open)
+
+    response = await client.get(
+        "/tracking/open/test-token",
+        headers={
+            "X-Forwarded-For": "203.0.113.10, 34.54.23.120",
+            "User-Agent": "TestAgent/1.0",
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured == {
+        "token": "test-token",
+        "ip_address": "203.0.113.10",
+        "user_agent": "TestAgent/1.0",
+    }
+
+
+@pytest.mark.asyncio
+async def test_track_click_uses_forwarded_client_ip(client, monkeypatch):
+    from app.core.config import settings
+
+    captured: dict[str, str | None] = {}
+
+    monkeypatch.setattr(settings, "TRUST_PROXY_HEADERS", True, raising=False)
+
+    def fake_record_click(*, db, token, url, signature, ip_address=None, user_agent=None):
+        captured["token"] = token
+        captured["url"] = url
+        captured["signature"] = signature
+        captured["ip_address"] = ip_address
+        captured["user_agent"] = user_agent
+        return "https://example.com/original"
+
+    monkeypatch.setattr(tracking_service, "record_click", fake_record_click)
+
+    response = await client.get(
+        "/tracking/click/test-token",
+        params={"url": "https://example.com/wrapped", "sig": "signed"},
+        headers={
+            "X-Forwarded-For": "198.51.100.22, 34.54.23.120",
+            "User-Agent": "ClickAgent/2.0",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "https://example.com/original"
+    assert captured == {
+        "token": "test-token",
+        "url": "https://example.com/wrapped",
+        "signature": "signed",
+        "ip_address": "198.51.100.22",
+        "user_agent": "ClickAgent/2.0",
+    }

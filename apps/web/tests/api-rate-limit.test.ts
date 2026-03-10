@@ -36,36 +36,20 @@ describe('api rate limit handling', () => {
     const originalFetch = global.fetch
 
     beforeEach(() => {
-        vi.useFakeTimers()
+        vi.clearAllMocks()
     })
 
     afterEach(() => {
-        vi.useRealTimers()
         global.fetch = originalFetch
     })
 
-    it('retries GET requests when Retry-After is provided', async () => {
-        const fetchMock = vi.fn()
-            .mockResolvedValueOnce(makeResponse(429, { detail: 'rate limit' }, { 'Retry-After': '1' }))
-            .mockResolvedValueOnce(makeResponse(200, { ok: true }))
-
-        global.fetch = fetchMock as unknown as typeof fetch
-
-        const promise = api.get('/surrogates')
-        await vi.runAllTimersAsync()
-        const result = await promise
-
-        expect(fetchMock).toHaveBeenCalledTimes(2)
-        expect(result).toEqual({ ok: true })
-    })
-
-    it('does not auto-retry expensive endpoints', async () => {
+    it('does not auto-retry GET requests when Retry-After is provided', async () => {
         const fetchMock = vi.fn()
             .mockResolvedValueOnce(makeResponse(429, { detail: 'rate limit' }, { 'Retry-After': '1' }))
 
         global.fetch = fetchMock as unknown as typeof fetch
 
-        await expect(api.get('/analytics/summary')).rejects.toBeInstanceOf(RateLimitError)
+        await expect(api.get('/surrogates')).rejects.toMatchObject({ retryAfter: 1 })
         expect(fetchMock).toHaveBeenCalledTimes(1)
     })
 

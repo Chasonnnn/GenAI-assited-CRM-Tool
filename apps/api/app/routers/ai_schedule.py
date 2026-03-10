@@ -15,6 +15,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import get_db, require_ai_enabled, require_csrf_header, require_permission
 from app.core.permissions import PermissionKey as P
 from app.core.rate_limit import limiter
@@ -27,6 +28,7 @@ from app.utils.sse import format_sse, sse_preamble, STREAM_HEADERS
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+AI_GENERATION_LIMIT = f"{settings.RATE_LIMIT_AI_GENERATION}/minute"
 
 
 class ParseScheduleRequest(BaseModel):
@@ -69,7 +71,7 @@ class ParseScheduleResponse(BaseModel):
     response_model=ParseScheduleResponse,
     dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
-@limiter.limit("10/minute")
+@limiter.limit(AI_GENERATION_LIMIT)
 async def parse_schedule(
     request: Request,
     body: ParseScheduleRequest,
@@ -176,7 +178,7 @@ async def parse_schedule(
     "/parse-schedule/stream",
     dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
-@limiter.limit("10/minute")
+@limiter.limit(AI_GENERATION_LIMIT)
 async def parse_schedule_stream(
     request: Request,
     body: ParseScheduleRequest,

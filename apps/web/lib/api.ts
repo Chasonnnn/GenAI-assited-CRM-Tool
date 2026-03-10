@@ -8,9 +8,6 @@ import { getApiBase } from '@/lib/api-base';
 import { toast } from 'sonner';
 
 const API_BASE = getApiBase();
-const MAX_RETRIES = 2;
-const BASE_BACKOFF_MS = 1000;
-const MAX_BACKOFF_MS = 8000;
 
 export class ApiError extends Error {
     constructor(
@@ -32,16 +29,6 @@ export class RateLimitError extends ApiError {
 
 interface RequestOptions extends Omit<RequestInit, 'body'> {
     body?: unknown;
-    /** Internal: current retry count */
-    _retryCount?: number;
-}
-
-/**
- * Check if a path is an expensive endpoint (search, reports, exports).
- * These should not auto-retry on rate limit.
- */
-function isExpensiveEndpoint(path: string): boolean {
-    return /\/(search|reports|export|analytics)/.test(path);
 }
 
 function parseRetryAfter(header: string | null): number | null {
@@ -61,24 +48,8 @@ function parseRetryAfter(header: string | null): number | null {
     return null;
 }
 
-function getRetryDelayMs(retryAfterSeconds: number | null, retryCount: number): number {
-    if (retryAfterSeconds !== null) {
-        return retryAfterSeconds * 1000;
-    }
-    const backoff = BASE_BACKOFF_MS * Math.pow(2, retryCount);
-    return Math.min(backoff, MAX_BACKOFF_MS);
-}
-
-/**
- * Sleep for a given number of milliseconds.
- */
-function sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-    const { body, headers: customHeaders, _retryCount = 0, ...rest } = options;
-    const method = (options.method || 'GET').toUpperCase();
+    const { body, headers: customHeaders, ...rest } = options;
 
     // Check if body is FormData - don't set Content-Type (browser sets multipart boundary)
     const isFormData = body instanceof FormData;
@@ -105,17 +76,6 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     // Handle rate limiting (429)
     if (response.status === 429) {
         const retryAfterSeconds = parseRetryAfter(response.headers.get('Retry-After'));
-
-        // Only auto-retry for non-expensive GET requests
-        const isGetRequest = method === 'GET';
-        const canAutoRetry = isGetRequest && !isExpensiveEndpoint(path) && _retryCount < MAX_RETRIES;
-
-        if (canAutoRetry) {
-            // Auto-retry with Retry-After when provided, otherwise exponential backoff
-            const delayMs = getRetryDelayMs(retryAfterSeconds, _retryCount);
-            await sleep(delayMs);
-            return request<T>(path, { ...options, _retryCount: _retryCount + 1 });
-        }
 
         // Show toast for user feedback
         const waitMessage = retryAfterSeconds

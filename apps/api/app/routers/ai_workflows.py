@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import get_db, require_ai_enabled, require_permission, require_csrf_header
 from app.core.permissions import PermissionKey as P
 from app.core.rate_limit import limiter
@@ -23,6 +24,7 @@ from app.utils.sse import format_sse, sse_preamble, STREAM_HEADERS
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+AI_GENERATION_LIMIT = f"{settings.RATE_LIMIT_AI_GENERATION}/minute"
 
 
 class GenerateWorkflowRequest(BaseModel):
@@ -77,7 +79,7 @@ class SaveWorkflowResponse(BaseModel):
     response_model=GenerateWorkflowResponse,
     dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
-@limiter.limit("10/minute")
+@limiter.limit(AI_GENERATION_LIMIT)
 def generate_workflow(
     request: Request,
     body: GenerateWorkflowRequest,
@@ -121,7 +123,7 @@ def generate_workflow(
     "/workflows/generate/stream",
     dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
-@limiter.limit("10/minute")
+@limiter.limit(AI_GENERATION_LIMIT)
 async def generate_workflow_stream(
     request: Request,
     body: GenerateWorkflowRequest,

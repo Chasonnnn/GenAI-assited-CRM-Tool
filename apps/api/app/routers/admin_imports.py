@@ -18,6 +18,7 @@ csrf_header_dependency = require_csrf_header
 
 
 router = APIRouter(prefix="/admin/imports", tags=["Admin - Imports"])
+ADMIN_IMPORT_LIMIT = f"{settings.RATE_LIMIT_ADMIN_IMPORTS}/minute"
 
 
 def _ensure_dev_env() -> None:
@@ -26,7 +27,7 @@ def _ensure_dev_env() -> None:
 
 
 @router.post("/all")
-@limiter.limit("2/minute")
+@limiter.limit(ADMIN_IMPORT_LIMIT)
 async def import_all(
     request: Request,
     config_zip: Annotated[UploadFile, "fastapi_param"] = File(
@@ -80,7 +81,7 @@ async def import_all(
 
 
 @router.post("/config")
-@limiter.limit("2/minute")
+@limiter.limit(ADMIN_IMPORT_LIMIT)
 async def import_config(
     request: Request,
     config_zip: Annotated[UploadFile, "fastapi_param"] = File(
@@ -120,7 +121,7 @@ async def import_config(
 
 
 @router.post("/surrogates")
-@limiter.limit("2/minute")
+@limiter.limit(ADMIN_IMPORT_LIMIT)
 async def import_surrogates(
     request: Request,
     surrogates_csv: Annotated[UploadFile, "fastapi_param"] = File(description="Surrogates CSV"),

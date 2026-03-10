@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server"
 
+import { buildServerApiHeaders } from "@/lib/server-api-headers"
+
 export const dynamic = "force-dynamic"
 
-async function _postToApi(token: string) {
+async function _postToApi(token: string, requestHeaders: Headers) {
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
     const safeToken = encodeURIComponent(token || "")
     if (!safeToken) return
@@ -12,6 +14,7 @@ async function _postToApi(token: string) {
         await fetch(`${apiBase}/email/unsubscribe/${safeToken}`, {
             method: "POST",
             cache: "no-store",
+            headers: buildServerApiHeaders(requestHeaders),
         })
     } catch {
         // Ignore failures to avoid leaking availability details.
@@ -19,11 +22,11 @@ async function _postToApi(token: string) {
 }
 
 export async function POST(
-    _request: Request,
+    request: Request,
     { params }: { params: Promise<{ token: string }> }
 ) {
     const { token } = await params
-    await _postToApi(token)
+    await _postToApi(token, request.headers)
     return new Response("OK", { status: 200, headers: { "Content-Type": "text/plain" } })
 }
 
@@ -36,4 +39,3 @@ export async function GET(
     // Redirect to the user-facing page (which also performs the unsubscribe).
     return NextResponse.redirect(new URL(`/email/unsubscribe/${encodeURIComponent(token)}`, _request.url))
 }
-

@@ -468,6 +468,36 @@ variable "db_auto_migrate" {
   default     = false
 }
 
+variable "trust_proxy_headers" {
+  description = "Trust forwarded proxy headers for the API service."
+  type        = bool
+  default     = true
+}
+
+variable "trust_proxy_hosts" {
+  description = "Comma-separated trusted proxy hosts for the API service."
+  type        = string
+  default     = "*"
+}
+
+variable "rate_limit_auth" {
+  description = "Per-minute rate limit for authentication endpoints."
+  type        = number
+  default     = 1000
+}
+
+variable "rate_limit_api" {
+  description = "Per-minute default API rate limit."
+  type        = number
+  default     = 1000
+}
+
+variable "rate_limit_public_read" {
+  description = "Per-minute public read rate limit."
+  type        = number
+  default     = 1000
+}
+
 variable "logging_retention_days" {
   description = "Cloud Logging retention in days for the default bucket."
   type        = number

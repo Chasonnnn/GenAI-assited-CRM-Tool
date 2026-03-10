@@ -27,6 +27,7 @@ from app.services import (
 
 
 router = APIRouter(prefix="/admin/exports", tags=["Admin - Exports"])
+ADMIN_EXPORT_LIMIT = f"{settings.RATE_LIMIT_ADMIN_EXPORTS}/minute"
 
 EXPORT_EVENT_MAP = {
     "surrogates_csv": AuditEventType.DATA_EXPORT_SURROGATES,
@@ -104,7 +105,7 @@ def _schedule_export_job(
     status_code=202,
     dependencies=[Depends(require_csrf_header)],
 )
-@limiter.limit("5/minute")
+@limiter.limit(ADMIN_EXPORT_LIMIT)
 def export_surrogates(
     request: Request,
     session: Annotated[UserSession, "fastapi_param"] = Depends(
@@ -123,7 +124,7 @@ def export_surrogates(
     status_code=202,
     dependencies=[Depends(require_csrf_header)],
 )
-@limiter.limit("5/minute")
+@limiter.limit(ADMIN_EXPORT_LIMIT)
 def export_config(
     request: Request,
     session: Annotated[UserSession, "fastapi_param"] = Depends(
@@ -142,7 +143,7 @@ def export_config(
     status_code=202,
     dependencies=[Depends(require_csrf_header)],
 )
-@limiter.limit("5/minute")
+@limiter.limit(ADMIN_EXPORT_LIMIT)
 def export_analytics(
     request: Request,
     from_date: Annotated[Optional[str], "fastapi_param"] = Query(

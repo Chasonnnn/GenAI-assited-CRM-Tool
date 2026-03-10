@@ -219,6 +219,12 @@ class Settings(BaseSettings):
     RATE_LIMIT_PUBLIC_READ: int = 60  # Public GET endpoints
     RATE_LIMIT_PUBLIC_FORMS: int = 10  # Public form submissions
     RATE_LIMIT_PUBLIC_DRAFTS: int = 60  # Public form draft autosave
+    RATE_LIMIT_ADMIN_IMPORTS: int = 2  # Admin restore/import tools
+    RATE_LIMIT_ADMIN_EXPORTS: int = 5  # Admin export tools
+    RATE_LIMIT_AI_GENERATION: int = 10  # AI generation endpoints
+    RATE_LIMIT_AI_ANALYSIS: int = 30  # AI analysis/drafting endpoints
+    RATE_LIMIT_AI_CHAT: int = 60  # AI chat endpoints
+    RATE_LIMIT_AI_CONVERSATIONS: int = 120  # AI conversation history
     RATE_LIMIT_FAIL_OPEN: bool = True
     REDIS_REQUIRED: bool = False
 

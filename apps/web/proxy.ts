@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+import { buildServerApiHeaders } from './lib/server-api-headers';
+
 const PLATFORM_BASE_DOMAIN =
     process.env.PLATFORM_BASE_DOMAIN || 'surrogacyforce.com';
 const API_BASE_URL =
@@ -188,7 +190,9 @@ export async function proxy(request: NextRequest) {
         const res = await fetch(
             `${API_BASE_URL}/public/org-by-domain?domain=${encodeURIComponent(hostname)}`,
             {
-                headers: { 'Content-Type': 'application/json' },
+                headers: buildServerApiHeaders(request.headers, {
+                    'Content-Type': 'application/json',
+                }),
                 // Edge runtime doesn't support revalidate in fetch options
                 cache: 'no-store',
                 signal: controller.signal,

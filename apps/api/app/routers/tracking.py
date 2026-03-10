@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from app.core.client_ip import get_client_ip
 from app.core.config import settings
 from app.core.deps import get_db
 from app.core.rate_limit import limiter
@@ -95,7 +96,7 @@ def track_open(
     Called when email client loads the tracking pixel.
     """
     # Extract client info
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     user_agent = request.headers.get("user-agent")
 
     # Record the open (best effort, don't fail on errors)
@@ -140,7 +141,7 @@ def track_click(
     Called when user clicks a tracked link in the email.
     """
     # Extract client info
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     user_agent = request.headers.get("user-agent")
 
     # Record the click and get original URL
