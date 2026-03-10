@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.33](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.32...surrogacy-crm-platform-v0.90.33) (2026-03-10)
+
+
+### Bug Fixes
+
+* harden proxy-aware rate limiting ([9d58766](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9d58766f505241d00e74bd3d16668bddb54ead94))
+
 ## [0.90.32](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.31...surrogacy-crm-platform-v0.90.32) (2026-03-10)
 
 
