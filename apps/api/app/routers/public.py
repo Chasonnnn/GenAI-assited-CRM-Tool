@@ -8,6 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import get_db
 from app.core.rate_limit import limiter
 from app.services import org_service
@@ -17,7 +18,7 @@ router = APIRouter(prefix="/public", tags=["public"])
 
 
 @router.get("/org-by-domain")
-@limiter.limit("60/minute")
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
 def get_org_by_domain(
     request: Request,
     response: Response,
