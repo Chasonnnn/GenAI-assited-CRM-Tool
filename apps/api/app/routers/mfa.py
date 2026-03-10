@@ -193,7 +193,9 @@ def get_mfa_status(
     response_model=TOTPSetupResponse,
     dependencies=[Depends(require_csrf_header)],
 )
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def setup_totp(
+    request: Request,
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
@@ -285,7 +287,9 @@ def verify_totp_setup(
     response_model=RecoveryCodesResponse,
     dependencies=[Depends(require_csrf_header)],
 )
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def regenerate_recovery_codes(
+    request: Request,
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
@@ -482,7 +486,9 @@ def complete_mfa_challenge(
     "/disable",
     dependencies=[Depends(require_csrf_header)],
 )
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def disable_mfa(
+    request: Request,
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> object:
