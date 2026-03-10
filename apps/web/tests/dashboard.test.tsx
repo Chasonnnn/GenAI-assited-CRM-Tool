@@ -7,6 +7,7 @@ import { formatLocalDate } from '@/lib/utils/date'
 import DashboardPage from '../app/(app)/dashboard/page'
 
 const mockUseSearchParams = vi.fn()
+const mockUseAuth = vi.fn()
 
 type DynamicComponent = React.ComponentType<Record<string, unknown>>
 type DynamicModule = DynamicComponent | { default: DynamicComponent }
@@ -55,14 +56,7 @@ vi.mock('next/link', () => ({
 }))
 
 vi.mock('@/lib/auth-context', () => ({
-    useAuth: () => ({
-        user: {
-            display_name: 'Test Manager',
-            ai_enabled: true,
-            role: 'admin',
-            user_id: 'user-1',
-        },
-    }),
+    useAuth: () => mockUseAuth(),
 }))
 
 vi.mock('recharts', () => ({
@@ -90,7 +84,7 @@ const mockUseAttention = vi.fn()
 const mockUseUpcoming = vi.fn()
 
 vi.mock('@/lib/hooks/use-surrogates', () => ({
-    useSurrogateStats: () => mockUseSurrogateStats(),
+    useSurrogateStats: (params: unknown) => mockUseSurrogateStats(params),
     useAssignees: () => ({ data: [] }),
 }))
 
@@ -102,7 +96,7 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
 
 vi.mock('@/lib/hooks/use-analytics', () => ({
     useSurrogatesTrend: (params: unknown) => mockUseSurrogatesTrend(params),
-    useSurrogatesByStatus: () => mockUseSurrogatesByStatus(),
+    useSurrogatesByStatus: (params: unknown) => mockUseSurrogatesByStatus(params),
 }))
 
 vi.mock('@/lib/hooks/use-dashboard', () => ({
@@ -135,6 +129,14 @@ vi.mock('@/lib/hooks/use-dashboard-socket', () => ({
 describe('DashboardPage', () => {
     beforeEach(() => {
         mockUseSearchParams.mockReturnValue(new URLSearchParams())
+        mockUseAuth.mockReturnValue({
+            user: {
+                display_name: 'Test Manager',
+                ai_enabled: true,
+                role: 'admin',
+                user_id: 'user-1',
+            },
+        })
         mockUseSurrogateStats.mockReturnValue({
             data: {
                 total: 10,
@@ -274,6 +276,51 @@ describe('DashboardPage', () => {
         const toDates = new Set(trendCalls.map((params) => params.to_date))
         expect(fromDates.size).toBe(1)
         expect(toDates.size).toBe(1)
+    })
+
+    it('scopes stale assignee filters back to the current non-admin user', async () => {
+        mockUseAuth.mockReturnValue({
+            user: {
+                display_name: 'Case Manager',
+                ai_enabled: true,
+                role: 'case_manager',
+                user_id: 'user-1',
+            },
+        })
+        mockUseSearchParams.mockReturnValue(new URLSearchParams('range=week&assignee=user-2'))
+        mockUseSurrogatesTrend.mockClear()
+        mockUseSurrogatesByStatus.mockClear()
+        mockUseSurrogateStats.mockClear()
+        mockUseAttention.mockClear()
+        mockUseUpcoming.mockClear()
+
+        render(<DashboardPage />)
+
+        await screen.findByText('Surrogates Trend')
+
+        const trendCalls = mockUseSurrogatesTrend.mock.calls.map((call) => call[0] as Record<string, unknown>)
+        expect(trendCalls.length).toBeGreaterThan(0)
+        for (const params of trendCalls) {
+            expect(params.owner_id).toBe('user-1')
+        }
+
+        const statusCalls = mockUseSurrogatesByStatus.mock.calls.map((call) => call[0] as Record<string, unknown>)
+        expect(statusCalls.length).toBeGreaterThan(0)
+        for (const params of statusCalls) {
+            expect(params.owner_id).toBe('user-1')
+        }
+
+        const statsCalls = mockUseSurrogateStats.mock.calls.map((call) => call[0] as Record<string, unknown>)
+        expect(statsCalls.length).toBeGreaterThan(0)
+        expect(statsCalls[0].owner_id).toBe('user-1')
+
+        const attentionCalls = mockUseAttention.mock.calls.map((call) => call[0] as Record<string, unknown>)
+        expect(attentionCalls.length).toBeGreaterThan(0)
+        expect(attentionCalls[0].assignee_id).toBe('user-1')
+
+        const upcomingCalls = mockUseUpcoming.mock.calls.map((call) => call[0] as Record<string, unknown>)
+        expect(upcomingCalls.length).toBeGreaterThan(0)
+        expect(upcomingCalls[0].assignee_id).toBe('user-1')
     })
 
     it('formats KPI deltas without percent when values drop to zero', () => {

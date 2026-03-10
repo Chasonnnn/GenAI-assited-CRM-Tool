@@ -17,7 +17,7 @@ from fastapi import Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.core.client_ip import get_client_ip
 from app.core.request_audit_context import mark_explicit_event_emitted
 from app.db.enums import AuditEventType
 from app.db.models import AuditLog, User
@@ -31,30 +31,6 @@ def hash_email(email: str) -> str:
     prefix = email.split("@")[0][:3] if "@" in email else email[:3]
     suffix = hashlib.sha256(email.lower().encode()).hexdigest()[:12]
     return f"{prefix}...@[hash:{suffix}]"
-
-
-def get_client_ip(request: Request | None) -> str | None:
-    """
-    Extract client IP from request.
-
-    Only trusts X-Forwarded-For when TRUST_PROXY_HEADERS=True (behind reverse proxy).
-    In development/direct connections, uses request.client.host.
-    """
-    if not request:
-        return None
-
-    # Only trust X-Forwarded-For when explicitly configured (behind nginx/Cloudflare)
-    if settings.TRUST_PROXY_HEADERS:
-        forwarded = request.headers.get("x-forwarded-for")
-        if forwarded:
-            # X-Forwarded-For: client, proxy1, proxy2 - take first
-            return forwarded.split(",")[0].strip()
-
-    # Direct connection or TRUST_PROXY_HEADERS=False
-    if request.client:
-        return request.client.host
-
-    return None
 
 
 def canonical_json(obj: dict | None) -> str:

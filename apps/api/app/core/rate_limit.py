@@ -7,9 +7,9 @@ import os
 import time
 
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 import slowapi.extension as slowapi_extension
 
+from app.core.client_ip import get_client_ip
 from app.core.config import settings
 from app.core.redis_client import get_redis_url, get_sync_redis_client
 
@@ -101,8 +101,13 @@ class FailOpenLimiter:
         return getattr(self._redis, name)
 
 
+def get_rate_limit_key(request) -> str:
+    """Use the end-user IP for rate limiting, including trusted proxy hops."""
+    return get_client_ip(request) or "unknown"
+
+
 memory_limiter = Limiter(
-    key_func=get_remote_address,
+    key_func=get_rate_limit_key,
     storage_uri="memory://",
     default_limits=DEFAULT_LIMITS,
 )
@@ -121,7 +126,7 @@ else:
             raise RuntimeError("Redis client unavailable")
         client.ping()
         redis_limiter = Limiter(
-            key_func=get_remote_address,
+            key_func=get_rate_limit_key,
             storage_uri=REDIS_URL,
             default_limits=DEFAULT_LIMITS,
         )

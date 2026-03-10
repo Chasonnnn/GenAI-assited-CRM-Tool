@@ -15,6 +15,7 @@ try:
 except Exception:  # pragma: no cover - optional dependency in some envs
     parse_user_agent = None
 
+from app.core.client_ip import get_client_ip
 from app.core.config import settings
 from app.core.redis_client import get_sync_redis_client
 from app.db.models import UserSession
@@ -67,23 +68,6 @@ def mask_ip(ip_address: str | None) -> str | None:
         return f"{network.network_address}/24"
     network = ipaddress.ip_network(f"{ip_address}/64", strict=False)
     return f"{network.network_address}/64"
-
-
-def get_client_ip(request: Request | None) -> str | None:
-    """Extract client IP from request, handling proxies."""
-    if not request:
-        return None
-
-    if settings.TRUST_PROXY_HEADERS:
-        forwarded = request.headers.get("x-forwarded-for")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
-
-    # Fall back to direct connection
-    if request.client:
-        return request.client.host
-
-    return None
 
 
 def create_session(

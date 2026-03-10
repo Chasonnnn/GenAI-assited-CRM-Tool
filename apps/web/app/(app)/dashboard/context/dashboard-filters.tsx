@@ -3,6 +3,7 @@
 import { createContext, use, useCallback, useState, useEffect, type ReactNode } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import type { DateRangePreset } from "@/components/ui/date-range-picker"
+import { useAuth } from "@/lib/auth-context"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 
 // =============================================================================
@@ -51,6 +52,18 @@ const normalizeFilterValue = (value: string | null): string | undefined => {
     return value
 }
 
+const isPrivilegedRole = (role: string | undefined): boolean =>
+    role === "admin" || role === "developer"
+
+const normalizeAssigneeForUser = (
+    value: string | undefined,
+    userId: string | undefined,
+    role: string | undefined,
+): string | undefined => {
+    if (!userId || isPrivilegedRole(role)) return value
+    return userId
+}
+
 const datesEqual = (left?: Date, right?: Date) => {
     return (left?.getTime() ?? null) === (right?.getTime() ?? null)
 }
@@ -78,6 +91,7 @@ interface DashboardFiltersProviderProps {
 }
 
 export function DashboardFiltersProvider({ children }: DashboardFiltersProviderProps) {
+    const { user } = useAuth()
     const searchParams = useSearchParams()
     const router = useRouter()
     const currentQuery = searchParams.toString()
@@ -92,10 +106,15 @@ export function DashboardFiltersProvider({ children }: DashboardFiltersProviderP
     const initialCustomRange = initialRange === "custom"
         ? { from: parseDateParam(urlFrom), to: parseDateParam(urlTo) }
         : { from: undefined, to: undefined }
+    const initialAssignee = normalizeAssigneeForUser(
+        normalizeFilterValue(urlAssignee),
+        user?.user_id,
+        user?.role,
+    )
 
     const [dateRange, setDateRangeState] = useState<DateRangePreset>(initialRange)
     const [customRange, setCustomRangeState] = useState<DateRange>(initialCustomRange)
-    const [assigneeId, setAssigneeIdState] = useState<string | undefined>(normalizeFilterValue(urlAssignee))
+    const [assigneeId, setAssigneeIdState] = useState<string | undefined>(initialAssignee)
 
     // Sync state changes back to URL
     const updateUrlParams = useCallback((
@@ -158,9 +177,10 @@ export function DashboardFiltersProvider({ children }: DashboardFiltersProviderP
 
     // Set assignee filter
     const setAssigneeId = useCallback((id: string | undefined) => {
-        setAssigneeIdState(id)
-        updateUrlParams(dateRange, customRange, id)
-    }, [dateRange, customRange, updateUrlParams])
+        const nextId = normalizeAssigneeForUser(id, user?.user_id, user?.role)
+        setAssigneeIdState(nextId)
+        updateUrlParams(dateRange, customRange, nextId)
+    }, [customRange, dateRange, updateUrlParams, user?.role, user?.user_id])
 
     // Reset all filters
     const resetFilters = useCallback(() => {
@@ -188,11 +208,15 @@ export function DashboardFiltersProvider({ children }: DashboardFiltersProviderP
             setCustomRangeState({ from: undefined, to: undefined })
         }
 
-        const nextAssignee = normalizeFilterValue(searchParams.get("assignee"))
+        const nextAssignee = normalizeAssigneeForUser(
+            normalizeFilterValue(searchParams.get("assignee")),
+            user?.user_id,
+            user?.role,
+        )
         if (nextAssignee !== assigneeId) {
             setAssigneeIdState(nextAssignee)
         }
-    }, [currentQuery]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [assigneeId, currentQuery, customRange.from, customRange.to, dateRange, searchParams, user?.role, user?.user_id])
 
     // Compute date params for API calls
     const getDateParams = useCallback((): { from_date?: string; to_date?: string } => {

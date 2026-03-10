@@ -90,6 +90,30 @@ async def test_google_callback_rate_limited(client: AsyncClient, rate_limiter_re
 
 
 @pytest.mark.asyncio
+async def test_google_login_rate_limit_uses_forwarded_client_ip(
+    client: AsyncClient, monkeypatch, rate_limiter_reset
+):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "TRUST_PROXY_HEADERS", True)
+
+    for _ in range(5):
+        response = await client.get(
+            "/auth/google/login",
+            follow_redirects=False,
+            headers={"X-Forwarded-For": "203.0.113.10, 34.54.23.120"},
+        )
+        assert response.status_code != 429
+
+    response = await client.get(
+        "/auth/google/login",
+        follow_redirects=False,
+        headers={"X-Forwarded-For": "198.51.100.22, 34.54.23.120"},
+    )
+    assert response.status_code != 429
+
+
+@pytest.mark.asyncio
 async def test_logout_rate_limited(
     authed_client: AsyncClient,
     test_auth,
