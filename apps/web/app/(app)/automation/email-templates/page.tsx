@@ -239,6 +239,7 @@ function SignaturePhotoField({
                     />
                     <button
                         type="button"
+                        aria-label="Upload profile photo"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isUploading}
                         className="absolute bottom-0 right-0 flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-md"
