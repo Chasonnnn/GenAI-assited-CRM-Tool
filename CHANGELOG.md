@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.30](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.29...surrogacy-crm-platform-v0.90.30) (2026-03-09)
+
+
+### Bug Fixes
+
+* clarify ops duo reset messaging ([eab274b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/eab274bc0cf431730d82f12d15ecc5e06bad0cef))
+* reset duo enrollment during platform mfa reset ([253d3c5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/253d3c598c204b641fb2c7629c83056c207d803d))
+
 ## [0.90.29](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.28...surrogacy-crm-platform-v0.90.29) (2026-03-09)
 
 
