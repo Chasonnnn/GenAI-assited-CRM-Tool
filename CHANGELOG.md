@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.32](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.31...surrogacy-crm-platform-v0.90.32) (2026-03-10)
+
+
+### Bug Fixes
+
+* make public domain resolver rate limit configurable ([61fc979](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/61fc9792b2fcfcfa010d22d28d986b431e2670c2))
+
 ## [0.90.31](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.30...surrogacy-crm-platform-v0.90.31) (2026-03-10)
 
 
