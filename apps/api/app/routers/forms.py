@@ -21,7 +21,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.surrogate_access import check_surrogate_access
+from app.core.surrogate_access import (
+    check_surrogate_access,
+    ensure_can_manage_surrogate_priority,
+)
 from app.core.deps import (
     get_current_session,
     get_db,
@@ -1263,6 +1266,9 @@ def promote_intake_lead(
     lead = form_intake_service.get_intake_lead(db, org_id=session.org_id, lead_id=lead_id)
     if not lead:
         raise HTTPException(status_code=404, detail="Intake lead not found")
+
+    if body.is_priority:
+        ensure_can_manage_surrogate_priority(session.role)
 
     try:
         surrogate, linked_submission_count = form_intake_service.promote_intake_lead(

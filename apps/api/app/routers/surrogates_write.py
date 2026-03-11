@@ -10,7 +10,11 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
 from app.core.policies import POLICIES
-from app.core.surrogate_access import can_modify_surrogate, check_surrogate_access
+from app.core.surrogate_access import (
+    can_modify_surrogate,
+    check_surrogate_access,
+    ensure_can_manage_surrogate_priority,
+)
 from app.db.enums import AuditEventType, OwnerType, Role
 from app.schemas.auth import UserSession
 from app.schemas.surrogate import (
@@ -36,6 +40,9 @@ def create_surrogate(
     db: Session = Depends(get_db),
 ) -> SurrogateRead:
     """Create a new surrogate."""
+    if data.is_priority:
+        ensure_can_manage_surrogate_priority(session.role)
+
     try:
         surrogate = surrogate_service.create_surrogate(
             db=db,
@@ -170,6 +177,15 @@ def update_surrogate(
     check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
     update_data = data.model_dump(exclude_unset=True)
+    priority_value = update_data.get("is_priority")
+    is_priority_change = (
+        "is_priority" in update_data
+        and priority_value is not None
+        and priority_value != surrogate.is_priority
+    )
+    if is_priority_change:
+        ensure_can_manage_surrogate_priority(session.role)
+
     is_priority_only_update = bool(update_data) and set(update_data.keys()) <= {"is_priority"}
 
     has_edit_permission = permission_service.check_permission(
