@@ -54,7 +54,7 @@ interface EditableTask extends ProposedTask {
 
 export type EntityType = "surrogate" | "intended_parent" | "match"
 
-interface ScheduleParserDialogProps {
+export interface ScheduleParserDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     entityType: EntityType

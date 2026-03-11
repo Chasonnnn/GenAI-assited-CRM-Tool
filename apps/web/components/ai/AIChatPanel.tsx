@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import dynamic from "next/dynamic"
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,7 +23,20 @@ import {
 } from "lucide-react"
 import { useConversation, useStreamChatMessage, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
 import type { ProposedAction } from "@/lib/api/ai"
-import { ScheduleParserDialog } from "@/components/ai/ScheduleParserDialog"
+import type { ScheduleParserDialogProps } from "@/components/ai/ScheduleParserDialog"
+
+const ScheduleParserDialog = dynamic<ScheduleParserDialogProps>(
+    () => import("@/components/ai/ScheduleParserDialog").then((mod) => mod.ScheduleParserDialog),
+    {
+        loading: () => null,
+    }
+)
+
+const SCROLL_BOTTOM_THRESHOLD = 48
+
+function isNearBottom(container: HTMLDivElement) {
+    return container.scrollHeight - container.clientHeight - container.scrollTop <= SCROLL_BOTTOM_THRESHOLD
+}
 
 interface AIChatPanelProps {
     entityType?: "surrogate" | "task" | null  // null/undefined = global mode
@@ -73,6 +87,8 @@ export function AIChatPanel({
     const streamAbortRef = useRef<AbortController | null>(null)
     const streamingMessageIdRef = useRef<string | null>(null)
     const stopRequestedRef = useRef(false)
+    const autoScrollFrameRef = useRef<number | null>(null)
+    const shouldStickToBottomRef = useRef(true)
     const prevContextRef = useRef<{ entityId: string | null; entityType: "surrogate" | "task" | null }>({
         entityId: entityId ?? null,
         entityType: entityType ?? null,
@@ -98,12 +114,23 @@ export function AIChatPanel({
         )
     }, [conversation?.messages, isStreaming])
 
-    // Scroll to bottom on new messages
+    const scheduleScrollToBottom = useCallback(() => {
+        if (typeof window === "undefined") return
+        if (autoScrollFrameRef.current !== null) {
+            window.cancelAnimationFrame(autoScrollFrameRef.current)
+        }
+        autoScrollFrameRef.current = window.requestAnimationFrame(() => {
+            const container = scrollRef.current
+            autoScrollFrameRef.current = null
+            if (!container) return
+            container.scrollTop = container.scrollHeight
+        })
+    }, [])
+
     useEffect(() => {
-        const container = scrollRef.current
-        if (!container) return
-        container.scrollTop = container.scrollHeight
-    }, [messages])
+        if (!shouldStickToBottomRef.current) return
+        scheduleScrollToBottom()
+    }, [messages, scheduleScrollToBottom])
 
     // Focus input on mount
     useEffect(() => {
@@ -113,6 +140,9 @@ export function AIChatPanel({
     useEffect(() => {
         return () => {
             streamAbortRef.current?.abort()
+            if (autoScrollFrameRef.current !== null) {
+                window.cancelAnimationFrame(autoScrollFrameRef.current)
+            }
         }
     }, [])
 
@@ -122,6 +152,9 @@ export function AIChatPanel({
         const currentEntityType = entityType ?? null
         const contextChanged = prev.entityId !== currentEntityId || prev.entityType !== currentEntityType
         prevContextRef.current = { entityId: currentEntityId, entityType: currentEntityType }
+        if (contextChanged) {
+            shouldStickToBottomRef.current = true
+        }
         if (!contextChanged || !isStreaming) return
         streamAbortRef.current?.abort()
         setIsStreaming(false)
@@ -141,6 +174,12 @@ export function AIChatPanel({
         }))
     }, [updateMessageById])
 
+    const handleScroll = useCallback(() => {
+        const container = scrollRef.current
+        if (!container) return
+        shouldStickToBottomRef.current = isNearBottom(container)
+    }, [])
+
     const handleSend = async () => {
         const trimmedMessage = message.trim()
         if (!trimmedMessage || isStreaming) return
@@ -159,6 +198,7 @@ export function AIChatPanel({
             status: "thinking",
         }
 
+        shouldStickToBottomRef.current = true
         setMessages((prev) => [...prev, userMessage, assistantMessage])
         setMessage("")
 
@@ -283,7 +323,7 @@ export function AIChatPanel({
             </div>
 
             {/* Messages */}
-            <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
+            <div ref={scrollRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto">
                 <div className="p-4">
                     {loadingConversation ? (
                         <div className="flex items-center justify-center py-8">

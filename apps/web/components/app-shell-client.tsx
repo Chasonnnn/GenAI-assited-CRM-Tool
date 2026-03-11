@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
 import { useRequireAuth } from "@/lib/auth-context"
 import { AIContextProvider } from "@/lib/context/ai-context"
-import { AIChatDrawer } from "@/components/ai/AIChatDrawer"
+import { AIChatDrawerHost } from "@/components/ai/AIChatDrawerHost"
 import { AIFloatingButton } from "@/components/ai/AIFloatingButton"
 import { OfflineBanner } from "@/components/offline-banner"
 import { SessionExpiredDialog } from "@/components/session-expired-dialog"
@@ -73,7 +73,7 @@ export default function AppShellClient({
     <AIContextProvider>
       {children}
       {/* AI Assistant - only shown when AI is enabled */}
-      <AIChatDrawer />
+      <AIChatDrawerHost />
       <AIFloatingButton />
     </AIContextProvider>
   )
