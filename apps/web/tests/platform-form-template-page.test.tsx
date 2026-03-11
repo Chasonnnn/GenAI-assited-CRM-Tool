@@ -151,4 +151,13 @@ describe("PlatformFormTemplatePage", () => {
         })
     })
 
+    it("adds a field from the palette without requiring drag and drop", async () => {
+        render(<PlatformFormTemplatePage />)
+
+        fireEvent.click(await screen.findByRole("button", { name: /add name field/i }))
+
+        expect(screen.queryByText(/Drag fields here to build your form/i)).not.toBeInTheDocument()
+        expect(screen.getAllByDisplayValue("Name").length).toBeGreaterThan(0)
+    })
+
 })

@@ -623,23 +623,21 @@ export default function FormBuilderPage() {
         return `field-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     }
 
-    const buildNewField = (): FormField | null => {
-        if (!draggedField) return null
-
+    const createField = (type: FieldType, label: string): FormField => {
         const fieldId = generateFieldId()
 
         const baseField: FormField = {
             id: fieldId,
-            type: draggedField.type,
-            label: draggedField.label,
+            type,
+            label,
             helperText: "",
             required: false,
             surrogateFieldMapping: "",
         }
-        if (["select", "multiselect", "radio"].includes(draggedField.type)) {
+        if (["select", "multiselect", "radio"].includes(type)) {
             return { ...baseField, options: ["Option 1", "Option 2", "Option 3"] }
         }
-        if (draggedField.type === "repeatable_table") {
+        if (type === "repeatable_table") {
             return {
                 ...baseField,
                 label: "Repeating Table",
@@ -662,6 +660,25 @@ export default function FormBuilderPage() {
             }
         }
         return baseField
+    }
+
+    const buildNewField = (): FormField | null => {
+        if (!draggedField) return null
+        return createField(draggedField.type, draggedField.label)
+    }
+
+    const handleInsertField = (type: FieldType, label: string) => {
+        const newField = createField(type, label)
+
+        setPages((prev) =>
+            prev.map((page) =>
+                page.id === activePage ? { ...page, fields: [...page.fields, newField] } : page,
+            ),
+        )
+        setDraggedField(null)
+        setDraggedFieldId(null)
+        setDropIndicatorId(null)
+        selectField(newField.id)
     }
 
     const moveFieldToIndex = (fields: FormField[], fieldId: string, targetIndex: number) => {
@@ -1759,14 +1776,17 @@ export default function FormBuilderPage() {
                                     return (
                                         <button
                                             key={field.id}
+                                            type="button"
                                             draggable
+                                            onClick={() => handleInsertField(field.id, field.label)}
                                             onDragStart={() => handleDragStart(field.id, field.label)}
                                             onDragEnd={handleDragEnd}
+                                            aria-label={`Add ${field.label} field`}
                                             className="flex w-full cursor-grab items-center gap-3 rounded-lg border border-stone-200 bg-white p-3 text-left text-sm font-medium transition-all hover:border-teal-500 hover:bg-teal-50 active:cursor-grabbing dark:border-stone-700 dark:bg-stone-800 dark:hover:border-teal-500 dark:hover:bg-teal-950"
                                         >
-                                            <IconComponent className="size-5 text-stone-600 dark:text-stone-400" />
-                                            <span className="flex-1">{field.label}</span>
-                                            <GripVerticalIcon className="size-4 text-stone-400" />
+                                            <IconComponent className="size-5 text-stone-600 dark:text-stone-400" aria-hidden="true" />
+                                            <span className="min-w-0 flex-1 break-words">{field.label}</span>
+                                            <GripVerticalIcon className="size-4 text-stone-400" aria-hidden="true" />
                                         </button>
                                     )
                                 })}
@@ -1784,14 +1804,17 @@ export default function FormBuilderPage() {
                                     return (
                                         <button
                                             key={field.id}
+                                            type="button"
                                             draggable
+                                            onClick={() => handleInsertField(field.id, field.label)}
                                             onDragStart={() => handleDragStart(field.id, field.label)}
                                             onDragEnd={handleDragEnd}
+                                            aria-label={`Add ${field.label} field`}
                                             className="flex w-full cursor-grab items-center gap-3 rounded-lg border border-stone-200 bg-white p-3 text-left text-sm font-medium transition-all hover:border-teal-500 hover:bg-teal-50 active:cursor-grabbing dark:border-stone-700 dark:bg-stone-800 dark:hover:border-teal-500 dark:hover:bg-teal-950"
                                         >
-                                            <IconComponent className="size-5 text-stone-600 dark:text-stone-400" />
-                                            <span className="flex-1">{field.label}</span>
-                                            <GripVerticalIcon className="size-4 text-stone-400" />
+                                            <IconComponent className="size-5 text-stone-600 dark:text-stone-400" aria-hidden="true" />
+                                            <span className="min-w-0 flex-1 break-words">{field.label}</span>
+                                            <GripVerticalIcon className="size-4 text-stone-400" aria-hidden="true" />
                                         </button>
                                     )
                                 })}
