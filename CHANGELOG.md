@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.34](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.33...surrogacy-crm-platform-v0.90.34) (2026-03-11)
+
+
+### Features
+
+* add mobile summaries to team performance ([0252e80](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0252e805805d5d74c69e9f5ac1215466b5ed92db))
+* allow click-to-add fields in form builders ([63ca936](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/63ca9363b8920b8e2b11f0660e24d1ec96fa012c))
+
+
+### Bug Fixes
+
+* add robots route for app domain ([f4c1211](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f4c1211989e7682151da732c28d438e3ae2cf8d6))
+* bypass org lookup for www host ([adc7491](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/adc74913b4f5446f44bcdbea3edf2ca1468eead3))
+* defer ai assistant panels until needed ([242a018](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/242a01825ca6c9b9e7c5edb195032a218e85ea06))
+* harden interactive controls for accessibility ([102df3c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/102df3cecb2c06be9c0954e877a20cb9807e378f))
+* keep public forms readable in dark mode ([da3457f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/da3457f313f3e70292be535472174207232bf643))
+* make form builders responsive ([35f209d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/35f209d65629d97ab6fbb99fce8bd77e39be7b34))
+* stabilize websocket redis pubsub ([c6d8413](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c6d8413338ecc0cfd44afc9eb767e2d0e83168e8))
+
 ## [0.90.33](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.32...surrogacy-crm-platform-v0.90.33) (2026-03-10)
 
 
