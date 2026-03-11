@@ -28,6 +28,10 @@ type OrgCacheEntry = {
 
 const orgCache = new Map<string, OrgCacheEntry>();
 
+export function isPlatformRootHost(hostname: string, platformBaseDomain: string): boolean {
+    return hostname === platformBaseDomain || hostname === `www.${platformBaseDomain}`;
+}
+
 function getHostname(request: NextRequest) {
     const forwardedHost = request.headers
         .get('x-forwarded-host')
@@ -150,13 +154,17 @@ export async function proxy(request: NextRequest) {
 
     // Validate hostname format: {slug}.surrogacyforce.com
     if (!hostname.endsWith(`.${PLATFORM_BASE_DOMAIN}`)) {
-        if (hostname === PLATFORM_BASE_DOMAIN) {
+        if (isPlatformRootHost(hostname, PLATFORM_BASE_DOMAIN)) {
             return NextResponse.next();
         }
         // Unknown domain - show org not found
         const url = request.nextUrl.clone();
         url.pathname = '/org-not-found';
         return NextResponse.rewrite(url);
+    }
+
+    if (isPlatformRootHost(hostname, PLATFORM_BASE_DOMAIN)) {
+        return NextResponse.next();
     }
 
     const now = Date.now();
