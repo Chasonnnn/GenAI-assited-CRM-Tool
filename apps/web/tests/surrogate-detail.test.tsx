@@ -11,6 +11,7 @@ const mockParams = {
     id: 'c1',
 }
 const mockSegment = { value: null as string | null }
+const mockDetailSearchParams = new URLSearchParams()
 const mockCreateZoomMeeting = vi.fn()
 const mockSendZoomInvite = vi.fn()
 
@@ -18,6 +19,10 @@ vi.mock('next/navigation', () => ({
     useParams: () => mockParams,
     useRouter: () => ({ push: mockPush, replace: mockReplace }),
     useSelectedLayoutSegment: () => mockSegment.value,
+    useSearchParams: () => ({
+        get: (key: string) => mockDetailSearchParams.get(key),
+        toString: () => mockDetailSearchParams.toString(),
+    }),
 }))
 
 vi.mock('@/lib/auth-context', () => ({
@@ -266,6 +271,7 @@ describe('SurrogateDetailPage', () => {
         mockPush.mockReset()
         mockReplace.mockReset()
         mockSegment.value = null
+        mockDetailSearchParams.delete('return_to')
         mockChangeStatus.mockReset()
         mockClaimSurrogate.mockReset()
         mockReleaseSurrogate.mockReset()
@@ -405,6 +411,37 @@ describe('SurrogateDetailPage', () => {
 
         fireEvent.click(screen.getByRole("button", { name: "Back" }))
         expect(onBack).toHaveBeenCalled()
+    })
+
+    it('returns to the filtered surrogates list when return_to is present', () => {
+        mockDetailSearchParams.set('return_to', '/surrogates?stage=s1&q=john&page=2')
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+
+        expect(mockPush).toHaveBeenCalledWith('/surrogates?stage=s1&q=john&page=2')
+    })
+
+    it('preserves return_to while switching detail tabs', () => {
+        mockDetailSearchParams.set('return_to', '/surrogates?stage=s1&q=john&page=2')
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        fireEvent.click(screen.getByRole('tab', { name: /Notes/i }))
+
+        expect(mockReplace).toHaveBeenCalledWith(
+            '/surrogates/c1/notes?return_to=%2Fsurrogates%3Fstage%3Ds1%26q%3Djohn%26page%3D2',
+            { scroll: false },
+        )
     })
 
     it('shows paused-from context in the detail header', () => {

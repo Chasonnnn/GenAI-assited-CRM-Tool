@@ -178,10 +178,23 @@ const parseDateParam = (value: string | null): Date | undefined => {
 const datesEqual = (left?: Date, right?: Date) => {
     return (left?.getTime() ?? null) === (right?.getTime() ?? null)
 }
+
+const SURROGATES_LIST_PATH = "/surrogates"
+
+const buildSurrogatesListHref = (query: string) => {
+    return query ? `${SURROGATES_LIST_PATH}?${query}` : SURROGATES_LIST_PATH
+}
+
+const buildSurrogateDetailHref = (surrogateId: string, returnTo: string) => {
+    const params = new URLSearchParams({ return_to: returnTo })
+    return `/surrogates/${surrogateId}?${params.toString()}`
+}
+
 export default function SurrogatesPage() {
     const searchParams = useSearchParams()
     const router = useRouter()
     const currentQuery = searchParams.toString()
+    const currentListHref = buildSurrogatesListHref(currentQuery)
 
     // Read initial values from URL params
     const urlStage = searchParams.get("stage")
@@ -196,6 +209,7 @@ export default function SurrogatesPage() {
     const urlDynamicFilter = searchParams.get("dynamic_filter")
     const { user } = useAuth()
     const canFilterByAssignee = user?.role === "admin" || user?.role === "developer"
+    const canManagePriority = user?.role === "admin" || user?.role === "developer"
     const effectiveUrlOwnerId = canFilterByAssignee ? urlOwnerId : null
 
     const [stageFilter, setStageFilter] = useState<string>(urlStage || "all")
@@ -654,7 +668,7 @@ export default function SurrogatesPage() {
             setIsCreateOpen(false)
             resetCreateForm()
             toast.success("Surrogate created successfully")
-            router.push(`/surrogates/${created.id}`)
+            router.push(buildSurrogateDetailHref(created.id, currentListHref))
         } catch (error) {
             const message = error instanceof Error ? error.message : "Failed to create surrogate"
             toast.error(message)
@@ -1018,6 +1032,7 @@ export default function SurrogatesPage() {
                                         const stage = stageById.get(surrogateItem.stage_id)
                                         const statusLabel = surrogateItem.status_label || stage?.label || "Unknown"
                                         const statusColor = stage?.color || "#6B7280"
+                                        const detailHref = buildSurrogateDetailHref(surrogateItem.id, currentListHref)
                                         // Apply gold styling for entire row on priority surrogates
                                         const rowClass = surrogateItem.is_priority ? "text-amber-600" : ""
                                         const mutedCellClass = surrogateItem.is_priority ? "text-amber-600" : "text-muted-foreground"
@@ -1035,7 +1050,7 @@ export default function SurrogatesPage() {
                                                     />
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Link href={`/surrogates/${surrogateItem.id}`} className={`font-medium hover:underline ${surrogateItem.is_priority ? "text-amber-600" : "text-primary"}`}>
+                                                    <Link href={detailHref} className={`font-medium hover:underline ${surrogateItem.is_priority ? "text-amber-600" : "text-primary"}`}>
                                                         #{surrogateItem.surrogate_number}
                                                     </Link>
                                                 </TableCell>
@@ -1116,15 +1131,17 @@ export default function SurrogatesPage() {
                                                             <MoreVerticalIcon className="size-4" />
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end">
-                                                            <DropdownMenuItem onClick={() => window.location.href = `/surrogates/${surrogateItem.id}`}>
+                                                            <DropdownMenuItem onClick={() => window.location.href = detailHref}>
                                                                 View Details
                                                             </DropdownMenuItem>
-                                                            <DropdownMenuItem
-                                                                onClick={() => handleTogglePriority(surrogateItem.id, surrogateItem.is_priority)}
-                                                                disabled={updateMutation.isPending}
-                                                            >
-                                                                {surrogateItem.is_priority ? "Remove Priority" : "Mark as Priority"}
-                                                            </DropdownMenuItem>
+                                                            {canManagePriority && (
+                                                                <DropdownMenuItem
+                                                                    onClick={() => handleTogglePriority(surrogateItem.id, surrogateItem.is_priority)}
+                                                                    disabled={updateMutation.isPending}
+                                                                >
+                                                                    {surrogateItem.is_priority ? "Remove Priority" : "Mark as Priority"}
+                                                                </DropdownMenuItem>
+                                                            )}
                                                             {!surrogateItem.is_archived ? (
                                                                 <DropdownMenuItem
                                                                     onClick={() => handleArchive(surrogateItem.id)}

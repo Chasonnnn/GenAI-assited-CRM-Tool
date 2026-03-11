@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { createContext, use, useState, useCallback, useMemo, useRef, useEffect } from "react"
-import { useRouter, useSelectedLayoutSegment } from "next/navigation"
+import { useRouter, useSearchParams, useSelectedLayoutSegment } from "next/navigation"
 import { toast } from "sonner"
 import {
     useSurrogate,
@@ -175,6 +175,18 @@ export type SurrogateDetailLayoutContextValue =
     SurrogateDetailZoomContextValue &
     SurrogateDetailActionsContextValue
 
+const DEFAULT_SURROGATES_LIST_PATH = "/surrogates"
+
+const sanitizeInternalReturnTo = (value: string | null) => {
+    if (!value) return null
+    if (!value.startsWith("/") || value.startsWith("//")) return null
+    return value
+}
+
+const appendSearchToPath = (path: string, search: string) => {
+    return search ? `${path}?${search}` : path
+}
+
 // ============================================================================
 // Context
 // ============================================================================
@@ -241,8 +253,11 @@ interface SurrogateDetailLayoutProviderProps {
 
 export function SurrogateDetailLayoutProvider({ surrogateId, children }: SurrogateDetailLayoutProviderProps) {
     const router = useRouter()
+    const searchParams = useSearchParams()
     const segment = useSelectedLayoutSegment()
     const { user } = useAuth()
+    const detailSearch = searchParams.toString()
+    const returnTo = sanitizeInternalReturnTo(searchParams.get("return_to")) ?? DEFAULT_SURROGATES_LIST_PATH
 
     // Tab state
     const canViewProfile = user
@@ -267,10 +282,11 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
         (value: string) => {
             const nextTab: TabValue = isTabValue(value) ? value : "overview"
             const basePath = `/surrogates/${surrogateId}`
-            const nextUrl = nextTab === "overview" ? basePath : `${basePath}/${nextTab}`
+            const nextPath = nextTab === "overview" ? basePath : `${basePath}/${nextTab}`
+            const nextUrl = appendSearchToPath(nextPath, detailSearch)
             router.replace(nextUrl, { scroll: false })
         },
-        [surrogateId, router, isTabValue]
+        [detailSearch, surrogateId, router, isTabValue]
     )
 
     useEffect(() => {
@@ -512,8 +528,8 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
 
     const archiveSurrogate = useCallback(async () => {
         await archiveMutation.mutateAsync(surrogateId)
-        router.push("/surrogates")
-    }, [archiveMutation, surrogateId, router])
+        router.push(returnTo)
+    }, [archiveMutation, surrogateId, router, returnTo])
 
     const restoreSurrogate = useCallback(async () => {
         await restoreMutation.mutateAsync(surrogateId)
@@ -614,8 +630,8 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
     }, [surrogateData, zoomForm, sendZoomInviteMutation, surrogateId, closeDialog, setZoomLastMeetingResult])
 
     const navigateToList = useCallback(() => {
-        router.push("/surrogates")
-    }, [router])
+        router.push(returnTo)
+    }, [router, returnTo])
 
     const dataValue: SurrogateDetailDataContextValue = useMemo(() => ({
         surrogateId,

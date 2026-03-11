@@ -15,6 +15,8 @@ from sqlalchemy.orm import Session
 from app.db.enums import OwnerType, Role, SurrogateStatus
 from app.db.models import Surrogate
 
+PRIORITY_MANAGER_ROLES = {Role.ADMIN.value, Role.DEVELOPER.value}
+
 
 def check_surrogate_access(
     surrogate: Surrogate,
@@ -68,6 +70,23 @@ def check_surrogate_access(
     _check_owner_based_access(surrogate, role_str, user_id, db=db, org_id=org_id)
 
 
+def can_manage_surrogate_priority(user_role: Role | str) -> bool:
+    """Return True when the role can change the priority flag on a lead."""
+    role_str = user_role.value if hasattr(user_role, "value") else user_role
+    return role_str in PRIORITY_MANAGER_ROLES
+
+
+def ensure_can_manage_surrogate_priority(user_role: Role | str) -> None:
+    """Raise when the current role is not allowed to change lead priority."""
+    if can_manage_surrogate_priority(user_role):
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Only admins and developers can manage lead priority",
+    )
+
+
 def _check_post_approval_access(
     db: Session,
     org_id: UUID,
@@ -89,10 +108,7 @@ def _check_post_approval_access(
         return
 
     # Owners can always view their own surrogates even after post-approval
-    if (
-        surrogate.owner_type == OwnerType.USER.value
-        and surrogate.owner_id == user_id
-    ):
+    if surrogate.owner_type == OwnerType.USER.value and surrogate.owner_id == user_id:
         return
 
     # Check permission

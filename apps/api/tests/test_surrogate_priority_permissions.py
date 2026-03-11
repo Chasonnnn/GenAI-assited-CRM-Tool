@@ -73,9 +73,7 @@ async def _authed_client_for_user(db, org_id, user, role: Role):
 
 
 @pytest.mark.asyncio
-async def test_priority_toggle_allowed_with_view_access_even_without_edit(
-    db, test_org, authed_client
-):
+async def test_admin_can_toggle_priority_without_edit_permission(db, test_org, authed_client):
     create_res = await authed_client.post(
         "/surrogates",
         json={
@@ -86,19 +84,19 @@ async def test_priority_toggle_allowed_with_view_access_even_without_edit(
     assert create_res.status_code == 201, create_res.text
     surrogate_id = create_res.json()["id"]
 
-    case_manager = _create_user_with_membership(db, test_org.id, Role.CASE_MANAGER)
+    admin = _create_user_with_membership(db, test_org.id, Role.ADMIN)
     db.add(
         UserPermissionOverride(
             id=uuid.uuid4(),
             organization_id=test_org.id,
-            user_id=case_manager.id,
+            user_id=admin.id,
             permission="edit_surrogates",
             override_type="revoke",
         )
     )
     db.flush()
 
-    async with _authed_client_for_user(db, test_org.id, case_manager, Role.CASE_MANAGER) as client:
+    async with _authed_client_for_user(db, test_org.id, admin, Role.ADMIN) as client:
         mark_res = await client.patch(
             f"/surrogates/{surrogate_id}",
             json={"is_priority": True},
@@ -112,6 +110,68 @@ async def test_priority_toggle_allowed_with_view_access_even_without_edit(
         )
         assert unmark_res.status_code == 200, unmark_res.text
         assert unmark_res.json()["is_priority"] is False
+
+
+@pytest.mark.asyncio
+async def test_priority_toggle_requires_admin_or_developer(db, test_org, authed_client):
+    create_res = await authed_client.post(
+        "/surrogates",
+        json={
+            "full_name": "Priority Guard Lead",
+            "email": f"priority-guard-{uuid.uuid4().hex[:8]}@example.com",
+        },
+    )
+    assert create_res.status_code == 201, create_res.text
+    surrogate_id = create_res.json()["id"]
+
+    case_manager = _create_user_with_membership(db, test_org.id, Role.CASE_MANAGER)
+
+    async with _authed_client_for_user(db, test_org.id, case_manager, Role.CASE_MANAGER) as client:
+        mark_res = await client.patch(
+            f"/surrogates/{surrogate_id}",
+            json={"is_priority": True},
+        )
+        assert mark_res.status_code == 403, mark_res.text
+
+
+@pytest.mark.asyncio
+async def test_priority_change_in_general_update_requires_admin_or_developer(
+    db, test_org, authed_client
+):
+    create_res = await authed_client.post(
+        "/surrogates",
+        json={
+            "full_name": "Priority Edit Guard Lead",
+            "email": f"priority-edit-{uuid.uuid4().hex[:8]}@example.com",
+        },
+    )
+    assert create_res.status_code == 201, create_res.text
+    surrogate_id = create_res.json()["id"]
+
+    case_manager = _create_user_with_membership(db, test_org.id, Role.CASE_MANAGER)
+
+    async with _authed_client_for_user(db, test_org.id, case_manager, Role.CASE_MANAGER) as client:
+        update_res = await client.patch(
+            f"/surrogates/{surrogate_id}",
+            json={"full_name": "Updated Name", "is_priority": True},
+        )
+        assert update_res.status_code == 403, update_res.text
+
+
+@pytest.mark.asyncio
+async def test_marking_priority_on_create_requires_admin_or_developer(db, test_org):
+    case_manager = _create_user_with_membership(db, test_org.id, Role.CASE_MANAGER)
+
+    async with _authed_client_for_user(db, test_org.id, case_manager, Role.CASE_MANAGER) as client:
+        create_res = await client.post(
+            "/surrogates",
+            json={
+                "full_name": "Priority Create Guard Lead",
+                "email": f"priority-create-{uuid.uuid4().hex[:8]}@example.com",
+                "is_priority": True,
+            },
+        )
+        assert create_res.status_code == 403, create_res.text
 
 
 @pytest.mark.asyncio

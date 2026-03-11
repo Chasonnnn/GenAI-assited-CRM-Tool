@@ -202,6 +202,98 @@ describe('SurrogatesPage', () => {
         expect(screen.getByText('john@example.com')).toBeInTheDocument()
     })
 
+    it('preserves current filters in surrogate detail links', () => {
+        mockSearchParams.set('stage', 's1')
+        mockSearchParams.set('q', 'john')
+        mockSearchParams.set('page', '2')
+        mockUseSurrogates.mockReturnValue({
+            data: {
+                items: [
+                    {
+                        id: '1',
+                        surrogate_number: 'S12345',
+                        full_name: 'John Doe',
+                        stage_id: 's1',
+                        stage_slug: 'new_unread',
+                        stage_type: 'intake',
+                        status_label: 'New Unread',
+                        source: 'manual',
+                        email: 'john@example.com',
+                        phone: null,
+                        state: null,
+                        race: null,
+                        owner_type: 'user',
+                        owner_id: 'u1',
+                        owner_name: 'Owner',
+                        created_at: new Date().toISOString(),
+                        last_activity_at: new Date().toISOString(),
+                        is_priority: false,
+                        is_archived: false,
+                        age: null,
+                        bmi: null,
+                    },
+                ],
+                total: 1,
+                pages: 1,
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        expect(screen.getByRole('link', { name: '#S12345' })).toHaveAttribute(
+            'href',
+            '/surrogates/1?return_to=%2Fsurrogates%3Fstage%3Ds1%26q%3Djohn%26page%3D2',
+        )
+    })
+
+    it('shows the priority action only for admin and developer users', () => {
+        const mockSurrogates = [
+            {
+                id: '1',
+                surrogate_number: 'S12345',
+                full_name: 'John Doe',
+                stage_id: 's1',
+                stage_slug: 'new_unread',
+                stage_type: 'intake',
+                status_label: 'New Unread',
+                source: 'manual',
+                email: 'john@example.com',
+                phone: null,
+                state: null,
+                race: null,
+                owner_type: 'user',
+                owner_id: 'u1',
+                owner_name: 'Owner',
+                created_at: new Date().toISOString(),
+                last_activity_at: new Date().toISOString(),
+                is_priority: false,
+                is_archived: false,
+                age: null,
+                bmi: null,
+            },
+        ]
+
+        mockUseSurrogates.mockReturnValue({
+            data: { items: mockSurrogates, total: 1, pages: 1 },
+            isLoading: false,
+            error: null,
+        })
+
+        const adminView = render(<SurrogatesPage />)
+        fireEvent.click(screen.getByLabelText('Actions for John Doe'))
+        expect(screen.getByText('Mark as Priority')).toBeInTheDocument()
+
+        adminView.unmount()
+
+        mockUseAuth.mockReturnValue({ user: { role: 'case_manager', user_id: 'cm-1' } })
+        render(<SurrogatesPage />)
+
+        fireEvent.click(screen.getByLabelText('Actions for John Doe'))
+        expect(screen.queryByText('Mark as Priority')).not.toBeInTheDocument()
+    })
+
     it('renders Last Modified column label', () => {
         const mockSurrogates = [
             {

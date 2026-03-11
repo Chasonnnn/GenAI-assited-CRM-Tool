@@ -5,6 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useAuth } from "@/lib/auth-context"
 import {
     useSurrogateDetailActions,
     useSurrogateDetailData,
@@ -12,9 +13,11 @@ import {
 } from "../context"
 
 export function EditDialog() {
+    const { user } = useAuth()
     const { surrogate } = useSurrogateDetailData()
     const { activeDialog, closeDialog } = useSurrogateDetailDialogs()
     const { updateSurrogate, isUpdatePending } = useSurrogateDetailActions()
+    const canManagePriority = user?.role === "admin" || user?.role === "developer"
 
     const isOpen = activeDialog.type === "edit_surrogate"
 
@@ -64,7 +67,9 @@ export function EditDialog() {
                         data.has_child = formData.get("has_child") === "on"
                         data.is_non_smoker = formData.get("is_non_smoker") === "on"
                         data.has_surrogate_experience = formData.get("has_surrogate_experience") === "on"
-                        data.is_priority = formData.get("is_priority") === "on"
+                        if (canManagePriority) {
+                            data.is_priority = formData.get("is_priority") === "on"
+                        }
 
                         await updateSurrogate(data)
                     }}
@@ -121,10 +126,12 @@ export function EditDialog() {
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4 pt-2">
-                            <div className="flex items-center gap-2">
-                                <Checkbox id="is_priority" name="is_priority" defaultChecked={surrogate.is_priority} />
-                                <Label htmlFor="is_priority">Priority Surrogate</Label>
-                            </div>
+                            {canManagePriority && (
+                                <div className="flex items-center gap-2">
+                                    <Checkbox id="is_priority" name="is_priority" defaultChecked={surrogate.is_priority} />
+                                    <Label htmlFor="is_priority">Priority Surrogate</Label>
+                                </div>
+                            )}
                             <div className="flex items-center gap-2">
                                 <Checkbox id="is_age_eligible" name="is_age_eligible" defaultChecked={surrogate.is_age_eligible ?? false} />
                                 <Label htmlFor="is_age_eligible">Age Eligible</Label>
