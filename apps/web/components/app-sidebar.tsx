@@ -281,8 +281,8 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const navItemClass = useCallback(
         (active: boolean) =>
             cn(
-                "ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground gap-2 rounded-lg p-2 text-left text-sm flex w-full items-center transition-colors focus-visible:ring-2 outline-none",
-                active && "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                "ring-sidebar-ring flex w-full items-center gap-2 rounded-xl border border-transparent px-3 py-2.5 text-left text-sm text-sidebar-foreground/78 transition-colors outline-none hover:border-sidebar-border hover:bg-background/70 hover:text-sidebar-foreground focus-visible:ring-2",
+                active && "border-sidebar-border bg-background text-sidebar-foreground shadow-sm"
             ),
         []
     )
@@ -308,16 +308,16 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
     const sidebarContent = (
         <div className="flex h-full flex-col">
-            <div className="p-2">
-                <div className={cn("flex items-center gap-2 rounded-lg p-2", isCollapsed && "justify-center")}
+            <div className="p-3 pb-2">
+                <div className={cn("flex items-center gap-3 rounded-2xl border border-sidebar-border bg-background/65 p-3", isCollapsed && "justify-center")}
                 >
-                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                    <div className="flex aspect-square size-9 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
                         <Users className="size-4" />
                     </div>
                     {!isCollapsed && (
                         <div className="grid flex-1 text-left text-sm leading-tight">
-                            <span className="truncate font-semibold">Surrogacy Force</span>
-                            <span className="truncate text-xs text-muted-foreground">
+                            <span className="truncate font-semibold tracking-tight">Surrogacy Force</span>
+                            <span className="truncate text-xs text-sidebar-foreground/60">
                                 {user?.org_display_name || user?.org_name || "Loading..."}
                             </span>
                         </div>
@@ -325,11 +325,11 @@ export function AppSidebar({ children }: AppSidebarProps) {
                 </div>
             </div>
 
-            <div className="px-2">
+            <div className="px-3">
                 <Button
                     variant="secondary"
                     className={cn(
-                        "w-full justify-start gap-2",
+                        "w-full justify-start gap-2 rounded-xl border border-sidebar-border bg-background/70 text-sidebar-foreground shadow-none hover:bg-background",
                         isCollapsed && "justify-center"
                     )}
                     onClick={openSearch}
@@ -342,9 +342,11 @@ export function AppSidebar({ children }: AppSidebarProps) {
                 </Button>
             </div>
 
-            <nav className="flex-1 px-2 pt-3" aria-label="Navigation">
+            <nav className="flex-1 px-3 pt-4" aria-label="Navigation">
                 {!isCollapsed && (
-                    <div className="mb-2 text-xs font-medium text-muted-foreground">Navigation</div>
+                    <div className="mb-2 px-1 text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-sidebar-foreground/52">
+                        Navigation
+                    </div>
                 )}
                 <div className="flex flex-col gap-1">
                     {navigationItems.map((item) => (
@@ -372,7 +374,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                         )}
                     </button>
                     {!isCollapsed && tasksOpen && (
-                        <div className="ml-6 flex flex-col gap-1">
+                        <div className="ml-4 flex flex-col gap-1 border-l border-sidebar-border pl-3">
                             {tasksItems.map((subItem) => (
                                 <Link
                                     key={subItem.url}
@@ -407,7 +409,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                         )}
                     </button>
                     {!isCollapsed && automationOpen && (
-                        <div className="ml-6 flex flex-col gap-1">
+                        <div className="ml-4 flex flex-col gap-1 border-l border-sidebar-border pl-3">
                             {automationItems.map((subItem) => (
                                 <Link
                                     key={subItem.url}
@@ -448,7 +450,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                         )}
                     </button>
                     {!isCollapsed && settingsOpen && (
-                        <div className="ml-6 flex flex-col gap-1">
+                        <div className="ml-4 flex flex-col gap-1 border-l border-sidebar-border pl-3">
                             {settingsItems.map((subItem) => (
                                 <Link
                                     key={subItem.url}
@@ -464,13 +466,13 @@ export function AppSidebar({ children }: AppSidebarProps) {
                 </div>
             </nav>
 
-            <div className="mt-auto p-2">
+            <div className="mt-auto p-3 pt-2">
                 <DropdownMenu>
                     <DropdownMenuTrigger
                         render={
                             <button
                                 className={cn(
-                                    "w-full rounded-lg data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground",
+                                    "w-full rounded-2xl data-[state=open]:border-sidebar-border data-[state=open]:bg-background data-[state=open]:text-sidebar-foreground",
                                     navItemClass(false)
                                 )}
                                 aria-label="User menu"
@@ -550,7 +552,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
             {isMobile && mobileOpen && (
                 <button
                     type="button"
-                    className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm appearance-none border-0 p-0 m-0"
+                    className="fixed inset-0 z-40 m-0 appearance-none border-0 bg-background/70 p-0"
                     onClick={() => setMobileOpen(false)}
                     aria-label="Close sidebar overlay"
                 />
@@ -558,7 +560,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
             <aside
                 className={cn(
-                    "bg-sidebar text-sidebar-foreground z-50 flex h-svh flex-col border-r border-sidebar-border transition-[width,transform] duration-200 ease-linear",
+                    "z-50 flex h-svh flex-col border-r border-sidebar-border bg-sidebar/95 text-sidebar-foreground transition-[width,transform] duration-200 ease-linear",
                     isCollapsed ? "w-12" : "w-64",
                     isMobile && "fixed inset-y-0 left-0",
                     isMobile && (mobileOpen ? "translate-x-0" : "-translate-x-full")
@@ -568,7 +570,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
             </aside>
 
             <div className="flex min-w-0 flex-1 flex-col bg-background">
-                <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b px-4 print:hidden">
+                <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border/80 bg-background/80 px-4 print:hidden">
                     <Button
                         variant="ghost"
                         size="icon"

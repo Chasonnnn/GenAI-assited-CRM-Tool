@@ -99,6 +99,8 @@ describe('ReportsPage', () => {
     it('renders report summary cards', () => {
         render(<ReportsPage />)
         expect(screen.getByText('Reports')).toBeInTheDocument()
+        expect(screen.getByText('Analyst Summary')).toBeInTheDocument()
+        expect(screen.getByText('Report Brief')).toBeInTheDocument()
         expect(screen.getByText('42')).toBeInTheDocument()
         expect(screen.getAllByText('$1,000').length).toBeGreaterThan(0)
     })

@@ -27,13 +27,14 @@ import {
     TrendingDownIcon,
     TrendingUpIcon,
 } from "lucide-react"
+import { REPORT_THEME } from "@/lib/report-theme"
 
 const surrogatesOverviewConfig = {
     count: { label: "Surrogates" },
 }
 
 const monthlyTrendsConfig = {
-    count: { label: "Surrogates", color: "#3b82f6" },
+    count: { label: "Surrogates", color: REPORT_THEME.primary },
 }
 
 const surrogatesByAssigneeConfig = {
@@ -105,9 +106,9 @@ export function ReportsChartsGrid({
     metaError,
 }: ReportsChartsGridProps) {
     return (
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6 xl:grid-cols-2">
             {/* Surrogates by Stage */}
-            <Card className="animate-in fade-in-50 duration-500 delay-400">
+            <Card className="gap-0 rounded-[24px] border border-border/80 bg-card/95 p-0 shadow-sm">
                 <CardHeader>
                     <CardTitle>Surrogates by Stage</CardTitle>
                 </CardHeader>
@@ -152,7 +153,7 @@ export function ReportsChartsGrid({
             </Card>
 
             {/* Surrogates Trend */}
-            <Card className="animate-in fade-in-50 duration-500 delay-500">
+            <Card className="gap-0 rounded-[24px] border border-border/80 bg-card/95 p-0 shadow-sm xl:col-span-2">
                 <CardHeader>
                     <CardTitle>Surrogates Trend</CardTitle>
                 </CardHeader>
@@ -175,7 +176,7 @@ export function ReportsChartsGrid({
                                 <Line
                                     type="monotone"
                                     dataKey="count"
-                                    stroke="#3b82f6"
+                                    stroke={REPORT_THEME.primary}
                                     strokeWidth={2}
                                     dot={{ r: 4 }}
                                 />
@@ -213,7 +214,7 @@ export function ReportsChartsGrid({
             </Card>
 
             {/* Team Performance */}
-            <Card className="animate-in fade-in-50 duration-500 delay-[600ms]">
+            <Card className="gap-0 rounded-[24px] border border-border/80 bg-card/95 p-0 shadow-sm">
                 <CardHeader>
                     <CardTitle>Team Performance</CardTitle>
                 </CardHeader>
@@ -266,10 +267,10 @@ export function ReportsChartsGrid({
             </Card>
 
             {/* Meta Performance */}
-            <Card className="animate-in fade-in-50 duration-500 delay-700">
+            <Card className="gap-0 rounded-[24px] border border-border/80 bg-card/95 p-0 shadow-sm xl:col-span-2">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <FacebookIcon className="size-5 text-blue-600" />
+                        <FacebookIcon className="size-5 text-muted-foreground" />
                         Meta Lead Ads Performance
                     </CardTitle>
                 </CardHeader>
@@ -285,9 +286,9 @@ export function ReportsChartsGrid({
                     ) : (
                         <ChartContainer
                             config={{
-                                notPreQualified: { label: "Not Pre-Qualified", color: "#94a3b8" },
-                                preQualified: { label: "Pre-Qualified Only", color: "#3b82f6" },
-                                converted: { label: "Converted", color: "#22c55e" },
+                                notPreQualified: { label: "Not Pre-Qualified", color: REPORT_THEME.muted },
+                                preQualified: { label: "Pre-Qualified Only", color: REPORT_THEME.primary },
+                                converted: { label: "Converted", color: REPORT_THEME.success },
                             }}
                             className="h-[300px] w-full"
                         >
@@ -302,7 +303,7 @@ export function ReportsChartsGrid({
                                                 (metaPerf?.leads_received ?? 0) -
                                                     (metaPerf?.leads_pre_qualified ?? 0)
                                             ),
-                                            fill: "#94a3b8",
+                                            fill: REPORT_THEME.muted,
                                         },
                                         {
                                             name: "Pre-Qualified Only",
@@ -311,12 +312,12 @@ export function ReportsChartsGrid({
                                                 (metaPerf?.leads_pre_qualified ?? 0) -
                                                     (metaPerf?.leads_converted ?? 0)
                                             ),
-                                            fill: "#3b82f6",
+                                            fill: REPORT_THEME.primary,
                                         },
                                         {
                                             name: "Converted",
                                             value: metaPerf?.leads_converted ?? 0,
-                                            fill: "#22c55e",
+                                            fill: REPORT_THEME.success,
                                         },
                                     ]}
                                     dataKey="value"

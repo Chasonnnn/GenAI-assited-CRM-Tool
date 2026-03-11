@@ -5,7 +5,7 @@ import { UsersIcon, UserPlusIcon, CheckSquareIcon } from "lucide-react"
 import { KPICard } from "./kpi-card"
 import type { useSurrogateStats } from "@/lib/hooks/use-surrogates"
 import type { useTasks } from "@/lib/hooks/use-tasks"
-import type { useSurrogatesTrend, useSurrogatesByStatus } from "@/lib/hooks/use-analytics"
+import type { useSurrogatesByStatus } from "@/lib/hooks/use-analytics"
 import { useDashboardFilters } from "../context/dashboard-filters"
 import { useAuth } from "@/lib/auth-context"
 import { formatLocalDate } from "@/lib/utils/date"
@@ -13,25 +13,16 @@ import { formatLocalDate } from "@/lib/utils/date"
 interface KPICardsSectionProps {
     statsQuery: ReturnType<typeof useSurrogateStats>
     tasksQuery: ReturnType<typeof useTasks>
-    trendQuery: ReturnType<typeof useSurrogatesTrend>
     statusQuery: ReturnType<typeof useSurrogatesByStatus>
 }
 
 export function KPICardsSection({
     statsQuery,
     tasksQuery,
-    trendQuery,
     statusQuery,
 }: KPICardsSectionProps) {
     const { filters } = useDashboardFilters()
     const { user } = useAuth()
-
-    // Compute sparkline data from trend
-    const sparklineData = useMemo(() => {
-        if (!trendQuery.data?.length) return undefined
-        // Take last 7 data points for mini sparkline
-        return trendQuery.data.slice(-7).map((d) => d.count)
-    }, [trendQuery.data])
 
     const statusTotal = useMemo(() => {
         if (!statusQuery.data?.length) return 0
@@ -77,13 +68,13 @@ export function KPICardsSection({
     const tasksFilter = filters.assigneeId && filters.assigneeId !== user?.user_id ? "all" : "my_tasks"
     const showWeeklyChange = !!stats && !(stats.this_week === 0 && stats.last_week === 0)
     return (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-stretch">
+        <div className="grid self-start grid-cols-1 items-start gap-4 lg:grid-cols-3">
             {/* Active Surrogates */}
             <KPICard
                 title="Active Surrogates"
                 icon={<UsersIcon className="size-3.5" />}
                 value={activeTotal || 0}
-                subtitle={`${stats?.this_week || 0} new this week`}
+                subtitle={`${stats?.this_week || 0} new this week.`}
                 change={
                     showWeeklyChange && stats?.week_change_pct !== null && stats?.week_change_pct !== undefined
                         ? {
@@ -94,7 +85,6 @@ export function KPICardsSection({
                         }
                         : undefined
                 }
-                sparklineData={sparklineData}
                 href="/surrogates"
                 isLoading={statsQuery.isLoading}
                 isError={statsQuery.isError}
@@ -106,7 +96,7 @@ export function KPICardsSection({
                 title="New Leads"
                 icon={<UserPlusIcon className="size-3.5" />}
                 value={stats?.new_leads_24h || 0}
-                subtitle="Last 24h"
+                subtitle="Last 24 hours."
                 change={
                     stats?.new_leads_change_pct !== null && stats?.new_leads_change_pct !== undefined
                         ? {
@@ -117,7 +107,6 @@ export function KPICardsSection({
                         }
                         : undefined
                 }
-                sparklineData={sparklineData}
                 href={buildSurrogatesUrl()}
                 isLoading={statsQuery.isLoading}
                 isError={statsQuery.isError}
@@ -131,8 +120,8 @@ export function KPICardsSection({
                 value={pendingTasksCount}
                 subtitle={
                     pendingTasksCount === 0
-                        ? "All caught up!"
-                        : "Tasks assigned to you"
+                        ? "Nothing waiting."
+                        : "Awaiting action."
                 }
                 href={filters.assigneeId
                     ? `/tasks?${new URLSearchParams({

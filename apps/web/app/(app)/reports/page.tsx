@@ -2,20 +2,20 @@
 
 import { useState, useMemo } from "react"
 import dynamic from "next/dynamic"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { TrendingUpIcon, SparklesIcon, UsersIcon, CheckCircle2Icon, Loader2Icon, AlertCircleIcon, FacebookIcon, DollarSignIcon } from "lucide-react"
+import { Loader2Icon } from "lucide-react"
 import { useAnalyticsSummary, useSurrogatesByStatus, useSurrogatesByAssignee, useSurrogatesTrend, useMetaPerformance, useFunnelCompare, useSurrogatesByStateCompare, useCampaigns, useSpendTotals, usePerformanceByUser } from "@/lib/hooks/use-analytics"
 import { TeamPerformanceTable } from "@/components/reports/TeamPerformanceTable"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/lib/auth-context"
 import { useSetAIContext } from "@/lib/context/ai-context"
-import { useAIUsageSummary } from "@/lib/hooks/use-ai"
 import { toast } from "sonner"
 import { formatLocalDate } from "@/lib/utils/date"
 import { getCsrfHeaders } from "@/lib/csrf"
+import { getReportSeriesColor } from "@/lib/report-theme"
 
 const ReportsChartsGrid = dynamic(
     () => import("./components/ReportsChartsGrid").then((mod) => mod.ReportsChartsGrid),
@@ -52,58 +52,8 @@ const MetaSpendDashboard = dynamic(
     { ssr: false, loading: () => <Skeleton className="h-[360px] w-full rounded-lg" /> }
 )
 
-// Color palette for charts
-const chartColors = [
-    "#3b82f6",
-    "#22c55e",
-    "#f59e0b",
-    "#a855f7",
-    "#06b6d4",
-    "#ef4444",
-]
-const chartFallbackColor = "#3b82f6"
-
-// AI Usage Stats sub-component
-function AIUsageStats() {
-    const { data: usage, isLoading, isError } = useAIUsageSummary(30)
-
-    if (isLoading) {
-        return <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-    }
-
-    if (isError) {
-        return <p className="text-xs text-destructive">Unable to load AI usage</p>
-    }
-
-    if (!usage || usage.total_requests === 0) {
-        return <p className="text-xs text-muted-foreground">No AI usage yet</p>
-    }
-
-    const formatTokens = (num: number) => {
-        if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`
-        if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`
-        return num.toString()
-    }
-
-    return (
-        <div className="space-y-1">
-            <div className="text-2xl font-bold">{usage.total_requests}</div>
-            <p className="text-xs text-muted-foreground">requests (30d)</p>
-            <div className="flex items-center gap-2 pt-1 text-xs">
-                <span className="text-muted-foreground">Tokens:</span>
-                <span className="font-medium">{formatTokens(usage.total_tokens)}</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs">
-                <span className="text-muted-foreground">Est. cost:</span>
-                <span className="font-medium">${usage.total_cost_usd.toFixed(2)}</span>
-            </div>
-        </div>
-    )
-}
-
 export default function ReportsPage() {
     const { user } = useAuth()
-    const aiEnabled = user?.ai_enabled ?? false
 
     const [dateRange, setDateRange] = useState<DateRangePreset>('all')
     const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
@@ -166,7 +116,7 @@ export default function ReportsPage() {
     const { data: byAssignee, isLoading: byAssigneeLoading, isError: byAssigneeError } = useSurrogatesByAssignee()
     const { data: trend, isLoading: trendLoading, isError: trendError } = useSurrogatesTrend(dateParams)
     const { data: metaPerf, isLoading: metaLoading, isError: metaError } = useMetaPerformance(dateParams)
-    const { data: spendTotals, isLoading: spendLoading, isError: spendError } = useSpendTotals(dateParams)
+    const { data: spendTotals } = useSpendTotals(dateParams)
 
     // New hooks for funnel and map
     const { data: campaigns, isLoading: campaignsLoading, isError: campaignsError } = useCampaigns()
@@ -189,7 +139,7 @@ export default function ReportsPage() {
     const statusChartData = (byStatus || []).map((item, i) => ({
         status: item.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
         count: item.count,
-        fill: chartColors[i % chartColors.length] ?? chartFallbackColor,
+        fill: getReportSeriesColor(i),
     }))
 
     const assigneeChartData = (byAssignee || [])
@@ -198,7 +148,7 @@ export default function ReportsPage() {
         .map((item, i) => ({
             member: item.user_email?.split('@')[0] || 'Unassigned',
             count: item.count,
-            fill: chartColors[i % chartColors.length] ?? chartFallbackColor,
+            fill: getReportSeriesColor(i),
         }))
 
     const trendChartData = (trend || []).map(item => ({
@@ -292,6 +242,31 @@ export default function ReportsPage() {
         }
     }, [computeTrendPercentage, trendChartData, topStatus, totalStatusCount])
 
+    const headerDescription = useMemo(() => {
+        if (dateRange === "all") {
+            return "A calmer analyst view of portfolio health, conversion flow, and paid acquisition efficiency."
+        }
+        if (dateRange === "custom" && customRange.from && customRange.to) {
+            return `A focused report for ${customRange.from.toLocaleDateString()} to ${customRange.to.toLocaleDateString()}.`
+        }
+        return "A focused report for the currently selected reporting window."
+    }, [customRange.from, customRange.to, dateRange])
+
+    const analystSummary = useMemo(() => {
+        if (summaryLoading) {
+            return "Loading the current reporting window."
+        }
+        if (summaryError) {
+            return "Core portfolio metrics are temporarily unavailable."
+        }
+
+        const total = summary?.total_surrogates ?? 0
+        const newThisPeriod = summary?.new_this_period ?? 0
+        const qualifiedRate = summary?.pre_qualified_rate ?? 0
+
+        return `${total.toLocaleString()} active surrogates are in the portfolio. ${newThisPeriod.toLocaleString()} entered during this reporting window, and ${qualifiedRate}% are already pre-qualified or approved.`
+    }, [summary, summaryError, summaryLoading])
+
     const campaignLabelById = useMemo(() => {
         const map = new Map<string, string>()
         campaigns?.forEach((campaign) => {
@@ -346,12 +321,18 @@ export default function ReportsPage() {
     }
 
     return (
-        <div className="flex min-h-screen flex-col">
-            {/* Page Header */}
-            <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-16 items-center justify-between px-6">
-                    <h1 className="text-2xl font-semibold">Reports</h1>
-                    <div className="flex items-center gap-3">
+        <div className="flex min-h-screen flex-col bg-background">
+            <div className="border-b border-border/80 bg-background/80">
+                <div className="flex flex-col gap-5 px-6 py-5 xl:flex-row xl:items-end xl:justify-between">
+                    <div className="space-y-2">
+                        <h1 className="font-display text-4xl font-semibold tracking-tight text-foreground">
+                            Reports
+                        </h1>
+                        <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+                            {headerDescription}
+                        </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
                         <DateRangePicker
                             preset={dateRange}
                             onPresetChange={setDateRange}
@@ -359,7 +340,7 @@ export default function ReportsPage() {
                             onCustomRangeChange={setCustomRange}
                         />
                         <Select value={selectedCampaign} onValueChange={(v) => setSelectedCampaign(v || '')}>
-                            <SelectTrigger className="w-48">
+                            <SelectTrigger className="w-full sm:w-56">
                                 <SelectValue placeholder="All">
                                     {(value: string | null) => {
                                         if (!value) return "All"
@@ -386,217 +367,121 @@ export default function ReportsPage() {
                                 ))}
                             </SelectContent>
                         </Select>
-                        <Button
-                            onClick={handleExportPDF}
-                            disabled={isExporting}
-                        >
+                        <Button onClick={handleExportPDF} disabled={isExporting}>
                             {isExporting ? (
                                 <>
                                     <Loader2Icon className="size-4 animate-spin" />
                                     Exporting...
                                 </>
                             ) : (
-                                'Export PDF'
+                                "Export PDF"
                             )}
                         </Button>
                     </div>
                 </div>
             </div>
 
-            {/* Main Content */}
-            <div className="flex-1 space-y-6 p-6">
-                {/* Quick Stats Row */}
-                <div className="grid gap-4 md:grid-cols-4">
-                    <Card className="animate-in fade-in-50 duration-500">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Surrogates</CardTitle>
-                            <TrendingUpIcon className="size-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            {summaryLoading ? (
-                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                            ) : summaryError ? (
-                                <div className="flex items-center text-xs text-destructive">
-                                    <AlertCircleIcon className="mr-1 size-4" />
-                                    Unable to load
-                                </div>
-                            ) : (
-                                <>
-                                    <div className="text-2xl font-bold">{summary?.total_surrogates ?? 0}</div>
-                                    <p className="text-xs text-muted-foreground">Active surrogates</p>
-                                </>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    <Card className="animate-in fade-in-50 duration-500 delay-100">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">New This Period</CardTitle>
-                            <UsersIcon className="size-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            {summaryLoading ? (
-                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                            ) : summaryError ? (
-                                <div className="flex items-center text-xs text-destructive">
-                                    <AlertCircleIcon className="mr-1 size-4" />
-                                    Unable to load
-                                </div>
-                            ) : (
-                                <>
-                                    <div className="text-2xl font-bold">{summary?.new_this_period ?? 0}</div>
-                                    <p className="text-xs text-muted-foreground">Last 30 days</p>
-                                </>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    <Card className="animate-in fade-in-50 duration-500 delay-200">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Pre-Qualified Rate</CardTitle>
-                            <CheckCircle2Icon className="size-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            {summaryLoading ? (
-                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                            ) : summaryError ? (
-                                <div className="flex items-center text-xs text-destructive">
-                                    <AlertCircleIcon className="mr-1 size-4" />
-                                    Unable to load
-                                </div>
-                            ) : (
-                                <>
-                                    <div className="text-2xl font-bold">{summary?.pre_qualified_rate ?? 0}%</div>
-                                    <p className="text-xs text-muted-foreground">Pre-qualified + approved</p>
-                                </>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    <Card className="animate-in fade-in-50 duration-500 delay-300">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Meta Funnel</CardTitle>
-                            <FacebookIcon className="size-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            {metaLoading ? (
-                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                            ) : metaError ? (
-                                <div className="flex items-center text-xs text-destructive">
-                                    <AlertCircleIcon className="mr-1 size-4" />
-                                    Unable to load
-                                </div>
-                            ) : (
-                                <div className="space-y-1">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs text-muted-foreground">Pre-Qualified</span>
-                                        <span className="text-sm font-semibold">{metaPerf?.pre_qualification_rate ?? 0}%</span>
+            <div className="flex-1 space-y-8 p-5 sm:p-6 xl:p-8">
+                <section className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
+                    <div className="overflow-hidden rounded-[28px] border border-border/80 bg-card/95 shadow-sm">
+                        <div className="flex h-full flex-col gap-6 p-6 sm:p-8">
+                            <div className="space-y-4">
+                                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                                    Analyst Summary
+                                </p>
+                                <div className="flex flex-wrap items-end gap-4">
+                                    <div className="font-display text-6xl font-semibold leading-none tracking-tight text-foreground sm:text-7xl">
+                                        {summary?.total_surrogates ?? 0}
                                     </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs text-muted-foreground">Converted</span>
-                                        <span className="text-sm font-semibold text-green-600">{metaPerf?.conversion_rate ?? 0}%</span>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground pt-1">
-                                        {metaPerf?.leads_received ?? 0} leads received
-                                    </p>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    <Card className="animate-in fade-in-50 duration-500 delay-400">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Ad Spend</CardTitle>
-                            <DollarSignIcon className="size-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            {spendLoading ? (
-                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                            ) : spendError ? (
-                                <div className="flex items-center text-xs text-destructive">
-                                    <AlertCircleIcon className="mr-1 size-4" />
-                                    Unable to load
-                                </div>
-                            ) : (
-                                <>
-                                    <div className="text-2xl font-bold">
-                                        ${spendTotals?.total_spend?.toLocaleString() ?? '0'}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">
-                                        CPL: ${spendTotals?.cost_per_lead?.toFixed(2) ?? 'N/A'}
-                                    </p>
-                                    {spendTotals?.sync_status === 'never' && (
-                                        <p className="text-xs text-amber-600 mt-1">
-                                            No sync data yet
+                                    <div className="max-w-xl space-y-2 pb-1">
+                                        <p className="text-lg font-medium text-foreground">
+                                            Active surrogates in the portfolio.
                                         </p>
-                                    )}
-                                </>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    {/* AI Usage Card - only show if AI is enabled */}
-                    {aiEnabled && (
-                        <Card className="animate-in fade-in-50 duration-500 delay-500">
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">AI Usage</CardTitle>
-                                <SparklesIcon className="size-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <AIUsageStats />
-                            </CardContent>
-                        </Card>
-                    )}
-                </div>
-
-                <Card className="animate-in fade-in-50 duration-500">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <SparklesIcon className="size-4 text-muted-foreground" />
-                            AI Summary
-                        </CardTitle>
-                        <CardDescription>Lightweight insights from the current report data.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid gap-3 md:grid-cols-3">
-                            <div className="rounded-lg border border-border bg-background p-3">
-                                <p className="text-xs font-semibold uppercase text-muted-foreground">Trend Shift</p>
-                                <p className="mt-1 text-sm font-medium">{insightSummary.trend}</p>
+                                        <p className="text-sm leading-6 text-muted-foreground">
+                                            {analystSummary}
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
-                            <div className="rounded-lg border border-border bg-background p-3">
-                                <p className="text-xs font-semibold uppercase text-muted-foreground">Anomalies</p>
-                                <p className="mt-1 text-sm font-medium">{insightSummary.anomaly}</p>
-                            </div>
-                            <div className="rounded-lg border border-border bg-background p-3">
-                                <p className="text-xs font-semibold uppercase text-muted-foreground">Bottlenecks</p>
-                                <p className="mt-1 text-sm font-medium">{insightSummary.bottleneck}</p>
+
+                            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-y border-border/70 py-4 text-sm">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-muted-foreground">New this period</span>
+                                    <span className="font-semibold text-foreground">
+                                        {summary?.new_this_period ?? 0}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-muted-foreground">Pre-qualified</span>
+                                    <span className="font-semibold text-foreground">
+                                        {summary?.pre_qualified_rate ?? 0}%
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-muted-foreground">Spend</span>
+                                    <span className="font-semibold text-foreground">
+                                        ${spendTotals?.total_spend?.toLocaleString() ?? "0"}
+                                    </span>
+                                </div>
                             </div>
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
 
-                <ReportsChartsGrid
-                    aiEnabled={aiEnabled}
-                    statusChartData={statusChartData}
-                    trendChartData={trendChartData}
-                    assigneeChartData={assigneeChartData}
-                    topStatus={topStatus}
-                    topPerformer={topPerformer}
-                    totalSurrogatesInPeriod={totalSurrogatesInPeriod}
-                    computeTrendPercentage={computeTrendPercentage}
-                    metaPerf={metaPerf ?? null}
-                    byStatusLoading={byStatusLoading}
-                    byStatusError={byStatusError}
-                    trendLoading={trendLoading}
-                    trendError={trendError}
-                    byAssigneeLoading={byAssigneeLoading}
-                    byAssigneeError={byAssigneeError}
-                    metaLoading={metaLoading}
-                    metaError={metaError}
-                />
+                    <Card className="gap-0 rounded-[28px] border border-border/80 bg-card/95 shadow-sm">
+                        <CardHeader className="gap-2 px-6 pb-0 pt-6">
+                            <CardTitle className="text-xl font-semibold tracking-tight">Report Brief</CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-6 pb-6 pt-5">
+                            <div className="space-y-4">
+                                <div className="border-b border-border/70 pb-4">
+                                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                                        Trend Shift
+                                    </p>
+                                    <p className="mt-2 text-sm font-medium leading-6 text-foreground">{insightSummary.trend}</p>
+                                </div>
+                                <div className="border-b border-border/70 pb-4">
+                                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                                        Bottlenecks
+                                    </p>
+                                    <p className="mt-2 text-sm font-medium leading-6 text-foreground">{insightSummary.bottleneck}</p>
+                                </div>
+                                <div className="text-sm leading-6 text-muted-foreground">
+                                    {insightSummary.anomaly}
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </section>
 
-                {/* Funnel & Map Charts */}
-                <div className="mt-6 grid gap-6 lg:grid-cols-2">
+                <section className="space-y-4">
+                    <div>
+                        <h2 className="text-xl font-semibold tracking-tight text-foreground">
+                            Portfolio trend and comparison views
+                        </h2>
+                    </div>
+
+                    <ReportsChartsGrid
+                        aiEnabled={user?.ai_enabled ?? false}
+                        statusChartData={statusChartData}
+                        trendChartData={trendChartData}
+                        assigneeChartData={assigneeChartData}
+                        topStatus={topStatus}
+                        topPerformer={topPerformer}
+                        totalSurrogatesInPeriod={totalSurrogatesInPeriod}
+                        computeTrendPercentage={computeTrendPercentage}
+                        metaPerf={metaPerf ?? null}
+                        byStatusLoading={byStatusLoading}
+                        byStatusError={byStatusError}
+                        trendLoading={trendLoading}
+                        trendError={trendError}
+                        byAssigneeLoading={byAssigneeLoading}
+                        byAssigneeError={byAssigneeError}
+                        metaLoading={metaLoading}
+                        metaError={metaError}
+                    />
+                </section>
+
+                <section className="grid gap-6 lg:grid-cols-2">
                     <FunnelChart
                         data={funnel}
                         isLoading={funnelLoading}
@@ -609,15 +494,18 @@ export default function ReportsPage() {
                         isError={byStateError}
                         title="Surrogates by State"
                     />
-                </div>
+                </section>
 
-                {/* Meta Spend Analytics Dashboard */}
-                <div className="mt-8">
+                <section className="space-y-4">
+                    <div>
+                        <h2 className="text-xl font-semibold tracking-tight text-foreground">
+                            Meta spend and form quality
+                        </h2>
+                    </div>
                     <MetaSpendDashboard dateParams={dateParams} />
-                </div>
+                </section>
 
-                {/* Individual Performance Section */}
-                <div className="mt-6 space-y-4">
+                <section className="space-y-4">
                     <div className="flex items-center justify-between">
                         <h2 className="text-xl font-semibold">Individual Performance</h2>
                         <div className="flex items-center gap-2">
@@ -640,11 +528,6 @@ export default function ReportsPage() {
                             </Select>
                         </div>
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                        {performanceMode === 'cohort'
-                            ? 'Showing metrics for surrogates created within the selected date range, grouped by current owner.'
-                            : 'Showing metrics for surrogates with status transitions within the selected date range.'}
-                    </p>
                     <div className="grid gap-6 lg:grid-cols-2">
                         <TeamPerformanceChart
                             data={performanceData?.data}
@@ -659,7 +542,7 @@ export default function ReportsPage() {
                             {...(performanceData?.as_of ? { asOf: performanceData.as_of } : {})}
                         />
                     </div>
-                </div>
+                </section>
             </div>
         </div>
     )

@@ -42,6 +42,10 @@ describe('InvitePage', () => {
             expect(screen.getByText("You're Invited")).toBeInTheDocument()
         })
 
+        expect(screen.getByText('Secure workspace access')).toBeInTheDocument()
+        expect(screen.getByText('Organization')).toBeInTheDocument()
+        expect(screen.getByText('Role')).toBeInTheDocument()
+
         const button = screen.getByRole('button', { name: /continue with google/i })
         fireEvent.click(button)
 
