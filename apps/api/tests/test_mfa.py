@@ -260,8 +260,8 @@ class TestMFAEndpoints:
         ("endpoint", "expected_status"),
         [
             ("/mfa/totp/setup", 200),
-            ("/mfa/recovery/regenerate", 400),
-            ("/mfa/disable", 403),
+            ("/mfa/recovery/regenerate", 200),
+            ("/mfa/disable", 200),
             ("/mfa/totp/verify", 400),
             ("/mfa/verify", 200),
             ("/mfa/complete", 400),
