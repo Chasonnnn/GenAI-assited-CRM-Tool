@@ -14,7 +14,7 @@ import logging
 
 from fastapi import WebSocket
 
-from app.core.redis_client import get_async_redis_client
+from app.core.redis_client import get_async_redis_client, get_async_redis_pubsub_client
 
 logger = logging.getLogger(__name__)
 
@@ -237,7 +237,7 @@ async def send_ws_to_org(org_id: UUID, message: dict) -> None:
 
 async def start_session_revocation_listener() -> None:
     """Listen for session revocation events and close matching sockets."""
-    if get_async_redis_client() is None:
+    if get_async_redis_pubsub_client() is None:
         return
 
     async def _handle_message(message: dict) -> None:
@@ -250,7 +250,7 @@ async def start_session_revocation_listener() -> None:
 
 async def start_websocket_event_listener() -> None:
     """Listen for websocket events from other instances."""
-    if get_async_redis_client() is None:
+    if get_async_redis_pubsub_client() is None:
         return
 
     async def _handle_message(message: dict) -> None:
@@ -274,7 +274,7 @@ async def start_websocket_event_listener() -> None:
 
 
 async def _listen_channel(channel: str, handler) -> None:
-    client = get_async_redis_client()
+    client = get_async_redis_pubsub_client()
     if client is None:
         return
 

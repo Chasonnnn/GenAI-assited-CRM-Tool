@@ -6,6 +6,7 @@ async def test_websocket_pubsub_no_redis(monkeypatch):
     import app.core.websocket as websocket
 
     monkeypatch.setattr(websocket, "get_async_redis_client", lambda: None)
+    monkeypatch.setattr(websocket, "get_async_redis_pubsub_client", lambda: None)
 
     # Should no-op without raising
     await websocket._publish_ws_event({"type": "noop"})

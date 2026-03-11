@@ -40,3 +40,21 @@ def test_get_sync_client_none_when_unset(monkeypatch):
     redis_client = _reload_redis_client(monkeypatch, redis_url=None)
     client = redis_client.get_sync_redis_client()
     assert client is None
+
+
+def test_get_async_pubsub_client_disables_socket_timeout(monkeypatch):
+    redis_client = _reload_redis_client(
+        monkeypatch,
+        redis_url="redis://localhost:6379/0",
+        max_connections=7,
+    )
+    client = redis_client.get_async_redis_pubsub_client()
+    assert client is not None
+    assert client.connection_pool.max_connections == 7
+    assert client.connection_pool.connection_kwargs["socket_timeout"] is None
+
+
+def test_get_async_pubsub_client_none_when_unset(monkeypatch):
+    redis_client = _reload_redis_client(monkeypatch, redis_url=None)
+    client = redis_client.get_async_redis_pubsub_client()
+    assert client is None

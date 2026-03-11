@@ -12,6 +12,7 @@ DEFAULT_REDIS_HEALTH_CHECK_SECONDS = 30
 
 _sync_client = None
 _async_client = None
+_async_pubsub_client = None
 
 
 def get_redis_url() -> str | None:
@@ -70,3 +71,24 @@ def get_async_redis_client():
         )
         _async_client = redis.Redis(connection_pool=pool)
     return _async_client
+
+
+def get_async_redis_pubsub_client():
+    url = get_redis_url()
+    if not url:
+        return None
+
+    global _async_pubsub_client
+    if _async_pubsub_client is None:
+        import redis.asyncio as redis
+
+        pool = redis.ConnectionPool.from_url(
+            url,
+            max_connections=_redis_max_connections(),
+            socket_connect_timeout=DEFAULT_REDIS_CONNECT_TIMEOUT_SECONDS,
+            socket_timeout=None,
+            health_check_interval=DEFAULT_REDIS_HEALTH_CHECK_SECONDS,
+            retry_on_timeout=True,
+        )
+        _async_pubsub_client = redis.Redis(connection_pool=pool)
+    return _async_pubsub_client
