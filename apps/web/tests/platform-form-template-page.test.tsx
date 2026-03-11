@@ -160,4 +160,22 @@ describe("PlatformFormTemplatePage", () => {
         expect(screen.getAllByDisplayValue("Name").length).toBeGreaterThan(0)
     })
 
+    it("uses design-system tab controls for page navigation and settings", async () => {
+        render(<PlatformFormTemplatePage />)
+
+        expect(await screen.findByRole("tablist", { name: /form pages/i })).toBeInTheDocument()
+        expect(screen.getByRole("tab", { name: /page 1/i })).toBeInTheDocument()
+        expect(screen.getByRole("tablist", { name: /builder settings/i })).toBeInTheDocument()
+        expect(screen.getByRole("tab", { name: /form settings/i })).toBeInTheDocument()
+    })
+
+    it("uses responsive builder regions instead of fixed desktop-only panes", async () => {
+        render(<PlatformFormTemplatePage />)
+
+        expect(await screen.findByTestId("form-builder-workspace")).toHaveClass("flex-col", "xl:flex-row")
+        expect(screen.getByTestId("form-builder-palette")).toHaveClass("w-full", "xl:w-[220px]")
+        expect(screen.getByTestId("form-builder-canvas")).toHaveClass("min-w-0", "p-4", "sm:p-6", "xl:p-8")
+        expect(screen.getByTestId("form-builder-settings")).toHaveClass("w-full", "xl:w-[280px]")
+    })
+
 })

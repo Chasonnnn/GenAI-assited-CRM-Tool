@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -1586,8 +1587,8 @@ export default function FormBuilderPage() {
     const isDragging = Boolean(draggedField || draggedFieldId)
     const canvasWidthClass = isMobilePreview ? "max-w-sm" : "max-w-3xl"
     const canvasFrameClass = isMobilePreview
-        ? "rounded-[32px] border border-stone-200 bg-white shadow-sm p-6"
-        : ""
+        ? "rounded-[32px] border border-border bg-card p-6 shadow-sm"
+        : "rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8"
     const canvasScaleClass = isMobilePreview ? "origin-top scale-[0.96]" : ""
     const canvasTypographyClass = isMobilePreview
         ? "text-[0.95rem] [&_input]:text-sm [&_textarea]:text-sm [&_label]:text-xs [&_p]:text-xs"
@@ -1611,8 +1612,8 @@ export default function FormBuilderPage() {
 
     if (!isNewForm && (isFormLoading || isMappingsLoading)) {
         return (
-            <div className="flex h-screen items-center justify-center bg-stone-100 dark:bg-stone-950">
-                <div className="flex items-center gap-2 text-stone-600 dark:text-stone-400">
+            <div className="flex h-screen items-center justify-center bg-background">
+                <div className="flex items-center gap-2 text-muted-foreground">
                     <Loader2Icon className="size-5 animate-spin" />
                     <span>Loading form...</span>
                 </div>
@@ -1630,10 +1631,10 @@ export default function FormBuilderPage() {
     }
 
     return (
-        <div className="flex h-screen flex-col bg-stone-100 dark:bg-stone-950">
+        <div className="flex min-h-screen flex-col bg-background">
             {/* Top Bar */}
-            <div className="flex h-16 items-center justify-between border-b border-stone-200 bg-white px-6 dark:border-stone-800 dark:bg-stone-900">
-                <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6 lg:h-16 lg:flex-nowrap lg:py-0">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 sm:gap-4">
                     <Button
                         variant="ghost"
                         size="icon"
@@ -1646,14 +1647,14 @@ export default function FormBuilderPage() {
                         value={formName}
                         onChange={(e) => setFormName(e.target.value)}
                         placeholder="Form name..."
-                        className="h-9 w-64 border-none bg-transparent px-0 text-lg font-semibold focus-visible:ring-0"
+                        className="h-9 min-w-0 flex-1 border-none bg-transparent px-0 text-lg font-semibold focus-visible:ring-0 sm:max-w-xs lg:w-64 lg:flex-none"
                     />
-                    <Badge variant={isPublished ? "default" : "secondary"} className={isPublished ? "bg-teal-500" : ""}>
+                    <Badge variant={isPublished ? "default" : "secondary"}>
                         {isPublished ? "Published" : "Draft"}
                     </Badge>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex w-full flex-wrap items-center gap-2 sm:gap-3 lg:w-auto lg:justify-end">
                     <Button variant="outline" size="sm" onClick={handlePreview}>
                         <EyeIcon className="mr-2 size-4" />
                         Preview
@@ -1668,8 +1669,8 @@ export default function FormBuilderPage() {
                     </Button>
                     {autoSaveLabel && (
                         <span
-                            className={`text-xs ${
-                                autoSaveStatus === "error" ? "text-red-600" : "text-stone-500"
+                            className={`w-full text-right text-xs lg:w-auto ${
+                                autoSaveStatus === "error" ? "text-destructive" : "text-muted-foreground"
                             }`}
                         >
                             {autoSaveLabel}
@@ -1681,7 +1682,6 @@ export default function FormBuilderPage() {
                     </Button>
                     <Button
                         size="sm"
-                        className="bg-teal-600 hover:bg-teal-700"
                         onClick={handlePublish}
                         disabled={isPublished || isPublishing}
                     >
@@ -1691,86 +1691,90 @@ export default function FormBuilderPage() {
                 </div>
             </div>
 
-            <div className="flex items-center gap-2 border-b border-stone-200 bg-white px-6 py-2 dark:border-stone-800 dark:bg-stone-900">
-                <button
-                    type="button"
-                    onClick={() => setWorkspaceTab("builder")}
-                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                        workspaceTab === "builder"
-                            ? "bg-teal-500/10 text-teal-600 dark:bg-teal-500/20 dark:text-teal-400"
-                            : "text-stone-600 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800"
-                    }`}
+            <div className="border-b border-border bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6">
+                <Tabs
+                    value={workspaceTab}
+                    onValueChange={(value) => setWorkspaceTab(value as typeof workspaceTab)}
+                    className="gap-0"
                 >
-                    Builder
-                </button>
-                <button
-                    type="button"
-                    onClick={() => setWorkspaceTab("submissions")}
-                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                        workspaceTab === "submissions"
-                            ? "bg-teal-500/10 text-teal-600 dark:bg-teal-500/20 dark:text-teal-400"
-                            : "text-stone-600 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800"
-                    }`}
-                >
-                    Submissions
-                    {pendingSubmissionHistory.length > 0 && (
-                        <span className="ml-2 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-semibold text-white">
-                            {pendingSubmissionHistory.length}
-                        </span>
-                    )}
-                </button>
+                    <TabsList aria-label="Workspace sections" className="h-auto flex-wrap bg-muted/70">
+                        <TabsTrigger value="builder" className="flex-none">
+                            Builder
+                        </TabsTrigger>
+                        <TabsTrigger value="submissions" className="flex-none">
+                            Submissions
+                            {pendingSubmissionHistory.length > 0 && (
+                                <Badge variant="secondary" className="ml-1">
+                                    {pendingSubmissionHistory.length}
+                                </Badge>
+                            )}
+                        </TabsTrigger>
+                    </TabsList>
+                </Tabs>
             </div>
 
             {/* Page Tabs */}
             <div
                 className={
                     workspaceTab === "builder"
-                        ? "flex items-center gap-2 border-b border-stone-200 bg-white px-6 py-2 dark:border-stone-800 dark:bg-stone-900"
+                        ? "border-b border-border bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6"
                         : "hidden"
                 }
             >
-                {pages.map((page) => (
-                    <button
-                        key={page.id}
-                        onClick={() => setActivePage(page.id)}
-                        className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${activePage === page.id
-                                ? "bg-teal-500/10 text-teal-600 dark:bg-teal-500/20 dark:text-teal-400"
-                                : "text-stone-600 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800"
-                            }`}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <Tabs
+                        value={String(activePage)}
+                        onValueChange={(value) => setActivePage(Number(value))}
+                        className="gap-0"
                     >
-                        {page.name}
-                    </button>
-                ))}
-                <Button variant="ghost" size="sm" onClick={handleAddPage}>
-                    <PlusIcon className="mr-1 size-4" />
-                    Add Page
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => handleDuplicatePage(activePage)}>
-                    <CopyIcon className="mr-1 size-4" />
-                    Duplicate Page
-                </Button>
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-600 hover:text-red-700"
-                    onClick={() => requestDeletePage(activePage)}
-                    disabled={pages.length === 1}
-                >
-                    <Trash2Icon className="mr-1 size-4" />
-                    Delete Page
-                </Button>
+                        <TabsList aria-label="Form pages" className="h-auto flex-wrap bg-muted/70">
+                            {pages.map((page) => (
+                                <TabsTrigger key={page.id} value={String(page.id)} className="flex-none">
+                                    {page.name}
+                                </TabsTrigger>
+                            ))}
+                        </TabsList>
+                    </Tabs>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Button variant="ghost" size="sm" onClick={handleAddPage}>
+                            <PlusIcon className="mr-1 size-4" />
+                            Add Page
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDuplicatePage(activePage)}>
+                            <CopyIcon className="mr-1 size-4" />
+                            Duplicate Page
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => requestDeletePage(activePage)}
+                            disabled={pages.length === 1}
+                        >
+                            <Trash2Icon className="mr-1 size-4" />
+                            Delete Page
+                        </Button>
+                    </div>
+                </div>
             </div>
 
-            <div className={workspaceTab === "builder" ? "flex flex-1 overflow-hidden" : "hidden"}>
+            <div
+                data-testid="form-builder-workspace"
+                className={workspaceTab === "builder" ? "flex flex-1 flex-col overflow-y-auto xl:flex-row xl:overflow-hidden" : "hidden"}
+            >
                 {/* Left Sidebar - Field Buttons */}
-                <div className="w-[200px] overflow-y-auto border-r border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900">
+                <div
+                    data-testid="form-builder-palette"
+                    aria-label="Field palette"
+                    className="w-full shrink-0 border-b border-border bg-card p-4 xl:w-[200px] xl:overflow-y-auto xl:border-r xl:border-b-0"
+                >
                     <div className="space-y-6">
                         {/* Basic Fields */}
                         <div>
-                            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                 Basic
                             </h3>
-                            <div className="space-y-2">
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
                                 {fieldTypes.basic.map((field) => {
                                     const IconComponent = field.icon
                                     return (
@@ -1782,11 +1786,11 @@ export default function FormBuilderPage() {
                                             onDragStart={() => handleDragStart(field.id, field.label)}
                                             onDragEnd={handleDragEnd}
                                             aria-label={`Add ${field.label} field`}
-                                            className="flex w-full cursor-grab items-center gap-3 rounded-lg border border-stone-200 bg-white p-3 text-left text-sm font-medium transition-all hover:border-teal-500 hover:bg-teal-50 active:cursor-grabbing dark:border-stone-700 dark:bg-stone-800 dark:hover:border-teal-500 dark:hover:bg-teal-950"
+                                            className="flex w-full cursor-grab items-center gap-3 rounded-lg border border-border bg-background p-3 text-left text-sm font-medium transition-all hover:border-primary/40 hover:bg-muted active:cursor-grabbing"
                                         >
-                                            <IconComponent className="size-5 text-stone-600 dark:text-stone-400" aria-hidden="true" />
+                                            <IconComponent className="size-5 text-muted-foreground" aria-hidden="true" />
                                             <span className="min-w-0 flex-1 break-words">{field.label}</span>
-                                            <GripVerticalIcon className="size-4 text-stone-400" aria-hidden="true" />
+                                            <GripVerticalIcon className="size-4 text-muted-foreground/70" aria-hidden="true" />
                                         </button>
                                     )
                                 })}
@@ -1795,10 +1799,10 @@ export default function FormBuilderPage() {
 
                         {/* Advanced Fields */}
                         <div>
-                            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                 Advanced
                             </h3>
-                            <div className="space-y-2">
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
                                 {fieldTypes.advanced.map((field) => {
                                     const IconComponent = field.icon
                                     return (
@@ -1810,11 +1814,11 @@ export default function FormBuilderPage() {
                                             onDragStart={() => handleDragStart(field.id, field.label)}
                                             onDragEnd={handleDragEnd}
                                             aria-label={`Add ${field.label} field`}
-                                            className="flex w-full cursor-grab items-center gap-3 rounded-lg border border-stone-200 bg-white p-3 text-left text-sm font-medium transition-all hover:border-teal-500 hover:bg-teal-50 active:cursor-grabbing dark:border-stone-700 dark:bg-stone-800 dark:hover:border-teal-500 dark:hover:bg-teal-950"
+                                            className="flex w-full cursor-grab items-center gap-3 rounded-lg border border-border bg-background p-3 text-left text-sm font-medium transition-all hover:border-primary/40 hover:bg-muted active:cursor-grabbing"
                                         >
-                                            <IconComponent className="size-5 text-stone-600 dark:text-stone-400" aria-hidden="true" />
+                                            <IconComponent className="size-5 text-muted-foreground" aria-hidden="true" />
                                             <span className="min-w-0 flex-1 break-words">{field.label}</span>
-                                            <GripVerticalIcon className="size-4 text-stone-400" aria-hidden="true" />
+                                            <GripVerticalIcon className="size-4 text-muted-foreground/70" aria-hidden="true" />
                                         </button>
                                     )
                                 })}
@@ -1822,7 +1826,7 @@ export default function FormBuilderPage() {
                         </div>
 
                         {/* Add Page Button */}
-                        <Button variant="outline" size="sm" className="w-full bg-transparent" onClick={handleAddPage}>
+                        <Button variant="outline" size="sm" className="w-full bg-transparent sm:w-auto xl:w-full" onClick={handleAddPage}>
                             <PlusIcon className="mr-2 size-4" />
                             Add Page
                         </Button>
@@ -1830,7 +1834,7 @@ export default function FormBuilderPage() {
                 </div>
 
                 {/* Center Canvas */}
-                <div className="flex-1 overflow-y-auto p-8">
+                <div data-testid="form-builder-canvas" className="min-w-0 flex-1 overflow-y-auto bg-muted/20 p-4 sm:p-6 xl:p-8">
                     <div
                         onDragOver={handleCanvasDragOver}
                         onDrop={handleDrop}
@@ -1842,13 +1846,13 @@ export default function FormBuilderPage() {
                             <div
                                 onDragOver={handleDragOver}
                                 onDrop={handleDrop}
-                                className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-stone-300 p-12 text-center dark:border-stone-700"
+                                className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/80 p-8 text-center sm:p-12"
                             >
-                                <div className="mb-4 flex size-20 items-center justify-center rounded-full bg-teal-100 dark:bg-teal-950">
-                                    <TypeIcon className="size-10 text-teal-600 dark:text-teal-400" />
+                                <div className="mb-4 flex size-20 items-center justify-center rounded-full bg-primary/10">
+                                    <TypeIcon className="size-10 text-primary" />
                                 </div>
                                 <h3 className="mb-2 text-lg font-semibold">Drag fields here to build your form</h3>
-                                <p className="text-sm text-stone-500 dark:text-stone-400">
+                                <p className="text-sm text-muted-foreground">
                                     Start by dragging fields from the left sidebar
                                 </p>
                             </div>
@@ -1859,7 +1863,7 @@ export default function FormBuilderPage() {
                                     return (
                                         <div key={field.id} className="space-y-2">
                                             {isDragging && dropIndicatorId === field.id && (
-                                                <div className="h-0.5 rounded-full bg-teal-500" />
+                                                <div className="h-0.5 rounded-full bg-primary" />
                                             )}
                                             <Card
                                                 draggable
@@ -1867,13 +1871,13 @@ export default function FormBuilderPage() {
                                                 onDragOver={(e) => handleFieldDragOver(e, field.id)}
                                                 onDrop={(e) => handleDropOnField(e, field.id)}
                                                 onDragEnd={handleDragEnd}
-                                                className={`cursor-pointer transition-all hover:shadow-md ${selectedField === field.id ? "ring-2 ring-teal-500" : ""
+                                                className={`cursor-pointer transition-all hover:border-primary/30 hover:shadow-md ${selectedField === field.id ? "border-primary/40 ring-2 ring-primary/20" : ""
                                                     }`}
                                                 onClick={() => selectField(field.id)}
                                             >
                                                 <CardContent className="flex items-start gap-4 p-6">
-                                                    <GripVerticalIcon className="mt-1 size-5 cursor-grab text-stone-400" />
-                                                    <IconComponent className="mt-1 size-5 text-teal-600 dark:text-teal-400" />
+                                                    <GripVerticalIcon className="mt-1 size-5 cursor-grab text-muted-foreground/70" />
+                                                    <IconComponent className="mt-1 size-5 text-primary" />
                                                     <div className="flex-1">
                                                         <div className="flex items-start justify-between">
                                                             <div className="flex-1">
@@ -1885,7 +1889,7 @@ export default function FormBuilderPage() {
                                                                     onClick={(e) => e.stopPropagation()}
                                                                 />
                                                                 {field.helperText && (
-                                                                    <p className="text-sm text-stone-500 dark:text-stone-400">{field.helperText}</p>
+                                                                    <p className="text-sm text-muted-foreground">{field.helperText}</p>
                                                                 )}
                                                             </div>
                                                             {field.required && <span className="ml-2 text-red-500">*</span>}
@@ -1921,7 +1925,7 @@ export default function FormBuilderPage() {
                                     )
                                 })}
                                 {isDragging && dropIndicatorId === "end" && (
-                                    <div className="h-0.5 rounded-full bg-teal-500" />
+                                    <div className="h-0.5 rounded-full bg-primary" />
                                 )}
                             </>
                         )}
@@ -1929,32 +1933,23 @@ export default function FormBuilderPage() {
                 </div>
 
                 {/* Right Sidebar - Settings */}
-                <div className="w-[280px] overflow-y-auto border-l border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900">
-                    <div className="mb-4 grid grid-cols-2 gap-2 rounded-lg border border-stone-200 bg-stone-50 p-1 text-xs font-medium dark:border-stone-800 dark:bg-stone-950">
-                        <button
-                            type="button"
-                            disabled={!selectedFieldData}
-                            onClick={() => setRightSidebarTab("field")}
-                            className={`rounded-md px-2 py-1 transition ${
-                                rightSidebarTab === "field"
-                                    ? "bg-white text-stone-900 shadow-sm dark:bg-stone-900 dark:text-stone-100"
-                                    : "text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
-                            } ${!selectedFieldData ? "cursor-not-allowed opacity-50" : ""}`}
-                        >
-                            Field Settings
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setRightSidebarTab("form")}
-                            className={`rounded-md px-2 py-1 transition ${
-                                rightSidebarTab === "form"
-                                    ? "bg-white text-stone-900 shadow-sm dark:bg-stone-900 dark:text-stone-100"
-                                    : "text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
-                            }`}
-                        >
-                            Form Settings
-                        </button>
-                    </div>
+                <div
+                    data-testid="form-builder-settings"
+                    aria-label="Form builder settings"
+                    className="w-full shrink-0 border-t border-border bg-card p-4 xl:w-[280px] xl:overflow-y-auto xl:border-l xl:border-t-0"
+                >
+                    <Tabs
+                        value={rightSidebarTab}
+                        onValueChange={(value) => setRightSidebarTab(value as typeof rightSidebarTab)}
+                        className="mb-4 gap-0"
+                    >
+                        <TabsList aria-label="Builder settings" className="grid w-full grid-cols-2 bg-muted/70">
+                            <TabsTrigger value="field" disabled={!selectedFieldData}>
+                                Field Settings
+                            </TabsTrigger>
+                            <TabsTrigger value="form">Form Settings</TabsTrigger>
+                        </TabsList>
+                    </Tabs>
 
                     {rightSidebarTab === "field" ? (
                         selectedFieldData ? (
