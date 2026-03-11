@@ -31,6 +31,7 @@ vi.mock('@/lib/api/forms', async () => {
 describe('Dedicated Apply Page Retirement', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        document.documentElement.classList.remove('dark')
         window.localStorage.clear()
     })
 
@@ -65,5 +66,42 @@ describe('Dedicated Apply Page Retirement', () => {
 
         expect(await screen.findByRole('heading', { name: 'Preview Intake' })).toBeInTheDocument()
         expect(screen.getByText(/preview mode/i)).toBeInTheDocument()
+    })
+
+    it('keeps the preview form readable in dark theme', async () => {
+        document.documentElement.classList.add('dark')
+        window.localStorage.setItem(
+            'form-preview:preview-form',
+            JSON.stringify({
+                form_id: 'form-preview-1',
+                name: 'Preview Form',
+                description: 'Preview only',
+                form_schema: {
+                    pages: [
+                        {
+                            title: 'Application',
+                            fields: [
+                                { key: 'full_name', label: 'Full Name', type: 'text', required: true },
+                            ],
+                        },
+                    ],
+                    public_title: 'Preview Intake',
+                    privacy_notice: 'https://example.com/privacy',
+                },
+                max_file_size_bytes: 5 * 1024 * 1024,
+                max_file_count: 5,
+                allowed_mime_types: ['application/pdf'],
+            }),
+        )
+
+        render(<PublicApplicationForm token="preview" previewKey="preview-form" />)
+
+        expect(await screen.findByRole('heading', { name: 'Preview Intake' })).toBeInTheDocument()
+
+        const field = screen.getByLabelText(/full name/i)
+        const shell = field.closest('.public-form-light')
+
+        expect(shell).toBeInTheDocument()
+        expect(shell).toHaveClass('text-stone-900')
     })
 })

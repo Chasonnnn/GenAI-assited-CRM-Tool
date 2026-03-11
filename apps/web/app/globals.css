@@ -312,3 +312,24 @@
   --card: oklch(1 0 89.876) !important;
   --card-foreground: oklch(0.289 0 89.876) !important;
 }
+
+/* Public forms stay on a light surface even when the app theme is dark. */
+.public-form-light {
+  color-scheme: light;
+  --background: oklch(0.985 0 89.876);
+  --foreground: oklch(0.289 0 89.876);
+  --card: oklch(1 0 89.876);
+  --card-foreground: oklch(0.289 0 89.876);
+  --popover: oklch(1 0 89.876);
+  --popover-foreground: oklch(0.289 0 89.876);
+  --secondary: oklch(0.97 0 89.876);
+  --secondary-foreground: oklch(0.289 0 89.876);
+  --muted: oklch(0.97 0 89.876);
+  --muted-foreground: oklch(0.528 0 89.876);
+  --accent: oklch(0.97 0 89.876);
+  --accent-foreground: oklch(0.289 0 89.876);
+  --border: oklch(0.922 0 89.876);
+  --input: oklch(0.922 0 89.876);
+  --ring: oklch(0.644 0.216 347.987);
+  color: oklch(0.289 0 89.876);
+}

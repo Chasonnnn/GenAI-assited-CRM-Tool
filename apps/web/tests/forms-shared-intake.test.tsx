@@ -68,6 +68,7 @@ const baseForm = {
 describe('Shared Intake Public Page', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        document.documentElement.classList.remove('dark')
         getSharedPublicForm.mockResolvedValue(baseForm)
         getSharedPublicFormDraft.mockResolvedValue({
             answers: {},
@@ -102,6 +103,34 @@ describe('Shared Intake Public Page', () => {
         expect(await screen.findByRole('heading', { name: 'Event Intake Form' })).toBeInTheDocument()
         expect(getSharedPublicForm).toHaveBeenCalledWith('event-abc')
         expect(getSharedPublicFormDraft).toHaveBeenCalledWith('event-abc', expect.any(String))
+    })
+
+    it('renders a light-surface form shell in dark theme', async () => {
+        document.documentElement.classList.add('dark')
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            form_schema: {
+                ...baseForm.form_schema,
+                pages: [
+                    {
+                        title: 'Application',
+                        fields: [
+                            { key: 'full_name', label: 'Full Name', type: 'text', required: true },
+                        ],
+                    },
+                ],
+            },
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+
+        expect(await screen.findByRole('heading', { name: 'Event Intake Form' })).toBeInTheDocument()
+
+        const field = screen.getByLabelText(/full name/i)
+        const shell = field.closest('.public-form-light')
+
+        expect(shell).toBeInTheDocument()
+        expect(shell).toHaveClass('text-stone-900')
     })
 
     it('submits shared intake and shows lead-created success state', async () => {

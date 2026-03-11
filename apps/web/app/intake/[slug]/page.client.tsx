@@ -92,6 +92,9 @@ function formatSavedTime(value: string | null): string {
     return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
 }
 
+const publicFormPageClassName =
+    "public-form-light min-h-screen bg-gradient-to-b from-stone-50 via-stone-50 to-stone-100/70 text-stone-900"
+
 function formatSavedDateTime(value: string | null): string {
     if (!value) return ""
     const date = new Date(value)
@@ -1512,7 +1515,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
     // Loading state
     if (isLoading) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
+            <div className={cn(publicFormPageClassName, "flex items-center justify-center p-4")}>
                 <div className="text-center">
                     <Loader2Icon className="size-10 animate-spin text-primary mx-auto mb-4" />
                     <p className="text-stone-600">Loading application form...</p>
@@ -1524,7 +1527,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
     // Error state
     if (formError) {
         return (
-            <div className="min-h-screen flex items-center justify-center p-4">
+            <div className={cn(publicFormPageClassName, "flex items-center justify-center p-4")}>
                 <Card className="max-w-md w-full rounded-3xl border border-stone-200 bg-white shadow-sm">
                     <CardContent className="pt-8 pb-8 text-center">
                         <AlertTriangleIcon className="size-16 text-amber-500 mx-auto mb-4" />
@@ -1548,7 +1551,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                     : "Your application has been received and added to intake review. A coordinator will reach out soon."
 
         return (
-            <div className="min-h-screen flex items-center justify-center p-4">
+            <div className={cn(publicFormPageClassName, "flex items-center justify-center p-4")}>
                 <Card className="max-w-md w-full rounded-3xl border border-stone-200 bg-white shadow-sm">
                     <CardContent className="pt-12 pb-12 text-center">
                         <div className="flex size-20 items-center justify-center rounded-full bg-primary/20 mx-auto mb-6">
@@ -1567,7 +1570,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-stone-50 via-stone-50 to-stone-100/70 pb-28 [color-scheme:light]">
+        <div className={cn(publicFormPageClassName, "pb-28")}>
             <div className="h-0.5 w-full bg-primary/80" />
             {/* Header */}
             <header className="py-8 md:py-10">
