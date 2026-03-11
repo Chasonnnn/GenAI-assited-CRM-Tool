@@ -116,9 +116,9 @@ export function DashboardFilterBar({
                         variant="ghost"
                         size="sm"
                         onClick={resetFilters}
-                        className="h-8 px-2 text-muted-foreground hover:text-foreground"
+                        className="h-9 px-3 text-muted-foreground hover:text-foreground"
                     >
-                        <XIcon className="mr-1 size-3.5" />
+                        <XIcon className="mr-1 size-3.5" aria-hidden="true" />
                         Reset
                     </Button>
                 )}
@@ -136,9 +136,13 @@ export function DashboardFilterBar({
                         size="icon"
                         onClick={handleRefresh}
                         disabled={showRefreshing}
-                        className="size-8"
+                        className="size-9"
+                        aria-label={showRefreshing ? "Refreshing dashboard" : "Refresh dashboard"}
                     >
-                        <RefreshCwIcon className={`size-4 ${showRefreshing ? 'animate-spin' : ''}`} />
+                        <RefreshCwIcon
+                            className={`size-4 ${showRefreshing ? 'animate-spin motion-reduce:animate-none' : ''}`}
+                            aria-hidden="true"
+                        />
                     </Button>
                 )}
             </div>

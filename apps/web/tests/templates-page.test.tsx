@@ -124,14 +124,21 @@ describe('WorkflowTemplatesPanel', () => {
         expect(screen.getByText('Task Reminder')).toBeInTheDocument()
     })
 
+    it('renders each template card as an accessible button', () => {
+        render(<WorkflowTemplatesPanel />)
+
+        expect(
+            screen.getByRole('button', { name: /use template welcome new lead/i })
+        ).toBeInTheDocument()
+        expect(
+            screen.getByRole('button', { name: /use template task reminder/i })
+        ).toBeInTheDocument()
+    })
+
     it('shows email template selection when template with missing email is selected', async () => {
         render(<WorkflowTemplatesPanel />)
 
-        // Find and click the template card (Card component, not button)
-        const templateName = screen.getByText('Welcome New Lead')
-        const templateCard = templateName.closest('[class*="cursor-pointer"]') || templateName.closest('div[class*="Card"]')
-        expect(templateCard).toBeTruthy()
-        fireEvent.click(templateCard!)
+        fireEvent.click(screen.getByRole('button', { name: /use template welcome new lead/i }))
 
         // Should show the email template selection prompt
         await waitFor(() => {
@@ -142,11 +149,7 @@ describe('WorkflowTemplatesPanel', () => {
     it('does not show email template selection for templates without send_email actions', async () => {
         render(<WorkflowTemplatesPanel />)
 
-        // Find and click the Task Reminder template card
-        const templateName = screen.getByText('Task Reminder')
-        const templateCard = templateName.closest('[class*="cursor-pointer"]') || templateName.closest('div[class*="Card"]')
-        expect(templateCard).toBeTruthy()
-        fireEvent.click(templateCard!)
+        fireEvent.click(screen.getByRole('button', { name: /use template task reminder/i }))
 
         // Should NOT show email template selection
         await waitFor(() => {

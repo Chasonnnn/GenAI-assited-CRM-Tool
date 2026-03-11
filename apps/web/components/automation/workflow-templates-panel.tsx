@@ -544,24 +544,37 @@ function TemplateCard({
     const IconComponent = iconMap[template.icon] || LayoutTemplateIcon
     const categoryLabel = categoryLabels[template.category] ?? template.category
     const categoryColor = CATEGORY_COLORS[template.category] || CATEGORY_COLORS.general
+    const accessibleLabel = `Use template ${template.name}`
 
     return (
-        <Card className="group cursor-pointer transition-all hover:border-teal-500/50 hover:shadow-md" onClick={onSelect}>
+        <Card
+            className="group cursor-pointer transition-all hover:border-teal-500/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            onClick={onSelect}
+            onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault()
+                    onSelect()
+                }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label={accessibleLabel}
+        >
             <CardHeader className="pb-2">
                 <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
                         <div className="flex size-10 items-center justify-center rounded-lg bg-teal-500/10">
-                            <IconComponent className="size-5 text-teal-500" />
+                            <IconComponent className="size-5 text-teal-500" aria-hidden="true" />
                         </div>
-                        <div>
-                            <CardTitle className="text-base">{template.name}</CardTitle>
+                        <div className="min-w-0">
+                            <CardTitle className="text-base break-words">{template.name}</CardTitle>
                             <div className="mt-1 flex items-center gap-2">
                                 <Badge variant="secondary" className={categoryColor}>
                                     {categoryLabel}
                                 </Badge>
                                 {template.is_global && (
                                     <Badge variant="outline" className="text-xs">
-                                        <GlobeIcon className="mr-1 h-3 w-3" />
+                                        <GlobeIcon className="mr-1 h-3 w-3" aria-hidden="true" />
                                         Global
                                     </Badge>
                                 )}
@@ -571,11 +584,13 @@ function TemplateCard({
                 </div>
             </CardHeader>
             <CardContent>
-                <CardDescription className="line-clamp-2">
+                <CardDescription className="line-clamp-2 break-words">
                     {template.description || "No description"}
                 </CardDescription>
                 <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Trigger: {TRIGGER_LABELS[template.trigger_type] || template.trigger_type}</span>
+                    <span className="min-w-0 pr-3 break-words">
+                        Trigger: {TRIGGER_LABELS[template.trigger_type] || template.trigger_type}
+                    </span>
                     <span>{template.usage_count} uses</span>
                 </div>
             </CardContent>

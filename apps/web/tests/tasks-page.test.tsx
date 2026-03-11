@@ -307,6 +307,57 @@ describe('TasksListView', () => {
         fireEvent.click(checkbox)
         expect(onTaskToggle).toHaveBeenCalledWith('t1', false)
     })
+
+    it('uses a dedicated open-task control instead of making the whole row a faux button', () => {
+        const onTaskToggle = vi.fn()
+        const onTaskClick = vi.fn()
+        const onSelectTask = vi.fn()
+        const onSelectAll = vi.fn()
+        const onBulkCompleteSelected = vi.fn()
+
+        render(
+            <TasksListView
+                incompleteTasks={[
+                    {
+                        id: 't1',
+                        title: 'Follow up with surrogate',
+                        is_completed: false,
+                        due_date: null,
+                        surrogate_id: 's1',
+                        surrogate_number: 'S12345',
+                        owner_type: 'user',
+                        owner_id: 'u1',
+                        owner_name: 'Jane Doe',
+                    } as TaskListItem,
+                ]}
+                completedTasks={{ items: [], total: 0 }}
+                selectedTaskIds={new Set()}
+                showCompleted={false}
+                loadingCompleted={false}
+                completedError={false}
+                onToggleShowCompleted={() => {}}
+                onTaskToggle={onTaskToggle}
+                onTaskClick={onTaskClick}
+                onSelectTask={onSelectTask}
+                onSelectAll={onSelectAll}
+                onBulkCompleteSelected={onBulkCompleteSelected}
+                bulkCompletePending={false}
+            />
+        )
+
+        const openTaskButton = screen.getByRole('button', {
+            name: /open task follow up with surrogate/i,
+        })
+        fireEvent.click(openTaskButton)
+
+        expect(onTaskClick).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 't1', title: 'Follow up with surrogate' })
+        )
+
+        const surrogateLink = screen.getByRole('link', { name: 'Surrogate #S12345' })
+        expect(surrogateLink.closest('button')).toBeNull()
+        expect(surrogateLink.closest('[role="button"]')).toBeNull()
+    })
 })
 
 describe('TasksCalendarView', () => {

@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { TaskListItem } from "@/lib/types/task"
 import { categoryColors, categoryLabels, getDueCategory, type DueCategory } from "@/lib/utils/task-due"
+import { cn } from "@/lib/utils"
 import { useMemo } from "react"
 import { Loader2Icon } from "lucide-react"
 
@@ -77,35 +78,21 @@ export function TasksListView({
         return (
             <div
                 key={task.id}
-                className={`flex items-start gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-accent/50 ${
+                className={`flex min-w-0 items-start gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-accent/50 ${
                     task.is_completed ? "opacity-60" : ""
                 }`}
-                role="button"
-                tabIndex={0}
-                onClick={(event) => {
-                    const target = event.target as HTMLElement
-                    if (target.closest('[data-task-checkbox="true"]')) return
-                    onTaskClick(task)
-                }}
-                onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault()
-                        onTaskClick(task)
-                    }
-                }}
             >
                 {!task.is_completed && (
-                    <div data-task-checkbox="true" onClick={(event) => event.stopPropagation()}>
+                    <div>
                         <Checkbox
                             className="mt-0.5"
                             aria-label={`Select task ${task.title}`}
                             checked={isSelected}
                             onCheckedChange={(checked) => onSelectTask(task.id, checked === true)}
-                            onClick={(event) => event.stopPropagation()}
                         />
                     </div>
                 )}
-                <div data-task-checkbox="true" onClick={(event) => event.stopPropagation()}>
+                <div>
                     <Checkbox
                         className="mt-0.5"
                         aria-label={
@@ -115,25 +102,35 @@ export function TasksListView({
                         }
                         checked={task.is_completed}
                         onCheckedChange={() => onTaskToggle(task.id, task.is_completed)}
-                        onClick={(event) => event.stopPropagation()}
                     />
                 </div>
-                <div className="flex-1 space-y-1">
-                    <div className="flex items-center gap-2">
-                        <span className={`font-medium ${task.is_completed ? "line-through" : ""}`}>
-                            {task.title}
-                        </span>
-                        {showCategory && !task.is_completed && (
-                            <Badge variant="secondary" className={colors.badge}>
-                                {categoryLabels[category]}
-                            </Badge>
-                        )}
-                    </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                    <button
+                        type="button"
+                        className="w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        onClick={() => onTaskClick(task)}
+                        aria-label={`Open task ${task.title}`}
+                    >
+                        <div className="flex min-w-0 items-center gap-2">
+                            <span
+                                className={cn(
+                                    "min-w-0 flex-1 break-words font-medium",
+                                    task.is_completed && "line-through",
+                                )}
+                            >
+                                {task.title}
+                            </span>
+                            {showCategory && !task.is_completed && (
+                                <Badge variant="secondary" className={colors.badge}>
+                                    {categoryLabels[category]}
+                                </Badge>
+                            )}
+                        </div>
+                    </button>
                     {task.surrogate_id && (
                         <Link
                             href={`/surrogates/${task.surrogate_id}`}
                             className="text-sm text-muted-foreground hover:underline"
-                            onClick={(event) => event.stopPropagation()}
                         >
                             Surrogate #{task.surrogate_number}
                         </Link>
@@ -142,7 +139,7 @@ export function TasksListView({
                 {task.owner_name && (
                     <TooltipProvider>
                         <Tooltip>
-                            <TooltipTrigger>
+                            <TooltipTrigger aria-label={`Assigned to ${task.owner_name}`}>
                                 <Avatar className="size-8">
                                     <AvatarFallback>{getInitials(task.owner_name)}</AvatarFallback>
                                 </Avatar>

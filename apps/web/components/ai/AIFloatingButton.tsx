@@ -16,6 +16,9 @@ const HIDDEN_PATHS = [
 export function AIFloatingButton() {
     const { canUseAI, isOpen, togglePanel, entityName } = useAIContext()
     const pathname = usePathname()
+    const accessibleLabel = entityName
+        ? `Open AI Assistant for ${entityName}`
+        : "Open AI Assistant"
 
     // Don't show if AI is not available
     if (!canUseAI) {
@@ -37,14 +40,15 @@ export function AIFloatingButton() {
                 "bg-primary text-primary-foreground hover:bg-primary/90",
                 isOpen && "opacity-0 pointer-events-none"
             )}
-            title={`AI Assistant${entityName ? ` • ${entityName}` : ""}`}
+            title={accessibleLabel}
+            aria-label={accessibleLabel}
         >
-            <SparklesIcon className="h-6 w-6" />
+            <SparklesIcon className="h-6 w-6" aria-hidden="true" />
 
             {/* Pulse indicator when context is available */}
             {entityName && !isOpen && (
-                <span className="absolute -right-1 -top-1 flex h-4 w-4">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                <span className="absolute -right-1 -top-1 flex h-4 w-4" aria-hidden="true">
+                    <span className="absolute inline-flex h-full w-full animate-ping motion-reduce:animate-none rounded-full bg-green-400 opacity-75" />
                     <span className="relative inline-flex h-4 w-4 rounded-full bg-green-500" />
                 </span>
             )}

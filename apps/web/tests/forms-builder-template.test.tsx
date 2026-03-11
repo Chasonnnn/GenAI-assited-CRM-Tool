@@ -54,4 +54,12 @@ describe('FormsListPage templates', () => {
 
         await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/automation/forms/form-123'))
     })
+
+    it('labels the automation back button for assistive technology', () => {
+        render(<FormsListPage />)
+
+        expect(
+            screen.getByRole('button', { name: /back to automation/i })
+        ).toBeInTheDocument()
+    })
 })
