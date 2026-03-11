@@ -27,6 +27,23 @@ interface TeamPerformanceTableProps {
 
 type SortKey = "user_name" | "total_surrogates" | "contacted" | "pre_qualified" | "ready_to_match" | "matched" | "application_submitted" | "on_hold" | "lost" | "conversion_rate" | "avg_days_to_match" | "avg_days_to_application_submitted"
 type SortDirection = "asc" | "desc"
+type PerformanceSummaryEntry = {
+    id: string
+    name: string
+    archivedCount: number
+    totalSurrogates: number
+    contacted: number
+    preQualified: number
+    readyToMatch: number
+    matched: number
+    applicationSubmitted: number
+    onHold: number
+    lost: number
+    conversionRate: number | null
+    avgDaysToMatch: number | null
+    avgDaysToApplicationSubmitted: number | null
+    muted?: boolean
+}
 
 function SortDirectionIcon({
     columnKey,
@@ -87,6 +104,47 @@ export function TeamPerformanceTable({
         })
     }, [data, sortKey, sortDirection])
 
+    const mobileSummaryData = useMemo<PerformanceSummaryEntry[]>(() => {
+        const entries: PerformanceSummaryEntry[] = sortedData.map((user) => ({
+            id: user.user_id,
+            name: user.user_name,
+            archivedCount: user.archived_count,
+            totalSurrogates: user.total_surrogates,
+            contacted: user.contacted,
+            preQualified: user.pre_qualified,
+            readyToMatch: user.ready_to_match,
+            matched: user.matched,
+            applicationSubmitted: user.application_submitted,
+            onHold: user.on_hold,
+            lost: user.lost,
+            conversionRate: user.conversion_rate,
+            avgDaysToMatch: user.avg_days_to_match,
+            avgDaysToApplicationSubmitted: user.avg_days_to_application_submitted,
+        }))
+
+        if (unassigned && unassigned.total_surrogates > 0) {
+            entries.push({
+                id: "unassigned",
+                name: "Unassigned",
+                archivedCount: unassigned.archived_count,
+                totalSurrogates: unassigned.total_surrogates,
+                contacted: unassigned.contacted,
+                preQualified: unassigned.pre_qualified,
+                readyToMatch: unassigned.ready_to_match,
+                matched: unassigned.matched,
+                applicationSubmitted: unassigned.application_submitted,
+                onHold: unassigned.on_hold,
+                lost: unassigned.lost,
+                conversionRate: null,
+                avgDaysToMatch: null,
+                avgDaysToApplicationSubmitted: null,
+                muted: true,
+            })
+        }
+
+        return entries
+    }, [sortedData, unassigned])
+
     if (isLoading) {
         return (
             <Card>
@@ -146,6 +204,19 @@ export function TeamPerformanceTable({
         return `${value.toFixed(1)}d`
     }
 
+    const formatPercent = (value: number | null) => {
+        if (value === null) return "-"
+        return `${value}%`
+    }
+
+    const conversionBadgeClass = (value: number | null) =>
+        cn(
+            value === null && "border-border bg-muted text-muted-foreground hover:bg-muted",
+            value !== null && value >= 30 && "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15",
+            value !== null && value >= 20 && value < 30 && "border-border bg-secondary text-secondary-foreground hover:bg-secondary/80",
+            value !== null && value < 20 && "border-border bg-background text-muted-foreground hover:bg-muted",
+        )
+
     return (
         <Card>
             <CardHeader>
@@ -163,7 +234,71 @@ export function TeamPerformanceTable({
                     </div>
                 </div>
             </CardHeader>
-            <CardContent className="p-0 overflow-x-auto">
+            <CardContent className="p-0">
+                <div
+                    className="space-y-3 p-4 md:hidden"
+                    role="list"
+                    aria-label="Team performance mobile summary"
+                >
+                    {mobileSummaryData.map((entry) => (
+                        <article
+                            key={entry.id}
+                            aria-label={`Performance summary for ${entry.name}`}
+                            className={cn(
+                                "rounded-2xl border border-border/70 bg-background p-4 shadow-sm",
+                                entry.muted && "bg-muted/30",
+                            )}
+                        >
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <h3 className="truncate font-semibold">{entry.name}</h3>
+                                        {entry.archivedCount > 0 && (
+                                            <Badge variant="outline" className="text-xs">
+                                                {entry.archivedCount} archived
+                                            </Badge>
+                                        )}
+                                    </div>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        {entry.totalSurrogates} surrogates
+                                    </p>
+                                </div>
+                                <Badge
+                                    variant="outline"
+                                    className={conversionBadgeClass(entry.conversionRate)}
+                                >
+                                    {formatPercent(entry.conversionRate)}
+                                </Badge>
+                            </div>
+
+                            <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                                {[
+                                    { label: "Contacted", value: entry.contacted },
+                                    { label: "Pre-qualified", value: entry.preQualified },
+                                    { label: "Ready to match", value: entry.readyToMatch },
+                                    { label: "Matched", value: entry.matched },
+                                    { label: "Application submitted", value: entry.applicationSubmitted, className: "text-green-600" },
+                                    { label: "On-Hold", value: entry.onHold, className: entry.onHold > 0 ? "text-rose-700" : "" },
+                                    { label: "Lost", value: entry.lost, className: entry.lost > 0 ? "text-red-600" : "" },
+                                    { label: "Match conversion", value: formatPercent(entry.conversionRate) },
+                                    { label: "Avg to match", value: formatDays(entry.avgDaysToMatch) },
+                                    { label: "Avg to application", value: formatDays(entry.avgDaysToApplicationSubmitted) },
+                                ].map((metric) => (
+                                    <div key={metric.label} className="rounded-xl bg-muted/40 p-3">
+                                        <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                            {metric.label}
+                                        </dt>
+                                        <dd className={cn("mt-1 text-base font-semibold", metric.className)}>
+                                            {metric.value}
+                                        </dd>
+                                    </div>
+                                ))}
+                            </dl>
+                        </article>
+                    ))}
+                </div>
+
+                <div className="hidden overflow-x-auto md:block">
                 <Table className="min-w-[980px]">
                     <TableHeader>
                         <TableRow>
@@ -348,11 +483,8 @@ export function TeamPerformanceTable({
                                 </TableCell>
                                 <TableCell className="text-center">
                                     <Badge
-                                        variant={user.conversion_rate >= 20 ? "default" : "secondary"}
-                                        className={cn(
-                                            user.conversion_rate >= 30 && "bg-green-500 hover:bg-green-600",
-                                            user.conversion_rate >= 20 && user.conversion_rate < 30 && "bg-blue-500 hover:bg-blue-600"
-                                        )}
+                                        variant="outline"
+                                        className={conversionBadgeClass(user.conversion_rate)}
                                     >
                                         {user.conversion_rate}%
                                     </Badge>
@@ -408,6 +540,7 @@ export function TeamPerformanceTable({
                         )}
                     </TableBody>
                 </Table>
+                </div>
             </CardContent>
         </Card>
     )
