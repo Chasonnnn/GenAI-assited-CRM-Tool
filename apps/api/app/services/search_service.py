@@ -288,10 +288,14 @@ def _global_search_unified(
                 return stmt.limit(0)
 
             selected_columns = stmt.selected_columns
-            return stmt.order_by(
-                selected_columns["rank"].desc(),
-                selected_columns["created_at"].desc(),
-            ).limit(branch_limit)
+            return (
+                stmt.with_only_columns(*selected_columns)
+                .order_by(
+                    selected_columns["rank"].desc(),
+                    selected_columns["created_at"].desc(),
+                )
+                .limit(branch_limit)
+            )
 
         def _null_surrogate_id():
             return literal(None, type_=surrogate_table.c.id.type).label("surrogate_id")
