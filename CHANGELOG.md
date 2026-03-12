@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.36](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.35...surrogacy-crm-platform-v0.90.36) (2026-03-12)
+
+
+### Bug Fixes
+
+* normalize intake values and repair orphaned matches ([ab0e7b6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ab0e7b6e2c3ae1e9af755b3148dc94d095317288))
+* normalize intake values and repair orphaned matches ([686af45](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/686af45297d7fbd13dee40c73d3c45beb775849a))
+* remove pnpm action from ci ([c8187f9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c8187f978cf3e638feee3e72b6e2039c5f1ed2c1))
+* remove pnpm action from ci ([dd50b9c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dd50b9c8243413d1a76d0efed8783d3e4c7f210b))
+* remove pnpm action from ci ([fb7d182](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fb7d182ca4c83330627ca1d12c0d45c55ebac59c))
+* remove pnpm cache from ci ([4380b0f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4380b0f580802d58a6235d07b78815fa03276b71))
+
 ## [0.90.35](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.34...surrogacy-crm-platform-v0.90.35) (2026-03-11)
 
 
