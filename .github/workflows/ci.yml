@@ -184,8 +184,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: 'pnpm'
-          cache-dependency-path: apps/web/pnpm-lock.yaml
 
       - name: Enable pnpm via corepack
         working-directory: apps/web
@@ -229,8 +227,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: 'pnpm'
-          cache-dependency-path: apps/web/pnpm-lock.yaml
 
       - name: Enable pnpm via corepack
         working-directory: apps/web
@@ -313,8 +309,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: 'pnpm'
-          cache-dependency-path: apps/web/pnpm-lock.yaml
 
       - name: Enable pnpm via corepack
         working-directory: apps/web
