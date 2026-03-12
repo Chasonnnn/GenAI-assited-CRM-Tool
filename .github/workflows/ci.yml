@@ -179,22 +179,23 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 10.25.0
-      
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: 'pnpm'
           cache-dependency-path: apps/web/pnpm-lock.yaml
+
+      - name: Enable pnpm via corepack
+        working-directory: apps/web
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.28.2 --activate
       
       - name: Install dependencies
         working-directory: apps/web
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
       
       - name: Run type check
         working-directory: apps/web
@@ -223,21 +224,24 @@ jobs:
       - name: Check Python syntax
         working-directory: apps/api
         run: python -m py_compile app/main.py
-      
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 10.25.0
-      
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
+      - name: Enable pnpm via corepack
+        working-directory: apps/web
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.28.2 --activate
       
       - name: TypeScript check
         working-directory: apps/web
         run: |
-          pnpm install
+          pnpm install --frozen-lockfile
           pnpm run typecheck
 
   terraform-fmt:
@@ -305,11 +309,6 @@ jobs:
         working-directory: apps/api
         run: uv run --with pip-audit -- python scripts/pip_audit_guard.py
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 10.25.0
-
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -317,9 +316,15 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: apps/web/pnpm-lock.yaml
 
+      - name: Enable pnpm via corepack
+        working-directory: apps/web
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.28.2 --activate
+
       - name: Install frontend dependencies
         working-directory: apps/web
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Run pnpm audit (Dependency Scan)
         working-directory: apps/web
