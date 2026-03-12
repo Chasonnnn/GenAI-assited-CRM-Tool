@@ -70,6 +70,18 @@ async def _create_surrogate(authed_client):
     return response.json()
 
 
+async def _create_intended_parent(authed_client):
+    response = await authed_client.post(
+        "/intended-parents",
+        json={
+            "full_name": "Journey Intended Parent",
+            "email": f"journey-ip-{uuid.uuid4().hex[:8]}@example.com",
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
 async def _set_stage(
     authed_client, surrogate_id: str, stage_id: UUID, effective_at: str | None = None
 ):
@@ -79,6 +91,23 @@ async def _set_stage(
     response = await authed_client.patch(f"/surrogates/{surrogate_id}/status", json=payload)
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "applied"
+
+
+async def _accept_match(authed_client, surrogate_id: str) -> dict:
+    intended_parent = await _create_intended_parent(authed_client)
+    create_response = await authed_client.post(
+        "/matches/",
+        json={
+            "surrogate_id": surrogate_id,
+            "intended_parent_id": intended_parent["id"],
+        },
+    )
+    assert create_response.status_code == 201, create_response.text
+    match = create_response.json()
+
+    accept_response = await authed_client.put(f"/matches/{match['id']}/accept", json={})
+    assert accept_response.status_code == 200, accept_response.text
+    return accept_response.json()
 
 
 def _iter_milestones(payload: dict):
@@ -103,11 +132,9 @@ def _org_today(org_timezone: str | None) -> str:
 async def test_journey_completion_date_uses_next_milestone_entry(authed_client, db, test_auth):
     surrogate = await _create_surrogate(authed_client)
     ready_to_match = _get_stage(db, test_auth.org.id, "ready_to_match")
-    matched = _get_stage(db, test_auth.org.id, "matched")
 
     await _set_stage(authed_client, surrogate["id"], ready_to_match.id)
-    today = _org_today(test_auth.org.timezone)
-    await _set_stage(authed_client, surrogate["id"], matched.id, effective_at=today)
+    await _accept_match(authed_client, surrogate["id"])
 
     response = await authed_client.get(f"/journey/surrogates/{surrogate['id']}")
     assert response.status_code == 200, response.text
@@ -206,10 +233,9 @@ async def test_journey_requires_surrogate_access(db, test_org, authed_client):
 async def test_journey_completed_milestones_do_not_roll_back(authed_client, db, test_auth):
     surrogate = await _create_surrogate(authed_client)
     ready_to_match = _get_stage(db, test_auth.org.id, "ready_to_match")
-    matched = _get_stage(db, test_auth.org.id, "matched")
 
     await _set_stage(authed_client, surrogate["id"], ready_to_match.id)
-    await _set_stage(authed_client, surrogate["id"], matched.id)
+    await _accept_match(authed_client, surrogate["id"])
 
     surrogate_row = db.query(Surrogate).filter(Surrogate.id == UUID(surrogate["id"])).first()
     assert surrogate_row is not None

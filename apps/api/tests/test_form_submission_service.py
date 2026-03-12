@@ -467,6 +467,11 @@ def test_coerce_surrogate_height_accepts_space_separated_feet_inches():
     assert coerced == Decimal("5.6")
 
 
+def test_coerce_surrogate_weight_accepts_prefixed_units():
+    coerced = form_submission_service._coerce_surrogate_value("weight_lb", "Weight: 160 lbs")
+    assert coerced == 160
+
+
 def test_submission_validates_field_constraints(db, test_org, test_user, default_stage):
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     form = _create_published_form_with_validation(db, test_org.id, test_user.id)

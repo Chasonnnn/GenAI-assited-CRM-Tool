@@ -81,6 +81,24 @@ def test_transform_height_flexible_interprets_inline_inch_suffix() -> None:
     assert result.value == Decimal("5.3")
 
 
+def test_transform_height_flexible_interprets_label_prefixed_dash_separated_feet_inches() -> None:
+    result = transform_height_flexible("Height: 4-5")
+    assert result.success is True
+    assert result.value == Decimal("4.4")
+
+
+def test_transform_height_flexible_interprets_label_prefixed_total_inches() -> None:
+    result = transform_height_flexible("Height: 67 inches")
+    assert result.success is True
+    assert result.value == Decimal("5.6")
+
+
+def test_transform_height_flexible_interprets_label_prefixed_short_inches_height() -> None:
+    result = transform_height_flexible("Height: 5-1")
+    assert result.success is True
+    assert result.value == Decimal("5.1")
+
+
 def test_transform_int_flexible_interprets_common_word_counts() -> None:
     assert transform_int_flexible("No").value == 0
     assert transform_int_flexible("One").value == 1
@@ -91,3 +109,9 @@ def test_transform_int_flexible_extracts_wordy_delivery_count() -> None:
     result = transform_int_flexible("Two vaginal deliveries")
     assert result.success is True
     assert result.value == 2
+
+
+def test_transform_int_flexible_extracts_label_prefixed_weight() -> None:
+    result = transform_int_flexible("Weight: 160 lbs")
+    assert result.success is True
+    assert result.value == 160

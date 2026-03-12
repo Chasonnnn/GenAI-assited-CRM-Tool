@@ -313,6 +313,21 @@ def update_status(
             status_code=400, detail="Cannot change status of archived intended parent"
         )
 
+    # Disallow setting Matched directly unless there is an accepted Match row
+    if data.status == IntendedParentStatus.MATCHED.value:
+        from app.services import match_service
+
+        accepted = match_service.get_accepted_match_for_intended_parent(
+            db=db,
+            org_id=session.org_id,
+            intended_parent_id=ip.id,
+        )
+        if accepted is None:
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot set to Matched without an accepted Match.",
+            )
+
     previous_status = ip.status
     try:
         result = ip_service.change_status(

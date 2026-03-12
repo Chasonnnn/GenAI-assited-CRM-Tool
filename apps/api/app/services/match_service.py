@@ -117,6 +117,23 @@ def get_accepted_match_for_surrogate(
     )
 
 
+def get_accepted_match_for_intended_parent(
+    db: Session,
+    org_id: UUID,
+    intended_parent_id: UUID,
+) -> Match | None:
+    """Get accepted match for an intended parent (org-scoped)."""
+    return (
+        db.query(Match)
+        .filter(
+            Match.organization_id == org_id,
+            Match.intended_parent_id == intended_parent_id,
+            Match.status == MatchStatus.ACCEPTED.value,
+        )
+        .first()
+    )
+
+
 def list_matches(
     db: Session,
     org_id: UUID,
