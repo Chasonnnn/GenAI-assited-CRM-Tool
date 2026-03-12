@@ -1,0 +1,3 @@
+## 2026-03-12 - Missing Keyboard Focus on Hover-Only Buttons
+**Learning:** Custom buttons and interactive components that use `hover` state for visual feedback frequently miss the keyboard focus state (`focus-visible`). For example, in `LatestUpdatesCard.tsx`, a file download button missed keyboard focus classes despite having hover styles. This creates accessibility issues for keyboard users.
+**Action:** When inspecting buttons with custom classes (like `hover:bg-muted/50`), always verify they also include `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2` or equivalent focus indicators.

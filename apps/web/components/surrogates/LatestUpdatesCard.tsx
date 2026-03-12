@@ -82,7 +82,7 @@ export function LatestUpdatesCard({
                     <button
                         onClick={() => handleAttachmentClick(latestAttachment.id)}
                         disabled={isDownloading}
-                        className="flex items-start gap-2 w-full text-left hover:bg-muted/50 rounded p-1 -m-1 transition-colors"
+                        className="flex items-start gap-2 w-full text-left hover:bg-muted/50 rounded p-1 -m-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         aria-label={`Download ${latestAttachment.filename}`}
                     >
                         <PaperclipIcon className="size-4 text-muted-foreground mt-0.5 shrink-0" />
