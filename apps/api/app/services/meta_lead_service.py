@@ -18,6 +18,7 @@ from app.services import custom_field_service
 from app.services.import_transformers import (
     get_suggested_transformer,
     transform_height_flexible,
+    transform_int_flexible,
     transform_value,
 )
 from app.utils.datetime_parsing import parse_datetime_with_timezone
@@ -881,6 +882,9 @@ def _parse_int(value) -> int | None:
     """Parse int from string or number."""
     if not value:
         return None
+    transformed = transform_int_flexible(str(value))
+    if transformed.success:
+        return transformed.value
     try:
         return int(value)
     except Exception:

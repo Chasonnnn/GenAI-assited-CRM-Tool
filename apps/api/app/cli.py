@@ -1,6 +1,7 @@
 """CLI tools for Surrogacy Force administration."""
 
 import click
+from datetime import datetime, timezone
 from uuid import UUID
 from sqlalchemy import func
 
@@ -443,6 +444,199 @@ def backfill_permissions(dry_run: bool):
             click.echo(f"[OK] {verb.capitalize()} {total_created} total permission(s)")
         else:
             click.echo("[OK] All permissions already up to date")
+
+    except Exception as e:
+        db.rollback()
+        click.echo(f"[ERROR] Error: {e}")
+        raise
+    finally:
+        db.close()
+
+
+@cli.command("repair-matched-without-match")
+@click.option("--org-slug", required=False, help="Optional organization slug to scope the repair")
+@click.option("--apply", is_flag=True, help="Apply the repair. Default is dry run.")
+def repair_matched_without_match(org_slug: str | None, apply: bool):
+    """
+    Find and repair records marked matched without an accepted Match row.
+
+    Preview by default. Use --apply to reset affected records back to ready_to_match.
+
+    Example:
+        python -m app.cli repair-matched-without-match --org-slug acme
+        python -m app.cli repair-matched-without-match --org-slug acme --apply
+    """
+    from sqlalchemy import and_
+    from sqlalchemy.orm import aliased
+
+    from app.db.enums import IntendedParentStatus, MatchStatus
+    from app.db.models import (
+        IntendedParent,
+        IntendedParentStatusHistory,
+        Match,
+        PipelineStage,
+        Surrogate,
+        SurrogateStatusHistory,
+    )
+    from app.services import pipeline_service
+
+    repair_reason = "Repair orphaned matched record without accepted Match"
+
+    db = SessionLocal()
+    try:
+        org = None
+        if org_slug:
+            org = (
+                db.query(Organization)
+                .filter(func.lower(Organization.slug) == org_slug.strip().lower())
+                .first()
+            )
+            if not org:
+                click.echo(f"[ERROR] Organization not found: {org_slug}")
+                return
+
+        accepted_surrogate_match = aliased(Match)
+        surrogate_query = (
+            db.query(Surrogate, PipelineStage)
+            .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
+            .outerjoin(
+                accepted_surrogate_match,
+                and_(
+                    accepted_surrogate_match.organization_id == Surrogate.organization_id,
+                    accepted_surrogate_match.surrogate_id == Surrogate.id,
+                    accepted_surrogate_match.status == MatchStatus.ACCEPTED.value,
+                ),
+            )
+            .filter(
+                PipelineStage.slug == "matched",
+                Surrogate.is_archived.is_(False),
+                accepted_surrogate_match.id.is_(None),
+            )
+            .order_by(Surrogate.created_at.asc())
+        )
+        if org:
+            surrogate_query = surrogate_query.filter(Surrogate.organization_id == org.id)
+        orphaned_surrogates = surrogate_query.all()
+
+        accepted_ip_match = aliased(Match)
+        intended_parent_query = (
+            db.query(IntendedParent)
+            .outerjoin(
+                accepted_ip_match,
+                and_(
+                    accepted_ip_match.organization_id == IntendedParent.organization_id,
+                    accepted_ip_match.intended_parent_id == IntendedParent.id,
+                    accepted_ip_match.status == MatchStatus.ACCEPTED.value,
+                ),
+            )
+            .filter(
+                IntendedParent.status == IntendedParentStatus.MATCHED.value,
+                IntendedParent.is_archived.is_(False),
+                accepted_ip_match.id.is_(None),
+            )
+            .order_by(IntendedParent.created_at.asc())
+        )
+        if org:
+            intended_parent_query = intended_parent_query.filter(
+                IntendedParent.organization_id == org.id
+            )
+        orphaned_intended_parents = intended_parent_query.all()
+
+        if not apply:
+            click.echo("DRY RUN - no changes will be made")
+        if org:
+            click.echo(f"Scope: {org.slug}")
+        else:
+            click.echo("Scope: all organizations")
+
+        click.echo(f"Found {len(orphaned_surrogates)} orphaned matched surrogate(s)")
+        for surrogate, _stage in orphaned_surrogates:
+            click.echo(
+                f"  - {surrogate.surrogate_number} {surrogate.full_name} "
+                f"(org={surrogate.organization_id})"
+            )
+
+        click.echo(
+            f"Found {len(orphaned_intended_parents)} orphaned matched intended parent(s)"
+        )
+        for intended_parent in orphaned_intended_parents:
+            click.echo(
+                f"  - {intended_parent.intended_parent_number} {intended_parent.full_name} "
+                f"(org={intended_parent.organization_id})"
+            )
+
+        if not apply:
+            click.echo("[OK] Dry run complete (no records changed)")
+            return
+
+        now = datetime.now(timezone.utc)
+        repaired_surrogates = 0
+        repaired_intended_parents = 0
+        skipped_surrogates = 0
+
+        for surrogate, current_stage in orphaned_surrogates:
+            pipeline_id = current_stage.pipeline_id
+            if not pipeline_id:
+                pipeline_id = pipeline_service.get_or_create_default_pipeline(
+                    db,
+                    surrogate.organization_id,
+                ).id
+            ready_stage = pipeline_service.get_stage_by_slug(db, pipeline_id, "ready_to_match")
+            if not ready_stage:
+                skipped_surrogates += 1
+                click.echo(
+                    f"[WARN] Missing ready_to_match stage for {surrogate.surrogate_number}; skipped"
+                )
+                continue
+
+            surrogate.stage_id = ready_stage.id
+            surrogate.status_label = ready_stage.label
+            surrogate.updated_at = now
+            db.add(
+                SurrogateStatusHistory(
+                    surrogate_id=surrogate.id,
+                    organization_id=surrogate.organization_id,
+                    from_stage_id=current_stage.id,
+                    to_stage_id=ready_stage.id,
+                    from_label_snapshot=current_stage.label,
+                    to_label_snapshot=ready_stage.label,
+                    changed_by_user_id=None,
+                    reason=repair_reason,
+                    changed_at=now,
+                    effective_at=now,
+                    recorded_at=now,
+                )
+            )
+            repaired_surrogates += 1
+
+        for intended_parent in orphaned_intended_parents:
+            old_status = intended_parent.status
+            intended_parent.status = IntendedParentStatus.READY_TO_MATCH.value
+            intended_parent.last_activity = now
+            intended_parent.updated_at = now
+            db.add(
+                IntendedParentStatusHistory(
+                    intended_parent_id=intended_parent.id,
+                    changed_by_user_id=None,
+                    old_status=old_status,
+                    new_status=IntendedParentStatus.READY_TO_MATCH.value,
+                    reason=repair_reason,
+                    changed_at=now,
+                    effective_at=now,
+                    recorded_at=now,
+                )
+            )
+            repaired_intended_parents += 1
+
+        db.commit()
+
+        click.echo(
+            "[OK] Repaired "
+            f"{repaired_surrogates} orphaned matched surrogate(s) and "
+            f"{repaired_intended_parents} intended parent(s)"
+        )
+        if skipped_surrogates:
+            click.echo(f"[WARN] Skipped {skipped_surrogates} surrogate(s)")
 
     except Exception as e:
         db.rollback()

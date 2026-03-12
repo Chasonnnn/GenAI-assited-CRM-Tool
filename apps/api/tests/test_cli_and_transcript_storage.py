@@ -279,6 +279,124 @@ def test_cli_backfill_permissions(monkeypatch, db, _cli_db):
     assert beta.id in created
 
 
+def _create_orphaned_matched_records(db, *, org: Organization, user: User):
+    from app.db.enums import IntendedParentStatus
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import ip_service, pipeline_service, surrogate_service
+
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org.id, user.id)
+    matched_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "matched")
+    ready_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "ready_to_match")
+    assert matched_stage is not None
+    assert ready_stage is not None
+
+    surrogate = surrogate_service.create_surrogate(
+        db,
+        org.id,
+        user.id,
+        SurrogateCreate(
+            full_name="Orphaned Matched Surrogate",
+            email="orphaned-surrogate@example.com",
+        ),
+    )
+    intended_parent = ip_service.create_intended_parent(
+        db,
+        org.id,
+        user.id,
+        full_name="Orphaned Matched IP",
+        email="orphaned-ip@example.com",
+    )
+
+    surrogate.stage_id = matched_stage.id
+    surrogate.status_label = matched_stage.label
+    intended_parent.status = IntendedParentStatus.MATCHED.value
+    db.commit()
+
+    return surrogate, intended_parent, matched_stage, ready_stage
+
+
+def test_cli_repair_matched_without_match_dry_run_reports_without_mutating(
+    db, _cli_db, _echo_log
+):
+    from app.db.enums import IntendedParentStatus
+
+    org = _create_org(db, slug="acme")
+    user = _create_user_with_membership(
+        db,
+        org=org,
+        email="repair-preview@example.com",
+        role=Role.DEVELOPER,
+    )
+    surrogate, intended_parent, matched_stage, _ = _create_orphaned_matched_records(
+        db,
+        org=org,
+        user=user,
+    )
+
+    _cli_db.repair_matched_without_match.callback(org_slug="acme", apply=False)
+
+    db.refresh(surrogate)
+    db.refresh(intended_parent)
+    assert surrogate.stage_id == matched_stage.id
+    assert intended_parent.status == IntendedParentStatus.MATCHED.value
+    assert any("DRY RUN" in line for line in _echo_log)
+    assert any("Found 1 orphaned matched surrogate(s)" in line for line in _echo_log)
+    assert any("Found 1 orphaned matched intended parent(s)" in line for line in _echo_log)
+
+
+def test_cli_repair_matched_without_match_apply_resets_entities_and_records_history(
+    db, _cli_db, _echo_log
+):
+    from app.db.enums import IntendedParentStatus
+    from app.db.models import IntendedParentStatusHistory, SurrogateStatusHistory
+
+    org = _create_org(db, slug="acme")
+    user = _create_user_with_membership(
+        db,
+        org=org,
+        email="repair-apply@example.com",
+        role=Role.DEVELOPER,
+    )
+    surrogate, intended_parent, _, ready_stage = _create_orphaned_matched_records(
+        db,
+        org=org,
+        user=user,
+    )
+
+    _cli_db.repair_matched_without_match.callback(org_slug="acme", apply=True)
+
+    db.refresh(surrogate)
+    db.refresh(intended_parent)
+    assert surrogate.stage_id == ready_stage.id
+    assert surrogate.status_label == ready_stage.label
+    assert intended_parent.status == IntendedParentStatus.READY_TO_MATCH.value
+
+    surrogate_history = (
+        db.query(SurrogateStatusHistory)
+        .filter(SurrogateStatusHistory.surrogate_id == surrogate.id)
+        .order_by(SurrogateStatusHistory.recorded_at.desc())
+        .first()
+    )
+    assert surrogate_history is not None
+    assert surrogate_history.to_stage_id == ready_stage.id
+    assert surrogate_history.reason == "Repair orphaned matched record without accepted Match"
+
+    ip_history = (
+        db.query(IntendedParentStatusHistory)
+        .filter(IntendedParentStatusHistory.intended_parent_id == intended_parent.id)
+        .order_by(IntendedParentStatusHistory.recorded_at.desc())
+        .first()
+    )
+    assert ip_history is not None
+    assert ip_history.new_status == IntendedParentStatus.READY_TO_MATCH.value
+    assert ip_history.reason == "Repair orphaned matched record without accepted Match"
+
+    assert any(
+        "Repaired 1 orphaned matched surrogate(s) and 1 intended parent(s)" in line
+        for line in _echo_log
+    )
+
+
 def test_cli_replay_failed_jobs_paths(monkeypatch, _cli_db, _echo_log):
     fake_jobs = [
         SimpleNamespace(id=uuid4(), job_type="meta_form_sync", attempts=2, max_attempts=5),

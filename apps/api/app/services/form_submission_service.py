@@ -45,7 +45,7 @@ from app.services.attachment_service import (
     strip_exif_data,
     store_file,
 )
-from app.services.import_transformers import transform_height_flexible
+from app.services.import_transformers import transform_height_flexible, transform_int_flexible
 from app.services import job_service
 
 
@@ -1760,10 +1760,10 @@ def _coerce_surrogate_value(surrogate_field: str, value: Any) -> Any:
     if field_type == "bool":
         return _parse_bool(value)
     if field_type == "int":
-        try:
-            return int(value)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"Invalid integer for {surrogate_field}") from exc
+        transformed = transform_int_flexible(str(value))
+        if transformed.success and transformed.value is not None:
+            return transformed.value
+        raise ValueError(f"Invalid integer for {surrogate_field}")
     if field_type == "decimal":
         if surrogate_field == "height_ft":
             transformed = transform_height_flexible(str(value))

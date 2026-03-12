@@ -54,7 +54,7 @@ from app.utils.normalization import (
     normalize_search_text,
     normalize_identifier,
 )
-from app.services.import_transformers import transform_height_flexible
+from app.services.import_transformers import transform_height_flexible, transform_int_flexible
 
 
 def _parse_uuid(value: str | None) -> UUID | None:
@@ -72,6 +72,9 @@ def _parse_bool(value: str | None) -> bool | None:
 def _parse_int(value: str | None) -> int | None:
     if value is None or value == "":
         return None
+    transformed = transform_int_flexible(value)
+    if transformed.success:
+        return transformed.value
     return int(value)
 
 

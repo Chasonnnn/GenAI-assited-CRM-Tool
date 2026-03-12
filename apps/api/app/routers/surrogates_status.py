@@ -48,6 +48,21 @@ def change_status(
     target_stage = pipeline_service.get_stage_by_id(db, data.stage_id)
     is_changing_to_delivered = target_stage and target_stage.slug == "delivered"
 
+    # Disallow setting Matched directly unless there is an accepted Match row
+    if target_stage and target_stage.slug == "matched":
+        from app.services import match_service
+
+        accepted = match_service.get_accepted_match_for_surrogate(
+            db=db,
+            org_id=session.org_id,
+            surrogate_id=surrogate.id,
+        )
+        if accepted is None:
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot set to Matched without an accepted Match.",
+            )
+
     try:
         result = surrogate_status_service.change_status(
             db=db,

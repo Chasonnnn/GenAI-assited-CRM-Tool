@@ -186,3 +186,36 @@ async def test_match_cancel_request_requires_accepted_match(authed_client, db):
 
     cancel = await authed_client.post(f"/matches/{match['id']}/cancel-request", json={})
     assert cancel.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_surrogate_cannot_be_manually_set_to_matched_without_accepted_match(
+    authed_client, db, test_auth
+):
+    surrogate = await _create_surrogate(authed_client)
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, test_auth.org.id)
+    matched_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "matched")
+    assert matched_stage is not None
+
+    response = await authed_client.patch(
+        f"/surrogates/{surrogate['id']}/status",
+        json={"stage_id": str(matched_stage.id)},
+    )
+
+    assert response.status_code == 403
+    assert "accepted match" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_intended_parent_cannot_be_manually_set_to_matched_without_accepted_match(
+    authed_client,
+):
+    intended_parent = await _create_intended_parent(authed_client)
+
+    response = await authed_client.patch(
+        f"/intended-parents/{intended_parent['id']}/status",
+        json={"status": IntendedParentStatus.MATCHED.value},
+    )
+
+    assert response.status_code == 403
+    assert "accepted match" in response.json()["detail"].lower()
