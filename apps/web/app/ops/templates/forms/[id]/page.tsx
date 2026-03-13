@@ -1417,6 +1417,7 @@ export default function FormBuilderPage() {
                                                                 e.stopPropagation()
                                                                 handleDuplicateField(field.id)
                                                             }}
+                                                            aria-label={`Duplicate ${field.label || "field"}`}
                                                         >
                                                             <CopyIcon className="size-4" />
                                                         </Button>
@@ -1428,6 +1429,7 @@ export default function FormBuilderPage() {
                                                                 e.stopPropagation()
                                                                 handleDeleteField(field.id)
                                                             }}
+                                                            aria-label={`Delete ${field.label || "field"}`}
                                                         >
                                                             <XIcon className="size-4" />
                                                         </Button>
@@ -1799,6 +1801,7 @@ export default function FormBuilderPage() {
                                                             onClick={() =>
                                                                 handleRemoveColumn(selectedFieldData.id, column.id)
                                                             }
+                                                            aria-label={`Remove column ${column.label || ""}`}
                                                         >
                                                             <XIcon className="size-4" />
                                                         </Button>
@@ -1855,6 +1858,7 @@ export default function FormBuilderPage() {
                                                         const newOptions = selectedFieldData.options!.filter((_, i) => i !== index)
                                                         handleUpdateField(selectedFieldData.id, { options: newOptions })
                                                     }}
+                                                    aria-label={`Remove option ${option || ""}`}
                                                 >
                                                     <XIcon className="size-4" />
                                                 </Button>
