@@ -12,7 +12,7 @@ from typing import TypedDict
 from uuid import UUID
 
 from fastapi import Request
-from sqlalchemy import and_, func, literal, or_, select, true, union_all
+from sqlalchemy import and_, func, literal, or_, select, true, union_all, cast
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -288,16 +288,25 @@ def _global_search_unified(
                 return stmt.limit(0)
 
             selected_columns = stmt.selected_columns
-            return stmt.order_by(
+            # ⚡ Bolt Optimization:
+            # When combining multiple queries via UNION ALL in SQLAlchemy 2.0, applying order_by().limit()
+            # directly can cause the inner statement to be wrapped in an outer SELECT subquery.
+            # Using with_only_columns() preserves the columns without creating the outer layer,
+            # allowing PostgreSQL to natively optimize each branch with a top-N sort index scan.
+            return stmt.with_only_columns(*selected_columns).order_by(
                 selected_columns["rank"].desc(),
                 selected_columns["created_at"].desc(),
             ).limit(branch_limit)
 
         def _null_surrogate_id():
-            return literal(None, type_=surrogate_table.c.id.type).label("surrogate_id")
+            # ⚡ Bolt Optimization:
+            # Explicitly casting literal(None) to the correct column type prevents PostgreSQL
+            # from defaulting the NULL to TEXT, which can cause type mismatch errors during UNION ALL
+            # or force implicit casting that degrades execution performance.
+            return cast(literal(None), surrogate_table.c.id.type).label("surrogate_id")
 
         def _null_surrogate_name():
-            return literal(None, type_=surrogate_table.c.full_name.type).label("surrogate_name")
+            return cast(literal(None), surrogate_table.c.full_name.type).label("surrogate_name")
 
         surrogate_access_filter = _build_surrogate_access_filter(
             role,
