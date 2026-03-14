@@ -1413,6 +1413,7 @@ export default function FormBuilderPage() {
                                                             variant="ghost"
                                                             size="icon"
                                                             className="shrink-0"
+                                                            aria-label={`Duplicate ${field.label || "field"}`}
                                                             onClick={(e) => {
                                                                 e.stopPropagation()
                                                                 handleDuplicateField(field.id)
@@ -1424,6 +1425,7 @@ export default function FormBuilderPage() {
                                                             variant="ghost"
                                                             size="icon"
                                                             className="shrink-0"
+                                                            aria-label={`Delete ${field.label || "field"}`}
                                                             onClick={(e) => {
                                                                 e.stopPropagation()
                                                                 handleDeleteField(field.id)
@@ -1796,6 +1798,7 @@ export default function FormBuilderPage() {
                                                             type="button"
                                                             variant="ghost"
                                                             size="icon"
+                                                            aria-label="Remove column"
                                                             onClick={() =>
                                                                 handleRemoveColumn(selectedFieldData.id, column.id)
                                                             }
@@ -1851,6 +1854,7 @@ export default function FormBuilderPage() {
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
+                                                    aria-label="Remove option"
                                                     onClick={() => {
                                                         const newOptions = selectedFieldData.options!.filter((_, i) => i !== index)
                                                         handleUpdateField(selectedFieldData.id, { options: newOptions })
