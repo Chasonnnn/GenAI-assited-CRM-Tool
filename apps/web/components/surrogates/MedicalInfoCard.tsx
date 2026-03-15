@@ -33,6 +33,7 @@ export function MedicalInfoCard({ surrogateData, onUpdate }: MedicalInfoCardProp
                         prefix="clinic"
                         data={surrogateData}
                         onUpdate={handleField}
+                        nameField="clinic_name"
                     />
 
                     {/* Monitoring Clinic */}
@@ -42,6 +43,7 @@ export function MedicalInfoCard({ surrogateData, onUpdate }: MedicalInfoCardProp
                         prefix="monitoring_clinic"
                         data={surrogateData}
                         onUpdate={handleField}
+                        nameField="monitoring_clinic_name"
                     />
 
                     {/* OB Provider */}
@@ -53,6 +55,8 @@ export function MedicalInfoCard({ surrogateData, onUpdate }: MedicalInfoCardProp
                         onUpdate={handleField}
                         showProviderName={true}
                         showClinicName={true}
+                        providerField="ob_provider_name"
+                        nameField="ob_clinic_name"
                     />
 
                     {/* Delivery Hospital */}
@@ -62,6 +66,7 @@ export function MedicalInfoCard({ surrogateData, onUpdate }: MedicalInfoCardProp
                         prefix="delivery_hospital"
                         data={surrogateData}
                         onUpdate={handleField}
+                        nameField="delivery_hospital_name"
                     />
                 </div>
             </CardContent>

@@ -21,7 +21,12 @@ from app.db.models import (
     Task,
     WorkflowExecution,
 )
-from app.utils.normalization import normalize_email, normalize_name, normalize_phone, normalize_search_text
+from app.utils.normalization import (
+    normalize_email,
+    normalize_name,
+    normalize_phone,
+    normalize_search_text,
+)
 
 
 def _create_surrogate(
@@ -124,7 +129,9 @@ async def test_shared_draft_lifecycle(authed_client):
     delete_res = await authed_client.delete(f"/forms/public/intake/{slug}/draft/{draft_session_id}")
     assert delete_res.status_code == 204
 
-    after_delete_res = await authed_client.get(f"/forms/public/intake/{slug}/draft/{draft_session_id}")
+    after_delete_res = await authed_client.get(
+        f"/forms/public/intake/{slug}/draft/{draft_session_id}"
+    )
     assert after_delete_res.status_code == 404
 
 
@@ -188,7 +195,9 @@ async def test_shared_draft_lookup_matches_across_links_and_returns_most_recent(
     )
     assert second_upsert.status_code == 200
 
-    first_draft = db.query(FormIntakeDraft).filter(FormIntakeDraft.draft_session_id == first_session).first()
+    first_draft = (
+        db.query(FormIntakeDraft).filter(FormIntakeDraft.draft_session_id == first_session).first()
+    )
     second_draft = (
         db.query(FormIntakeDraft).filter(FormIntakeDraft.draft_session_id == second_session).first()
     )
@@ -229,7 +238,9 @@ async def test_shared_draft_lookup_matches_across_links_and_returns_most_recent(
     assert phone_payload["source_draft_id"] == str(second_draft.id)
     assert phone_payload["match_reason"] == "name_dob_phone"
 
-    first_link = db.query(FormIntakeLink).filter(FormIntakeLink.id == uuid.UUID(first_link_id)).first()
+    first_link = (
+        db.query(FormIntakeLink).filter(FormIntakeLink.id == uuid.UUID(first_link_id)).first()
+    )
     assert first_link is not None
 
 
@@ -249,7 +260,9 @@ async def test_shared_draft_lookup_excludes_stale_drafts(authed_client, db):
     )
     assert upsert_res.status_code == 200
 
-    stale_draft = db.query(FormIntakeDraft).filter(FormIntakeDraft.draft_session_id == session_id).first()
+    stale_draft = (
+        db.query(FormIntakeDraft).filter(FormIntakeDraft.draft_session_id == session_id).first()
+    )
     assert stale_draft is not None
     stale_draft.updated_at = datetime.now(timezone.utc) - timedelta(days=45)
     db.commit()
@@ -286,7 +299,9 @@ async def test_shared_draft_restore_copies_answers_and_keeps_source(authed_clien
     )
     assert source_upsert.status_code == 200
 
-    source_draft = db.query(FormIntakeDraft).filter(FormIntakeDraft.draft_session_id == source_session).first()
+    source_draft = (
+        db.query(FormIntakeDraft).filter(FormIntakeDraft.draft_session_id == source_session).first()
+    )
     assert source_draft is not None
 
     restore_res = await authed_client.post(
@@ -298,7 +313,9 @@ async def test_shared_draft_restore_copies_answers_and_keeps_source(authed_clien
     assert restored_payload["answers"]["full_name"] == source_answers["full_name"]
     assert restored_payload["answers"]["email"] == source_answers["email"]
 
-    refreshed_source = db.query(FormIntakeDraft).filter(FormIntakeDraft.id == source_draft.id).first()
+    refreshed_source = (
+        db.query(FormIntakeDraft).filter(FormIntakeDraft.id == source_draft.id).first()
+    )
     assert refreshed_source is not None
     assert refreshed_source.answers_json["full_name"] == source_answers["full_name"]
 

@@ -14,6 +14,23 @@ export interface IntendedParent {
     state: string | null
     budget: number | null
     notes_internal: string | null
+    pronouns: string | null
+    partner_name: string | null
+    partner_email: string | null
+    partner_pronouns: string | null
+    address_line1: string | null
+    address_line2: string | null
+    city: string | null
+    postal: string | null
+    ip_clinic_name: string | null
+    ip_clinic_address_line1: string | null
+    ip_clinic_address_line2: string | null
+    ip_clinic_city: string | null
+    ip_clinic_state: string | null
+    ip_clinic_postal: string | null
+    ip_clinic_phone: string | null
+    ip_clinic_fax: string | null
+    ip_clinic_email: string | null
     status: IntendedParentStatus
     owner_type: 'user' | 'queue' | null
     owner_id: string | null
@@ -33,6 +50,7 @@ export interface IntendedParentListItem {
     phone: string | null
     state: string | null
     budget: number | null
+    partner_name: string | null
     status: IntendedParentStatus
     owner_type: 'user' | 'queue' | null
     owner_id: string | null
@@ -49,6 +67,23 @@ export interface IntendedParentCreate {
     state?: string | null
     budget?: number | null
     notes_internal?: string | null
+    pronouns?: string | null
+    partner_name?: string | null
+    partner_email?: string | null
+    partner_pronouns?: string | null
+    address_line1?: string | null
+    address_line2?: string | null
+    city?: string | null
+    postal?: string | null
+    ip_clinic_name?: string | null
+    ip_clinic_address_line1?: string | null
+    ip_clinic_address_line2?: string | null
+    ip_clinic_city?: string | null
+    ip_clinic_state?: string | null
+    ip_clinic_postal?: string | null
+    ip_clinic_phone?: string | null
+    ip_clinic_fax?: string | null
+    ip_clinic_email?: string | null
     owner_type?: 'user' | 'queue' | null
     owner_id?: string | null
 }
@@ -60,6 +95,23 @@ export interface IntendedParentUpdate {
     state?: string | null
     budget?: number | null
     notes_internal?: string | null
+    pronouns?: string | null
+    partner_name?: string | null
+    partner_email?: string | null
+    partner_pronouns?: string | null
+    address_line1?: string | null
+    address_line2?: string | null
+    city?: string | null
+    postal?: string | null
+    ip_clinic_name?: string | null
+    ip_clinic_address_line1?: string | null
+    ip_clinic_address_line2?: string | null
+    ip_clinic_city?: string | null
+    ip_clinic_state?: string | null
+    ip_clinic_postal?: string | null
+    ip_clinic_phone?: string | null
+    ip_clinic_fax?: string | null
+    ip_clinic_email?: string | null
     owner_type?: 'user' | 'queue' | null
     owner_id?: string | null
 }

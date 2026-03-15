@@ -18,7 +18,7 @@ def test_sanitize_csv_escapes_formula_cells_and_preserves_structure():
     )
 
     assert sanitized.read().decode("utf-8") == (
-        'name,formula\r\n"Alice, Jr.",\'=2+2\r\nBob,\'@cmd\r\n'
+        "name,formula\r\n\"Alice, Jr.\",'=2+2\r\nBob,'@cmd\r\n"
     )
 
 
@@ -109,7 +109,9 @@ def test_store_submission_file_sanitizes_csv_before_storage(
     )
     db.flush()
 
-    record = db.query(FormSubmissionFile).filter(FormSubmissionFile.submission_id == submission.id).one()
+    record = (
+        db.query(FormSubmissionFile).filter(FormSubmissionFile.submission_id == submission.id).one()
+    )
     stored = attachment_service.load_file_bytes(record.storage_key).decode("utf-8")
 
     assert stored == "name,formula\r\nAlice,'=2+2\r\n"

@@ -1,21 +1,15 @@
 "use client"
 
 import * as React from "react"
-import Image from "next/image"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
-    CheckIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
-    CalendarIcon,
     UploadIcon,
     XIcon,
     LockIcon,
@@ -29,6 +23,8 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { ApiError } from "@/lib/api"
+import { PublicFormFieldRenderer } from "@/components/forms/PublicFormFieldRenderer"
+import { PublicFormHeader } from "@/components/forms/PublicFormHeader"
 import {
     deletePublicFormDraft,
     savePublicFormDraft,
@@ -167,57 +163,6 @@ function ProgressStepper({
                 </div>
             </div>
         </>
-    )
-}
-
-// Large Option Card for Radio/Checkbox selections
-function OptionCard({
-    selected,
-    onClick,
-    label,
-    description,
-    selectionRole = "radio",
-}: {
-    selected: boolean
-    onClick: () => void
-    label: string
-    description?: string
-    selectionRole?: "radio" | "checkbox"
-}) {
-    return (
-        <button
-            type="button"
-            role={selectionRole}
-            aria-checked={selected}
-            onClick={onClick}
-            className={cn(
-                "w-full rounded-2xl border border-stone-200 bg-white p-4 text-left transition-all",
-                "hover:border-primary/60 hover:bg-primary/5",
-                "focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-2",
-                selected
-                    ? "border-primary bg-primary/10"
-                    : "border-stone-200"
-            )}
-        >
-            <div className="flex items-center gap-3">
-                <div
-                    className={cn(
-                        "flex size-6 items-center justify-center rounded-full border-2 transition-all",
-                        selected
-                            ? "border-primary bg-primary"
-                            : "border-stone-300 bg-white"
-                    )}
-                >
-                    {selected && <CheckIcon className="size-4 text-white" />}
-                </div>
-                <div>
-                    <div className="font-medium text-stone-900">{label}</div>
-                    {description && (
-                        <div className="text-sm text-stone-500">{description}</div>
-                    )}
-                </div>
-            </div>
-        </button>
     )
 }
 
@@ -898,188 +843,9 @@ export default function PublicApplicationForm({ token, previewKey }: PublicAppli
 
     const renderFieldInput = (field: FormSchema["pages"][number]["fields"][number]) => {
         const value = answers[field.key]
-        const requiredMark = field.required ? <span className="text-red-500">*</span> : null
-
-        if (field.type === "textarea") {
-            return (
-                <div key={field.key} className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50 p-4">
-                    <Label htmlFor={field.key} className="text-sm font-medium">
-                        {field.label} {requiredMark}
-                    </Label>
-                    <Textarea
-                        id={field.key}
-                        value={typeof value === "string" ? value : ""}
-                        onChange={(e) => updateField(field.key, e.target.value)}
-                        placeholder={field.label}
-                        className="min-h-24 rounded-xl border-stone-200 bg-white shadow-none"
-                    />
-                    {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
-                </div>
-            )
-        }
-
-        if (field.type === "date") {
-            const isOpen = datePickerOpen[field.key] || false
-            const dateValue = typeof value === "string" ? parseDateInput(value) : undefined
-            return (
-                <div key={field.key} className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50 p-4">
-                    <Label className="text-sm font-medium">
-                        {field.label} {requiredMark}
-                    </Label>
-                    <Popover
-                        open={isOpen}
-                        onOpenChange={(open) =>
-                            setDatePickerOpen((prev) => ({ ...prev, [field.key]: open }))
-                        }
-                    >
-                        <PopoverTrigger
-                            render={
-                                <Button
-                                    variant="outline"
-                                    className={cn(
-                                        "h-11 w-full justify-start rounded-xl border-stone-200 bg-white text-left font-normal shadow-none",
-                                        !value && "text-stone-500",
-                                    )}
-                                >
-                                    <CalendarIcon className="mr-2 size-4" />
-                                    {typeof value === "string" ? formatDate(value) : "Select a date"}
-                                </Button>
-                            }
-                        />
-                        <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                                mode="single"
-                                selected={dateValue}
-                                onSelect={(date) => {
-                                    updateField(field.key, date ? formatLocalDate(date) : null)
-                                    setDatePickerOpen((prev) => ({ ...prev, [field.key]: false }))
-                                }}
-                                initialFocus
-                            />
-                        </PopoverContent>
-                    </Popover>
-                    {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
-                </div>
-            )
-        }
-
-        if (field.type === "select" || field.type === "radio") {
-            const options = field.options || []
-            return (
-                <div key={field.key} className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
-                    <Label className="text-sm font-medium">
-                        {field.label} {requiredMark}
-                    </Label>
-                    {options.length === 0 ? (
-                        <p className="text-sm text-stone-500">No options configured.</p>
-                    ) : (
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            {options.map((option) => (
-                                <OptionCard
-                                    key={option.value}
-                                    selected={value === option.value}
-                                    onClick={() => updateField(field.key, option.value)}
-                                    label={option.label}
-                                    selectionRole="radio"
-                                />
-                            ))}
-                        </div>
-                    )}
-                    {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
-                </div>
-            )
-        }
-
-        if (field.type === "multiselect") {
-            const options = field.options || []
-            const selectedValues = Array.isArray(value)
-                ? value.filter((item): item is string => typeof item === "string")
-                : []
-            return (
-                <div key={field.key} className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
-                    <Label className="text-sm font-medium">
-                        {field.label} {requiredMark}
-                    </Label>
-                    {options.length === 0 ? (
-                        <p className="text-sm text-stone-500">No options configured.</p>
-                    ) : (
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            {options.map((option) => (
-                                <OptionCard
-                                    key={option.value}
-                                    selected={selectedValues.includes(option.value)}
-                                    onClick={() => {
-                                        const next = selectedValues.includes(option.value)
-                                            ? selectedValues.filter((item) => item !== option.value)
-                                            : [...selectedValues, option.value]
-                                        updateField(field.key, next)
-                                    }}
-                                    label={option.label}
-                                    selectionRole="checkbox"
-                                />
-                            ))}
-                        </div>
-                    )}
-                    {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
-                </div>
-            )
-        }
-
-        if (field.type === "checkbox") {
-            const options = field.options || []
-            if (options.length === 0) {
-                const checked = value === true
-                return (
-                    <div
-                        key={field.key}
-                        className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50 p-4"
-                    >
-                        <div className="flex items-start gap-3">
-                            <Checkbox
-                                id={field.key}
-                                checked={checked}
-                                onCheckedChange={(next) => updateField(field.key, next === true)}
-                                className="mt-0.5"
-                            />
-                            <Label htmlFor={field.key} className="text-sm font-medium">
-                                {field.label} {requiredMark}
-                            </Label>
-                        </div>
-                        {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
-                    </div>
-                )
-            }
-
-            const selectedValues = Array.isArray(value)
-                ? value.filter((item): item is string => typeof item === "string")
-                : []
-            return (
-                <div key={field.key} className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
-                    <Label className="text-sm font-medium">
-                        {field.label} {requiredMark}
-                    </Label>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                        {options.map((option) => (
-                            <OptionCard
-                                key={option.value}
-                                selected={selectedValues.includes(option.value)}
-                                onClick={() => {
-                                    const next = selectedValues.includes(option.value)
-                                        ? selectedValues.filter((item) => item !== option.value)
-                                        : [...selectedValues, option.value]
-                                    updateField(field.key, next)
-                                }}
-                                label={option.label}
-                                selectionRole="checkbox"
-                            />
-                        ))}
-                    </div>
-                    {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
-                </div>
-            )
-        }
 
         if (field.type === "repeatable_table") {
+            const requiredMark = field.required ? <span className="text-red-500">*</span> : null
             const columns = field.columns || []
             const rows = Array.isArray(value)
                 ? value.filter((item): item is TableRow => typeof item === "object" && item !== null)
@@ -1205,30 +971,15 @@ export default function PublicApplicationForm({ token, previewKey }: PublicAppli
             )
         }
 
-        const inputType =
-            field.type === "email"
-                ? "email"
-                : field.type === "phone"
-                    ? "tel"
-                    : field.type === "number"
-                        ? "number"
-                        : "text"
-
         return (
-            <div key={field.key} className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50 p-4">
-                <Label htmlFor={field.key} className="text-sm font-medium">
-                    {field.label} {requiredMark}
-                </Label>
-                <Input
-                    id={field.key}
-                    type={inputType}
-                    value={typeof value === "string" ? value : value ? String(value) : ""}
-                    onChange={(e) => updateField(field.key, e.target.value)}
-                    placeholder={field.label}
-                    className="h-11 rounded-xl border-stone-200 bg-white shadow-none"
-                />
-                {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
-            </div>
+            <PublicFormFieldRenderer
+                key={field.key}
+                field={field}
+                value={value}
+                updateField={updateField}
+                datePickerOpen={datePickerOpen}
+                setDatePickerOpen={setDatePickerOpen}
+            />
         )
     }
 
@@ -1286,57 +1037,25 @@ export default function PublicApplicationForm({ token, previewKey }: PublicAppli
     return (
         <div className={cn(publicFormPageClassName, "pb-28")}>
             <div className="h-0.5 w-full bg-primary/80" />
-            {/* Header */}
-            <header className="py-8 md:py-10">
-                <div className="max-w-3xl mx-auto px-4">
-                    <div className="rounded-3xl border border-stone-200/70 bg-white/95 p-8 shadow-[0_2px_12px_rgba(15,23,42,0.06)] md:p-10">
-                        <div className="flex flex-col items-center gap-4 text-center">
-                            {showLogo ? (
-                                <div className="flex size-16 items-center justify-center">
-                                    <Image
-                                        src={resolvedLogoUrl}
-                                        alt={`${publicTitle} logo`}
-                                        width={64}
-                                        height={64}
-                                        unoptimized
-                                        className="size-16 rounded-2xl object-contain shadow-sm"
-                                        onError={() => setLogoError(true)}
-                                    />
-                                </div>
-                            ) : (
-                                <div className="flex size-16 items-center justify-center rounded-2xl bg-primary/10">
-                                    <span className="text-primary text-2xl font-semibold">
-                                        {publicTitle.charAt(0).toUpperCase()}
-                                    </span>
-                                </div>
-                            )}
-                            <div className="space-y-3">
-                                <h1 className="text-3xl font-semibold tracking-tight text-stone-900 md:text-4xl">
-                                    {publicTitle}
-                                </h1>
-                                <p className="mx-auto max-w-2xl text-base text-stone-500 md:text-lg">
-                                    {formConfig?.description ||
-                                        "Thank you for your interest in our program"}
-                                </p>
-                                {isPreview && (
-                                    <div className="pt-2 text-[11px] uppercase tracking-[0.3em] text-stone-400">
-                                        Preview Mode
-                                    </div>
-                                )}
-                                {!isPreview && (
-                                    <div className="pt-2 text-[11px] uppercase tracking-[0.3em] text-stone-400">
-                                        {draftSaveState === "saving"
-                                            ? "Saving..."
-                                            : draftSaveState === "error"
-                                                ? "Autosave unavailable"
-                                                : draftUpdatedAt
-                                                    ? `Saved ${formatSavedTime(draftUpdatedAt)}`
-                                                    : "Autosave on"}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                        <div className="mt-8">
+            <PublicFormHeader
+                publicTitle={publicTitle}
+                description={formConfig?.description}
+                resolvedLogoUrl={resolvedLogoUrl}
+                showLogo={showLogo}
+                onLogoError={() => setLogoError(true)}
+                metadata={
+                    isPreview
+                        ? "Preview Mode"
+                        : draftSaveState === "saving"
+                            ? "Saving..."
+                            : draftSaveState === "error"
+                                ? "Autosave unavailable"
+                                : draftUpdatedAt
+                                    ? `Saved ${formatSavedTime(draftUpdatedAt)}`
+                                    : "Autosave on"
+                }
+            >
+                <div className="mt-8">
                             <ProgressStepper currentStep={currentStep} steps={steps} />
                             {!isPreview && hasAnyFileFields && (
                                 <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-200/70 bg-amber-50 px-4 py-3 text-left text-sm text-amber-950/80">
@@ -1349,10 +1068,8 @@ export default function PublicApplicationForm({ token, previewKey }: PublicAppli
                                     </div>
                                 </div>
                             )}
-                        </div>
-                    </div>
                 </div>
-            </header>
+            </PublicFormHeader>
 
             {/* Form Content */}
             <div className="max-w-3xl mx-auto px-4">

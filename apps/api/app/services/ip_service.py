@@ -217,6 +217,7 @@ def list_intended_parents(
     sortable_columns = {
         "intended_parent_number": IntendedParent.intended_parent_number,
         "full_name": IntendedParent.full_name,
+        "partner_name": IntendedParent.partner_name,
         "state": IntendedParent.state,
         "budget": IntendedParent.budget,
         "status": IntendedParent.status,
@@ -366,6 +367,23 @@ def create_intended_parent(
     notes_internal: str | None = None,
     owner_type: str | None = None,
     owner_id: UUID | None = None,
+    partner_name: str | None = None,
+    partner_email: str | None = None,
+    pronouns: str | None = None,
+    partner_pronouns: str | None = None,
+    address_line1: str | None = None,
+    address_line2: str | None = None,
+    city: str | None = None,
+    postal: str | None = None,
+    ip_clinic_name: str | None = None,
+    ip_clinic_address_line1: str | None = None,
+    ip_clinic_address_line2: str | None = None,
+    ip_clinic_city: str | None = None,
+    ip_clinic_state: str | None = None,
+    ip_clinic_postal: str | None = None,
+    ip_clinic_phone: str | None = None,
+    ip_clinic_fax: str | None = None,
+    ip_clinic_email: str | None = None,
 ) -> IntendedParent:
     """Create a new intended parent and record initial status."""
     now = datetime.now(timezone.utc)
@@ -375,6 +393,11 @@ def create_intended_parent(
     phone_last4 = extract_phone_last4(normalized_phone)
     intended_parent_number = generate_intended_parent_number(db, org_id)
     normalized_full_name = normalize_search_text(full_name)
+
+    # Hash partner email if provided
+    normalized_partner_email = normalize_email(partner_email) if partner_email else None
+    partner_email_hash = hash_email(normalized_partner_email) if normalized_partner_email else None
+
     ip = IntendedParent(
         intended_parent_number=intended_parent_number,
         intended_parent_number_normalized=normalize_identifier(intended_parent_number),
@@ -392,6 +415,25 @@ def create_intended_parent(
         notes_internal=notes_internal,
         owner_type=owner_type,
         owner_id=owner_id,
+        # New fields
+        partner_name=partner_name,
+        partner_email=normalized_partner_email,
+        partner_email_hash=partner_email_hash,
+        pronouns=pronouns,
+        partner_pronouns=partner_pronouns,
+        address_line1=address_line1,
+        address_line2=address_line2,
+        city=city,
+        postal=postal,
+        ip_clinic_name=ip_clinic_name,
+        ip_clinic_address_line1=ip_clinic_address_line1,
+        ip_clinic_address_line2=ip_clinic_address_line2,
+        ip_clinic_city=ip_clinic_city,
+        ip_clinic_state=ip_clinic_state,
+        ip_clinic_postal=ip_clinic_postal,
+        ip_clinic_phone=ip_clinic_phone,
+        ip_clinic_fax=ip_clinic_fax,
+        ip_clinic_email=ip_clinic_email,
     )
     db.add(ip)
     db.flush()
@@ -425,6 +467,23 @@ def update_intended_parent(
     notes_internal: str | None = None,
     owner_type: str | None = None,
     owner_id: UUID | None = None,
+    partner_name: str | None = None,
+    partner_email: str | None = None,
+    pronouns: str | None = None,
+    partner_pronouns: str | None = None,
+    address_line1: str | None = None,
+    address_line2: str | None = None,
+    city: str | None = None,
+    postal: str | None = None,
+    ip_clinic_name: str | None = None,
+    ip_clinic_address_line1: str | None = None,
+    ip_clinic_address_line2: str | None = None,
+    ip_clinic_city: str | None = None,
+    ip_clinic_state: str | None = None,
+    ip_clinic_postal: str | None = None,
+    ip_clinic_phone: str | None = None,
+    ip_clinic_fax: str | None = None,
+    ip_clinic_email: str | None = None,
 ) -> IntendedParent:
     """Update intended parent fields and bump last_activity."""
     if full_name is not None:
@@ -450,6 +509,52 @@ def update_intended_parent(
         ip.owner_type = owner_type
     if owner_id is not None:
         ip.owner_id = owner_id
+
+    # Partner
+    if partner_name is not None:
+        ip.partner_name = partner_name
+    if partner_email is not None:
+        normalized_partner_email = normalize_email(partner_email) if partner_email else None
+        ip.partner_email = normalized_partner_email
+        ip.partner_email_hash = (
+            hash_email(normalized_partner_email) if normalized_partner_email else None
+        )
+
+    # Pronouns
+    if pronouns is not None:
+        ip.pronouns = pronouns
+    if partner_pronouns is not None:
+        ip.partner_pronouns = partner_pronouns
+
+    # Address
+    if address_line1 is not None:
+        ip.address_line1 = address_line1
+    if address_line2 is not None:
+        ip.address_line2 = address_line2
+    if city is not None:
+        ip.city = city
+    if postal is not None:
+        ip.postal = postal
+
+    # IVF Clinic
+    if ip_clinic_name is not None:
+        ip.ip_clinic_name = ip_clinic_name
+    if ip_clinic_address_line1 is not None:
+        ip.ip_clinic_address_line1 = ip_clinic_address_line1
+    if ip_clinic_address_line2 is not None:
+        ip.ip_clinic_address_line2 = ip_clinic_address_line2
+    if ip_clinic_city is not None:
+        ip.ip_clinic_city = ip_clinic_city
+    if ip_clinic_state is not None:
+        ip.ip_clinic_state = ip_clinic_state
+    if ip_clinic_postal is not None:
+        ip.ip_clinic_postal = ip_clinic_postal
+    if ip_clinic_phone is not None:
+        ip.ip_clinic_phone = ip_clinic_phone
+    if ip_clinic_fax is not None:
+        ip.ip_clinic_fax = ip_clinic_fax
+    if ip_clinic_email is not None:
+        ip.ip_clinic_email = ip_clinic_email
 
     ip.last_activity = datetime.now(timezone.utc)
     ip.updated_at = datetime.now(timezone.utc)

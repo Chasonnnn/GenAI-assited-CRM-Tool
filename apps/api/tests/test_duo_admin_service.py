@@ -11,7 +11,9 @@ import pytest
 
 def _canonical_query(params: dict[str, str]) -> str:
     items = sorted((key, value) for key, value in params.items() if value is not None)
-    return "&".join(f"{quote(str(key), safe='~')}={quote(str(value), safe='~')}" for key, value in items)
+    return "&".join(
+        f"{quote(str(key), safe='~')}={quote(str(value), safe='~')}" for key, value in items
+    )
 
 
 def _enable_duo(monkeypatch):
@@ -126,7 +128,11 @@ def test_reset_user_enrollment_cleans_factors_and_preserves_shared_phone(monkeyp
     class FakeClient:
         def get_user(self, user_id: str):
             calls.append(("get_user", user_id, None))
-            return {"user_id": user_id, "username": "cathyf@ewifamilyglobal.com", "is_enrolled": True}
+            return {
+                "user_id": user_id,
+                "username": "cathyf@ewifamilyglobal.com",
+                "is_enrolled": True,
+            }
 
         def find_user_by_username(self, username: str):
             calls.append(("find_user_by_username", username, None))
@@ -163,7 +169,11 @@ def test_reset_user_enrollment_cleans_factors_and_preserves_shared_phone(monkeyp
 
         def get_user_authenticator_summary(self, user_id: str):
             calls.append(("get_user_authenticator_summary", user_id, None))
-            return {"user_id": user_id, "username": "cathyf@ewifamilyglobal.com", "is_enrolled": False}
+            return {
+                "user_id": user_id,
+                "username": "cathyf@ewifamilyglobal.com",
+                "is_enrolled": False,
+            }
 
         def delete_user(self, user_id: str):
             calls.append(("delete_user", user_id, None))
@@ -216,7 +226,11 @@ def test_reset_user_enrollment_falls_back_to_delete_user_when_still_enrolled(mon
 
         def get_user_authenticator_summary(self, user_id: str):
             calls.append(("get_user_authenticator_summary", user_id, None))
-            return {"user_id": user_id, "username": "cathyf@ewifamilyglobal.com", "is_enrolled": True}
+            return {
+                "user_id": user_id,
+                "username": "cathyf@ewifamilyglobal.com",
+                "is_enrolled": True,
+            }
 
         def delete_user(self, user_id: str):
             calls.append(("delete_user", user_id, None))
@@ -236,6 +250,7 @@ def test_reset_user_enrollment_falls_back_to_delete_user_when_still_enrolled(mon
 
 def test_reset_user_enrollment_raises_config_error_without_admin_api(monkeypatch):
     from app.core.config import settings
+
     _enable_duo(monkeypatch)
     from app.services import duo_admin_service
 

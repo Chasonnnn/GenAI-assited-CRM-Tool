@@ -130,4 +130,3 @@ async def test_surrogates_list_owner_filter_allows_admin(db, test_org):
 
         response = await client.get("/surrogates", params={"owner_id": str(other_user.id)})
         assert response.status_code == 200
-

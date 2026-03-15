@@ -40,6 +40,7 @@ from app.services import status_change_request_service
 from app.services import intended_parent_status_service
 from app.services import form_submission_service
 from app.services import clamav_signature_service
+from app.services import scan_dispatch_service
 from app.services import surrogate_events
 from app.services import wif_oidc_service
 from app.services import duo_admin_service
@@ -80,6 +81,7 @@ __all__ = [
     "intended_parent_status_service",
     "form_submission_service",
     "clamav_signature_service",
+    "scan_dispatch_service",
     "surrogate_events",
     "wif_oidc_service",
     "duo_admin_service",

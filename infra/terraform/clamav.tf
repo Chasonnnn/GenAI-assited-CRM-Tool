@@ -61,6 +61,77 @@ resource "google_cloud_run_v2_job" "clamav_update" {
   }
 }
 
+resource "google_cloud_run_v2_job" "attachment_scan" {
+  count    = var.attachment_scan_job_enabled ? 1 : 0
+  provider = google-beta
+  name     = var.attachment_scan_job_name
+  location = var.region
+
+  depends_on = [google_secret_manager_secret_iam_member.worker_secret_access]
+
+  template {
+    template {
+      service_account = google_service_account.worker.email
+
+      containers {
+        image   = local.worker_image
+        command = ["python", "-m", "app.scan_job_runner"]
+
+        resources {
+          limits = {
+            cpu    = var.attachment_scan_job_cpu
+            memory = var.attachment_scan_job_memory
+          }
+        }
+
+        volume_mounts {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+
+        dynamic "env" {
+          for_each = local.common_env
+          content {
+            name  = env.key
+            value = env.value
+          }
+        }
+
+        dynamic "env" {
+          for_each = { for key in sort(local.common_secret_keys) : key => key }
+          content {
+            name = env.value
+            value_source {
+              secret_key_ref {
+                secret  = google_secret_manager_secret.secrets[env.value].secret_id
+                version = "latest"
+              }
+            }
+          }
+        }
+      }
+
+      vpc_access {
+        connector = google_vpc_access_connector.crm.id
+        egress    = "PRIVATE_RANGES_ONLY"
+      }
+
+      volumes {
+        name = "cloudsql"
+        cloud_sql_instance {
+          instances = [google_sql_database_instance.crm.connection_name]
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image
+    ]
+  }
+}
+
 resource "google_cloud_scheduler_job" "clamav_update" {
   count     = var.clamav_update_enabled ? 1 : 0
   name      = "${var.clamav_update_job_name}-schedule"

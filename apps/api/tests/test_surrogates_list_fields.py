@@ -59,7 +59,9 @@ async def test_surrogates_list_does_not_fallback_to_updated_at_for_last_activity
     created_id = create_res.json()["id"]
     surrogate_id = uuid.UUID(created_id)
 
-    db.query(SurrogateActivityLog).filter(SurrogateActivityLog.surrogate_id == surrogate_id).delete()
+    db.query(SurrogateActivityLog).filter(
+        SurrogateActivityLog.surrogate_id == surrogate_id
+    ).delete()
     surrogate = db.query(Surrogate).filter(Surrogate.id == surrogate_id).first()
     assert surrogate is not None
     surrogate.updated_at = datetime.now(timezone.utc)

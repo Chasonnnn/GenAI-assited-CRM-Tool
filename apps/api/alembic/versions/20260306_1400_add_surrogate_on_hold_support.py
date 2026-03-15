@@ -30,9 +30,10 @@ ON_HOLD_STAGE_TYPE = "paused"
 
 
 def _all_pipeline_stages(conn, pipeline_id):
-    return conn.execute(
-        sa.text(
-            """
+    return (
+        conn.execute(
+            sa.text(
+                """
             SELECT
                 id,
                 pipeline_id,
@@ -48,9 +49,12 @@ def _all_pipeline_stages(conn, pipeline_id):
             WHERE pipeline_id = :pipeline_id
             ORDER BY "order", created_at, id
             """
-        ),
-        {"pipeline_id": pipeline_id},
-    ).mappings().all()
+            ),
+            {"pipeline_id": pipeline_id},
+        )
+        .mappings()
+        .all()
+    )
 
 
 def _active_ordered_stages(stages):
@@ -75,9 +79,7 @@ def _reorder_with_on_hold(conn, pipeline_id) -> None:
     on_hold_stage = _find_on_hold_stage(stages)
     active_stages = _active_ordered_stages(stages)
 
-    ordered_active = [
-        stage for stage in active_stages if not _is_on_hold_stage(stage)
-    ]
+    ordered_active = [stage for stage in active_stages if not _is_on_hold_stage(stage)]
     insert_at = next(
         (index for index, stage in enumerate(ordered_active) if stage["stage_type"] == "terminal"),
         len(ordered_active),

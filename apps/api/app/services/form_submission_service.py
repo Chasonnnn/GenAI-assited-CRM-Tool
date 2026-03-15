@@ -23,6 +23,7 @@ from app.db.enums import (
     FormStatus,
     FormSubmissionMatchStatus,
     FormSubmissionStatus,
+    JobStatus,
     JobType,
     OwnerType,
     SurrogateActivityType,
@@ -33,6 +34,7 @@ from app.db.models import (
     FormSubmission,
     FormSubmissionFile,
     FormSubmissionToken,
+    Job,
     Surrogate,
 )
 from app.schemas.forms import FormField, FormFieldCondition, FormFieldColumn, FormSchema
@@ -845,15 +847,64 @@ def add_submission_file(
     db.flush()
 
     if scan_enabled:
-        job_service.enqueue_job(
+        ensure_submission_file_scan_job(
             db=db,
             org_id=org_id,
-            job_type=JobType.FORM_SUBMISSION_FILE_SCAN,
-            payload={"submission_file_id": str(record.id)},
-            run_at=datetime.now(timezone.utc),
+            submission_file_id=record.id,
             commit=False,
         )
     return record
+
+
+def ensure_submission_file_scan_job(
+    db: Session,
+    org_id: uuid.UUID,
+    submission_file_id: uuid.UUID,
+    *,
+    commit: bool = False,
+) -> bool:
+    """Ensure a pending/running scan job exists for a form submission file."""
+    submission_file_id_str = str(submission_file_id)
+    now = datetime.now(timezone.utc)
+    stale_after_seconds = max(0, settings.ATTACHMENT_SCAN_STALE_RUNNING_SECONDS)
+    in_flight_jobs = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == org_id,
+            Job.job_type == JobType.FORM_SUBMISSION_FILE_SCAN.value,
+            Job.status.in_([JobStatus.PENDING.value, JobStatus.RUNNING.value]),
+        )
+        .all()
+    )
+    for job in in_flight_jobs:
+        payload = job.payload or {}
+        if payload.get("submission_file_id") == submission_file_id_str:
+            if job.status == JobStatus.RUNNING.value and job.run_at <= now - timedelta(
+                seconds=stale_after_seconds
+            ):
+                job.status = JobStatus.PENDING.value
+                job.last_error = (
+                    "Recovered stale form submission file scan job after exceeding "
+                    f"{stale_after_seconds}s lease"
+                )
+                job.run_at = now
+                job.completed_at = None
+                if commit:
+                    db.commit()
+                else:
+                    db.flush()
+                return True
+            return False
+
+    job_service.enqueue_job(
+        db=db,
+        org_id=org_id,
+        job_type=JobType.FORM_SUBMISSION_FILE_SCAN,
+        payload={"submission_file_id": submission_file_id_str},
+        run_at=now,
+        commit=commit,
+    )
+    return True
 
 
 def soft_delete_submission_file(
@@ -1189,6 +1240,21 @@ def _validate_field_value(field: FormField, value: Any) -> None:
                 raise ValueError(f"Field '{field.label}' must be at least {validation.min_value}")
             if validation.max_value is not None and numeric_value > validation.max_value:
                 raise ValueError(f"Field '{field.label}' must be at most {validation.max_value}")
+        return
+
+    if field_type == "height":
+        if isinstance(value, (int, float)):
+            numeric_value = float(value)
+        elif isinstance(value, str):
+            transformed = transform_height_flexible(value)
+            if not transformed.success or transformed.value is None:
+                raise ValueError(f"Field '{field.label}' must be a valid height")
+            numeric_value = float(transformed.value)
+        else:
+            raise ValueError(f"Field '{field.label}' must be a valid height")
+
+        if numeric_value < 0:
+            raise ValueError(f"Field '{field.label}' must be a valid height")
         return
 
     if field_type == "date":
@@ -1602,7 +1668,9 @@ def _store_submission_file(
     file_size = file.file.tell()
     file.file.seek(0)
 
-    processed_file = sanitize_upload_content(file.filename or "upload", resolved_content_type, file.file)
+    processed_file = sanitize_upload_content(
+        file.filename or "upload", resolved_content_type, file.file
+    )
     checksum = calculate_checksum(processed_file)
     ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename else ""
     suffix = f".{ext}" if ext else ""
@@ -1629,12 +1697,10 @@ def _store_submission_file(
     db.flush()
 
     if scan_enabled:
-        job_service.enqueue_job(
+        ensure_submission_file_scan_job(
             db=db,
             org_id=submission.organization_id,
-            job_type=JobType.FORM_SUBMISSION_FILE_SCAN,
-            payload={"submission_file_id": str(record.id)},
-            run_at=datetime.now(timezone.utc),
+            submission_file_id=record.id,
             commit=False,
         )
 

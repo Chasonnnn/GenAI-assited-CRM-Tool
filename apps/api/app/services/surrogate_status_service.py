@@ -322,7 +322,9 @@ def change_status(
                 recorded_at=now,
                 org_timezone_str=org_tz_str,
                 is_undo=True,
-                paused_from_stage=effective_old_stage if new_stage.slug == "on_hold" else paused_from_stage,
+                paused_from_stage=effective_old_stage
+                if new_stage.slug == "on_hold"
+                else paused_from_stage,
                 on_hold_follow_up_months=on_hold_follow_up_months,
                 trigger_workflows=trigger_workflows,
             )
@@ -457,7 +459,9 @@ def apply_status_change(
     resolved_org_timezone = org_timezone_str or _get_org_timezone(db, surrogate.organization_id)
     deleted_follow_up_task = None
     created_follow_up_task = None
-    leaving_on_hold = bool(current_stage and current_stage.slug == "on_hold" and new_stage.slug != "on_hold")
+    leaving_on_hold = bool(
+        current_stage and current_stage.slug == "on_hold" and new_stage.slug != "on_hold"
+    )
 
     if leaving_on_hold:
         deleted_follow_up_task = _cleanup_on_hold_follow_up_task(db, surrogate=surrogate)
@@ -477,7 +481,9 @@ def apply_status_change(
             org_timezone_str=resolved_org_timezone,
             follow_up_months=on_hold_follow_up_months,
         )
-        surrogate.on_hold_follow_up_task_id = created_follow_up_task.id if created_follow_up_task else None
+        surrogate.on_hold_follow_up_task_id = (
+            created_follow_up_task.id if created_follow_up_task else None
+        )
 
     # Update contact status if reached or leaving intake stage
     if surrogate.contact_status == ContactStatus.UNREACHED.value:

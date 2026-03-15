@@ -70,6 +70,8 @@ enable_domain_mapping = true
 
 # Monitoring + budgets (recommended)
 alert_notification_channel_ids = ["projects/PROJECT_ID/notificationChannels/CHANNEL_ID"]
+# Billing budgets accept only email notification channels.
+billing_budget_notification_channel_ids = ["projects/PROJECT_ID/notificationChannels/EMAIL_CHANNEL_ID"]
 monitoring_webhook_token = "replace-me"
 billing_account_id = "000000-000000-000000"
 billing_budget_amount_usd = 300
@@ -86,6 +88,10 @@ You can copy the example:
 ```bash
 cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
 ```
+
+Dedicated scan job:
+- Keep `crm-worker` lean and dispatch malware scans to the dedicated Cloud Run job (`attachment_scan_job_*` vars).
+- Keep `crm-clamav-update` for weekly signature refresh only; it is not the scan executor.
 
 Terraform only creates Secret Manager containers. Add secret versions out-of-band (manual or CI):
 ```bash
@@ -142,7 +148,7 @@ To route GCP Monitoring alerts into the Ops console, set `monitoring_webhook_tok
 The token is sent via the webhook auth header and must match the API's `INTERNAL_SECRET`.
 Note: the token will exist in Terraform state (marked sensitive).
 
-Budget alerts use the same channel. Set `billing_account_id` and `billing_budget_amount_usd`.
+Budget alerts do not use the general alert channels. Cloud Billing only accepts email notification channels for budgets, so set `billing_budget_notification_channel_ids` to email channel IDs only. If you leave it empty, default Billing IAM recipients stay enabled. Set `billing_account_id` and `billing_budget_amount_usd`.
 
 ## Weekly spend summary (optional)
 Terraform provisions a BigQuery dataset and a Cloud Run job that posts a weekly spend summary to Slack.

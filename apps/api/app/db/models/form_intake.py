@@ -35,10 +35,11 @@ class FormIntakeLink(Base):
 
     __tablename__ = "form_intake_links"
     __table_args__ = (
-        UniqueConstraint("slug", name="uq_form_intake_link_slug"),
+        UniqueConstraint("organization_id", "slug", name="uq_form_intake_link_org_slug"),
         Index("idx_form_intake_links_org", "organization_id"),
         Index("idx_form_intake_links_form", "form_id"),
         Index("idx_form_intake_links_slug", "slug"),
+        Index("idx_form_intake_links_org_slug", "organization_id", "slug"),
         Index("idx_form_intake_links_active", "organization_id", "is_active"),
     )
 
@@ -64,7 +65,9 @@ class FormIntakeLink(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
     max_submissions: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    submissions_count: Mapped[int] = mapped_column(Integer, server_default=text("0"), nullable=False)
+    submissions_count: Mapped[int] = mapped_column(
+        Integer, server_default=text("0"), nullable=False
+    )
 
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True

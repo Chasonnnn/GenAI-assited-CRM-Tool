@@ -43,7 +43,9 @@ class _FakeResponse:
 
 
 class _FakeAsyncClient:
-    def __init__(self, responses: list[_FakeResponse] | None = None, error: Exception | None = None):
+    def __init__(
+        self, responses: list[_FakeResponse] | None = None, error: Exception | None = None
+    ):
         self._responses = responses or []
         self._error = error
 
@@ -167,7 +169,9 @@ async def test_meta_sync_forms_no_page_mapping_and_success_path(db, test_org, mo
             None,
         )
 
-    monkeypatch.setattr(meta_sync_service.meta_api, "fetch_page_leadgen_forms", _fake_fetch_page_forms)
+    monkeypatch.setattr(
+        meta_sync_service.meta_api, "fetch_page_leadgen_forms", _fake_fetch_page_forms
+    )
 
     synced = await meta_sync_service.sync_forms(db, test_org.id, page_id="page_1")
     assert synced["error"] is None

@@ -6,10 +6,8 @@ import Link from "@/components/app-link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
+import { Textarea } from "@/components/ui/textarea"
 import {
     Dialog,
     DialogContent,
@@ -32,13 +30,20 @@ import {
     MailIcon,
     PhoneIcon,
     MapPinIcon,
-    DollarSignIcon,
     ClockIcon,
     ArchiveIcon,
     ArchiveRestoreIcon,
     Trash2Icon,
     HeartHandshakeIcon,
+    UserIcon,
 } from "lucide-react"
+import {
+    IntendedParentFormFields,
+    EMPTY_INTENDED_PARENT_FORM_VALUES,
+    buildIntendedParentUpdatePayload,
+    type IntendedParentFormValues,
+} from "@/components/intended-parents/IntendedParentFormFields"
+import { IntendedParentClinicCard } from "@/components/intended-parents/IntendedParentClinicCard"
 import {
     useIntendedParent,
     useIntendedParentHistory,
@@ -108,14 +113,7 @@ export default function IntendedParentDetailPage() {
 
     const [isEditOpen, setIsEditOpen] = useState(false)
     const [newNote, setNewNote] = useState("")
-    const [formData, setFormData] = useState({
-        full_name: "",
-        email: "",
-        phone: "",
-        state: "",
-        budget: "",
-        notes_internal: "",
-    })
+    const [formData, setFormData] = useState<IntendedParentFormValues>(EMPTY_INTENDED_PARENT_FORM_VALUES)
     const [proposeMatchOpen, setProposeMatchOpen] = useState(false)
     const [changeStatusModalOpen, setChangeStatusModalOpen] = useState(false)
 
@@ -156,44 +154,48 @@ export default function IntendedParentDetailPage() {
         })
     }
 
-    const formatBudget = (budget: number | null) => {
-        if (!budget) return "Not specified"
-        return new Intl.NumberFormat("en-US", {
-            style: "currency",
-            currency: "USD",
-            maximumFractionDigits: 0,
-        }).format(budget)
-    }
-
     const handleEdit = () => {
         if (!ip) return
         setFormData({
             full_name: ip.full_name,
             email: ip.email,
             phone: ip.phone || "",
+            pronouns: ip.pronouns || "",
+            partner_name: ip.partner_name || "",
+            partner_email: ip.partner_email || "",
+            partner_pronouns: ip.partner_pronouns || "",
+            address_line1: ip.address_line1 || "",
+            address_line2: ip.address_line2 || "",
+            city: ip.city || "",
             state: ip.state || "",
-            budget: ip.budget?.toString() || "",
+            postal: ip.postal || "",
+            ip_clinic_name: ip.ip_clinic_name || "",
+            ip_clinic_address_line1: ip.ip_clinic_address_line1 || "",
+            ip_clinic_address_line2: ip.ip_clinic_address_line2 || "",
+            ip_clinic_city: ip.ip_clinic_city || "",
+            ip_clinic_state: ip.ip_clinic_state || "",
+            ip_clinic_postal: ip.ip_clinic_postal || "",
+            ip_clinic_phone: ip.ip_clinic_phone || "",
+            ip_clinic_fax: ip.ip_clinic_fax || "",
+            ip_clinic_email: ip.ip_clinic_email || "",
             notes_internal: ip.notes_internal || "",
         })
         setIsEditOpen(true)
     }
 
     const handleSave = async () => {
-        const phone = formData.phone.trim()
-        const state = formData.state.trim()
-        const notesInternal = formData.notes_internal.trim()
         await updateMutation.mutateAsync({
             id,
-            data: {
-                full_name: formData.full_name,
-                email: formData.email,
-                ...(phone ? { phone } : {}),
-                ...(state ? { state } : {}),
-                ...(formData.budget ? { budget: parseFloat(formData.budget) } : {}),
-                ...(notesInternal ? { notes_internal: notesInternal } : {}),
-            },
+            data: buildIntendedParentUpdatePayload(formData),
         })
         setIsEditOpen(false)
+    }
+
+    const updateFormField = <K extends keyof IntendedParentFormValues>(
+        field: K,
+        value: IntendedParentFormValues[K],
+    ) => {
+        setFormData((previous) => ({ ...previous, [field]: value }))
     }
 
     const handleStatusChange = async (data: {
@@ -382,21 +384,66 @@ export default function IntendedParentDetailPage() {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                    <MapPinIcon className="size-5 text-muted-foreground" />
+                                    <UserIcon className="size-5 text-muted-foreground" />
                                     <div>
-                                        <p className="text-sm text-muted-foreground">State</p>
-                                        <p className="font-medium">{ip.state || "Not provided"}</p>
+                                        <p className="text-sm text-muted-foreground">Pronouns</p>
+                                        <p className="font-medium">{ip.pronouns || "Not provided"}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                    <DollarSignIcon className="size-5 text-muted-foreground" />
+                                    <MapPinIcon className="size-5 text-muted-foreground" />
                                     <div>
-                                        <p className="text-sm text-muted-foreground">Budget</p>
-                                        <p className="font-medium">{formatBudget(ip.budget)}</p>
+                                        <p className="text-sm text-muted-foreground">Address</p>
+                                        <p className="font-medium">
+                                            {[ip.address_line1, ip.address_line2, ip.city, ip.state, ip.postal]
+                                                .filter(Boolean)
+                                                .join(", ") || "Not provided"}
+                                        </p>
                                     </div>
                                 </div>
                             </CardContent>
                         </Card>
+
+                        {/* Partner Info */}
+                        {(ip.partner_name || ip.partner_email) && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Partner</CardTitle>
+                                </CardHeader>
+                                <CardContent className="grid gap-4 sm:grid-cols-2">
+                                    <div className="flex items-center gap-3">
+                                        <UserIcon className="size-5 text-muted-foreground" />
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Name</p>
+                                            <p className="font-medium">{ip.partner_name || "Not provided"}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <MailIcon className="size-5 text-muted-foreground" />
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Email</p>
+                                            <p className="font-medium">{ip.partner_email || "Not provided"}</p>
+                                        </div>
+                                    </div>
+                                    {ip.partner_pronouns && (
+                                        <div className="flex items-center gap-3">
+                                            <UserIcon className="size-5 text-muted-foreground" />
+                                            <div>
+                                                <p className="text-sm text-muted-foreground">Pronouns</p>
+                                                <p className="font-medium">{ip.partner_pronouns}</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        <IntendedParentClinicCard
+                            intendedParent={ip}
+                            onUpdate={async (data) => {
+                                await updateMutation.mutateAsync({ id, data })
+                            }}
+                        />
 
                         {/* Status Change */}
                         <Card>
@@ -573,61 +620,13 @@ export default function IntendedParentDetailPage() {
                         <DialogTitle>Edit Intended Parent</DialogTitle>
                         <DialogDescription>Update the intended parent details</DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="edit_name">Full Name</Label>
-                            <Input
-                                id="edit_name"
-                                value={formData.full_name}
-                                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="edit_email">Email</Label>
-                            <Input
-                                id="edit_email"
-                                type="email"
-                                value={formData.email}
-                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                            />
-                        </div>
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <div className="space-y-2">
-                                <Label htmlFor="edit_phone">Phone</Label>
-                                <Input
-                                    id="edit_phone"
-                                    value={formData.phone}
-                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="edit_state">State</Label>
-                                <Input
-                                    id="edit_state"
-                                    value={formData.state}
-                                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                                />
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="edit_budget">Budget</Label>
-                            <Input
-                                id="edit_budget"
-                                type="number"
-                                value={formData.budget}
-                                onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="edit_notes">Internal Notes</Label>
-                            <Textarea
-                                id="edit_notes"
-                                value={formData.notes_internal}
-                                onChange={(e) => setFormData({ ...formData, notes_internal: e.target.value })}
-                                rows={3}
-                            />
-                        </div>
-                    </div>
+                    <IntendedParentFormFields
+                        values={formData}
+                        onChange={updateFormField}
+                        idPrefix="edit_"
+                        showClinicSection={false}
+                        showInternalNotes={false}
+                    />
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsEditOpen(false)}>
                             Cancel

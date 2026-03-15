@@ -31,6 +31,7 @@ from app.db.models import (
     Surrogate,
     IntendedParent,
     Organization,
+    User,
 )
 from app.schemas.appointment import AppointmentRead, AppointmentListItem
 from app.db.enums import AppointmentStatus, MeetingMode
@@ -83,6 +84,45 @@ def generate_token(length: int = 32) -> str:
 def generate_public_slug() -> str:
     """Generate 16-char random slug for booking links."""
     return secrets.token_urlsafe(12)[:16]
+
+
+def build_booking_slug_base(display_name: str) -> str:
+    """Build a readable booking slug base from a user's display name."""
+    slug = generate_slug(display_name).strip("-")
+    return slug[:32] or "staff"
+
+
+def _format_booking_slug_candidate(base: str, sequence: int) -> str:
+    if sequence <= 1:
+        return base[:32]
+
+    suffix = f"-{sequence}"
+    trimmed_base = base[: max(1, 32 - len(suffix))]
+    return f"{trimmed_base}{suffix}"
+
+
+def generate_unique_booking_slug(
+    db: Session,
+    org_id: UUID,
+    display_name: str,
+) -> str:
+    """Generate a readable booking slug unique within an organization."""
+    base = build_booking_slug_base(display_name)
+    sequence = 1
+
+    while True:
+        candidate = _format_booking_slug_candidate(base, sequence)
+        exists = (
+            db.query(BookingLink.id)
+            .filter(
+                BookingLink.organization_id == org_id,
+                BookingLink.public_slug == candidate,
+            )
+            .first()
+        )
+        if not exists:
+            return candidate
+        sequence += 1
 
 
 def _get_timezone(name: str | None) -> ZoneInfo:
@@ -657,10 +697,14 @@ def get_or_create_booking_link(
     if existing:
         return existing
 
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise ValueError("User not found")
+
     link = BookingLink(
         organization_id=org_id,
         user_id=user_id,
-        public_slug=generate_public_slug(),
+        public_slug=generate_unique_booking_slug(db, org_id, user.display_name),
         is_active=True,
     )
     db.add(link)
@@ -693,16 +737,21 @@ def regenerate_booking_link(
 def get_booking_link_by_slug(
     db: Session,
     public_slug: str,
+    org_id: UUID | None = None,
 ) -> BookingLink | None:
-    """Get a booking link by its public slug."""
-    return (
-        db.query(BookingLink)
-        .filter(
-            BookingLink.public_slug == public_slug,
-            BookingLink.is_active.is_(True),
-        )
-        .first()
+    """Get a booking link by its public slug, scoped to org when available."""
+    query = db.query(BookingLink).filter(
+        BookingLink.public_slug == public_slug,
+        BookingLink.is_active.is_(True),
     )
+
+    if org_id is not None:
+        return query.filter(BookingLink.organization_id == org_id).first()
+
+    matches = query.order_by(BookingLink.created_at.asc(), BookingLink.id.asc()).limit(2).all()
+    if len(matches) == 1:
+        return matches[0]
+    return None
 
 
 # =============================================================================

@@ -74,6 +74,7 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
         insurance_group_number=surrogate.insurance_group_number,
         insurance_subscriber_name=surrogate.insurance_subscriber_name,
         insurance_subscriber_dob=surrogate.insurance_subscriber_dob,
+        insurance_fax=surrogate.insurance_fax,
         # IVF clinic
         clinic_name=surrogate.clinic_name,
         clinic_address_line1=surrogate.clinic_address_line1,
@@ -83,6 +84,7 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
         clinic_postal=surrogate.clinic_postal,
         clinic_phone=surrogate.clinic_phone,
         clinic_email=surrogate.clinic_email,
+        clinic_fax=surrogate.clinic_fax,
         # Monitoring clinic
         monitoring_clinic_name=surrogate.monitoring_clinic_name,
         monitoring_clinic_address_line1=surrogate.monitoring_clinic_address_line1,
@@ -92,6 +94,7 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
         monitoring_clinic_postal=surrogate.monitoring_clinic_postal,
         monitoring_clinic_phone=surrogate.monitoring_clinic_phone,
         monitoring_clinic_email=surrogate.monitoring_clinic_email,
+        monitoring_clinic_fax=surrogate.monitoring_clinic_fax,
         # OB provider
         ob_provider_name=surrogate.ob_provider_name,
         ob_clinic_name=surrogate.ob_clinic_name,
@@ -102,6 +105,7 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
         ob_postal=surrogate.ob_postal,
         ob_phone=surrogate.ob_phone,
         ob_email=surrogate.ob_email,
+        ob_fax=surrogate.ob_fax,
         # Delivery hospital
         delivery_hospital_name=surrogate.delivery_hospital_name,
         delivery_hospital_address_line1=surrogate.delivery_hospital_address_line1,
@@ -111,6 +115,28 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
         delivery_hospital_postal=surrogate.delivery_hospital_postal,
         delivery_hospital_phone=surrogate.delivery_hospital_phone,
         delivery_hospital_email=surrogate.delivery_hospital_email,
+        delivery_hospital_fax=surrogate.delivery_hospital_fax,
+        # PCP provider
+        pcp_provider_name=surrogate.pcp_provider_name,
+        pcp_name=surrogate.pcp_name,
+        pcp_address_line1=surrogate.pcp_address_line1,
+        pcp_address_line2=surrogate.pcp_address_line2,
+        pcp_city=surrogate.pcp_city,
+        pcp_state=surrogate.pcp_state,
+        pcp_postal=surrogate.pcp_postal,
+        pcp_phone=surrogate.pcp_phone,
+        pcp_fax=surrogate.pcp_fax,
+        pcp_email=surrogate.pcp_email,
+        # Lab clinic
+        lab_clinic_name=surrogate.lab_clinic_name,
+        lab_clinic_address_line1=surrogate.lab_clinic_address_line1,
+        lab_clinic_address_line2=surrogate.lab_clinic_address_line2,
+        lab_clinic_city=surrogate.lab_clinic_city,
+        lab_clinic_state=surrogate.lab_clinic_state,
+        lab_clinic_postal=surrogate.lab_clinic_postal,
+        lab_clinic_phone=surrogate.lab_clinic_phone,
+        lab_clinic_fax=surrogate.lab_clinic_fax,
+        lab_clinic_email=surrogate.lab_clinic_email,
         # Pregnancy tracking
         pregnancy_start_date=surrogate.pregnancy_start_date,
         pregnancy_due_date=surrogate.pregnancy_due_date,

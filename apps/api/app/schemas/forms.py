@@ -21,6 +21,7 @@ FieldType = Literal[
     "file",
     "address",
     "repeatable_table",
+    "height",
 ]
 FormPurpose = Literal["surrogate_application", "event_intake", "other"]
 

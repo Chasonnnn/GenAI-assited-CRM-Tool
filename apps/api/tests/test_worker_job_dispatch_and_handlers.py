@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -56,10 +57,64 @@ def test_worker_env_flags_and_backoff(monkeypatch):
     assert worker._rate_limit_backoff_seconds(10) <= 3630
 
 
+def test_worker_global_resend_warning_is_specific(monkeypatch, caplog):
+    monkeypatch.setattr(worker, "RESEND_API_KEY", "")
+
+    with caplog.at_level(logging.WARNING):
+        worker._log_global_email_sender_status()
+
+    assert (
+        "Global RESEND_API_KEY not set; legacy non-campaign SEND_EMAIL jobs will be "
+        "logged but not sent." in caplog.text
+    )
+    assert (
+        "Org workflow Resend and platform/system email use separate configuration." in caplog.text
+    )
+
+
+def test_worker_logs_retryable_job_failures_at_warning(caplog):
+    job = _job(
+        job_type=JobType.TICKET_OUTBOUND_SEND.value,
+        status=JobStatus.PENDING.value,
+        attempts=1,
+        max_attempts=3,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        worker._log_job_failure(job, RuntimeError("boom"))
+
+    assert "will retry" in caplog.text
+    assert "type=ticket_outbound_send" in caplog.text
+    assert "job_status=pending" in caplog.text
+    assert "final=false" in caplog.text
+    assert not any(record.levelno >= logging.ERROR for record in caplog.records)
+
+
+def test_worker_logs_final_job_failures_at_error(caplog):
+    job = _job(
+        job_type=JobType.TICKET_OUTBOUND_SEND.value,
+        status=JobStatus.FAILED.value,
+        attempts=3,
+        max_attempts=3,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        worker._log_job_failure(job, RuntimeError("boom"))
+
+    assert "failed permanently" in caplog.text
+    assert "type=ticket_outbound_send" in caplog.text
+    assert "job_status=failed" in caplog.text
+    assert "final=true" in caplog.text
+    assert any(record.levelno >= logging.ERROR for record in caplog.records)
+
+
 def test_worker_resolve_integration_keys(db):
     keys = worker._resolve_integration_keys(
         db,
-        _job(job_type=JobType.TICKET_OUTBOUND_SEND.value, payload={"mailbox_id": "m1", "mode": "reply"}),
+        _job(
+            job_type=JobType.TICKET_OUTBOUND_SEND.value,
+            payload={"mailbox_id": "m1", "mode": "reply"},
+        ),
         integration_type="worker",
     )
     assert "mailbox:m1" in keys
@@ -67,7 +122,10 @@ def test_worker_resolve_integration_keys(db):
 
     keys = worker._resolve_integration_keys(
         db,
-        _job(job_type=JobType.META_FORM_SYNC.value, payload={"page_id": "p1", "page_ids": ["p1", "p2"]}),
+        _job(
+            job_type=JobType.META_FORM_SYNC.value,
+            payload={"page_id": "p1", "page_ids": ["p1", "p2"]},
+        ),
         integration_type="meta_forms",
     )
     assert keys == ["p1", "p2"]
@@ -80,11 +138,15 @@ def test_worker_record_success_and_failure(monkeypatch, db):
 
     monkeypatch.setattr(
         "app.services.ops_service.record_success",
-        lambda db, org_id, integration_type, integration_key=None: success_calls.append((integration_type, integration_key)),
+        lambda db, org_id, integration_type, integration_key=None: success_calls.append(
+            (integration_type, integration_key)
+        ),
     )
     monkeypatch.setattr(
         "app.services.ops_service.record_error",
-        lambda db, org_id, integration_type, error_message, integration_key=None: error_calls.append((integration_type, integration_key)),
+        lambda db, org_id, integration_type, error_message, integration_key=None: (
+            error_calls.append((integration_type, integration_key))
+        ),
     )
     monkeypatch.setattr(
         "app.services.alert_service.record_alert_isolated",
@@ -157,8 +219,14 @@ async def test_worker_loop_single_iteration_success_and_failure(monkeypatch, db)
     monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(db))
     monkeypatch.setattr(worker, "WORKER_JOB_TYPES", None)
     monkeypatch.setattr(worker, "POLL_INTERVAL_SECONDS", 0)
-    monkeypatch.setattr(worker, "maybe_schedule_google_calendar_sync_jobs", lambda *args, **kwargs: datetime.now(timezone.utc))
-    monkeypatch.setattr(worker, "maybe_schedule_gmail_sync_jobs", lambda *args, **kwargs: datetime.now(timezone.utc))
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_google_calendar_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(
+        worker, "maybe_schedule_gmail_sync_jobs", lambda *args, **kwargs: datetime.now(timezone.utc)
+    )
     monkeypatch.setattr(
         worker.job_service,
         "claim_pending_jobs",
@@ -181,7 +249,7 @@ async def test_worker_loop_single_iteration_success_and_failure(monkeypatch, db)
     async def _process(session, job):
         if job.job_type == JobType.SEND_EMAIL.value:
             raise RuntimeError("send failed")
-        return None
+        return True
 
     monkeypatch.setattr(worker, "process_job", _process)
     monkeypatch.setattr(worker, "_is_meta_rate_limit_error", lambda *args, **kwargs: False)
@@ -202,11 +270,70 @@ async def test_worker_loop_single_iteration_success_and_failure(monkeypatch, db)
     assert jobs[1].status == JobStatus.FAILED.value
 
 
+@pytest.mark.asyncio
+async def test_worker_loop_leaves_job_running_when_handler_defers_completion(monkeypatch, db):
+    job = _job(
+        job_type=JobType.ATTACHMENT_SCAN.value,
+        status=JobStatus.RUNNING.value,
+        payload={"attachment_id": str(uuid4())},
+    )
+
+    monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(db))
+    monkeypatch.setattr(worker, "WORKER_JOB_TYPES", None)
+    monkeypatch.setattr(worker, "POLL_INTERVAL_SECONDS", 0)
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_google_calendar_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(
+        worker, "maybe_schedule_gmail_sync_jobs", lambda *args, **kwargs: datetime.now(timezone.utc)
+    )
+    monkeypatch.setattr(
+        worker.job_service,
+        "claim_pending_jobs",
+        lambda session, limit, job_types: [job],
+    )
+    completed = {"count": 0}
+
+    def _mark_completed(*_args, **_kwargs):
+        completed["count"] += 1
+
+    monkeypatch.setattr(worker.job_service, "mark_job_completed", _mark_completed)
+    monkeypatch.setattr(worker.job_service, "mark_job_failed", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(worker, "_record_job_success", lambda *args, **kwargs: None)
+    monkeypatch.setattr(worker, "_record_job_failure", lambda *args, **kwargs: None)
+
+    async def _process(session, claimed_job):
+        assert claimed_job is job
+        return False
+
+    monkeypatch.setattr(worker, "process_job", _process)
+
+    async def _sleep(seconds):
+        raise RuntimeError("stop-loop")
+
+    monkeypatch.setattr(worker.asyncio, "sleep", _sleep)
+
+    with pytest.raises(RuntimeError, match="stop-loop"):
+        await worker.worker_loop()
+
+    assert job.status == JobStatus.RUNNING.value
+    assert completed["count"] == 0
+
+
 def test_worker_main_paths(monkeypatch):
     called = {"sync": 0, "scan": 0, "run": 0, "report": 0}
 
-    monkeypatch.setattr(worker, "_sync_clamav_signatures", lambda: called.__setitem__("sync", called["sync"] + 1))
-    monkeypatch.setattr(worker, "_ensure_attachment_scanner_available", lambda: called.__setitem__("scan", called["scan"] + 1))
+    monkeypatch.setattr(
+        worker, "_sync_clamav_signatures", lambda: called.__setitem__("sync", called["sync"] + 1)
+    )
+    monkeypatch.setattr(
+        worker,
+        "_ensure_attachment_scanner_available",
+        lambda: called.__setitem__("scan", called["scan"] + 1),
+    )
+
     def _run_ok(coro):
         coro.close()
         called["run"] += 1
@@ -223,7 +350,11 @@ def test_worker_main_paths(monkeypatch):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(worker.asyncio, "run", _run_fail)
-    monkeypatch.setattr(worker, "report_exception", lambda *_args, **_kwargs: called.__setitem__("report", called["report"] + 1))
+    monkeypatch.setattr(
+        worker,
+        "report_exception",
+        lambda *_args, **_kwargs: called.__setitem__("report", called["report"] + 1),
+    )
     with pytest.raises(RuntimeError):
         worker.main()
     assert called["report"] == 1

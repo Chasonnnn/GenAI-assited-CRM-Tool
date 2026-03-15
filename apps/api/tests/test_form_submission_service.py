@@ -168,6 +168,38 @@ def _create_published_form_with_height_weight(db, org_id, user_id):
     return form
 
 
+def _create_published_form_with_height_field(db, org_id, user_id):
+    schema = {
+        "pages": [
+            {
+                "title": "Vitals",
+                "fields": [
+                    {
+                        "key": "height",
+                        "label": "Height",
+                        "type": "height",
+                        "required": False,
+                    },
+                ],
+            }
+        ]
+    }
+
+    form = form_service.create_form(
+        db=db,
+        org_id=org_id,
+        user_id=user_id,
+        name="Height Form",
+        description="Height validation",
+        schema=schema,
+        max_file_size_bytes=None,
+        max_file_count=None,
+        allowed_mime_types=None,
+    )
+    form_service.publish_form(db, form, user_id)
+    return form
+
+
 def _create_published_form_with_conditions(db, org_id, user_id):
     schema = {
         "pages": [
@@ -224,6 +256,13 @@ def _create_published_form_with_conditions(db, org_id, user_id):
     )
     form_service.publish_form(db, form, user_id)
     return form
+
+
+def test_validate_answers_accepts_height_field_values(db, test_org, test_user):
+    form = _create_published_form_with_height_field(db, test_org.id, test_user.id)
+    schema = form_submission_service.parse_schema(form.published_schema_json)
+
+    form_submission_service._validate_answers(schema, {"height": "5.50"})
 
 
 def _create_published_form_with_repeatable_table(db, org_id, user_id):

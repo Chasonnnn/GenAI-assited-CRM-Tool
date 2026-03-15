@@ -6,8 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TabsContent } from "@/components/ui/tabs"
 import { InlineEditField } from "@/components/inline-edit-field"
-import { InsuranceInfoCard } from "@/components/surrogates/InsuranceInfoCard"
-import { MedicalInfoCard } from "@/components/surrogates/MedicalInfoCard"
+import { CombinedMedicalInsuranceCard } from "@/components/surrogates/CombinedMedicalInsuranceCard"
 import { ActivityTimeline } from "@/components/surrogates/ActivityTimeline"
 import { PregnancyTrackerCard } from "@/components/surrogates/PregnancyTrackerCard"
 import { SurrogateOverviewCard } from "@/components/surrogates/SurrogateOverviewCard"
@@ -28,10 +27,6 @@ export function SurrogateOverviewTab() {
     const stageOptions = React.useMemo(() => defaultPipeline?.stages || [], [defaultPipeline])
     const stageById = React.useMemo(
         () => new Map(stageOptions.map((stage) => [stage.id, stage])),
-        [stageOptions]
-    )
-    const readyToMatchStage = React.useMemo(
-        () => stageOptions.find((stage) => stage.slug === "ready_to_match"),
         [stageOptions]
     )
     const heartbeatStage = React.useMemo(
@@ -61,11 +56,6 @@ export function SurrogateOverviewTab() {
     const effectiveStageOrder = effectiveStage?.order ?? null
     const effectiveStageSlug =
         effectiveStage?.slug ?? surrogateData.paused_from_stage_slug ?? surrogateData.stage_slug
-    const isReadyToMatchOrLater = !!(
-        effectiveStageOrder !== null &&
-        readyToMatchStage &&
-        effectiveStageOrder >= readyToMatchStage.order
-    )
     const isHeartbeatConfirmedOrLater = !!(
         effectiveStageOrder !== null &&
         heartbeatStage &&
@@ -213,7 +203,7 @@ export function SurrogateOverviewTab() {
                         )}
                     </SurrogateOverviewCard>
 
-                    <InsuranceInfoCard
+                    <CombinedMedicalInsuranceCard
                         surrogateData={surrogateData}
                         onUpdate={async (data) => {
                             await updateSurrogateMutation.mutateAsync({
@@ -222,18 +212,6 @@ export function SurrogateOverviewTab() {
                             })
                         }}
                     />
-
-                    {isReadyToMatchOrLater && (
-                        <MedicalInfoCard
-                            surrogateData={surrogateData}
-                            onUpdate={async (data) => {
-                                await updateSurrogateMutation.mutateAsync({
-                                    surrogateId: id,
-                                    data,
-                                })
-                            }}
-                        />
-                    )}
                 </div>
 
                 <div className="space-y-4">

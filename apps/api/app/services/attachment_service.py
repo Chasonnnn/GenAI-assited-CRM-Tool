@@ -8,7 +8,7 @@ import os
 import shutil
 import tempfile
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import BinaryIO
 
 from botocore.client import BaseClient
@@ -562,6 +562,8 @@ def ensure_attachment_scan_job(
         True when a new job is enqueued; False when a matching job already exists.
     """
     attachment_id_str = str(attachment_id)
+    now = datetime.now(timezone.utc)
+    stale_after_seconds = max(0, settings.ATTACHMENT_SCAN_STALE_RUNNING_SECONDS)
     in_flight_jobs = (
         db.query(Job)
         .filter(
@@ -574,6 +576,21 @@ def ensure_attachment_scan_job(
     for job in in_flight_jobs:
         payload = job.payload or {}
         if payload.get("attachment_id") == attachment_id_str:
+            if job.status == JobStatus.RUNNING.value and job.run_at <= now - timedelta(
+                seconds=stale_after_seconds
+            ):
+                job.status = JobStatus.PENDING.value
+                job.last_error = (
+                    "Recovered stale attachment scan job after exceeding "
+                    f"{stale_after_seconds}s lease"
+                )
+                job.run_at = now
+                job.completed_at = None
+                if commit:
+                    db.commit()
+                else:
+                    db.flush()
+                return True
             return False
 
     job_service.enqueue_job(
@@ -581,7 +598,7 @@ def ensure_attachment_scan_job(
         org_id=org_id,
         job_type=JobType.ATTACHMENT_SCAN,
         payload={"attachment_id": attachment_id_str},
-        run_at=datetime.now(timezone.utc),
+        run_at=now,
         commit=commit,
     )
     return True

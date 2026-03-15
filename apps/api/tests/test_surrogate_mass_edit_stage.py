@@ -429,7 +429,9 @@ async def test_mass_edit_preview_total_matches_surrogates_list_for_same_created_
     in_range_1_row = db.query(Surrogate).filter(Surrogate.id == UUID(in_range_1["id"])).first()
     in_range_2_row = db.query(Surrogate).filter(Surrogate.id == UUID(in_range_2["id"])).first()
     out_of_range_row = db.query(Surrogate).filter(Surrogate.id == UUID(out_of_range["id"])).first()
-    assert in_range_1_row is not None and in_range_2_row is not None and out_of_range_row is not None
+    assert (
+        in_range_1_row is not None and in_range_2_row is not None and out_of_range_row is not None
+    )
 
     in_range_1_row.created_at = datetime(2025, 1, 10, 8, 0, tzinfo=timezone.utc)
     in_range_2_row.created_at = datetime(2025, 1, 10, 23, 59, tzinfo=timezone.utc)
@@ -454,9 +456,7 @@ async def test_mass_edit_preview_total_matches_surrogates_list_for_same_created_
 
 
 @pytest.mark.asyncio
-async def test_mass_edit_archive_preview_and_apply_archives_matching_surrogates(
-    authed_client, db
-):
+async def test_mass_edit_archive_preview_and_apply_archives_matching_surrogates(authed_client, db):
     s1 = await _create_surrogate(authed_client, state="CA")
     s2 = await _create_surrogate(authed_client, state="CA")
     s3 = await _create_surrogate(authed_client, state="TX")

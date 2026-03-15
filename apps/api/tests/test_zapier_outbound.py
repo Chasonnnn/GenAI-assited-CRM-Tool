@@ -17,7 +17,12 @@ async def test_zapier_outbound_settings_update(authed_client):
         "send_hashed_pii": True,
         "event_mapping": [
             {"stage_key": "new_unread", "event_name": "Lead", "enabled": True},
-            {"stage_key": "pre_qualified", "event_name": "Qualified", "bucket": "qualified", "enabled": True},
+            {
+                "stage_key": "pre_qualified",
+                "event_name": "Qualified",
+                "bucket": "qualified",
+                "enabled": True,
+            },
             {"stage_key": "matched", "event_name": "ConvertedLead", "enabled": False},
         ],
     }
@@ -30,9 +35,7 @@ async def test_zapier_outbound_settings_update(authed_client):
     assert data["outbound_secret_configured"] is True
     assert data["send_hashed_pii"] is True
     assert all(m["stage_key"] != "new_unread" for m in data["event_mapping"])
-    assert any(
-        m["stage_key"] == "pre_qualified" and m["enabled"] for m in data["event_mapping"]
-    )
+    assert any(m["stage_key"] == "pre_qualified" and m["enabled"] for m in data["event_mapping"])
     assert any(
         m["stage_key"] == "pre_qualified" and m.get("bucket") == "qualified"
         for m in data["event_mapping"]
@@ -160,7 +163,12 @@ def test_enqueue_stage_event_skips_meta_leads_older_than_90_days(db, test_org, t
     settings.outbound_webhook_url = "https://hooks.zapier.com/hooks/catch/123/abc"
     settings.outbound_enabled = True
     settings.outbound_event_mapping = [
-        {"stage_key": "pre_qualified", "event_name": "Qualified", "bucket": "qualified", "enabled": True}
+        {
+            "stage_key": "pre_qualified",
+            "event_name": "Qualified",
+            "bucket": "qualified",
+            "enabled": True,
+        }
     ]
     db.commit()
 
@@ -226,7 +234,12 @@ def test_enqueue_stage_event_includes_click_id_and_customer_fields(db, test_org,
     settings.outbound_enabled = True
     settings.outbound_send_hashed_pii = True
     settings.outbound_event_mapping = [
-        {"stage_key": "pre_qualified", "event_name": "Qualified", "bucket": "qualified", "enabled": True}
+        {
+            "stage_key": "pre_qualified",
+            "event_name": "Qualified",
+            "bucket": "qualified",
+            "enabled": True,
+        }
     ]
     db.commit()
 

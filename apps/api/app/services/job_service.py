@@ -125,11 +125,7 @@ def claim_pending_jobs(
     db.commit()
     db.expire_all()
 
-    claimed_jobs = (
-        db.query(Job)
-        .filter(Job.id.in_(claimed_ids))
-        .all()
-    )
+    claimed_jobs = db.query(Job).filter(Job.id.in_(claimed_ids)).all()
     claimed_by_id = {job.id: job for job in claimed_jobs}
     return [claimed_by_id[job_id] for job_id in claimed_ids if job_id in claimed_by_id]
 

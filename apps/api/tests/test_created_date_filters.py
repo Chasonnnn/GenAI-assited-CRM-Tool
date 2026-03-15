@@ -79,8 +79,12 @@ async def test_intended_parent_created_before_date_uses_created_at_day_boundary(
     assert next_day_res.status_code == 201, next_day_res.text
     next_day_id = next_day_res.json()["id"]
 
-    same_day_row = db.query(IntendedParent).filter(IntendedParent.id == uuid.UUID(same_day_id)).first()
-    next_day_row = db.query(IntendedParent).filter(IntendedParent.id == uuid.UUID(next_day_id)).first()
+    same_day_row = (
+        db.query(IntendedParent).filter(IntendedParent.id == uuid.UUID(same_day_id)).first()
+    )
+    next_day_row = (
+        db.query(IntendedParent).filter(IntendedParent.id == uuid.UUID(next_day_id)).first()
+    )
     assert same_day_row is not None and next_day_row is not None
 
     same_day_row.created_at = datetime(2025, 1, 10, 13, 20, tzinfo=timezone.utc)
@@ -133,7 +137,9 @@ async def test_intended_parent_created_dates_endpoint_returns_distinct_context_d
 
     alpha_row = db.query(IntendedParent).filter(IntendedParent.id == uuid.UUID(alpha_id)).first()
     beta_row = db.query(IntendedParent).filter(IntendedParent.id == uuid.UUID(beta_id)).first()
-    beta_two_row = db.query(IntendedParent).filter(IntendedParent.id == uuid.UUID(beta_two_id)).first()
+    beta_two_row = (
+        db.query(IntendedParent).filter(IntendedParent.id == uuid.UUID(beta_two_id)).first()
+    )
     assert alpha_row is not None and beta_row is not None and beta_two_row is not None
 
     alpha_row.created_at = datetime(2026, 2, 16, 10, 0, tzinfo=timezone.utc)
@@ -145,6 +151,8 @@ async def test_intended_parent_created_dates_endpoint_returns_distinct_context_d
     assert all_dates_res.status_code == 200, all_dates_res.text
     assert all_dates_res.json() == ["2026-02-16", "2026-02-18"]
 
-    q_filtered_res = await authed_client.get("/intended-parents/created-dates", params={"q": "alpha"})
+    q_filtered_res = await authed_client.get(
+        "/intended-parents/created-dates", params={"q": "alpha"}
+    )
     assert q_filtered_res.status_code == 200, q_filtered_res.text
     assert q_filtered_res.json() == ["2026-02-16"]

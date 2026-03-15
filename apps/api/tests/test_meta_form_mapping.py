@@ -692,7 +692,9 @@ def test_meta_lead_conversion_failure_records_system_alert(monkeypatch, db, test
         def close(self):
             return None
 
-    monkeypatch.setattr("app.services.meta_lead_service.SessionLocal", lambda: _FakeFailureSession())
+    monkeypatch.setattr(
+        "app.services.meta_lead_service.SessionLocal", lambda: _FakeFailureSession()
+    )
 
     mappings = [
         {

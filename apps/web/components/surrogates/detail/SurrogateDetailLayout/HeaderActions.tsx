@@ -21,7 +21,6 @@ import {
     HeartHandshakeIcon,
     PhoneIcon,
     VideoIcon,
-    DownloadIcon,
     CalendarIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -238,13 +237,8 @@ export function HeaderActions() {
                     <DropdownMenuItem onClick={() => openDialog({ type: "edit_surrogate" })}>
                         Edit
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleExport} disabled={isExporting} className="gap-2">
-                        {isExporting ? (
-                            <Loader2Icon className="size-4 animate-spin" />
-                        ) : (
-                            <DownloadIcon className="size-4" />
-                        )}
-                        Export
+                    <DropdownMenuItem onClick={handleExport} disabled={isExporting}>
+                        {isExporting ? "Exporting..." : "Export"}
                     </DropdownMenuItem>
                     {canManageQueue && isOwnedByUser && queues.length > 0 && (
                         <DropdownMenuItem

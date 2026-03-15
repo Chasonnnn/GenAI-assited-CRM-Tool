@@ -5,7 +5,7 @@ resource "google_billing_budget" "monthly" {
   display_name    = "CRM monthly budget"
 
   budget_filter {
-    projects = ["projects/${var.project_id}"]
+    projects = ["projects/${data.google_project.current.number}"]
   }
 
   amount {
@@ -24,7 +24,7 @@ resource "google_billing_budget" "monthly" {
   }
 
   all_updates_rule {
-    monitoring_notification_channels = local.alert_notification_channels
-    disable_default_iam_recipients   = true
+    monitoring_notification_channels = var.billing_budget_notification_channel_ids
+    disable_default_iam_recipients   = length(var.billing_budget_notification_channel_ids) > 0
   }
 }

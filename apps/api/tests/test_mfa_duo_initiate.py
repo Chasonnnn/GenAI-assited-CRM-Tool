@@ -13,7 +13,9 @@ def rate_limiter_reset():
 
 
 @pytest.mark.asyncio
-async def test_duo_initiate_prefers_ops_return_to(authed_client, db, test_org, test_user, monkeypatch):
+async def test_duo_initiate_prefers_ops_return_to(
+    authed_client, db, test_org, test_user, monkeypatch
+):
     from app.core.config import settings
     from app.services import duo_service
 

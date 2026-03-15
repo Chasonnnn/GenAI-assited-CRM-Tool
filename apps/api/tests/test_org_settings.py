@@ -20,7 +20,7 @@ async def test_booking_link_uses_slug_based_domain(
     response = await authed_client.get("/appointments/booking-link")
     assert response.status_code == 200
     data = response.json()
-    assert data["full_url"].startswith("https://ewi.surrogacyforce.com/book/")
+    assert data["full_url"] == "https://ewi.surrogacyforce.com/book/test-user"
 
 
 @pytest.mark.asyncio

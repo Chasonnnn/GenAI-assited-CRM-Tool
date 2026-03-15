@@ -127,8 +127,7 @@ const buildJotformTemplate = (): FormTemplate => {
                     required: true,
                     mapping: "date_of_birth",
                 }),
-                field("height_ft", "Height", "number", {
-                    helpText: "Feet (e.g., 5.5).",
+                field("height_ft", "Height", "height", {
                     mapping: "height_ft",
                 }),
                 field("weight_lb", "Weight", "number", {

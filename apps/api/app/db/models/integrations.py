@@ -220,7 +220,9 @@ class ZapierOutboundEvent(Base):
         TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
     delivered_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
-    last_attempt_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
 
     organization: Mapped["Organization"] = relationship()
 
@@ -319,7 +321,9 @@ class MetaCrmDatasetEvent(Base):
         TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
     delivered_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
-    last_attempt_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
 
     organization: Mapped["Organization"] = relationship()
 

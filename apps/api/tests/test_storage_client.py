@@ -13,7 +13,9 @@ def test_get_s3_client_uses_auto_region_for_gcs_endpoint(monkeypatch):
         return object()
 
     monkeypatch.setattr(storage_client.boto3, "client", _fake_boto3_client)
-    monkeypatch.setattr(settings, "S3_ENDPOINT_URL", "https://storage.googleapis.com", raising=False)
+    monkeypatch.setattr(
+        settings, "S3_ENDPOINT_URL", "https://storage.googleapis.com", raising=False
+    )
     monkeypatch.setattr(settings, "S3_REGION", "us-east-1", raising=False)
     monkeypatch.setattr(settings, "S3_URL_STYLE", "path", raising=False)
 
@@ -37,7 +39,9 @@ def test_get_s3_client_honors_virtual_style(monkeypatch):
         return object()
 
     monkeypatch.setattr(storage_client.boto3, "client", _fake_boto3_client)
-    monkeypatch.setattr(settings, "S3_ENDPOINT_URL", "https://s3.us-east-1.amazonaws.com", raising=False)
+    monkeypatch.setattr(
+        settings, "S3_ENDPOINT_URL", "https://s3.us-east-1.amazonaws.com", raising=False
+    )
     monkeypatch.setattr(settings, "S3_REGION", "us-east-1", raising=False)
     monkeypatch.setattr(settings, "S3_URL_STYLE", "virtual", raising=False)
 
@@ -60,7 +64,9 @@ def test_get_s3_client_honors_signature_version_override(monkeypatch):
         return object()
 
     monkeypatch.setattr(storage_client.boto3, "client", _fake_boto3_client)
-    monkeypatch.setattr(settings, "S3_ENDPOINT_URL", "https://storage.googleapis.com", raising=False)
+    monkeypatch.setattr(
+        settings, "S3_ENDPOINT_URL", "https://storage.googleapis.com", raising=False
+    )
     monkeypatch.setattr(settings, "S3_REGION", "auto", raising=False)
     monkeypatch.setattr(settings, "S3_URL_STYLE", "path", raising=False)
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import IntendedParentsPage from '../app/(app)/intended-parents/page'
 
 vi.mock('next/link', () => ({
@@ -10,6 +10,7 @@ vi.mock('next/link', () => ({
 
 const mockSearchParams = new URLSearchParams()
 const mockRouterReplace = vi.fn()
+const mockCreateIntendedParent = vi.fn()
 
 // Mock Next.js navigation
 vi.mock('next/navigation', () => ({
@@ -36,7 +37,7 @@ vi.mock('@/lib/hooks/use-intended-parents', () => ({
     useIntendedParentStats: () => ({
         data: { total: 1, by_status: { new: 1, ready_to_match: 0, matched: 0, delivered: 0 } },
     }),
-    useCreateIntendedParent: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useCreateIntendedParent: () => ({ mutateAsync: mockCreateIntendedParent, isPending: false }),
 }))
 
 describe('IntendedParentsPage', () => {
@@ -44,6 +45,8 @@ describe('IntendedParentsPage', () => {
         mockSearchParams.delete('page')
         mockSearchParams.delete('status')
         mockSearchParams.delete('q')
+        mockCreateIntendedParent.mockReset()
+        mockCreateIntendedParent.mockResolvedValue({})
         mockUseIntendedParentCreatedDates.mockReturnValue({ data: [] })
         mockUseIntendedParents.mockReturnValue({
             data: {
@@ -97,5 +100,55 @@ describe('IntendedParentsPage', () => {
                 page: 4,
             })
         )
+    })
+
+    it('creates an intended parent without requiring address or IVF clinic details', async () => {
+        render(<IntendedParentsPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: /new intended parent/i }))
+
+        expect(screen.queryByText(/budget/i)).not.toBeInTheDocument()
+        expect(screen.getByLabelText(/partner email/i)).toBeInTheDocument()
+        expect(screen.getByLabelText(/partner pronouns/i)).toBeInTheDocument()
+        expect(screen.queryByLabelText(/address line 1/i)).not.toBeInTheDocument()
+        expect(screen.queryByLabelText(/address line 2/i)).not.toBeInTheDocument()
+        expect(screen.queryByLabelText(/^city$/i)).not.toBeInTheDocument()
+        expect(screen.queryByLabelText(/zip/i)).not.toBeInTheDocument()
+        expect(screen.queryByLabelText(/ivf clinic name/i)).not.toBeInTheDocument()
+        expect(screen.queryByLabelText(/ivf clinic email/i)).not.toBeInTheDocument()
+
+        fireEvent.change(screen.getByLabelText(/full name/i), {
+            target: { value: 'Jordan and Casey Smith' },
+        })
+        fireEvent.change(screen.getByLabelText(/^email \*/i), {
+            target: { value: 'jordan@example.com' },
+        })
+        fireEvent.change(screen.getByLabelText(/partner name/i), {
+            target: { value: 'Casey Smith' },
+        })
+        fireEvent.change(screen.getByLabelText(/partner email/i), {
+            target: { value: 'casey@example.com' },
+        })
+
+        fireEvent.click(screen.getByRole('button', { name: /^create$/i }))
+
+        await waitFor(() => {
+            expect(mockCreateIntendedParent).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    full_name: 'Jordan and Casey Smith',
+                    email: 'jordan@example.com',
+                    partner_name: 'Casey Smith',
+                    partner_email: 'casey@example.com',
+                }),
+            )
+        })
+
+        const payload = mockCreateIntendedParent.mock.calls[0]?.[0]
+        expect(payload).not.toHaveProperty('address_line1')
+        expect(payload).not.toHaveProperty('address_line2')
+        expect(payload).not.toHaveProperty('city')
+        expect(payload).not.toHaveProperty('postal')
+        expect(payload).not.toHaveProperty('ip_clinic_name')
+        expect(payload).not.toHaveProperty('ip_clinic_email')
     })
 })

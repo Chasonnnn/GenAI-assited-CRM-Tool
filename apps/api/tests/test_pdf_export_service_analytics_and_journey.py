@@ -125,7 +125,12 @@ async def test_export_analytics_pdf_async_uses_renderer(db, test_org, monkeypatc
             "surrogates_by_status": [{"status": "approved", "count": 3}],
             "surrogates_by_assignee": [{"user_email": "agent@example.com", "count": 3}],
             "trend_data": [{"date": "2026-01-01", "count": 1}, {"date": "2026-01-02", "count": 2}],
-            "meta_performance": {"leads_received": 0, "leads_pre_qualified": 0, "leads_converted": 0, "conversion_rate": 0},
+            "meta_performance": {
+                "leads_received": 0,
+                "leads_pre_qualified": 0,
+                "leads_converted": 0,
+                "conversion_rate": 0,
+            },
             "org_name": "Test Org",
             "funnel_data": [],
             "state_data": [],
@@ -163,7 +168,9 @@ def test_export_journey_pdf_and_generate_journey_html(db, test_org, monkeypatch)
 
     captured: dict[str, str] = {}
 
-    async def _fake_render_url_to_pdf(url: str, wait_selector: str = "[data-journey-print='ready']"):
+    async def _fake_render_url_to_pdf(
+        url: str, wait_selector: str = "[data-journey-print='ready']"
+    ):
         captured["url"] = url
         captured["selector"] = wait_selector
         return b"%PDF-1.7 journey"

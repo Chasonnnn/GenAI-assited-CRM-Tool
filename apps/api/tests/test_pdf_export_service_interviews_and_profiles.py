@@ -77,7 +77,14 @@ def _create_submission(db, *, org_id, form_id) -> FormSubmission:
 
 def test_submission_render_helpers(monkeypatch):
     class _FakeFile:
-        def __init__(self, filename: str, content_type: str, file_size: int, storage_key: str, quarantined: bool):
+        def __init__(
+            self,
+            filename: str,
+            content_type: str,
+            file_size: int,
+            storage_key: str,
+            quarantined: bool,
+        ):
             self.filename = filename
             self.content_type = content_type
             self.file_size = file_size
@@ -133,7 +140,9 @@ def test_submission_render_helpers(monkeypatch):
 
 
 def test_interview_export_html_helpers(monkeypatch):
-    monkeypatch.setattr(pdf_export_service.tiptap_service, "tiptap_to_text", lambda _json: "Transcript text")
+    monkeypatch.setattr(
+        pdf_export_service.tiptap_service, "tiptap_to_text", lambda _json: "Transcript text"
+    )
 
     export_html = pdf_export_service._generate_interview_export_html(
         title="Interview Export",
@@ -173,7 +182,9 @@ def test_export_submission_pdf_and_export_interviews_pdf(db, test_org, test_user
     form = _create_form(db, org_id=test_org.id, user_id=test_user.id)
     submission = _create_submission(db, org_id=test_org.id, form_id=form.id)
 
-    monkeypatch.setattr(form_submission_service, "list_submission_files", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        form_submission_service, "list_submission_files", lambda *_args, **_kwargs: []
+    )
 
     async def _fake_render_html_to_pdf(_html: str) -> bytes:
         return b"%PDF-1.7 export"
@@ -189,7 +200,9 @@ def test_export_submission_pdf_and_export_interviews_pdf(db, test_org, test_user
     )
     assert submission_pdf.startswith(b"%PDF")
 
-    interview = SimpleNamespace(id=uuid4(), conducted_at=datetime.now(timezone.utc), created_at=datetime.now(timezone.utc))
+    interview = SimpleNamespace(
+        id=uuid4(), conducted_at=datetime.now(timezone.utc), created_at=datetime.now(timezone.utc)
+    )
     monkeypatch.setattr(
         interview_service,
         "build_interview_exports",

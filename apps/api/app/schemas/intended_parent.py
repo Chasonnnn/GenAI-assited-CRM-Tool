@@ -26,6 +26,31 @@ class IntendedParentCreate(BaseModel):
     owner_type: str | None = None  # "user" or "queue"
     owner_id: UUID | None = None
 
+    # Partner
+    partner_name: str | None = Field(None, max_length=255)
+    partner_email: EmailStr | None = None
+
+    # Pronouns
+    pronouns: str | None = Field(None, max_length=50)
+    partner_pronouns: str | None = Field(None, max_length=50)
+
+    # Address
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = Field(None, max_length=100)
+    postal: str | None = Field(None, max_length=20)
+
+    # IVF Clinic
+    ip_clinic_name: str | None = Field(None, max_length=255)
+    ip_clinic_address_line1: str | None = None
+    ip_clinic_address_line2: str | None = None
+    ip_clinic_city: str | None = Field(None, max_length=100)
+    ip_clinic_state: str | None = None
+    ip_clinic_postal: str | None = Field(None, max_length=20)
+    ip_clinic_phone: str | None = None
+    ip_clinic_fax: str | None = None
+    ip_clinic_email: EmailStr | None = None
+
     @field_validator("phone", mode="before")
     @classmethod
     def normalize_phone_field(cls, v: str | None) -> str | None:
@@ -35,6 +60,20 @@ class IntendedParentCreate(BaseModel):
     @classmethod
     def normalize_state_field(cls, v: str | None) -> str | None:
         return normalize_state(v)  # Raises ValueError on invalid
+
+    @field_validator("ip_clinic_state", mode="before")
+    @classmethod
+    def normalize_ip_clinic_state(cls, v: str | None) -> str | None:
+        if v is None or (isinstance(v, str) and v.strip() == ""):
+            return None
+        return normalize_state(v)
+
+    @field_validator("ip_clinic_phone", "ip_clinic_fax", mode="before")
+    @classmethod
+    def normalize_ip_clinic_phone(cls, v: str | None) -> str | None:
+        if v is None or (isinstance(v, str) and v.strip() == ""):
+            return None
+        return normalize_phone(v)
 
 
 class IntendedParentUpdate(BaseModel):
@@ -49,6 +88,31 @@ class IntendedParentUpdate(BaseModel):
     owner_type: str | None = None
     owner_id: UUID | None = None
 
+    # Partner
+    partner_name: str | None = Field(None, max_length=255)
+    partner_email: EmailStr | None = None
+
+    # Pronouns
+    pronouns: str | None = Field(None, max_length=50)
+    partner_pronouns: str | None = Field(None, max_length=50)
+
+    # Address
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = Field(None, max_length=100)
+    postal: str | None = Field(None, max_length=20)
+
+    # IVF Clinic
+    ip_clinic_name: str | None = Field(None, max_length=255)
+    ip_clinic_address_line1: str | None = None
+    ip_clinic_address_line2: str | None = None
+    ip_clinic_city: str | None = Field(None, max_length=100)
+    ip_clinic_state: str | None = None
+    ip_clinic_postal: str | None = Field(None, max_length=20)
+    ip_clinic_phone: str | None = None
+    ip_clinic_fax: str | None = None
+    ip_clinic_email: EmailStr | None = None
+
     @field_validator("phone", mode="before")
     @classmethod
     def normalize_phone_field(cls, v: str | None) -> str | None:
@@ -58,6 +122,20 @@ class IntendedParentUpdate(BaseModel):
     @classmethod
     def normalize_state_field(cls, v: str | None) -> str | None:
         return normalize_state(v)
+
+    @field_validator("ip_clinic_state", mode="before")
+    @classmethod
+    def normalize_ip_clinic_state(cls, v: str | None) -> str | None:
+        if v is None or (isinstance(v, str) and v.strip() == ""):
+            return None
+        return normalize_state(v)
+
+    @field_validator("ip_clinic_phone", "ip_clinic_fax", mode="before")
+    @classmethod
+    def normalize_ip_clinic_phone(cls, v: str | None) -> str | None:
+        if v is None or (isinstance(v, str) and v.strip() == ""):
+            return None
+        return normalize_phone(v)
 
 
 class IntendedParentStatusUpdate(BaseModel):
@@ -93,6 +171,32 @@ class IntendedParentRead(BaseModel):
     owner_type: str | None
     owner_id: UUID | None
     owner_name: str | None = None  # Resolved from user/queue
+
+    # Partner
+    partner_name: str | None = None
+    partner_email: str | None = None
+
+    # Pronouns
+    pronouns: str | None = None
+    partner_pronouns: str | None = None
+
+    # Address
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    postal: str | None = None
+
+    # IVF Clinic
+    ip_clinic_name: str | None = None
+    ip_clinic_address_line1: str | None = None
+    ip_clinic_address_line2: str | None = None
+    ip_clinic_city: str | None = None
+    ip_clinic_state: str | None = None
+    ip_clinic_postal: str | None = None
+    ip_clinic_phone: str | None = None
+    ip_clinic_fax: str | None = None
+    ip_clinic_email: str | None = None
+
     is_archived: bool
     archived_at: datetime | None
     last_activity: datetime
@@ -116,6 +220,7 @@ class IntendedParentListItem(BaseModel):
     owner_type: str | None
     owner_id: UUID | None
     owner_name: str | None = None
+    partner_name: str | None = None
     is_archived: bool
     last_activity: datetime
     created_at: datetime

@@ -51,9 +51,7 @@ def get_settings(db: Session, organization_id: uuid.UUID) -> MetaCrmDatasetSetti
     )
 
 
-def get_settings_by_id(
-    db: Session, settings_id: uuid.UUID | str
-) -> MetaCrmDatasetSettings | None:
+def get_settings_by_id(db: Session, settings_id: uuid.UUID | str) -> MetaCrmDatasetSettings | None:
     try:
         parsed = settings_id if isinstance(settings_id, uuid.UUID) else uuid.UUID(str(settings_id))
     except (TypeError, ValueError):
@@ -102,9 +100,7 @@ def update_settings(
         settings_row.dataset_id = stripped or None
     if access_token is not None:
         stripped = access_token.strip()
-        settings_row.access_token_encrypted = (
-            encrypt_access_token(stripped) if stripped else None
-        )
+        settings_row.access_token_encrypted = encrypt_access_token(stripped) if stripped else None
     if enabled is not None:
         settings_row.enabled = enabled
     if crm_name is not None:

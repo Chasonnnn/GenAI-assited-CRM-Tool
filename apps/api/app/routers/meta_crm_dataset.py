@@ -258,7 +258,9 @@ def _serialize_settings(settings) -> MetaCrmDatasetSettingsResponse:
         enabled=bool(settings.enabled),
         crm_name=settings.crm_name or meta_crm_dataset_settings_service.default_crm_name(),
         send_hashed_pii=bool(settings.send_hashed_pii),
-        event_mapping=meta_crm_dataset_settings_service.normalize_event_mapping(settings.event_mapping),
+        event_mapping=meta_crm_dataset_settings_service.normalize_event_mapping(
+            settings.event_mapping
+        ),
         test_event_code=settings.test_event_code,
     )
 

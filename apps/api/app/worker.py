@@ -37,7 +37,7 @@ from app.jobs.handlers.meta import (  # noqa: F401
     process_meta_spend_sync,
 )
 from app.jobs.registry import resolve_job_handler
-from app.services import email_service, job_service
+from app.services import email_service, job_service, scan_dispatch_service
 
 monitoring = setup_gcp_monitoring(f"{settings.GCP_SERVICE_NAME}-worker")
 
@@ -109,6 +109,40 @@ def parse_worker_job_types(raw: str | None) -> list[str] | None:
 WORKER_JOB_TYPES = parse_worker_job_types(os.getenv("WORKER_JOB_TYPES"))
 
 
+def _log_global_email_sender_status() -> None:
+    """Warn only about the legacy global Resend fallback path."""
+    if RESEND_API_KEY:
+        return
+    logger.warning(
+        "Global RESEND_API_KEY not set; legacy non-campaign SEND_EMAIL jobs will be "
+        "logged but not sent. Org workflow Resend and platform/system email use "
+        "separate configuration."
+    )
+
+
+def _log_job_failure(job, exception: Exception) -> None:
+    """Log retries at warning level and dead-letter failures at error level."""
+    is_final_failure = job.status == JobStatus.FAILED.value
+    exception_name = type(exception).__name__
+    if is_final_failure:
+        logger.error(
+            "Job %s failed permanently (type=%s, job_status=%s, final=true): %s",
+            job.id,
+            job.job_type,
+            job.status,
+            exception_name,
+        )
+        return
+
+    logger.warning(
+        "Job %s failed and will retry (type=%s, job_status=%s, final=false): %s",
+        job.id,
+        job.job_type,
+        job.status,
+        exception_name,
+    )
+
+
 def maybe_schedule_google_calendar_sync_jobs(
     db,
     *,
@@ -174,6 +208,9 @@ def maybe_schedule_gmail_sync_jobs(
 
 
 def _ensure_attachment_scanner_available() -> None:
+    if scan_dispatch_service.remote_scan_dispatch_configured():
+        logger.info("Attachment scanning delegated to dedicated Cloud Run job")
+        return
     if settings.ATTACHMENT_SCAN_ENABLED and not settings.is_dev:
         from app.jobs.scan_attachment import get_available_scanner
 
@@ -187,6 +224,8 @@ def _ensure_attachment_scanner_available() -> None:
 
 
 def _sync_clamav_signatures() -> None:
+    if scan_dispatch_service.remote_scan_dispatch_configured():
+        return
     if settings.ATTACHMENT_SCAN_ENABLED and not settings.is_dev:
         from app.services import clamav_signature_service
 
@@ -196,11 +235,12 @@ def _sync_clamav_signatures() -> None:
             logger.warning("ClamAV signature sync failed: %s", exc)
 
 
-async def process_job(db, job) -> None:
+async def process_job(db, job) -> bool:
     """Process a single job based on its type."""
     logger.info("Processing job %s (type=%s, attempt=%s)", job.id, job.job_type, job.attempts)
     handler = resolve_job_handler(job.job_type)
-    await handler(db, job)
+    result = await handler(db, job)
+    return result is not False
 
 
 def _resolve_integration_keys(db, job, integration_type) -> list[str]:
@@ -505,9 +545,7 @@ async def worker_loop() -> None:
         BATCH_SIZE,
         job_types_display,
     )
-
-    if not RESEND_API_KEY:
-        logger.warning("RESEND_API_KEY not set - emails will be logged but not sent")
+    _log_global_email_sender_status()
 
     last_session_cleanup = datetime.min.replace(tzinfo=timezone.utc)
     last_google_sync_schedule: datetime | None = None
@@ -559,9 +597,13 @@ async def worker_loop() -> None:
 
                 for job in jobs:
                     try:
-                        await process_job(db, job)
-                        job_service.mark_job_completed(db, job)
-                        logger.info("Job %s completed successfully", job.id)
+                        should_mark_completed = await process_job(db, job)
+                        if should_mark_completed:
+                            job_service.mark_job_completed(db, job)
+                            logger.info("Job %s completed successfully", job.id)
+                        else:
+                            logger.info("Job %s delegated for out-of-process completion", job.id)
+                            continue
 
                         # Record success for integration health (Meta jobs)
                         _record_job_success(db, job)
@@ -569,12 +611,7 @@ async def worker_loop() -> None:
                     except Exception as e:
                         error_msg = str(e)
                         job_service.mark_job_failed(db, job, error_msg)
-                        logger.error(
-                            "Job %s failed (type=%s): %s",
-                            job.id,
-                            job.job_type,
-                            type(e).__name__,
-                        )
+                        _log_job_failure(job, e)
 
                         # Apply rate limit backoff for Meta throttling errors
                         if job.status == JobStatus.PENDING.value and _is_meta_rate_limit_error(

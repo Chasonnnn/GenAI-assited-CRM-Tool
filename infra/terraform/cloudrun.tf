@@ -39,6 +39,11 @@ resource "google_cloud_run_v2_service" "api" {
         container_port = 8000
       }
 
+      volume_mounts {
+        name       = "cloudsql"
+        mount_path = "/cloudsql"
+      }
+
       startup_probe {
         # Cloud Run startup probes are strict by default (short timeouts / low
         # retries). Give the container a few minutes to finish cold start and
@@ -80,6 +85,13 @@ resource "google_cloud_run_v2_service" "api" {
             }
           }
         }
+      }
+    }
+
+    volumes {
+      name = "cloudsql"
+      cloud_sql_instance {
+        instances = [google_sql_database_instance.crm.connection_name]
       }
     }
   }
@@ -221,6 +233,11 @@ resource "google_cloud_run_v2_service" "worker" {
         container_port = 8080
       }
 
+      volume_mounts {
+        name       = "cloudsql"
+        mount_path = "/cloudsql"
+      }
+
       dynamic "env" {
         for_each = local.common_env
         content {
@@ -240,6 +257,13 @@ resource "google_cloud_run_v2_service" "worker" {
             }
           }
         }
+      }
+    }
+
+    volumes {
+      name = "cloudsql"
+      cloud_sql_instance {
+        instances = [google_sql_database_instance.crm.connection_name]
       }
     }
   }

@@ -361,6 +361,9 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     ATTACHMENT_SCAN_ENABLED: bool = False
+    ATTACHMENT_SCAN_CLOUD_RUN_JOB_NAME: str = ""
+    ATTACHMENT_SCAN_CLOUD_RUN_REGION: str = ""
+    ATTACHMENT_SCAN_STALE_RUNNING_SECONDS: int = 900
     CLAMAV_SIGNATURES_BUCKET: str = ""
     CLAMAV_SIGNATURES_PREFIX: str = "clamav"
     CLAMAV_SIGNATURES_DIR: str = "/var/lib/clamav"

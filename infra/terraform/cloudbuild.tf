@@ -17,12 +17,13 @@ resource "google_cloudbuild_trigger" "api" {
   }
 
   substitutions = {
-    _REGION            = var.region
-    _API_SERVICE       = var.api_service_name
-    _WORKER_SERVICE    = var.worker_job_name
-    _IMAGE_API         = local.api_image
-    _IMAGE_WORKER      = local.worker_image
-    _CLAMAV_UPDATE_JOB = var.clamav_update_job_name
+    _REGION              = var.region
+    _API_SERVICE         = var.api_service_name
+    _WORKER_SERVICE      = var.worker_job_name
+    _IMAGE_API           = local.api_image
+    _IMAGE_WORKER        = local.worker_image
+    _CLAMAV_UPDATE_JOB   = var.clamav_update_job_name
+    _ATTACHMENT_SCAN_JOB = var.attachment_scan_job_name
   }
 
 }

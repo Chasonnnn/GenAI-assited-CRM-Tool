@@ -6,7 +6,7 @@ import pytest
 from fastapi import UploadFile
 from app.core.config import settings
 from app.core.encryption import hash_email
-from app.db.enums import JobType
+from app.db.enums import JobStatus, JobType
 from app.db.models import Attachment, Form, FormSubmission, Job, Surrogate
 from app.jobs import scan_attachment
 from app.services import attachment_service, form_submission_service
@@ -43,6 +43,57 @@ def test_ensure_attachment_scan_job_deduplicates_inflight_jobs(db, test_org):
     assert created_again is False
     assert len(jobs) == 1
     assert jobs[0].payload.get("attachment_id") == str(attachment_id)
+
+
+def test_ensure_attachment_scan_job_reclaims_stale_running_job(db, test_org, monkeypatch):
+    attachment_id = uuid.uuid4()
+    stale_job = Job(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        job_type=JobType.ATTACHMENT_SCAN.value,
+        status=JobStatus.RUNNING.value,
+        payload={"attachment_id": str(attachment_id)},
+        run_at=datetime.now(timezone.utc),
+        attempts=1,
+        max_attempts=3,
+    )
+    db.add(stale_job)
+    db.flush()
+
+    db.query(Job).filter(Job.id == stale_job.id).update(
+        {"run_at": datetime.now(timezone.utc).replace(microsecond=0)}
+    )
+    db.flush()
+
+    monkeypatch.setattr(
+        settings,
+        "ATTACHMENT_SCAN_STALE_RUNNING_SECONDS",
+        0,
+        raising=False,
+    )
+
+    created = attachment_service.ensure_attachment_scan_job(
+        db=db,
+        org_id=test_org.id,
+        attachment_id=attachment_id,
+        commit=False,
+    )
+
+    db.refresh(stale_job)
+    jobs = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.ATTACHMENT_SCAN.value,
+        )
+        .all()
+    )
+
+    assert created is True
+    assert len(jobs) == 1
+    assert stale_job.status == JobStatus.PENDING.value
+    assert stale_job.payload.get("attachment_id") == str(attachment_id)
+    assert stale_job.last_error is not None
 
 
 def test_upload_attachment_enqueues_scan_job(db, test_org, test_user, default_stage, monkeypatch):
@@ -242,6 +293,52 @@ def test_form_submission_file_enqueues_scan_job(
     )
     assert job is not None
     assert job.payload.get("submission_file_id") == str(file_record.id)
+
+
+def test_ensure_form_submission_file_scan_job_reclaims_stale_running_job(db, test_org, monkeypatch):
+    submission_file_id = uuid.uuid4()
+    stale_job = Job(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        job_type=JobType.FORM_SUBMISSION_FILE_SCAN.value,
+        status=JobStatus.RUNNING.value,
+        payload={"submission_file_id": str(submission_file_id)},
+        run_at=datetime.now(timezone.utc),
+        attempts=1,
+        max_attempts=3,
+    )
+    db.add(stale_job)
+    db.flush()
+
+    db.query(Job).filter(Job.id == stale_job.id).update(
+        {"run_at": datetime.now(timezone.utc).replace(microsecond=0)}
+    )
+    db.flush()
+
+    monkeypatch.setattr(settings, "ATTACHMENT_SCAN_STALE_RUNNING_SECONDS", 0)
+
+    created = form_submission_service.ensure_submission_file_scan_job(
+        db=db,
+        org_id=test_org.id,
+        submission_file_id=submission_file_id,
+        commit=False,
+    )
+
+    db.refresh(stale_job)
+    jobs = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.FORM_SUBMISSION_FILE_SCAN.value,
+        )
+        .all()
+    )
+
+    assert created is True
+    assert len(jobs) == 1
+    assert stale_job.status == JobStatus.PENDING.value
+    assert stale_job.payload.get("submission_file_id") == str(submission_file_id)
+    assert stale_job.last_error is not None
 
 
 @pytest.mark.asyncio

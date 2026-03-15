@@ -4,6 +4,7 @@ from typing import Annotated
 
 import json
 import os
+from urllib.parse import urlparse
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -52,6 +53,45 @@ def _schema_or_none(schema_json: dict | None) -> FormSchema | None:
         return FormSchema.model_validate(schema_json)
     except Exception:
         return None
+
+
+def _get_public_org_from_request(request: Request, db: Session):
+    host = (request.headers.get("host") or "").split(":")[0].lower()
+    org = org_service.get_org_by_host(db, host)
+    if org:
+        return org
+
+    origin = request.headers.get("origin") or request.headers.get("referer") or ""
+    if not origin:
+        return None
+
+    try:
+        origin_host = (urlparse(origin).hostname or "").lower()
+    except Exception:
+        return None
+
+    if not origin_host:
+        return None
+
+    return org_service.get_org_by_host(db, origin_host)
+
+
+def _get_active_intake_link_or_404(
+    *,
+    db: Session,
+    request: Request,
+    slug: str,
+    detail: str,
+) -> object:
+    org = _get_public_org_from_request(request, db)
+    intake_link = form_intake_service.get_active_intake_link_by_slug(
+        db,
+        slug,
+        org_id=org.id if org else None,
+    )
+    if not intake_link:
+        raise HTTPException(status_code=404, detail=detail)
+    return intake_link
 
 
 @router.get("/{org_id}/logos/{logo_id}")
@@ -155,9 +195,12 @@ def get_shared_public_form(
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Form not found")
 
-    intake_link = form_intake_service.get_active_intake_link_by_slug(db, slug)
-    if not intake_link:
-        raise HTTPException(status_code=404, detail="Form not found")
+    intake_link = _get_active_intake_link_or_404(
+        db=db,
+        request=request,
+        slug=slug,
+        detail="Form not found",
+    )
 
     form = form_service.get_form(db, intake_link.organization_id, intake_link.form_id)
     if not form or form.status != FormStatus.PUBLISHED.value:
@@ -194,9 +237,12 @@ def get_shared_public_form_draft(
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Draft not found")
 
-    intake_link = form_intake_service.get_active_intake_link_by_slug(db, slug)
-    if not intake_link:
-        raise HTTPException(status_code=404, detail="Draft not found")
+    intake_link = _get_active_intake_link_or_404(
+        db=db,
+        request=request,
+        slug=slug,
+        detail="Draft not found",
+    )
     draft = form_intake_service.get_shared_draft(
         db=db,
         link=intake_link,
@@ -222,9 +268,12 @@ def lookup_shared_public_form_draft(
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Form not found")
 
-    intake_link = form_intake_service.get_active_intake_link_by_slug(db, slug)
-    if not intake_link:
-        raise HTTPException(status_code=404, detail="Form not found")
+    intake_link = _get_active_intake_link_or_404(
+        db=db,
+        request=request,
+        slug=slug,
+        detail="Form not found",
+    )
     form = form_service.get_form(db, intake_link.organization_id, intake_link.form_id)
     if not form or form.status != FormStatus.PUBLISHED.value:
         raise HTTPException(status_code=404, detail="Form not found")
@@ -256,9 +305,12 @@ def upsert_shared_public_form_draft(
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Form not found")
 
-    intake_link = form_intake_service.get_active_intake_link_by_slug(db, slug)
-    if not intake_link:
-        raise HTTPException(status_code=404, detail="Form not found")
+    intake_link = _get_active_intake_link_or_404(
+        db=db,
+        request=request,
+        slug=slug,
+        detail="Form not found",
+    )
     form = form_service.get_form(db, intake_link.organization_id, intake_link.form_id)
     if not form or form.status != FormStatus.PUBLISHED.value:
         raise HTTPException(status_code=404, detail="Form not found")
@@ -291,9 +343,12 @@ def restore_shared_public_form_draft(
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Form not found")
 
-    intake_link = form_intake_service.get_active_intake_link_by_slug(db, slug)
-    if not intake_link:
-        raise HTTPException(status_code=404, detail="Form not found")
+    intake_link = _get_active_intake_link_or_404(
+        db=db,
+        request=request,
+        slug=slug,
+        detail="Form not found",
+    )
     form = form_service.get_form(db, intake_link.organization_id, intake_link.form_id)
     if not form or form.status != FormStatus.PUBLISHED.value:
         raise HTTPException(status_code=404, detail="Form not found")
@@ -328,9 +383,12 @@ def delete_shared_public_form_draft(
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Draft not found")
 
-    intake_link = form_intake_service.get_active_intake_link_by_slug(db, slug)
-    if not intake_link:
-        raise HTTPException(status_code=404, detail="Draft not found")
+    intake_link = _get_active_intake_link_or_404(
+        db=db,
+        request=request,
+        slug=slug,
+        detail="Draft not found",
+    )
     deleted = form_intake_service.delete_shared_draft(
         db=db,
         link=intake_link,
@@ -354,9 +412,12 @@ def submit_shared_public_form(
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Form not found")
 
-    intake_link = form_intake_service.get_active_intake_link_by_slug(db, slug)
-    if not intake_link:
-        raise HTTPException(status_code=404, detail="Form not found")
+    intake_link = _get_active_intake_link_or_404(
+        db=db,
+        request=request,
+        slug=slug,
+        detail="Form not found",
+    )
 
     form = form_service.get_form(db, intake_link.organization_id, intake_link.form_id)
     if not form or form.status != FormStatus.PUBLISHED.value:

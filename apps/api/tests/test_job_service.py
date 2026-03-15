@@ -66,9 +66,7 @@ def test_claim_pending_jobs_marks_running(db_engine):
         session.rollback()
         verification_session.rollback()
         if job_ids:
-            cleanup_session.query(Job).filter(Job.id.in_(job_ids)).delete(
-                synchronize_session=False
-            )
+            cleanup_session.query(Job).filter(Job.id.in_(job_ids)).delete(synchronize_session=False)
         if org_id:
             cleanup_session.query(Organization).filter(Organization.id == org_id).delete(
                 synchronize_session=False
