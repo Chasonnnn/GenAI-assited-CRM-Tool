@@ -294,12 +294,10 @@ def _global_search_unified(
             ).limit(branch_limit)
 
         def _null_surrogate_id():
-            from sqlalchemy import cast
-            return cast(literal(None), surrogate_table.c.id.type).label("surrogate_id")
+            return literal(None, type_=surrogate_table.c.id.type).label("surrogate_id")
 
         def _null_surrogate_name():
-            from sqlalchemy import cast
-            return cast(literal(None), surrogate_table.c.full_name.type).label("surrogate_name")
+            return literal(None, type_=surrogate_table.c.full_name.type).label("surrogate_name")
 
         surrogate_access_filter = _build_surrogate_access_filter(
             role,
