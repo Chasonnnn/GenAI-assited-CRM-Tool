@@ -4,14 +4,27 @@ import tomllib
 from packaging.version import Version
 
 
-def test_pypdf_pin_meets_cve_2026_fix_floor():
+def test_dependency_pins_meet_security_fix_floors():
     pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
     with pyproject_path.open("rb") as file:
         pyproject = tomllib.load(file)
 
     dependencies = pyproject.get("project", {}).get("dependencies", [])
-    pypdf_pin = next((dep for dep in dependencies if dep.startswith("pypdf==")), None)
 
-    assert pypdf_pin is not None, "Expected an explicit pypdf== pin in pyproject.toml"
-    pinned_version = pypdf_pin.split("==", 1)[1].strip()
-    assert Version(pinned_version) >= Version("6.7.5")
+    expected_minimums = {
+        "pyjwt": "2.12.0",
+        "pypdf": "6.8.0",
+    }
+
+    for dependency_name, minimum_version in expected_minimums.items():
+        pinned_dependency = next(
+            (dep for dep in dependencies if dep.startswith(f"{dependency_name}==")),
+            None,
+        )
+
+        assert (
+            pinned_dependency is not None
+        ), f"Expected an explicit {dependency_name}== pin in pyproject.toml"
+
+        pinned_version = pinned_dependency.split("==", 1)[1].strip()
+        assert Version(pinned_version) >= Version(minimum_version)
