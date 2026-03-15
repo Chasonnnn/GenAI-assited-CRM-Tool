@@ -203,7 +203,7 @@ class BookingLink(Base):
 
     __tablename__ = "booking_links"
     __table_args__ = (
-        UniqueConstraint("public_slug", name="uq_booking_link_slug"),
+        UniqueConstraint("organization_id", "public_slug", name="uq_booking_link_org_slug"),
         UniqueConstraint("user_id", name="uq_booking_link_user"),
         Index("idx_booking_links_org", "organization_id"),
     )
@@ -220,7 +220,7 @@ class BookingLink(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
 
-    # Public URL slug (cryptographically random)
+    # Public URL slug (stable and readable within the organization)
     public_slug: Mapped[str] = mapped_column(String(32), nullable=False)
 
     # Status

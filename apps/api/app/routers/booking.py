@@ -10,6 +10,7 @@ Unauthenticated endpoints for clients to:
 from typing import Annotated
 
 from datetime import date, timedelta
+from urllib.parse import urlparse
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -97,6 +98,40 @@ def _appointment_to_public_read(appt, db: Session) -> dict:
     }
 
 
+def _get_public_org_from_request(request: Request, db: Session):
+    """Resolve tenant org from the request host or browser origin."""
+    host = (request.headers.get("host") or "").split(":")[0].lower()
+    org = org_service.get_org_by_host(db, host)
+    if org:
+        return org
+
+    origin = request.headers.get("origin") or request.headers.get("referer") or ""
+    if not origin:
+        return None
+
+    try:
+        origin_host = (urlparse(origin).hostname or "").lower()
+    except Exception:
+        return None
+
+    if not origin_host:
+        return None
+
+    return org_service.get_org_by_host(db, origin_host)
+
+
+def _get_booking_link_or_404(db: Session, request: Request, public_slug: str):
+    org = _get_public_org_from_request(request, db)
+    link = appointment_service.get_booking_link_by_slug(
+        db,
+        public_slug,
+        org_id=org.id if org else None,
+    )
+    if not link:
+        raise HTTPException(status_code=404, detail="Booking page not found")
+    return link
+
+
 # =============================================================================
 # Public Booking Page
 # =============================================================================
@@ -114,9 +149,7 @@ def get_booking_page(
 
     Returns staff info and available appointment types.
     """
-    link = appointment_service.get_booking_link_by_slug(db, public_slug)
-    if not link:
-        raise HTTPException(status_code=404, detail="Booking page not found")
+    link = _get_booking_link_or_404(db, request, public_slug)
 
     # Get staff info
     user = user_service.get_user_by_id(db, link.user_id)
@@ -166,9 +199,7 @@ def get_available_slots(
 
     Returns slots for the specified date range.
     """
-    link = appointment_service.get_booking_link_by_slug(db, public_slug)
-    if not link:
-        raise HTTPException(status_code=404, detail="Booking page not found")
+    link = _get_booking_link_or_404(db, request, public_slug)
 
     # Default to 7-day window
     if not date_end:
@@ -231,9 +262,7 @@ def create_booking(
     Rate limited to prevent spam.
     """
     # Verify booking link
-    link = appointment_service.get_booking_link_by_slug(db, public_slug)
-    if not link:
-        raise HTTPException(status_code=404, detail="Booking page not found")
+    link = _get_booking_link_or_404(db, request, public_slug)
 
     # Verify appointment type
     appt_type = appointment_service.get_appointment_type(
