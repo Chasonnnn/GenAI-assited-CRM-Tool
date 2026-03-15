@@ -184,6 +184,7 @@ def create_surrogate(
             insurance_group_number=data.insurance_group_number,
             insurance_subscriber_name=data.insurance_subscriber_name,
             insurance_subscriber_dob=data.insurance_subscriber_dob,
+            insurance_fax=data.insurance_fax,
             # IVF clinic
             clinic_name=data.clinic_name,
             clinic_address_line1=data.clinic_address_line1,
@@ -192,6 +193,7 @@ def create_surrogate(
             clinic_state=data.clinic_state,
             clinic_postal=data.clinic_postal,
             clinic_phone=data.clinic_phone,
+            clinic_fax=data.clinic_fax,
             clinic_email=data.clinic_email,
             # Monitoring clinic
             monitoring_clinic_name=data.monitoring_clinic_name,
@@ -201,6 +203,7 @@ def create_surrogate(
             monitoring_clinic_state=data.monitoring_clinic_state,
             monitoring_clinic_postal=data.monitoring_clinic_postal,
             monitoring_clinic_phone=data.monitoring_clinic_phone,
+            monitoring_clinic_fax=data.monitoring_clinic_fax,
             monitoring_clinic_email=data.monitoring_clinic_email,
             # OB provider
             ob_provider_name=data.ob_provider_name,
@@ -211,7 +214,29 @@ def create_surrogate(
             ob_state=data.ob_state,
             ob_postal=data.ob_postal,
             ob_phone=data.ob_phone,
+            ob_fax=data.ob_fax,
             ob_email=data.ob_email,
+            # PCP provider
+            pcp_provider_name=data.pcp_provider_name,
+            pcp_name=data.pcp_name,
+            pcp_address_line1=data.pcp_address_line1,
+            pcp_address_line2=data.pcp_address_line2,
+            pcp_city=data.pcp_city,
+            pcp_state=data.pcp_state,
+            pcp_postal=data.pcp_postal,
+            pcp_phone=data.pcp_phone,
+            pcp_fax=data.pcp_fax,
+            pcp_email=data.pcp_email,
+            # Lab clinic
+            lab_clinic_name=data.lab_clinic_name,
+            lab_clinic_address_line1=data.lab_clinic_address_line1,
+            lab_clinic_address_line2=data.lab_clinic_address_line2,
+            lab_clinic_city=data.lab_clinic_city,
+            lab_clinic_state=data.lab_clinic_state,
+            lab_clinic_postal=data.lab_clinic_postal,
+            lab_clinic_phone=data.lab_clinic_phone,
+            lab_clinic_fax=data.lab_clinic_fax,
+            lab_clinic_email=data.lab_clinic_email,
             # Delivery hospital
             delivery_hospital_name=data.delivery_hospital_name,
             delivery_hospital_address_line1=data.delivery_hospital_address_line1,
@@ -220,6 +245,7 @@ def create_surrogate(
             delivery_hospital_state=data.delivery_hospital_state,
             delivery_hospital_postal=data.delivery_hospital_postal,
             delivery_hospital_phone=data.delivery_hospital_phone,
+            delivery_hospital_fax=data.delivery_hospital_fax,
             delivery_hospital_email=data.delivery_hospital_email,
             # Pregnancy tracking
             pregnancy_start_date=data.pregnancy_start_date,

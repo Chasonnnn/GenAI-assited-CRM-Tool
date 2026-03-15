@@ -20,6 +20,11 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+def _drop_column_if_exists(table_name: str, column_name: str) -> None:
+    if _column_exists(table_name, column_name):
+        op.drop_column(table_name, column_name)
+
+
 def _column_exists(table_name: str, column_name: str) -> bool:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
@@ -85,31 +90,31 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Lab Clinic (reverse order)
-    op.drop_column("surrogates", "lab_clinic_email")
-    op.drop_column("surrogates", "lab_clinic_fax")
-    op.drop_column("surrogates", "lab_clinic_phone")
-    op.drop_column("surrogates", "lab_clinic_postal")
-    op.drop_column("surrogates", "lab_clinic_state")
-    op.drop_column("surrogates", "lab_clinic_city")
-    op.drop_column("surrogates", "lab_clinic_address_line2")
-    op.drop_column("surrogates", "lab_clinic_address_line1")
-    op.drop_column("surrogates", "lab_clinic_name")
+    _drop_column_if_exists("surrogates", "lab_clinic_email")
+    _drop_column_if_exists("surrogates", "lab_clinic_fax")
+    _drop_column_if_exists("surrogates", "lab_clinic_phone")
+    _drop_column_if_exists("surrogates", "lab_clinic_postal")
+    _drop_column_if_exists("surrogates", "lab_clinic_state")
+    _drop_column_if_exists("surrogates", "lab_clinic_city")
+    _drop_column_if_exists("surrogates", "lab_clinic_address_line2")
+    _drop_column_if_exists("surrogates", "lab_clinic_address_line1")
+    _drop_column_if_exists("surrogates", "lab_clinic_name")
 
     # PCP Provider (reverse order)
-    op.drop_column("surrogates", "pcp_email")
-    op.drop_column("surrogates", "pcp_fax")
-    op.drop_column("surrogates", "pcp_phone")
-    op.drop_column("surrogates", "pcp_postal")
-    op.drop_column("surrogates", "pcp_state")
-    op.drop_column("surrogates", "pcp_city")
-    op.drop_column("surrogates", "pcp_address_line2")
-    op.drop_column("surrogates", "pcp_address_line1")
-    op.drop_column("surrogates", "pcp_name")
-    op.drop_column("surrogates", "pcp_provider_name")
+    _drop_column_if_exists("surrogates", "pcp_email")
+    _drop_column_if_exists("surrogates", "pcp_fax")
+    _drop_column_if_exists("surrogates", "pcp_phone")
+    _drop_column_if_exists("surrogates", "pcp_postal")
+    _drop_column_if_exists("surrogates", "pcp_state")
+    _drop_column_if_exists("surrogates", "pcp_city")
+    _drop_column_if_exists("surrogates", "pcp_address_line2")
+    _drop_column_if_exists("surrogates", "pcp_address_line1")
+    _drop_column_if_exists("surrogates", "pcp_name")
+    _drop_column_if_exists("surrogates", "pcp_provider_name")
 
     # Fax fields (reverse order)
-    op.drop_column("surrogates", "delivery_hospital_fax")
-    op.drop_column("surrogates", "ob_fax")
-    op.drop_column("surrogates", "monitoring_clinic_fax")
-    op.drop_column("surrogates", "clinic_fax")
-    op.drop_column("surrogates", "insurance_fax")
+    _drop_column_if_exists("surrogates", "delivery_hospital_fax")
+    _drop_column_if_exists("surrogates", "ob_fax")
+    _drop_column_if_exists("surrogates", "monitoring_clinic_fax")
+    _drop_column_if_exists("surrogates", "clinic_fax")
+    _drop_column_if_exists("surrogates", "insurance_fax")

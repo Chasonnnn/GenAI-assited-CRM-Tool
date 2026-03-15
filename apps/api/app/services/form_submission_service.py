@@ -1242,6 +1242,21 @@ def _validate_field_value(field: FormField, value: Any) -> None:
                 raise ValueError(f"Field '{field.label}' must be at most {validation.max_value}")
         return
 
+    if field_type == "height":
+        if isinstance(value, (int, float)):
+            numeric_value = float(value)
+        elif isinstance(value, str):
+            transformed = transform_height_flexible(value)
+            if not transformed.success or transformed.value is None:
+                raise ValueError(f"Field '{field.label}' must be a valid height")
+            numeric_value = float(transformed.value)
+        else:
+            raise ValueError(f"Field '{field.label}' must be a valid height")
+
+        if numeric_value < 0:
+            raise ValueError(f"Field '{field.label}' must be a valid height")
+        return
+
     if field_type == "date":
         if isinstance(value, date):
             return

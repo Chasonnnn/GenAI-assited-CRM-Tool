@@ -217,6 +217,7 @@ def list_intended_parents(
     sortable_columns = {
         "intended_parent_number": IntendedParent.intended_parent_number,
         "full_name": IntendedParent.full_name,
+        "partner_name": IntendedParent.partner_name,
         "state": IntendedParent.state,
         "budget": IntendedParent.budget,
         "status": IntendedParent.status,

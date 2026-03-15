@@ -753,6 +753,25 @@ describe('SurrogateDetailPage', () => {
         })
     })
 
+    it('shows persisted medical sections automatically when hidden address fields contain data', () => {
+        mockUseSurrogate.mockReturnValue({
+            data: {
+                ...baseSurrogateData,
+                pcp_state: 'TX',
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        expect(screen.getByText('PCP Provider')).toBeInTheDocument()
+    })
+
     it('allows deleting a visible section from Edit Info with confirmation', async () => {
         render(
             <SurrogateDetailLayoutClient>
