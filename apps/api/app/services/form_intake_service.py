@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-import secrets
+import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -42,6 +42,7 @@ from app.utils.normalization import (
 )
 
 IDENTITY_SURROGATE_FIELDS = ("full_name", "date_of_birth", "phone", "email")
+INTAKE_SLUG_MAX_LENGTH = 100
 logger = logging.getLogger(__name__)
 
 
@@ -52,11 +53,66 @@ def build_shared_application_link(base_url: str | None, slug: str) -> str:
     return f"{cleaned_base}/intake/{slug}"
 
 
-def _generate_intake_slug(db: Session) -> str:
-    slug = secrets.token_urlsafe(12).replace("_", "-")
-    while db.query(FormIntakeLink).filter(FormIntakeLink.slug == slug).first() is not None:
-        slug = secrets.token_urlsafe(12).replace("_", "-")
-    return slug
+def _normalize_slug(value: str) -> str:
+    slug = value.lower().strip()
+    slug = re.sub(r"[^a-z0-9\s-]", "", slug)
+    slug = re.sub(r"[\s_]+", "-", slug)
+    slug = re.sub(r"-+", "-", slug)
+    return slug[:INTAKE_SLUG_MAX_LENGTH]
+
+
+def build_intake_slug_base(
+    *,
+    event_name: str | None,
+    campaign_name: str | None,
+    form_name: str | None,
+) -> str:
+    for raw_value in (event_name, campaign_name, form_name):
+        if not raw_value:
+            continue
+        slug = _normalize_slug(raw_value).strip("-")
+        if slug:
+            return slug[:INTAKE_SLUG_MAX_LENGTH]
+    return "intake"
+
+
+def _format_intake_slug_candidate(base: str, sequence: int) -> str:
+    if sequence <= 1:
+        return base[:INTAKE_SLUG_MAX_LENGTH]
+
+    suffix = f"-{sequence}"
+    trimmed_base = base[: max(1, INTAKE_SLUG_MAX_LENGTH - len(suffix))]
+    return f"{trimmed_base}{suffix}"
+
+
+def generate_unique_intake_slug(
+    db: Session,
+    *,
+    org_id: uuid.UUID,
+    form_name: str | None,
+    campaign_name: str | None,
+    event_name: str | None,
+) -> str:
+    base = build_intake_slug_base(
+        event_name=event_name,
+        campaign_name=campaign_name,
+        form_name=form_name,
+    )
+    sequence = 1
+
+    while True:
+        candidate = _format_intake_slug_candidate(base, sequence)
+        exists = (
+            db.query(FormIntakeLink.id)
+            .filter(
+                FormIntakeLink.organization_id == org_id,
+                FormIntakeLink.slug == candidate,
+            )
+            .first()
+        )
+        if not exists:
+            return candidate
+        sequence += 1
 
 
 def create_intake_link(
@@ -73,13 +129,21 @@ def create_intake_link(
 ) -> FormIntakeLink:
     if form.status != FormStatus.PUBLISHED.value:
         raise ValueError("Form must be published before creating shared links")
-    slug = _generate_intake_slug(db)
+    normalized_campaign_name = (campaign_name or "").strip() or None
+    normalized_event_name = (event_name or "").strip() or None
+    slug = generate_unique_intake_slug(
+        db,
+        org_id=org_id,
+        form_name=form.name,
+        campaign_name=normalized_campaign_name,
+        event_name=normalized_event_name,
+    )
     record = FormIntakeLink(
         organization_id=org_id,
         form_id=form.id,
         slug=slug,
-        campaign_name=(campaign_name or "").strip() or None,
-        event_name=(event_name or "").strip() or None,
+        campaign_name=normalized_campaign_name,
+        event_name=normalized_event_name,
         expires_at=expires_at,
         max_submissions=max_submissions,
         utm_defaults=utm_defaults or None,
@@ -275,8 +339,23 @@ def get_intake_link(
     )
 
 
-def get_intake_link_by_slug(db: Session, slug: str) -> FormIntakeLink | None:
-    return db.query(FormIntakeLink).filter(FormIntakeLink.slug == slug).first()
+def get_intake_link_by_slug(
+    db: Session,
+    slug: str,
+    *,
+    org_id: uuid.UUID | None = None,
+) -> FormIntakeLink | None:
+    query = db.query(FormIntakeLink).filter(FormIntakeLink.slug == slug)
+
+    if org_id is not None:
+        return query.filter(FormIntakeLink.organization_id == org_id).first()
+
+    matches = (
+        query.order_by(FormIntakeLink.created_at.asc(), FormIntakeLink.id.asc()).limit(2).all()
+    )
+    if len(matches) == 1:
+        return matches[0]
+    return None
 
 
 def _is_link_publicly_available(link: FormIntakeLink) -> bool:
@@ -294,8 +373,13 @@ def _is_link_publicly_available(link: FormIntakeLink) -> bool:
     return True
 
 
-def get_active_intake_link_by_slug(db: Session, slug: str) -> FormIntakeLink | None:
-    link = get_intake_link_by_slug(db, slug)
+def get_active_intake_link_by_slug(
+    db: Session,
+    slug: str,
+    *,
+    org_id: uuid.UUID | None = None,
+) -> FormIntakeLink | None:
+    link = get_intake_link_by_slug(db, slug, org_id=org_id)
     if not link:
         return None
     if not _is_link_publicly_available(link):
@@ -351,7 +435,13 @@ def rotate_intake_link(
     *,
     link: FormIntakeLink,
 ) -> FormIntakeLink:
-    link.slug = _generate_intake_slug(db)
+    link.slug = generate_unique_intake_slug(
+        db,
+        org_id=link.organization_id,
+        form_name=link.form.name if link.form else None,
+        campaign_name=link.campaign_name,
+        event_name=link.event_name,
+    )
     link.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(link)
