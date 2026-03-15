@@ -72,8 +72,8 @@ export interface SurrogateRead {
     clinic_state?: string | null;
     clinic_postal?: string | null;
     clinic_phone?: string | null;
-    clinic_fax?: string | null;
     clinic_email?: string | null;
+    clinic_fax?: string | null;
     monitoring_clinic_name?: string | null;
     monitoring_clinic_address_line1?: string | null;
     monitoring_clinic_address_line2?: string | null;
@@ -81,8 +81,8 @@ export interface SurrogateRead {
     monitoring_clinic_state?: string | null;
     monitoring_clinic_postal?: string | null;
     monitoring_clinic_phone?: string | null;
-    monitoring_clinic_fax?: string | null;
     monitoring_clinic_email?: string | null;
+    monitoring_clinic_fax?: string | null;
     ob_provider_name?: string | null;
     ob_clinic_name?: string | null;
     ob_address_line1?: string | null;
@@ -91,8 +91,8 @@ export interface SurrogateRead {
     ob_state?: string | null;
     ob_postal?: string | null;
     ob_phone?: string | null;
-    ob_fax?: string | null;
     ob_email?: string | null;
+    ob_fax?: string | null;
     delivery_hospital_name?: string | null;
     delivery_hospital_address_line1?: string | null;
     delivery_hospital_address_line2?: string | null;
@@ -100,8 +100,8 @@ export interface SurrogateRead {
     delivery_hospital_state?: string | null;
     delivery_hospital_postal?: string | null;
     delivery_hospital_phone?: string | null;
-    delivery_hospital_fax?: string | null;
     delivery_hospital_email?: string | null;
+    delivery_hospital_fax?: string | null;
     pcp_provider_name?: string | null;
     pcp_name?: string | null;
     pcp_address_line1?: string | null;

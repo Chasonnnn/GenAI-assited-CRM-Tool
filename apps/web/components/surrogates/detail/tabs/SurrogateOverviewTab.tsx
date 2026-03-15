@@ -29,10 +29,6 @@ export function SurrogateOverviewTab() {
         () => new Map(stageOptions.map((stage) => [stage.id, stage])),
         [stageOptions]
     )
-    const readyToMatchStage = React.useMemo(
-        () => stageOptions.find((stage) => stage.slug === "ready_to_match"),
-        [stageOptions]
-    )
     const heartbeatStage = React.useMemo(
         () => stageOptions.find((stage) => stage.slug === "heartbeat_confirmed"),
         [stageOptions]
@@ -60,11 +56,6 @@ export function SurrogateOverviewTab() {
     const effectiveStageOrder = effectiveStage?.order ?? null
     const effectiveStageSlug =
         effectiveStage?.slug ?? surrogateData.paused_from_stage_slug ?? surrogateData.stage_slug
-    const isReadyToMatchOrLater = !!(
-        effectiveStageOrder !== null &&
-        readyToMatchStage &&
-        effectiveStageOrder >= readyToMatchStage.order
-    )
     const isHeartbeatConfirmedOrLater = !!(
         effectiveStageOrder !== null &&
         heartbeatStage &&

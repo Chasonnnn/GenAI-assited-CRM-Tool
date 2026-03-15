@@ -6,7 +6,6 @@ import { useSearchParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { PaginationJump } from "@/components/ui/pagination-jump"
 import {
@@ -31,7 +30,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
 import {
     PlusIcon,
     SearchIcon,
@@ -43,6 +41,12 @@ import {
 } from "lucide-react"
 import { SortableTableHead } from "@/components/ui/sortable-table-head"
 import {
+    IntendedParentFormFields,
+    EMPTY_INTENDED_PARENT_FORM_VALUES,
+    buildIntendedParentCreatePayload,
+    type IntendedParentFormValues,
+} from "@/components/intended-parents/IntendedParentFormFields"
+import {
     useIntendedParents,
     useIntendedParentStats,
     useIntendedParentCreatedDates,
@@ -52,7 +56,6 @@ import type { IntendedParentStatus, IntendedParentListItem } from "@/lib/types/i
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { toast } from "sonner"
-import { US_STATES } from "@/lib/constants/us-states"
 
 const STATUS_LABELS: Record<IntendedParentStatus, string> = {
     new: "New",
@@ -261,14 +264,7 @@ export default function IntendedParentsPage() {
     }, [currentQuery]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Form state
-    const [formData, setFormData] = useState({
-        full_name: "",
-        email: "",
-        phone: "",
-        state: "",
-        partner_name: "",
-        notes_internal: "",
-    })
+    const [formData, setFormData] = useState<IntendedParentFormValues>(EMPTY_INTENDED_PARENT_FORM_VALUES)
 
     // Queries
     const getDateRangeParams = () => {
@@ -316,30 +312,14 @@ export default function IntendedParentsPage() {
     }
 
     const resetForm = () => {
-        setFormData({
-            full_name: "",
-            email: "",
-            phone: "",
-            state: "",
-            partner_name: "",
-            notes_internal: "",
-        })
+        setFormData(EMPTY_INTENDED_PARENT_FORM_VALUES)
     }
 
     const handleCreate = async () => {
         try {
-            const phone = formData.phone.trim()
-            const state = formData.state.trim()
-            const notesInternal = formData.notes_internal.trim()
-            const partnerName = formData.partner_name.trim()
-            await createMutation.mutateAsync({
-                full_name: formData.full_name,
-                email: formData.email,
-                ...(phone ? { phone } : {}),
-                ...(state ? { state } : {}),
-                ...(partnerName ? { partner_name: partnerName } : {}),
-                ...(notesInternal ? { notes_internal: notesInternal } : {}),
-            })
+            await createMutation.mutateAsync(
+                buildIntendedParentCreatePayload(formData),
+            )
             setIsCreateOpen(false)
             resetForm()
             toast.success("Intended parent created successfully")
@@ -347,6 +327,13 @@ export default function IntendedParentsPage() {
             const message = error instanceof Error ? error.message : "Failed to create intended parent"
             toast.error(message)
         }
+    }
+
+    const updateFormField = <K extends keyof IntendedParentFormValues>(
+        field: K,
+        value: IntendedParentFormValues[K],
+    ) => {
+        setFormData((previous) => ({ ...previous, [field]: value }))
     }
 
     const formatDate = (dateStr: string) => {
@@ -554,82 +541,24 @@ export default function IntendedParentsPage() {
                         <DialogTitle>New Intended Parent</DialogTitle>
                         <DialogDescription>Add a new intended parent to the system</DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="full_name">Full Name *</Label>
-                            <Input
-                                id="full_name"
-                                value={formData.full_name}
-                                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                                placeholder="John and Jane Doe"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="email">Email *</Label>
-                            <Input
-                                id="email"
-                                type="email"
-                                value={formData.email}
-                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                placeholder="john@example.com"
-                            />
-                        </div>
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <div className="space-y-2">
-                                <Label htmlFor="phone">Phone</Label>
-                                <Input
-                                    id="phone"
-                                    value={formData.phone}
-                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                    placeholder="+1 (555) 123-4567"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="state">State</Label>
-                                <Select
-                                    value={formData.state || undefined}
-                                    onValueChange={(value) => setFormData({ ...formData, state: value ?? "" })}
-                                >
-                                    <SelectTrigger id="state">
-                                        <SelectValue placeholder="Select a state" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {US_STATES.map((state) => (
-                                            <SelectItem key={state.value} value={state.value}>
-                                                {state.label} ({state.value})
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="partner_name">Partner Name</Label>
-                            <Input
-                                id="partner_name"
-                                value={formData.partner_name}
-                                onChange={(e) => setFormData({ ...formData, partner_name: e.target.value })}
-                                placeholder="Partner name (optional)"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="notes">Internal Notes</Label>
-                            <Textarea
-                                id="notes"
-                                value={formData.notes_internal}
-                                onChange={(e) => setFormData({ ...formData, notes_internal: e.target.value })}
-                                placeholder="Notes visible only to staff..."
-                                rows={3}
-                            />
-                        </div>
-                    </div>
+                    <IntendedParentFormFields
+                        values={formData}
+                        onChange={updateFormField}
+                        idPrefix="create_"
+                        showAddressSection={false}
+                        showClinicSection={false}
+                    />
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                             Cancel
                         </Button>
                         <Button
                             onClick={handleCreate}
-                            disabled={createMutation.isPending || !formData.full_name || !formData.email}
+                            disabled={
+                                createMutation.isPending ||
+                                !formData.full_name.trim() ||
+                                !formData.email.trim()
+                            }
                         >
                             {createMutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
                             Create

@@ -1,15 +1,14 @@
 "use client"
 
 import { InlineEditField } from "@/components/inline-edit-field"
-import { SurrogateRead } from "@/lib/types/surrogate"
 
-interface AddressFieldsProps {
+interface AddressFieldsProps<T extends object> {
     prefix: string  // e.g., 'clinic', 'monitoring_clinic', 'ob', 'delivery_hospital'
-    data: SurrogateRead
+    data: T
     onUpdate: (field: string, value: string | null) => Promise<void>
 }
 
-export function AddressFields({ prefix, data, onUpdate }: AddressFieldsProps) {
+export function AddressFields<T extends object>({ prefix, data, onUpdate }: AddressFieldsProps<T>) {
     const field = (name: string) => `${prefix}_${name}`
     const dataRecord = data as unknown as Record<string, string | null | undefined>
     const getValue = (name: string) => dataRecord[field(name)] ?? null

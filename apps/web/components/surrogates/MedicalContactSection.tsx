@@ -1,21 +1,23 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { PhoneIcon, MailIcon, PrinterIcon } from "lucide-react"
 import { InlineEditField } from "@/components/inline-edit-field"
 import { AddressFields } from "@/components/surrogates/AddressFields"
-import { SurrogateRead } from "@/lib/types/surrogate"
 
-interface MedicalContactSectionProps {
+interface MedicalContactSectionProps<T extends object> {
     title: string
-    icon?: React.ReactNode
+    icon?: ReactNode
     prefix: string  // e.g., 'clinic', 'monitoring_clinic', 'ob', 'delivery_hospital'
-    data: SurrogateRead
+    data: T
     onUpdate: (field: string, value: string | null) => Promise<void>
     showProviderName?: boolean  // For OB section: show doctor name
     showClinicName?: boolean    // Default true
+    providerField?: string
+    nameField?: string
 }
 
-export function MedicalContactSection({
+export function MedicalContactSection<T extends object>({
     title,
     icon,
     prefix,
@@ -23,14 +25,16 @@ export function MedicalContactSection({
     onUpdate,
     showProviderName = false,
     showClinicName = true,
-}: MedicalContactSectionProps) {
+    providerField,
+    nameField,
+}: MedicalContactSectionProps<T>) {
     const field = (name: string) => `${prefix}_${name}`
     const dataRecord = data as unknown as Record<string, string | null | undefined>
     const getValue = (name: string) => dataRecord[field(name)] ?? null
 
-    // OB uses ob_clinic_name, others use {prefix}_name
-    const clinicNameField = showProviderName ? `${prefix}_clinic_name` : `${prefix}_name`
-    const getClinicNameValue = () => dataRecord[clinicNameField] ?? null
+    const resolvedProviderField = providerField ?? field("provider_name")
+    const resolvedNameField = nameField ?? field("name")
+    const getNameValue = () => dataRecord[resolvedNameField] ?? null
 
     // Check if this section has an email field (delivery_hospital may have one now)
     const hasEmailField = `${prefix}_email` in dataRecord
@@ -46,8 +50,8 @@ export function MedicalContactSection({
                 <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground w-16 shrink-0">Provider:</span>
                     <InlineEditField
-                        value={getValue('provider_name')}
-                        onSave={(v) => onUpdate(field('provider_name'), v || null)}
+                        value={dataRecord[resolvedProviderField] ?? null}
+                        onSave={(v) => onUpdate(resolvedProviderField, v || null)}
                         placeholder="Doctor name"
                     />
                 </div>
@@ -57,8 +61,8 @@ export function MedicalContactSection({
                 <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground w-16 shrink-0">Name:</span>
                     <InlineEditField
-                        value={getClinicNameValue()}
-                        onSave={(v) => onUpdate(clinicNameField, v || null)}
+                        value={getNameValue()}
+                        onSave={(v) => onUpdate(resolvedNameField, v || null)}
                         placeholder="Clinic/Hospital name"
                     />
                 </div>

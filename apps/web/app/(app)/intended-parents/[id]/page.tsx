@@ -6,10 +6,8 @@ import Link from "@/components/app-link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
+import { Textarea } from "@/components/ui/textarea"
 import {
     Dialog,
     DialogContent,
@@ -38,9 +36,14 @@ import {
     Trash2Icon,
     HeartHandshakeIcon,
     UserIcon,
-    BuildingIcon,
-    PrinterIcon,
 } from "lucide-react"
+import {
+    IntendedParentFormFields,
+    EMPTY_INTENDED_PARENT_FORM_VALUES,
+    buildIntendedParentUpdatePayload,
+    type IntendedParentFormValues,
+} from "@/components/intended-parents/IntendedParentFormFields"
+import { IntendedParentClinicCard } from "@/components/intended-parents/IntendedParentClinicCard"
 import {
     useIntendedParent,
     useIntendedParentHistory,
@@ -110,21 +113,7 @@ export default function IntendedParentDetailPage() {
 
     const [isEditOpen, setIsEditOpen] = useState(false)
     const [newNote, setNewNote] = useState("")
-    const [formData, setFormData] = useState({
-        full_name: "",
-        email: "",
-        phone: "",
-        pronouns: "",
-        partner_name: "",
-        partner_email: "",
-        partner_pronouns: "",
-        address_line1: "",
-        address_line2: "",
-        city: "",
-        state: "",
-        postal: "",
-        notes_internal: "",
-    })
+    const [formData, setFormData] = useState<IntendedParentFormValues>(EMPTY_INTENDED_PARENT_FORM_VALUES)
     const [proposeMatchOpen, setProposeMatchOpen] = useState(false)
     const [changeStatusModalOpen, setChangeStatusModalOpen] = useState(false)
 
@@ -180,34 +169,33 @@ export default function IntendedParentDetailPage() {
             city: ip.city || "",
             state: ip.state || "",
             postal: ip.postal || "",
+            ip_clinic_name: ip.ip_clinic_name || "",
+            ip_clinic_address_line1: ip.ip_clinic_address_line1 || "",
+            ip_clinic_address_line2: ip.ip_clinic_address_line2 || "",
+            ip_clinic_city: ip.ip_clinic_city || "",
+            ip_clinic_state: ip.ip_clinic_state || "",
+            ip_clinic_postal: ip.ip_clinic_postal || "",
+            ip_clinic_phone: ip.ip_clinic_phone || "",
+            ip_clinic_fax: ip.ip_clinic_fax || "",
+            ip_clinic_email: ip.ip_clinic_email || "",
             notes_internal: ip.notes_internal || "",
         })
         setIsEditOpen(true)
     }
 
     const handleSave = async () => {
-        const phone = formData.phone.trim()
-        const state = formData.state.trim()
-        const notesInternal = formData.notes_internal.trim()
         await updateMutation.mutateAsync({
             id,
-            data: {
-                full_name: formData.full_name,
-                email: formData.email,
-                ...(phone ? { phone } : {}),
-                ...(formData.pronouns.trim() ? { pronouns: formData.pronouns.trim() } : {}),
-                ...(formData.partner_name.trim() ? { partner_name: formData.partner_name.trim() } : {}),
-                ...(formData.partner_email.trim() ? { partner_email: formData.partner_email.trim() } : {}),
-                ...(formData.partner_pronouns.trim() ? { partner_pronouns: formData.partner_pronouns.trim() } : {}),
-                ...(formData.address_line1.trim() ? { address_line1: formData.address_line1.trim() } : {}),
-                ...(formData.address_line2.trim() ? { address_line2: formData.address_line2.trim() } : {}),
-                ...(formData.city.trim() ? { city: formData.city.trim() } : {}),
-                ...(state ? { state } : {}),
-                ...(formData.postal.trim() ? { postal: formData.postal.trim() } : {}),
-                ...(notesInternal ? { notes_internal: notesInternal } : {}),
-            },
+            data: buildIntendedParentUpdatePayload(formData),
         })
         setIsEditOpen(false)
+    }
+
+    const updateFormField = <K extends keyof IntendedParentFormValues>(
+        field: K,
+        value: IntendedParentFormValues[K],
+    ) => {
+        setFormData((previous) => ({ ...previous, [field]: value }))
     }
 
     const handleStatusChange = async (data: {
@@ -450,49 +438,12 @@ export default function IntendedParentDetailPage() {
                             </Card>
                         )}
 
-                        {/* IVF Clinic */}
-                        {(ip.ip_clinic_name || ip.ip_clinic_phone || ip.ip_clinic_email) && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-2">
-                                        <BuildingIcon className="size-4" />
-                                        IVF Clinic
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-2 text-sm">
-                                    {ip.ip_clinic_name && (
-                                        <p className="font-medium">{ip.ip_clinic_name}</p>
-                                    )}
-                                    {(ip.ip_clinic_address_line1 || ip.ip_clinic_city) && (
-                                        <p className="text-muted-foreground">
-                                            {[ip.ip_clinic_address_line1, ip.ip_clinic_address_line2, ip.ip_clinic_city, ip.ip_clinic_state, ip.ip_clinic_postal]
-                                                .filter(Boolean)
-                                                .join(", ")}
-                                        </p>
-                                    )}
-                                    <div className="flex flex-wrap gap-4 pt-1">
-                                        {ip.ip_clinic_phone && (
-                                            <span className="flex items-center gap-1.5">
-                                                <PhoneIcon className="size-3.5 text-muted-foreground" />
-                                                {ip.ip_clinic_phone}
-                                            </span>
-                                        )}
-                                        {ip.ip_clinic_fax && (
-                                            <span className="flex items-center gap-1.5">
-                                                <PrinterIcon className="size-3.5 text-muted-foreground" />
-                                                {ip.ip_clinic_fax}
-                                            </span>
-                                        )}
-                                        {ip.ip_clinic_email && (
-                                            <span className="flex items-center gap-1.5">
-                                                <MailIcon className="size-3.5 text-muted-foreground" />
-                                                {ip.ip_clinic_email}
-                                            </span>
-                                        )}
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        )}
+                        <IntendedParentClinicCard
+                            intendedParent={ip}
+                            onUpdate={async (data) => {
+                                await updateMutation.mutateAsync({ id, data })
+                            }}
+                        />
 
                         {/* Status Change */}
                         <Card>
@@ -669,150 +620,13 @@ export default function IntendedParentDetailPage() {
                         <DialogTitle>Edit Intended Parent</DialogTitle>
                         <DialogDescription>Update the intended parent details</DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4">
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <div className="space-y-2">
-                                <Label htmlFor="edit_name">Full Name</Label>
-                                <Input
-                                    id="edit_name"
-                                    value={formData.full_name}
-                                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="edit_pronouns">Pronouns</Label>
-                                <select
-                                    id="edit_pronouns"
-                                    value={formData.pronouns}
-                                    onChange={(e) => setFormData({ ...formData, pronouns: e.target.value })}
-                                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-                                >
-                                    <option value="">Select pronouns</option>
-                                    <option value="He/Him">He/Him</option>
-                                    <option value="She/Her">She/Her</option>
-                                    <option value="They/Them">They/Them</option>
-                                    <option value="Other">Other</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <div className="space-y-2">
-                                <Label htmlFor="edit_email">Email</Label>
-                                <Input
-                                    id="edit_email"
-                                    type="email"
-                                    value={formData.email}
-                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="edit_phone">Phone</Label>
-                                <Input
-                                    id="edit_phone"
-                                    value={formData.phone}
-                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                />
-                            </div>
-                        </div>
-
-                        <Separator />
-                        <p className="text-sm font-medium">Partner</p>
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <div className="space-y-2">
-                                <Label htmlFor="edit_partner_name">Partner Name</Label>
-                                <Input
-                                    id="edit_partner_name"
-                                    value={formData.partner_name}
-                                    onChange={(e) => setFormData({ ...formData, partner_name: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="edit_partner_pronouns">Partner Pronouns</Label>
-                                <select
-                                    id="edit_partner_pronouns"
-                                    value={formData.partner_pronouns}
-                                    onChange={(e) => setFormData({ ...formData, partner_pronouns: e.target.value })}
-                                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-                                >
-                                    <option value="">Select pronouns</option>
-                                    <option value="He/Him">He/Him</option>
-                                    <option value="She/Her">She/Her</option>
-                                    <option value="They/Them">They/Them</option>
-                                    <option value="Other">Other</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="edit_partner_email">Partner Email</Label>
-                            <Input
-                                id="edit_partner_email"
-                                type="email"
-                                value={formData.partner_email}
-                                onChange={(e) => setFormData({ ...formData, partner_email: e.target.value })}
-                            />
-                        </div>
-
-                        <Separator />
-                        <p className="text-sm font-medium">Address</p>
-                        <div className="space-y-2">
-                            <Label htmlFor="edit_address1">Address Line 1</Label>
-                            <Input
-                                id="edit_address1"
-                                value={formData.address_line1}
-                                onChange={(e) => setFormData({ ...formData, address_line1: e.target.value })}
-                                placeholder="Street address"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="edit_address2">Address Line 2</Label>
-                            <Input
-                                id="edit_address2"
-                                value={formData.address_line2}
-                                onChange={(e) => setFormData({ ...formData, address_line2: e.target.value })}
-                                placeholder="Suite, unit, etc."
-                            />
-                        </div>
-                        <div className="grid gap-4 md:grid-cols-3">
-                            <div className="space-y-2">
-                                <Label htmlFor="edit_city">City</Label>
-                                <Input
-                                    id="edit_city"
-                                    value={formData.city}
-                                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="edit_state">State</Label>
-                                <Input
-                                    id="edit_state"
-                                    value={formData.state}
-                                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                                    placeholder="XX"
-                                    maxLength={2}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="edit_postal">ZIP</Label>
-                                <Input
-                                    id="edit_postal"
-                                    value={formData.postal}
-                                    onChange={(e) => setFormData({ ...formData, postal: e.target.value })}
-                                    placeholder="00000"
-                                />
-                            </div>
-                        </div>
-
-                        <Separator />
-                        <div className="space-y-2">
-                            <Label htmlFor="edit_notes">Internal Notes</Label>
-                            <Textarea
-                                id="edit_notes"
-                                value={formData.notes_internal}
-                                onChange={(e) => setFormData({ ...formData, notes_internal: e.target.value })}
-                                rows={3}
-                            />
-                        </div>
-                    </div>
+                    <IntendedParentFormFields
+                        values={formData}
+                        onChange={updateFormField}
+                        idPrefix="edit_"
+                        showClinicSection={false}
+                        showInternalNotes={false}
+                    />
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsEditOpen(false)}>
                             Cancel
