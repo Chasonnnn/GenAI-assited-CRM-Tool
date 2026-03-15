@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.37](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.36...surrogacy-crm-platform-v0.90.37) (2026-03-15)
+
+
+### Features
+
+* add attachment scan job dispatch ([5aa4af6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5aa4af6ae1c3d97fdd7fdfec649108fc649a45ae))
+* add readable booking link slugs ([a783c4a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a783c4a28cb7fba3c889565e4e1cde06f9d8f153))
+* add readable shared intake slugs ([f0e7318](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f0e73187b0f33c71faf7a6686c8b5fcc745e6a42))
+* form builder improvements, combined medical/insurance card, and IP expanded fields ([10ea721](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/10ea721aa51c51f5fca2093c49331504f651c4f4))
+* form builder improvements, combined medical/insurance card, and IP expanded fields ([bb301b4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bb301b44e3ba0813c6a56d6a485bb231e6f54061))
+* improve calendar month overflow handling ([26009e5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/26009e5004bd3ed554093c6792bca96841a4368f))
+* refine surrogate and intended parent info flows ([dfd9713](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dfd9713de1caec1b65e26bd929950c5f3b3f0aff))
+* share public form field rendering ([4c0e920](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4c0e92042e182e46a43d23a7751d0361f0063f32))
+
+
+### Bug Fixes
+
+* address surrogate and intended parent review feedback ([84a34ae](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/84a34ae903deb2d50e165d1f7d4e66e64294cd9a))
+* bump pyjwt and pypdf for audit guard ([c4f2f68](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c4f2f689f423b43a256eea69abc8ec3e5a7d1152))
+* pin flatted for pnpm audit ([bf8ef52](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bf8ef5232245a3995e1c2119f298c80ba5641aa1))
+* tighten public form date and height inputs ([ce97b47](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ce97b4739c0247e70ad51c61826c09940cc7013f))
+
+
+### Maintenance
+
+* include pre-existing uncommitted backend changes ([7a76f25](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7a76f254501baed00e8b97e573dc2ab4a5527663))
+
 ## [0.90.36](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.35...surrogacy-crm-platform-v0.90.36) (2026-03-12)
 
 
