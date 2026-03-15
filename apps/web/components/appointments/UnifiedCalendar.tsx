@@ -29,6 +29,14 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle,
+} from "@/components/ui/sheet"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import {
     ChevronLeftIcon,
     ChevronRightIcon,
     CalendarIcon,
@@ -98,6 +106,10 @@ function activateWithKeyboard(event: KeyboardEvent<HTMLDivElement>, onActivate: 
     onActivate()
 }
 
+function formatItemCount(count: number) {
+    return `${count} item${count === 1 ? "" : "s"}`
+}
+
 // View type
 type ViewType = "month" | "week" | "day"
 
@@ -119,35 +131,34 @@ const TaskItem = memo(function TaskItem({
     const handleTaskClick = () => onClick?.(task)
 
     if (compact) {
+        const compactContent = (
+            <>
+                <CheckSquareIcon className="size-3 shrink-0" />
+                <span className="truncate">{time ? `${time} - ${task.title}` : task.title}</span>
+            </>
+        )
+
+        if (clickable) {
+            return (
+                <button
+                    type="button"
+                    onClick={handleTaskClick}
+                    className="flex w-full items-center gap-1.5 rounded-md border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-left text-[11px] font-medium text-purple-950 transition-opacity hover:opacity-90 dark:text-purple-100"
+                >
+                    {compactContent}
+                </button>
+            )
+        }
+
         return (
-            <div
-                onClick={clickable ? handleTaskClick : undefined}
-                onKeyDown={clickable ? (e) => activateWithKeyboard(e, handleTaskClick) : undefined}
-                role={clickable ? "button" : undefined}
-                tabIndex={clickable ? 0 : undefined}
-                className={cn(
-                    "w-full text-left px-2 py-1 rounded text-xs truncate",
-                    TASK_COLOR,
-                    "text-white",
-                    clickable && "cursor-pointer hover:opacity-90"
-                )}
-            >
-                {time && `${time} - `}📋 {task.title}
+            <div className="flex w-full items-center gap-1.5 rounded-md border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-left text-[11px] font-medium text-purple-950 dark:text-purple-100">
+                {compactContent}
             </div>
         )
     }
 
-    return (
-        <div
-            onClick={clickable ? handleTaskClick : undefined}
-            onKeyDown={clickable ? (e) => activateWithKeyboard(e, handleTaskClick) : undefined}
-            role={clickable ? "button" : undefined}
-            tabIndex={clickable ? 0 : undefined}
-            className={cn(
-                "w-full text-left p-2 rounded-lg border-l-4 border-purple-500 bg-muted/50",
-                clickable && "cursor-pointer hover:bg-muted"
-            )}
-        >
+    const fullContent = (
+        <>
             <p className="font-medium text-sm truncate flex items-center gap-1">
                 <CheckSquareIcon className="size-3" />
                 {task.title}
@@ -156,6 +167,24 @@ const TaskItem = memo(function TaskItem({
             {task.surrogate_number && (
                 <p className="text-xs text-muted-foreground">Surrogate #{task.surrogate_number}</p>
             )}
+        </>
+    )
+
+    if (clickable) {
+        return (
+            <button
+                type="button"
+                onClick={handleTaskClick}
+                className="w-full rounded-lg border-l-4 border-purple-500 bg-muted/50 p-2 text-left hover:bg-muted"
+            >
+                {fullContent}
+            </button>
+        )
+    }
+
+    return (
+        <div className="w-full rounded-lg border-l-4 border-purple-500 bg-muted/50 p-2 text-left">
+            {fullContent}
         </div>
     )
 })
@@ -188,10 +217,11 @@ const GoogleEventItem = memo(function GoogleEventItem({
                 onKeyDown={(e) => activateWithKeyboard(e, handleClick)}
                 role="button"
                 tabIndex={0}
-                className={`w-full text-left px-2 py-1 rounded text-xs truncate ${GOOGLE_EVENT_COLOR} text-white cursor-pointer hover:opacity-90`}
+                className="flex w-full items-center gap-1.5 rounded-md border border-slate-400/20 bg-slate-400/12 px-2 py-1 text-left text-[11px] font-medium text-slate-900 dark:text-slate-100 cursor-pointer hover:opacity-90"
                 title="Click to open in Google Calendar"
             >
-                {time} - 🌐 {event.summary}
+                <CalendarIcon className="size-3 shrink-0" />
+                <span className="truncate">{time} - {event.summary}</span>
             </div>
         )
     }
@@ -206,7 +236,8 @@ const GoogleEventItem = memo(function GoogleEventItem({
             title="Click to open in Google Calendar"
         >
             <p className="font-medium text-sm truncate flex items-center gap-1">
-                🌐 {event.summary}
+                <CalendarIcon className="size-3" />
+                {event.summary}
             </p>
             <p className="text-xs text-muted-foreground">{time}</p>
             <p className="text-xs text-muted-foreground/70">Google Calendar</p>
@@ -226,7 +257,7 @@ const EventItem = memo(function EventItem({
     onDragStart,
 }: {
     appointment: AppointmentListItem
-    onClick: () => void
+    onClick?: (appointment: AppointmentListItem) => void
     compact?: boolean
     draggable?: boolean
     onDragStart?: (e: React.DragEvent, appointment: AppointmentListItem) => void
@@ -234,6 +265,7 @@ const EventItem = memo(function EventItem({
     const statusColor = STATUS_COLORS[appointment.status as keyof typeof STATUS_COLORS] || "bg-gray-500"
     const time = format(parseISO(appointment.scheduled_start), "h:mm a")
     const canDrag = draggable && (appointment.status === "pending" || appointment.status === "confirmed")
+    const handleAppointmentClick = () => onClick?.(appointment)
 
     const handleDragStart = (e: React.DragEvent) => {
         if (onDragStart && canDrag) {
@@ -246,8 +278,8 @@ const EventItem = memo(function EventItem({
             <div
                 draggable={canDrag}
                 onDragStart={handleDragStart}
-                onClick={onClick}
-                onKeyDown={(e) => activateWithKeyboard(e, onClick)}
+                onClick={onClick ? handleAppointmentClick : undefined}
+                onKeyDown={onClick ? (e) => activateWithKeyboard(e, handleAppointmentClick) : undefined}
                 role="button"
                 tabIndex={0}
                 className={`w-full text-left px-2 py-1 rounded text-xs truncate ${statusColor} text-white hover:opacity-90 transition-opacity ${canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
@@ -261,8 +293,8 @@ const EventItem = memo(function EventItem({
         <div
             draggable={canDrag}
             onDragStart={handleDragStart}
-            onClick={onClick}
-            onKeyDown={(e) => activateWithKeyboard(e, onClick)}
+            onClick={onClick ? handleAppointmentClick : undefined}
+            onKeyDown={onClick ? (e) => activateWithKeyboard(e, handleAppointmentClick) : undefined}
             role="button"
             tabIndex={0}
             className={`w-full text-left p-2 rounded-lg border-l-4 ${statusColor.replace('bg-', 'border-')} bg-muted/50 hover:bg-muted transition-colors ${canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
@@ -615,6 +647,7 @@ function MonthView({
     dragOverDate,
     onDragOver,
     onDragLeave,
+    onOpenDayAgenda,
 }: {
     currentDate: Date
     appointments: AppointmentListItem[]
@@ -627,6 +660,7 @@ function MonthView({
     dragOverDate?: string | null
     onDragOver?: (e: React.DragEvent, date: Date) => void
     onDragLeave?: (e: React.DragEvent) => void
+    onOpenDayAgenda?: (day: Date) => void
 }) {
     const days = useMemo(() => {
         const monthStart = startOfMonth(currentDate)
@@ -704,7 +738,7 @@ function MonthView({
 
             {/* Days Grid */}
             <div className="grid grid-cols-7">
-                {days.map((day, i) => {
+                {days.map((day) => {
                     const dateStr = format(day, "yyyy-MM-dd")
                     const dayAppointments = appointmentsByDate.get(dateStr) || []
                     const dayTasks = tasksByDate.get(dateStr) || []
@@ -719,11 +753,16 @@ function MonthView({
                     const shownTasks = dayTasks.slice(0, remainingSlots)
                     const remainingAfterTasks = Math.max(0, remainingSlots - shownTasks.length)
                     const shownGoogleEvents = dayGoogleEvents.slice(0, remainingAfterTasks)
+                    const canOpenDayAgenda = totalEvents > 0 && typeof onOpenDayAgenda === "function"
 
                     return (
                         <div
-                            key={i}
-                            className={`min-h-[100px] p-1 border-b border-r border-border transition-colors ${!isCurrentMonth ? "bg-muted/30" : ""} ${isDropTarget ? "bg-primary/10 ring-2 ring-primary/50 ring-inset" : ""}`}
+                            key={dateStr}
+                            className={cn(
+                                "min-h-[128px] border-b border-r border-border p-2 transition-colors",
+                                !isCurrentMonth && "bg-muted/20",
+                                isDropTarget && "bg-primary/10 ring-2 ring-primary/50 ring-inset"
+                            )}
                             onDragOver={(e) => {
                                 e.preventDefault()
                                 onDragOver?.(e, day)
@@ -734,16 +773,43 @@ function MonthView({
                                 onDrop?.(e, day)
                             }}
                         >
-                            <div className={`text-sm p-1 ${isCurrentDay ? "bg-primary text-primary-foreground rounded-full w-7 h-7 flex items-center justify-center" : ""} ${!isCurrentMonth ? "text-muted-foreground" : ""}`}>
-                                {format(day, "d")}
+                            <div className="flex items-start justify-between gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => onOpenDayAgenda?.(day)}
+                                    disabled={!canOpenDayAgenda}
+                                    aria-label={
+                                        canOpenDayAgenda
+                                            ? `Open agenda for ${format(day, "EEEE, MMMM d")}`
+                                            : undefined
+                                    }
+                                    className={cn(
+                                        "flex h-8 min-w-8 items-center justify-center rounded-full px-2 text-sm font-medium transition-colors",
+                                        isCurrentDay
+                                            ? "bg-primary text-primary-foreground shadow-sm"
+                                            : "text-foreground",
+                                        !isCurrentMonth && "text-muted-foreground",
+                                        canOpenDayAgenda && "hover:bg-muted"
+                                    )}
+                                >
+                                    {format(day, "d")}
+                                </button>
+                                {totalEvents > 0 && (
+                                    <Badge
+                                        variant="outline"
+                                        className="rounded-full bg-background/90 px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+                                    >
+                                        {formatItemCount(totalEvents)}
+                                    </Badge>
+                                )}
                             </div>
-                            <div className="space-y-1 mt-1">
+                            <div className="mt-2 space-y-1">
                                 {/* Surrogacy Force Appointments */}
                                 {shownAppointments.map((appt) => (
                                     <EventItem
                                         key={appt.id}
                                         appointment={appt}
-                                        onClick={() => onEventClick(appt)}
+                                        onClick={onEventClick}
                                         compact
                                         draggable
                                         {...(onDragStart ? { onDragStart } : {})}
@@ -767,9 +833,16 @@ function MonthView({
                                     />
                                 ))}
                                 {totalEvents > 3 && (
-                                    <p className="text-xs text-muted-foreground text-center">
-                                        +{totalEvents - 3} more
-                                    </p>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        type="button"
+                                        onClick={() => onOpenDayAgenda?.(day)}
+                                        aria-label={`View all ${totalEvents} items`}
+                                        className="h-7 w-full justify-start rounded-md px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                                    >
+                                        View all {totalEvents}
+                                    </Button>
                                 )}
                             </div>
                         </div>
@@ -777,6 +850,157 @@ function MonthView({
                 })}
             </div>
         </div>
+    )
+}
+
+function DayAgendaSheet({
+    day,
+    appointments,
+    tasks,
+    googleEvents = EMPTY_GOOGLE_EVENTS,
+    open,
+    onOpenChange,
+    onEventClick,
+    onTaskClick,
+}: {
+    day: Date | null
+    appointments: AppointmentListItem[]
+    tasks: TaskListItem[]
+    googleEvents?: GoogleCalendarEvent[]
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    onEventClick: (appt: AppointmentListItem) => void
+    onTaskClick?: (task: TaskListItem) => void
+}) {
+    const dateStr = day ? format(day, "yyyy-MM-dd") : null
+
+    const dayAppointments = useMemo(() => {
+        if (!dateStr) return []
+        return appointments
+            .filter((appt) => format(parseISO(appt.scheduled_start), "yyyy-MM-dd") === dateStr)
+            .sort((a, b) => a.scheduled_start.localeCompare(b.scheduled_start))
+    }, [appointments, dateStr])
+
+    const dayTasks = useMemo(() => {
+        if (!dateStr) return []
+        return tasks
+            .filter((task) => task.due_date === dateStr)
+            .sort((a, b) => {
+                const first = a.due_time ?? "99:99:99"
+                const second = b.due_time ?? "99:99:99"
+                return first.localeCompare(second)
+            })
+    }, [dateStr, tasks])
+
+    const dayGoogleEvents = useMemo(() => {
+        if (!dateStr) return []
+        return googleEvents
+            .filter((event) => {
+                if (event.is_all_day) {
+                    const startDate = event.start.slice(0, 10)
+                    const endDate = event.end.slice(0, 10)
+                    return dateStr >= startDate && dateStr < endDate
+                }
+                return format(parseISO(event.start), "yyyy-MM-dd") === dateStr
+            })
+            .sort((a, b) => {
+                if (a.is_all_day && !b.is_all_day) return -1
+                if (!a.is_all_day && b.is_all_day) return 1
+                return a.start.localeCompare(b.start)
+            })
+    }, [dateStr, googleEvents])
+
+    const totalItems = dayAppointments.length + dayTasks.length + dayGoogleEvents.length
+    const handleAgendaAppointmentClick = useCallback(
+        (appointment: AppointmentListItem) => {
+            onOpenChange(false)
+            onEventClick(appointment)
+        },
+        [onEventClick, onOpenChange]
+    )
+    const handleAgendaTaskClick = useCallback(
+        (task: TaskListItem) => {
+            onOpenChange(false)
+            onTaskClick?.(task)
+        },
+        [onOpenChange, onTaskClick]
+    )
+
+    return (
+        <Sheet open={open} onOpenChange={onOpenChange}>
+            <SheetContent side="right" className="w-full sm:max-w-xl">
+                <SheetHeader className="border-b border-border/70 pb-4">
+                    <SheetTitle>{day ? format(day, "EEEE, MMMM d") : "Day agenda"}</SheetTitle>
+                    <SheetDescription>
+                        {totalItems > 0
+                            ? `${formatItemCount(totalItems)} scheduled in this calendar day.`
+                            : "No tasks, appointments, or external events on this day."}
+                    </SheetDescription>
+                </SheetHeader>
+                <ScrollArea className="h-[calc(100vh-7rem)] px-6 pb-6">
+                    <div className="space-y-6 pt-6">
+                        {dayAppointments.length > 0 && (
+                            <section className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-sm font-semibold">Appointments</h3>
+                                    <Badge variant="secondary">{dayAppointments.length}</Badge>
+                                </div>
+                                <div className="space-y-2">
+                                    {dayAppointments.map((appointment) => (
+                                        <EventItem
+                                            key={appointment.id}
+                                            appointment={appointment}
+                                            onClick={handleAgendaAppointmentClick}
+                                        />
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+
+                        {dayTasks.length > 0 && (
+                            <section className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-sm font-semibold">Tasks</h3>
+                                    <Badge variant="secondary">{dayTasks.length}</Badge>
+                                </div>
+                                <div className="space-y-2">
+                                    {dayTasks.map((task) => (
+                                        <TaskItem
+                                            key={task.id}
+                                            task={task}
+                                            {...(onTaskClick ? { onClick: handleAgendaTaskClick } : {})}
+                                        />
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+
+                        {dayGoogleEvents.length > 0 && (
+                            <section className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-sm font-semibold">Google Calendar</h3>
+                                    <Badge variant="secondary">{dayGoogleEvents.length}</Badge>
+                                </div>
+                                <div className="space-y-2">
+                                    {dayGoogleEvents.map((event) => (
+                                        <GoogleEventItem key={`agenda-${event.id}`} event={event} />
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+
+                        {totalItems === 0 && (
+                            <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-10 text-center">
+                                <p className="text-sm font-medium">Nothing scheduled</p>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    Use week or day view if you want more room to plan around this date.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </ScrollArea>
+            </SheetContent>
+        </Sheet>
     )
 }
 
@@ -873,7 +1097,7 @@ function WeekView({
                                 <EventItem
                                     key={appt.id}
                                     appointment={appt}
-                                    onClick={() => onEventClick(appt)}
+                                    onClick={onEventClick}
                                 />
                             ))}
                             {dayTasks.map((task) => (
@@ -1011,7 +1235,7 @@ function DayView({
                                     <EventItem
                                         key={appt.id}
                                         appointment={appt}
-                                        onClick={() => onEventClick(appt)}
+                                        onClick={onEventClick}
                                     />
                                 ))}
                                 {hourTasks.map((task) => (
@@ -1056,6 +1280,8 @@ export function UnifiedCalendar({
     const [viewType, setViewType] = useState<ViewType>("month")
     const [selectedAppointment, setSelectedAppointment] = useState<AppointmentListItem | null>(null)
     const [dialogOpen, setDialogOpen] = useState(false)
+    const [dayAgendaDate, setDayAgendaDate] = useState<Date | null>(null)
+    const [dayAgendaOpen, setDayAgendaOpen] = useState(false)
     const [dragRescheduleDialogOpen, setDragRescheduleDialogOpen] = useState(false)
     const [dragRescheduleAppointmentId, setDragRescheduleAppointmentId] = useState<string | null>(null)
     const [dragRescheduleDateSeed, setDragRescheduleDateSeed] = useState<string | null>(null)
@@ -1108,6 +1334,11 @@ export function UnifiedCalendar({
         setDialogOpen(true)
     }
 
+    const handleOpenDayAgenda = useCallback((day: Date) => {
+        setDayAgendaDate(day)
+        setDayAgendaOpen(true)
+    }, [])
+
     // Drag handlers
     const handleDragStart = useCallback((e: React.DragEvent, appointment: AppointmentListItem) => {
         setDraggedAppointment(appointment)
@@ -1155,27 +1386,34 @@ export function UnifiedCalendar({
     }, [draggedAppointment])
 
     return (
-        <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-                <div className="flex items-center gap-4">
-                    <Button variant="outline" size="sm" onClick={() => navigate("prev")}>
-                        <ChevronLeftIcon className="size-4" />
-                    </Button>
-                    <h2 className="text-lg font-semibold min-w-[200px] text-center">
-                        {viewType === "month" && format(currentDate, "MMMM yyyy")}
-                        {viewType === "week" && `Week of ${format(startOfWeek(currentDate), "MMM d")}`}
-                        {viewType === "day" && format(currentDate, "MMMM d, yyyy")}
-                    </h2>
-                    <Button variant="outline" size="sm" onClick={() => navigate("next")}>
-                        <ChevronRightIcon className="size-4" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setCurrentDate(new Date())}>
+        <Card className="gap-3 overflow-hidden border-border/70">
+            <CardHeader className="grid-cols-[minmax(0,1fr)_auto] grid-rows-1 items-center gap-3 border-b border-border/70 bg-muted/20 pb-4">
+                <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex min-w-0 items-center rounded-xl border border-border/70 bg-background p-1 shadow-sm">
+                        <Button variant="ghost" size="sm" onClick={() => navigate("prev")} aria-label="Previous period">
+                            <ChevronLeftIcon className="size-4" />
+                        </Button>
+                        <div className="min-w-[160px] px-2 text-center sm:min-w-[200px]">
+                            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                                Calendar
+                            </p>
+                            <h2 className="truncate text-lg font-semibold">
+                                {viewType === "month" && format(currentDate, "MMMM yyyy")}
+                                {viewType === "week" && `Week of ${format(startOfWeek(currentDate), "MMM d")}`}
+                                {viewType === "day" && format(currentDate, "MMMM d, yyyy")}
+                            </h2>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => navigate("next")} aria-label="Next period">
+                            <ChevronRightIcon className="size-4" />
+                        </Button>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date())}>
                         Today
                     </Button>
                 </div>
 
                 <Select value={viewType} onValueChange={(v) => v && setViewType(v as ViewType)}>
-                    <SelectTrigger className="w-32">
+                    <SelectTrigger className="w-28 shrink-0 bg-background sm:w-36">
                         <SelectValue placeholder="View">
                             {(value: string | null) => {
                                 if (value === "month") return "Month"
@@ -1193,7 +1431,7 @@ export function UnifiedCalendar({
                 </Select>
             </CardHeader>
 
-            <CardContent>
+            <CardContent className="pt-2">
                 {appointmentsLoading || tasksLoading ? (
                     <div className="py-12 flex items-center justify-center">
                         <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
@@ -1224,6 +1462,7 @@ export function UnifiedCalendar({
                                 googleEvents={googleEvents}
                                 onEventClick={handleEventClick}
                                 dragOverDate={dragOverDate}
+                                onOpenDayAgenda={handleOpenDayAgenda}
                                 {...(onTaskClick ? { onTaskClick } : {})}
                                 {...(includeAppointments ? {
                                     onDragStart: handleDragStart,
@@ -1257,27 +1496,29 @@ export function UnifiedCalendar({
                 )}
 
                 {/* Legend */}
-                <div className="flex flex-wrap items-center gap-4 mt-4 pt-4 border-t border-border">
-                    <span className="text-sm text-muted-foreground">Status:</span>
+                <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-border pt-4">
+                    <span className="mr-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                        Legend
+                    </span>
                     {includeAppointments && Object.entries(STATUS_COLORS).map(([status, color]) => (
-                        <div key={status} className="flex items-center gap-1.5">
-                            <div className={`size-3 rounded-full ${color}`} />
-                            <span className="text-xs capitalize">{status.replace("_", " ")}</span>
-                        </div>
+                        <Badge key={status} variant="outline" className="gap-1.5 rounded-full font-normal">
+                            <span className={`size-2 rounded-full ${color}`} />
+                            <span className="capitalize">{status.replace("_", " ")}</span>
+                        </Badge>
                     ))}
                     {includeGoogleEvents && (
-                        <div className="flex items-center gap-1.5">
-                            <div className={`size-3 rounded-full ${GOOGLE_EVENT_COLOR}`} />
-                            <span className="text-xs">🌐 Google Calendar</span>
-                        </div>
+                        <Badge variant="outline" className="gap-1.5 rounded-full font-normal">
+                            <span className={`size-2 rounded-full ${GOOGLE_EVENT_COLOR}`} />
+                            <span>Google Calendar</span>
+                        </Badge>
                     )}
-                    <div className="flex items-center gap-1.5">
-                        <div className={`size-3 rounded-full ${TASK_COLOR}`} />
-                        <span className="text-xs">Tasks</span>
-                    </div>
+                    <Badge variant="outline" className="gap-1.5 rounded-full font-normal">
+                        <span className={`size-2 rounded-full ${TASK_COLOR}`} />
+                        <span>Tasks</span>
+                    </Badge>
                     {includeAppointments && (
-                        <span className="text-xs text-muted-foreground ml-auto">
-                            💡 Drag pending/confirmed appointments to open reschedule picker
+                        <span className="ml-auto text-xs text-muted-foreground">
+                            Drag pending or confirmed appointments to open the reschedule picker.
                         </span>
                     )}
                 </div>
@@ -1304,6 +1545,16 @@ export function UnifiedCalendar({
                     startInRescheduleMode={!!dragRescheduleDateSeed}
                 />
             )}
+            <DayAgendaSheet
+                day={dayAgendaDate}
+                appointments={appointments}
+                tasks={tasks}
+                googleEvents={googleEvents}
+                open={dayAgendaOpen}
+                onOpenChange={setDayAgendaOpen}
+                onEventClick={handleEventClick}
+                {...(onTaskClick ? { onTaskClick } : {})}
+            />
         </Card>
     )
 }

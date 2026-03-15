@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent } from "@testing-library/react"
 import "@testing-library/jest-dom"
 import { UnifiedCalendar } from "@/components/appointments/UnifiedCalendar"
+import { format } from "date-fns"
 
 const mockMutate = vi.fn()
 const mockUseUnifiedCalendarData = vi.fn()
@@ -165,5 +166,96 @@ describe("UnifiedCalendar drag-to-reschedule", () => {
 
         expect(mockMutate).not.toHaveBeenCalled()
         expect(screen.getByText("Available Times")).toBeInTheDocument()
+    })
+
+    it("keeps all month-view items accessible from the overflow action", () => {
+        const overflowDay = new Date(now.getFullYear(), now.getMonth(), 15, 9, 0, 0, 0)
+        const overflowDate = format(overflowDay, "yyyy-MM-dd")
+
+        mockUseUnifiedCalendarData.mockReturnValue({
+            appointments: [
+                {
+                    id: "appt-overflow-1",
+                    appointment_type_name: "Initial Interview",
+                    client_name: "Appointment 1",
+                    client_email: "appt1@example.com",
+                    client_phone: null,
+                    client_timezone: "America/Los_Angeles",
+                    scheduled_start: new Date(now.getFullYear(), now.getMonth(), 15, 9, 0, 0, 0).toISOString(),
+                    scheduled_end: new Date(now.getFullYear(), now.getMonth(), 15, 9, 30, 0, 0).toISOString(),
+                    duration_minutes: 30,
+                    meeting_mode: "zoom",
+                    meeting_location: null,
+                    dial_in_number: null,
+                    status: "confirmed",
+                    zoom_join_url: null,
+                    google_meet_url: null,
+                    surrogate_id: null,
+                    surrogate_number: null,
+                    intended_parent_id: null,
+                    intended_parent_name: null,
+                    created_at: "2026-02-20T00:00:00Z",
+                },
+                {
+                    id: "appt-overflow-2",
+                    appointment_type_name: "Follow-up",
+                    client_name: "Appointment 2",
+                    client_email: "appt2@example.com",
+                    client_phone: null,
+                    client_timezone: "America/Los_Angeles",
+                    scheduled_start: new Date(now.getFullYear(), now.getMonth(), 15, 10, 0, 0, 0).toISOString(),
+                    scheduled_end: new Date(now.getFullYear(), now.getMonth(), 15, 10, 30, 0, 0).toISOString(),
+                    duration_minutes: 30,
+                    meeting_mode: "zoom",
+                    meeting_location: null,
+                    dial_in_number: null,
+                    status: "confirmed",
+                    zoom_join_url: null,
+                    google_meet_url: null,
+                    surrogate_id: null,
+                    surrogate_number: null,
+                    intended_parent_id: null,
+                    intended_parent_name: null,
+                    created_at: "2026-02-20T00:00:00Z",
+                },
+            ],
+            appointmentsLoading: false,
+            tasks: Array.from({ length: 5 }, (_, index) => ({
+                id: `task-overflow-${index + 1}`,
+                title: `Task ${index + 1}`,
+                description: null,
+                task_type: "other",
+                surrogate_id: null,
+                surrogate_number: null,
+                owner_type: "user",
+                owner_id: "u1",
+                owner_name: "Owner",
+                created_by_user_id: "u1",
+                created_by_name: "Owner",
+                due_date: overflowDate,
+                due_time: `${String(11 + index).padStart(2, "0")}:00:00`,
+                duration_minutes: null,
+                is_completed: false,
+                completed_at: null,
+                completed_by_name: null,
+                created_at: "2026-02-20T00:00:00Z",
+            })),
+            tasksLoading: false,
+            googleEvents: [],
+            calendarConnected: true,
+            calendarError: null,
+        })
+
+        render(<UnifiedCalendar includeGoogleEvents={false} />)
+
+        expect(screen.queryByText("Task 5")).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "View all 7 items" }))
+
+        expect(
+            screen.getByRole("heading", { name: format(overflowDay, "EEEE, MMMM d") })
+        ).toBeInTheDocument()
+        expect(screen.getByText("Task 5")).toBeInTheDocument()
+        expect(screen.getByText("Appointment 2")).toBeInTheDocument()
     })
 })
