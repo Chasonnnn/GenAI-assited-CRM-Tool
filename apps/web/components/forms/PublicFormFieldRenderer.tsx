@@ -35,6 +35,137 @@ function formatDate(value: string | null): string {
     return formatLocalDate(parseDateInput(value))
 }
 
+function isDobField(field: FormField): boolean {
+    const key = field.key.trim().toLowerCase()
+    const label = field.label.trim().toLowerCase()
+
+    return (
+        key === "dob" ||
+        /\bdob\b/.test(key) ||
+        key.includes("date_of_birth") ||
+        key.includes("birth_date") ||
+        label.includes("date of birth") ||
+        label.includes("birth date") ||
+        /\bdob\b/.test(label)
+    )
+}
+
+function parseHeightSelection(value: PublicFormAnswerValue | undefined): { feet: string; inches: string } {
+    const numericValue =
+        typeof value === "string" ? parseFloat(value) : typeof value === "number" ? value : NaN
+
+    if (Number.isNaN(numericValue) || numericValue < 0) {
+        return { feet: "", inches: "" }
+    }
+
+    const totalInches = Math.round(numericValue * 12)
+    return {
+        feet: String(Math.floor(totalInches / 12)),
+        inches: String(totalInches % 12),
+    }
+}
+
+function serializeHeightSelection(feet: string, inches: string): string | null {
+    if (feet === "" && inches === "") {
+        return null
+    }
+
+    return (Number(feet || 0) + Number(inches || 0) / 12).toFixed(2)
+}
+
+function HeightFieldInput({
+    field,
+    value,
+    requiredMark,
+    updateField,
+}: {
+    field: FormField
+    value: PublicFormAnswerValue | undefined
+    requiredMark: React.ReactNode
+    updateField: (fieldKey: string, value: PublicFormAnswerValue) => void
+}) {
+    const parsedSelection = React.useMemo(() => parseHeightSelection(value), [value])
+    const [feetValue, setFeetValue] = React.useState(() => parsedSelection.feet)
+    const [inchesValue, setInchesValue] = React.useState(() => parsedSelection.inches)
+    const serializedSelection = React.useMemo(
+        () => serializeHeightSelection(feetValue, inchesValue),
+        [feetValue, inchesValue],
+    )
+    const serializedIncomingValue = React.useMemo(
+        () => serializeHeightSelection(parsedSelection.feet, parsedSelection.inches),
+        [parsedSelection.feet, parsedSelection.inches],
+    )
+
+    React.useEffect(() => {
+        if (serializedIncomingValue === serializedSelection) {
+            return
+        }
+        setFeetValue(parsedSelection.feet)
+        setInchesValue(parsedSelection.inches)
+    }, [parsedSelection.feet, parsedSelection.inches, serializedIncomingValue, serializedSelection])
+
+    const syncHeight = (nextFeet: string, nextInches: string) => {
+        setFeetValue(nextFeet)
+        setInchesValue(nextInches)
+        updateField(field.key, serializeHeightSelection(nextFeet, nextInches))
+    }
+
+    return (
+        <div key={field.key} className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+            <Label className="text-sm font-medium">
+                {field.label} {requiredMark}
+            </Label>
+            <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                    <Label
+                        htmlFor={`${field.key}_ft`}
+                        className="text-xs font-medium uppercase tracking-[0.2em] text-stone-500"
+                    >
+                        {field.label} Feet
+                    </Label>
+                    <select
+                        id={`${field.key}_ft`}
+                        aria-label={`${field.label} Feet`}
+                        value={feetValue}
+                        onChange={(event) => syncHeight(event.target.value, inchesValue)}
+                        className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm shadow-none"
+                    >
+                        <option value="">ft</option>
+                        {Array.from({ length: 9 }, (_, index) => (
+                            <option key={index} value={index}>
+                                {index} ft
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                <div className="space-y-2">
+                    <Label
+                        htmlFor={`${field.key}_in`}
+                        className="text-xs font-medium uppercase tracking-[0.2em] text-stone-500"
+                    >
+                        {field.label} Inches
+                    </Label>
+                    <select
+                        id={`${field.key}_in`}
+                        aria-label={`${field.label} Inches`}
+                        value={inchesValue}
+                        onChange={(event) => syncHeight(feetValue, event.target.value)}
+                        className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm shadow-none"
+                    >
+                        <option value="">in</option>
+                        {Array.from({ length: 12 }, (_, index) => (
+                            <option key={index} value={index}>
+                                {index} in
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            </div>
+            {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
+        </div>
+    )
+}
+
 function OptionCard({
     selected,
     onClick,
@@ -104,6 +235,7 @@ export function PublicFormFieldRenderer({
     if (field.type === "date") {
         const isOpen = datePickerOpen[field.key] || false
         const dateValue = typeof value === "string" ? parseDateInput(value) : undefined
+        const usesDobPickerNavigation = isDobField(field)
 
         return (
             <div key={field.key} className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50 p-4">
@@ -133,9 +265,13 @@ export function PublicFormFieldRenderer({
                     <PopoverContent className="w-auto p-0" align="start">
                         <Calendar
                             mode="single"
-                            captionLayout="dropdown"
-                            startMonth={new Date(1950, 0)}
-                            endMonth={new Date()}
+                            {...(usesDobPickerNavigation
+                                ? {
+                                      captionLayout: "dropdown" as const,
+                                      startMonth: new Date(1950, 0),
+                                      endMonth: new Date(),
+                                  }
+                                : {})}
                             selected={dateValue}
                             onSelect={(date) => {
                                 updateField(field.key, date ? formatLocalDate(date) : null)
@@ -151,69 +287,13 @@ export function PublicFormFieldRenderer({
     }
 
     if (field.type === "height") {
-        const numericValue =
-            typeof value === "string" ? parseFloat(value) : typeof value === "number" ? value : NaN
-        const hasParsed = !Number.isNaN(numericValue) && numericValue >= 0
-        const feet = hasParsed ? Math.floor(numericValue) : ""
-        const inches = hasParsed ? Math.round((numericValue - Math.floor(numericValue)) * 12) : ""
-
-        const computeDecimal = (ft: number, inc: number) => (ft + inc / 12).toFixed(2)
-
         return (
-            <div key={field.key} className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
-                <Label className="text-sm font-medium">
-                    {field.label} {requiredMark}
-                </Label>
-                <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-2">
-                        <Label htmlFor={`${field.key}_ft`} className="text-xs font-medium uppercase tracking-[0.2em] text-stone-500">
-                            {field.label} Feet
-                        </Label>
-                        <select
-                            id={`${field.key}_ft`}
-                            aria-label={`${field.label} Feet`}
-                            value={String(feet)}
-                            onChange={(event) => {
-                                const ft = Number(event.target.value)
-                                const inc = typeof inches === "number" ? inches : 0
-                                updateField(field.key, computeDecimal(ft, inc))
-                            }}
-                            className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm shadow-none"
-                        >
-                            <option value="">ft</option>
-                            {Array.from({ length: 9 }, (_, index) => (
-                                <option key={index} value={index}>
-                                    {index} ft
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor={`${field.key}_in`} className="text-xs font-medium uppercase tracking-[0.2em] text-stone-500">
-                            {field.label} Inches
-                        </Label>
-                        <select
-                            id={`${field.key}_in`}
-                            aria-label={`${field.label} Inches`}
-                            value={String(inches)}
-                            onChange={(event) => {
-                                const inc = Number(event.target.value)
-                                const ft = typeof feet === "number" ? feet : 0
-                                updateField(field.key, computeDecimal(ft, inc))
-                            }}
-                            className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm shadow-none"
-                        >
-                            <option value="">in</option>
-                            {Array.from({ length: 12 }, (_, index) => (
-                                <option key={index} value={index}>
-                                    {index} in
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                </div>
-                {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
-            </div>
+            <HeightFieldInput
+                field={field}
+                value={value}
+                requiredMark={requiredMark}
+                updateField={updateField}
+            />
         )
     }
 
