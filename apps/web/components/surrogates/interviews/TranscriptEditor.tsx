@@ -353,6 +353,7 @@ export function TranscriptEditor({
                     disabled={!editor.can().undo()}
                     className="size-8 p-0"
                     title="Undo (Ctrl+Z)"
+                    aria-label="Undo"
                 >
                     <Undo2Icon className="size-4" />
                 </Button>
@@ -363,6 +364,7 @@ export function TranscriptEditor({
                     disabled={!editor.can().redo()}
                     className="size-8 p-0"
                     title="Redo (Ctrl+Shift+Z)"
+                    aria-label="Redo"
                 >
                     <Redo2Icon className="size-4" />
                 </Button>
@@ -378,6 +380,7 @@ export function TranscriptEditor({
                             disabled={!hasSelection}
                             className="size-8 p-0"
                             title="Add Comment (select text first)"
+                            aria-label="Add Comment"
                         >
                             <MessageSquareIcon className="size-4" />
                         </Button>
