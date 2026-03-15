@@ -12,6 +12,9 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    env:
+      # Upstream still declares node20; force Node 24 now to match GitHub's upcoming default.
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - name: Run release-please
         uses: googleapis/release-please-action@v4
