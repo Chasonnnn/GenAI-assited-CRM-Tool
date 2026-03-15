@@ -45,9 +45,13 @@ def test_download_submission_file_branch_paths(monkeypatch, db, test_org, test_u
     monkeypatch.setattr(forms_router.audit_service, "log_phi_access", lambda **_kwargs: None)
 
     # Submission missing.
-    monkeypatch.setattr(forms_router.form_submission_service, "get_submission", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        forms_router.form_submission_service, "get_submission", lambda *_args, **_kwargs: None
+    )
     with pytest.raises(HTTPException, match="Submission not found"):
-        forms_router.download_submission_file(submission_id, file_id, request, session=session, db=db)
+        forms_router.download_submission_file(
+            submission_id, file_id, request, session=session, db=db
+        )
 
     # Submission not linked.
     monkeypatch.setattr(
@@ -56,20 +60,34 @@ def test_download_submission_file_branch_paths(monkeypatch, db, test_org, test_u
         lambda *_args, **_kwargs: _submission(surrogate_id=None),
     )
     with pytest.raises(HTTPException, match="not linked to a surrogate"):
-        forms_router.download_submission_file(submission_id, file_id, request, session=session, db=db)
+        forms_router.download_submission_file(
+            submission_id, file_id, request, session=session, db=db
+        )
 
     # Surrogate missing.
     linked = _submission(surrogate_id=uuid4())
-    monkeypatch.setattr(forms_router.form_submission_service, "get_submission", lambda *_args, **_kwargs: linked)
-    monkeypatch.setattr(forms_router.surrogate_service, "get_surrogate", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        forms_router.form_submission_service, "get_submission", lambda *_args, **_kwargs: linked
+    )
+    monkeypatch.setattr(
+        forms_router.surrogate_service, "get_surrogate", lambda *_args, **_kwargs: None
+    )
     with pytest.raises(HTTPException, match="Surrogate not found"):
-        forms_router.download_submission_file(submission_id, file_id, request, session=session, db=db)
+        forms_router.download_submission_file(
+            submission_id, file_id, request, session=session, db=db
+        )
 
     # File missing.
-    monkeypatch.setattr(forms_router.surrogate_service, "get_surrogate", lambda *_args, **_kwargs: _surrogate())
-    monkeypatch.setattr(forms_router.form_submission_service, "get_submission_file", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        forms_router.surrogate_service, "get_surrogate", lambda *_args, **_kwargs: _surrogate()
+    )
+    monkeypatch.setattr(
+        forms_router.form_submission_service, "get_submission_file", lambda *_args, **_kwargs: None
+    )
     with pytest.raises(HTTPException, match="File not found"):
-        forms_router.download_submission_file(submission_id, file_id, request, session=session, db=db)
+        forms_router.download_submission_file(
+            submission_id, file_id, request, session=session, db=db
+        )
 
     # Infected / scan error / pending scan.
     monkeypatch.setattr(
@@ -78,7 +96,9 @@ def test_download_submission_file_branch_paths(monkeypatch, db, test_org, test_u
         lambda *_args, **_kwargs: _file_record(scan_status="infected"),
     )
     with pytest.raises(HTTPException, match="File is infected"):
-        forms_router.download_submission_file(submission_id, file_id, request, session=session, db=db)
+        forms_router.download_submission_file(
+            submission_id, file_id, request, session=session, db=db
+        )
 
     monkeypatch.setattr(
         forms_router.form_submission_service,
@@ -86,7 +106,9 @@ def test_download_submission_file_branch_paths(monkeypatch, db, test_org, test_u
         lambda *_args, **_kwargs: _file_record(scan_status="error"),
     )
     with pytest.raises(HTTPException, match="failed virus scan"):
-        forms_router.download_submission_file(submission_id, file_id, request, session=session, db=db)
+        forms_router.download_submission_file(
+            submission_id, file_id, request, session=session, db=db
+        )
 
     monkeypatch.setattr(forms_router.settings, "ATTACHMENT_SCAN_ENABLED", True)
     monkeypatch.setattr(
@@ -95,7 +117,9 @@ def test_download_submission_file_branch_paths(monkeypatch, db, test_org, test_u
         lambda *_args, **_kwargs: _file_record(scan_status="pending"),
     )
     with pytest.raises(HTTPException, match="still being scanned"):
-        forms_router.download_submission_file(submission_id, file_id, request, session=session, db=db)
+        forms_router.download_submission_file(
+            submission_id, file_id, request, session=session, db=db
+        )
 
     # URL generation failure then success with relative URL expansion.
     monkeypatch.setattr(forms_router.settings, "ATTACHMENT_SCAN_ENABLED", False)
@@ -110,14 +134,18 @@ def test_download_submission_file_branch_paths(monkeypatch, db, test_org, test_u
         lambda **_kwargs: None,
     )
     with pytest.raises(HTTPException, match="Failed to generate download URL"):
-        forms_router.download_submission_file(submission_id, file_id, request, session=session, db=db)
+        forms_router.download_submission_file(
+            submission_id, file_id, request, session=session, db=db
+        )
 
     monkeypatch.setattr(
         forms_router.form_submission_service,
         "get_submission_file_download_url",
         lambda **_kwargs: "/files/download/signed",
     )
-    response = forms_router.download_submission_file(submission_id, file_id, request, session=session, db=db)
+    response = forms_router.download_submission_file(
+        submission_id, file_id, request, session=session, db=db
+    )
     assert response.download_url == "https://api.example.com/files/download/signed"
     assert response.filename == "doc.pdf"
 
@@ -131,7 +159,9 @@ def test_upload_and_delete_submission_file_branch_paths(monkeypatch, db, test_or
     monkeypatch.setattr(forms_router, "check_surrogate_access", lambda *_args, **_kwargs: None)
 
     # Upload: submission missing.
-    monkeypatch.setattr(forms_router.form_submission_service, "get_submission", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        forms_router.form_submission_service, "get_submission", lambda *_args, **_kwargs: None
+    )
     with pytest.raises(HTTPException, match="Submission not found"):
         forms_router.upload_submission_file(submission_id, upload, None, session=session, db=db)
 
@@ -145,13 +175,19 @@ def test_upload_and_delete_submission_file_branch_paths(monkeypatch, db, test_or
         forms_router.upload_submission_file(submission_id, upload, None, session=session, db=db)
 
     linked = _submission(surrogate_id=uuid4())
-    monkeypatch.setattr(forms_router.form_submission_service, "get_submission", lambda *_args, **_kwargs: linked)
-    monkeypatch.setattr(forms_router.surrogate_service, "get_surrogate", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        forms_router.form_submission_service, "get_submission", lambda *_args, **_kwargs: linked
+    )
+    monkeypatch.setattr(
+        forms_router.surrogate_service, "get_surrogate", lambda *_args, **_kwargs: None
+    )
     with pytest.raises(HTTPException, match="Surrogate not found"):
         forms_router.upload_submission_file(submission_id, upload, None, session=session, db=db)
 
     # Upload: service validation error.
-    monkeypatch.setattr(forms_router.surrogate_service, "get_surrogate", lambda *_args, **_kwargs: _surrogate())
+    monkeypatch.setattr(
+        forms_router.surrogate_service, "get_surrogate", lambda *_args, **_kwargs: _surrogate()
+    )
     monkeypatch.setattr(
         forms_router.form_submission_service,
         "add_submission_file",
@@ -166,12 +202,16 @@ def test_upload_and_delete_submission_file_branch_paths(monkeypatch, db, test_or
         "add_submission_file",
         lambda **_kwargs: _file_record(scan_status="clean", filename="note.txt"),
     )
-    uploaded = forms_router.upload_submission_file(submission_id, upload, "document", session=session, db=db)
+    uploaded = forms_router.upload_submission_file(
+        submission_id, upload, "document", session=session, db=db
+    )
     assert uploaded.filename == "note.txt"
     assert uploaded.scan_status == "clean"
 
     # Delete: missing submission.
-    monkeypatch.setattr(forms_router.form_submission_service, "get_submission", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        forms_router.form_submission_service, "get_submission", lambda *_args, **_kwargs: None
+    )
     with pytest.raises(HTTPException, match="Submission not found"):
         forms_router.delete_submission_file(submission_id, file_id, session=session, db=db)
 
@@ -184,13 +224,21 @@ def test_upload_and_delete_submission_file_branch_paths(monkeypatch, db, test_or
     with pytest.raises(HTTPException, match="not linked to a surrogate"):
         forms_router.delete_submission_file(submission_id, file_id, session=session, db=db)
 
-    monkeypatch.setattr(forms_router.form_submission_service, "get_submission", lambda *_args, **_kwargs: linked)
-    monkeypatch.setattr(forms_router.surrogate_service, "get_surrogate", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        forms_router.form_submission_service, "get_submission", lambda *_args, **_kwargs: linked
+    )
+    monkeypatch.setattr(
+        forms_router.surrogate_service, "get_surrogate", lambda *_args, **_kwargs: None
+    )
     with pytest.raises(HTTPException, match="Surrogate not found"):
         forms_router.delete_submission_file(submission_id, file_id, session=session, db=db)
 
-    monkeypatch.setattr(forms_router.surrogate_service, "get_surrogate", lambda *_args, **_kwargs: _surrogate())
-    monkeypatch.setattr(forms_router.form_submission_service, "get_submission_file", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        forms_router.surrogate_service, "get_surrogate", lambda *_args, **_kwargs: _surrogate()
+    )
+    monkeypatch.setattr(
+        forms_router.form_submission_service, "get_submission_file", lambda *_args, **_kwargs: None
+    )
     with pytest.raises(HTTPException, match="File not found"):
         forms_router.delete_submission_file(submission_id, file_id, session=session, db=db)
 
@@ -223,7 +271,9 @@ def test_export_submission_pdf_branch_paths(monkeypatch, db, test_org, test_user
 
     monkeypatch.setattr(forms_router, "check_surrogate_access", lambda *_args, **_kwargs: None)
 
-    monkeypatch.setattr(forms_router.form_submission_service, "get_submission", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        forms_router.form_submission_service, "get_submission", lambda *_args, **_kwargs: None
+    )
     with pytest.raises(HTTPException, match="Submission not found"):
         forms_router.export_submission_pdf(submission_id, session=session, db=db)
 
@@ -236,14 +286,24 @@ def test_export_submission_pdf_branch_paths(monkeypatch, db, test_org, test_user
         forms_router.export_submission_pdf(submission_id, session=session, db=db)
 
     linked = _submission(surrogate_id=uuid4())
-    monkeypatch.setattr(forms_router.form_submission_service, "get_submission", lambda *_args, **_kwargs: linked)
-    monkeypatch.setattr(forms_router.surrogate_service, "get_surrogate", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        forms_router.form_submission_service, "get_submission", lambda *_args, **_kwargs: linked
+    )
+    monkeypatch.setattr(
+        forms_router.surrogate_service, "get_surrogate", lambda *_args, **_kwargs: None
+    )
     with pytest.raises(HTTPException, match="Surrogate not found"):
         forms_router.export_submission_pdf(submission_id, session=session, db=db)
 
     surrogate = _surrogate()
-    monkeypatch.setattr(forms_router.surrogate_service, "get_surrogate", lambda *_args, **_kwargs: surrogate)
-    monkeypatch.setattr(forms_router.org_service, "get_org_by_id", lambda *_args, **_kwargs: SimpleNamespace(name="Test Org"))
+    monkeypatch.setattr(
+        forms_router.surrogate_service, "get_surrogate", lambda *_args, **_kwargs: surrogate
+    )
+    monkeypatch.setattr(
+        forms_router.org_service,
+        "get_org_by_id",
+        lambda *_args, **_kwargs: SimpleNamespace(name="Test Org"),
+    )
 
     monkeypatch.setattr(
         "app.services.pdf_export_service.export_submission_pdf",

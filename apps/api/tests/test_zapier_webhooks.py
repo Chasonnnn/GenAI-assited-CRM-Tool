@@ -575,7 +575,9 @@ async def test_zapier_webhook_stores_raw_payload_and_creates_form(client, db, te
 
 
 @pytest.mark.asyncio
-async def test_zapier_webhook_refreshes_form_schema_when_lead_id_appears_later(client, db, test_org):
+async def test_zapier_webhook_refreshes_form_schema_when_lead_id_appears_later(
+    client, db, test_org
+):
     from app.db.models import MetaForm, MetaFormVersion
     from app.services import zapier_settings_service
 

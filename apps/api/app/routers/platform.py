@@ -37,7 +37,13 @@ from app.core.deps import (
 )
 from app.core.csrf import set_csrf_cookie, CSRF_COOKIE_NAME, get_csrf_cookie
 from app.core.config import settings
-from app.services import duo_admin_service, platform_service, session_service, storage_client, storage_url_service
+from app.services import (
+    duo_admin_service,
+    platform_service,
+    session_service,
+    storage_client,
+    storage_url_service,
+)
 from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
 from app.db.enums import Role
 from app.schemas.platform_templates import (

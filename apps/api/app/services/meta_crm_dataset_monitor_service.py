@@ -167,9 +167,7 @@ def record_queued_event(
 def mark_job_delivered(*, job_id: UUID, attempts: int, db: Session | None = None) -> None:
     def _update(inner_db: Session) -> None:
         event = (
-            inner_db.query(MetaCrmDatasetEvent)
-            .filter(MetaCrmDatasetEvent.job_id == job_id)
-            .first()
+            inner_db.query(MetaCrmDatasetEvent).filter(MetaCrmDatasetEvent.job_id == job_id).first()
         )
         if not event:
             return
@@ -194,9 +192,7 @@ def mark_job_failed(
 ) -> None:
     def _update(inner_db: Session) -> None:
         event = (
-            inner_db.query(MetaCrmDatasetEvent)
-            .filter(MetaCrmDatasetEvent.job_id == job_id)
-            .first()
+            inner_db.query(MetaCrmDatasetEvent).filter(MetaCrmDatasetEvent.job_id == job_id).first()
         )
         if not event:
             return

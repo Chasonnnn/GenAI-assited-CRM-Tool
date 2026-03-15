@@ -840,9 +840,7 @@ def _parse_inches_component(raw_inches: str | None) -> Decimal | None:
     return None
 
 
-def _height_transform_result(
-    feet: int, inches: Decimal, warnings: list[str]
-) -> TransformOutput:
+def _height_transform_result(feet: int, inches: Decimal, warnings: list[str]) -> TransformOutput:
     local_warnings = list(warnings)
     if inches >= 12:
         local_warnings.append(f"Inches value {inches} >= 12, may be incorrect")

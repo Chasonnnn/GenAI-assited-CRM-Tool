@@ -22,7 +22,9 @@ class OrgIntelligentSuggestionSettings(Base):
 
     __tablename__ = "org_intelligent_suggestion_settings"
     __table_args__ = (
-        CheckConstraint("new_unread_business_days BETWEEN 1 AND 30", name="ck_intel_new_unread_days"),
+        CheckConstraint(
+            "new_unread_business_days BETWEEN 1 AND 30", name="ck_intel_new_unread_days"
+        ),
         CheckConstraint(
             "meeting_outcome_business_days BETWEEN 1 AND 30",
             name="ck_intel_meeting_outcome_days",
@@ -59,7 +61,9 @@ class OrgIntelligentSuggestionSettings(Base):
         Integer, server_default=text("1"), nullable=False
     )
 
-    stuck_enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("true"), nullable=False)
+    stuck_enabled: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("true"), nullable=False
+    )
     stuck_business_days: Mapped[int] = mapped_column(
         Integer, server_default=text("5"), nullable=False
     )

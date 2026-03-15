@@ -30,7 +30,9 @@ def test_pipeline_service_lifecycle(monkeypatch, db, test_org, test_user):
 
     monkeypatch.setattr("app.services.version_service.create_version", _create_version)
 
-    default_pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id, user_id=test_user.id)
+    default_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db, test_org.id, user_id=test_user.id
+    )
     assert default_pipeline.is_default is True
     assert len(default_pipeline.stages) > 0
 
@@ -69,7 +71,9 @@ def test_internal_verify_secret_guard(monkeypatch):
         internal_router.verify_internal_secret("secret")
 
     monkeypatch.setattr(internal_router.settings, "INTERNAL_SECRET", "expected")
-    monkeypatch.setattr(internal_router, "verify_secret", lambda provided, expected: provided == expected)
+    monkeypatch.setattr(
+        internal_router, "verify_secret", lambda provided, expected: provided == expected
+    )
     with pytest.raises(Exception):
         internal_router.verify_internal_secret("wrong")
     internal_router.verify_internal_secret("expected")
@@ -78,7 +82,9 @@ def test_internal_verify_secret_guard(monkeypatch):
 @pytest.mark.asyncio
 async def test_internal_scheduled_endpoints(client, db, monkeypatch, test_org):
     monkeypatch.setattr(internal_router.settings, "INTERNAL_SECRET", "secret")
-    monkeypatch.setattr(internal_router, "verify_secret", lambda provided, expected: provided == expected)
+    monkeypatch.setattr(
+        internal_router, "verify_secret", lambda provided, expected: provided == expected
+    )
     monkeypatch.setattr(internal_router, "SessionLocal", lambda: _SessionCtx(db))
 
     scheduled_jobs: list[dict] = []
@@ -109,15 +115,25 @@ async def test_internal_scheduled_endpoints(client, db, monkeypatch, test_org):
         meta_user_name="Meta User",
         meta_user_id="meta-1",
     )
-    monkeypatch.setattr(internal_router.meta_page_service, "list_active_mappings", lambda _db: [mapping_expired, mapping_soon])
+    monkeypatch.setattr(
+        internal_router.meta_page_service,
+        "list_active_mappings",
+        lambda _db: [mapping_expired, mapping_soon],
+    )
     monkeypatch.setattr(
         internal_router.meta_oauth_service,
         "list_active_oauth_connections_any_org",
         lambda _db: [oauth_conn],
     )
     monkeypatch.setattr(internal_router.ops_service, "update_config_status", lambda **kwargs: None)
-    monkeypatch.setattr(internal_router.ops_service, "get_or_create_health", lambda **kwargs: SimpleNamespace(status="ok"))
-    monkeypatch.setattr(internal_router.alert_service, "create_or_update_alert", lambda **kwargs: None)
+    monkeypatch.setattr(
+        internal_router.ops_service,
+        "get_or_create_health",
+        lambda **kwargs: SimpleNamespace(status="ok"),
+    )
+    monkeypatch.setattr(
+        internal_router.alert_service, "create_or_update_alert", lambda **kwargs: None
+    )
 
     token_check = await client.post(
         "/internal/scheduled/token-check",
@@ -154,16 +170,47 @@ async def test_internal_scheduled_endpoints(client, db, monkeypatch, test_org):
     monkeypatch.setattr(
         internal_router.task_service,
         "list_user_tasks_due_on",
-        lambda **kwargs: [SimpleNamespace(id=uuid4(), title="Due Soon", organization_id=test_org.id, owner_id=uuid4(), due_date=datetime.now().date(), case=None)],
+        lambda **kwargs: [
+            SimpleNamespace(
+                id=uuid4(),
+                title="Due Soon",
+                organization_id=test_org.id,
+                owner_id=uuid4(),
+                due_date=datetime.now().date(),
+                case=None,
+            )
+        ],
     )
     monkeypatch.setattr(
         internal_router.task_service,
         "list_user_tasks_overdue",
-        lambda **kwargs: [SimpleNamespace(id=uuid4(), title="Overdue", organization_id=test_org.id, owner_id=uuid4(), due_date=datetime.now().date(), case=None)],
+        lambda **kwargs: [
+            SimpleNamespace(
+                id=uuid4(),
+                title="Overdue",
+                organization_id=test_org.id,
+                owner_id=uuid4(),
+                due_date=datetime.now().date(),
+                case=None,
+            )
+        ],
     )
-    monkeypatch.setattr("app.services.notification_service.notify_task_due_soon", lambda **kwargs: None)
-    monkeypatch.setattr("app.services.notification_service.notify_task_overdue", lambda **kwargs: None)
-    monkeypatch.setattr(internal_router.contact_reminder_service, "process_contact_reminder_jobs", lambda _db: {"orgs_processed": 1, "total_surrogates_checked": 3, "total_notifications_created": 1, "errors": []})
+    monkeypatch.setattr(
+        "app.services.notification_service.notify_task_due_soon", lambda **kwargs: None
+    )
+    monkeypatch.setattr(
+        "app.services.notification_service.notify_task_overdue", lambda **kwargs: None
+    )
+    monkeypatch.setattr(
+        internal_router.contact_reminder_service,
+        "process_contact_reminder_jobs",
+        lambda _db: {
+            "orgs_processed": 1,
+            "total_surrogates_checked": 3,
+            "total_notifications_created": 1,
+            "errors": [],
+        },
+    )
 
     task_notifs = await client.post(
         "/internal/scheduled/task-notifications",
@@ -181,7 +228,9 @@ async def test_internal_scheduled_endpoints(client, db, monkeypatch, test_org):
 
     # meta sync endpoints
     ad_account = SimpleNamespace(id=uuid4(), organization_id=test_org.id)
-    monkeypatch.setattr(internal_router.meta_admin_service, "list_active_ad_accounts", lambda _db: [ad_account])
+    monkeypatch.setattr(
+        internal_router.meta_admin_service, "list_active_ad_accounts", lambda _db: [ad_account]
+    )
 
     meta_hierarchy = await client.post(
         "/internal/scheduled/meta-hierarchy-sync",
@@ -200,7 +249,10 @@ async def test_internal_scheduled_endpoints(client, db, monkeypatch, test_org):
     monkeypatch.setattr(
         internal_router.meta_page_service,
         "list_active_mappings",
-        lambda _db: [SimpleNamespace(organization_id=test_org.id, page_id="p1"), SimpleNamespace(organization_id=test_org.id, page_id="p2")],
+        lambda _db: [
+            SimpleNamespace(organization_id=test_org.id, page_id="p1"),
+            SimpleNamespace(organization_id=test_org.id, page_id="p2"),
+        ],
     )
     meta_forms = await client.post(
         "/internal/scheduled/meta-forms-sync",

@@ -144,9 +144,10 @@ async def test_workflow_options_filters_email_templates_by_scope(db, test_org):
             "send_notification",
             "promote_intake_lead",
         ]
-        assert "send_zapier_conversion_event" in org_payload["action_types_by_trigger"][
-            "status_changed"
-        ]
+        assert (
+            "send_zapier_conversion_event"
+            in org_payload["action_types_by_trigger"]["status_changed"]
+        )
         assert org_payload["trigger_entity_types"]["form_submitted"] == "form_submission"
         assert org_payload["action_types_by_trigger"]["form_submitted"][:2] == [
             "auto_match_submission",

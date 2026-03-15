@@ -709,7 +709,9 @@ def performance_cases(db, test_org, test_user, second_test_user, performance_pip
             stage_id=(
                 stages["contacted"].id
                 if i < 2
-                else stages["lost"].id if i == 2 else stages["on_hold"].id
+                else stages["lost"].id
+                if i == 2
+                else stages["on_hold"].id
             ),
             full_name=f"User1 Case {i}",
             status_label="Contacted" if i < 2 else "Lost" if i == 2 else "On-Hold",

@@ -556,9 +556,7 @@ def repair_matched_without_match(org_slug: str | None, apply: bool):
                 f"(org={surrogate.organization_id})"
             )
 
-        click.echo(
-            f"Found {len(orphaned_intended_parents)} orphaned matched intended parent(s)"
-        )
+        click.echo(f"Found {len(orphaned_intended_parents)} orphaned matched intended parent(s)")
         for intended_parent in orphaned_intended_parents:
             click.echo(
                 f"  - {intended_parent.intended_parent_number} {intended_parent.full_name} "

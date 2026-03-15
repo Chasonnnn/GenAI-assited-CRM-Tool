@@ -384,9 +384,7 @@ def _merge_stage_key_collisions(conn) -> None:
         canonical = ranked[0]
         canonical_stage_id = canonical["id"]
         canonical_label = (
-            "Pre-Qualified"
-            if stage_key == "pre_qualified"
-            else str(canonical.get("label") or "")
+            "Pre-Qualified" if stage_key == "pre_qualified" else str(canonical.get("label") or "")
         )
 
         for duplicate in ranked[1:]:
@@ -430,9 +428,7 @@ def upgrade() -> None:
     _merge_stage_key_collisions(conn)
 
     conn.execute(
-        sa.text(
-            "UPDATE pipeline_stages SET slug = 'pre_qualified' WHERE slug = 'qualified'"
-        )
+        sa.text("UPDATE pipeline_stages SET slug = 'pre_qualified' WHERE slug = 'qualified'")
     )
     conn.execute(
         sa.text(
@@ -499,7 +495,9 @@ def upgrade() -> None:
     conn.execute(sa.text("DELETE FROM entity_versions WHERE entity_type = 'pipeline'"))
     conn.execute(sa.text("UPDATE pipelines SET current_version = 1"))
 
-    op.alter_column("pipeline_stages", "stage_key", existing_type=sa.String(length=50), nullable=False)
+    op.alter_column(
+        "pipeline_stages", "stage_key", existing_type=sa.String(length=50), nullable=False
+    )
     op.create_unique_constraint("uq_stage_key", "pipeline_stages", ["pipeline_id", "stage_key"])
     op.create_index(
         "idx_stage_pipeline_key",

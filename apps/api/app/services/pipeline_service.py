@@ -31,7 +31,8 @@ def _merge_required_stage_defs(stage_defs: list[dict]) -> list[dict]:
     """Ensure required system stages exist in a sensible order."""
     normalized_defs = [dict(stage) for stage in stage_defs]
     existing_keys = {
-        _normalize_stage_key(stage.get("stage_key") or stage.get("slug")) for stage in normalized_defs
+        _normalize_stage_key(stage.get("stage_key") or stage.get("slug"))
+        for stage in normalized_defs
     }
 
     if "on_hold" not in existing_keys:

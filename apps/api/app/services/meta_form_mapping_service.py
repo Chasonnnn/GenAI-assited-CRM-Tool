@@ -255,21 +255,13 @@ def list_unconverted_leads_for_form(
     offset: int = 0,
 ) -> tuple[list[MetaLead], int]:
     """Return unconverted leads and total count for a specific form."""
-    base_query = (
-        db.query(MetaLead)
-        .filter(
-            MetaLead.organization_id == org_id,
-            MetaLead.meta_form_id == form_external_id,
-            MetaLead.is_converted.is_(False),
-        )
+    base_query = db.query(MetaLead).filter(
+        MetaLead.organization_id == org_id,
+        MetaLead.meta_form_id == form_external_id,
+        MetaLead.is_converted.is_(False),
     )
     total = base_query.count()
-    items = (
-        base_query.order_by(MetaLead.received_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    items = base_query.order_by(MetaLead.received_at.desc()).offset(offset).limit(limit).all()
     return items, total
 
 
@@ -317,7 +309,9 @@ def get_reprocess_eligibility_for_leads(
             reason = "test_lead"
         else:
             email_hash = email_hashes.get(lead.id)
-            if email_hash and (email_hash in existing_hashes or email_hash in duplicate_hashes_within_batch):
+            if email_hash and (
+                email_hash in existing_hashes or email_hash in duplicate_hashes_within_batch
+            ):
                 reason = "duplicate_email"
 
         reasons_by_lead[lead.id] = reason

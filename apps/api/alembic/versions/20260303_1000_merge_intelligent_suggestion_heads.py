@@ -5,11 +5,12 @@ Revises: 20260301_1200, 20260302_0900
 Create Date: 2026-03-02 22:50:49.243297
 
 """
+
 from typing import Sequence, Union
 
 # revision identifiers, used by Alembic.
-revision: str = '20260303_1000'
-down_revision: Union[str, Sequence[str], None] = ('20260301_1200', '20260302_0900')
+revision: str = "20260303_1000"
+down_revision: Union[str, Sequence[str], None] = ("20260301_1200", "20260302_0900")
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

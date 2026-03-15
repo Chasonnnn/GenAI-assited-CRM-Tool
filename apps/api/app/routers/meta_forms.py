@@ -221,7 +221,10 @@ def update_meta_form_mapping(
             db=db,
             org_id=session.org_id,
             job_type=JobType.META_LEAD_REPROCESS_FORM,
-            payload={"form_id": str(form.id), "lead_ids": [str(lead_id) for lead_id in eligible_ids]},
+            payload={
+                "form_id": str(form.id),
+                "lead_ids": [str(lead_id) for lead_id in eligible_ids],
+            },
         )
 
     return MetaFormMappingUpdateResponse(
@@ -258,10 +261,12 @@ def list_unconverted_leads(
         limit=limit,
         offset=offset,
     )
-    all_unconverted, eligible_ids, reasons_by_lead, _ = meta_form_mapping_service.get_reprocess_plan_for_form(
-        db,
-        session.org_id,
-        form.form_external_id,
+    all_unconverted, eligible_ids, reasons_by_lead, _ = (
+        meta_form_mapping_service.get_reprocess_plan_for_form(
+            db,
+            session.org_id,
+            form.form_external_id,
+        )
     )
     eligible_set = set(eligible_ids)
     return MetaFormUnconvertedLeadListResponse(
@@ -309,7 +314,10 @@ def reconvert_meta_form_leads(
             db=db,
             org_id=session.org_id,
             job_type=JobType.META_LEAD_REPROCESS_FORM,
-            payload={"form_id": str(form.id), "lead_ids": [str(lead_id) for lead_id in eligible_ids]},
+            payload={
+                "form_id": str(form.id),
+                "lead_ids": [str(lead_id) for lead_id in eligible_ids],
+            },
         )
 
     blocked_count = sum(reason_counts.values())

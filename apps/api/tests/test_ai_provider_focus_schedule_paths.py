@@ -110,7 +110,9 @@ async def test_google_genai_provider_chat_and_stream():
     assert response.content == "response-text"
     assert response.total_tokens == 12
 
-    chunks = [chunk async for chunk in provider.stream_chat([ChatMessage(role="user", content="hello")])]
+    chunks = [
+        chunk async for chunk in provider.stream_chat([ChatMessage(role="user", content="hello")])
+    ]
     assert [chunk.text for chunk in chunks[:-1]] == ["H", "i"]
     assert chunks[-1].is_final is True
     assert chunks[-1].total_tokens == 15
@@ -169,7 +171,9 @@ async def test_vertex_provider_and_factory(monkeypatch):
     fake_client = SimpleNamespace(aio=SimpleNamespace(models=fake_models))
 
     monkeypatch.setattr(ai_provider, "genai", SimpleNamespace(Client=lambda **kwargs: fake_client))
-    monkeypatch.setattr(ai_provider.types, "HttpOptions", lambda api_version="v1": {"api_version": api_version})
+    monkeypatch.setattr(
+        ai_provider.types, "HttpOptions", lambda api_version="v1": {"api_version": api_version}
+    )
     monkeypatch.setattr(ai_provider.asyncio, "to_thread", lambda fn, *args: fn(*args))
 
     cfg = VertexWIFConfig(
@@ -199,7 +203,9 @@ async def test_vertex_provider_and_factory(monkeypatch):
 
     gemini = ai_provider.get_provider("gemini", "api-key")
     assert isinstance(gemini, ai_provider.GeminiProvider)
-    vertex = ai_provider.get_provider("vertex_api_key", "api-key", project_id="proj", location="us-central1")
+    vertex = ai_provider.get_provider(
+        "vertex_api_key", "api-key", project_id="proj", location="us-central1"
+    )
     assert isinstance(vertex, ai_provider.VertexAPIKeyProvider)
     with pytest.raises(ValueError, match="Unknown provider"):
         ai_provider.get_provider("unknown", "api-key")
@@ -227,6 +233,8 @@ async def test_vertex_validate_key_failure(monkeypatch):
         organization_id=uuid4(),
     )
     provider = ai_provider.VertexWIFProvider(cfg)
-    monkeypatch.setattr(provider._credentials, "refresh", lambda _req: (_ for _ in ()).throw(RuntimeError("bad")))
+    monkeypatch.setattr(
+        provider._credentials, "refresh", lambda _req: (_ for _ in ()).throw(RuntimeError("bad"))
+    )
     ok = await provider.validate_key()
     assert ok is False

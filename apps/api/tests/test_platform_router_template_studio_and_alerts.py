@@ -123,7 +123,9 @@ async def test_platform_template_studio_missing_resources_return_404(
         else:
             response = await getattr(authed_client, method)(path, json=payload)
 
-        assert response.status_code == 404, f"{method.upper()} {path} returned {response.status_code}"
+        assert response.status_code == 404, (
+            f"{method.upper()} {path} returned {response.status_code}"
+        )
         assert response.json()["detail"] == "Template not found"
 
 

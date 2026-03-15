@@ -43,11 +43,7 @@ def _sanitize_secret(value: str) -> str:
 def _canonical_query(params: dict[str, Any] | None) -> str:
     if not params:
         return ""
-    items = sorted(
-        (str(key), str(value))
-        for key, value in params.items()
-        if value is not None
-    )
+    items = sorted((str(key), str(value)) for key, value in params.items() if value is not None)
     return "&".join(f"{quote(key, safe='~')}={quote(value, safe='~')}" for key, value in items)
 
 
@@ -121,7 +117,9 @@ class DuoAdminClient:
 
         self.base_url = f"https://{self.host}"
 
-    def _build_auth_header(self, method: str, path: str, params: dict[str, Any] | None, date: str) -> str:
+    def _build_auth_header(
+        self, method: str, path: str, params: dict[str, Any] | None, date: str
+    ) -> str:
         canonical = "\n".join(
             [
                 date,
@@ -136,9 +134,9 @@ class DuoAdminClient:
             canonical.encode("utf-8"),
             hashlib.sha1,
         ).hexdigest()
-        token = base64.b64encode(
-            f"{self.integration_key}:{signature}".encode("utf-8")
-        ).decode("ascii")
+        token = base64.b64encode(f"{self.integration_key}:{signature}".encode("utf-8")).decode(
+            "ascii"
+        )
         return f"Basic {token}"
 
     def _request(
@@ -150,7 +148,9 @@ class DuoAdminClient:
         step: str,
         allow_not_found: bool = False,
     ) -> Any:
-        normalized_params = {key: value for key, value in (params or {}).items() if value is not None}
+        normalized_params = {
+            key: value for key, value in (params or {}).items() if value is not None
+        }
         date_header = format_datetime(datetime.now(timezone.utc), usegmt=True)
         headers = {
             "Accept": "application/json",

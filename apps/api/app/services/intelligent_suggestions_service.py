@@ -474,7 +474,10 @@ def list_rules(db: Session, organization_id: UUID) -> list[OrgIntelligentSuggest
     return (
         db.query(OrgIntelligentSuggestionRule)
         .filter(OrgIntelligentSuggestionRule.organization_id == organization_id)
-        .order_by(OrgIntelligentSuggestionRule.sort_order.asc(), OrgIntelligentSuggestionRule.created_at.asc())
+        .order_by(
+            OrgIntelligentSuggestionRule.sort_order.asc(),
+            OrgIntelligentSuggestionRule.created_at.asc(),
+        )
         .all()
     )
 
@@ -622,9 +625,7 @@ def _stage_inactivity_ids(
     last_activity_col = func.coalesce(
         latest_activity_subquery.c.last_activity_at,
         Surrogate.created_at,
-    ).label(
-        "last_activity_at"
-    )
+    ).label("last_activity_at")
 
     query = (
         db.query(Surrogate.id, last_activity_col)
@@ -704,7 +705,8 @@ def _meeting_outcome_missing_ids(
         )
         .filter(
             SurrogateActivityLog.organization_id == org_id,
-            SurrogateActivityLog.activity_type == SurrogateActivityType.INTERVIEW_OUTCOME_LOGGED.value,
+            SurrogateActivityLog.activity_type
+            == SurrogateActivityType.INTERVIEW_OUTCOME_LOGGED.value,
         )
         .group_by(SurrogateActivityLog.surrogate_id)
         .subquery()
@@ -782,7 +784,9 @@ def _attention_unreached_ids(
     now_utc: datetime,
 ) -> set[UUID]:
     cutoff = now_utc - timedelta(days=7)
-    owner_filters = _attention_owner_filters(db, org_id=org_id, user_id=user_id, user_role=user_role)
+    owner_filters = _attention_owner_filters(
+        db, org_id=org_id, user_id=user_id, user_role=user_role
+    )
     latest_activity_subquery = (
         db.query(
             SurrogateActivityLog.surrogate_id.label("surrogate_id"),
@@ -827,7 +831,9 @@ def _attention_stuck_ids(
     user_role: Role | str,
     now_utc: datetime,
 ) -> set[UUID]:
-    owner_filters = _attention_owner_filters(db, org_id=org_id, user_id=user_id, user_role=user_role)
+    owner_filters = _attention_owner_filters(
+        db, org_id=org_id, user_id=user_id, user_role=user_role
+    )
     cutoff = now_utc - timedelta(days=30)
 
     latest_stage_change_subquery = (

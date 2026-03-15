@@ -155,9 +155,7 @@ def test_build_meta_crm_dataset_payload_ignores_invalid_click_ids():
     assert "fbc" not in payload["data"][0]["user_data"]
 
 
-def test_enqueue_meta_crm_dataset_stage_event_includes_fbc_from_meta_lead(
-    db, test_org, test_user
-):
+def test_enqueue_meta_crm_dataset_stage_event_includes_fbc_from_meta_lead(db, test_org, test_user):
     from app.db.enums import JobType, SurrogateSource
     from app.db.models import Job, MetaLead
     from app.schemas.surrogate import SurrogateCreate
@@ -204,7 +202,12 @@ def test_enqueue_meta_crm_dataset_stage_event_includes_fbc_from_meta_lead(
     settings.enabled = True
     settings.send_hashed_pii = True
     settings.event_mapping = [
-        {"stage_key": "pre_qualified", "event_name": "Qualified", "bucket": "qualified", "enabled": True}
+        {
+            "stage_key": "pre_qualified",
+            "event_name": "Qualified",
+            "bucket": "qualified",
+            "enabled": True,
+        }
     ]
     db.commit()
 
@@ -279,7 +282,12 @@ def test_enqueue_meta_crm_dataset_stage_event_skips_meta_leads_older_than_90_day
     )
     settings.enabled = True
     settings.event_mapping = [
-        {"stage_key": "pre_qualified", "event_name": "Qualified", "bucket": "qualified", "enabled": True}
+        {
+            "stage_key": "pre_qualified",
+            "event_name": "Qualified",
+            "bucket": "qualified",
+            "enabled": True,
+        }
     ]
     db.commit()
 

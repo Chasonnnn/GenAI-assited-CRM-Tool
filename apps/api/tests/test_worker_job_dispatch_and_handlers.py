@@ -59,7 +59,10 @@ def test_worker_env_flags_and_backoff(monkeypatch):
 def test_worker_resolve_integration_keys(db):
     keys = worker._resolve_integration_keys(
         db,
-        _job(job_type=JobType.TICKET_OUTBOUND_SEND.value, payload={"mailbox_id": "m1", "mode": "reply"}),
+        _job(
+            job_type=JobType.TICKET_OUTBOUND_SEND.value,
+            payload={"mailbox_id": "m1", "mode": "reply"},
+        ),
         integration_type="worker",
     )
     assert "mailbox:m1" in keys
@@ -67,7 +70,10 @@ def test_worker_resolve_integration_keys(db):
 
     keys = worker._resolve_integration_keys(
         db,
-        _job(job_type=JobType.META_FORM_SYNC.value, payload={"page_id": "p1", "page_ids": ["p1", "p2"]}),
+        _job(
+            job_type=JobType.META_FORM_SYNC.value,
+            payload={"page_id": "p1", "page_ids": ["p1", "p2"]},
+        ),
         integration_type="meta_forms",
     )
     assert keys == ["p1", "p2"]
@@ -80,11 +86,15 @@ def test_worker_record_success_and_failure(monkeypatch, db):
 
     monkeypatch.setattr(
         "app.services.ops_service.record_success",
-        lambda db, org_id, integration_type, integration_key=None: success_calls.append((integration_type, integration_key)),
+        lambda db, org_id, integration_type, integration_key=None: success_calls.append(
+            (integration_type, integration_key)
+        ),
     )
     monkeypatch.setattr(
         "app.services.ops_service.record_error",
-        lambda db, org_id, integration_type, error_message, integration_key=None: error_calls.append((integration_type, integration_key)),
+        lambda db, org_id, integration_type, error_message, integration_key=None: (
+            error_calls.append((integration_type, integration_key))
+        ),
     )
     monkeypatch.setattr(
         "app.services.alert_service.record_alert_isolated",
@@ -157,8 +167,14 @@ async def test_worker_loop_single_iteration_success_and_failure(monkeypatch, db)
     monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(db))
     monkeypatch.setattr(worker, "WORKER_JOB_TYPES", None)
     monkeypatch.setattr(worker, "POLL_INTERVAL_SECONDS", 0)
-    monkeypatch.setattr(worker, "maybe_schedule_google_calendar_sync_jobs", lambda *args, **kwargs: datetime.now(timezone.utc))
-    monkeypatch.setattr(worker, "maybe_schedule_gmail_sync_jobs", lambda *args, **kwargs: datetime.now(timezone.utc))
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_google_calendar_sync_jobs",
+        lambda *args, **kwargs: datetime.now(timezone.utc),
+    )
+    monkeypatch.setattr(
+        worker, "maybe_schedule_gmail_sync_jobs", lambda *args, **kwargs: datetime.now(timezone.utc)
+    )
     monkeypatch.setattr(
         worker.job_service,
         "claim_pending_jobs",
@@ -205,8 +221,15 @@ async def test_worker_loop_single_iteration_success_and_failure(monkeypatch, db)
 def test_worker_main_paths(monkeypatch):
     called = {"sync": 0, "scan": 0, "run": 0, "report": 0}
 
-    monkeypatch.setattr(worker, "_sync_clamav_signatures", lambda: called.__setitem__("sync", called["sync"] + 1))
-    monkeypatch.setattr(worker, "_ensure_attachment_scanner_available", lambda: called.__setitem__("scan", called["scan"] + 1))
+    monkeypatch.setattr(
+        worker, "_sync_clamav_signatures", lambda: called.__setitem__("sync", called["sync"] + 1)
+    )
+    monkeypatch.setattr(
+        worker,
+        "_ensure_attachment_scanner_available",
+        lambda: called.__setitem__("scan", called["scan"] + 1),
+    )
+
     def _run_ok(coro):
         coro.close()
         called["run"] += 1
@@ -223,7 +246,11 @@ def test_worker_main_paths(monkeypatch):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(worker.asyncio, "run", _run_fail)
-    monkeypatch.setattr(worker, "report_exception", lambda *_args, **_kwargs: called.__setitem__("report", called["report"] + 1))
+    monkeypatch.setattr(
+        worker,
+        "report_exception",
+        lambda *_args, **_kwargs: called.__setitem__("report", called["report"] + 1),
+    )
     with pytest.raises(RuntimeError):
         worker.main()
     assert called["report"] == 1

@@ -35,7 +35,12 @@ def upgrade() -> None:
     if not _has_table("org_intelligent_suggestion_settings"):
         op.create_table(
             "org_intelligent_suggestion_settings",
-            sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+            sa.Column(
+                "id",
+                postgresql.UUID(as_uuid=True),
+                server_default=sa.text("gen_random_uuid()"),
+                nullable=False,
+            ),
             sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
             sa.Column("enabled", sa.Boolean(), server_default=sa.text("true"), nullable=False),
             sa.Column(

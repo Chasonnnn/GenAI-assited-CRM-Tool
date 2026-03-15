@@ -29,7 +29,9 @@ def _create_appointment_type(db, org_id, user_id) -> AppointmentType:
     return appt_type
 
 
-def _create_appointment(db, org_id, user_id, appt_type_id=None, *, status=AppointmentStatus.CONFIRMED.value):
+def _create_appointment(
+    db, org_id, user_id, appt_type_id=None, *, status=AppointmentStatus.CONFIRMED.value
+):
     start = datetime.now(timezone.utc) + timedelta(days=1)
     appt = Appointment(
         id=uuid4(),
@@ -145,7 +147,9 @@ async def test_appointment_integrations_await_async_wrapper():
     assert await appointment_integrations._await_async(_explode()) is None
 
 
-def test_sync_to_google_calendar_create_update_delete_branches(db, test_org, test_user, monkeypatch):
+def test_sync_to_google_calendar_create_update_delete_branches(
+    db, test_org, test_user, monkeypatch
+):
     appt_type = _create_appointment_type(db, test_org.id, test_user.id)
     appointment = _create_appointment(db, test_org.id, test_user.id, appt_type.id)
 
@@ -188,7 +192,9 @@ def test_sync_to_google_calendar_create_update_delete_branches(db, test_org, tes
 
 def test_backfill_confirmed_appointments_and_sync_wrapper(db, test_org, test_user, monkeypatch):
     appt_type = _create_appointment_type(db, test_org.id, test_user.id)
-    appt = _create_appointment(db, test_org.id, test_user.id, appt_type.id, status=AppointmentStatus.CONFIRMED.value)
+    appt = _create_appointment(
+        db, test_org.id, test_user.id, appt_type.id, status=AppointmentStatus.CONFIRMED.value
+    )
     appt.google_event_id = None
     db.commit()
 
@@ -196,7 +202,11 @@ def test_backfill_confirmed_appointments_and_sync_wrapper(db, test_org, test_use
         "app.services.calendar_service.check_user_has_google_calendar",
         lambda *_args, **_kwargs: True,
     )
-    monkeypatch.setattr(appointment_integrations, "sync_to_google_calendar", lambda *_args, **_kwargs: "evt_backfill")
+    monkeypatch.setattr(
+        appointment_integrations,
+        "sync_to_google_calendar",
+        lambda *_args, **_kwargs: "evt_backfill",
+    )
 
     updated = appointment_integrations.backfill_confirmed_appointments_to_google(
         db,
@@ -222,8 +232,12 @@ def test_backfill_confirmed_appointments_and_sync_wrapper(db, test_org, test_use
 
 
 @pytest.mark.asyncio
-async def test_sync_manual_google_events_async_reconcile_paths(db, test_org, test_user, monkeypatch):
-    existing = _create_appointment(db, test_org.id, test_user.id, None, status=AppointmentStatus.CONFIRMED.value)
+async def test_sync_manual_google_events_async_reconcile_paths(
+    db, test_org, test_user, monkeypatch
+):
+    existing = _create_appointment(
+        db, test_org.id, test_user.id, None, status=AppointmentStatus.CONFIRMED.value
+    )
     existing.google_event_id = "evt_old"
     db.commit()
 
@@ -235,13 +249,27 @@ async def test_sync_manual_google_events_async_reconcile_paths(db, test_org, tes
         return {
             "connected": True,
             "events": [
-                {"id": "evt_new", "summary": "Manual Event", "start": start, "end": start + timedelta(minutes=45), "is_all_day": False},
-                {"id": "evt_all_day", "summary": "All Day", "start": start, "end": start + timedelta(days=1), "is_all_day": True},
+                {
+                    "id": "evt_new",
+                    "summary": "Manual Event",
+                    "start": start,
+                    "end": start + timedelta(minutes=45),
+                    "is_all_day": False,
+                },
+                {
+                    "id": "evt_all_day",
+                    "summary": "All Day",
+                    "start": start,
+                    "end": start + timedelta(days=1),
+                    "is_all_day": True,
+                },
             ],
             "error": None,
         }
 
-    monkeypatch.setattr("app.services.calendar_service.list_user_google_calendar_ids", _calendar_ids)
+    monkeypatch.setattr(
+        "app.services.calendar_service.list_user_google_calendar_ids", _calendar_ids
+    )
     monkeypatch.setattr("app.services.calendar_service.get_user_calendar_events", _calendar_events)
 
     changed = await appointment_integrations._sync_manual_google_events_for_appointments_async(
@@ -281,11 +309,15 @@ def test_zoom_and_google_meet_creation_failure_paths(monkeypatch):
         google_meet_url=None,
     )
 
-    monkeypatch.setattr("app.services.zoom_service.check_user_has_zoom", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(
+        "app.services.zoom_service.check_user_has_zoom", lambda *_args, **_kwargs: False
+    )
     with pytest.raises(ValueError, match="Zoom not connected"):
         appointment_integrations.create_zoom_meeting(SimpleNamespace(), appointment, "Consult")
 
-    monkeypatch.setattr("app.services.zoom_service.check_user_has_zoom", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        "app.services.zoom_service.check_user_has_zoom", lambda *_args, **_kwargs: True
+    )
 
     def _run_none(coro):
         coro.close()
@@ -306,6 +338,7 @@ def test_zoom_and_google_meet_creation_failure_paths(monkeypatch):
         "app.services.calendar_service.check_user_has_google_calendar",
         lambda *_args, **_kwargs: True,
     )
+
     def _run_meet(coro):
         coro.close()
         return {"event_id": "evt_1", "meet_url": "https://meet.google.com/abc"}

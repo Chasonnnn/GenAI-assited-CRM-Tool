@@ -162,11 +162,7 @@ def record_queued_event(
 
 def mark_job_delivered(*, job_id: UUID, attempts: int, db: Session | None = None) -> None:
     def _update(db: Session) -> None:
-        event = (
-            db.query(ZapierOutboundEvent)
-            .filter(ZapierOutboundEvent.job_id == job_id)
-            .first()
-        )
+        event = db.query(ZapierOutboundEvent).filter(ZapierOutboundEvent.job_id == job_id).first()
         if not event:
             return
         now = _now_utc()
@@ -189,11 +185,7 @@ def mark_job_failed(
     db: Session | None = None,
 ) -> None:
     def _update(db: Session) -> None:
-        event = (
-            db.query(ZapierOutboundEvent)
-            .filter(ZapierOutboundEvent.job_id == job_id)
-            .first()
-        )
+        event = db.query(ZapierOutboundEvent).filter(ZapierOutboundEvent.job_id == job_id).first()
         if not event:
             return
         now = _now_utc()

@@ -154,20 +154,17 @@ class ZoomWebhookHandler:
         # Dedupe: check if we've already processed this event
         provider_event_id = f"{event_type}:{zoom_meeting_id}:{event_id}"
 
-        inserted_event_id = (
-            db.execute(
-                insert(ZoomWebhookEvent)
-                .values(
-                    provider_event_id=provider_event_id,
-                    event_type=event_type,
-                    zoom_meeting_id=zoom_meeting_id,
-                    payload=data,
-                )
-                .on_conflict_do_nothing(index_elements=[ZoomWebhookEvent.provider_event_id])
-                .returning(ZoomWebhookEvent.id)
+        inserted_event_id = db.execute(
+            insert(ZoomWebhookEvent)
+            .values(
+                provider_event_id=provider_event_id,
+                event_type=event_type,
+                zoom_meeting_id=zoom_meeting_id,
+                payload=data,
             )
-            .scalar_one_or_none()
-        )
+            .on_conflict_do_nothing(index_elements=[ZoomWebhookEvent.provider_event_id])
+            .returning(ZoomWebhookEvent.id)
+        ).scalar_one_or_none()
         if inserted_event_id is None:
             logger.info("Zoom webhook duplicate event: %s", provider_event_id)
             return {"status": "ok", "message": "Duplicate event"}

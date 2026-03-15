@@ -222,7 +222,9 @@ async def test_log_interview_outcome_rejects_cross_org_appointment(authed_client
 
 
 @pytest.mark.asyncio
-async def test_log_interview_outcome_rejects_appointment_for_other_surrogate(authed_client, db, test_auth):
+async def test_log_interview_outcome_rejects_appointment_for_other_surrogate(
+    authed_client, db, test_auth
+):
     surrogate_a = await _create_surrogate(
         authed_client,
         name="Outcome A",

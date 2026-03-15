@@ -72,7 +72,9 @@ def test_ticketing_cursor_roundtrip_and_invalid() -> None:
 
 
 def test_ticketing_watch_helpers(monkeypatch) -> None:
-    monkeypatch.setattr(ticketing_service.settings, "GMAIL_PUSH_TOPIC", "projects/test/topics/gmail")
+    monkeypatch.setattr(
+        ticketing_service.settings, "GMAIL_PUSH_TOPIC", "projects/test/topics/gmail"
+    )
     monkeypatch.setattr(ticketing_service.settings, "GMAIL_PUSH_LABEL_IDS", "INBOX,UNREAD,INBOX")
 
     assert ticketing_service._configured_gmail_push_topic() == "projects/test/topics/gmail"

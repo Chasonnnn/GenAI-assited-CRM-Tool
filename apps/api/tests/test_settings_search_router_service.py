@@ -21,8 +21,12 @@ def test_settings_signature_validators_and_social_links():
         settings_router.SocialLinkItem(platform="LinkedIn", url="http://not-https.example.com")
 
     links = [
-        settings_router.SocialLinkItem(platform="LinkedIn", url="https://linkedin.com/company/acme"),
-        settings_router.SocialLinkItem(platform="LinkedIn", url="https://linkedin.com/company/acme/"),
+        settings_router.SocialLinkItem(
+            platform="LinkedIn", url="https://linkedin.com/company/acme"
+        ),
+        settings_router.SocialLinkItem(
+            platform="LinkedIn", url="https://linkedin.com/company/acme/"
+        ),
     ]
     update = settings_router.OrgSignatureUpdate(
         signature_template="modern",
@@ -57,8 +61,13 @@ def test_settings_logo_local_storage_helpers(monkeypatch, tmp_path):
     settings_router._delete_logo_from_storage(logo_url)
     assert not full_path.exists()
 
-    assert settings_router._extract_local_logo_storage_key("/static/logos/org/test.png") == "logos/org/test.png"
-    assert settings_router._extract_local_logo_storage_key("https://cdn.example.com/file.png") is None
+    assert (
+        settings_router._extract_local_logo_storage_key("/static/logos/org/test.png")
+        == "logos/org/test.png"
+    )
+    assert (
+        settings_router._extract_local_logo_storage_key("https://cdn.example.com/file.png") is None
+    )
 
 
 def test_settings_get_org_logo_local_guards(db, test_org, monkeypatch, tmp_path):
@@ -126,7 +135,11 @@ def test_search_global_search_for_session_orchestration(monkeypatch, db, test_or
     monkeypatch.setattr(
         search_service,
         "global_search",
-        lambda **kwargs: {"query": kwargs["query"], "total": 1, "results": [{"entity_type": "surrogate"}]},
+        lambda **kwargs: {
+            "query": kwargs["query"],
+            "total": 1,
+            "results": [{"entity_type": "surrogate"}],
+        },
     )
     monkeypatch.setattr(
         "app.services.phi_access_service.log_phi_access",

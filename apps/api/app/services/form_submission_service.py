@@ -1602,7 +1602,9 @@ def _store_submission_file(
     file_size = file.file.tell()
     file.file.seek(0)
 
-    processed_file = sanitize_upload_content(file.filename or "upload", resolved_content_type, file.file)
+    processed_file = sanitize_upload_content(
+        file.filename or "upload", resolved_content_type, file.file
+    )
     checksum = calculate_checksum(processed_file)
     ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename else ""
     suffix = f".{ext}" if ext else ""

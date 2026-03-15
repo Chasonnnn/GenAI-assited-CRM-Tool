@@ -322,7 +322,9 @@ def test_status_changed_workflow_conversion_event_fans_out_to_zapier_and_meta_da
     assert executions[0].status == WorkflowExecutionStatus.SUCCESS.value
     assert executions[0].actions_executed[0]["queued"] is True
     assert executions[0].actions_executed[0]["transport_results"]["zapier"]["queued"] is True
-    assert executions[0].actions_executed[0]["transport_results"]["meta_crm_dataset"]["queued"] is True
+    assert (
+        executions[0].actions_executed[0]["transport_results"]["meta_crm_dataset"]["queued"] is True
+    )
 
     assert (
         db.query(Job)

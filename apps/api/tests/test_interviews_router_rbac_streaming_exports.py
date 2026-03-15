@@ -81,7 +81,9 @@ async def test_interview_export_endpoint_returns_pdf(
 ):
     interview = _create_interview(db, test_org.id, interview_surrogate.id, test_user.id)
 
-    monkeypatch.setattr(pdf_export_service, "export_interview_pdf", lambda **_kwargs: b"%PDF-1.7 export")
+    monkeypatch.setattr(
+        pdf_export_service, "export_interview_pdf", lambda **_kwargs: b"%PDF-1.7 export"
+    )
 
     response = await authed_client.get(f"/interviews/{interview.id}/export")
     assert response.status_code == 200
@@ -110,7 +112,9 @@ async def test_interview_summarize_stream_endpoint_returns_sse(
     db.commit()
 
     class _Chunk:
-        def __init__(self, text: str, is_final: bool, prompt_tokens: int = 0, completion_tokens: int = 0):
+        def __init__(
+            self, text: str, is_final: bool, prompt_tokens: int = 0, completion_tokens: int = 0
+        ):
             self.text = text
             self.is_final = is_final
             self.prompt_tokens = prompt_tokens
@@ -120,7 +124,12 @@ async def test_interview_summarize_stream_endpoint_returns_sse(
     class _Provider:
         async def stream_chat(self, **_kwargs):
             yield _Chunk('{"summary":"Done"', False)
-            yield _Chunk(',"key_points":[],"concerns":[],"sentiment":"neutral","follow_up_items":[]}', True, 12, 7)
+            yield _Chunk(
+                ',"key_points":[],"concerns":[],"sentiment":"neutral","follow_up_items":[]}',
+                True,
+                12,
+                7,
+            )
 
     from app.services import ai_interview_service
 

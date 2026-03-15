@@ -161,7 +161,9 @@ def test_create_or_update_alert_concurrent_dedupe_upsert(db_engine):
         assert alerts[0].occurrence_count == workers
     finally:
         if org_id:
-            cleanup_session.query(SystemAlert).filter(SystemAlert.organization_id == org_id).delete()
+            cleanup_session.query(SystemAlert).filter(
+                SystemAlert.organization_id == org_id
+            ).delete()
             cleanup_session.query(Organization).filter(Organization.id == org_id).delete()
             cleanup_session.commit()
         cleanup_session.close()

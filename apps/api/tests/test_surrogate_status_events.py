@@ -214,9 +214,7 @@ def test_status_change_enqueues_zapier_stage_event(monkeypatch, db, test_org, te
     assert data["meta_campaign_id"] == "camp_123"
 
 
-def test_status_change_enqueues_meta_crm_dataset_stage_event(
-    monkeypatch, db, test_org, test_user
-):
+def test_status_change_enqueues_meta_crm_dataset_stage_event(monkeypatch, db, test_org, test_user):
     from app.services import meta_crm_dataset_settings_service
 
     settings = meta_crm_dataset_settings_service.get_or_create_settings(db, test_org.id)
@@ -272,7 +270,11 @@ def test_meta_surrogate_creation_does_not_enqueue_new_unread_conversion_events(
     db, test_org, test_user
 ):
     from app.db.enums import JobType
-    from app.services import meta_crm_dataset_settings_service, surrogate_events, zapier_settings_service
+    from app.services import (
+        meta_crm_dataset_settings_service,
+        surrogate_events,
+        zapier_settings_service,
+    )
 
     zapier_settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
     zapier_settings.outbound_webhook_url = "https://hooks.zapier.com/hooks/catch/123/abc"
@@ -613,7 +615,9 @@ def test_status_change_dedupes_converted_stage_updates(monkeypatch, db, test_org
     assert jobs[0].payload["data"]["event_name"] == "Converted"
 
 
-def test_status_change_dedupes_using_configured_bucket_mapping(monkeypatch, db, test_org, test_user):
+def test_status_change_dedupes_using_configured_bucket_mapping(
+    monkeypatch, db, test_org, test_user
+):
     from app.services import zapier_settings_service
 
     settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
