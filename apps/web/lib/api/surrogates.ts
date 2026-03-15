@@ -458,7 +458,6 @@ export interface SurrogateCaseDetailsExportView {
     surrogate: SurrogateRead;
     activities: SurrogateActivity[];
     tasks: TaskListItem[];
-    show_medical: boolean;
     show_pregnancy: boolean;
 }
 

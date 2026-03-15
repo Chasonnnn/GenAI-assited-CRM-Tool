@@ -290,6 +290,38 @@ async def test_surrogate_export_view_handles_unknown_task_type(
     assert payload["tasks"][0]["task_type"] == "other"
 
 
+@pytest.mark.asyncio
+async def test_surrogate_export_view_always_includes_medical_data_before_ready_to_match(
+    client, db, test_org, test_user, default_stage
+):
+    surrogate = _create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        default_stage,
+        suffix=uuid.uuid4().hex[:8],
+    )
+    surrogate.clinic_name = "Austin Fertility Center"
+    surrogate.monitoring_clinic_name = "Austin Monitoring"
+    db.flush()
+
+    export_token = create_export_token(
+        org_id=test_org.id,
+        surrogate_id=surrogate.id,
+        purpose="case_details_export",
+    )
+    response = await client.get(
+        f"/surrogates/{surrogate.id}/export-view?export_token={export_token}"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["surrogate"]["clinic_name"] == "Austin Fertility Center"
+    assert payload["surrogate"]["monitoring_clinic_name"] == "Austin Monitoring"
+    assert "show_medical" not in payload
+    assert payload["show_pregnancy"] is False
+
+
 def test_merge_pdf_bytes_combines_pages_in_order():
     pdf_a = _make_single_page_pdf(111, 222)
     pdf_b = _make_single_page_pdf(333, 444)

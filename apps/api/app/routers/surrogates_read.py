@@ -43,7 +43,6 @@ class SurrogateCaseDetailsExportView(BaseModel):
     surrogate: SurrogateRead
     activities: list[SurrogateActivityRead]
     tasks: list[TaskListItem]
-    show_medical: bool
     show_pregnancy: bool
 
 
@@ -526,14 +525,8 @@ def get_surrogate_export_view(
     from app.services import surrogate_stage_context
 
     current_stage = surrogate_stage_context.get_stage_context(db, surrogate).effective_stage
-    ready_to_match_stage = None
     heartbeat_stage = None
     if current_stage:
-        ready_to_match_stage = pipeline_service.get_stage_by_slug(
-            db,
-            current_stage.pipeline_id,
-            "ready_to_match",
-        )
         heartbeat_stage = pipeline_service.get_stage_by_slug(
             db,
             current_stage.pipeline_id,
@@ -542,9 +535,6 @@ def get_surrogate_export_view(
 
     is_terminal_intake_outcome = bool(
         current_stage and current_stage.slug in {"lost", "disqualified"}
-    )
-    show_medical = bool(
-        current_stage and ready_to_match_stage and current_stage.order >= ready_to_match_stage.order
     )
     show_pregnancy = bool(
         current_stage
@@ -587,7 +577,6 @@ def get_surrogate_export_view(
         surrogate=surrogate_read,
         activities=activities,
         tasks=task_items,
-        show_medical=show_medical,
         show_pregnancy=show_pregnancy,
     )
 

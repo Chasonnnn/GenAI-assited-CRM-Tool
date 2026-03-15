@@ -149,84 +149,82 @@ export function CaseDetailsPrintView({ data }: CaseDetailsPrintViewProps) {
                             />
                         </Section>
 
-                        {data.show_medical && (
-                            <Section title="Medical Information">
-                                <Row label="IVF Clinic" value={display(surrogate.clinic_name)} />
-                                <Row
-                                    label="IVF Address"
-                                    value={formatAddress([
-                                        surrogate.clinic_address_line1,
-                                        surrogate.clinic_address_line2,
-                                        surrogate.clinic_city,
-                                        surrogate.clinic_state,
-                                        surrogate.clinic_postal,
-                                    ])}
-                                />
-                                <Row label="IVF Phone" value={display(surrogate.clinic_phone)} />
-                                <Row label="IVF Email" value={display(surrogate.clinic_email)} />
+                        <Section title="Medical Information">
+                            <Row label="IVF Clinic" value={display(surrogate.clinic_name)} />
+                            <Row
+                                label="IVF Address"
+                                value={formatAddress([
+                                    surrogate.clinic_address_line1,
+                                    surrogate.clinic_address_line2,
+                                    surrogate.clinic_city,
+                                    surrogate.clinic_state,
+                                    surrogate.clinic_postal,
+                                ])}
+                            />
+                            <Row label="IVF Phone" value={display(surrogate.clinic_phone)} />
+                            <Row label="IVF Email" value={display(surrogate.clinic_email)} />
 
-                                <Row
-                                    label="Monitoring Clinic"
-                                    value={display(surrogate.monitoring_clinic_name)}
-                                />
-                                <Row
-                                    label="Monitoring Address"
-                                    value={formatAddress([
-                                        surrogate.monitoring_clinic_address_line1,
-                                        surrogate.monitoring_clinic_address_line2,
-                                        surrogate.monitoring_clinic_city,
-                                        surrogate.monitoring_clinic_state,
-                                        surrogate.monitoring_clinic_postal,
-                                    ])}
-                                />
-                                <Row
-                                    label="Monitoring Phone"
-                                    value={display(surrogate.monitoring_clinic_phone)}
-                                />
-                                <Row
-                                    label="Monitoring Email"
-                                    value={display(surrogate.monitoring_clinic_email)}
-                                />
+                            <Row
+                                label="Monitoring Clinic"
+                                value={display(surrogate.monitoring_clinic_name)}
+                            />
+                            <Row
+                                label="Monitoring Address"
+                                value={formatAddress([
+                                    surrogate.monitoring_clinic_address_line1,
+                                    surrogate.monitoring_clinic_address_line2,
+                                    surrogate.monitoring_clinic_city,
+                                    surrogate.monitoring_clinic_state,
+                                    surrogate.monitoring_clinic_postal,
+                                ])}
+                            />
+                            <Row
+                                label="Monitoring Phone"
+                                value={display(surrogate.monitoring_clinic_phone)}
+                            />
+                            <Row
+                                label="Monitoring Email"
+                                value={display(surrogate.monitoring_clinic_email)}
+                            />
 
-                                <Row label="OB Provider" value={display(surrogate.ob_provider_name)} />
-                                <Row label="OB Clinic" value={display(surrogate.ob_clinic_name)} />
-                                <Row
-                                    label="OB Address"
-                                    value={formatAddress([
-                                        surrogate.ob_address_line1,
-                                        surrogate.ob_address_line2,
-                                        surrogate.ob_city,
-                                        surrogate.ob_state,
-                                        surrogate.ob_postal,
-                                    ])}
-                                />
-                                <Row label="OB Phone" value={display(surrogate.ob_phone)} />
-                                <Row label="OB Email" value={display(surrogate.ob_email)} />
+                            <Row label="OB Provider" value={display(surrogate.ob_provider_name)} />
+                            <Row label="OB Clinic" value={display(surrogate.ob_clinic_name)} />
+                            <Row
+                                label="OB Address"
+                                value={formatAddress([
+                                    surrogate.ob_address_line1,
+                                    surrogate.ob_address_line2,
+                                    surrogate.ob_city,
+                                    surrogate.ob_state,
+                                    surrogate.ob_postal,
+                                ])}
+                            />
+                            <Row label="OB Phone" value={display(surrogate.ob_phone)} />
+                            <Row label="OB Email" value={display(surrogate.ob_email)} />
 
-                                <Row
-                                    label="Delivery Hospital"
-                                    value={display(surrogate.delivery_hospital_name)}
-                                />
-                                <Row
-                                    label="Delivery Address"
-                                    value={formatAddress([
-                                        surrogate.delivery_hospital_address_line1,
-                                        surrogate.delivery_hospital_address_line2,
-                                        surrogate.delivery_hospital_city,
-                                        surrogate.delivery_hospital_state,
-                                        surrogate.delivery_hospital_postal,
-                                    ])}
-                                />
-                                <Row
-                                    label="Delivery Phone"
-                                    value={display(surrogate.delivery_hospital_phone)}
-                                />
-                                <Row
-                                    label="Delivery Email"
-                                    value={display(surrogate.delivery_hospital_email)}
-                                />
-                            </Section>
-                        )}
+                            <Row
+                                label="Delivery Hospital"
+                                value={display(surrogate.delivery_hospital_name)}
+                            />
+                            <Row
+                                label="Delivery Address"
+                                value={formatAddress([
+                                    surrogate.delivery_hospital_address_line1,
+                                    surrogate.delivery_hospital_address_line2,
+                                    surrogate.delivery_hospital_city,
+                                    surrogate.delivery_hospital_state,
+                                    surrogate.delivery_hospital_postal,
+                                ])}
+                            />
+                            <Row
+                                label="Delivery Phone"
+                                value={display(surrogate.delivery_hospital_phone)}
+                            />
+                            <Row
+                                label="Delivery Email"
+                                value={display(surrogate.delivery_hospital_email)}
+                            />
+                        </Section>
                     </div>
 
                     <div className="space-y-4">
