@@ -289,7 +289,7 @@ export default function FormBuilderPage() {
     const updateTemplateMutation = useUpdatePlatformFormTemplate()
     const publishTemplateMutation = usePublishPlatformFormTemplate()
     const deleteTemplateMutation = useDeletePlatformFormTemplate()
-    const lastSavedFingerprintRef = useRef<string>("")
+    const lastSavedFingerprintRef = useRef<typeof draftPayload | null>(null)
     const currentVersionRef = useRef<number | null>(null)
     const templateIdRef = useRef<string | null>(isNewForm ? null : id)
     const saveQueueRef = useRef<Promise<void>>(Promise.resolve())
@@ -442,26 +442,22 @@ export default function FormBuilderPage() {
         allowedMimeTypesText,
     ])
     const debouncedPayload = useDebouncedValue(draftPayload, 1200)
-    const debouncedFingerprint = useMemo(
-        () => JSON.stringify(debouncedPayload),
-        [debouncedPayload],
-    )
     const draftIsDebounced = draftPayload === debouncedPayload
-    const isDirty = !draftIsDebounced || debouncedFingerprint !== lastSavedFingerprintRef.current
+    const isDirty = !draftIsDebounced || debouncedPayload !== lastSavedFingerprintRef.current
 
     useEffect(() => {
         if (!hasHydrated) return
         const identity = isNewForm ? "new" : formId || "unknown"
         if (hydratedFormRef.current === identity) return
         hydratedFormRef.current = identity
-        lastSavedFingerprintRef.current = debouncedFingerprint
+        lastSavedFingerprintRef.current = debouncedPayload
         if (!isNewForm && templateData?.updated_at) {
             setAutoSaveStatus("saved")
             setLastSavedAt(new Date(templateData.updated_at))
         } else {
             setAutoSaveStatus("idle")
         }
-    }, [hasHydrated, isNewForm, formId, debouncedFingerprint, templateData?.updated_at])
+    }, [hasHydrated, isNewForm, formId, debouncedPayload, templateData?.updated_at])
 
     // Drag and drop handlers
     const handleDragStart = (type: FieldType, label: string) => {
@@ -857,7 +853,7 @@ export default function FormBuilderPage() {
         setPageToDelete(null)
     }
 
-    const markSaved = useCallback((fingerprint: string, savedForm?: PlatformFormTemplate) => {
+    const markSaved = useCallback((fingerprint: typeof draftPayload, savedForm?: PlatformFormTemplate) => {
         lastSavedFingerprintRef.current = fingerprint
         setAutoSaveStatus("saved")
         if (savedForm?.updated_at) {
@@ -920,7 +916,7 @@ export default function FormBuilderPage() {
         setIsSaving(true)
         try {
             const savedTemplate = await queueSave(draftPayload)
-            markSaved(JSON.stringify(draftPayload), savedTemplate)
+            markSaved(draftPayload, savedTemplate)
             toast.success("Template saved")
         } catch {
             setAutoSaveStatus("error")
@@ -938,7 +934,7 @@ export default function FormBuilderPage() {
         if (!hasHydrated) return
         if (!formName.trim()) return
         if (draftPayload !== debouncedPayload) return
-        if (debouncedFingerprint === lastSavedFingerprintRef.current) return
+        if (debouncedPayload === lastSavedFingerprintRef.current) return
         if (isSaving || isPublishing) return
 
         let cancelled = false
@@ -947,7 +943,7 @@ export default function FormBuilderPage() {
         queueSave(debouncedPayload)
             .then((savedForm) => {
                 if (cancelled) return
-                markSaved(debouncedFingerprint, savedForm)
+                markSaved(debouncedPayload, savedForm)
             })
             .catch(() => {
                 if (cancelled) return
@@ -961,7 +957,6 @@ export default function FormBuilderPage() {
         hasHydrated,
         formName,
         draftPayload,
-        debouncedFingerprint,
         debouncedPayload,
         isSaving,
         isPublishing,
@@ -1025,7 +1020,7 @@ export default function FormBuilderPage() {
         setIsPublishing(true)
         try {
             const savedTemplate = await queueSave(draftPayload)
-            markSaved(JSON.stringify(draftPayload), savedTemplate)
+            markSaved(draftPayload, savedTemplate)
             await publishTemplateMutation.mutateAsync({
                 id: savedTemplate.id,
                 payload: {
