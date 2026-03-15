@@ -50,11 +50,38 @@ def test_alert_channel_locals_include_webhook() -> None:
     assert "?auth_token=" not in content
 
 
+def test_google_provider_uses_project_for_quota_billing() -> None:
+    content = _read("infra/terraform/providers.tf")
+    assert 'provider "google"' in content
+    assert 'provider "google-beta"' in content
+    assert "user_project_override = true" in content
+    assert "billing_project       = var.project_id" in content
+
+
+def test_api_and_worker_mount_cloudsql_socket() -> None:
+    content = _read("infra/terraform/cloudrun.tf")
+    assert 'resource "google_cloud_run_v2_service" "api"' in content
+    assert 'resource "google_cloud_run_v2_service" "worker"' in content
+    assert 'mount_path = "/cloudsql"' in content
+    assert 'cloud_sql_instance {' in content
+
+
+def test_billing_budget_uses_email_specific_channels_or_default_recipients() -> None:
+    content = _read("infra/terraform/budget.tf")
+    vars_content = _read("infra/terraform/variables.tf")
+    assert "billing_budget_notification_channel_ids" in vars_content
+    assert "monitoring_notification_channels = var.billing_budget_notification_channel_ids" in content
+    assert "disable_default_iam_recipients   = length(var.billing_budget_notification_channel_ids) > 0" in content
+    assert 'projects = ["projects/${data.google_project.current.number}"]' in content
+
+
 def test_ticketing_logging_metrics_and_alerts_are_configured() -> None:
     content = _read("infra/terraform/monitoring.tf")
     assert 'resource "google_logging_metric" "ticketing_outbound_failures"' in content
     assert 'resource "google_logging_metric" "mailbox_ingestion_failures"' in content
     assert "type=ticket_outbound_send" in content
+    assert "final=true" in content
+    assert 'resource.type=\\"cloud_run_revision\\" metric.type=\\"logging.googleapis.com/user/' in content
     assert (
         "type=(mailbox_backfill|mailbox_history_sync|mailbox_watch_refresh|email_occurrence_fetch_raw|email_occurrence_parse|email_occurrence_stitch|ticket_apply_linking)"
         in content

@@ -51,6 +51,8 @@ steps:
     args: ["run", "services", "update", "$_WORKER_SERVICE", "--image", "$_IMAGE_WORKER", "--region", "$_REGION", "--quiet"]
   - name: gcr.io/cloud-builders/gcloud
     args: ["run", "jobs", "update", "$_CLAMAV_UPDATE_JOB", "--image", "$_IMAGE_WORKER", "--region", "$_REGION", "--quiet"]
+  - name: gcr.io/cloud-builders/gcloud
+    args: ["run", "jobs", "update", "$_ATTACHMENT_SCAN_JOB", "--image", "$_IMAGE_WORKER", "--region", "$_REGION", "--quiet"]
 images:
   - "$_IMAGE_API"
   - "$_IMAGE_WORKER"
@@ -66,3 +68,4 @@ substitutions:
   _IMAGE_API: "us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/api:latest"
   _IMAGE_WORKER: "us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/worker:latest"
   _CLAMAV_UPDATE_JOB: "crm-clamav-update"
+  _ATTACHMENT_SCAN_JOB: "crm-attachment-scan"

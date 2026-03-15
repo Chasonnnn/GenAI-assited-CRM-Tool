@@ -44,8 +44,15 @@ enable_domain_mapping = true
 # worker_min_instances_day = 1
 # worker_min_instances_night = 0
 
+# Dedicated malware scan job (recommended when ATTACHMENT_SCAN_ENABLED=true)
+# attachment_scan_job_enabled = true
+# attachment_scan_job_name = "crm-attachment-scan"
+# attachment_scan_job_cpu = "1"
+# attachment_scan_job_memory = "4Gi"
+
 # Monitoring + budgets (recommended)
 # alert_notification_channel_ids = ["projects/PROJECT_ID/notificationChannels/CHANNEL_ID"]
+# billing_budget_notification_channel_ids = ["projects/PROJECT_ID/notificationChannels/EMAIL_CHANNEL_ID"]
 # monitoring_webhook_token = "replace-me"
 # billing_account_id = "000000-000000-000000"
 # billing_budget_amount_usd = 300

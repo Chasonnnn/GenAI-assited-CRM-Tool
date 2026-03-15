@@ -137,7 +137,7 @@ resource "google_monitoring_alert_policy" "cloud_run_5xx" {
 
 resource "google_logging_metric" "ticketing_outbound_failures" {
   name   = "ticketing_outbound_failures"
-  filter = "resource.type=\"cloud_run_revision\" resource.labels.service_name=\"${var.worker_job_name}\" (textPayload=~\"type=ticket_outbound_send\" OR jsonPayload.message=~\"type=ticket_outbound_send\") severity>=ERROR"
+  filter = "resource.type=\"cloud_run_revision\" resource.labels.service_name=\"${var.worker_job_name}\" (textPayload=~\"type=ticket_outbound_send.*final=true\" OR jsonPayload.message=~\"type=ticket_outbound_send.*final=true\") severity>=ERROR"
 
   metric_descriptor {
     metric_kind  = "DELTA"
@@ -149,7 +149,7 @@ resource "google_logging_metric" "ticketing_outbound_failures" {
 
 resource "google_logging_metric" "mailbox_ingestion_failures" {
   name   = "mailbox_ingestion_failures"
-  filter = "resource.type=\"cloud_run_revision\" resource.labels.service_name=\"${var.worker_job_name}\" (textPayload=~\"type=(mailbox_backfill|mailbox_history_sync|mailbox_watch_refresh|email_occurrence_fetch_raw|email_occurrence_parse|email_occurrence_stitch|ticket_apply_linking)\" OR jsonPayload.message=~\"type=(mailbox_backfill|mailbox_history_sync|mailbox_watch_refresh|email_occurrence_fetch_raw|email_occurrence_parse|email_occurrence_stitch|ticket_apply_linking)\") severity>=ERROR"
+  filter = "resource.type=\"cloud_run_revision\" resource.labels.service_name=\"${var.worker_job_name}\" (textPayload=~\"type=(mailbox_backfill|mailbox_history_sync|mailbox_watch_refresh|email_occurrence_fetch_raw|email_occurrence_parse|email_occurrence_stitch|ticket_apply_linking).*final=true\" OR jsonPayload.message=~\"type=(mailbox_backfill|mailbox_history_sync|mailbox_watch_refresh|email_occurrence_fetch_raw|email_occurrence_parse|email_occurrence_stitch|ticket_apply_linking).*final=true\") severity>=ERROR"
 
   metric_descriptor {
     metric_kind  = "DELTA"
@@ -162,14 +162,14 @@ resource "google_logging_metric" "mailbox_ingestion_failures" {
 resource "google_monitoring_alert_policy" "ticketing_outbound_failures" {
   count = local.alerting_enabled ? 1 : 0
 
-  display_name          = "Ticketing outbound failures"
+  display_name          = "Ticketing outbound dead-letter failures"
   combiner              = "OR"
   notification_channels = local.alert_notification_channels
 
   conditions {
-    display_name = "Ticketing outbound failures > 0 in 5m"
+    display_name = "Ticketing outbound dead-letter failures > 0 in 5m"
     condition_threshold {
-      filter          = "resource.type=\"global\" metric.type=\"logging.googleapis.com/user/${google_logging_metric.ticketing_outbound_failures.name}\""
+      filter          = "resource.type=\"cloud_run_revision\" metric.type=\"logging.googleapis.com/user/${google_logging_metric.ticketing_outbound_failures.name}\""
       comparison      = "COMPARISON_GT"
       threshold_value = 0
       duration        = "300s"
@@ -187,14 +187,14 @@ resource "google_monitoring_alert_policy" "ticketing_outbound_failures" {
 resource "google_monitoring_alert_policy" "mailbox_ingestion_failures" {
   count = local.alerting_enabled ? 1 : 0
 
-  display_name          = "Mailbox ingestion failures"
+  display_name          = "Mailbox ingestion dead-letter failures"
   combiner              = "OR"
   notification_channels = local.alert_notification_channels
 
   conditions {
-    display_name = "Mailbox ingestion failures > 0 in 5m"
+    display_name = "Mailbox ingestion dead-letter failures > 0 in 5m"
     condition_threshold {
-      filter          = "resource.type=\"global\" metric.type=\"logging.googleapis.com/user/${google_logging_metric.mailbox_ingestion_failures.name}\""
+      filter          = "resource.type=\"cloud_run_revision\" metric.type=\"logging.googleapis.com/user/${google_logging_metric.mailbox_ingestion_failures.name}\""
       comparison      = "COMPARISON_GT"
       threshold_value = 0
       duration        = "300s"

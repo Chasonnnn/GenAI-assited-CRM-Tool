@@ -189,6 +189,35 @@ variable "clamav_update_timezone" {
   default     = "UTC"
 }
 
+variable "attachment_scan_job_enabled" {
+  description = "Whether to provision the on-demand Cloud Run job for malware scans."
+  type        = bool
+  default     = true
+}
+
+variable "attachment_scan_job_name" {
+  description = "Name of the Cloud Run job for on-demand attachment/form scan executions."
+  type        = string
+  default     = "crm-attachment-scan"
+}
+
+variable "attachment_scan_job_cpu" {
+  description = "CPU allocation for the dedicated scan job."
+  type        = string
+  default     = "1"
+
+  validation {
+    condition     = contains(["1", "1000m", "2", "2000m"], var.attachment_scan_job_cpu)
+    error_message = "attachment_scan_job_cpu must be 1 or 2 vCPU (\"1\"/\"1000m\" or \"2\"/\"2000m\")."
+  }
+}
+
+variable "attachment_scan_job_memory" {
+  description = "Memory allocation for the dedicated scan job."
+  type        = string
+  default     = "4Gi"
+}
+
 variable "migrate_job_name" {
   description = "Name of the Cloud Run database migration job."
   type        = string
@@ -562,6 +591,12 @@ variable "billing_budget_amount_usd" {
   description = "Monthly budget amount in USD."
   type        = number
   default     = 300
+}
+
+variable "billing_budget_notification_channel_ids" {
+  description = "Email-only Cloud Monitoring notification channel IDs for billing budgets."
+  type        = list(string)
+  default     = []
 }
 
 variable "billing_budget_thresholds" {
