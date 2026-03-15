@@ -26,6 +26,7 @@ export type FieldType =
     | 'file'
     | 'address'
     | 'repeatable_table'
+    | 'height'
 
 export interface FormFieldOption {
     label: string

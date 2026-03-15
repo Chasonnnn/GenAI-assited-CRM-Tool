@@ -949,6 +949,9 @@ export default function PublicApplicationForm({ token, previewKey }: PublicAppli
                         <PopoverContent className="w-auto p-0" align="start">
                             <Calendar
                                 mode="single"
+                                captionLayout="dropdown"
+                                startMonth={new Date(1950, 0)}
+                                endMonth={new Date()}
                                 selected={dateValue}
                                 onSelect={(date) => {
                                     updateField(field.key, date ? formatLocalDate(date) : null)
@@ -958,6 +961,62 @@ export default function PublicApplicationForm({ token, previewKey }: PublicAppli
                             />
                         </PopoverContent>
                     </Popover>
+                    {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
+                </div>
+            )
+        }
+
+        if (field.type === "height") {
+            const numValue = typeof value === "string" ? parseFloat(value) : typeof value === "number" ? value : NaN
+            const hasParsed = !Number.isNaN(numValue) && numValue >= 0
+            const feet = hasParsed ? Math.floor(numValue) : ""
+            const inches = hasParsed ? Math.round((numValue - Math.floor(numValue)) * 12) : ""
+
+            const computeDecimal = (ft: number, inc: number) => {
+                return (ft + inc / 12).toFixed(2)
+            }
+
+            return (
+                <div key={field.key} className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+                    <Label className="text-sm font-medium">
+                        {field.label} {requiredMark}
+                    </Label>
+                    <div className="flex items-center gap-3">
+                        <div className="flex-1">
+                            <select
+                                id={`${field.key}_ft`}
+                                value={String(feet)}
+                                onChange={(e) => {
+                                    const ft = Number(e.target.value)
+                                    const inc = typeof inches === "number" ? inches : 0
+                                    updateField(field.key, computeDecimal(ft, inc))
+                                }}
+                                className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm shadow-none"
+                            >
+                                <option value="">ft</option>
+                                {Array.from({ length: 9 }, (_, i) => (
+                                    <option key={i} value={i}>{i} ft</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="flex-1">
+                            <select
+                                id={`${field.key}_in`}
+                                value={String(inches)}
+                                onChange={(e) => {
+                                    const inc = Number(e.target.value)
+                                    const ft = typeof feet === "number" ? feet : 0
+                                    updateField(field.key, computeDecimal(ft, inc))
+                                }}
+                                className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm shadow-none"
+                            >
+                                <option value="">in</option>
+                                {Array.from({ length: 12 }, (_, i) => (
+                                    <option key={i} value={i}>{i} in</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
                     {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
                 </div>
             )
@@ -1292,14 +1351,14 @@ export default function PublicApplicationForm({ token, previewKey }: PublicAppli
                     <div className="rounded-3xl border border-stone-200/70 bg-white/95 p-8 shadow-[0_2px_12px_rgba(15,23,42,0.06)] md:p-10">
                         <div className="flex flex-col items-center gap-4 text-center">
                             {showLogo ? (
-                                <div className="flex size-16 items-center justify-center">
+                                <div className="flex items-center justify-center">
                                     <Image
                                         src={resolvedLogoUrl}
                                         alt={`${publicTitle} logo`}
-                                        width={64}
+                                        width={256}
                                         height={64}
                                         unoptimized
-                                        className="size-16 rounded-2xl object-contain shadow-sm"
+                                        className="max-h-16 max-w-64 w-auto rounded-2xl object-contain shadow-sm"
                                         onError={() => setLogoError(true)}
                                     />
                                 </div>

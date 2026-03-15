@@ -235,6 +235,7 @@ class Surrogate(Base):
     insurance_group_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     insurance_subscriber_name: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     insurance_subscriber_dob: Mapped[date | None] = mapped_column(EncryptedDate, nullable=True)
+    insurance_fax: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
     # ============================================
     # IVF CLINIC
@@ -247,6 +248,7 @@ class Surrogate(Base):
     clinic_postal: Mapped[str | None] = mapped_column(String(20), nullable=True)
     clinic_phone: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     clinic_email: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    clinic_fax: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
     # ============================================
     # MONITORING CLINIC
@@ -263,6 +265,7 @@ class Surrogate(Base):
     monitoring_clinic_postal: Mapped[str | None] = mapped_column(String(20), nullable=True)
     monitoring_clinic_phone: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     monitoring_clinic_email: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    monitoring_clinic_fax: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
     # ============================================
     # OB PROVIDER
@@ -276,6 +279,7 @@ class Surrogate(Base):
     ob_postal: Mapped[str | None] = mapped_column(String(20), nullable=True)
     ob_phone: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     ob_email: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    ob_fax: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
     # ============================================
     # DELIVERY HOSPITAL
@@ -292,6 +296,34 @@ class Surrogate(Base):
     delivery_hospital_postal: Mapped[str | None] = mapped_column(String(20), nullable=True)
     delivery_hospital_phone: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     delivery_hospital_email: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    delivery_hospital_fax: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+
+    # ============================================
+    # PCP PROVIDER
+    # ============================================
+    pcp_provider_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    pcp_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    pcp_address_line1: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    pcp_address_line2: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    pcp_city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    pcp_state: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    pcp_postal: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    pcp_phone: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    pcp_fax: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    pcp_email: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+
+    # ============================================
+    # LAB CLINIC
+    # ============================================
+    lab_clinic_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lab_clinic_address_line1: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    lab_clinic_address_line2: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    lab_clinic_city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    lab_clinic_state: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    lab_clinic_postal: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    lab_clinic_phone: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    lab_clinic_fax: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    lab_clinic_email: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
     # ============================================
     # PREGNANCY TRACKING

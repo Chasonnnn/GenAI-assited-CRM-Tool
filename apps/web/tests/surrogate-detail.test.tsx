@@ -387,7 +387,7 @@ describe('SurrogateDetailPage', () => {
             </SurrogateDetailLayoutClient>
         )
 
-        expect(screen.getByText('Insurance Information')).toBeInTheDocument()
+        expect(screen.getByText('Medical & Insurance')).toBeInTheDocument()
         expect(screen.getByText('Activity')).toBeInTheDocument()
     })
 
@@ -605,14 +605,14 @@ describe('SurrogateDetailPage', () => {
         expect(heightRow).toHaveTextContent('5 ft 0 in')
     })
 
-    it('hides Medical Information and Pregnancy Tracker before ready_to_match', () => {
+    it('shows Medical & Insurance but hides Pregnancy Tracker before ready_to_match', () => {
         render(
             <SurrogateDetailLayoutClient>
                 <SurrogateOverviewTab />
             </SurrogateDetailLayoutClient>
         )
 
-        expect(screen.queryByText('Medical Information')).not.toBeInTheDocument()
+        expect(screen.getByText('Medical & Insurance')).toBeInTheDocument()
         expect(screen.queryByText('Pregnancy Tracker')).not.toBeInTheDocument()
     })
 
@@ -635,7 +635,7 @@ describe('SurrogateDetailPage', () => {
             </SurrogateDetailLayoutClient>
         )
 
-        expect(screen.getByText('Medical Information')).toBeInTheDocument()
+        expect(screen.getByText('Medical & Insurance')).toBeInTheDocument()
         expect(screen.getByText('Pregnancy Tracker')).toBeInTheDocument()
         expect(screen.queryByText('Due Date:')).not.toBeInTheDocument()
     })
@@ -674,7 +674,7 @@ describe('SurrogateDetailPage', () => {
         })
     })
 
-    it('uses paused-from stage context for overview gating while on hold', () => {
+    it('shows Medical & Insurance but hides Pregnancy Tracker for on-hold with intake stage', () => {
         mockUseSurrogate.mockReturnValueOnce({
             data: {
                 ...baseSurrogateData,
@@ -697,7 +697,7 @@ describe('SurrogateDetailPage', () => {
             </SurrogateDetailLayoutClient>
         )
 
-        expect(screen.queryByText('Medical Information')).not.toBeInTheDocument()
+        expect(screen.getByText('Medical & Insurance')).toBeInTheDocument()
         expect(screen.queryByText('Pregnancy Tracker')).not.toBeInTheDocument()
     })
 

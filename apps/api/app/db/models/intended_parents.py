@@ -118,6 +118,32 @@ class IntendedParent(Base):
     # Location (state only)
     state: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
+    # Address (full — extends state-only)
+    address_line1: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    address_line2: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    postal: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # Partner
+    partner_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    partner_email: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    partner_email_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    # Pronouns
+    pronouns: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    partner_pronouns: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    # IVF Clinic
+    ip_clinic_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    ip_clinic_address_line1: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    ip_clinic_address_line2: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    ip_clinic_city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    ip_clinic_state: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    ip_clinic_postal: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    ip_clinic_phone: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    ip_clinic_fax: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    ip_clinic_email: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+
     # Budget (single field, Decimal for precision)
     budget: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
 

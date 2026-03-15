@@ -45,6 +45,7 @@ import {
     QrCodeIcon,
     LinkIcon,
     DownloadIcon,
+    RulerIcon,
 } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
 import { toast } from "sonner"
@@ -109,6 +110,7 @@ const fieldTypes: { basic: FieldTypeOption[]; advanced: FieldTypeOption[] } = {
         { id: "file", label: "File Upload", icon: FileIcon },
         { id: "address", label: "Address", icon: HomeIcon },
         { id: "repeatable_table", label: "Repeating Table", icon: ListIcon },
+        { id: "height", label: "Height (ft/in)", icon: RulerIcon },
     ],
 }
 

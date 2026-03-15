@@ -1,6 +1,6 @@
 "use client"
 
-import { PhoneIcon, MailIcon } from "lucide-react"
+import { PhoneIcon, MailIcon, PrinterIcon } from "lucide-react"
 import { InlineEditField } from "@/components/inline-edit-field"
 import { AddressFields } from "@/components/surrogates/AddressFields"
 import { SurrogateRead } from "@/lib/types/surrogate"
@@ -73,6 +73,16 @@ export function MedicalContactSection({
                     onSave={(v) => onUpdate(field('phone'), v || null)}
                     type="tel"
                     placeholder="Phone"
+                />
+            </div>
+
+            <div className="flex items-center gap-2">
+                <PrinterIcon className="size-3.5 text-muted-foreground shrink-0" />
+                <InlineEditField
+                    value={getValue('fax')}
+                    onSave={(v) => onUpdate(field('fax'), v || null)}
+                    type="tel"
+                    placeholder="Fax"
                 />
             </div>
 

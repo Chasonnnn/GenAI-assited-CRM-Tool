@@ -53,6 +53,7 @@ class SurrogateCreate(BaseModel):
     insurance_group_number: str | None = Field(None, max_length=100)
     insurance_subscriber_name: str | None = None
     insurance_subscriber_dob: date | None = None
+    insurance_fax: str | None = None
 
     # =========================================================================
     # IVF CLINIC
@@ -65,6 +66,7 @@ class SurrogateCreate(BaseModel):
     clinic_postal: str | None = Field(None, max_length=20)
     clinic_phone: str | None = None
     clinic_email: EmailStr | None = None
+    clinic_fax: str | None = None
 
     # =========================================================================
     # MONITORING CLINIC
@@ -77,6 +79,7 @@ class SurrogateCreate(BaseModel):
     monitoring_clinic_postal: str | None = Field(None, max_length=20)
     monitoring_clinic_phone: str | None = None
     monitoring_clinic_email: EmailStr | None = None
+    monitoring_clinic_fax: str | None = None
 
     # =========================================================================
     # OB PROVIDER
@@ -90,6 +93,7 @@ class SurrogateCreate(BaseModel):
     ob_postal: str | None = Field(None, max_length=20)
     ob_phone: str | None = None
     ob_email: EmailStr | None = None
+    ob_fax: str | None = None
 
     # =========================================================================
     # DELIVERY HOSPITAL
@@ -102,6 +106,34 @@ class SurrogateCreate(BaseModel):
     delivery_hospital_postal: str | None = Field(None, max_length=20)
     delivery_hospital_phone: str | None = None
     delivery_hospital_email: EmailStr | None = None
+    delivery_hospital_fax: str | None = None
+
+    # =========================================================================
+    # PCP PROVIDER
+    # =========================================================================
+    pcp_provider_name: str | None = Field(None, max_length=255)
+    pcp_name: str | None = Field(None, max_length=255)
+    pcp_address_line1: str | None = None
+    pcp_address_line2: str | None = None
+    pcp_city: str | None = Field(None, max_length=100)
+    pcp_state: str | None = None
+    pcp_postal: str | None = Field(None, max_length=20)
+    pcp_phone: str | None = None
+    pcp_fax: str | None = None
+    pcp_email: EmailStr | None = None
+
+    # =========================================================================
+    # LAB CLINIC
+    # =========================================================================
+    lab_clinic_name: str | None = Field(None, max_length=255)
+    lab_clinic_address_line1: str | None = None
+    lab_clinic_address_line2: str | None = None
+    lab_clinic_city: str | None = Field(None, max_length=100)
+    lab_clinic_state: str | None = None
+    lab_clinic_postal: str | None = Field(None, max_length=20)
+    lab_clinic_phone: str | None = None
+    lab_clinic_fax: str | None = None
+    lab_clinic_email: EmailStr | None = None
 
     # =========================================================================
     # PREGNANCY TRACKING
@@ -130,10 +162,19 @@ class SurrogateCreate(BaseModel):
 
     @field_validator(
         "insurance_phone",
+        "insurance_fax",
         "clinic_phone",
+        "clinic_fax",
         "monitoring_clinic_phone",
+        "monitoring_clinic_fax",
         "ob_phone",
+        "ob_fax",
         "delivery_hospital_phone",
+        "delivery_hospital_fax",
+        "pcp_phone",
+        "pcp_fax",
+        "lab_clinic_phone",
+        "lab_clinic_fax",
     )
     @classmethod
     def validate_optional_phone(cls, v: str | None) -> str | None:
@@ -149,6 +190,8 @@ class SurrogateCreate(BaseModel):
         "monitoring_clinic_state",
         "ob_state",
         "delivery_hospital_state",
+        "pcp_state",
+        "lab_clinic_state",
     )
     @classmethod
     def validate_optional_state(cls, v: str | None) -> str | None:
@@ -191,6 +234,7 @@ class SurrogateUpdate(BaseModel):
     insurance_group_number: str | None = Field(None, max_length=100)
     insurance_subscriber_name: str | None = None
     insurance_subscriber_dob: date | None = None
+    insurance_fax: str | None = None
 
     # =========================================================================
     # IVF CLINIC
@@ -203,6 +247,7 @@ class SurrogateUpdate(BaseModel):
     clinic_postal: str | None = Field(None, max_length=20)
     clinic_phone: str | None = None
     clinic_email: EmailStr | None = None
+    clinic_fax: str | None = None
 
     # =========================================================================
     # MONITORING CLINIC
@@ -215,6 +260,7 @@ class SurrogateUpdate(BaseModel):
     monitoring_clinic_postal: str | None = Field(None, max_length=20)
     monitoring_clinic_phone: str | None = None
     monitoring_clinic_email: EmailStr | None = None
+    monitoring_clinic_fax: str | None = None
 
     # =========================================================================
     # OB PROVIDER
@@ -228,6 +274,7 @@ class SurrogateUpdate(BaseModel):
     ob_postal: str | None = Field(None, max_length=20)
     ob_phone: str | None = None
     ob_email: EmailStr | None = None
+    ob_fax: str | None = None
 
     # =========================================================================
     # DELIVERY HOSPITAL
@@ -240,6 +287,34 @@ class SurrogateUpdate(BaseModel):
     delivery_hospital_postal: str | None = Field(None, max_length=20)
     delivery_hospital_phone: str | None = None
     delivery_hospital_email: EmailStr | None = None
+    delivery_hospital_fax: str | None = None
+
+    # =========================================================================
+    # PCP PROVIDER
+    # =========================================================================
+    pcp_provider_name: str | None = Field(None, max_length=255)
+    pcp_name: str | None = Field(None, max_length=255)
+    pcp_address_line1: str | None = None
+    pcp_address_line2: str | None = None
+    pcp_city: str | None = Field(None, max_length=100)
+    pcp_state: str | None = None
+    pcp_postal: str | None = Field(None, max_length=20)
+    pcp_phone: str | None = None
+    pcp_fax: str | None = None
+    pcp_email: EmailStr | None = None
+
+    # =========================================================================
+    # LAB CLINIC
+    # =========================================================================
+    lab_clinic_name: str | None = Field(None, max_length=255)
+    lab_clinic_address_line1: str | None = None
+    lab_clinic_address_line2: str | None = None
+    lab_clinic_city: str | None = Field(None, max_length=100)
+    lab_clinic_state: str | None = None
+    lab_clinic_postal: str | None = Field(None, max_length=20)
+    lab_clinic_phone: str | None = None
+    lab_clinic_fax: str | None = None
+    lab_clinic_email: EmailStr | None = None
 
     # =========================================================================
     # PREGNANCY TRACKING
@@ -270,10 +345,19 @@ class SurrogateUpdate(BaseModel):
 
     @field_validator(
         "insurance_phone",
+        "insurance_fax",
         "clinic_phone",
+        "clinic_fax",
         "monitoring_clinic_phone",
+        "monitoring_clinic_fax",
         "ob_phone",
+        "ob_fax",
         "delivery_hospital_phone",
+        "delivery_hospital_fax",
+        "pcp_phone",
+        "pcp_fax",
+        "lab_clinic_phone",
+        "lab_clinic_fax",
     )
     @classmethod
     def validate_optional_phone(cls, v: str | None) -> str | None:
@@ -289,6 +373,8 @@ class SurrogateUpdate(BaseModel):
         "monitoring_clinic_state",
         "ob_state",
         "delivery_hospital_state",
+        "pcp_state",
+        "lab_clinic_state",
     )
     @classmethod
     def validate_optional_state(cls, v: str | None) -> str | None:
@@ -360,6 +446,7 @@ class SurrogateRead(BaseModel):
     insurance_group_number: str | None = None
     insurance_subscriber_name: str | None = None
     insurance_subscriber_dob: date | None = None
+    insurance_fax: str | None = None
 
     # =========================================================================
     # IVF CLINIC
@@ -372,6 +459,7 @@ class SurrogateRead(BaseModel):
     clinic_postal: str | None = None
     clinic_phone: str | None = None
     clinic_email: str | None = None
+    clinic_fax: str | None = None
 
     # =========================================================================
     # MONITORING CLINIC
@@ -384,6 +472,7 @@ class SurrogateRead(BaseModel):
     monitoring_clinic_postal: str | None = None
     monitoring_clinic_phone: str | None = None
     monitoring_clinic_email: str | None = None
+    monitoring_clinic_fax: str | None = None
 
     # =========================================================================
     # OB PROVIDER
@@ -397,6 +486,7 @@ class SurrogateRead(BaseModel):
     ob_postal: str | None = None
     ob_phone: str | None = None
     ob_email: str | None = None
+    ob_fax: str | None = None
 
     # =========================================================================
     # DELIVERY HOSPITAL
@@ -409,6 +499,34 @@ class SurrogateRead(BaseModel):
     delivery_hospital_postal: str | None = None
     delivery_hospital_phone: str | None = None
     delivery_hospital_email: str | None = None
+    delivery_hospital_fax: str | None = None
+
+    # =========================================================================
+    # PCP PROVIDER
+    # =========================================================================
+    pcp_provider_name: str | None = None
+    pcp_name: str | None = None
+    pcp_address_line1: str | None = None
+    pcp_address_line2: str | None = None
+    pcp_city: str | None = None
+    pcp_state: str | None = None
+    pcp_postal: str | None = None
+    pcp_phone: str | None = None
+    pcp_fax: str | None = None
+    pcp_email: str | None = None
+
+    # =========================================================================
+    # LAB CLINIC
+    # =========================================================================
+    lab_clinic_name: str | None = None
+    lab_clinic_address_line1: str | None = None
+    lab_clinic_address_line2: str | None = None
+    lab_clinic_city: str | None = None
+    lab_clinic_state: str | None = None
+    lab_clinic_postal: str | None = None
+    lab_clinic_phone: str | None = None
+    lab_clinic_fax: str | None = None
+    lab_clinic_email: str | None = None
 
     # =========================================================================
     # PREGNANCY TRACKING

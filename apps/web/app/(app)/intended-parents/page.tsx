@@ -266,7 +266,7 @@ export default function IntendedParentsPage() {
         email: "",
         phone: "",
         state: "",
-        budget: "",
+        partner_name: "",
         notes_internal: "",
     })
 
@@ -321,7 +321,7 @@ export default function IntendedParentsPage() {
             email: "",
             phone: "",
             state: "",
-            budget: "",
+            partner_name: "",
             notes_internal: "",
         })
     }
@@ -331,12 +331,13 @@ export default function IntendedParentsPage() {
             const phone = formData.phone.trim()
             const state = formData.state.trim()
             const notesInternal = formData.notes_internal.trim()
+            const partnerName = formData.partner_name.trim()
             await createMutation.mutateAsync({
                 full_name: formData.full_name,
                 email: formData.email,
                 ...(phone ? { phone } : {}),
                 ...(state ? { state } : {}),
-                ...(formData.budget ? { budget: parseFloat(formData.budget) } : {}),
+                ...(partnerName ? { partner_name: partnerName } : {}),
                 ...(notesInternal ? { notes_internal: notesInternal } : {}),
             })
             setIsCreateOpen(false)
@@ -356,15 +357,6 @@ export default function IntendedParentsPage() {
             day: "numeric",
             year: "numeric",
         })
-    }
-
-    const formatBudget = (budget: number | null) => {
-        if (!budget) return "—"
-        return new Intl.NumberFormat("en-US", {
-            style: "currency",
-            currency: "USD",
-            maximumFractionDigits: 0,
-        }).format(budget)
     }
 
     const totalPages = data ? Math.ceil(data.total / data.per_page) : 1
@@ -486,7 +478,7 @@ export default function IntendedParentsPage() {
                                         <SortableTableHead column="email" label="Email" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="phone" label="Phone" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="state" label="State" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                        <SortableTableHead column="budget" label="Budget" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                                        <SortableTableHead column="partner_name" label="Partner" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="status" label="Status" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="created_at" label="Created" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                     </TableRow>
@@ -508,7 +500,7 @@ export default function IntendedParentsPage() {
                                             <TableCell className="text-muted-foreground">{ip.email}</TableCell>
                                             <TableCell className="text-muted-foreground">{ip.phone || "—"}</TableCell>
                                             <TableCell className="text-muted-foreground">{ip.state || "—"}</TableCell>
-                                            <TableCell>{formatBudget(ip.budget)}</TableCell>
+                                            <TableCell className="text-muted-foreground">{ip.partner_name || "—"}</TableCell>
                                             <TableCell>
                                                 <Badge className={STATUS_COLORS[ip.status]}>
                                                     {STATUS_LABELS[ip.status]}
@@ -612,13 +604,12 @@ export default function IntendedParentsPage() {
                             </div>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="budget">Budget</Label>
+                            <Label htmlFor="partner_name">Partner Name</Label>
                             <Input
-                                id="budget"
-                                type="number"
-                                value={formData.budget}
-                                onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
-                                placeholder="100000"
+                                id="partner_name"
+                                value={formData.partner_name}
+                                onChange={(e) => setFormData({ ...formData, partner_name: e.target.value })}
+                                placeholder="Partner name (optional)"
                             />
                         </div>
                         <div className="space-y-2">
