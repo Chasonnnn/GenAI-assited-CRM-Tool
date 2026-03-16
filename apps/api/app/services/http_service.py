@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import secrets
+import time
 from typing import Awaitable, Callable
+
+import asyncio
 
 import httpx
 
@@ -52,6 +54,45 @@ async def request_with_retries(
             logger.warning("HTTP request returned %s, retrying", response.status_code)
             if delay:
                 await asyncio.sleep(delay)
+            continue
+
+        return response
+
+    return response
+
+
+def request_with_retries_sync(
+    request_fn: Callable[[], httpx.Response],
+    *,
+    max_attempts: int = 3,
+    base_delay: float = 0.5,
+    max_delay: float = 4.0,
+    retry_statuses: set[int] | None = None,
+) -> httpx.Response:
+    """Execute a synchronous HTTP request with exponential backoff retries."""
+    statuses = retry_statuses or DEFAULT_RETRY_STATUSES
+
+    for attempt in range(max_attempts):
+        try:
+            response = request_fn()
+        except httpx.RequestError as exc:
+            if attempt >= max_attempts - 1:
+                raise
+            delay = min(max_delay, base_delay * (2**attempt))
+            if delay:
+                delay = delay + _jitter(delay)
+            logger.warning("HTTP request failed, retrying", exc_info=exc)
+            if delay:
+                time.sleep(delay)
+            continue
+
+        if response.status_code in statuses and attempt < max_attempts - 1:
+            delay = min(max_delay, base_delay * (2**attempt))
+            if delay:
+                delay = delay + _jitter(delay)
+            logger.warning("HTTP request returned %s, retrying", response.status_code)
+            if delay:
+                time.sleep(delay)
             continue
 
         return response

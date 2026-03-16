@@ -341,6 +341,94 @@ def test_ensure_form_submission_file_scan_job_reclaims_stale_running_job(db, tes
     assert stale_job.last_error is not None
 
 
+def test_dispatch_attachment_scan_if_needed_dispatches_pending_remote_scan(
+    db, test_org, monkeypatch
+):
+    attachment_id = uuid.uuid4()
+    job = Job(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        job_type=JobType.ATTACHMENT_SCAN.value,
+        status=JobStatus.PENDING.value,
+        payload={"attachment_id": str(attachment_id)},
+        attempts=0,
+        max_attempts=3,
+    )
+    db.add(job)
+    db.commit()
+
+    from app.services import scan_dispatch_service
+
+    monkeypatch.setattr(scan_dispatch_service, "remote_scan_dispatch_configured", lambda: True)
+    captured: dict[str, object] = {}
+
+    def _dispatch_attachment_scan_job_sync(*, job_id, attachment_id):
+        captured["job_id"] = job_id
+        captured["attachment_id"] = attachment_id
+
+    monkeypatch.setattr(
+        scan_dispatch_service,
+        "dispatch_attachment_scan_job_sync",
+        _dispatch_attachment_scan_job_sync,
+    )
+
+    dispatched = attachment_service.dispatch_attachment_scan_if_needed(
+        db=db,
+        org_id=test_org.id,
+        attachment_id=attachment_id,
+    )
+
+    db.refresh(job)
+    assert dispatched is True
+    assert captured == {"job_id": job.id, "attachment_id": attachment_id}
+    assert job.status == JobStatus.RUNNING.value
+    assert job.attempts == 1
+
+
+def test_dispatch_submission_file_scan_if_needed_dispatches_pending_remote_scan(
+    db, test_org, monkeypatch
+):
+    submission_file_id = uuid.uuid4()
+    job = Job(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        job_type=JobType.FORM_SUBMISSION_FILE_SCAN.value,
+        status=JobStatus.PENDING.value,
+        payload={"submission_file_id": str(submission_file_id)},
+        attempts=0,
+        max_attempts=3,
+    )
+    db.add(job)
+    db.commit()
+
+    from app.services import scan_dispatch_service
+
+    monkeypatch.setattr(scan_dispatch_service, "remote_scan_dispatch_configured", lambda: True)
+    captured: dict[str, object] = {}
+
+    def _dispatch_form_submission_file_scan_job_sync(*, job_id, submission_file_id):
+        captured["job_id"] = job_id
+        captured["submission_file_id"] = submission_file_id
+
+    monkeypatch.setattr(
+        scan_dispatch_service,
+        "dispatch_form_submission_file_scan_job_sync",
+        _dispatch_form_submission_file_scan_job_sync,
+    )
+
+    dispatched = form_submission_service.dispatch_submission_file_scan_if_needed(
+        db=db,
+        org_id=test_org.id,
+        submission_file_id=submission_file_id,
+    )
+
+    db.refresh(job)
+    assert dispatched is True
+    assert captured == {"job_id": job.id, "submission_file_id": submission_file_id}
+    assert job.status == JobStatus.RUNNING.value
+    assert job.attempts == 1
+
+
 @pytest.mark.asyncio
 async def test_download_pending_attachment_requeues_scan_job_when_missing(
     authed_client, db, test_org, test_user, default_stage, monkeypatch
@@ -390,6 +478,21 @@ async def test_download_pending_attachment_requeues_scan_job_when_missing(
     )
     assert existing == []
 
+    from app.services import scan_dispatch_service
+
+    monkeypatch.setattr(scan_dispatch_service, "remote_scan_dispatch_configured", lambda: True)
+    captured: dict[str, object] = {}
+
+    def _dispatch_attachment_scan_job_sync(*, job_id, attachment_id):
+        captured["job_id"] = job_id
+        captured["attachment_id"] = attachment_id
+
+    monkeypatch.setattr(
+        scan_dispatch_service,
+        "dispatch_attachment_scan_job_sync",
+        _dispatch_attachment_scan_job_sync,
+    )
+
     response = await authed_client.get(f"/attachments/{attachment.id}/download")
     assert response.status_code == 409
     assert response.json()["detail"] == "File is still being scanned"
@@ -403,4 +506,6 @@ async def test_download_pending_attachment_requeues_scan_job_when_missing(
         .all()
     )
     assert len(jobs) == 1
+    assert jobs[0].status == JobStatus.RUNNING.value
     assert jobs[0].payload.get("attachment_id") == str(attachment.id)
+    assert captured == {"job_id": jobs[0].id, "attachment_id": attachment.id}

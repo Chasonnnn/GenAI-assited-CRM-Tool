@@ -138,6 +138,12 @@ async def upload_attachment(
             filename=attachment.filename,
         )
         db.commit()
+        if attachment.scan_status != "clean":
+            attachment_service.dispatch_attachment_scan_if_needed(
+                db=db,
+                org_id=surrogate.organization_id,
+                attachment_id=attachment.id,
+            )
 
         return AttachmentRead(
             id=str(attachment.id),
@@ -317,6 +323,12 @@ async def upload_ip_attachment(
             file_size=file_size,
         )
         db.commit()
+        if attachment.scan_status != "clean":
+            attachment_service.dispatch_attachment_scan_if_needed(
+                db=db,
+                org_id=ip.organization_id,
+                attachment_id=attachment.id,
+            )
 
         return AttachmentRead(
             id=str(attachment.id),
@@ -376,13 +388,11 @@ def download_attachment(
         )
         raise HTTPException(status_code=403, detail=detail)
     if settings.ATTACHMENT_SCAN_ENABLED and attachment.scan_status != "clean":
-        attachment_service.ensure_attachment_scan_job(
+        attachment_service.dispatch_attachment_scan_if_needed(
             db=db,
             org_id=session.org_id,
             attachment_id=attachment.id,
-            commit=False,
         )
-        db.commit()
         raise HTTPException(status_code=409, detail="File is still being scanned")
 
     url = attachment_service.get_download_url(
@@ -516,6 +526,11 @@ def download_local_attachment(
         )
         raise HTTPException(status_code=403, detail=detail)
     if settings.ATTACHMENT_SCAN_ENABLED and attachment.scan_status != "clean":
+        attachment_service.dispatch_attachment_scan_if_needed(
+            db=db,
+            org_id=session.org_id,
+            attachment_id=attachment.id,
+        )
         raise HTTPException(status_code=409, detail="File is still being scanned")
 
     # Verify access: case attachment requires case access, IP attachment uses org-wide access
