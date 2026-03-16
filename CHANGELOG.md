@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.43](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.42...surrogacy-crm-platform-v0.90.43) (2026-03-16)
+
+
+### Bug Fixes
+
+* align README version with current release ([4d1e6b0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4d1e6b040a211653f539fcb583c011fe6c0da46b))
+
 ## [0.90.42](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.41...surrogacy-crm-platform-v0.90.42) (2026-03-16)
 
 
