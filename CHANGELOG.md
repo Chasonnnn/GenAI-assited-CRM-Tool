@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.39](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.38...surrogacy-crm-platform-v0.90.39) (2026-03-16)
+
+
+### Bug Fixes
+
+* grant api run overrides for scan jobs ([76c11fd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/76c11fdd0b0b69067a2b231bcc41703e97b4aa69))
+* let api dispatch attachment scan job ([c796fa5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c796fa571a33fb1d852ee0f4d33b31361ce067a6))
+
 ## [0.90.38](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.37...surrogacy-crm-platform-v0.90.38) (2026-03-16)
 
 
