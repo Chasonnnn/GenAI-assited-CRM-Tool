@@ -37,29 +37,17 @@ import {
 } from "@/lib/hooks/use-analytics"
 import type { DateRangeParams, BreakdownParams } from "@/lib/api/analytics"
 import { cn } from "@/lib/utils"
+import { REPORT_THEME, getDirectionalColor, getEfficiencyColor, getReportSeriesColor } from "@/lib/report-theme"
 
 interface MetaSpendDashboardProps {
     dateParams: DateRangeParams
 }
 
-// Refined color palette with depth
 const CHART_COLORS = {
-    primary: "#0d9488",      // Teal-600
-    secondary: "#14b8a6",    // Teal-500
-    tertiary: "#5eead4",     // Teal-300
-    accent: "#f59e0b",       // Amber-500
-    muted: "#94a3b8",        // Slate-400
-    success: "#22c55e",      // Green-500
-    gradient: {
-        from: "#0d9488",
-        to: "#06b6d4",
-    }
+    primary: REPORT_THEME.primary,
+    accent: REPORT_THEME.quaternary,
+    muted: REPORT_THEME.muted,
 }
-
-const BREAKDOWN_COLORS = [
-    "#0d9488", "#0891b2", "#6366f1", "#8b5cf6", "#d946ef",
-    "#ec4899", "#f43f5e", "#f97316", "#eab308", "#84cc16"
-]
 
 // Format helpers
 const formatCurrency = (value: number | null) => {
@@ -149,18 +137,15 @@ function MetricCard({
 }) {
     return (
         <div className={cn(
-            "relative overflow-hidden rounded-xl border border-border/50 bg-gradient-to-br from-background to-muted/30 p-4 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 hover:border-primary/20",
+            "rounded-2xl border border-border/70 bg-card/95 p-4 transition-colors hover:border-primary/20 hover:bg-card",
             className
         )}>
-            {/* Subtle gradient overlay */}
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.02] to-transparent pointer-events-none" />
-
-            <div className="relative">
+            <div>
                 <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                         {title}
                     </span>
-                    <div className="p-1.5 rounded-lg bg-primary/10">
+                    <div className="rounded-lg border border-border/70 bg-background/70 p-1.5">
                         <Icon className="size-3.5 text-primary" />
                     </div>
                 </div>
@@ -177,10 +162,7 @@ function MetricCard({
                         <div className="flex items-baseline gap-2">
                             <span className="text-2xl font-bold tracking-tight">{value}</span>
                             {trend !== null && trend !== undefined && (
-                                <span className={cn(
-                                    "flex items-center text-xs font-medium",
-                                    trend >= 0 ? "text-emerald-600" : "text-rose-600"
-                                )}>
+                                <span className="flex items-center text-xs font-medium" style={{ color: getDirectionalColor(trend) }}>
                                     {trend >= 0 ? <TrendingUpIcon className="size-3 mr-0.5" /> : <TrendingDownIcon className="size-3 mr-0.5" />}
                                     {Math.abs(trend)}%
                                 </span>
@@ -271,7 +253,7 @@ function CampaignSpendTable({
                                     <div className="flex items-center gap-3">
                                         <div
                                             className="w-1 h-8 rounded-full"
-                                            style={{ backgroundColor: BREAKDOWN_COLORS[idx % BREAKDOWN_COLORS.length] }}
+                                            style={{ backgroundColor: getReportSeriesColor(idx) }}
                                         />
                                         <div className="min-w-0">
                                             <p className="font-medium truncate max-w-[200px]">{campaign.campaign_name}</p>
@@ -292,14 +274,10 @@ function CampaignSpendTable({
                                     {formatNumber(campaign.leads)}
                                 </td>
                                 <td className="px-4 py-3 text-right">
-                                    <span className={cn(
-                                        "font-mono text-sm",
-                                        campaign.cost_per_lead && campaign.cost_per_lead < 50
-                                            ? "text-emerald-600"
-                                            : campaign.cost_per_lead && campaign.cost_per_lead > 100
-                                                ? "text-amber-600"
-                                                : ""
-                                    )}>
+                                    <span
+                                        className="font-mono text-sm"
+                                        style={{ color: getEfficiencyColor(campaign.cost_per_lead) }}
+                                    >
                                         {campaign.cost_per_lead ? formatCurrency(campaign.cost_per_lead) : "—"}
                                     </span>
                                 </td>
@@ -351,7 +329,7 @@ function BreakdownChart({
         name: item.breakdown_value.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
         spend: item.spend,
         leads: item.leads,
-        fill: BREAKDOWN_COLORS[idx % BREAKDOWN_COLORS.length],
+        fill: getReportSeriesColor(idx),
     }))
 
     return (
@@ -365,7 +343,7 @@ function BreakdownChart({
                         if (!payload?.length) return null
                         const d = payload[0].payload
                         return (
-                            <div className="rounded-lg border bg-background/95 backdrop-blur p-2 shadow-lg text-xs">
+                            <div className="rounded-lg border bg-card p-2 shadow-sm text-xs">
                                 <p className="font-medium">{d.name}</p>
                                 <p className="text-muted-foreground">Spend: {formatCurrency(d.spend)}</p>
                                 <p className="text-muted-foreground">Leads: {d.leads}</p>
@@ -475,22 +453,22 @@ function FormPerformanceTable({
                             <td className="px-4 py-3 text-right">
                                 {formatNumber(form.surrogate_count)}
                             </td>
-                            <td className="px-4 py-3 text-right text-emerald-600 hidden sm:table-cell">
+                            <td className="px-4 py-3 text-right hidden sm:table-cell" style={{ color: REPORT_THEME.success }}>
                                 {formatNumber(form.pre_qualified_count)}
                             </td>
                             <td className="px-4 py-3 text-right">
-                                <span className={cn(
-                                    "font-medium",
-                                    form.conversion_rate >= 80 ? "text-emerald-600" : form.conversion_rate < 50 ? "text-amber-600" : ""
-                                )}>
+                                <span
+                                    className="font-medium"
+                                    style={{ color: getEfficiencyColor(form.conversion_rate, { lowThreshold: 50, highThreshold: 80 }) }}
+                                >
                                     {formatPercent(form.conversion_rate)}
                                 </span>
                             </td>
                             <td className="px-4 py-3 text-right hidden md:table-cell">
-                                <span className={cn(
-                                    "font-medium",
-                                    form.pre_qualified_rate >= 30 ? "text-emerald-600" : form.pre_qualified_rate < 10 ? "text-amber-600" : ""
-                                )}>
+                                <span
+                                    className="font-medium"
+                                    style={{ color: getEfficiencyColor(form.pre_qualified_rate, { lowThreshold: 10, highThreshold: 30 }) }}
+                                >
                                     {formatPercent(form.pre_qualified_rate)}
                                 </span>
                             </td>
@@ -540,7 +518,7 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
         return platforms.map((item, idx) => ({
             platform: item.platform.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
             leads: item.lead_count,
-            fill: BREAKDOWN_COLORS[idx % BREAKDOWN_COLORS.length],
+            fill: getReportSeriesColor(idx),
         }))
     }, [platforms])
 
@@ -550,7 +528,7 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
             ad: item.ad_name,
             leads: item.lead_count,
             surrogates: item.surrogate_count,
-            fill: BREAKDOWN_COLORS[idx % BREAKDOWN_COLORS.length],
+            fill: getReportSeriesColor(idx),
         }))
     }, [ads])
 
@@ -559,7 +537,7 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
             {/* Header with filters */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5">
+                    <div className="rounded-xl border border-border/70 bg-background/70 p-2">
                         <DollarSignIcon className="size-5 text-primary" />
                     </div>
                     <div>
@@ -679,7 +657,7 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
                                                 if (!payload?.length) return null
                                                 const d = payload[0].payload
                                                 return (
-                                                    <div className="rounded-lg border bg-background/95 backdrop-blur p-2 shadow-lg text-xs">
+                                                    <div className="rounded-lg border bg-card p-2 shadow-sm text-xs">
                                                         <p className="font-medium">{d.date}</p>
                                                         <p className="text-muted-foreground">Spend: {formatCurrency(d.spend)}</p>
                                                         <p className="text-muted-foreground">Leads: {d.leads}</p>
@@ -781,13 +759,13 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
                                             <YAxis dataKey="platform" type="category" tickLine={false} axisLine={false} width={110} fontSize={11} />
                                             <ChartTooltip
                                                 content={({ payload }) => {
-                                                    if (!payload?.length) return null
-                                                    const d = payload[0].payload
-                                                    return (
-                                                        <div className="rounded-lg border bg-background/95 backdrop-blur p-2 shadow-lg text-xs">
-                                                            <p className="font-medium">{d.platform}</p>
-                                                            <p className="text-muted-foreground">Leads: {formatNumber(d.leads)}</p>
-                                                        </div>
+                                                if (!payload?.length) return null
+                                                const d = payload[0].payload
+                                                return (
+                                                    <div className="rounded-lg border bg-card p-2 shadow-sm text-xs">
+                                                        <p className="font-medium">{d.platform}</p>
+                                                        <p className="text-muted-foreground">Leads: {formatNumber(d.leads)}</p>
+                                                    </div>
                                                     )
                                                 }}
                                             />
@@ -838,13 +816,13 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
                                             <YAxis dataKey="ad" type="category" tickLine={false} axisLine={false} width={140} fontSize={11} />
                                             <ChartTooltip
                                                 content={({ payload }) => {
-                                                    if (!payload?.length) return null
-                                                    const d = payload[0].payload
-                                                    return (
-                                                        <div className="rounded-lg border bg-background/95 backdrop-blur p-2 shadow-lg text-xs">
-                                                            <p className="font-medium truncate max-w-[220px]">{d.ad}</p>
-                                                            <p className="text-muted-foreground">Leads: {formatNumber(d.leads)}</p>
-                                                            <p className="text-muted-foreground">Surrogates: {formatNumber(d.surrogates)}</p>
+                                                if (!payload?.length) return null
+                                                const d = payload[0].payload
+                                                return (
+                                                    <div className="rounded-lg border bg-card p-2 shadow-sm text-xs">
+                                                        <p className="font-medium truncate max-w-[220px]">{d.ad}</p>
+                                                        <p className="text-muted-foreground">Leads: {formatNumber(d.leads)}</p>
+                                                        <p className="text-muted-foreground">Surrogates: {formatNumber(d.surrogates)}</p>
                                                         </div>
                                                     )
                                                 }}

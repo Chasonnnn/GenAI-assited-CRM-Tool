@@ -1,6 +1,5 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,9 +8,8 @@ import {
     TrendingUpIcon,
     TrendingDownIcon,
     AlertCircleIcon,
-    ChevronRightIcon,
+    ArrowUpRightIcon,
 } from "lucide-react"
-import { Area, AreaChart, ResponsiveContainer } from "recharts"
 import { cn } from "@/lib/utils"
 
 // =============================================================================
@@ -30,7 +28,6 @@ interface KPICardProps {
     value: number | string
     subtitle?: string | undefined
     change?: ChangeIndicator | undefined
-    sparklineData?: number[] | undefined
     href?: string | undefined
     attention?: boolean | undefined
     isLoading?: boolean | undefined
@@ -80,7 +77,12 @@ function formatChange(change: ChangeIndicator): { text: string; color: string; i
 
         return {
             text: `${currentValue} vs ${previousValue} ${period}`,
-            color: direction === "up" ? "text-green-600" : direction === "down" ? "text-red-600" : "text-muted-foreground",
+            color:
+                direction === "up"
+                    ? "text-[var(--status-success)]"
+                    : direction === "down"
+                      ? "text-[var(--status-danger)]"
+                      : "text-muted-foreground",
             icon,
         }
     }
@@ -93,88 +95,9 @@ function formatChange(change: ChangeIndicator): { text: string; color: string; i
 
     return {
         text: `${sign}${Math.round(effectivePercent)}%`,
-        color: isPositive ? "text-green-600" : "text-muted-foreground",
+        color: isPositive ? "text-[var(--status-success)]" : "text-muted-foreground",
         icon: <Icon className="size-3" />,
     }
-}
-
-// =============================================================================
-// Components
-// =============================================================================
-
-function Sparkline({ data }: { data: number[] }) {
-    const containerRef = useRef<HTMLDivElement | null>(null)
-    const [size, setSize] = useState<{ width: number; height: number } | null>(null)
-    const hasData = data.length >= 2
-
-    useEffect(() => {
-        if (!hasData) return
-        const element = containerRef.current
-        if (!element) return
-
-        const updateSize = () => {
-            const rect = element.getBoundingClientRect()
-            const width = Math.round(rect.width)
-            const height = Math.round(rect.height)
-            if (width > 0 && height > 0) {
-                setSize((prev) =>
-                    prev && prev.width === width && prev.height === height ? prev : { width, height }
-                )
-            } else {
-                setSize(null)
-            }
-        }
-
-        updateSize()
-
-        if (typeof ResizeObserver === "undefined") {
-            if (typeof window.requestAnimationFrame === "function") {
-                const frame = window.requestAnimationFrame(updateSize)
-                return () => window.cancelAnimationFrame(frame)
-            }
-            updateSize()
-            return
-        }
-
-        const observer = new ResizeObserver(updateSize)
-        observer.observe(element)
-        return () => observer.disconnect()
-    }, [hasData])
-
-    if (!hasData) return null
-
-    const chartData = data.map((value, index) => ({ index, value }))
-    const maxValue = Math.max(...data)
-    const minValue = Math.min(...data)
-    const hasVariance = maxValue !== minValue
-
-    return (
-        <div ref={containerRef} className="h-8 w-full">
-            {size ? (
-                <ResponsiveContainer width={size.width} height={size.height} minWidth={1} minHeight={1}>
-                    <AreaChart data={chartData} margin={{ top: 2, right: 0, bottom: 2, left: 0 }}>
-                        <defs>
-                            <linearGradient id="sparklineGradient" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.3} />
-                                <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.05} />
-                            </linearGradient>
-                        </defs>
-                        <Area
-                            type="monotone"
-                            dataKey="value"
-                            stroke="var(--primary)"
-                            strokeWidth={1.5}
-                            fill="url(#sparklineGradient)"
-                            isAnimationActive={false}
-                            dot={false}
-                            // If no variance, show a flat line in the middle
-                            baseValue={hasVariance ? "dataMin" : (minValue - 1)}
-                        />
-                    </AreaChart>
-                </ResponsiveContainer>
-            ) : null}
-        </div>
-    )
 }
 
 export function KPICard({
@@ -182,7 +105,6 @@ export function KPICard({
     value,
     subtitle,
     change,
-    sparklineData,
     href,
     attention,
     isLoading,
@@ -194,34 +116,39 @@ export function KPICard({
     const changeDisplay = change ? formatChange(change) : null
     const content = (
         <Card className={cn(
-            "transition-all h-full flex flex-col gap-0 p-0",
-            href && "hover:bg-muted/30 cursor-pointer",
+            "gap-0 rounded-2xl border border-border/80 bg-card/95 p-0 shadow-none transition-colors",
+            href && "cursor-pointer hover:border-primary/30 hover:bg-card",
             className
         )}>
-            <CardHeader className="p-6 pb-0 gap-0">
-                <div className="flex items-center justify-between mb-1">
-                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2 min-w-0 flex-1">
-                        {icon}
+            <CardHeader className="gap-0 px-5 pb-0 pt-5">
+                <div className="mb-2 flex items-start justify-between gap-3">
+                    <CardTitle className="flex min-w-0 flex-1 items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                        {icon && (
+                            <span className="flex size-7 items-center justify-center rounded-full border border-border/70 bg-background text-foreground/80">
+                                {icon}
+                            </span>
+                        )}
                         <span className="truncate" title={title}>{title}</span>
                     </CardTitle>
                     {changeDisplay && !isLoading && !isError && (
-                        <div className={cn("flex items-center gap-1 text-xs font-medium whitespace-nowrap shrink-0", changeDisplay.color)}>
+                        <div className={cn("shrink-0 whitespace-nowrap text-xs font-medium", changeDisplay.color)}>
+                            <div className="flex items-center gap-1 rounded-full bg-muted/60 px-2.5 py-1">
                             {changeDisplay.icon}
                             {changeDisplay.text}
+                            </div>
                         </div>
                     )}
                     {attention && !isLoading && !isError && (
-                        <AlertCircleIcon className="size-4 text-amber-500" />
+                        <AlertCircleIcon className="size-4 text-[var(--status-warning)]" />
                     )}
                 </div>
-                <div className="mb-4 h-0" aria-hidden="true" />
             </CardHeader>
-            <CardContent className="p-6 pt-0 space-y-2 flex-1">
+            <CardContent className="flex flex-1 flex-col gap-3 px-5 pb-5 pt-0">
                 {isLoading ? (
                     <div className="space-y-2">
-                        <Skeleton className="h-8 w-20" />
+                        <Skeleton className="h-7 w-20" />
                         <Skeleton className="h-4 w-32" />
-                        <Skeleton className="h-8 w-full" />
+                        <Skeleton className="h-4 w-24" />
                     </div>
                 ) : isError ? (
                     <div className="flex items-center justify-between text-xs text-destructive">
@@ -246,19 +173,19 @@ export function KPICard({
                     </div>
                 ) : (
                     <>
-                        <div className="flex items-baseline justify-between">
-                            <div className="text-4xl font-semibold tracking-tight tabular-nums leading-none">
+                        <div className="flex items-end justify-between gap-3">
+                            <div className="text-3xl font-semibold leading-none tracking-tight tabular-nums text-foreground sm:text-[2.15rem]">
                                 {typeof value === "number" ? value.toLocaleString() : value}
                             </div>
                             {href && (
-                                <ChevronRightIcon className="size-5 text-muted-foreground" />
+                                <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                                    Open
+                                    <ArrowUpRightIcon className="size-3.5" />
+                                </span>
                             )}
                         </div>
                         {subtitle && (
-                            <p className="text-xs text-muted-foreground">{subtitle}</p>
-                        )}
-                        {sparklineData && sparklineData.length >= 2 && (
-                            <Sparkline data={sparklineData} />
+                            <p className="max-w-[18rem] text-sm leading-6 text-muted-foreground">{subtitle}</p>
                         )}
                     </>
                 )}
@@ -268,7 +195,7 @@ export function KPICard({
 
     if (href && !isLoading && !isError) {
         return (
-            <Link href={href} className="block h-full">
+            <Link href={href} className="block">
                 {content}
             </Link>
         )
@@ -283,18 +210,17 @@ export function KPICard({
 
 export function KPICardSkeleton() {
     return (
-        <Card className="gap-0 p-0">
-            <CardHeader className="p-6 pb-0 gap-0">
-                <div className="flex items-center justify-between mb-1">
+        <Card className="gap-0 rounded-2xl p-0 shadow-none">
+            <CardHeader className="gap-0 px-5 pb-0 pt-5">
+                <div className="mb-2 flex items-center justify-between">
                     <Skeleton className="h-4 w-24" />
                     <Skeleton className="h-4 w-12" />
                 </div>
-                <div className="mb-4 h-0" aria-hidden="true" />
             </CardHeader>
-            <CardContent className="p-6 pt-0 space-y-2">
+            <CardContent className="space-y-3 px-5 pb-5 pt-0">
                 <Skeleton className="h-8 w-20" />
                 <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-4 w-24" />
             </CardContent>
         </Card>
     )

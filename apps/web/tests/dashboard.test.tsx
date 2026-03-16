@@ -1,7 +1,7 @@
 import type { PropsWithChildren } from "react"
 import * as React from "react"
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { ApiError } from '@/lib/api'
 import { formatLocalDate } from '@/lib/utils/date'
 import DashboardPage from '../app/(app)/dashboard/page'
@@ -184,10 +184,13 @@ describe('DashboardPage', () => {
 
         // Check welcome header
         expect(screen.getByText(/Welcome back, Test/)).toBeInTheDocument()
+        expect(screen.getByText('Portfolio health')).toBeInTheDocument()
+        expect(screen.getByRole('link', { name: /review attention queue/i })).toBeInTheDocument()
 
         // Check stats cards
-        expect(screen.getByText('Active Surrogates')).toBeInTheDocument()
-        expect(screen.getByText('10')).toBeInTheDocument()
+        const activeCard = screen.getByText('Active Surrogates').closest('[data-slot="card"]')
+        expect(activeCard).not.toBeNull()
+        expect(within(activeCard as HTMLElement).getByText('10')).toBeInTheDocument()
         expect(screen.getByText('My Tasks')).toBeInTheDocument()
 
         // Check chart sections exist

@@ -38,7 +38,7 @@ function TableSkeleton() {
     return (
         <div className="flex min-h-screen flex-col">
             {/* Header */}
-            <div className="border-b border-border bg-background/95 backdrop-blur">
+            <div className="border-b border-border/80 bg-background/80">
                 <div className="flex h-14 items-center justify-between px-6">
                     <Skeleton className="h-7 w-32" />
                     <Skeleton className="h-9 w-24" />
@@ -89,7 +89,7 @@ function CardsSkeleton() {
     return (
         <div className="flex min-h-screen flex-col">
             {/* Header */}
-            <div className="border-b border-border bg-background/95 backdrop-blur">
+            <div className="border-b border-border/80 bg-background/80">
                 <div className="flex h-14 items-center justify-between px-6">
                     <Skeleton className="h-7 w-32" />
                     <Skeleton className="h-9 w-24" />
@@ -124,7 +124,7 @@ function ProfileSkeleton() {
     return (
         <div className="flex min-h-screen flex-col">
             {/* Header with back button */}
-            <div className="border-b border-border bg-background/95 backdrop-blur">
+            <div className="border-b border-border/80 bg-background/80">
                 <div className="flex h-14 items-center gap-4 px-6">
                     <Skeleton className="size-9" />
                     <Skeleton className="h-7 w-48" />
@@ -183,7 +183,7 @@ function CalendarSkeleton() {
     return (
         <div className="flex min-h-screen flex-col">
             {/* Header */}
-            <div className="border-b border-border bg-background/95 backdrop-blur">
+            <div className="border-b border-border/80 bg-background/80">
                 <div className="flex h-14 items-center justify-between px-6">
                     <Skeleton className="h-7 w-32" />
                     <div className="flex items-center gap-2">

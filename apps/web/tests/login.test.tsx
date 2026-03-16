@@ -7,6 +7,8 @@ describe('LoginPage', () => {
         render(<LoginPage />)
 
         expect(screen.getByText('Welcome Back')).toBeInTheDocument()
+        expect(screen.getByText('Secure workspace access')).toBeInTheDocument()
+        expect(screen.getByText(/use your organization google account to continue/i)).toBeInTheDocument()
         expect(screen.getByRole('button', { name: /sign in with google/i })).toBeInTheDocument()
         expect(screen.queryByText('Other sign-in methods')).not.toBeInTheDocument()
     })

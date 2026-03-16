@@ -37,6 +37,7 @@ vi.mock("@/components/ui/sonner", () => ({
 
 vi.mock("next/font/google", () => ({
     Noto_Sans: () => ({ variable: "font-noto-sans" }),
+    Cormorant_Garamond: () => ({ variable: "font-cormorant-garamond" }),
 }))
 
 describe("layout auth provider placement", () => {

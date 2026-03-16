@@ -40,6 +40,12 @@ const MAX_UPCOMING_ITEMS = 5
 const OVERDUE_COLLAPSE_THRESHOLD = 3
 const MY_TASKS_HREF = "/tasks?filter=my_tasks"
 const COUNT_BADGE_CLASS = "h-5 min-w-5 rounded-full px-2 text-[10px] font-medium"
+const STATUS_SUCCESS_TEXT = "text-[var(--status-success)]"
+const STATUS_SUCCESS_BG = "bg-[color:var(--status-success)]/10"
+const STATUS_WARNING_TEXT = "text-[var(--status-warning)]"
+const STATUS_WARNING_BG = "bg-[color:var(--status-warning)]/12"
+const STATUS_DANGER_TEXT = "text-[var(--status-danger)]"
+const STATUS_DANGER_BG = "bg-[color:var(--status-danger)]/10"
 
 export function AttentionNeededPanel() {
     const { filters } = useDashboardFilters()
@@ -127,8 +133,8 @@ export function AttentionNeededPanel() {
     const upcomingOpen = activeSection === "upcoming"
 
     return (
-        <Card className="h-full flex flex-col gap-0 p-0">
-            <CardContent className="p-6 flex-1 min-h-0">
+        <Card className="flex h-full flex-col gap-0 rounded-[28px] border border-border/80 bg-card/95 p-0 shadow-sm">
+            <CardContent className="flex min-h-0 flex-1 p-6">
                 <div className="flex h-full min-h-0 flex-col gap-6">
                     <section
                         className={cn("flex min-h-0 flex-col", attentionOpen && "flex-1")}
@@ -162,7 +168,7 @@ export function AttentionNeededPanel() {
                                         <Button
                                             variant="ghost"
                                             size="sm"
-                                            className="h-8 px-2 text-xs font-medium text-teal-600 hover:text-teal-700"
+                                            className="h-8 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
                                         >
                                             View all
                                         </Button>
@@ -223,8 +229,8 @@ export function AttentionNeededPanel() {
                                         </div>
                                     ) : !hasAttentionItems || !data ? (
                                         <div className="flex flex-col items-center justify-center py-6 text-center">
-                                            <div className="size-12 rounded-full bg-green-500/10 flex items-center justify-center mb-4">
-                                                <CheckCircle2Icon className="size-6 text-green-600" />
+                                            <div className={cn("mb-4 flex size-12 items-center justify-center rounded-full", STATUS_SUCCESS_BG)}>
+                                                <CheckCircle2Icon className={cn("size-6", STATUS_SUCCESS_TEXT)} />
                                             </div>
                                             <h4 className="font-medium text-foreground">All caught up!</h4>
                                             <p className="text-sm text-muted-foreground mt-1">
@@ -236,8 +242,8 @@ export function AttentionNeededPanel() {
                                             {unreachedCount > 0 && (
                                                 <AttentionItem
                                                     icon={<PhoneOffIcon className="size-4" />}
-                                                    iconBg="bg-amber-500/10"
-                                                    iconColor="text-amber-600"
+                                                    iconBg={STATUS_WARNING_BG}
+                                                    iconColor={STATUS_WARNING_TEXT}
                                                     title="Unreached leads (7+ days)"
                                                     description="No contact or activity in 7+ days"
                                                     count={unreachedCount}
@@ -249,8 +255,8 @@ export function AttentionNeededPanel() {
                                             {overdueCount > 0 && (
                                                 <AttentionItem
                                                     icon={<ClockIcon className="size-4" />}
-                                                    iconBg="bg-red-500/10"
-                                                    iconColor="text-red-600"
+                                                    iconBg={STATUS_DANGER_BG}
+                                                    iconColor={STATUS_DANGER_TEXT}
                                                     title="Overdue tasks"
                                                     description="Past due date"
                                                     count={overdueCount}
@@ -262,8 +268,8 @@ export function AttentionNeededPanel() {
                                             {stuckCount > 0 && (
                                                 <AttentionItem
                                                     icon={<PauseCircleIcon className="size-4" />}
-                                                    iconBg="bg-orange-500/10"
-                                                    iconColor="text-orange-600"
+                                                    iconBg={STATUS_WARNING_BG}
+                                                    iconColor={STATUS_WARNING_TEXT}
                                                     title="Stuck surrogates (30+ days)"
                                                     description="In stage for 30+ days"
                                                     count={stuckCount}
@@ -303,7 +309,7 @@ export function AttentionNeededPanel() {
                                 href={buildTaskHref({
                                     ...(filters.assigneeId ? { assigneeId: filters.assigneeId } : {}),
                                 })}
-                                className="flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-700 transition-colors h-8"
+                                className="flex h-8 items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
                             >
                                 View all
                                 <ArrowRightIcon className="h-3 w-3" />
@@ -341,7 +347,7 @@ export function AttentionNeededPanel() {
                                                 <div key={section.title}>
                                                     <h3
                                                         className={`text-xs font-semibold mb-2 ${section.title === "Overdue"
-                                                            ? "text-red-600"
+                                                            ? STATUS_DANGER_TEXT
                                                             : "text-muted-foreground"
                                                             }`}
                                                     >
@@ -392,7 +398,7 @@ function AttentionItem({
     return (
         <Link
             href={href}
-            className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+            className="flex items-center gap-3 rounded-lg border border-border bg-background/72 p-3 transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
             <div className={cn("size-9 rounded-lg flex items-center justify-center", iconBg)}>
                 <span className={iconColor}>{icon}</span>
@@ -461,10 +467,10 @@ function OverdueSummaryRow({
                 ...(assigneeId ? { assigneeId } : {}),
                 focus: "overdue",
             })}
-            className="flex items-center gap-3 rounded-lg border border-border bg-card/50 p-3 hover:bg-accent/50 transition-colors"
+            className="flex items-center gap-3 rounded-lg border border-border bg-background/72 p-3 transition-colors hover:bg-accent/40"
         >
             <div className="flex-shrink-0 mt-0.5">
-                <AlertTriangleIcon className="h-4 w-4 text-red-600" />
+                <AlertTriangleIcon className={cn("h-4 w-4", STATUS_DANGER_TEXT)} />
             </div>
             <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium leading-tight">Overdue tasks</p>
@@ -523,7 +529,7 @@ function UpcomingItemRow({
     const content = (
         <>
             <div className="flex-shrink-0 mt-0.5">
-                <Icon className={`h-4 w-4 ${item.type === "meeting" ? "text-blue-500" : "text-muted-foreground"}`} />
+                <Icon className={`h-4 w-4 ${item.type === "meeting" ? "text-primary" : "text-muted-foreground"}`} />
             </div>
 
             <div className="flex-1 min-w-0 space-y-1">
@@ -558,7 +564,7 @@ function UpcomingItemRow({
                 href={href}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-start gap-3 rounded-lg border border-border bg-card/50 p-3 hover:bg-accent/50 transition-colors"
+                className="flex items-start gap-3 rounded-lg border border-border bg-background/72 p-3 transition-colors hover:bg-accent/40"
             >
                 {content}
             </a>
@@ -568,7 +574,7 @@ function UpcomingItemRow({
     return (
         <Link
             href={href}
-            className="flex items-start gap-3 rounded-lg border border-border bg-card/50 p-3 hover:bg-accent/50 transition-colors"
+            className="flex items-start gap-3 rounded-lg border border-border bg-background/72 p-3 transition-colors hover:bg-accent/40"
         >
             {content}
         </Link>

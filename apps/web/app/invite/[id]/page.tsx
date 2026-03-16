@@ -2,9 +2,18 @@
 
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
+import {
+    ArrowRight,
+    CheckCircle2,
+    Clock,
+    Loader2,
+    ShieldCheck,
+    UserPlus,
+    XCircle,
+} from "lucide-react"
+
+import { PublicAccessShell } from "@/components/public-access-shell"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ShieldCheck, UserPlus, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react"
 import api from "@/lib/api"
 
 interface InviteDetails {
@@ -21,6 +30,21 @@ interface MeResponse {
     org_id: string
     role: string
     display_name: string
+}
+
+const ROLE_LABELS: Record<string, string> = {
+    intake_specialist: "Intake Specialist",
+    case_manager: "Case Manager",
+    admin: "Administrator",
+    developer: "Developer",
+}
+
+function formatRole(role: string | null | undefined) {
+    if (!role) {
+        return "Pending assignment"
+    }
+
+    return ROLE_LABELS[role] ?? role.replaceAll("_", " ")
 }
 
 export default function InviteAcceptPage() {
@@ -86,169 +110,193 @@ export default function InviteAcceptPage() {
         : null
 
     const alreadyMember = Boolean(invite && currentOrgId && invite.organization_id === currentOrgId)
+    const title =
+        isLoading
+            ? "Loading invite"
+            : invite?.status === "accepted"
+                ? "Access already activated"
+                : invite?.status === "expired"
+                    ? "Invite expired"
+                    : invite?.status === "revoked"
+                        ? "Invite revoked"
+                        : error && !invite
+                            ? "Invite unavailable"
+                            : "You're Invited"
+
+    const description = invite?.inviter_name
+        ? `${invite.inviter_name} invited you to join ${invite.organization_name}.`
+        : "Review the organization, confirm the assigned role, and continue with Google to enter the workspace."
+
+    const facts =
+        invite
+            ? [
+                { label: "Organization", value: invite.organization_name },
+                { label: "Role", value: formatRole(invite.role) },
+                { label: "Status", value: invite.status },
+            ]
+            : []
 
     return (
-        <div
-            className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
-            style={{
-                background: "linear-gradient(135deg, #f8f9fa 0%, #f1f3f5 50%, #f8f9fa 100%)",
-            }}
-        >
-            {/* Background blobs */}
-            <div
-                className="absolute -left-32 top-1/2 w-[600px] h-[600px] rounded-full blur-3xl"
-                style={{
-                    background: "radial-gradient(circle, rgba(99, 102, 241, 0.6) 0%, rgba(139, 92, 246, 0.5) 40%, transparent 70%)",
-                }}
-            />
-            <div
-                className="absolute -right-32 top-0 w-[500px] h-[500px] rounded-full blur-3xl"
-                style={{
-                    background: "radial-gradient(circle, rgba(34, 197, 94, 0.4) 0%, rgba(74, 222, 128, 0.3) 40%, transparent 70%)",
-                }}
-            />
-
-            <Card
-                className="w-full max-w-md relative z-10 border border-white/40 shadow-2xl"
-                style={{
-                    background: "linear-gradient(180deg, rgba(255, 255, 255, 0.7) 0%, rgba(240, 253, 244, 0.6) 100%)",
-                    backdropFilter: "blur(8px) saturate(160%)",
-                    WebkitBackdropFilter: "blur(8px) saturate(160%)",
-                    boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.6)",
-                }}
-            >
-                <CardHeader className="text-center space-y-4 pb-2">
-                    <div className="flex justify-center mb-2">
-                        <div className="w-14 h-14 rounded-xl flex items-center justify-center bg-green-100 border border-green-200">
-                            <UserPlus className="w-8 h-8 text-green-700" strokeWidth={1.5} />
-                        </div>
-                    </div>
-                    <div className="space-y-1">
-                        <div className="text-xs font-semibold text-gray-500 tracking-widest">SURROGACY FORCE</div>
-                        <CardTitle className="text-3xl font-bold text-gray-900">
-                            {isLoading
-                                ? "Loading..."
-                                : invite?.status === "accepted"
-                                    ? "Welcome!"
-                                    : "You're Invited"}
-                        </CardTitle>
-                    </div>
-                </CardHeader>
-
-                <CardContent className="space-y-5">
-                    {isLoading ? (
-                        <div className="flex justify-center py-8">
-                            <Loader2 className="size-8 animate-spin text-gray-400" />
-                        </div>
-                    ) : error && !invite ? (
-                        <div className="text-center py-6">
-                            <XCircle className="size-12 mx-auto mb-4 text-red-400" />
-                            <p className="text-gray-600">{error}</p>
-                        </div>
-                    ) : invite?.status !== "pending" ? (
-                        <div className="text-center py-6">
-                            {invite?.status === "accepted" ? (
-                                <CheckCircle2 className="size-12 mx-auto mb-4 text-green-500" />
+        <PublicAccessShell
+            title={title}
+            description={description}
+            facts={facts}
+            notes={[
+                {
+                    label: "Authentication",
+                    value: "Continue with your organization Google account. Existing app permissions remain in place.",
+                },
+                {
+                    label: "Membership",
+                    value: alreadyMember
+                        ? "You already belong to this organization. Signing in will keep your current access."
+                        : "Accepted invitations activate access after sign-in.",
+                },
+                {
+                    label: "Invite window",
+                    value: expiryText ?? "This invitation stays available until an administrator changes its status.",
+                },
+            ]}
+            panel={
+                <div className="space-y-6">
+                    <div className="space-y-3">
+                        <div className="inline-flex size-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/8">
+                            {isLoading ? (
+                                <Loader2 className="size-7 animate-spin text-primary" />
+                            ) : invite?.status === "accepted" ? (
+                                <CheckCircle2 className="size-7 text-[var(--status-success)]" />
+                            ) : invite?.status === "expired" || invite?.status === "revoked" || (error && !invite) ? (
+                                <XCircle className="size-7 text-[var(--status-danger)]" />
                             ) : (
-                                <XCircle className="size-12 mx-auto mb-4 text-gray-400" />
-                            )}
-                            <p className="text-gray-600">
-                                This invite is {invite?.status}.
-                            </p>
-                            {alreadyMember && (
-                                <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-left text-sm text-blue-700">
-                                    You already have access to this organization. This invite won&apos;t change your role.
-                                    Sign in and ask an admin to update your role if needed.
-                                </div>
-                            )}
-                            {invite?.status === "expired" && (
-                                <p className="text-sm text-gray-500 mt-2">
-                                    Ask the inviter to send a new invitation.
-                                </p>
-                            )}
-                            {invite?.status === "accepted" && (
-                                <Button
-                                    onClick={handleSignIn}
-                                    className="mt-6 w-full font-semibold py-5 rounded-lg bg-green-700 text-white hover:bg-green-800"
-                                >
-                                    <ShieldCheck className="size-5 mr-2" />
-                                    Continue to Sign In
-                                </Button>
+                                <UserPlus className="size-7 text-primary" strokeWidth={1.6} />
                             )}
                         </div>
-                    ) : (
-                        <>
-                            <CardDescription className="text-center text-gray-600">
-                                {invite?.inviter_name ? (
-                                    <>
-                                        <strong>{invite.inviter_name}</strong> invited you to join
-                                    </>
-                                ) : (
-                                    "You've been invited to join"
-                                )}
-                            </CardDescription>
 
-                            <div className="bg-white/60 rounded-xl p-4 border border-gray-200/50 space-y-3">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sm text-gray-500">Organization</span>
-                                    <span className="font-semibold text-gray-900">{invite?.organization_name}</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sm text-gray-500">Role</span>
-                                    <span className="font-semibold text-gray-900 capitalize">{invite?.role}</span>
-                                </div>
-                                {expiryText && (
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-500">Expires</span>
-                                        <span className="text-sm text-gray-600 flex items-center gap-1">
-                                            <Clock className="size-3" />
+                        <div className="space-y-2">
+                            <h2 className="font-[family-name:var(--font-display)] text-4xl leading-none text-foreground">
+                                {invite?.status === "accepted"
+                                    ? "Continue into the workspace."
+                                    : invite?.status === "expired"
+                                        ? "This invitation has closed."
+                                        : invite?.status === "revoked"
+                                            ? "This access request was withdrawn."
+                                            : error && !invite
+                                                ? "We couldn&apos;t verify this invite."
+                                                : "Review the assignment, then continue."}
+                            </h2>
+                            <p className="text-sm leading-6 text-muted-foreground">
+                                {invite?.status === "accepted"
+                                    ? "Your membership is already active. Sign in with Google to continue."
+                                    : invite?.status === "expired"
+                                        ? "Ask the inviter to send a new invitation if you still need access."
+                                        : invite?.status === "revoked"
+                                            ? "An administrator revoked this invitation before sign-in."
+                                            : error && !invite
+                                                ? error
+                                                : "Continue with Google to confirm the invite and open the correct Surrogacy Force workspace."}
+                            </p>
+                        </div>
+                    </div>
+
+                    {invite?.status === "pending" ? (
+                        <>
+                            <div className="rounded-3xl border border-border/80 bg-background px-5 py-5">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="space-y-1">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                                            Invitation summary
+                                        </p>
+                                        <p className="text-base font-medium text-foreground">
+                                            {invite?.organization_name}
+                                        </p>
+                                    </div>
+                                    {expiryText ? (
+                                        <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-medium text-muted-foreground">
+                                            <Clock className="size-3.5" />
                                             {expiryText}
                                         </span>
+                                    ) : null}
+                                </div>
+
+                                <div className="mt-4 grid gap-3 border-t border-border/70 pt-4 sm:grid-cols-2">
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                                            Assigned org
+                                        </p>
+                                        <p className="mt-1 text-sm font-medium text-foreground">
+                                            {invite?.organization_name}
+                                        </p>
                                     </div>
-                                )}
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                                            Access role
+                                        </p>
+                                        <p className="mt-1 text-sm font-medium text-foreground">
+                                            {formatRole(invite?.role)}
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
 
-                            {error && (
-                                <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg border border-red-200">
+                            {error ? (
+                                <div className="rounded-2xl border border-[var(--status-danger)]/30 bg-[var(--status-danger)]/8 px-4 py-3 text-sm text-foreground">
                                     {error}
                                 </div>
-                            )}
-                            {alreadyMember && (
-                                <div className="bg-blue-50 text-blue-700 text-sm p-3 rounded-lg border border-blue-200">
-                                    You already have access to this organization. This invite won&apos;t change your role.
-                                    Sign in and ask an admin to update your role if needed.
-                                </div>
-                            )}
+                            ) : null}
 
-                            <div className="relative py-2">
-                                <div className="absolute inset-0 flex items-center">
-                                    <span className="w-full border-t border-gray-300/50" />
+                            {alreadyMember ? (
+                                <div className="rounded-2xl border border-primary/20 bg-primary/8 px-4 py-3 text-sm leading-6 text-foreground">
+                                    You already have access to this organization. This invite won&apos;t change your role. Sign in and ask an administrator to adjust permissions if needed.
                                 </div>
-                                <div className="relative flex justify-center text-xs uppercase">
-                                    <span className="px-3 bg-transparent text-gray-500 font-medium tracking-wider">
-                                        Continue to sign in
-                                    </span>
-                                </div>
-                            </div>
+                            ) : null}
 
                             <Button
                                 onClick={handleSignIn}
-                                variant="outline"
-                                className="w-full border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold py-5 rounded-lg"
+                                className="h-13 w-full justify-between rounded-full px-5 text-base font-semibold"
                             >
-                                <ShieldCheck className="size-5 mr-2" />
-                                Continue with Google
+                                <span className="inline-flex items-center gap-2">
+                                    <ShieldCheck className="size-5" />
+                                    Continue with Google
+                                </span>
+                                <ArrowRight className="size-5" />
                             </Button>
                         </>
-                    )}
+                    ) : invite?.status === "accepted" ? (
+                        <>
+                            {alreadyMember ? (
+                                <div className="rounded-2xl border border-primary/20 bg-primary/8 px-4 py-3 text-sm leading-6 text-foreground">
+                                    You already have access to this organization. Signing in will keep your current access and won&apos;t overwrite your role.
+                                </div>
+                            ) : null}
 
-                    <div className="pt-4 border-t border-gray-100">
-                        <div className="text-center">
-                            <p className="text-xs text-gray-400">© 2025 Surrogacy Force. All rights reserved.</p>
+                            <Button
+                                onClick={handleSignIn}
+                                className="h-13 w-full justify-between rounded-full px-5 text-base font-semibold"
+                            >
+                                <span className="inline-flex items-center gap-2">
+                                    <ShieldCheck className="size-5" />
+                                    Continue to Sign In
+                                </span>
+                                <ArrowRight className="size-5" />
+                            </Button>
+                        </>
+                    ) : (
+                        <div className="rounded-2xl border border-border/70 bg-background px-5 py-5 text-sm leading-6 text-muted-foreground">
+                            {invite?.status === "expired"
+                                ? "Ask the inviter to send a new invitation if you still need access."
+                                : invite?.status === "revoked"
+                                    ? "If this was unexpected, contact your administrator before attempting to sign in."
+                                    : "If you believe this invite should still work, contact your administrator to verify the link and your account."}
                         </div>
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
+                    )}
+                </div>
+            }
+            footer={
+                <div className="flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                    <span>Need help with your invitation? Contact the administrator who sent it.</span>
+                    <span>© 2025 Surrogacy Force</span>
+                </div>
+            }
+        />
     )
 }

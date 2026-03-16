@@ -10,20 +10,13 @@ import {
 } from "@/components/ui/chart"
 import { Loader2Icon, BarChart3Icon } from "lucide-react"
 import type { UserPerformanceData } from "@/lib/api/analytics"
+import { REPORT_THEME, getReportPerformanceColor } from "@/lib/report-theme"
 
 interface TeamPerformanceChartProps {
     data: UserPerformanceData[] | undefined
     isLoading?: boolean
     isError?: boolean
     title?: string
-}
-
-// Color scale for conversion rates
-const getConversionColor = (rate: number) => {
-    if (rate >= 30) return "#22c55e" // green-500
-    if (rate >= 20) return "#3b82f6" // blue-500
-    if (rate >= 10) return "#f59e0b" // amber-500
-    return "#94a3b8" // slate-400
 }
 
 const chartConfig = {
@@ -48,7 +41,7 @@ export function TeamPerformanceChart({
                 conversion_rate: user.conversion_rate,
                 total_surrogates: user.total_surrogates,
                 application_submitted: user.application_submitted,
-                fill: getConversionColor(user.conversion_rate),
+                fill: getReportPerformanceColor(user.conversion_rate),
             }))
     }, [data])
 
@@ -69,7 +62,7 @@ export function TeamPerformanceChart({
 
     if (isLoading) {
         return (
-            <Card>
+            <Card className="gap-0 rounded-[24px] border border-border/80 bg-card/95 p-0 shadow-sm">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <BarChart3Icon className="size-5" />
@@ -87,7 +80,7 @@ export function TeamPerformanceChart({
 
     if (isError) {
         return (
-            <Card>
+            <Card className="gap-0 rounded-[24px] border border-border/80 bg-card/95 p-0 shadow-sm">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <BarChart3Icon className="size-5" />
@@ -105,7 +98,7 @@ export function TeamPerformanceChart({
 
     if (!chartData || chartData.length === 0) {
         return (
-            <Card>
+            <Card className="gap-0 rounded-[24px] border border-border/80 bg-card/95 p-0 shadow-sm">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <BarChart3Icon className="size-5" />
@@ -122,7 +115,7 @@ export function TeamPerformanceChart({
     }
 
     return (
-        <Card>
+        <Card className="gap-0 rounded-[24px] border border-border/80 bg-card/95 p-0 shadow-sm">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                     <BarChart3Icon className="size-5" />
@@ -169,19 +162,19 @@ export function TeamPerformanceChart({
                 {/* Legend */}
                 <div className="mt-4 flex items-center justify-center gap-6 text-xs">
                     <div className="flex items-center gap-1.5">
-                        <div className="size-3 rounded-sm bg-green-500" />
+                        <div className="size-3 rounded-sm" style={{ backgroundColor: REPORT_THEME.success }} />
                         <span className="text-muted-foreground">30%+</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        <div className="size-3 rounded-sm bg-blue-500" />
+                        <div className="size-3 rounded-sm" style={{ backgroundColor: REPORT_THEME.primary }} />
                         <span className="text-muted-foreground">20-30%</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        <div className="size-3 rounded-sm bg-amber-500" />
+                        <div className="size-3 rounded-sm" style={{ backgroundColor: REPORT_THEME.warning }} />
                         <span className="text-muted-foreground">10-20%</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        <div className="size-3 rounded-sm bg-slate-400" />
+                        <div className="size-3 rounded-sm" style={{ backgroundColor: REPORT_THEME.muted }} />
                         <span className="text-muted-foreground">&lt;10%</span>
                     </div>
                 </div>
