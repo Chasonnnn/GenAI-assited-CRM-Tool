@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.45](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.44...surrogacy-crm-platform-v0.90.45) (2026-03-16)
+
+
+### Bug Fixes
+
+* restore root redirect to dashboard ([43fa762](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/43fa7626678c97d0b3148b6489b897084e165406))
+
 ## [0.90.44](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.43...surrogacy-crm-platform-v0.90.44) (2026-03-16)
 
 
