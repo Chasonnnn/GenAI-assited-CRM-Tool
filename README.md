@@ -1,6 +1,6 @@
 # Surrogacy Force Platform
 
-**Version:** 0.90.2 | **Last Updated:** February 23, 2026
+**Version:** 0.90.2 | **Last Updated:** March 16, 2026
 
 A modern, multi-tenant platform for surrogacy agencies. Manage surrogates from intake through delivery with configurable workflows, matching, automation, and full auditability.
 
@@ -18,6 +18,14 @@ A modern, multi-tenant platform for surrogacy agencies. Manage surrogates from i
 - Ticketing inbox with Gmail journal sync, compose, and replies
 - Ops console for agencies, templates, and integration alerts
 - Integrations: Google OAuth, Google Calendar, Gmail, Zoom, Meta Lead Ads
+
+---
+
+## Release and Deploy Flow
+
+- Merge changes into `main` to let Release Please evaluate the next release.
+- Release Please opens and merges a release PR, then creates a version tag like `surrogacy-crm-platform-v0.90.41`.
+- Cloud Build deploy triggers listen for those version tags, not arbitrary GitHub release objects.
 
 ---
 

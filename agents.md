@@ -292,6 +292,10 @@ cd apps/web && pnpm test --run tests/surrogates.test.tsx
 
 ## 7) Git Workflow
 
+### Branch Creation Rule
+- Do not create a new branch unless the user explicitly asks for one.
+- By default, work on the current branch or `main`, depending on the user's instruction.
+
 ### Commit Prefix Rule
 - All commits must start with a conventional prefix: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, or `chore:`.
 
