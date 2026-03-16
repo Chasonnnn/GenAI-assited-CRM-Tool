@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.44](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.43...surrogacy-crm-platform-v0.90.44) (2026-03-16)
+
+
+### Bug Fixes
+
+* redirect app MFA flows to dashboard ([4f0d9c6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4f0d9c65021b5c7def34afdc9f025d60cd4ca096))
+
 ## [0.90.43](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.42...surrogacy-crm-platform-v0.90.43) (2026-03-16)
 
 
