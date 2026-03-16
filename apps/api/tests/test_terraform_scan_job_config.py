@@ -24,6 +24,13 @@ def test_attachment_scan_job_env_is_exposed_to_services() -> None:
     assert "ATTACHMENT_SCAN_CLOUD_RUN_REGION" in content
 
 
+def test_api_service_account_can_execute_attachment_scan_job() -> None:
+    content = _read("infra/terraform/clamav-iam.tf")
+    assert 'resource "google_project_iam_member" "api_run_invoker"' in content
+    assert 'role    = "roles/run.invoker"' in content
+    assert 'member  = "serviceAccount:${google_service_account.api.email}"' in content
+
+
 def test_cloudbuild_updates_attachment_scan_job_image() -> None:
     content = _read("cloudbuild/api.yaml")
     assert "$_ATTACHMENT_SCAN_JOB" in content
