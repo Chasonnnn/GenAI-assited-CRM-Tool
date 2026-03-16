@@ -209,3 +209,26 @@ async def test_intake_can_follow_after_approving_case(db, test_org):
         )
         assert updated.status_code == 200, updated.text
         assert updated.json()["full_name"] == updated_name
+
+
+@pytest.mark.asyncio
+async def test_intake_can_follow_after_approving_case_when_slug_is_renamed(db, test_org):
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id)
+    approved_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "approved")
+    assert approved_stage is not None
+    approved_stage.slug = "screened_and_approved"
+    db.commit()
+
+    async with _client_for_role(db, test_org.id, Role.INTAKE_SPECIALIST) as (_, client):
+        surrogate_id = await _create_surrogate(client, "Intake Follow Renamed")
+
+        to_approved = await client.patch(
+            f"/surrogates/{surrogate_id}/status",
+            json={"stage_id": str(approved_stage.id)},
+        )
+        assert to_approved.status_code == 200, to_approved.text
+        assert to_approved.json()["status"] == "applied"
+
+        listed = await client.get("/surrogates", params={"per_page": 100})
+        assert listed.status_code == 200, listed.text
+        assert any(item["id"] == surrogate_id for item in listed.json()["items"])

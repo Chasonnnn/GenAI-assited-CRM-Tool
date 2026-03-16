@@ -68,12 +68,15 @@ def handle_status_changed(
 ) -> None:
     """Dispatch surrogate status change side effects."""
     from app.db.enums import AlertType
-    from app.services import notification_facade, queue_service, workflow_triggers
+    from app.services import notification_facade, pipeline_service, queue_service, workflow_triggers
 
     actor = _get_org_user(db, surrogate.organization_id, user_id)
     actor_name = actor.display_name if actor else "Someone"
+    old_stage = pipeline_service.get_stage_by_id(db, old_stage_id) if old_stage_id else None
+    old_stage_key = pipeline_service.get_stage_semantic_key(old_stage) or old_slug or ""
+    new_stage_key = pipeline_service.get_stage_semantic_key(new_stage) or new_stage.slug
 
-    if new_stage.slug != "application_submitted":
+    if not pipeline_service.stage_matches_key(new_stage, "application_submitted"):
         try:
             notification_facade.notify_surrogate_status_changed(
                 db=db,
@@ -99,7 +102,7 @@ def handle_status_changed(
                 },
             )
 
-    if new_stage.slug == "approved":
+    if pipeline_service.stage_matches_key(new_stage, "approved"):
         try:
             pool_queue = queue_service.get_or_create_surrogate_pool_queue(
                 db, surrogate.organization_id
@@ -121,11 +124,11 @@ def handle_status_changed(
         except Exception:
             logger.debug("surrogate_ready_for_claim_notify_failed", exc_info=True)
 
-    _maybe_send_capi_event(db, surrogate, old_slug or "", new_stage.slug)
+    _maybe_send_capi_event(db, surrogate, old_stage_key, new_stage_key)
     _dispatch_conversion_events(
         db,
         surrogate,
-        new_stage_key=new_stage.stage_key,
+        new_stage_key=new_stage_key,
         new_stage_slug=new_stage.slug,
         new_stage_id=str(new_stage.id),
         new_stage_label=new_stage.label,
@@ -133,10 +136,7 @@ def handle_status_changed(
     )
 
     if trigger_workflows:
-        from app.services import pipeline_service
-
         try:
-            old_stage = pipeline_service.get_stage_by_id(db, old_stage_id) if old_stage_id else None
             workflow_triggers.trigger_status_changed(
                 db=db,
                 surrogate=surrogate,
@@ -144,8 +144,8 @@ def handle_status_changed(
                 new_stage_id=new_stage.id,
                 old_stage_slug=old_slug,
                 new_stage_slug=new_stage.slug,
-                old_stage_key=old_stage.stage_key if old_stage else None,
-                new_stage_key=new_stage.stage_key,
+                old_stage_key=old_stage_key or None,
+                new_stage_key=new_stage_key,
                 effective_at=effective_at,
                 recorded_at=recorded_at,
                 is_undo=is_undo,
@@ -318,20 +318,23 @@ def _dispatch_conversion_events(
 
 def handle_surrogate_created(*, db: Session, surrogate: Surrogate) -> None:
     """Emit initial outbound conversion events for Meta-sourced surrogates."""
+    from app.services import pipeline_service
+
     if surrogate.source != SurrogateSource.META.value or not surrogate.stage_id:
         return
 
     stage = db.query(PipelineStage).filter(PipelineStage.id == surrogate.stage_id).first()
     if not stage:
         return
-    if stage.stage_key == "new_unread":
+    stage_key = pipeline_service.get_stage_semantic_key(stage)
+    if stage_key == "new_unread":
         return
 
-    _maybe_send_capi_event(db, surrogate, "", stage.slug)
+    _maybe_send_capi_event(db, surrogate, "", stage_key or "")
     _dispatch_conversion_events(
         db,
         surrogate,
-        new_stage_key=stage.stage_key,
+        new_stage_key=stage_key or stage.slug,
         new_stage_slug=stage.slug,
         new_stage_id=str(stage.id),
         new_stage_label=stage.label,

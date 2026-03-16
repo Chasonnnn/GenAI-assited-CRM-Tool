@@ -46,10 +46,10 @@ def change_status(
         raise HTTPException(status_code=400, detail="Cannot change status of archived surrogate")
 
     target_stage = pipeline_service.get_stage_by_id(db, data.stage_id)
-    is_changing_to_delivered = target_stage and target_stage.slug == "delivered"
+    is_changing_to_delivered = pipeline_service.stage_matches_key(target_stage, "delivered")
 
     # Disallow setting Matched directly unless there is an accepted Match row
-    if target_stage and target_stage.slug == "matched":
+    if pipeline_service.stage_matches_key(target_stage, "matched"):
         from app.services import match_service
 
         accepted = match_service.get_accepted_match_for_surrogate(

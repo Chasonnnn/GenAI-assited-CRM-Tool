@@ -27,6 +27,27 @@ def _is_required_system_stage(stage_key: str | None) -> bool:
     return _normalize_stage_key(stage_key) in REQUIRED_SYSTEM_STAGE_KEYS
 
 
+def get_stage_semantic_key(stage: PipelineStage | None) -> str | None:
+    """Return the canonical stage key for a stage instance."""
+    if not stage:
+        return None
+    return _normalize_stage_key(stage.stage_key or stage.slug)
+
+
+def normalize_stage_ref(value: str | None) -> str | None:
+    """Normalize a stage key or slug reference to its canonical stage key."""
+    normalized = _normalize_stage_key(value)
+    return normalized or None
+
+
+def stage_matches_key(stage: PipelineStage | None, stage_key: str | None) -> bool:
+    """Return whether a stage represents the requested semantic stage key."""
+    normalized_target = normalize_stage_ref(stage_key)
+    if not normalized_target:
+        return False
+    return get_stage_semantic_key(stage) == normalized_target
+
+
 def _merge_required_stage_defs(stage_defs: list[dict]) -> list[dict]:
     """Ensure required system stages exist in a sensible order."""
     normalized_defs = [dict(stage) for stage in stage_defs]

@@ -317,3 +317,30 @@ async def test_surrogate_status_change_still_applies_when_workflow_trigger_fails
     surrogate_row = db.query(Surrogate).filter(Surrogate.id == UUID(surrogate["id"])).first()
     assert surrogate_row is not None
     assert surrogate_row.stage_id == target_stage.id
+
+
+@pytest.mark.asyncio
+async def test_renamed_on_hold_stage_still_creates_pause_metadata_and_follow_up(
+    authed_client, db, test_auth
+):
+    surrogate = await _create_surrogate(authed_client)
+    on_hold_stage = _get_stage(db, test_auth.org.id, "on_hold")
+    on_hold_stage.slug = "pause_for_review"
+    db.commit()
+
+    response = await authed_client.patch(
+        f"/surrogates/{surrogate['id']}/status",
+        json={
+            "stage_id": str(on_hold_stage.id),
+            "reason": "Waiting on coordinator review",
+            "on_hold_follow_up_months": 3,
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "applied"
+
+    surrogate_row = db.query(Surrogate).filter(Surrogate.id == UUID(surrogate["id"])).first()
+    assert surrogate_row is not None
+    assert surrogate_row.stage_id == on_hold_stage.id
+    assert surrogate_row.paused_from_stage_id is not None
+    assert surrogate_row.on_hold_follow_up_task_id is not None

@@ -527,14 +527,18 @@ def get_surrogate_export_view(
     current_stage = surrogate_stage_context.get_stage_context(db, surrogate).effective_stage
     heartbeat_stage = None
     if current_stage:
-        heartbeat_stage = pipeline_service.get_stage_by_slug(
+        heartbeat_stage = pipeline_service.get_stage_by_key(
             db,
             current_stage.pipeline_id,
             "heartbeat_confirmed",
         )
 
     is_terminal_intake_outcome = bool(
-        current_stage and current_stage.slug in {"lost", "disqualified"}
+        current_stage
+        and (
+            pipeline_service.stage_matches_key(current_stage, "lost")
+            or pipeline_service.stage_matches_key(current_stage, "disqualified")
+        )
     )
     show_pregnancy = bool(
         current_stage

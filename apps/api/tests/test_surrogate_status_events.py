@@ -159,6 +159,42 @@ def test_event_bus_assigns_pool_queue_on_approved(monkeypatch, db, test_org, tes
     assert called["ready"] is True
 
 
+def test_event_bus_assigns_pool_queue_on_approved_when_slug_is_renamed(
+    monkeypatch, db, test_org, test_user
+):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id)
+    approved_stage = _get_stage(db, test_org.id, "approved")
+    approved_stage.slug = "screened_and_approved"
+    db.commit()
+
+    pool_queue = SimpleNamespace(id=uuid.uuid4())
+    called = {"assign": False, "ready": False}
+
+    from app.services import notification_facade, queue_service, workflow_triggers
+
+    def fake_assign(*_args, **_kwargs):
+        called["assign"] = True
+        return surrogate
+
+    def mark_ready(*_args, **_kwargs):
+        called["ready"] = True
+
+    monkeypatch.setattr(queue_service, "get_or_create_surrogate_pool_queue", lambda *_: pool_queue)
+    monkeypatch.setattr(queue_service, "assign_surrogate_to_queue", fake_assign)
+    monkeypatch.setattr(notification_facade, "notify_surrogate_ready_for_claim", mark_ready)
+    monkeypatch.setattr(
+        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
+
+    event_kwargs = _event_kwargs(surrogate, approved_stage, user_id=test_user.id)
+    event_kwargs["db"] = db
+    surrogate_events.handle_status_changed(**event_kwargs)
+
+    assert called["assign"] is True
+    assert called["ready"] is True
+
+
 def test_status_change_enqueues_zapier_stage_event(monkeypatch, db, test_org, test_user):
     from app.services import zapier_settings_service
 

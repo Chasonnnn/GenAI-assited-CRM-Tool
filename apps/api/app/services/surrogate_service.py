@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import (
+    AlertSeverity,
+    AlertType,
     SurrogateActivityType,
     SurrogateSource,
     OwnerType,
@@ -31,6 +33,9 @@ from app.utils.normalization import (
 from app.services.surrogate_status_service import StatusChangeResult
 
 logger = logging.getLogger(__name__)
+
+SURROGATE_NUMBER_COUNTER_FLOOR = 10000
+MAX_SURROGATE_CREATE_ATTEMPTS = 5
 
 
 def _parse_created_to_filter(value: str) -> tuple[datetime, bool]:
@@ -63,13 +68,13 @@ def generate_surrogate_number(db: Session, org_id: UUID) -> str:
     result = db.execute(
         text("""
             INSERT INTO org_counters (organization_id, counter_type, current_value)
-            VALUES (:org_id, 'surrogate_number', 10001)
+            VALUES (:org_id, 'surrogate_number', :starting_value)
             ON CONFLICT (organization_id, counter_type)
             DO UPDATE SET current_value = org_counters.current_value + 1,
                           updated_at = now()
             RETURNING current_value
         """),
-        {"org_id": org_id},
+        {"org_id": org_id, "starting_value": SURROGATE_NUMBER_COUNTER_FLOOR + 1},
     ).scalar_one_or_none()
     if result is None:
         raise RuntimeError("Failed to generate surrogate number")
@@ -77,12 +82,94 @@ def generate_surrogate_number(db: Session, org_id: UUID) -> str:
     return f"S{result:05d}"
 
 
-def _is_surrogate_number_conflict(error: IntegrityError) -> bool:
+def is_surrogate_number_conflict(error: IntegrityError) -> bool:
     constraint_name = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
     if constraint_name == "uq_surrogate_number":
         return True
     message = str(error.orig) if error.orig else str(error)
     return "uq_surrogate_number" in message
+
+
+def is_duplicate_email_conflict(error: IntegrityError) -> bool:
+    constraint_name = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
+    if constraint_name == "uq_surrogate_email_hash_active":
+        return True
+    message = str(error.orig) if error.orig else str(error)
+    return "uq_surrogate_email_hash_active" in message
+
+
+def _sync_surrogate_number_counter_to_max(db: Session, org_id: UUID) -> int:
+    from sqlalchemy import text
+
+    max_existing = db.execute(
+        text("""
+            SELECT COALESCE(MAX(CAST(SUBSTRING(surrogate_number FROM 2) AS BIGINT)), :counter_floor)
+            FROM surrogates
+            WHERE organization_id = :org_id
+        """),
+        {"org_id": org_id, "counter_floor": SURROGATE_NUMBER_COUNTER_FLOOR},
+    ).scalar_one()
+
+    repaired_value = db.execute(
+        text("""
+            UPDATE org_counters
+            SET current_value = GREATEST(current_value, :current_value),
+                updated_at = now()
+            WHERE organization_id = :org_id
+              AND counter_type = 'surrogate_number'
+            RETURNING current_value
+        """),
+        {"org_id": org_id, "current_value": max_existing},
+    ).scalar_one_or_none()
+
+    if repaired_value is None:
+        repaired_value = db.execute(
+            text("""
+                INSERT INTO org_counters (organization_id, counter_type, current_value)
+                VALUES (:org_id, 'surrogate_number', :current_value)
+                RETURNING current_value
+            """),
+            {"org_id": org_id, "current_value": max_existing},
+        ).scalar_one()
+
+    return int(repaired_value)
+
+
+def _record_surrogate_number_counter_drift_alert(
+    db: Session,
+    *,
+    org_id: UUID,
+    attempted_surrogate_number: str,
+    repaired_counter_value: int,
+) -> None:
+    from app.services import alert_service
+
+    attempted_counter_value = max(
+        SURROGATE_NUMBER_COUNTER_FLOOR,
+        int(attempted_surrogate_number.removeprefix("S")) - 1,
+    )
+    counter_gap = max(0, repaired_counter_value - attempted_counter_value)
+
+    alert_service.create_or_update_alert(
+        db=db,
+        org_id=org_id,
+        alert_type=AlertType.SURROGATE_NUMBER_COUNTER_DRIFT,
+        severity=AlertSeverity.WARN,
+        title="Surrogate number counter drift repaired",
+        message=(
+            f"Detected stale surrogate number counter while creating a surrogate. "
+            f"Attempted {attempted_surrogate_number} and repaired the counter to "
+            f"{repaired_counter_value} before retrying."
+        ),
+        integration_key="surrogate_number_counter",
+        error_class="CounterDriftDetected",
+        details={
+            "attempted_surrogate_number": attempted_surrogate_number,
+            "attempted_counter_value": attempted_counter_value,
+            "repaired_counter_value": repaired_counter_value,
+            "counter_gap": counter_gap,
+        },
+    )
 
 
 def _get_org_user(db: Session, org_id: UUID, user_id: UUID | None) -> User | None:
@@ -141,12 +228,9 @@ def create_surrogate(
     email_domain = extract_email_domain(normalized_email)
     phone_last4 = extract_phone_last4(normalized_phone)
     surrogate = None
-    for attempt in range(3):
-        surrogate_number = generate_surrogate_number(db, org_id)
+    for attempt in range(MAX_SURROGATE_CREATE_ATTEMPTS):
         normalized_full_name = normalize_name(data.full_name)
         surrogate_kwargs = dict(
-            surrogate_number=surrogate_number,
-            surrogate_number_normalized=normalize_identifier(surrogate_number),
             organization_id=org_id,
             created_by_user_id=user_id,
             owner_type=owner_type,
@@ -257,19 +341,39 @@ def create_surrogate(
         )
         if created_at_override is not None:
             surrogate_kwargs["created_at"] = created_at_override
-        surrogate = Surrogate(**surrogate_kwargs)
-        db.add(surrogate)
         try:
+            with db.begin_nested():
+                surrogate_number = generate_surrogate_number(db, org_id)
+                surrogate = Surrogate(
+                    surrogate_number=surrogate_number,
+                    surrogate_number_normalized=normalize_identifier(surrogate_number),
+                    **surrogate_kwargs,
+                )
+                db.add(surrogate)
+                db.flush()
             db.commit()
             db.refresh(surrogate)
             break
         except IntegrityError as exc:
-            db.rollback()
             try:
-                db.expunge(surrogate)
+                if surrogate is not None:
+                    db.expunge(surrogate)
             except Exception as expunge_exc:
                 logger.debug("surrogate_expunge_failed", exc_info=expunge_exc)
-            if _is_surrogate_number_conflict(exc) and attempt < 2:
+            if is_surrogate_number_conflict(exc) and attempt < MAX_SURROGATE_CREATE_ATTEMPTS - 1:
+                repaired_counter = _sync_surrogate_number_counter_to_max(db, org_id)
+                _record_surrogate_number_counter_drift_alert(
+                    db,
+                    org_id=org_id,
+                    attempted_surrogate_number=surrogate_number,
+                    repaired_counter_value=repaired_counter,
+                )
+                logger.warning(
+                    "surrogate_number_counter_repaired_for_retry org_id=%s attempted=%s counter=%s",
+                    org_id,
+                    surrogate_number,
+                    repaired_counter,
+                )
                 continue
             raise
 
@@ -955,7 +1059,7 @@ def _build_surrogate_filter_clauses(
                 .where(
                     SurrogateStatusHistory.organization_id == org_id,
                     SurrogateStatusHistory.changed_by_user_id == user_id,
-                    PipelineStage.slug == SurrogateStatus.APPROVED.value,
+                    PipelineStage.stage_key == SurrogateStatus.APPROVED.value,
                 )
             )
             filter_clauses.append(or_(owned_clause, Surrogate.id.in_(followed_ids)))
@@ -1191,7 +1295,7 @@ def list_surrogates(
                 .where(
                     SurrogateStatusHistory.organization_id == org_id,
                     SurrogateStatusHistory.changed_by_user_id == user_id,
-                    PipelineStage.slug == SurrogateStatus.APPROVED.value,
+                    PipelineStage.stage_key == SurrogateStatus.APPROVED.value,
                 )
             )
             filter_clauses.append(or_(owned_clause, Surrogate.id.in_(followed_ids)))
@@ -1265,7 +1369,11 @@ def list_surrogates(
     base_query = db.query(Surrogate).filter(*filter_clauses)
 
     query = base_query.options(
-        joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
+        joinedload(Surrogate.stage).load_only(
+            PipelineStage.stage_key,
+            PipelineStage.slug,
+            PipelineStage.stage_type,
+        ),
         joinedload(Surrogate.owner_user).load_only(User.display_name),
         joinedload(Surrogate.owner_queue).load_only(Queue.name),
     )
@@ -1356,7 +1464,11 @@ def list_claim_queue(
         Surrogate.stage_id == approved_stage.id,
     )
     query = base_query.options(
-        joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
+        joinedload(Surrogate.stage).load_only(
+            PipelineStage.stage_key,
+            PipelineStage.slug,
+            PipelineStage.stage_type,
+        ),
         joinedload(Surrogate.owner_user).load_only(User.display_name),
         joinedload(Surrogate.owner_queue).load_only(Queue.name),
     ).order_by(Surrogate.updated_at.desc())
@@ -1391,7 +1503,11 @@ def list_unassigned_queue(
         Surrogate.owner_id == default_queue.id,
     )
     query = base_query.options(
-        joinedload(Surrogate.stage).load_only(PipelineStage.slug, PipelineStage.stage_type),
+        joinedload(Surrogate.stage).load_only(
+            PipelineStage.stage_key,
+            PipelineStage.slug,
+            PipelineStage.stage_type,
+        ),
         joinedload(Surrogate.owner_user).load_only(User.display_name),
         joinedload(Surrogate.owner_queue).load_only(Queue.name),
     ).order_by(Surrogate.updated_at.desc())

@@ -6,6 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
@@ -51,10 +52,15 @@ def create_surrogate(
             data=data,
             emit_events=True,
         )
-    except Exception as e:
-        if "uq_surrogate_email_hash_active" in str(e).lower() or "duplicate" in str(e).lower():
+    except IntegrityError as exc:
+        if surrogate_service.is_duplicate_email_conflict(exc):
             raise HTTPException(
                 status_code=409, detail="A surrogate with this email already exists"
+            )
+        if surrogate_service.is_surrogate_number_conflict(exc):
+            raise HTTPException(
+                status_code=503,
+                detail="Unable to allocate a new surrogate number. Please retry.",
             )
         raise
 
@@ -233,7 +239,7 @@ def update_surrogate(
 
     if is_setting_delivery_date and surrogate.stage_id:
         current_stage = pipeline_service.get_stage_by_id(db, surrogate.stage_id)
-        if current_stage and current_stage.slug != "delivered":
+        if current_stage and not pipeline_service.stage_matches_key(current_stage, "delivered"):
             delivered_stage = pipeline_service.get_stage_by_slug(
                 db, current_stage.pipeline_id, "delivered"
             )

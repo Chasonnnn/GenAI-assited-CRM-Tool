@@ -112,3 +112,31 @@ async def test_surrogates_list_created_to_date_includes_entire_day(authed_client
 
     assert same_day_id in ids
     assert next_day_id not in ids
+
+
+@pytest.mark.asyncio
+async def test_surrogate_list_and_detail_include_stage_key_fields(authed_client):
+    payload = {
+        "full_name": "Stage Key Contract",
+        "email": f"stage-key-{uuid.uuid4().hex[:8]}@example.com",
+    }
+    create_res = await authed_client.post("/surrogates", json=payload)
+    assert create_res.status_code == 201, create_res.text
+    created_id = create_res.json()["id"]
+
+    list_res = await authed_client.get("/surrogates")
+    assert list_res.status_code == 200, list_res.text
+    items = list_res.json()["items"]
+    match = next((item for item in items if item["id"] == created_id), None)
+
+    assert match is not None
+    assert match["stage_key"] == "new_unread"
+
+    detail_res = await authed_client.get(f"/surrogates/{created_id}")
+    assert detail_res.status_code == 200, detail_res.text
+    detail = detail_res.json()
+
+    assert detail["stage_key"] == "new_unread"
+    assert detail["stage_slug"] == "new_unread"
+    assert detail["stage_type"] == "intake"
+    assert detail["paused_from_stage_key"] is None

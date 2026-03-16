@@ -35,6 +35,7 @@ const alertTypeLabels: Record<string, string> = {
     meta_token_expired: "Meta Token Expired",
     worker_job_failed: "Worker Job Failed",
     api_error: "API Error",
+    surrogate_number_counter_drift: "Surrogate Number Counter Drift",
 }
 
 export default function AlertsPage() {

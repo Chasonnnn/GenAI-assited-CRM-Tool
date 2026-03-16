@@ -400,8 +400,12 @@ class SurrogateRead(BaseModel):
     id: UUID
     surrogate_number: str
     stage_id: UUID
+    stage_key: str | None = None
+    stage_slug: str | None = None
+    stage_type: str | None = None
     status_label: str
     paused_from_stage_id: UUID | None = None
+    paused_from_stage_key: str | None = None
     paused_from_stage_slug: str | None = None
     paused_from_stage_label: str | None = None
     paused_from_stage_type: str | None = None
@@ -558,6 +562,7 @@ class SurrogateListItem(BaseModel):
     id: UUID
     surrogate_number: str
     stage_id: UUID
+    stage_key: str | None = None
     stage_slug: str | None = None
     stage_type: str | None = None
     status_label: str

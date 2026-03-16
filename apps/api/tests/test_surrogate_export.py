@@ -16,7 +16,12 @@ from app.core.security import create_export_token, create_session_token
 from app.db.enums import FormStatus, FormSubmissionStatus, Role
 from app.db.models import Form, FormSubmission, Membership, Organization, Surrogate, Task, User
 from app.main import app
-from app.services import form_submission_service, pdf_export_service, session_service
+from app.services import (
+    form_submission_service,
+    pdf_export_service,
+    pipeline_service,
+    session_service,
+)
 from app.utils.normalization import normalize_email
 
 
@@ -320,6 +325,38 @@ async def test_surrogate_export_view_always_includes_medical_data_before_ready_t
     assert payload["surrogate"]["monitoring_clinic_name"] == "Austin Monitoring"
     assert "show_medical" not in payload
     assert payload["show_pregnancy"] is False
+
+
+@pytest.mark.asyncio
+async def test_surrogate_export_view_uses_stage_key_for_pregnancy_gating_when_slug_is_renamed(
+    client, db, test_org, test_user, default_stage
+):
+    surrogate = _create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        default_stage,
+        suffix=uuid.uuid4().hex[:8],
+    )
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id)
+    heartbeat_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "heartbeat_confirmed")
+    assert heartbeat_stage is not None
+    heartbeat_stage.slug = "heartbeat_logged"
+    surrogate.stage_id = heartbeat_stage.id
+    surrogate.status_label = heartbeat_stage.label
+    db.commit()
+
+    export_token = create_export_token(
+        org_id=test_org.id,
+        surrogate_id=surrogate.id,
+        purpose="case_details_export",
+    )
+    response = await client.get(
+        f"/surrogates/{surrogate.id}/export-view?export_token={export_token}"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["show_pregnancy"] is True
 
 
 def test_merge_pdf_bytes_combines_pages_in_order():

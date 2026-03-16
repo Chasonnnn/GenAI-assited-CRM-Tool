@@ -236,16 +236,19 @@ def change_status(
     if old_stage_id == new_stage.id:
         raise ValueError("Target stage is same as current stage")
 
-    if new_stage.slug != "on_hold" and on_hold_follow_up_months is not None:
+    if (
+        not pipeline_service.stage_matches_key(new_stage, "on_hold")
+        and on_hold_follow_up_months is not None
+    ):
         raise ValueError("Follow-up timing is only allowed when moving to On-Hold")
 
-    if new_stage.slug == "on_hold" and not reason:
+    if pipeline_service.stage_matches_key(new_stage, "on_hold") and not reason:
         raise ValueError("Reason required when moving to On-Hold")
 
     is_backdated = (now - normalized_effective_at).total_seconds() > 1
     is_resume_from_on_hold = bool(
         current_stage
-        and current_stage.slug == "on_hold"
+        and pipeline_service.stage_matches_key(current_stage, "on_hold")
         and paused_from_stage
         and paused_from_stage.id == new_stage.id
     )
@@ -270,24 +273,29 @@ def change_status(
             raise ValueError("Surrogate must be claimed before changing stage")
 
     allowed_types = set(rules["stage_types"])
-    allowed_slugs = set(rules.get("extra_slugs", []))
+    allowed_stage_keys = {
+        normalized_key
+        for value in rules.get("extra_slugs", [])
+        if (normalized_key := pipeline_service.normalize_stage_ref(value))
+    }
+    new_stage_key = pipeline_service.get_stage_semantic_key(new_stage)
     if is_resume_from_on_hold:
         pass
     elif not is_regression:
-        if new_stage.stage_type not in allowed_types and new_stage.slug not in allowed_slugs:
+        if new_stage.stage_type not in allowed_types and new_stage_key not in allowed_stage_keys:
             if role_str == Role.INTAKE_SPECIALIST.value:
                 raise ValueError(f"Intake specialists cannot set stage to {new_stage.slug}")
             if role_str == Role.CASE_MANAGER.value:
                 raise ValueError("Case managers can only set post-approval stages")
             raise ValueError("Role not permitted to change stage")
     elif role_str == Role.INTAKE_SPECIALIST.value:
-        if new_stage.stage_type not in allowed_types and new_stage.slug not in allowed_slugs:
+        if new_stage.stage_type not in allowed_types and new_stage_key not in allowed_stage_keys:
             raise ValueError(f"Intake specialists cannot set stage to {new_stage.slug}")
     elif role_str == Role.CASE_MANAGER.value:
         regression_allowed_types = allowed_types | {"intake"}
         if (
             new_stage.stage_type not in regression_allowed_types
-            and new_stage.slug not in allowed_slugs
+            and new_stage_key not in allowed_stage_keys
         ):
             raise ValueError("Case managers can only regress to intake or post-approval stages")
 
@@ -323,7 +331,7 @@ def change_status(
                 org_timezone_str=org_tz_str,
                 is_undo=True,
                 paused_from_stage=effective_old_stage
-                if new_stage.slug == "on_hold"
+                if pipeline_service.stage_matches_key(new_stage, "on_hold")
                 else paused_from_stage,
                 on_hold_follow_up_months=on_hold_follow_up_months,
                 trigger_workflows=trigger_workflows,
@@ -418,7 +426,11 @@ def change_status(
         recorded_at=now,
         org_timezone_str=org_tz_str,
         is_undo=False,
-        paused_from_stage=effective_old_stage if new_stage.slug == "on_hold" else paused_from_stage,
+        paused_from_stage=(
+            effective_old_stage
+            if pipeline_service.stage_matches_key(new_stage, "on_hold")
+            else paused_from_stage
+        ),
         on_hold_follow_up_months=on_hold_follow_up_months,
         trigger_workflows=trigger_workflows,
     )
@@ -456,11 +468,14 @@ def apply_status_change(
 
     Called for non-regressions, undo within grace period, and approved regressions.
     """
+    from app.services import pipeline_service
+
     resolved_org_timezone = org_timezone_str or _get_org_timezone(db, surrogate.organization_id)
     deleted_follow_up_task = None
     created_follow_up_task = None
     leaving_on_hold = bool(
-        current_stage and current_stage.slug == "on_hold" and new_stage.slug != "on_hold"
+        pipeline_service.stage_matches_key(current_stage, "on_hold")
+        and not pipeline_service.stage_matches_key(new_stage, "on_hold")
     )
 
     if leaving_on_hold:
@@ -469,7 +484,7 @@ def apply_status_change(
     surrogate.stage_id = new_stage.id
     surrogate.status_label = new_stage.label
 
-    if new_stage.slug == "on_hold":
+    if pipeline_service.stage_matches_key(new_stage, "on_hold"):
         surrogate.paused_from_stage_id = paused_from_stage.id if paused_from_stage else old_stage_id
         created_follow_up_task = _create_on_hold_follow_up_task(
             db,
@@ -487,8 +502,9 @@ def apply_status_change(
 
     # Update contact status if reached or leaving intake stage
     if surrogate.contact_status == ContactStatus.UNREACHED.value:
-        if new_stage.slug == SurrogateStatus.CONTACTED.value or (
-            new_stage.is_intake_stage is False and new_stage.slug != "on_hold"
+        if pipeline_service.stage_matches_key(new_stage, SurrogateStatus.CONTACTED.value) or (
+            new_stage.is_intake_stage is False
+            and not pipeline_service.stage_matches_key(new_stage, "on_hold")
         ):
             surrogate.contact_status = ContactStatus.REACHED.value
             if not surrogate.contacted_at:

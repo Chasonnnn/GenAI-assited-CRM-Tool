@@ -117,3 +117,31 @@ async def test_delivery_outcome_fields_saved(authed_client, db, test_auth):
     assert surrogate_row is not None
     assert surrogate_row.delivery_baby_gender == "Female"
     assert surrogate_row.delivery_baby_weight == "7 lb 2 oz"
+
+
+@pytest.mark.asyncio
+async def test_renamed_delivered_stage_still_syncs_delivery_outcome_fields(
+    authed_client, db, test_auth
+):
+    surrogate = await _create_surrogate(authed_client)
+    delivered_stage = _get_stage(db, test_auth.org.id, "delivered")
+    delivered_stage.slug = "birth_complete"
+    db.commit()
+    today = _org_today(test_auth.org.timezone)
+
+    response = await authed_client.patch(
+        f"/surrogates/{surrogate['id']}/status",
+        json={
+            "stage_id": str(delivered_stage.id),
+            "effective_at": today,
+            "delivery_baby_gender": "Male",
+            "delivery_baby_weight": "6 lb 8 oz",
+        },
+    )
+    assert response.status_code == 200, response.text
+
+    surrogate_row = db.query(Surrogate).filter(Surrogate.id == UUID(surrogate["id"])).first()
+    assert surrogate_row is not None
+    assert surrogate_row.stage_id == delivered_stage.id
+    assert surrogate_row.delivery_baby_gender == "Male"
+    assert surrogate_row.delivery_baby_weight == "6 lb 8 oz"

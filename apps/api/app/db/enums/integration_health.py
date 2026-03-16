@@ -70,6 +70,9 @@ class AlertType(str, Enum):
     # Workflow
     WORKFLOW_EXECUTION_FAILED = "workflow_execution_failed"
 
+    # Surrogate creation
+    SURROGATE_NUMBER_COUNTER_DRIFT = "surrogate_number_counter_drift"
+
 
 class AlertSeverity(str, Enum):
     """Severity levels for alerts."""

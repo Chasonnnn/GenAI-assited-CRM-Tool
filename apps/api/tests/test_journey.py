@@ -170,6 +170,26 @@ async def test_journey_terminal_state_has_banner_and_no_current(authed_client, d
 
 
 @pytest.mark.asyncio
+async def test_journey_terminal_state_uses_stage_key_when_terminal_slug_is_renamed(
+    authed_client, db, test_auth
+):
+    surrogate = await _create_surrogate(authed_client)
+    lost_stage = _get_stage(db, test_auth.org.id, "lost")
+    lost_stage.slug = "withdrawn"
+    db.commit()
+    today = _org_today(test_auth.org.timezone)
+
+    await _set_stage(authed_client, surrogate["id"], lost_stage.id, effective_at=today)
+
+    response = await authed_client.get(f"/journey/surrogates/{surrogate['id']}")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert payload["is_terminal"] is True
+    assert all(milestone["status"] != "current" for milestone in _iter_milestones(payload))
+
+
+@pytest.mark.asyncio
 async def test_journey_unknown_stage_falls_back_to_first_milestone(authed_client, db, test_auth):
     surrogate = await _create_surrogate(authed_client)
     pipeline = pipeline_service.get_or_create_default_pipeline(db, test_auth.org.id)
@@ -249,6 +269,27 @@ async def test_journey_completed_milestones_do_not_roll_back(authed_client, db, 
 
     approved_matching = _find_milestone(payload, "approved_matching")
     assert approved_matching["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_journey_match_milestone_uses_stage_key_when_matched_slug_is_renamed(
+    authed_client, db, test_auth
+):
+    surrogate = await _create_surrogate(authed_client)
+    matched_stage = _get_stage(db, test_auth.org.id, "matched")
+    matched_stage.slug = "match_confirmed_custom"
+    db.commit()
+
+    ready_to_match = _get_stage(db, test_auth.org.id, "ready_to_match")
+    await _set_stage(authed_client, surrogate["id"], ready_to_match.id)
+    await _accept_match(authed_client, surrogate["id"])
+
+    response = await authed_client.get(f"/journey/surrogates/{surrogate['id']}")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    match_confirmed = _find_milestone(payload, "match_confirmed")
+    assert match_confirmed["status"] == "current"
 
 
 @pytest.mark.asyncio

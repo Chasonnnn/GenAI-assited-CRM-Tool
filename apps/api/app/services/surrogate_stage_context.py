@@ -18,7 +18,7 @@ class SurrogateStageContext:
 
     @property
     def is_on_hold(self) -> bool:
-        return bool(self.current_stage and self.current_stage.slug == "on_hold")
+        return pipeline_service.stage_matches_key(self.current_stage, "on_hold")
 
 
 def get_stage_context(
@@ -35,7 +35,7 @@ def get_stage_context(
     paused_from_stage = None
     if (
         resolved_current_stage
-        and resolved_current_stage.slug == "on_hold"
+        and pipeline_service.stage_matches_key(resolved_current_stage, "on_hold")
         and surrogate.paused_from_stage_id
     ):
         paused_from_stage = pipeline_service.get_stage_by_id(db, surrogate.paused_from_stage_id)

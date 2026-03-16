@@ -16,6 +16,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import settings
+from app.core.stage_definitions import canonicalize_stage_key
 from app.db.models import (
     JourneyFeaturedImage,
     PipelineStage,
@@ -29,7 +30,7 @@ from app.services import attachment_service
 JOURNEY_VERSION = 1
 
 # Terminal stage slugs (journey ended early)
-TERMINAL_STAGE_SLUGS = {"lost", "disqualified"}
+TERMINAL_STAGE_KEYS = {"lost", "disqualified"}
 
 # Export variants for journey PDF
 EXPORT_VARIANTS = {"internal", "client"}
@@ -49,7 +50,7 @@ class MilestoneDefinition:
     slug: str
     label: str
     description: str
-    mapped_stage_slugs: tuple[str, ...]  # Stages that map to this milestone
+    mapped_stage_keys: tuple[str, ...]  # Canonical stage keys that map to this milestone
     is_soft: bool = False  # Soft milestones never become "current"
 
 
@@ -71,7 +72,7 @@ MILESTONES: tuple[MilestoneDefinition, ...] = (
         slug="application_intake",
         label="Application & Intake",
         description="Initial application received and intake process begun.",
-        mapped_stage_slugs=(
+        mapped_stage_keys=(
             "new_unread",
             "contacted",
             "pre_qualified",
@@ -82,37 +83,37 @@ MILESTONES: tuple[MilestoneDefinition, ...] = (
         slug="screening_interviews",
         label="Screening & Interviews",
         description="Background screening and interviews in progress.",
-        mapped_stage_slugs=("under_review", "interview_scheduled", "approved"),
+        mapped_stage_keys=("under_review", "interview_scheduled", "approved"),
     ),
     MilestoneDefinition(
         slug="approved_matching",
         label="Approved for Matching",
         description="Approved and ready to be matched with intended parents.",
-        mapped_stage_slugs=("ready_to_match",),
+        mapped_stage_keys=("ready_to_match",),
     ),
     MilestoneDefinition(
         slug="match_confirmed",
         label="Match Confirmed",
         description="Successfully matched with intended parents.",
-        mapped_stage_slugs=("matched",),
+        mapped_stage_keys=("matched",),
     ),
     MilestoneDefinition(
         slug="medical_clearance",
         label="Medical Clearance",
         description="Medical screening and clearance completed.",
-        mapped_stage_slugs=("medical_clearance_passed",),
+        mapped_stage_keys=("medical_clearance_passed",),
     ),
     MilestoneDefinition(
         slug="legal_finalization",
         label="Legal Finalization",
         description="Legal contracts and agreements finalized.",
-        mapped_stage_slugs=("legal_clearance_passed",),
+        mapped_stage_keys=("legal_clearance_passed",),
     ),
     MilestoneDefinition(
         slug="transfer_pregnancy",
         label="Transfer & Pregnancy Confirmation",
         description="Embryo transfer completed and pregnancy confirmed.",
-        mapped_stage_slugs=(
+        mapped_stage_keys=(
             "transfer_cycle",
             "second_hcg_confirmed",
             "heartbeat_confirmed",
@@ -122,20 +123,20 @@ MILESTONES: tuple[MilestoneDefinition, ...] = (
         slug="ongoing_care",
         label="Ongoing Pregnancy Care",
         description="Regular prenatal care and monitoring in progress.",
-        mapped_stage_slugs=("ob_care_established", "anatomy_scanned"),
+        mapped_stage_keys=("ob_care_established", "anatomy_scanned"),
     ),
     MilestoneDefinition(
         slug="delivery_preparation",
         label="Delivery Preparation",
         description="Final preparations underway as delivery approaches.",
-        mapped_stage_slugs=(),  # No mapped stages - soft milestone
+        mapped_stage_keys=(),  # No mapped stages - soft milestone
         is_soft=True,
     ),
     MilestoneDefinition(
         slug="delivery",
         label="Delivery",
         description="Baby delivered successfully.",
-        mapped_stage_slugs=("delivered",),
+        mapped_stage_keys=("delivered",),
     ),
 )
 
@@ -175,11 +176,11 @@ PHASES: tuple[PhaseDefinition, ...] = (
 _MILESTONE_BY_SLUG: dict[str, MilestoneDefinition] = {m.slug: m for m in MILESTONES}
 _MILESTONE_INDEX_BY_SLUG: dict[str, int] = {m.slug: i for i, m in enumerate(MILESTONES)}
 
-# Stage slug to milestone slug mapping (inverted index)
+# Canonical stage key to milestone slug mapping (inverted index)
 _STAGE_TO_MILESTONE: dict[str, str] = {}
 for milestone in MILESTONES:
-    for stage_slug in milestone.mapped_stage_slugs:
-        _STAGE_TO_MILESTONE[stage_slug] = milestone.slug
+    for stage_key in milestone.mapped_stage_keys:
+        _STAGE_TO_MILESTONE[stage_key] = milestone.slug
 
 
 @dataclass
@@ -347,23 +348,23 @@ def update_milestone_featured_image(
 
 
 def _get_milestone_for_stage(
-    stage_slug: str | None,
-    pipeline_stages: dict[str, int],  # slug -> order
+    stage_key: str | None,
+    pipeline_stages: dict[str, int],  # stage_key -> order
 ) -> str | None:
     """
-    Get the milestone slug for a given stage slug.
+    Get the milestone slug for a given stage key.
 
     Falls back to nearest prior milestone using pipeline order if stage is unknown.
     """
-    if not stage_slug:
+    if not stage_key:
         return None
 
     # Direct mapping
-    if stage_slug in _STAGE_TO_MILESTONE:
-        return _STAGE_TO_MILESTONE[stage_slug]
+    if stage_key in _STAGE_TO_MILESTONE:
+        return _STAGE_TO_MILESTONE[stage_key]
 
     # Unknown stage - fall back to nearest prior milestone by pipeline order
-    stage_order = pipeline_stages.get(stage_slug)
+    stage_order = pipeline_stages.get(stage_key)
     if stage_order is None:
         return MILESTONES[0].slug  # Default to first milestone
 
@@ -390,7 +391,7 @@ def _normalize_label_to_slug(label: str) -> str:
 def _get_completion_date_for_milestone(
     milestone_index: int,
     history: list[SurrogateStatusHistory],
-    pipeline_stages: dict[str, int],  # slug -> order
+    pipeline_stages: dict[str, int],  # stage_key -> order
 ) -> datetime | None:
     """
     Get the completion date for a milestone.
@@ -405,9 +406,8 @@ def _get_completion_date_for_milestone(
         delivery_milestone = MILESTONES[-1]
         for entry in history:
             if entry.to_stage_id:
-                # Get the stage slug from history
-                to_stage_slug = getattr(entry, "_to_stage_slug", None)
-                if to_stage_slug and to_stage_slug in delivery_milestone.mapped_stage_slugs:
+                to_stage_key = getattr(entry, "_to_stage_key", None)
+                if to_stage_key and to_stage_key in delivery_milestone.mapped_stage_keys:
                     return entry.effective_at or entry.recorded_at or entry.changed_at
         return None
 
@@ -415,15 +415,15 @@ def _get_completion_date_for_milestone(
     next_milestone_index = milestone_index + 1
 
     # Collect all stage slugs that would indicate completion
-    completion_stage_slugs: set[str] = set()
+    completion_stage_keys: set[str] = set()
     for i in range(next_milestone_index, len(MILESTONES)):
-        completion_stage_slugs.update(MILESTONES[i].mapped_stage_slugs)
+        completion_stage_keys.update(MILESTONES[i].mapped_stage_keys)
 
     # Find the earliest history entry that enters a completion stage
     earliest_date: datetime | None = None
     for entry in history:
-        to_stage_slug = getattr(entry, "_to_stage_slug", None)
-        if to_stage_slug and to_stage_slug in completion_stage_slugs:
+        to_stage_key = getattr(entry, "_to_stage_key", None)
+        if to_stage_key and to_stage_key in completion_stage_keys:
             entry_date = entry.effective_at or entry.recorded_at or entry.changed_at
             if entry_date and (earliest_date is None or entry_date < earliest_date):
                 earliest_date = entry_date
@@ -474,17 +474,25 @@ def get_journey(
         pipeline_id = pipeline.id
 
     stages = db.query(PipelineStage).filter(PipelineStage.pipeline_id == pipeline_id).all()
-    pipeline_stages: dict[str, int] = {s.slug: s.order for s in stages}
-    stage_id_to_slug: dict[UUID, str] = {s.id: s.slug for s in stages}
-    label_to_slug: dict[str, str] = {s.label.strip().lower(): s.slug for s in stages if s.label}
+    pipeline_stages: dict[str, int] = {
+        canonicalize_stage_key(s.stage_key or s.slug): s.order for s in stages
+    }
+    stage_id_to_key: dict[UUID, str] = {
+        s.id: canonicalize_stage_key(s.stage_key or s.slug) for s in stages
+    }
+    label_to_key: dict[str, str] = {
+        s.label.strip().lower(): canonicalize_stage_key(s.stage_key or s.slug)
+        for s in stages
+        if s.label
+    }
 
-    def resolve_label_slug(label: str | None) -> str | None:
+    def resolve_label_stage_key(label: str | None) -> str | None:
         if not label:
             return None
         key = label.strip().lower()
-        if key in label_to_slug:
-            return label_to_slug[key]
-        normalized = _normalize_label_to_slug(label)
+        if key in label_to_key:
+            return label_to_key[key]
+        normalized = canonicalize_stage_key(_normalize_label_to_slug(label))
         if normalized in pipeline_stages:
             return normalized
         if normalized in _STAGE_TO_MILESTONE:
@@ -504,12 +512,12 @@ def get_journey(
 
     # Enrich history with stage slugs (avoiding N+1)
     for entry in history_entries:
-        entry._to_stage_slug = (
-            stage_id_to_slug.get(entry.to_stage_id) if entry.to_stage_id else None
-        ) or resolve_label_slug(entry.to_label_snapshot)
-        entry._from_stage_slug = (
-            stage_id_to_slug.get(entry.from_stage_id) if entry.from_stage_id else None
-        ) or resolve_label_slug(entry.from_label_snapshot)
+        entry._to_stage_key = (
+            stage_id_to_key.get(entry.to_stage_id) if entry.to_stage_id else None
+        ) or resolve_label_stage_key(entry.to_label_snapshot)
+        entry._from_stage_key = (
+            stage_id_to_key.get(entry.from_stage_id) if entry.from_stage_id else None
+        ) or resolve_label_stage_key(entry.from_label_snapshot)
 
     from app.services import surrogate_stage_context
 
@@ -520,10 +528,14 @@ def get_journey(
     ).effective_stage
 
     # Determine current state
-    current_stage_slug = current_stage.slug if current_stage else None
-    if not current_stage_slug and surrogate.status_label:
-        current_stage_slug = resolve_label_slug(surrogate.status_label)
-    is_terminal = current_stage_slug in TERMINAL_STAGE_SLUGS
+    current_stage_key = (
+        canonicalize_stage_key(current_stage.stage_key or current_stage.slug)
+        if current_stage
+        else None
+    )
+    if not current_stage_key and surrogate.status_label:
+        current_stage_key = resolve_label_stage_key(surrogate.status_label)
+    is_terminal = current_stage_key in TERMINAL_STAGE_KEYS
 
     # Get terminal info if applicable
     terminal_message: str | None = None
@@ -531,7 +543,7 @@ def get_journey(
     if is_terminal:
         terminal_message = "This journey ended before completion."
         terminal_entries = [
-            entry for entry in history_entries if entry._to_stage_slug in TERMINAL_STAGE_SLUGS
+            entry for entry in history_entries if entry._to_stage_key in TERMINAL_STAGE_KEYS
         ]
         if terminal_entries:
             terminal_entry = max(
@@ -549,10 +561,10 @@ def get_journey(
                 terminal_date = entry_date.isoformat()
 
     # Determine current milestone
-    journey_complete = current_stage_slug == "delivered"
+    journey_complete = current_stage_key == "delivered"
     current_milestone_slug: str | None = None
-    if not is_terminal and not journey_complete and current_stage_slug:
-        current_milestone_slug = _get_milestone_for_stage(current_stage_slug, pipeline_stages)
+    if not is_terminal and not journey_complete and current_stage_key:
+        current_milestone_slug = _get_milestone_for_stage(current_stage_key, pipeline_stages)
 
     delivery_completed_at = _get_completion_date_for_milestone(
         len(MILESTONES) - 1, history_entries, pipeline_stages

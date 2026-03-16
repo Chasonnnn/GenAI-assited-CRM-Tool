@@ -20,11 +20,11 @@ describe('AlertsPage', () => {
                 items: [
                     {
                         id: 'a1',
-                        alert_type: 'meta_fetch_failed',
+                        alert_type: 'surrogate_number_counter_drift',
                         severity: 'critical',
                         status: 'open',
-                        title: 'Meta lead fetch failing',
-                        message: 'Token expired',
+                        title: 'Surrogate number counter drift repaired',
+                        message: 'The counter was repaired before retrying surrogate creation.',
                         integration_key: null,
                         occurrence_count: 1,
                         first_seen_at: new Date().toISOString(),
@@ -42,6 +42,7 @@ describe('AlertsPage', () => {
     it('renders an alert and can resolve it', () => {
         render(<AlertsPage />)
         expect(screen.getByText('System Alerts')).toBeInTheDocument()
+        expect(screen.getByText('Surrogate Number Counter Drift')).toBeInTheDocument()
 
         fireEvent.click(screen.getByRole('button', { name: /resolve/i }))
         expect(mockResolve).toHaveBeenCalledWith('a1')

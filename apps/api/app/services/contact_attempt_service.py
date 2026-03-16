@@ -117,7 +117,7 @@ def create_contact_attempt(
 
         current_stage = pipeline_service.get_stage_by_id(session, surrogate.stage_id)
         if current_stage and current_stage.stage_type == "intake":
-            if current_stage.slug != "contacted":
+            if not pipeline_service.stage_matches_key(current_stage, "contacted"):
                 contacted_stage = pipeline_service.get_stage_by_slug(
                     session, current_stage.pipeline_id, "contacted"
                 )
