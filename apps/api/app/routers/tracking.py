@@ -8,12 +8,11 @@ These endpoints must be unauthenticated since they're called from email clients.
 from typing import Annotated
 
 import logging
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.client_ip import get_client_ip
-from app.core.config import settings
 from app.core.deps import get_db
 from app.core.rate_limit import limiter
 from app.services import tracking_service
@@ -144,30 +143,20 @@ def track_click(
     ip_address = get_client_ip(request)
     user_agent = request.headers.get("user-agent")
 
-    # Record the click and get original URL
-    try:
-        original_url = tracking_service.record_click(
-            db=db,
-            token=token,
-            url=url,
-            signature=sig,
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-    except Exception as e:
-        logger.warning(
-            "Failed to record click for token %s: %s",
-            _mask_token(token),
-            type(e).__name__,
-        )
-        original_url = None
+    original_url = tracking_service.record_click(
+        db=db,
+        token=token,
+        url=url,
+        signature=sig,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
 
-    # Redirect to original URL (or fallback if not found)
-    if original_url:
-        return RedirectResponse(url=original_url, status_code=302)
-    else:
-        # Token not found - redirect to a safe fallback
-        return RedirectResponse(
-            url=settings.FRONTEND_URL.rstrip("/") + "/",
-            status_code=302,
+    if not original_url:
+        logger.info(
+            "Tracking click target not found for token %s",
+            _mask_token(token),
         )
+        raise HTTPException(status_code=404, detail="Tracking link not found")
+
+    return RedirectResponse(url=original_url, status_code=302)

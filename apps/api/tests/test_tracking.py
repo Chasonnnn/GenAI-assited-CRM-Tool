@@ -486,3 +486,51 @@ async def test_track_click_uses_forwarded_client_ip(client, monkeypatch):
         "ip_address": "198.51.100.22",
         "user_agent": "ClickAgent/2.0",
     }
+
+
+@pytest.mark.asyncio
+async def test_track_click_returns_404_for_invalid_tracking_target(client, monkeypatch):
+    def fake_record_click(*, db, token, url, signature, ip_address=None, user_agent=None):
+        return None
+
+    monkeypatch.setattr(tracking_service, "record_click", fake_record_click)
+
+    response = await client.get(
+        "/tracking/click/test-token",
+        params={"url": "https://example.com/wrapped", "sig": "signed"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Tracking link not found"}
+
+
+@pytest.mark.asyncio
+async def test_track_click_returns_500_for_unexpected_tracking_failure(db, monkeypatch):
+    from httpx import ASGITransport, AsyncClient
+
+    from app.core.deps import get_db
+    from app.main import app
+
+    def fake_record_click(*, db, token, url, signature, ip_address=None, user_agent=None):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(tracking_service, "record_click", fake_record_click)
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app, raise_app_exceptions=False),
+            base_url="https://test",
+        ) as client:
+            response = await client.get(
+                "/tracking/click/test-token",
+                params={"url": "https://example.com/wrapped", "sig": "signed"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 500
