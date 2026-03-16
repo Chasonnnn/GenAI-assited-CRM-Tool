@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:20.20.0-bullseye-slim AS builder
+FROM node:24.14.0-bullseye-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
@@ -42,7 +42,7 @@ RUN pnpm build
 RUN pnpm prune --prod
 
 
-FROM node:20.20.0-bullseye-slim AS runner
+FROM node:24.14.0-bullseye-slim AS runner
 
 WORKDIR /app/apps/web
 
