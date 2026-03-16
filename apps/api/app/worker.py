@@ -107,6 +107,22 @@ def parse_worker_job_types(raw: str | None) -> list[str] | None:
 
 
 WORKER_JOB_TYPES = parse_worker_job_types(os.getenv("WORKER_JOB_TYPES"))
+REMOTE_SCAN_JOB_TYPES = {
+    JobType.ATTACHMENT_SCAN.value,
+    JobType.FORM_SUBMISSION_FILE_SCAN.value,
+}
+
+
+def _claimed_job_types() -> list[str] | None:
+    if not scan_dispatch_service.remote_scan_dispatch_configured():
+        return WORKER_JOB_TYPES
+
+    if WORKER_JOB_TYPES is None:
+        return [
+            job_type.value for job_type in JobType if job_type.value not in REMOTE_SCAN_JOB_TYPES
+        ]
+
+    return [job_type for job_type in WORKER_JOB_TYPES if job_type not in REMOTE_SCAN_JOB_TYPES]
 
 
 def _log_global_email_sender_status() -> None:
@@ -533,10 +549,13 @@ def _rate_limit_backoff_seconds(attempts: int) -> int:
 
 async def worker_loop() -> None:
     """Main worker loop - polls for and processes pending jobs."""
-    if WORKER_JOB_TYPES is None:
+    claimed_job_types = _claimed_job_types()
+    if WORKER_JOB_TYPES is None and claimed_job_types is None:
         job_types_display = "all"
-    elif WORKER_JOB_TYPES:
-        job_types_display = ",".join(WORKER_JOB_TYPES)
+    elif WORKER_JOB_TYPES is None and claimed_job_types is not None:
+        job_types_display = "all-except-attachment_scan,form_submission_file_scan"
+    elif claimed_job_types:
+        job_types_display = ",".join(claimed_job_types)
     else:
         job_types_display = "none"
     logger.info(
@@ -589,7 +608,7 @@ async def worker_loop() -> None:
                 jobs = job_service.claim_pending_jobs(
                     db,
                     limit=BATCH_SIZE,
-                    job_types=WORKER_JOB_TYPES,
+                    job_types=claimed_job_types,
                 )
 
                 if jobs:

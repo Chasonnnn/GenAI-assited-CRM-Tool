@@ -57,6 +57,22 @@ def test_worker_env_flags_and_backoff(monkeypatch):
     assert worker._rate_limit_backoff_seconds(10) <= 3630
 
 
+def test_worker_claimed_job_types_exclude_remote_scan_jobs(monkeypatch):
+    monkeypatch.setattr(worker, "WORKER_JOB_TYPES", None)
+    monkeypatch.setattr(
+        worker.scan_dispatch_service,
+        "remote_scan_dispatch_configured",
+        lambda: True,
+    )
+
+    claimed = worker._claimed_job_types()
+
+    assert claimed is not None
+    assert JobType.ATTACHMENT_SCAN.value not in claimed
+    assert JobType.FORM_SUBMISSION_FILE_SCAN.value not in claimed
+    assert JobType.SEND_EMAIL.value in claimed
+
+
 def test_worker_global_resend_warning_is_specific(monkeypatch, caplog):
     monkeypatch.setattr(worker, "RESEND_API_KEY", "")
 
