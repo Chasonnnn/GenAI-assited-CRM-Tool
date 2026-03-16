@@ -25,7 +25,7 @@ import {
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { useAuth } from "@/lib/auth-context"
 import { ROLE_STAGE_VISIBILITY, type StageType } from "@/lib/constants/stages.generated"
-import { getSurrogateStageContext } from "@/lib/surrogate-stage-context"
+import { getStageSemanticKey, getSurrogateStageContext, stageMatchesKey } from "@/lib/surrogate-stage-context"
 import {
     formatMeetingTimeForInvite,
     toLocalIsoDateTime,
@@ -347,13 +347,13 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
             const stageType = stage.stage_type as StageType | null
             return (
                 (stageType && rules.stageTypes.includes(stageType)) ||
-                rules.extraSlugs.includes(stage.slug)
+                rules.extraSlugs.includes(getStageSemanticKey(stage) ?? "")
             )
         })
     }, [stageOptions, user?.role])
 
     const matchedStage = useMemo(
-        () => stageOptions.find((stage) => stage.slug === "matched"),
+        () => stageOptions.find((stage) => stageMatchesKey(stage, "matched")),
         [stageOptions]
     )
     const stageContext = useMemo(

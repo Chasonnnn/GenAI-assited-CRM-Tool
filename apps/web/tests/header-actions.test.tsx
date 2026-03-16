@@ -148,11 +148,18 @@ describe("HeaderActions", () => {
             stageById: new Map([
                 [
                     "stage_new_unread",
-                    { slug: "new_unread", stage_type: "intake", order: 10 },
+                    { stage_key: "new_unread", slug: "new_unread", stage_type: "intake", order: 10 },
                 ],
             ]),
-            effectiveStage: { slug: "new_unread", stage_type: "intake", order: 10 },
-            stageOptions: [{ slug: "contacted", stage_type: "intake", order: 2 }],
+            effectiveStage: {
+                stage_key: "new_unread",
+                slug: "new_unread",
+                stage_type: "intake",
+                order: 10,
+            },
+            stageOptions: [
+                { stage_key: "contacted", slug: "contacted", stage_type: "intake", order: 12 },
+            ],
             queues: [],
             assignees: [],
             canManageQueue: false,
@@ -165,6 +172,118 @@ describe("HeaderActions", () => {
 
         render(<HeaderActions />)
         expect(screen.getByRole("button", { name: /log contact/i })).toBeInTheDocument()
+    })
+
+    it("shows Propose Match when ready_to_match slug is renamed", () => {
+        mockUseSurrogateDetailData.mockReturnValue({
+            surrogate: {
+                id: "s1",
+                stage_id: "stage_ready_to_match",
+                stage_key: "ready_to_match",
+                owner_type: "user",
+                owner_id: "user1",
+                is_archived: false,
+                surrogate_number: "S123",
+                full_name: "Jane Doe",
+            },
+            stageById: new Map([
+                [
+                    "stage_ready_to_match",
+                    {
+                        stage_key: "ready_to_match",
+                        slug: "matching_queue",
+                        stage_type: "post_approval",
+                        order: 8,
+                    },
+                ],
+            ]),
+            effectiveStage: {
+                stage_key: "ready_to_match",
+                slug: "matching_queue",
+                stage_type: "post_approval",
+                order: 8,
+            },
+            stageOptions: [
+                { stage_key: "contacted", slug: "contacted", stage_type: "intake", order: 2 },
+                {
+                    stage_key: "interview_scheduled",
+                    slug: "interview_scheduled",
+                    stage_type: "intake",
+                    order: 6,
+                },
+                {
+                    stage_key: "ready_to_match",
+                    slug: "matching_queue",
+                    stage_type: "post_approval",
+                    order: 8,
+                },
+            ],
+            queues: [],
+            assignees: [],
+            canManageQueue: true,
+            canClaimSurrogate: false,
+            canChangeStage: true,
+            isInQueue: false,
+            isOwnedByUser: true,
+            zoomConnected: false,
+        })
+
+        render(<HeaderActions />)
+
+        expect(screen.getByRole("button", { name: /propose match/i })).toBeInTheDocument()
+    })
+
+    it("shows Resume when on_hold slug is renamed", () => {
+        mockUseSurrogateDetailData.mockReturnValue({
+            surrogate: {
+                id: "s1",
+                stage_id: "stage_on_hold",
+                stage_key: "on_hold",
+                paused_from_stage_id: "stage_ready_to_match",
+                paused_from_stage_key: "ready_to_match",
+                owner_type: "user",
+                owner_id: "user1",
+                is_archived: false,
+                surrogate_number: "S123",
+                full_name: "Jane Doe",
+            },
+            stageById: new Map([
+                [
+                    "stage_on_hold",
+                    { stage_key: "on_hold", slug: "paused_review", stage_type: "paused", order: 99 },
+                ],
+                [
+                    "stage_ready_to_match",
+                    {
+                        stage_key: "ready_to_match",
+                        slug: "matching_queue",
+                        stage_type: "post_approval",
+                        order: 8,
+                    },
+                ],
+            ]),
+            effectiveStage: {
+                stage_key: "ready_to_match",
+                slug: "matching_queue",
+                stage_type: "post_approval",
+                order: 8,
+            },
+            stageOptions: [
+                { stage_key: "ready_to_match", slug: "matching_queue", stage_type: "post_approval", order: 8 },
+            ],
+            queues: [],
+            assignees: [],
+            canManageQueue: true,
+            canClaimSurrogate: false,
+            canChangeStage: true,
+            isInQueue: false,
+            isOwnedByUser: true,
+            zoomConnected: false,
+        })
+
+        render(<HeaderActions />)
+
+        expect(screen.getByRole("button", { name: "Resume" })).toBeInTheDocument()
     })
 
     it("hides Log Contact once surrogate is past contacted", () => {
@@ -186,11 +305,23 @@ describe("HeaderActions", () => {
             stageById: new Map([
                 [
                     "stage_pre_qualified",
-                    { slug: "pre_qualified", stage_type: "intake", order: 3 },
+                    {
+                        stage_key: "pre_qualified",
+                        slug: "pre_qualified",
+                        stage_type: "intake",
+                        order: 3,
+                    },
                 ],
             ]),
-            effectiveStage: { slug: "pre_qualified", stage_type: "intake", order: 3 },
-            stageOptions: [],
+            effectiveStage: {
+                stage_key: "pre_qualified",
+                slug: "pre_qualified",
+                stage_type: "intake",
+                order: 3,
+            },
+            stageOptions: [
+                { stage_key: "contacted", slug: "contacted", stage_type: "intake", order: 2 },
+            ],
             queues: [],
             assignees: [],
             canManageQueue: false,
@@ -224,11 +355,23 @@ describe("HeaderActions", () => {
             stageById: new Map([
                 [
                     "stage_contacted",
-                    { slug: "contacted", stage_type: "intake", order: 2 },
+                    { stage_key: "contacted", slug: "contacted", stage_type: "intake", order: 2 },
                 ],
             ]),
-            effectiveStage: { slug: "contacted", stage_type: "intake", order: 2 },
-            stageOptions: [],
+            effectiveStage: {
+                stage_key: "contacted",
+                slug: "contacted",
+                stage_type: "intake",
+                order: 2,
+            },
+            stageOptions: [
+                {
+                    stage_key: "interview_scheduled",
+                    slug: "interview_scheduled",
+                    stage_type: "intake",
+                    order: 5,
+                },
+            ],
             queues: [],
             assignees: [],
             canManageQueue: false,
@@ -262,11 +405,28 @@ describe("HeaderActions", () => {
             stageById: new Map([
                 [
                     "stage_interview_scheduled",
-                    { slug: "interview_scheduled", stage_type: "intake", order: 5 },
+                    {
+                        stage_key: "interview_scheduled",
+                        slug: "interview_scheduled",
+                        stage_type: "intake",
+                        order: 5,
+                    },
                 ],
             ]),
-            effectiveStage: { slug: "interview_scheduled", stage_type: "intake", order: 5 },
-            stageOptions: [],
+            effectiveStage: {
+                stage_key: "interview_scheduled",
+                slug: "interview_scheduled",
+                stage_type: "intake",
+                order: 5,
+            },
+            stageOptions: [
+                {
+                    stage_key: "interview_scheduled",
+                    slug: "interview_scheduled",
+                    stage_type: "intake",
+                    order: 5,
+                },
+            ],
             queues: [],
             assignees: [],
             canManageQueue: false,

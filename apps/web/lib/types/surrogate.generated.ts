@@ -6,6 +6,7 @@ export interface SurrogateListItem {
     id: string;
     surrogate_number: string;
     stage_id: string;
+    stage_key?: string | null;
     stage_slug?: string | null;
     stage_type?: string | null;
     status_label: string;
@@ -30,8 +31,12 @@ export interface SurrogateRead {
     id: string;
     surrogate_number: string;
     stage_id: string;
+    stage_key?: string | null;
+    stage_slug?: string | null;
+    stage_type?: string | null;
     status_label: string;
     paused_from_stage_id?: string | null;
+    paused_from_stage_key?: string | null;
     paused_from_stage_slug?: string | null;
     paused_from_stage_label?: string | null;
     paused_from_stage_type?: string | null;

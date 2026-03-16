@@ -25,27 +25,14 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
+import { stageMatchesKey } from "@/lib/surrogate-stage-context"
 import { toast } from "sonner"
 import { exportSurrogatePacketPdf } from "@/lib/api/surrogates"
-import { DEFAULT_STAGE_ORDER } from "@/lib/constants/stages.generated"
 import {
     useSurrogateDetailActions,
     useSurrogateDetailData,
     useSurrogateDetailDialogs,
 } from "./context"
-
-const STAGE_INDEX_BY_SLUG = new Map(
-    DEFAULT_STAGE_ORDER.map((slug, index) => [slug, index])
-)
-
-const CONTACTED_STAGE_INDEX = STAGE_INDEX_BY_SLUG.get("contacted") ?? -1
-const INTERVIEW_SCHEDULED_STAGE_INDEX = STAGE_INDEX_BY_SLUG.get("interview_scheduled") ?? -1
-
-function getStageIndex(slug?: string | null): number | null {
-    if (!slug) return null
-    const index = STAGE_INDEX_BY_SLUG.get(slug)
-    return typeof index === "number" ? index : null
-}
 
 export function HeaderActions() {
     const { user } = useAuth()
@@ -61,6 +48,7 @@ export function HeaderActions() {
         isInQueue,
         isOwnedByUser,
         zoomConnected,
+        stageOptions,
     } = useSurrogateDetailData()
     const { openDialog } = useSurrogateDetailDialogs()
     const {
@@ -80,18 +68,24 @@ export function HeaderActions() {
 
     // Determine if log contact button should be shown
     const currentStage = stageById.get(surrogate.stage_id)
-    const isOnHold = (currentStage?.slug ?? surrogate.stage_slug) === "on_hold"
+    const isOnHold = stageMatchesKey(
+        currentStage ?? { stage_key: surrogate.stage_key, stage_slug: surrogate.stage_slug },
+        "on_hold"
+    )
     const workflowStage = effectiveStage ?? currentStage
     const isIntakeStage = workflowStage?.stage_type === "intake"
-    const workflowStageSlug = workflowStage?.slug ?? surrogate.paused_from_stage_slug ?? surrogate.stage_slug
-    const currentStageIndex = getStageIndex(workflowStageSlug)
+    const contactedStage = stageOptions.find((stage) => stageMatchesKey(stage, "contacted"))
+    const interviewScheduledStage = stageOptions.find((stage) =>
+        stageMatchesKey(stage, "interview_scheduled")
+    )
+    const workflowStageOrder = workflowStage?.order ?? null
     const isAtOrBeforeContacted =
-        currentStageIndex !== null && CONTACTED_STAGE_INDEX >= 0
-            ? currentStageIndex <= CONTACTED_STAGE_INDEX
+        workflowStageOrder !== null && contactedStage
+            ? workflowStageOrder <= contactedStage.order
             : isIntakeStage
     const isAtOrAfterInterviewScheduled =
-        currentStageIndex !== null && INTERVIEW_SCHEDULED_STAGE_INDEX >= 0
-            ? currentStageIndex >= INTERVIEW_SCHEDULED_STAGE_INDEX
+        workflowStageOrder !== null && interviewScheduledStage
+            ? workflowStageOrder >= interviewScheduledStage.order
             : false
     const isAssignee = !!(user?.user_id && surrogate.owner_id === user.user_id)
     const canLogInteraction =
@@ -102,7 +96,10 @@ export function HeaderActions() {
     const canLogInterviewOutcome = canLogInteraction && !isOnHold && isAtOrAfterInterviewScheduled
 
     // Determine if propose match button should be shown
-    const isReadyToMatchStage = workflowStage?.slug === "ready_to_match"
+    const isReadyToMatchStage = stageMatchesKey(
+        workflowStage ?? { stage_key: surrogate.stage_key, stage_slug: surrogate.stage_slug },
+        "ready_to_match"
+    )
     const isManagerRole = user?.role && ["case_manager", "admin", "developer"].includes(user.role)
     const canProposeMatch = isManagerRole && !isOnHold && isReadyToMatchStage && !surrogate.is_archived
 

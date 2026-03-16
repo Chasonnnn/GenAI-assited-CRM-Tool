@@ -23,6 +23,16 @@ const stages = [
         stage_type: "paused" as const,
         is_active: true,
     },
+    {
+        id: "stage_delivered",
+        stage_key: "delivered",
+        slug: "delivered",
+        label: "Delivered",
+        color: "#16a34a",
+        order: 20,
+        stage_type: "post_approval" as const,
+        is_active: true,
+    },
 ]
 
 describe("ChangeStageModal", () => {
@@ -80,5 +90,60 @@ describe("ChangeStageModal", () => {
 
         expect(screen.getByRole("button", { name: "Resume" })).toBeInTheDocument()
         expect(screen.queryByText(/admin approval required/i)).not.toBeInTheDocument()
+    })
+
+    it("uses stage_key semantics when the On-Hold slug is renamed", async () => {
+        const onSubmit = vi.fn().mockResolvedValue({ status: "applied" })
+
+        render(
+            <ChangeStageModal
+                open
+                onOpenChange={vi.fn()}
+                stages={stages.map((stage) =>
+                    stage.id === "stage_on_hold" ? { ...stage, slug: "paused_review" } : stage
+                )}
+                currentStageId="stage_new_unread"
+                currentStageLabel="New Unread"
+                onSubmit={onSubmit}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: /on-hold/i }))
+
+        expect(screen.getByRole("button", { name: "Save Change" })).toBeDisabled()
+
+        fireEvent.change(screen.getByLabelText(/reason/i), {
+            target: { value: "Waiting for updated availability." },
+        })
+
+        fireEvent.click(screen.getByRole("button", { name: "Save Change" }))
+
+        await waitFor(() => {
+            expect(onSubmit).toHaveBeenCalledWith({
+                stage_id: "stage_on_hold",
+                reason: "Waiting for updated availability.",
+            })
+        })
+    })
+
+    it("shows delivery fields when the delivered slug is renamed", () => {
+        render(
+            <ChangeStageModal
+                open
+                onOpenChange={vi.fn()}
+                stages={stages.map((stage) =>
+                    stage.id === "stage_delivered" ? { ...stage, slug: "birth_complete" } : stage
+                )}
+                currentStageId="stage_new_unread"
+                currentStageLabel="New Unread"
+                onSubmit={vi.fn().mockResolvedValue({ status: "applied" })}
+                deliveryFieldsEnabled
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: /delivered/i }))
+
+        expect(screen.getByLabelText(/baby gender/i)).toBeInTheDocument()
+        expect(screen.getByLabelText(/baby weight/i)).toBeInTheDocument()
     })
 })

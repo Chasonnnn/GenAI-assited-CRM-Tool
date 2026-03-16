@@ -27,6 +27,7 @@ import type { SurrogateActivity, SurrogateStatusHistory } from "@/lib/api/surrog
 import type { PipelineStage } from "@/lib/api/pipelines"
 import type { TaskListItem } from "@/lib/types/task"
 import type { LucideIcon } from "lucide-react"
+import { isTerminalStage } from "@/lib/surrogate-stage-context"
 import { cn } from "@/lib/utils"
 
 // ============================================================================
@@ -408,16 +409,14 @@ function buildTimelineData(
 
     // 7. Create StageGroup for ALL pipeline stages (preserve full story)
     const displayStages = activeStages.filter((stage) => {
-        const isTerminalStage =
-            stage.stage_type === "terminal" || ["lost", "disqualified"].includes(stage.slug)
-        return !isTerminalStage || stage.id === currentStageId
+        const terminalStage = stage.stage_type === "terminal" || isTerminalStage(stage)
+        return !terminalStage || stage.id === currentStageId
     })
     const stageGroups: StageGroup[] = displayStages.map((stage) => {
         const allActivities = activitiesByStage.get(stage.id) || []
         const entryMeta = stageEntryMeta.get(stage.id)
         const entryAt = entryMeta?.entryAt || null
-        const isTerminalStage =
-            stage.stage_type === "terminal" || ["lost", "disqualified"].includes(stage.slug)
+        const terminalStage = stage.stage_type === "terminal" || isTerminalStage(stage)
 
         return {
             id: stage.id,
@@ -429,7 +428,7 @@ function buildTimelineData(
             isCurrent: stage.id === currentStageId,
             isCompleted: stage.id !== currentStageId && stage.order < currentStageOrder,
             isUpcoming: stage.id !== currentStageId && stage.order > currentStageOrder,
-            isTerminal: isTerminalStage,
+            isTerminal: terminalStage,
             transitionLabel: entryMeta?.transitionLabel ?? null,
             isBackdated: entryMeta?.isBackdated ?? false,
             activityCount: allActivities.length, // Total count BEFORE cap

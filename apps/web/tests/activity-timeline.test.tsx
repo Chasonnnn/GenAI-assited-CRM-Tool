@@ -30,6 +30,7 @@ vi.mock('date-fns', async () => {
 function makeStage(overrides: Partial<PipelineStage> = {}): PipelineStage {
     return {
         id: 's1',
+        stage_key: 'new_unread',
         slug: 'new_unread',
         label: 'New Unread',
         color: '#3b82f6',
@@ -254,6 +255,36 @@ describe('ActivityTimeline', () => {
         expect(screen.getByText(/reason: bounced/i)).toBeInTheDocument()
         expect(screen.getByText(/hard bounce/i)).toBeInTheDocument()
         expect(screen.getByText(/via resend/i)).toBeInTheDocument()
+    })
+
+    it('treats renamed terminal stages as terminal when stage_key is preserved', () => {
+        const stages = [
+            makeStage({ id: 's1', label: 'New Unread', order: 1 }),
+            makeStage({
+                id: 's_lost',
+                stage_key: 'lost',
+                slug: 'withdrawn',
+                label: 'Lost',
+                stage_type: 'intake',
+                order: 99,
+            }),
+        ]
+
+        mockUseSurrogateHistory.mockReturnValue({
+            data: [makeHistory({ id: 'h1', to_stage_id: 's1' })],
+        })
+
+        render(
+            <ActivityTimeline
+                surrogateId="surr1"
+                currentStageId="s1"
+                stages={stages}
+                activities={[]}
+                tasks={[]}
+            />
+        )
+
+        expect(screen.queryByText('Lost')).not.toBeInTheDocument()
     })
 
     it('shows contact note preview in activity tracker entries', () => {

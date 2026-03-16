@@ -11,6 +11,7 @@ import { Loader2Icon, HeartHandshakeIcon, AlertCircleIcon } from "lucide-react"
 import { toast } from "sonner"
 import { useCreateMatch } from "@/lib/hooks/use-matches"
 import { useSurrogates } from "@/lib/hooks/use-surrogates"
+import { normalizeStageKey } from "@/lib/surrogate-stage-context"
 
 interface ProposeMatchFromIPDialogProps {
     open: boolean
@@ -41,8 +42,9 @@ export function ProposeMatchFromIPDialog({
     const eligibleSurrogates = useMemo(() => {
         if (!surrogatesData?.items) return []
         return surrogatesData.items.filter((s) => {
-            if (s.stage_slug) {
-                return s.stage_slug === "ready_to_match"
+            const stageKey = normalizeStageKey(s.stage_key ?? s.stage_slug ?? null)
+            if (stageKey) {
+                return stageKey === "ready_to_match"
             }
             return s.status_label?.toLowerCase() === "ready to match"
         })

@@ -82,9 +82,11 @@ const baseSurrogateData = {
     full_name: 'Jane Applicant',
     status_label: 'New Unread',
     stage_id: 's1',
+    stage_key: 'new_unread',
     stage_slug: 'new_unread',
     stage_type: 'intake',
     paused_from_stage_id: null,
+    paused_from_stage_key: null,
     paused_from_stage_slug: null,
     paused_from_stage_label: null,
     paused_from_stage_type: null,
@@ -195,13 +197,13 @@ const baseSurrogateData = {
 }
 
 const defaultPipelineStages = [
-    { id: 's1', slug: 'new_unread', label: 'New Unread', color: '#3b82f6', stage_type: 'intake', order: 1, is_active: true },
-    { id: 's2', slug: 'ready_to_match', label: 'Ready to Match', color: '#10b981', stage_type: 'post_approval', order: 10, is_active: true },
-    { id: 's2b', slug: 'matched', label: 'Matched', color: '#6366f1', stage_type: 'post_approval', order: 15, is_active: true },
-    { id: 's3', slug: 'heartbeat_confirmed', label: 'Heartbeat Confirmed', color: '#f97316', stage_type: 'post_approval', order: 20, is_active: true },
-    { id: 's4', slug: 'on_hold', label: 'On-Hold', color: '#b4536a', stage_type: 'paused', order: 89, is_active: true },
-    { id: 's5', slug: 'lost', label: 'Lost', color: '#ef4444', stage_type: 'terminal', order: 90, is_active: true },
-    { id: 's6', slug: 'disqualified', label: 'Disqualified', color: '#dc2626', stage_type: 'terminal', order: 91, is_active: true },
+    { id: 's1', stage_key: 'new_unread', slug: 'new_unread', label: 'New Unread', color: '#3b82f6', stage_type: 'intake', order: 1, is_active: true },
+    { id: 's2', stage_key: 'ready_to_match', slug: 'ready_to_match', label: 'Ready to Match', color: '#10b981', stage_type: 'post_approval', order: 10, is_active: true },
+    { id: 's2b', stage_key: 'matched', slug: 'matched', label: 'Matched', color: '#6366f1', stage_type: 'post_approval', order: 15, is_active: true },
+    { id: 's3', stage_key: 'heartbeat_confirmed', slug: 'heartbeat_confirmed', label: 'Heartbeat Confirmed', color: '#f97316', stage_type: 'post_approval', order: 20, is_active: true },
+    { id: 's4', stage_key: 'on_hold', slug: 'on_hold', label: 'On-Hold', color: '#b4536a', stage_type: 'paused', order: 89, is_active: true },
+    { id: 's5', stage_key: 'lost', slug: 'lost', label: 'Lost', color: '#ef4444', stage_type: 'terminal', order: 90, is_active: true },
+    { id: 's6', stage_key: 'disqualified', slug: 'disqualified', label: 'Disqualified', color: '#dc2626', stage_type: 'terminal', order: 91, is_active: true },
 ]
 let mockPipelineStages = [...defaultPipelineStages]
 
@@ -664,6 +666,32 @@ describe('SurrogateDetailPage', () => {
         expect(screen.getByText('Medical & Insurance')).toBeInTheDocument()
         expect(screen.getByText('Pregnancy Tracker')).toBeInTheDocument()
         expect(screen.queryByText('Due Date:')).not.toBeInTheDocument()
+    })
+
+    it('shows Pregnancy Tracker when the heartbeat_confirmed slug is renamed', () => {
+        mockPipelineStages = defaultPipelineStages.map((stage) =>
+            stage.id === 's3' ? { ...stage, slug: 'heartbeat_logged' } : stage
+        )
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                status_label: 'Heartbeat Confirmed',
+                stage_id: 's3',
+                stage_key: 'heartbeat_confirmed',
+                stage_slug: 'heartbeat_logged',
+                stage_type: 'post_approval',
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        expect(screen.getByText('Pregnancy Tracker')).toBeInTheDocument()
     })
 
     it('shows Resume action for surrogates currently on hold and resumes to paused-from stage', async () => {

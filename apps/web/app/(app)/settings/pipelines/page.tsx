@@ -131,12 +131,12 @@ function StageEditor({
                 ))}
             </div>
 
-            <Alert>
-                <InfoIcon className="size-4" aria-hidden="true" />
-                <AlertDescription>
-                    Drag stages to reorder. Edit labels, slugs, and colors. Stage keys stay immutable.
-                </AlertDescription>
-            </Alert>
+                <Alert>
+                    <InfoIcon className="size-4" aria-hidden="true" />
+                    <AlertDescription>
+                    Drag stages to reorder. Edit labels, slugs, and colors. Stage keys stay immutable and workflows and integrations follow the stage key, not the slug.
+                    </AlertDescription>
+                </Alert>
         </div>
     )
 }

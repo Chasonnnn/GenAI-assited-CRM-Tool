@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "sonner"
 import { useQueryClient } from "@tanstack/react-query"
+import { normalizeStageKey } from "@/lib/surrogate-stage-context"
 
 const STATUS_CONFIG: Record<MatchStatus, { label: string; color: string; icon?: React.ReactNode }> = {
     proposed: { label: "Proposed", color: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" },
@@ -112,8 +113,9 @@ function NewMatchDialog({ open, onOpenChange, onSuccess }: NewMatchDialogProps) 
 
     // Filter surrogates to ready_to_match status
     const eligibleSurrogates = surrogatesData?.items?.filter((s) => {
-        if (s.stage_slug) {
-            return s.stage_slug === "ready_to_match"
+        const stageKey = normalizeStageKey(s.stage_key ?? s.stage_slug ?? null)
+        if (stageKey) {
+            return stageKey === "ready_to_match"
         }
         return s.status_label?.toLowerCase() === "ready to match"
     }) || []

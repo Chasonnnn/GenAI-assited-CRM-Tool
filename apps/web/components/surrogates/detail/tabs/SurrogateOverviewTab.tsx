@@ -17,6 +17,7 @@ import { ClipboardCheckIcon, CopyIcon, InfoIcon, CheckIcon, UserIcon, XIcon } fr
 import { computeBmi, formatDate, formatHeight } from "@/components/surrogates/detail/surrogate-detail-utils"
 import { useSurrogateDetailContext } from "@/components/surrogates/detail/SurrogateDetailContext"
 import { formatRace } from "@/lib/formatters"
+import { getSurrogateStageContext, stageMatchesKey } from "@/lib/surrogate-stage-context"
 
 export function SurrogateOverviewTab() {
     const params = useParams<{ id: string }>()
@@ -30,7 +31,7 @@ export function SurrogateOverviewTab() {
         [stageOptions]
     )
     const heartbeatStage = React.useMemo(
-        () => stageOptions.find((stage) => stage.slug === "heartbeat_confirmed"),
+        () => stageOptions.find((stage) => stageMatchesKey(stage, "heartbeat_confirmed")),
         [stageOptions]
     )
     const { data: activityData } = useSurrogateActivity(id)
@@ -43,27 +44,24 @@ export function SurrogateOverviewTab() {
         if (typeof surrogateData.bmi === "number") return surrogateData.bmi
         return computeBmi(surrogateData.height_ft, surrogateData.weight_lb)
     }, [surrogateData])
+    const stageContext = React.useMemo(
+        () => getSurrogateStageContext(surrogateData ?? null, stageById),
+        [surrogateData, stageById]
+    )
 
     if (!surrogateData) {
         return null
     }
 
-    const currentStage = stageById.get(surrogateData.stage_id)
-    const pausedFromStage = surrogateData.paused_from_stage_id
-        ? stageById.get(surrogateData.paused_from_stage_id)
-        : undefined
-    const effectiveStage = pausedFromStage ?? currentStage
+    const effectiveStage = stageContext.effectiveStage
     const effectiveStageOrder = effectiveStage?.order ?? null
-    const effectiveStageSlug =
-        effectiveStage?.slug ?? surrogateData.paused_from_stage_slug ?? surrogateData.stage_slug
     const isHeartbeatConfirmedOrLater = !!(
         effectiveStageOrder !== null &&
         heartbeatStage &&
         effectiveStageOrder >= heartbeatStage.order
     )
-    const isTerminalIntakeOutcome = ["lost", "disqualified"].includes(
-        effectiveStageSlug ?? ""
-    )
+    const isTerminalIntakeOutcome =
+        stageContext.effectiveStageKey === "lost" || stageContext.effectiveStageKey === "disqualified"
 
     const copyEmail = () => {
         navigator.clipboard.writeText(surrogateData.email)

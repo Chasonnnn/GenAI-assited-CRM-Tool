@@ -27,6 +27,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { stageMatchesKey } from "@/lib/surrogate-stage-context"
 import { cn } from "@/lib/utils"
 import type { PipelineStage } from "@/lib/api/pipelines"
 
@@ -108,13 +109,13 @@ export function ChangeStageModal({
         () => stages.find(s => s.id === selectedStageId),
         [stages, selectedStageId]
     )
-    const isDeliveredStage = selectedStage?.slug === "delivered"
-    const isOnHoldStage = selectedStage?.slug === "on_hold"
+    const isDeliveredStage = stageMatchesKey(selectedStage, "delivered")
+    const isOnHoldStage = stageMatchesKey(selectedStage, "on_hold")
     const showDeliveryFields = deliveryFieldsEnabled && isDeliveredStage
 
     const isResumeSelection = useMemo(() => {
         if (!selectedStage || !currentStage || !comparisonStage) return false
-        return currentStage.slug === "on_hold" && selectedStage.id === comparisonStage.id
+        return stageMatchesKey(currentStage, "on_hold") && selectedStage.id === comparisonStage.id
     }, [selectedStage, currentStage, comparisonStage])
 
     // Calculate if this is a regression (moving to earlier stage)

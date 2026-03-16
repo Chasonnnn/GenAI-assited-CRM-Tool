@@ -86,6 +86,9 @@ describe('PipelinesSettingsPage', () => {
         const stageKeyInput = screen.getAllByLabelText('Stage key')[0]
         expect(stageKeyInput).toBeDisabled()
         expect(stageKeyInput).toHaveAttribute('readonly')
+        expect(
+            screen.getByText(/workflows and integrations follow the stage key, not the slug/i)
+        ).toBeInTheDocument()
     })
 
     it('saves edited stage label using updateStage', async () => {
