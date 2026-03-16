@@ -604,6 +604,82 @@ def ensure_attachment_scan_job(
     return True
 
 
+def dispatch_attachment_scan_if_needed(
+    db: Session,
+    org_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+) -> bool:
+    """Directly dispatch a dedicated attachment scan job when needed."""
+    from app.services import scan_dispatch_service
+
+    attachment_id_str = str(attachment_id)
+    now = datetime.now(timezone.utc)
+    stale_after_seconds = max(0, settings.ATTACHMENT_SCAN_STALE_RUNNING_SECONDS)
+
+    job = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == org_id,
+            Job.job_type == JobType.ATTACHMENT_SCAN.value,
+            Job.status.in_([JobStatus.PENDING.value, JobStatus.RUNNING.value]),
+        )
+        .order_by(Job.created_at.desc())
+        .all()
+    )
+
+    selected_job: Job | None = None
+    for candidate in job:
+        payload = candidate.payload or {}
+        if payload.get("attachment_id") != attachment_id_str:
+            continue
+        selected_job = candidate
+        break
+
+    if selected_job is None:
+        selected_job = job_service.enqueue_job(
+            db=db,
+            org_id=org_id,
+            job_type=JobType.ATTACHMENT_SCAN,
+            payload={"attachment_id": attachment_id_str},
+            run_at=now,
+            commit=True,
+        )
+    elif selected_job.status == JobStatus.RUNNING.value:
+        if selected_job.run_at > now - timedelta(seconds=stale_after_seconds):
+            return False
+        selected_job.status = JobStatus.PENDING.value
+        selected_job.last_error = (
+            f"Recovered stale attachment scan job after exceeding {stale_after_seconds}s lease"
+        )
+        selected_job.run_at = now
+        selected_job.completed_at = None
+        db.commit()
+        db.refresh(selected_job)
+
+    if not scan_dispatch_service.remote_scan_dispatch_configured():
+        return False
+
+    claimed_job = job_service.claim_job_for_dispatch(db, selected_job.id)
+    if claimed_job is None:
+        return False
+
+    try:
+        scan_dispatch_service.dispatch_attachment_scan_job_sync(
+            job_id=claimed_job.id,
+            attachment_id=attachment_id,
+        )
+    except Exception as exc:
+        job_service.mark_job_failed(db, claimed_job, str(exc))
+        logger.exception(
+            "Failed to dispatch dedicated attachment scan job %s for attachment %s",
+            claimed_job.id,
+            attachment_id,
+        )
+        return False
+
+    return True
+
+
 def list_attachments(
     db: Session,
     org_id: uuid.UUID,

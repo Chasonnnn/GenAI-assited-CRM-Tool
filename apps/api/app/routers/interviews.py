@@ -552,6 +552,12 @@ async def upload_attachment(
             attachment_id=attachment.id,
         )
         db.commit()
+        if attachment.scan_status != "clean":
+            attachment_service.dispatch_attachment_scan_if_needed(
+                db=db,
+                org_id=session.org_id,
+                attachment_id=attachment.id,
+            )
 
         # Refresh to get attachment relationship
         db.refresh(link)

@@ -11,7 +11,11 @@ from google.auth.transport.requests import Request
 import httpx
 
 from app.core.config import settings
-from app.services.http_service import DEFAULT_RETRY_STATUSES, request_with_retries
+from app.services.http_service import (
+    DEFAULT_RETRY_STATUSES,
+    request_with_retries,
+    request_with_retries_sync,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -124,6 +128,64 @@ async def _dispatch_scan_job(*, scan_type: str, resource_id: UUID, job_id: UUID)
     raise RuntimeError(f"Dedicated scan job dispatch failed: {response.status_code}")
 
 
+def _raise_for_dispatch_response(
+    response: httpx.Response,
+    *,
+    scan_type: str,
+    resource_id: UUID,
+    job_id: UUID,
+) -> None:
+    if 200 <= response.status_code < 300:
+        logger.info(
+            "Dispatched dedicated scan job type=%s resource_id=%s db_job_id=%s",
+            scan_type,
+            resource_id,
+            job_id,
+        )
+        return
+
+    detail = None
+    try:
+        data = response.json()
+        if isinstance(data, dict):
+            detail = data.get("message") or data.get("error")
+    except Exception:
+        detail = None
+
+    if detail:
+        raise RuntimeError(f"Dedicated scan job dispatch failed: {response.status_code} ({detail})")
+    raise RuntimeError(f"Dedicated scan job dispatch failed: {response.status_code}")
+
+
+def _dispatch_scan_job_sync(*, scan_type: str, resource_id: UUID, job_id: UUID) -> None:
+    token = _access_token()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    payload = _run_payload(scan_type=scan_type, resource_id=resource_id, job_id=job_id)
+
+    with httpx.Client(timeout=SCAN_JOB_TIMEOUT_SECONDS) as client:
+
+        def request_fn() -> httpx.Response:
+            return client.post(_run_job_url(), headers=headers, json=payload)
+
+        response = request_with_retries_sync(
+            request_fn,
+            max_attempts=3,
+            base_delay=0.5,
+            max_delay=4.0,
+            retry_statuses=DEFAULT_RETRY_STATUSES,
+        )
+
+    _raise_for_dispatch_response(
+        response,
+        scan_type=scan_type,
+        resource_id=resource_id,
+        job_id=job_id,
+    )
+
+
 async def dispatch_attachment_scan_job(*, job_id: UUID, attachment_id: UUID) -> None:
     await _dispatch_scan_job(
         scan_type="attachment",
@@ -134,6 +196,22 @@ async def dispatch_attachment_scan_job(*, job_id: UUID, attachment_id: UUID) -> 
 
 async def dispatch_form_submission_file_scan_job(*, job_id: UUID, submission_file_id: UUID) -> None:
     await _dispatch_scan_job(
+        scan_type="form_submission_file",
+        resource_id=submission_file_id,
+        job_id=job_id,
+    )
+
+
+def dispatch_attachment_scan_job_sync(*, job_id: UUID, attachment_id: UUID) -> None:
+    _dispatch_scan_job_sync(
+        scan_type="attachment",
+        resource_id=attachment_id,
+        job_id=job_id,
+    )
+
+
+def dispatch_form_submission_file_scan_job_sync(*, job_id: UUID, submission_file_id: UUID) -> None:
+    _dispatch_scan_job_sync(
         scan_type="form_submission_file",
         resource_id=submission_file_id,
         job_id=job_id,

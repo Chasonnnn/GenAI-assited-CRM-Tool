@@ -130,6 +130,34 @@ def claim_pending_jobs(
     return [claimed_by_id[job_id] for job_id in claimed_ids if job_id in claimed_by_id]
 
 
+def claim_job_for_dispatch(db: Session, job_id: UUID) -> Job | None:
+    """Atomically transition a pending job to running for direct dispatch."""
+    now = datetime.now(timezone.utc)
+    result = db.execute(
+        update(Job)
+        .where(
+            Job.id == job_id,
+            Job.status == JobStatus.PENDING.value,
+            Job.run_at <= now,
+        )
+        .values(
+            status=JobStatus.RUNNING.value,
+            attempts=Job.attempts + 1,
+            run_at=now,
+            completed_at=None,
+            last_error=None,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if (result.rowcount or 0) != 1:
+        db.expire_all()
+        return None
+
+    db.commit()
+    db.expire_all()
+    return db.query(Job).filter(Job.id == job_id).first()
+
+
 def get_job(db: Session, job_id: UUID, org_id: UUID | None = None) -> Job | None:
     """Get a job by ID, optionally scoped to org."""
     query = db.query(Job).filter(Job.id == job_id)

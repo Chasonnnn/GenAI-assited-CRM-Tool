@@ -1448,13 +1448,11 @@ def download_submission_file(
         )
         raise HTTPException(status_code=403, detail=detail)
     if settings.ATTACHMENT_SCAN_ENABLED and file_record.scan_status != "clean":
-        form_submission_service.ensure_submission_file_scan_job(
+        form_submission_service.dispatch_submission_file_scan_if_needed(
             db=db,
             org_id=session.org_id,
             submission_file_id=file_record.id,
-            commit=False,
         )
-        db.commit()
         raise HTTPException(status_code=409, detail="File is still being scanned")
 
     url = form_submission_service.get_submission_file_download_url(
@@ -1526,6 +1524,12 @@ def upload_submission_file(
             user_id=session.user_id,
         )
         db.commit()
+        if file_record.scan_status != "clean":
+            form_submission_service.dispatch_submission_file_scan_if_needed(
+                db=db,
+                org_id=session.org_id,
+                submission_file_id=file_record.id,
+            )
         return FormSubmissionFileRead(
             id=file_record.id,
             filename=file_record.filename,

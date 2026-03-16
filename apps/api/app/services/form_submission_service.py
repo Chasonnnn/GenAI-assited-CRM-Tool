@@ -495,9 +495,10 @@ def create_submission(
         db.add(submission)
         db.flush()
 
+    created_submission_file_ids: list[uuid.UUID] = []
     for idx, file in enumerate(upload_files):
         field_key = resolved_file_field_keys[idx] if resolved_file_field_keys else None
-        _store_submission_file(
+        file_record = _store_submission_file(
             db,
             submission,
             file,
@@ -505,6 +506,7 @@ def create_submission(
             field_key=field_key,
             content_type=validated_content_types[idx],
         )
+        created_submission_file_ids.append(file_record.id)
 
     token.used_submissions += 1
     if token.used_submissions >= token.max_submissions:
@@ -527,6 +529,13 @@ def create_submission(
 
     db.commit()
     db.refresh(submission)
+    if getattr(settings, "ATTACHMENT_SCAN_ENABLED", False):
+        for submission_file_id in created_submission_file_ids:
+            dispatch_submission_file_scan_if_needed(
+                db=db,
+                org_id=form.organization_id,
+                submission_file_id=submission_file_id,
+            )
 
     surrogate = db.query(Surrogate).filter(Surrogate.id == token.surrogate_id).first()
     if surrogate:
@@ -904,6 +913,83 @@ def ensure_submission_file_scan_job(
         run_at=now,
         commit=commit,
     )
+    return True
+
+
+def dispatch_submission_file_scan_if_needed(
+    db: Session,
+    org_id: uuid.UUID,
+    submission_file_id: uuid.UUID,
+) -> bool:
+    """Directly dispatch a dedicated scan for a form submission file when needed."""
+    from app.services import scan_dispatch_service
+
+    submission_file_id_str = str(submission_file_id)
+    now = datetime.now(timezone.utc)
+    stale_after_seconds = max(0, settings.ATTACHMENT_SCAN_STALE_RUNNING_SECONDS)
+
+    jobs = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == org_id,
+            Job.job_type == JobType.FORM_SUBMISSION_FILE_SCAN.value,
+            Job.status.in_([JobStatus.PENDING.value, JobStatus.RUNNING.value]),
+        )
+        .order_by(Job.created_at.desc())
+        .all()
+    )
+
+    selected_job: Job | None = None
+    for candidate in jobs:
+        payload = candidate.payload or {}
+        if payload.get("submission_file_id") != submission_file_id_str:
+            continue
+        selected_job = candidate
+        break
+
+    if selected_job is None:
+        selected_job = job_service.enqueue_job(
+            db=db,
+            org_id=org_id,
+            job_type=JobType.FORM_SUBMISSION_FILE_SCAN,
+            payload={"submission_file_id": submission_file_id_str},
+            run_at=now,
+            commit=True,
+        )
+    elif selected_job.status == JobStatus.RUNNING.value:
+        if selected_job.run_at > now - timedelta(seconds=stale_after_seconds):
+            return False
+        selected_job.status = JobStatus.PENDING.value
+        selected_job.last_error = (
+            "Recovered stale form submission file scan job after exceeding "
+            f"{stale_after_seconds}s lease"
+        )
+        selected_job.run_at = now
+        selected_job.completed_at = None
+        db.commit()
+        db.refresh(selected_job)
+
+    if not scan_dispatch_service.remote_scan_dispatch_configured():
+        return False
+
+    claimed_job = job_service.claim_job_for_dispatch(db, selected_job.id)
+    if claimed_job is None:
+        return False
+
+    try:
+        scan_dispatch_service.dispatch_form_submission_file_scan_job_sync(
+            job_id=claimed_job.id,
+            submission_file_id=submission_file_id,
+        )
+    except Exception as exc:
+        job_service.mark_job_failed(db, claimed_job, str(exc))
+        logger.exception(
+            "Failed to dispatch dedicated submission file scan job %s for file %s",
+            claimed_job.id,
+            submission_file_id,
+        )
+        return False
+
     return True
 
 
@@ -1652,7 +1738,7 @@ def _store_submission_file(
     form: Form,
     field_key: str | None,
     content_type: str | None = None,
-) -> None:
+) -> FormSubmissionFile:
     # Prefer a validated content type from the caller. Fall back to UploadFile.content_type.
     # (We still verify content in `_validate_file` for public upload flows.)
     resolved_content_type = (
@@ -1703,6 +1789,7 @@ def _store_submission_file(
             submission_file_id=record.id,
             commit=False,
         )
+    return record
 
 
 def _build_surrogate_updates(
