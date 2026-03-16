@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { TabsContent } from "@/components/ui/tabs"
+import { RichTextPreview } from "@/components/rich-text-preview"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { FileUploadZone } from "@/components/FileUploadZone"
 import type { NoteRead } from "@/lib/types/note"
@@ -35,9 +36,9 @@ export function SurrogateNotesTab({
     return (
         <TabsContent value="notes">
             <Card>
-                <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] divide-y lg:divide-y-0 lg:divide-x divide-border">
+                <div className="grid grid-cols-1 divide-y divide-border lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:divide-x lg:divide-y-0">
                     {/* Notes Column - Left/Main */}
-                    <div className="p-6 order-last lg:order-first">
+                    <div className="order-last min-w-0 p-6 lg:order-first">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-lg font-semibold">Notes</h3>
                             {notes && notes.length > 0 && (
@@ -91,9 +92,9 @@ export function SurrogateNotesTab({
                                                         <TrashIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
                                                     </Button>
                                                 </div>
-                                                <div
-                                                    className="mt-2 text-sm prose prose-sm max-w-none dark:prose-invert"
-                                                    dangerouslySetInnerHTML={{ __html: note.body }}
+                                                <RichTextPreview
+                                                    html={note.body}
+                                                    className="mt-2 text-sm"
                                                 />
                                             </div>
                                         </div>
@@ -108,7 +109,7 @@ export function SurrogateNotesTab({
                     </div>
 
                     {/* Attachments Column - Right/Sidebar */}
-                    <div className="lg:sticky lg:top-4 lg:self-start p-6 order-first lg:order-last">
+                    <div className="order-first min-w-0 p-6 lg:sticky lg:top-4 lg:self-start lg:order-last">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-lg font-semibold">Attachments</h3>
                         </div>

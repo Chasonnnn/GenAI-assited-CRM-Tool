@@ -64,4 +64,26 @@ describe("SurrogateNotesTab", () => {
 
         expect(screen.getByRole("button", { name: "Delete note by Nina Admin" })).toBeInTheDocument()
     })
+
+    it("uses a 3/5 to 2/5 desktop split between notes and attachments", () => {
+        render(
+            <Tabs defaultValue="notes">
+                <SurrogateNotesTab
+                    surrogateId="sur_1"
+                    notes={[]}
+                    onAddNote={vi.fn()}
+                    isSubmitting={false}
+                    onDeleteNote={vi.fn()}
+                    formatDateTime={() => "now"}
+                />
+            </Tabs>
+        )
+
+        const notesHeading = screen.getByRole("heading", { name: "Notes" })
+        const grid = notesHeading.closest(".grid")
+
+        expect(grid).toBeTruthy()
+        expect(grid).toHaveClass("lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]")
+        expect(grid).not.toHaveClass("lg:grid-cols-[1fr_320px]")
+    })
 })
