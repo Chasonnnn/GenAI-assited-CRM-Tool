@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.40](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.39...surrogacy-crm-platform-v0.90.40) (2026-03-16)
+
+
+### Bug Fixes
+
+* harden backend pipeline stage semantics ([5ebf895](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5ebf895befa79fc3516403e1810a32ca72e7f2f7))
+* return 404 for missing tracking links ([846cdd6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/846cdd61137a1d14da0475546f943edd0d1849ff))
+* use stage keys in pipeline-driven ui ([3cdbf23](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3cdbf23b549a518da6d5de404b8c7c575dc15f20))
+
 ## [0.90.39](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.38...surrogacy-crm-platform-v0.90.39) (2026-03-16)
 
 
