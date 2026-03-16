@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.41](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.40...surrogacy-crm-platform-v0.90.41) (2026-03-16)
+
+
+### Bug Fixes
+
+* unblock web startup probe and hard-fail routing ([566dff6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/566dff6d2844d4b3814e189fe285793c5289fd2c))
+* unblock web startup probe and hard-fail routing ([421cc0c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/421cc0c1532fd15307539dbb527fbd8dc78180e3))
+
 ## [0.90.40](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.39...surrogacy-crm-platform-v0.90.40) (2026-03-16)
 
 
