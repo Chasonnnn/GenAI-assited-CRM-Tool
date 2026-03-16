@@ -26,8 +26,8 @@ def test_attachment_scan_job_env_is_exposed_to_services() -> None:
 
 def test_api_service_account_can_execute_attachment_scan_job() -> None:
     content = _read("infra/terraform/clamav-iam.tf")
-    assert 'resource "google_project_iam_member" "api_run_invoker"' in content
-    assert 'role    = "roles/run.invoker"' in content
+    assert 'resource "google_project_iam_member" "api_run_developer"' in content
+    assert 'role    = "roles/run.developer"' in content
     assert 'member  = "serviceAccount:${google_service_account.api.email}"' in content
 
 
