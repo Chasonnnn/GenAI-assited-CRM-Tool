@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import MFAPage from "../app/mfa/page"
 
 const mockUseAuth = vi.fn()
@@ -73,5 +73,65 @@ describe("MFAPage", () => {
         expect(screen.getByRole("button", { name: /set up duo/i })).toBeInTheDocument()
         expect(screen.queryByRole("button", { name: /set up authenticator/i })).not.toBeInTheDocument()
         expect(screen.queryByText(/google authenticator/i)).not.toBeInTheDocument()
+    })
+
+    it("redirects app users to dashboard after completing MFA", async () => {
+        const refetch = vi.fn()
+        const mutateAsync = vi.fn().mockResolvedValue({ success: true })
+
+        mockUseAuth.mockReturnValue({
+            user: {
+                email: "user@example.com",
+                mfa_required: true,
+                mfa_verified: false,
+            },
+            isLoading: false,
+            refetch,
+        })
+        mockUseMFAStatus.mockReturnValue({
+            data: {
+                mfa_enabled: true,
+                totp_enabled: false,
+            },
+            isLoading: false,
+        })
+        mockUseDuoStatus.mockReturnValue({
+            data: {
+                available: false,
+                enrolled: false,
+            },
+            isLoading: false,
+        })
+        mockUseCompleteMFAChallenge.mockReturnValue({
+            mutateAsync,
+            isPending: false,
+        })
+
+        render(<MFAPage />)
+
+        fireEvent.change(screen.getByLabelText(/recovery code/i), {
+            target: { value: "RECOVERYCODE" },
+        })
+        fireEvent.click(screen.getByRole("button", { name: /verify code/i }))
+
+        await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith("RECOVERYCODE"))
+        await waitFor(() => expect(refetch).toHaveBeenCalled())
+        await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/dashboard"))
+    })
+
+    it("redirects verified app users away from MFA to dashboard", async () => {
+        mockUseAuth.mockReturnValue({
+            user: {
+                email: "user@example.com",
+                mfa_required: true,
+                mfa_verified: true,
+            },
+            isLoading: false,
+            refetch: vi.fn(),
+        })
+
+        render(<MFAPage />)
+
+        await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/dashboard"))
     })
 })

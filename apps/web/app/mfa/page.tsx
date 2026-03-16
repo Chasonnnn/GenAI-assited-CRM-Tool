@@ -21,6 +21,8 @@ function hasAuthReturnToOpsCookie(): boolean {
     return document.cookie.split(";").some((c) => c.trim().startsWith("auth_return_to=ops"))
 }
 
+const APP_POST_MFA_PATH = "/dashboard"
+
 export default function MFAPage() {
     const router = useRouter()
     const { user, isLoading: authLoading, refetch } = useAuth()
@@ -61,7 +63,7 @@ export default function MFAPage() {
                 router.replace("/ops")
                 return
             }
-            router.replace("/")
+            router.replace(APP_POST_MFA_PATH)
         }
     }, [authLoading, user, router])
 
@@ -77,7 +79,7 @@ export default function MFAPage() {
                 router.replace("/ops")
                 return
             }
-            router.replace("/")
+            router.replace(APP_POST_MFA_PATH)
         } catch (error) {
             console.error("MFA challenge failed:", error)
             setErrorMessage("Invalid code. Please try again.")

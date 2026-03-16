@@ -22,6 +22,8 @@ function hasAuthReturnToOpsCookie(): boolean {
     return document.cookie.split(";").some((c) => c.trim().startsWith("auth_return_to=ops"))
 }
 
+const APP_POST_MFA_PATH = "/dashboard"
+
 const duoVerifyAttempts = new Set<string>()
 
 function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: () => void }) {
@@ -156,7 +158,7 @@ export default function DuoCallbackPage() {
                         router.replace("/ops")
                         return
                     }
-                    router.replace("/")
+                    router.replace(APP_POST_MFA_PATH)
                 }
             } catch (error) {
                 console.error("Duo verification failed:", error)
@@ -198,7 +200,7 @@ export default function DuoCallbackPage() {
                     {status === "success" && (
                         <div className="space-y-2">
                             <p className="text-sm text-muted-foreground">Duo verification complete.</p>
-                            <Button onClick={() => router.replace("/")}>Continue</Button>
+                            <Button onClick={() => router.replace(APP_POST_MFA_PATH)}>Continue</Button>
                         </div>
                     )}
                 </CardContent>
@@ -222,7 +224,7 @@ export default function DuoCallbackPage() {
                             router.replace("/ops")
                             return
                         }
-                        router.replace("/")
+                        router.replace(APP_POST_MFA_PATH)
                     }}
                 />
             )}
