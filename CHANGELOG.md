@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.38](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.37...surrogacy-crm-platform-v0.90.38) (2026-03-16)
+
+
+### Bug Fixes
+
+* always include medical info in case exports ([6b70e75](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6b70e754cce05f75270193221f8c11d1a1d09108))
+* dispatch dedicated scan jobs directly from API flows ([5bc7fd5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5bc7fd5833d10bdde6436f7704ad597209e7c62e))
+* exclude remote scan jobs from worker claims ([b09b3b7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b09b3b72f6f6ba0f2f9464061d6551cbf2efaa34))
+* improve surrogate notes tab layout and rendering ([97dbcbf](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/97dbcbfb6fabee2aa7c4a906cf2ee46ab9c97a96))
+
+
+### Maintenance
+
+* force release-please onto node 24 ([e714a64](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e714a6494c724033ae6de6912ad86641eb074bf7))
+* move ci and web docker to node 24 ([cb627be](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cb627bec41958e83ae87790834a11fc26fa88beb))
+* set node 24 override at workflow scope ([e3e7d8f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e3e7d8f5a1fde4fe37ce5ff4d3a1395d7da78901))
+
 ## [0.90.37](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.36...surrogacy-crm-platform-v0.90.37) (2026-03-15)
 
 
