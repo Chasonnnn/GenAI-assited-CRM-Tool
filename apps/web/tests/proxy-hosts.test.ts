@@ -45,6 +45,17 @@ describe('proxy hard-fail behavior', () => {
         expect(response.status).toBe(404)
     })
 
+    it('lets the health route bypass host hard-fail checks', async () => {
+        const response = await proxy(
+            createRequest('https://crm-web-00145-jj5-uc.a.run.app/health', {
+                host: 'crm-web-00145-jj5-uc.a.run.app',
+            }) as never,
+        )
+
+        expect(response.status).toBe(200)
+        expect(response.headers.get('x-middleware-rewrite')).toBeNull()
+    })
+
     it('returns 500 when tenant lookup fails for a platform subdomain', async () => {
         vi.spyOn(globalThis, 'fetch').mockResolvedValue(
             new Response('upstream failure', { status: 500 }),

@@ -269,6 +269,7 @@ export async function proxy(request: NextRequest) {
     const pathname = request.nextUrl.pathname;
     // Skip static assets, API routes, and Next.js internals
     if (
+        pathname === '/health' ||
         pathname === '/_not-found' ||
         pathname.startsWith('/_next') ||
         pathname.startsWith('/api') ||
