@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import '@testing-library/jest-dom'
-import MatchDetailPage from '../app/(app)/intended-parents/matches/[id]/page'
+import MatchDetailPage from '../app/(app)/intended-parents/matches/[id]/page.client'
 
 const mockPush = vi.fn()
 const mockReplace = vi.fn()
@@ -223,14 +223,14 @@ describe('MatchDetailPage', () => {
         expect(loadingIndicator).toBeTruthy()
     })
 
-    it('shows error state when match not found', () => {
+    it('renders nothing when the route wrapper should own missing-match handling', () => {
         mockUseMatch.mockReturnValue({
             data: null,
             isLoading: false,
             error: new Error('Not found'),
         })
-        render(<MatchDetailPage />)
-        expect(screen.getByText('Match not found')).toBeInTheDocument()
+        const { container } = render(<MatchDetailPage />)
+        expect(container).toBeEmptyDOMElement()
     })
 
     it('shows upload button in files tab', () => {

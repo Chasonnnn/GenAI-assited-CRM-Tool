@@ -39,7 +39,7 @@ describe("React regression guards (source)", () => {
     })
 
     it("delegates match detail tab rendering to a dedicated component", () => {
-        const source = readSource("app/(app)/intended-parents/matches/[id]/page.tsx")
+        const source = readSource("app/(app)/intended-parents/matches/[id]/page.client.tsx")
 
         expect(source).toContain('import { MatchDetailOverviewTabs } from "./components/MatchDetailOverviewTabs"')
         expect(source).toContain("<MatchDetailOverviewTabs")

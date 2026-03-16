@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react"
-import PlatformFormTemplatePage from "../app/ops/templates/forms/[id]/page"
+import PlatformFormTemplatePage from "../app/ops/templates/forms/[id]/page.client"
 
 const mockUpdate = vi.fn()
 const mockCreate = vi.fn()

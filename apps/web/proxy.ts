@@ -8,11 +8,13 @@ const PLATFORM_BASE_DOMAIN =
 const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 const ORG_CACHE_TTL_MS = 60_000;
-const ORG_CACHE_STALE_MS = 5 * 60_000;
 const ORG_LOOKUP_TIMEOUT_MS = 2000;
+const ROUTE_LOOKUP_TIMEOUT_MS = 2000;
 const ORG_COOKIE_ID = 'sf_org_id';
 const ORG_COOKIE_SLUG = 'sf_org_slug';
 const ORG_COOKIE_NAME = 'sf_org_name';
+const UUID_PARAM_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type OrgRecord = {
     id: string;
@@ -23,7 +25,6 @@ type OrgRecord = {
 type OrgCacheEntry = {
     value: OrgRecord | null;
     expiresAt: number;
-    staleUntil: number;
 };
 
 const orgCache = new Map<string, OrgCacheEntry>();
@@ -57,18 +58,10 @@ function getCachedEntry(hostname: string, now: number) {
     return null;
 }
 
-function getStaleEntry(hostname: string, now: number) {
-    const cached = orgCache.get(hostname);
-    if (!cached) return null;
-    if (cached.staleUntil >= now) return cached;
-    return null;
-}
-
 function setCachedOrg(hostname: string, value: OrgRecord | null, now: number, ttlMs: number) {
     orgCache.set(hostname, {
         value,
         expiresAt: now + ttlMs,
-        staleUntil: now + ORG_CACHE_STALE_MS,
     });
 }
 
@@ -121,17 +114,173 @@ function clearOrgCookies(response: NextResponse, secure: boolean) {
     response.cookies.set(ORG_COOKIE_NAME, '', baseOptions);
 }
 
+function createHardFailureResponse(status: number, message: string): NextResponse {
+    return new NextResponse(message, {
+        status,
+        headers: {
+            'Cache-Control': 'no-store',
+            'Content-Type': 'text/plain; charset=utf-8',
+        },
+    });
+}
+
+function createNotFoundRewrite(request: NextRequest): NextResponse {
+    return NextResponse.rewrite(new URL('/_not-found', request.nextUrl), {
+        status: 404,
+        headers: {
+            'Cache-Control': 'no-store',
+        },
+    });
+}
+
+function getRouteResourceApiPath(pathname: string): string | null | 'not_found' {
+    const routeMatchers: Array<{
+        pattern: RegExp;
+        resolveApiPath: (segment: string) => string | null | 'not_found';
+    }> = [
+        {
+            pattern: /^\/automation\/campaigns\/([^/]+)$/,
+            resolveApiPath: (id) => (UUID_PARAM_RE.test(id) ? `/campaigns/${id}` : 'not_found'),
+        },
+        {
+            pattern: /^\/automation\/forms\/([^/]+)$/,
+            resolveApiPath: (id) => {
+                if (id === 'new') return null;
+                return UUID_PARAM_RE.test(id) ? `/forms/${id}` : 'not_found';
+            },
+        },
+        {
+            pattern: /^\/intended-parents\/matches\/([^/]+)$/,
+            resolveApiPath: (id) => (UUID_PARAM_RE.test(id) ? `/matches/${id}` : 'not_found'),
+        },
+        {
+            pattern: /^\/settings\/team\/members\/([^/]+)$/,
+            resolveApiPath: (id) =>
+                UUID_PARAM_RE.test(id) ? `/settings/permissions/members/${id}` : 'not_found',
+        },
+        {
+            pattern: /^\/settings\/team\/roles\/([^/]+)$/,
+            resolveApiPath: (role) => `/settings/permissions/roles/${encodeURIComponent(role)}`,
+        },
+        {
+            pattern: /^\/ops\/templates\/email\/([^/]+)$/,
+            resolveApiPath: (id) => {
+                if (id === 'new') return null;
+                return UUID_PARAM_RE.test(id)
+                    ? `/platform/templates/email/${id}`
+                    : 'not_found';
+            },
+        },
+        {
+            pattern: /^\/ops\/templates\/forms\/([^/]+)$/,
+            resolveApiPath: (id) => {
+                if (id === 'new') return null;
+                return UUID_PARAM_RE.test(id)
+                    ? `/platform/templates/forms/${id}`
+                    : 'not_found';
+            },
+        },
+        {
+            pattern: /^\/ops\/templates\/workflows\/([^/]+)$/,
+            resolveApiPath: (id) => {
+                if (id === 'new') return null;
+                return UUID_PARAM_RE.test(id)
+                    ? `/platform/templates/workflows/${id}`
+                    : 'not_found';
+            },
+        },
+    ];
+
+    for (const { pattern, resolveApiPath } of routeMatchers) {
+        const match = pathname.match(pattern);
+        if (!match) continue;
+        return resolveApiPath(match[1] ?? '');
+    }
+
+    return null;
+}
+
+async function enforceRouteResourceHardFail(
+    request: NextRequest
+): Promise<NextResponse | null> {
+    const apiPath = getRouteResourceApiPath(request.nextUrl.pathname);
+    if (!apiPath) {
+        return null;
+    }
+
+    if (apiPath === 'not_found') {
+        return createNotFoundRewrite(request);
+    }
+
+    const headers = buildServerApiHeaders(request.headers, {
+        'Content-Type': 'application/json',
+    });
+    const cookie = request.headers.get('cookie');
+    if (cookie) {
+        headers.set('cookie', cookie);
+    }
+
+    for (const headerName of ['x-org-id', 'x-org-slug', 'x-org-name']) {
+        const value = request.headers.get(headerName);
+        if (value) {
+            headers.set(headerName, value);
+        }
+    }
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(
+            () => controller.abort(),
+            ROUTE_LOOKUP_TIMEOUT_MS
+        );
+        const res = await fetch(`${API_BASE_URL}${apiPath}`, {
+            headers,
+            cache: 'no-store',
+            signal: controller.signal,
+        }).finally(() => clearTimeout(timeoutId));
+
+        if (res.status === 404 || res.status === 422) {
+            return createNotFoundRewrite(request);
+        }
+
+        if (res.status === 401 || res.status === 403) {
+            return null;
+        }
+
+        if (!res.ok) {
+            console.error(
+                `[middleware] API error resolving route resource ${apiPath}: ${res.status}`
+            );
+            return createHardFailureResponse(500, 'Route resolution failed');
+        }
+    } catch (error) {
+        console.error(
+            `[middleware] Network error resolving route resource ${apiPath}:`,
+            error
+        );
+        return createHardFailureResponse(500, 'Route resolution failed');
+    }
+
+    return null;
+}
+
 export async function proxy(request: NextRequest) {
     const hostname = getHostname(request);
     const pathname = request.nextUrl.pathname;
     // Skip static assets, API routes, and Next.js internals
     if (
+        pathname === '/_not-found' ||
         pathname.startsWith('/_next') ||
         pathname.startsWith('/api') ||
         pathname.startsWith('/static') ||
         pathname.includes('.') // Static files with extensions
     ) {
         return NextResponse.next();
+    }
+
+    const routeResourceResponse = await enforceRouteResourceHardFail(request);
+    if (routeResourceResponse) {
+        return routeResourceResponse;
     }
 
     const isDev = process.env.NODE_ENV !== 'production';
@@ -157,10 +306,7 @@ export async function proxy(request: NextRequest) {
         if (isPlatformRootHost(hostname, PLATFORM_BASE_DOMAIN)) {
             return NextResponse.next();
         }
-        // Unknown domain - show org not found
-        const url = request.nextUrl.clone();
-        url.pathname = '/org-not-found';
-        return NextResponse.rewrite(url);
+        return createHardFailureResponse(404, 'Organization not found');
     }
 
     if (isPlatformRootHost(hostname, PLATFORM_BASE_DOMAIN)) {
@@ -178,9 +324,7 @@ export async function proxy(request: NextRequest) {
     const cachedEntry = getCachedEntry(hostname, now);
     if (cachedEntry) {
         if (!cachedEntry.value) {
-            const url = request.nextUrl.clone();
-            url.pathname = '/org-not-found';
-            const response = NextResponse.rewrite(url);
+            const response = createHardFailureResponse(404, 'Organization not found');
             clearOrgCookies(response, secureCookies);
             return response;
         }
@@ -209,31 +353,16 @@ export async function proxy(request: NextRequest) {
 
         if (res.status === 404) {
             setCachedOrg(hostname, null, now, ORG_CACHE_TTL_MS);
-            const url = request.nextUrl.clone();
-            url.pathname = '/org-not-found';
-            const response = NextResponse.rewrite(url);
+            const response = createHardFailureResponse(404, 'Organization not found');
             clearOrgCookies(response, secureCookies);
             return response;
         }
 
         if (!res.ok) {
-            // API error (not 404) - let the request through to show a proper error page
             console.error(
                 `[middleware] API error resolving org for ${hostname}: ${res.status}`
             );
-            const staleEntry = getStaleEntry(hostname, now);
-            if (staleEntry) {
-                if (!staleEntry.value) {
-                    const url = request.nextUrl.clone();
-                    url.pathname = '/org-not-found';
-                    const response = NextResponse.rewrite(url);
-                    clearOrgCookies(response, secureCookies);
-                    return response;
-                }
-                const { response } = attachOrgHeaders(request, staleEntry.value);
-                return response;
-            }
-            return NextResponse.next();
+            return createHardFailureResponse(500, 'Tenant resolution failed');
         }
 
         const org = (await res.json()) as OrgRecord;
@@ -244,24 +373,11 @@ export async function proxy(request: NextRequest) {
         setOrgCookies(response, org, secureCookies);
         return response;
     } catch (error) {
-        // Network error - let the request through to avoid blocking users
         console.error(
             `[middleware] Network error resolving org for ${hostname}:`,
             error
         );
-        const staleEntry = getStaleEntry(hostname, Date.now());
-        if (staleEntry) {
-            if (!staleEntry.value) {
-                const url = request.nextUrl.clone();
-                url.pathname = '/org-not-found';
-                const response = NextResponse.rewrite(url);
-                clearOrgCookies(response, secureCookies);
-                return response;
-            }
-            const { response } = attachOrgHeaders(request, staleEntry.value);
-            return response;
-        }
-        return NextResponse.next();
+        return createHardFailureResponse(500, 'Tenant resolution failed');
     }
 }
 

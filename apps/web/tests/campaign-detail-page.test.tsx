@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, waitFor } from "@testing-library/react"
-import CampaignDetailPage from "../app/(app)/automation/campaigns/[id]/page"
+import CampaignDetailPage from "../app/(app)/automation/campaigns/[id]/page.client"
 
 const mockPush = vi.fn()
 const mockUseRunRecipients = vi.fn()

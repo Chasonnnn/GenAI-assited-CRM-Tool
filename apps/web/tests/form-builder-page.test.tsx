@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { render, screen } from "@testing-library/react"
 import type { ImgHTMLAttributes } from "react"
 
-import FormBuilderPage from "../app/(app)/automation/forms/[id]/page"
+import FormBuilderPage from "../app/(app)/automation/forms/[id]/page.client"
 
 const mockPush = vi.fn()
 

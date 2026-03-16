@@ -1,7 +1,7 @@
 import { beforeEach, describe, it, expect, vi } from "vitest"
 import { render, screen } from "@testing-library/react"
 import * as React from "react"
-import PlatformEmailTemplatePage from "../app/ops/templates/email/[id]/page"
+import PlatformEmailTemplatePage from "../app/ops/templates/email/[id]/page.client"
 
 const richTextEditorSpy = vi.fn()
 
