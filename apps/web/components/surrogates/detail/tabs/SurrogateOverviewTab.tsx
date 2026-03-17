@@ -112,9 +112,9 @@ export function SurrogateOverviewTab() {
                                 aria-label="Copy email"
                             >
                                 {copiedEmail ? (
-                                    <CheckIcon className="h-3 w-3" />
+                                    <CheckIcon className="h-3 w-3" aria-hidden="true" />
                                 ) : (
-                                    <CopyIcon className="h-3 w-3" />
+                                    <CopyIcon className="h-3 w-3" aria-hidden="true" />
                                 )}
                             </Button>
                         </div>
