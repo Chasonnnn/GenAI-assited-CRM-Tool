@@ -9,3 +9,7 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+
+## 2025-05-20 - Icon-Only Button Accessibility in Complex Components
+**Learning:** In complex, highly interactive components like nested comment threads (`CommentCard`), it's easy to overlook `aria-label`s on small, icon-only utility buttons (e.g., delete/edit icons on hover). Also, inner SVG icons should have `aria-hidden="true"` applied to prevent them from being redundantly announced by screen readers alongside the button's text or label.
+**Action:** When creating or modifying complex interactive cards, explicitly check every `<Button>` element. If it has no text child, it MUST have an `aria-label`. Ensure all decorative inner SVG icons carry `aria-hidden="true"`.

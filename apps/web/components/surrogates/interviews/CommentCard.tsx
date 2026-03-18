@@ -113,7 +113,7 @@ const ReplyItem = memo(function ReplyItem({
                                     }}
                                     className="h-7 px-2 text-xs"
                                 >
-                                    <XIcon className="size-3 mr-1" />
+                                    <XIcon className="size-3 mr-1" aria-hidden="true" />
                                     Cancel
                                 </Button>
                                 <Button
@@ -122,7 +122,7 @@ const ReplyItem = memo(function ReplyItem({
                                     disabled={!editContent.trim()}
                                     className="h-7 px-2 text-xs"
                                 >
-                                    <CheckIcon className="size-3 mr-1" />
+                                    <CheckIcon className="size-3 mr-1" aria-hidden="true" />
                                     Save
                                 </Button>
                             </div>
@@ -139,9 +139,10 @@ const ReplyItem = memo(function ReplyItem({
                         variant="ghost"
                         size="sm"
                         onClick={onDelete}
+                        aria-label={`Delete reply by ${reply.author_name}`}
                         className="size-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
                     >
-                        <Trash2Icon className="size-3" />
+                        <Trash2Icon className="size-3" aria-hidden="true" />
                     </Button>
                 )}
             </div>
@@ -153,7 +154,7 @@ const ReplyItem = memo(function ReplyItem({
                         onClick={() => setIsEditing(true)}
                         className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
                     >
-                        <PencilIcon className="size-3 mr-1" />
+                        <PencilIcon className="size-3 mr-1" aria-hidden="true" />
                         Edit
                     </Button>
                 </div>
@@ -289,7 +290,7 @@ export const CommentCard = memo(function CommentCard({
                                 }}
                                 className="h-7 px-2 text-xs"
                             >
-                                <XIcon className="size-3 mr-1" />
+                                <XIcon className="size-3 mr-1" aria-hidden="true" />
                                 Cancel
                             </Button>
                             <Button
@@ -298,7 +299,7 @@ export const CommentCard = memo(function CommentCard({
                                 disabled={!editContent.trim()}
                                 className="h-7 px-2 text-xs"
                             >
-                                <CheckIcon className="size-3 mr-1" />
+                                <CheckIcon className="size-3 mr-1" aria-hidden="true" />
                                 Save
                             </Button>
                         </div>
@@ -369,7 +370,7 @@ export const CommentCard = memo(function CommentCard({
                                 }}
                                 className="h-7 px-2 text-xs"
                             >
-                                <XIcon className="size-3 mr-1" />
+                                <XIcon className="size-3 mr-1" aria-hidden="true" />
                                 Cancel
                             </Button>
                             <Button
@@ -378,7 +379,7 @@ export const CommentCard = memo(function CommentCard({
                                 disabled={!replyContent.trim()}
                                 className="h-7 px-2 text-xs"
                             >
-                                <SendIcon className="size-3 mr-1" />
+                                <SendIcon className="size-3 mr-1" aria-hidden="true" />
                                 Reply
                             </Button>
                         </div>
@@ -397,7 +398,7 @@ export const CommentCard = memo(function CommentCard({
                             onClick={() => setIsReplying(true)}
                             className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
                         >
-                            <MessageSquareIcon className="size-3 mr-1" />
+                            <MessageSquareIcon className="size-3 mr-1" aria-hidden="true" />
                             Reply
                         </Button>
 
@@ -408,7 +409,7 @@ export const CommentCard = memo(function CommentCard({
                                 onClick={() => setIsEditing(true)}
                                 className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
                             >
-                                <PencilIcon className="size-3 mr-1" />
+                                <PencilIcon className="size-3 mr-1" aria-hidden="true" />
                                 Edit
                             </Button>
                         )}
@@ -420,7 +421,7 @@ export const CommentCard = memo(function CommentCard({
                                 onClick={onDelete}
                                 className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
                             >
-                                <Trash2Icon className="size-3 mr-1" />
+                                <Trash2Icon className="size-3 mr-1" aria-hidden="true" />
                                 Delete
                             </Button>
                         )}
