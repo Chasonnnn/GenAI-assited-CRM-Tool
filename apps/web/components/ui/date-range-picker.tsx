@@ -102,8 +102,10 @@ export function DateRangePicker({
 
     const handleApply = () => {
         if (localRange.from && localRange.to) {
-            onCustomRangeChange?.(localRange)
+            // Some parents store the preset and the concrete range separately.
+            // Apply the preset first so the subsequent range update wins with the selected dates.
             onPresetChange('custom')
+            onCustomRangeChange?.(localRange)
             setOpen(false)
             setShowCalendar(false)
         }
