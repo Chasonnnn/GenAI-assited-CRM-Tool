@@ -160,9 +160,9 @@ export function InlineEditField({
                 aria-label={`Save ${fieldLabel}`}
             >
                 {isSaving ? (
-                    <Loader2Icon className="size-3 animate-spin" />
+                    <Loader2Icon className="size-3 animate-spin" aria-hidden="true" />
                 ) : (
-                    <CheckIcon className="size-3 text-green-600" />
+                    <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
                 )}
             </Button>
             <Button
@@ -174,7 +174,7 @@ export function InlineEditField({
                 disabled={isSaving}
                 aria-label={`Cancel ${fieldLabel}`}
             >
-                <XIcon className="size-3 text-destructive" />
+                <XIcon className="size-3 text-destructive" aria-hidden="true" />
             </Button>
         </div>
     )
