@@ -12,7 +12,7 @@ from typing import TypedDict
 from uuid import UUID
 
 from fastapi import Request
-from sqlalchemy import and_, func, literal, or_, select, true, union_all
+from sqlalchemy import and_, func, literal, literal_column, or_, select, true, union_all
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -287,10 +287,11 @@ def _global_search_unified(
             if branch_limit <= 0:
                 return stmt.limit(0)
 
-            selected_columns = stmt.selected_columns
+            # Using literal_column instead of stmt.selected_columns avoids expensive AST traversal overhead
+            # during SQLAlchemy query compilation, improving Python-side CPU performance.
             return stmt.order_by(
-                selected_columns["rank"].desc(),
-                selected_columns["created_at"].desc(),
+                literal_column("rank").desc(),
+                literal_column("created_at").desc(),
             ).limit(branch_limit)
 
         def _null_surrogate_id():
