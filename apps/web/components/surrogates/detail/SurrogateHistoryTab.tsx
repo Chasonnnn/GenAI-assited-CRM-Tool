@@ -1,5 +1,7 @@
 "use client"
 
+import type { ReactNode } from "react"
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatHeight } from "@/components/surrogates/detail/surrogate-detail-utils"
 
@@ -97,16 +99,43 @@ function getUserDisplayName(
     return "user"
 }
 
-function formatActivityDetails(type: string, details: Record<string, unknown>): string {
+function formatDateDetail(
+    value: unknown,
+    formatDateTime: (dateString: string) => string
+): string | null {
+    if (typeof value !== "string" || value.trim() === "") return null
+    return formatDateTime(value)
+}
+
+function addAiPrefix(lines: string[], details: Record<string, unknown>): string[] {
+    if (details?.source !== "ai" || lines.length === 0) return lines
+    return [`AI-generated · ${lines[0]}`, ...lines.slice(1)]
+}
+
+function formatActivityDetails(
+    type: string,
+    details: Record<string, unknown>,
+    formatDateTime: (dateString: string) => string,
+    createdAt: string
+): ReactNode {
     const aiPrefix = details?.source === "ai" ? "AI-generated" : ""
-    const withAiPrefix = (detail: string) => (aiPrefix ? `${aiPrefix} · ${detail}` : detail)
     const aiOnly = () => (aiPrefix ? aiPrefix : "")
+    const createdAtFormatted = formatDateDetail(createdAt, formatDateTime)
 
     switch (type) {
-        case "status_changed":
-            return withAiPrefix(
-                `${details.from} → ${details.to}${details.reason ? `: ${details.reason}` : ""}`
+        case "status_changed": {
+            const lines = addAiPrefix(
+                [
+                    `${details.from} → ${details.to}${details.reason ? `: ${details.reason}` : ""}`,
+                ],
+                details
             )
+            const effectiveAt = formatDateDetail(details.effective_at, formatDateTime)
+            const recordedAt = formatDateDetail(details.recorded_at, formatDateTime)
+            if (effectiveAt) lines.push(`Effective: ${effectiveAt}`)
+            if (recordedAt && recordedAt !== effectiveAt) lines.push(`Recorded: ${recordedAt}`)
+            return lines
+        }
         case "info_edited":
             if (isRecord(details.changes)) {
                 const changes = Object.entries(details.changes)
@@ -118,7 +147,7 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
                             )}`
                     )
                     .join(", ")
-                return aiPrefix ? withAiPrefix(changes) : changes
+                return aiPrefix ? `AI-generated · ${changes}` : changes
             }
             return aiOnly()
         case "assigned":
@@ -127,55 +156,69 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
                 const hasPreviousAssignee = Boolean(details.from_user_id || details.from_user_name)
                 if (hasPreviousAssignee) {
                     const fromUser = getUserDisplayName(details, "from_user_name", "from_user_id")
-                    return withAiPrefix(`Reassigned from ${fromUser} to ${toUser}`)
+                    return aiPrefix
+                        ? `AI-generated · Reassigned from ${fromUser} to ${toUser}`
+                        : `Reassigned from ${fromUser} to ${toUser}`
                 }
-                return withAiPrefix(`Assigned to ${toUser}`)
+                return aiPrefix ? `AI-generated · Assigned to ${toUser}` : `Assigned to ${toUser}`
             }
         case "unassigned":
             {
                 const fromUser = getUserDisplayName(details, "from_user_name", "from_user_id")
-                return withAiPrefix(`Removed assignment from ${fromUser}`)
+                return aiPrefix
+                    ? `AI-generated · Removed assignment from ${fromUser}`
+                    : `Removed assignment from ${fromUser}`
             }
         case "surrogate_assigned_to_queue": {
             const toQueue = getQueueName(details, "to_queue_name", "to_queue_id")
-            return withAiPrefix(`Assigned to ${toQueue}`)
+            return aiPrefix ? `AI-generated · Assigned to ${toQueue}` : `Assigned to ${toQueue}`
         }
         case "surrogate_claimed": {
             const fromQueue = getQueueName(details, "from_queue_name", "from_queue_id")
-            return withAiPrefix(`Claimed from ${fromQueue}`)
+            return aiPrefix ? `AI-generated · Claimed from ${fromQueue}` : `Claimed from ${fromQueue}`
         }
         case "surrogate_released": {
             const toQueue = getQueueName(details, "to_queue_name", "to_queue_id")
-            return withAiPrefix(`Released to ${toQueue}`)
+            return aiPrefix ? `AI-generated · Released to ${toQueue}` : `Released to ${toQueue}`
         }
         case "priority_changed":
             return aiPrefix
-                ? withAiPrefix(details.is_priority ? "Marked as priority" : "Removed priority")
+                ? `AI-generated · ${details.is_priority ? "Marked as priority" : "Removed priority"}`
                 : details.is_priority
                   ? "Marked as priority"
                   : "Removed priority"
         case "note_added": {
             const preview = details.preview ? String(details.preview) : ""
-            return preview ? withAiPrefix(preview) : withAiPrefix("Note added")
+            if (preview) return aiPrefix ? `AI-generated · ${preview}` : preview
+            return aiPrefix ? "AI-generated · Note added" : "Note added"
         }
         case "note_deleted": {
             const preview = details.preview ? String(details.preview) : ""
-            return preview ? withAiPrefix(`${preview} (deleted)`) : withAiPrefix("Note deleted")
+            if (preview) return aiPrefix ? `AI-generated · ${preview} (deleted)` : `${preview} (deleted)`
+            return aiPrefix ? "AI-generated · Note deleted" : "Note deleted"
         }
         case "attachment_added": {
             const filename = details.filename ? String(details.filename) : "file"
-            return withAiPrefix(`Uploaded: ${filename}`)
+            return aiPrefix ? `AI-generated · Uploaded: ${filename}` : `Uploaded: ${filename}`
         }
         case "attachment_deleted": {
             const filename = details.filename ? String(details.filename) : "file"
-            return withAiPrefix(`Deleted: ${filename}`)
+            return aiPrefix ? `AI-generated · Deleted: ${filename}` : `Deleted: ${filename}`
         }
         case "task_created":
-            return details.title ? withAiPrefix(`Task: ${String(details.title)}`) : aiOnly()
+            return details.title
+                ? aiPrefix
+                    ? `AI-generated · Task: ${String(details.title)}`
+                    : `Task: ${String(details.title)}`
+                : aiOnly()
         case "task_deleted":
             return details.title
-                ? withAiPrefix(`Deleted: ${String(details.title)}`)
-                : withAiPrefix("Task deleted")
+                ? aiPrefix
+                    ? `AI-generated · Deleted: ${String(details.title)}`
+                    : `Deleted: ${String(details.title)}`
+                : aiPrefix
+                    ? "AI-generated · Task deleted"
+                    : "Task deleted"
         case "email_sent": {
             const subject = details.subject ? `Subject: ${String(details.subject)}` : ""
             const provider = details.provider ? `via ${String(details.provider)}` : ""
@@ -187,7 +230,10 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
                   ? "template"
                   : ""
             const parts = [subject, provider, templateDetail].filter(Boolean)
-            return parts.length > 0 ? withAiPrefix(parts.join(" • ")) : withAiPrefix("Email sent")
+            if (parts.length > 0) {
+                return aiPrefix ? `AI-generated · ${parts.join(" • ")}` : parts.join(" • ")
+            }
+            return aiPrefix ? "AI-generated · Email sent" : "Email sent"
         }
         case "email_bounced": {
             const subject = details.subject ? `Subject: ${String(details.subject)}` : ""
@@ -195,7 +241,7 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
             const reason = details.reason ? `Reason: ${String(details.reason)}` : "Email bounced"
             const bounceType = details.bounce_type ? `${String(details.bounce_type)} bounce` : ""
             const parts = [subject, reason, bounceType, provider].filter(Boolean)
-            return withAiPrefix(parts.join(" • "))
+            return aiPrefix ? `AI-generated · ${parts.join(" • ")}` : parts.join(" • ")
         }
         case "contact_attempt": {
             const methods = Array.isArray(details.contact_methods)
@@ -203,9 +249,31 @@ function formatActivityDetails(type: string, details: Record<string, unknown>): 
                 : ""
             const outcome = String(details.outcome || "").replace(/_/g, " ")
             const backdated = details.is_backdated ? " (backdated)" : ""
-            const summary = `${methods}: ${outcome}${backdated}`
+            const lines = addAiPrefix([`${methods}: ${outcome}${backdated}`], details)
+            const attemptedAt = formatDateDetail(details.attempted_at, formatDateTime)
+            if (attemptedAt && attemptedAt !== createdAtFormatted) {
+                lines.push(`Attempted: ${attemptedAt}`)
+            }
             const notePreview = details.note_preview ? String(details.note_preview) : ""
-            return withAiPrefix([summary, notePreview].filter(Boolean).join(" • "))
+            const notes = details.notes ? String(details.notes) : ""
+            if (notePreview) lines.push(notePreview)
+            else if (notes) lines.push(notes)
+            return lines
+        }
+        case "interview_outcome_logged": {
+            const outcome = String(details.outcome || "").replace(/_/g, " ")
+            const lines = addAiPrefix([`Outcome: ${outcome}`], details)
+            const occurredAt = formatDateDetail(details.occurred_at, formatDateTime)
+            if (occurredAt) lines.push(`Occurred: ${occurredAt}`)
+            const scheduledStart = formatDateDetail(details.scheduled_start, formatDateTime)
+            const scheduledEnd = formatDateDetail(details.scheduled_end, formatDateTime)
+            if (scheduledStart || scheduledEnd) {
+                lines.push(
+                    `Appointment: ${[scheduledStart, scheduledEnd].filter(Boolean).join(" to ")}`
+                )
+            }
+            if (details.notes) lines.push(String(details.notes))
+            return lines
         }
         default:
             return aiOnly()
@@ -240,7 +308,24 @@ export function SurrogateHistoryTab({ activities, formatDateTime }: SurrogateHis
                                     </div>
                                     {entry.details && (
                                         <div className="pt-1 text-sm text-muted-foreground">
-                                            {formatActivityDetails(entry.activity_type, entry.details)}
+                                            {(() => {
+                                                const detailsContent = formatActivityDetails(
+                                                    entry.activity_type,
+                                                    entry.details,
+                                                    formatDateTime,
+                                                    entry.created_at
+                                                )
+                                                if (Array.isArray(detailsContent)) {
+                                                    return (
+                                                        <div className="space-y-1">
+                                                            {detailsContent.map((line) => (
+                                                                <div key={line}>{line}</div>
+                                                            ))}
+                                                        </div>
+                                                    )
+                                                }
+                                                return detailsContent
+                                            })()}
                                         </div>
                                     )}
                                 </div>

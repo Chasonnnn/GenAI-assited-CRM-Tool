@@ -45,6 +45,7 @@ describe("SurrogateHistoryTab", () => {
                         details: {
                             contact_methods: ["phone"],
                             outcome: "no_answer",
+                            attempted_at: "2024-01-01T09:30:00Z",
                             note_preview: "Left voicemail requesting callback",
                         },
                     },
@@ -55,7 +56,63 @@ describe("SurrogateHistoryTab", () => {
 
         expect(screen.getByText("Contact Attempt")).toBeInTheDocument()
         expect(screen.getByText(/phone: no answer/i)).toBeInTheDocument()
+        expect(screen.getByText(/attempted:/i)).toBeInTheDocument()
         expect(screen.getByText(/left voicemail requesting callback/i)).toBeInTheDocument()
+    })
+
+    it("renders interview outcome details", () => {
+        render(
+            <SurrogateHistoryTab
+                activities={[
+                    {
+                        id: "a-interview",
+                        activity_type: "interview_outcome_logged",
+                        actor_name: "Alex",
+                        created_at: "2024-01-05T00:00:00Z",
+                        details: {
+                            outcome: "no_show",
+                            occurred_at: "2024-01-04T16:30:00Z",
+                            scheduled_start: "2024-01-04T16:00:00Z",
+                            scheduled_end: "2024-01-04T16:30:00Z",
+                            notes: "Did not join the call.",
+                        },
+                    },
+                ]}
+                formatDateTime={formatDateTime}
+            />
+        )
+
+        expect(screen.getByText("Interview Outcome Logged")).toBeInTheDocument()
+        expect(screen.getByText(/outcome: no show/i)).toBeInTheDocument()
+        expect(screen.getByText(/occurred:/i)).toBeInTheDocument()
+        expect(screen.getByText(/appointment:/i)).toBeInTheDocument()
+        expect(screen.getByText(/did not join the call/i)).toBeInTheDocument()
+    })
+
+    it("renders backdated stage change timing details", () => {
+        render(
+            <SurrogateHistoryTab
+                activities={[
+                    {
+                        id: "a-stage",
+                        activity_type: "status_changed",
+                        actor_name: "Alex",
+                        created_at: "2024-01-06T00:00:00Z",
+                        details: {
+                            from: "New Unread",
+                            to: "Contacted",
+                            effective_at: "2024-01-03T12:00:00Z",
+                            recorded_at: "2024-01-06T00:00:00Z",
+                        },
+                    },
+                ]}
+                formatDateTime={formatDateTime}
+            />
+        )
+
+        expect(screen.getByText(/new unread → contacted/i)).toBeInTheDocument()
+        expect(screen.getByText(/effective:/i)).toBeInTheDocument()
+        expect(screen.getByText(/recorded:/i)).toBeInTheDocument()
     })
 
     it("renders email bounced activity details", () => {
