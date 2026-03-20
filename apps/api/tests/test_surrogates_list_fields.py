@@ -1,8 +1,9 @@
 import uuid
 from datetime import datetime, timezone
-import time
 
 import pytest
+from sqlalchemy import text
+from sqlalchemy import update as sql_update
 
 from app.db.models import Surrogate, SurrogateActivityLog
 
@@ -124,16 +125,24 @@ async def test_surrogates_list_supports_updated_at_sorting(authed_client, db):
     first_updated_at = datetime(2030, 1, 2, 9, 0, tzinfo=timezone.utc)
     second_updated_at = datetime(2030, 1, 3, 9, 0, tzinfo=timezone.utc)
 
-    first_row.full_name = "Updated Sort First Edited"
-    first_row.updated_at = first_updated_at
-    db.commit()
+    db.execute(text("ALTER TABLE surrogates DISABLE TRIGGER ALL"))
+    try:
+        db.execute(
+            sql_update(Surrogate)
+            .where(Surrogate.id == uuid.UUID(first_id))
+            .values(full_name="Updated Sort First Edited", updated_at=first_updated_at)
+        )
+        db.execute(
+            sql_update(Surrogate)
+            .where(Surrogate.id == uuid.UUID(second_id))
+            .values(full_name="Updated Sort Second Edited", updated_at=second_updated_at)
+        )
+        db.commit()
+    finally:
+        db.execute(text("ALTER TABLE surrogates ENABLE TRIGGER ALL"))
+        db.commit()
+
     db.refresh(first_row)
-
-    time.sleep(1.1)
-
-    second_row.full_name = "Updated Sort Second Edited"
-    second_row.updated_at = second_updated_at
-    db.commit()
     db.refresh(second_row)
 
     assert first_row.updated_at == first_updated_at
