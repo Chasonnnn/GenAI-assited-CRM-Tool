@@ -970,6 +970,7 @@ def _build_surrogate_filter_clauses(
     *,
     stage_id: UUID | None = None,
     source: SurrogateSource | None = None,
+    is_priority: bool | None = None,
     owner_id: UUID | None = None,
     q: str | None = None,
     include_archived: bool = False,
@@ -1072,6 +1073,9 @@ def _build_surrogate_filter_clauses(
     if source:
         filter_clauses.append(Surrogate.source == source.value)
 
+    if is_priority:
+        filter_clauses.append(Surrogate.is_priority.is_(True))
+
     if owner_id:
         filter_clauses.extend(
             [
@@ -1116,6 +1120,7 @@ def list_surrogate_created_dates(
     *,
     stage_id: UUID | None = None,
     source: SurrogateSource | None = None,
+    is_priority: bool | None = None,
     owner_id: UUID | None = None,
     q: str | None = None,
     include_archived: bool = False,
@@ -1132,6 +1137,7 @@ def list_surrogate_created_dates(
         org_id,
         stage_id=stage_id,
         source=source,
+        is_priority=is_priority,
         owner_id=owner_id,
         q=q,
         include_archived=include_archived,
@@ -1161,6 +1167,7 @@ def list_surrogates(
     cursor: str | None = None,
     stage_id: UUID | None = None,
     source: SurrogateSource | None = None,
+    is_priority: bool | None = None,
     owner_id: UUID | None = None,
     q: str | None = None,
     include_archived: bool = False,
@@ -1188,7 +1195,7 @@ def list_surrogates(
         created_to: Filter by creation date to (ISO format YYYY-MM-DD)
         exclude_stage_types: Stage types to exclude (e.g. ['post_approval'] for users without permission)
         dynamic_filter: Dynamic filter key (intelligent suggestions / attention links)
-        sort_by: Column to sort by (surrogate_number, full_name, state, race, source, created_at)
+        sort_by: Column to sort by
         sort_order: Sort direction ('asc' or 'desc')
         include_total: Whether to include total count in response
 
@@ -1311,6 +1318,9 @@ def list_surrogates(
     if source:
         filter_clauses.append(Surrogate.source == source.value)
 
+    if is_priority:
+        filter_clauses.append(Surrogate.is_priority.is_(True))
+
     # Assigned filter
     if owner_id:
         filter_clauses.extend(
@@ -1387,10 +1397,11 @@ def list_surrogates(
         "race": Surrogate.race,
         "source": Surrogate.source,
         "created_at": Surrogate.created_at,
+        "updated_at": Surrogate.updated_at,
     }
 
     if sort_by and sort_by in sortable_columns:
-        if sort_by == "created_at":
+        if sort_by in {"created_at", "updated_at"}:
             query = query.order_by(order_func(sortable_columns[sort_by]), order_func(Surrogate.id))
         else:
             query = query.order_by(order_func(sortable_columns[sort_by]))
@@ -1773,9 +1784,10 @@ def list_surrogate_activity(
     """List activity log items for a case."""
     from app.db.models import EmailTemplate, Membership, Queue, SurrogateActivityLog, User
 
-    filters = [
+    activity_filters = [
         SurrogateActivityLog.surrogate_id == surrogate_id,
         SurrogateActivityLog.organization_id == org_id,
+        SurrogateActivityLog.activity_type != SurrogateActivityType.STATUS_CHANGED.value,
     ]
 
     base_query = (
@@ -1784,22 +1796,31 @@ def list_surrogate_activity(
             User.display_name.label("actor_name"),
         )
         .outerjoin(User, SurrogateActivityLog.actor_user_id == User.id)
-        .filter(*filters)
+        .filter(*activity_filters)
     )
 
-    total = db.query(func.count(SurrogateActivityLog.id)).filter(*filters).scalar() or 0
-    offset = (page - 1) * per_page
-    rows = (
+    activity_rows = (
         base_query.order_by(SurrogateActivityLog.created_at.desc())
-        .offset(offset)
-        .limit(per_page)
+        .all()
+    )
+    status_history_rows = (
+        db.query(
+            SurrogateStatusHistory,
+            User.display_name.label("actor_name"),
+        )
+        .outerjoin(User, SurrogateStatusHistory.changed_by_user_id == User.id)
+        .filter(
+            SurrogateStatusHistory.surrogate_id == surrogate_id,
+            SurrogateStatusHistory.organization_id == org_id,
+        )
+        .order_by(SurrogateStatusHistory.changed_at.desc())
         .all()
     )
 
     queue_ids: set[UUID] = set()
     user_ids: set[UUID] = set()
     template_ids: set[UUID] = set()
-    for row in rows:
+    for row in activity_rows:
         details = row.SurrogateActivityLog.details
         if not isinstance(details, dict):
             continue
@@ -1836,6 +1857,11 @@ def list_surrogate_activity(
                 template_ids.add(UUID(str(template_id)))
             except (TypeError, ValueError):
                 pass
+
+    for history_row in status_history_rows:
+        history = history_row.SurrogateStatusHistory
+        if history.approved_by_user_id:
+            user_ids.add(history.approved_by_user_id)
 
     queue_name_by_id: dict[str, str] = {}
     if queue_ids:
@@ -1875,7 +1901,7 @@ def list_surrogate_activity(
         template_name_by_id = {str(template_id): name for template_id, name in template_rows}
 
     items = []
-    for row in rows:
+    for row in activity_rows:
         activity = row.SurrogateActivityLog
         details = activity.details
         if isinstance(details, dict):
@@ -1925,7 +1951,59 @@ def list_surrogate_activity(
             }
         )
 
-    return items, total
+    for history_row in status_history_rows:
+        history = history_row.SurrogateStatusHistory
+        from_label = history.from_label_snapshot or (
+            "Start" if history.from_stage_id is None else "Unknown"
+        )
+        to_label = history.to_label_snapshot or "Unknown"
+
+        items.append(
+            {
+                "id": history.id,
+                "activity_type": SurrogateActivityType.STATUS_CHANGED.value,
+                "actor_user_id": history.changed_by_user_id,
+                "actor_name": history_row.actor_name,
+                "details": {
+                    "from": from_label,
+                    "to": to_label,
+                    "reason": history.reason,
+                    "effective_at": history.effective_at.isoformat()
+                    if history.effective_at
+                    else None,
+                    "recorded_at": history.recorded_at.isoformat()
+                    if history.recorded_at
+                    else None,
+                    "requested_at": history.requested_at.isoformat()
+                    if history.requested_at
+                    else None,
+                    "approved_by_user_id": str(history.approved_by_user_id)
+                    if history.approved_by_user_id
+                    else None,
+                    "approved_by_name": user_name_by_id.get(str(history.approved_by_user_id))
+                    if history.approved_by_user_id
+                    else None,
+                    "approved_at": history.approved_at.isoformat()
+                    if history.approved_at
+                    else None,
+                    "is_undo": history.is_undo,
+                    "request_id": str(history.request_id) if history.request_id else None,
+                },
+                "created_at": history.effective_at or history.changed_at,
+            }
+        )
+
+    items.sort(
+        key=lambda item: (
+            item["created_at"],
+            str(item["id"]),
+        ),
+        reverse=True,
+    )
+    total = len(items)
+    offset = (page - 1) * per_page
+
+    return items[offset : offset + per_page], total
 
 
 def log_interview_outcome(

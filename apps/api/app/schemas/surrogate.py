@@ -582,6 +582,7 @@ class SurrogateListItem(BaseModel):
     bmi: float | None = None  # Calculated from height_ft and weight_lb
     last_activity_at: datetime | None = None
     created_at: datetime
+    updated_at: datetime
 
     model_config = {"from_attributes": True}
 

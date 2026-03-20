@@ -199,4 +199,5 @@ def _surrogate_to_list_item(surrogate, db: Session, last_activity_at=None) -> Su
         bmi=bmi,
         last_activity_at=last_activity_at,
         created_at=surrogate.created_at,
+        updated_at=surrogate.updated_at,
     )

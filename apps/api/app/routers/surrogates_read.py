@@ -169,6 +169,10 @@ def list_surrogates(
     ),
     stage_id: UUID | None = None,
     source: SurrogateSource | None = None,
+    is_priority: bool | None = Query(
+        None,
+        description="When true, only include priority surrogates",
+    ),
     owner_id: UUID | None = None,
     q: str | None = Query(None, max_length=100),
     include_archived: bool = False,
@@ -209,6 +213,7 @@ def list_surrogates(
             cursor=cursor,
             stage_id=stage_id,
             source=source,
+            is_priority=is_priority,
             owner_id=owner_id,
             q=q,
             include_archived=include_archived,
@@ -254,6 +259,7 @@ def list_surrogates(
             "owner_type": owner_type,
             "queue_id": str(queue_id) if queue_id else None,
             "source": source.value if source else None,
+            "is_priority": is_priority,
             "q_type": q_type,
             "created_from": created_from,
             "created_to": created_to,
@@ -281,6 +287,10 @@ def list_surrogate_created_dates(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     stage_id: UUID | None = None,
     source: SurrogateSource | None = None,
+    is_priority: Annotated[bool | None, "fastapi_param"] = Query(
+        None,
+        description="When true, only include priority surrogates",
+    ),
     owner_id: UUID | None = None,
     q: Annotated[str | None, "fastapi_param"] = Query(None, max_length=100),
     include_archived: bool = False,
@@ -312,6 +322,7 @@ def list_surrogate_created_dates(
             org_id=session.org_id,
             stage_id=stage_id,
             source=source,
+            is_priority=is_priority,
             owner_id=owner_id,
             q=q,
             include_archived=include_archived,
@@ -596,9 +607,16 @@ def get_surrogate_history(
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
 
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+
     history = surrogate_service.get_status_history(db, surrogate_id, session.org_id)
 
-    user_ids = {h.changed_by_user_id for h in history if h.changed_by_user_id}
+    user_ids = {
+        user_id
+        for h in history
+        for user_id in (h.changed_by_user_id, h.approved_by_user_id)
+        if user_id
+    }
     users_by_id = user_service.get_display_names_by_ids(db, user_ids)
 
     result = []
@@ -616,6 +634,14 @@ def get_surrogate_history(
                 changed_by_name=changed_by_name,
                 reason=h.reason,
                 changed_at=h.changed_at,
+                effective_at=h.effective_at,
+                recorded_at=h.recorded_at,
+                requested_at=h.requested_at,
+                approved_by_user_id=h.approved_by_user_id,
+                approved_by_name=users_by_id.get(h.approved_by_user_id),
+                approved_at=h.approved_at,
+                is_undo=h.is_undo,
+                request_id=h.request_id,
             )
         )
 

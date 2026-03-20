@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone
+import time
 
 import pytest
 
@@ -74,6 +75,153 @@ async def test_surrogates_list_does_not_fallback_to_updated_at_for_last_activity
 
     assert match is not None
     assert match["last_activity_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_surrogates_list_includes_updated_at(authed_client):
+    payload = {
+        "full_name": "Updated At Test",
+        "email": f"updated-at-{uuid.uuid4().hex[:8]}@example.com",
+    }
+    create_res = await authed_client.post("/surrogates", json=payload)
+    assert create_res.status_code == 201, create_res.text
+    created_id = create_res.json()["id"]
+
+    list_res = await authed_client.get("/surrogates")
+    assert list_res.status_code == 200, list_res.text
+    match = next((item for item in list_res.json()["items"] if item["id"] == created_id), None)
+
+    assert match is not None
+    assert match["updated_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_surrogates_list_supports_updated_at_sorting(authed_client, db):
+    first_res = await authed_client.post(
+        "/surrogates",
+        json={
+            "full_name": "Updated Sort First",
+            "email": f"updated-sort-first-{uuid.uuid4().hex[:8]}@example.com",
+        },
+    )
+    assert first_res.status_code == 201, first_res.text
+    first_id = first_res.json()["id"]
+
+    second_res = await authed_client.post(
+        "/surrogates",
+        json={
+            "full_name": "Updated Sort Second",
+            "email": f"updated-sort-second-{uuid.uuid4().hex[:8]}@example.com",
+        },
+    )
+    assert second_res.status_code == 201, second_res.text
+    second_id = second_res.json()["id"]
+
+    first_row = db.query(Surrogate).filter(Surrogate.id == uuid.UUID(first_id)).first()
+    second_row = db.query(Surrogate).filter(Surrogate.id == uuid.UUID(second_id)).first()
+    assert first_row is not None and second_row is not None
+
+    first_updated_at = datetime(2030, 1, 2, 9, 0, tzinfo=timezone.utc)
+    second_updated_at = datetime(2030, 1, 3, 9, 0, tzinfo=timezone.utc)
+
+    first_row.full_name = "Updated Sort First Edited"
+    first_row.updated_at = first_updated_at
+    db.commit()
+    db.refresh(first_row)
+
+    time.sleep(1.1)
+
+    second_row.full_name = "Updated Sort Second Edited"
+    second_row.updated_at = second_updated_at
+    db.commit()
+    db.refresh(second_row)
+
+    assert first_row.updated_at == first_updated_at
+    assert second_row.updated_at == second_updated_at
+    assert second_row.updated_at > first_row.updated_at
+
+    desc_res = await authed_client.get(
+        "/surrogates",
+        params={"sort_by": "updated_at", "sort_order": "desc"},
+    )
+    assert desc_res.status_code == 200, desc_res.text
+    desc_ids = [item["id"] for item in desc_res.json()["items"]]
+    assert desc_ids.index(second_id) < desc_ids.index(first_id)
+
+    asc_res = await authed_client.get(
+        "/surrogates",
+        params={"sort_by": "updated_at", "sort_order": "asc"},
+    )
+    assert asc_res.status_code == 200, asc_res.text
+    asc_ids = [item["id"] for item in asc_res.json()["items"]]
+    assert asc_ids.index(first_id) < asc_ids.index(second_id)
+
+
+@pytest.mark.asyncio
+async def test_surrogates_list_filters_priority_only(authed_client):
+    priority_res = await authed_client.post(
+        "/surrogates",
+        json={
+            "full_name": "Priority Lead",
+            "email": f"priority-lead-{uuid.uuid4().hex[:8]}@example.com",
+            "is_priority": True,
+        },
+    )
+    assert priority_res.status_code == 201, priority_res.text
+    priority_id = priority_res.json()["id"]
+
+    normal_res = await authed_client.post(
+        "/surrogates",
+        json={
+            "full_name": "Normal Lead",
+            "email": f"normal-lead-{uuid.uuid4().hex[:8]}@example.com",
+        },
+    )
+    assert normal_res.status_code == 201, normal_res.text
+    normal_id = normal_res.json()["id"]
+
+    list_res = await authed_client.get("/surrogates", params={"is_priority": "true"})
+    assert list_res.status_code == 200, list_res.text
+    ids = {item["id"] for item in list_res.json()["items"]}
+
+    assert priority_id in ids
+    assert normal_id not in ids
+
+
+@pytest.mark.asyncio
+async def test_surrogate_created_dates_filters_priority_only(authed_client, db):
+    priority_res = await authed_client.post(
+        "/surrogates",
+        json={
+            "full_name": "Priority Created Date",
+            "email": f"priority-created-{uuid.uuid4().hex[:8]}@example.com",
+            "is_priority": True,
+        },
+    )
+    assert priority_res.status_code == 201, priority_res.text
+    priority_id = priority_res.json()["id"]
+
+    normal_res = await authed_client.post(
+        "/surrogates",
+        json={
+            "full_name": "Normal Created Date",
+            "email": f"normal-created-{uuid.uuid4().hex[:8]}@example.com",
+        },
+    )
+    assert normal_res.status_code == 201, normal_res.text
+    normal_id = normal_res.json()["id"]
+
+    priority_row = db.query(Surrogate).filter(Surrogate.id == uuid.UUID(priority_id)).first()
+    normal_row = db.query(Surrogate).filter(Surrogate.id == uuid.UUID(normal_id)).first()
+    assert priority_row is not None and normal_row is not None
+
+    priority_row.created_at = datetime(2025, 1, 10, 12, 0, tzinfo=timezone.utc)
+    normal_row.created_at = datetime(2025, 1, 11, 12, 0, tzinfo=timezone.utc)
+    db.commit()
+
+    dates_res = await authed_client.get("/surrogates/created-dates", params={"is_priority": "true"})
+    assert dates_res.status_code == 200, dates_res.text
+    assert dates_res.json() == ["2025-01-10"]
 
 
 @pytest.mark.asyncio
