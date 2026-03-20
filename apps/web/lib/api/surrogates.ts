@@ -44,6 +44,7 @@ export interface SurrogateListParams {
     include_total?: boolean;
     stage_id?: string;
     source?: SurrogateSource;
+    is_priority?: boolean;
     owner_id?: string;
     q?: string;
     include_archived?: boolean;
@@ -86,6 +87,7 @@ export interface IntelligentSuggestionSummary {
 export interface SurrogateCreatedDatesParams {
     stage_id?: string;
     source?: SurrogateSource;
+    is_priority?: boolean;
     owner_id?: string;
     q?: string;
     include_archived?: boolean;
@@ -246,6 +248,7 @@ export function getSurrogates(params: SurrogateListParams = {}): Promise<Surroga
     }
     if (params.stage_id) searchParams.set('stage_id', params.stage_id);
     if (params.source) searchParams.set('source', params.source);
+    if (params.is_priority) searchParams.set('is_priority', 'true');
     if (params.owner_id) searchParams.set('owner_id', params.owner_id);
     if (params.q) searchParams.set('q', params.q);
     if (params.include_archived) searchParams.set('include_archived', 'true');
@@ -271,6 +274,7 @@ export function getSurrogateCreatedDates(
     const searchParams = new URLSearchParams();
     if (params.stage_id) searchParams.set('stage_id', params.stage_id);
     if (params.source) searchParams.set('source', params.source);
+    if (params.is_priority) searchParams.set('is_priority', 'true');
     if (params.owner_id) searchParams.set('owner_id', params.owner_id);
     if (params.q) searchParams.set('q', params.q);
     if (params.include_archived) searchParams.set('include_archived', 'true');

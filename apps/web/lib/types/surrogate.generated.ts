@@ -25,6 +25,7 @@ export interface SurrogateListItem {
     bmi?: number | null;
     last_activity_at?: string | null;
     created_at: string;
+    updated_at: string;
 }
 
 export interface SurrogateRead {

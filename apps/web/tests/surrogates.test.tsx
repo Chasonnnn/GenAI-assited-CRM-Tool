@@ -376,7 +376,7 @@ describe('SurrogatesPage', () => {
         )
     })
 
-    it('shows assignee filter for admin users only', () => {
+    it('keeps assignee filtering behind More Filters', () => {
         mockUseAssignees.mockReturnValue({
             data: [{ id: 'user-123', name: 'Case Manager A', role: 'case_manager' }],
         })
@@ -387,7 +387,8 @@ describe('SurrogatesPage', () => {
         })
 
         const { rerender } = render(<SurrogatesPage />)
-        expect(screen.getByText('All Assignees')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'More Filters' })).toBeInTheDocument()
+        expect(screen.queryByText('All Assignees')).not.toBeInTheDocument()
 
         mockUseAuth.mockReturnValue({ user: { role: 'case_manager', user_id: 'cm-1' } })
         rerender(<SurrogatesPage />)
@@ -459,7 +460,7 @@ describe('SurrogatesPage', () => {
         )
     })
 
-    it('shows Reset Filter when only owner_id is active and clears filters', () => {
+    it('shows Reset when only owner_id is active and clears filters', () => {
         mockSearchParams.set('owner_id', 'user-123')
         mockUseSurrogates.mockReturnValue({
             data: { items: [], total: 0, pages: 0 },
@@ -469,7 +470,7 @@ describe('SurrogatesPage', () => {
 
         render(<SurrogatesPage />)
 
-        fireEvent.click(screen.getByRole('button', { name: 'Reset Filter' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
 
         expect(mockRouterReplace).toHaveBeenCalledWith('/surrogates', { scroll: false })
     })
@@ -500,5 +501,151 @@ describe('SurrogatesPage', () => {
 
         render(<SurrogatesPage />)
         expect(screen.getByText('Intelligent suggestions are not available right now.')).toBeInTheDocument()
+    })
+
+    it('uses More Filters entry point instead of inline secondary filters', () => {
+        mockUseAssignees.mockReturnValue({
+            data: [{ id: 'user-123', name: 'Case Manager A', role: 'case_manager' }],
+        })
+        mockUseQueues.mockReturnValue({
+            data: [{ id: 'queue-1', name: 'Unassigned' }],
+        })
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        expect(screen.getByRole('button', { name: 'More Filters' })).toBeInTheDocument()
+        expect(screen.queryByText('All Sources')).not.toBeInTheDocument()
+        expect(screen.queryByText('All Queues')).not.toBeInTheDocument()
+        expect(screen.queryByText('All Assignees')).not.toBeInTheDocument()
+    })
+
+    it('applies priority-only filter from URL params', () => {
+        mockSearchParams.set('priority', 'only')
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        expect(mockUseSurrogates).toHaveBeenCalledWith(
+            expect.objectContaining({
+                is_priority: true,
+            })
+        )
+        expect(mockUseSurrogateCreatedDates).toHaveBeenCalledWith(
+            expect.objectContaining({
+                is_priority: true,
+            }),
+        )
+    })
+
+    it('renders active chips for secondary filters', () => {
+        mockSearchParams.set('priority', 'only')
+        mockSearchParams.set('source', 'manual')
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        expect(screen.getByText('Priority Only')).toBeInTheDocument()
+        expect(screen.getByText('Source: Manual')).toBeInTheDocument()
+    })
+
+    it('sorts by updated_at when Last Modified header is clicked', () => {
+        mockUseSurrogates.mockReturnValue({
+            data: {
+                items: [
+                    {
+                        id: '1',
+                        surrogate_number: 'S12345',
+                        full_name: 'John Doe',
+                        stage_id: 's1',
+                        stage_slug: 'new_unread',
+                        stage_type: 'intake',
+                        status_label: 'New Unread',
+                        source: 'manual',
+                        email: 'john@example.com',
+                        phone: null,
+                        state: null,
+                        race: null,
+                        owner_type: 'user',
+                        owner_id: 'u1',
+                        owner_name: 'Owner',
+                        created_at: '2024-03-03T12:00:00.000Z',
+                        updated_at: '2024-02-02T12:00:00.000Z',
+                        last_activity_at: '2024-01-01T12:00:00.000Z',
+                        is_priority: false,
+                        is_archived: false,
+                        age: null,
+                        bmi: null,
+                    },
+                ],
+                total: 1,
+                pages: 1,
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+        fireEvent.click(screen.getByRole('columnheader', { name: /last modified/i }))
+
+        expect(mockUseSurrogates).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+                sort_by: 'updated_at',
+            })
+        )
+    })
+
+    it('renders Last Modified from updated_at instead of last_activity_at', () => {
+        mockUseSurrogates.mockReturnValue({
+            data: {
+                items: [
+                    {
+                        id: '1',
+                        surrogate_number: 'S12345',
+                        full_name: 'John Doe',
+                        stage_id: 's1',
+                        stage_slug: 'new_unread',
+                        stage_type: 'intake',
+                        status_label: 'New Unread',
+                        source: 'manual',
+                        email: 'john@example.com',
+                        phone: null,
+                        state: null,
+                        race: null,
+                        owner_type: 'user',
+                        owner_id: 'u1',
+                        owner_name: 'Owner',
+                        created_at: '2024-03-03T12:00:00.000Z',
+                        updated_at: '2024-02-02T12:00:00.000Z',
+                        last_activity_at: '2024-01-01T12:00:00.000Z',
+                        is_priority: false,
+                        is_archived: false,
+                        age: null,
+                        bmi: null,
+                    },
+                ],
+                total: 1,
+                pages: 1,
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        expect(screen.getByText('Feb 02, 2024')).toBeInTheDocument()
+        expect(screen.queryByText('Jan 01, 2024')).not.toBeInTheDocument()
     })
 })
