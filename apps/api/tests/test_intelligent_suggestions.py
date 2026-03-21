@@ -7,7 +7,7 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.core.encryption import hash_email
 from app.db.enums import OwnerType, SurrogateSource
-from app.db.models import Surrogate, SurrogateActivityLog
+from app.db.models import PipelineStage, Surrogate, SurrogateActivityLog
 
 
 def _ensure_intelligent_schema(db) -> None:
@@ -291,6 +291,55 @@ async def test_surrogates_dynamic_filter_attention_unreached_excludes_recent_act
     ids = {item["id"] for item in data["items"]}
     assert str(stale.id) in ids
     assert str(recently_active.id) not in ids
+
+
+@pytest.mark.asyncio
+async def test_surrogates_dynamic_filter_attention_stuck_matches_dashboard_stage_scope(
+    authed_client,
+    db,
+    test_org,
+    default_stage,
+    test_user,
+):
+    post_approval_stage = PipelineStage(
+        id=uuid.uuid4(),
+        pipeline_id=default_stage.pipeline_id,
+        slug="approved",
+        label="Approved",
+        color="#10B981",
+        stage_type="post_approval",
+        order=2,
+        is_active=True,
+        is_intake_stage=False,
+    )
+    now = datetime.now(timezone.utc)
+    stuck = Surrogate(
+        id=uuid.uuid4(),
+        surrogate_number="S91005",
+        organization_id=test_org.id,
+        stage_id=post_approval_stage.id,
+        status_label=post_approval_stage.label,
+        source=SurrogateSource.MANUAL.value,
+        owner_type=OwnerType.USER.value,
+        owner_id=test_user.id,
+        full_name="Attention Stuck Post Approval",
+        email="attention-stuck-post-approval@example.com",
+        email_hash=hash_email("attention-stuck-post-approval@example.com"),
+        created_at=now - timedelta(days=35),
+        updated_at=now - timedelta(days=35),
+        last_contacted_at=now,
+    )
+    db.add_all([post_approval_stage, stuck])
+    db.flush()
+
+    response = await authed_client.get(
+        "/surrogates",
+        params={"dynamic_filter": "attention_stuck"},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    ids = {item["id"] for item in data["items"]}
+    assert str(stuck.id) in ids
 
 
 @pytest.mark.asyncio

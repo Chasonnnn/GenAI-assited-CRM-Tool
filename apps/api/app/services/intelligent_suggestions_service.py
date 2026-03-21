@@ -853,7 +853,9 @@ def _attention_stuck_ids(
         .filter(
             Surrogate.organization_id == org_id,
             Surrogate.is_archived.is_(False),
-            PipelineStage.stage_type == "intake",
+            # Keep this aligned with dashboard_service.get_attention_items so
+            # attention card links and the filtered list view show the same records.
+            PipelineStage.stage_type != "paused",
             last_change_col < cutoff,
             *owner_filters,
         )
