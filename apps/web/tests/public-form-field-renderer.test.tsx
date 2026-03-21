@@ -170,4 +170,34 @@ describe("PublicFormFieldRenderer", () => {
         expect(screen.getByLabelText(/height feet/i)).toHaveValue("")
         expect(screen.getByLabelText(/height inches/i)).toHaveValue("")
     })
+
+    it("renders select option labels with the same small type scale as other controls", () => {
+        const updateField = vi.fn()
+        const setDatePickerOpen = vi.fn()
+        const field: FormField = {
+            key: "race",
+            label: "What is your race",
+            type: "radio",
+            required: true,
+            options: [
+                { label: "Asian", value: "asian" },
+                { label: "Black", value: "black" },
+                { label: "Option 3", value: "option_3" },
+            ],
+        }
+
+        render(
+            <PublicFormFieldRenderer
+                field={field}
+                value={null}
+                updateField={updateField}
+                datePickerOpen={{}}
+                setDatePickerOpen={setDatePickerOpen}
+            />,
+        )
+
+        expect(screen.getByText("Asian")).toHaveClass("text-sm")
+        expect(screen.getByText("Black")).toHaveClass("text-sm")
+        expect(screen.getByText("Option 3")).toHaveClass("text-sm")
+    })
 })

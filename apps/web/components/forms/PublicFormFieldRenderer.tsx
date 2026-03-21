@@ -131,9 +131,9 @@ function HeightFieldInput({
                         className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm shadow-none"
                     >
                         <option value="">ft</option>
-                        {Array.from({ length: 9 }, (_, index) => (
-                            <option key={index} value={index}>
-                                {index} ft
+                        {Array.from({ length: 9 }, (_, value) => value).map((value) => (
+                            <option key={`feet-${value}`} value={value}>
+                                {value} ft
                             </option>
                         ))}
                     </select>
@@ -153,9 +153,9 @@ function HeightFieldInput({
                         className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm shadow-none"
                     >
                         <option value="">in</option>
-                        {Array.from({ length: 12 }, (_, index) => (
-                            <option key={index} value={index}>
-                                {index} in
+                        {Array.from({ length: 12 }, (_, value) => value).map((value) => (
+                            <option key={`inches-${value}`} value={value}>
+                                {value} in
                             </option>
                         ))}
                     </select>
@@ -199,7 +199,7 @@ function OptionCard({
                 >
                     {selected && <CheckIcon className="size-4 text-white" />}
                 </div>
-                <div className="font-medium text-stone-900">{label}</div>
+                <div className="text-sm font-medium text-stone-900">{label}</div>
             </div>
         </button>
     )
