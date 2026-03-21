@@ -62,25 +62,23 @@ function PaletteFieldTile({
             onDragEnd={onFieldDragEnd}
             aria-label={`${isPreset ? "Add preset" : "Add"} ${field.label} field`}
             className={cn(
-                "group flex min-h-0 flex-col items-start gap-2.5 rounded-2xl border border-transparent px-2 py-2.5 text-left transition-colors active:cursor-grabbing",
+                "group flex min-h-0 flex-col items-center gap-1.5 rounded-xl border border-transparent px-1.5 py-2 text-center transition-colors active:cursor-grabbing",
                 isPreset
                     ? "hover:bg-sky-50/75 focus-visible:border-sky-200"
                     : "hover:bg-emerald-50/70 focus-visible:border-emerald-200",
             )}
         >
-            <div className="flex w-full items-start justify-between gap-3">
-                <span
-                    className={cn(
-                        "flex size-14 items-center justify-center rounded-[18px] border bg-white text-slate-900 transition-transform group-hover:scale-[1.02]",
-                        isPreset
-                            ? "border-sky-200/90 bg-sky-50/70"
-                            : "border-emerald-200/90 bg-emerald-50/65",
-                    )}
-                >
-                    <Icon className="size-[18px]" aria-hidden="true" />
-                </span>
-            </div>
-            <div className="pr-1 text-[15px] font-medium leading-snug text-slate-950">{field.label}</div>
+            <span
+                className={cn(
+                    "flex size-12 items-center justify-center rounded-2xl border bg-white text-slate-900 transition-transform group-hover:scale-[1.02]",
+                    isPreset
+                        ? "border-sky-200/90 bg-sky-50/70"
+                        : "border-emerald-200/90 bg-emerald-50/65",
+                )}
+            >
+                <Icon className="size-4" aria-hidden="true" />
+            </span>
+            <div className="w-full text-[13px] font-medium leading-tight text-slate-950">{field.label}</div>
         </button>
     )
 }
@@ -195,7 +193,7 @@ export function FormBuilderPalette({
                                             </h3>
                                             <div
                                                 data-testid="form-builder-palette-field-grid"
-                                                className="grid grid-cols-2 gap-2.5 2xl:grid-cols-3"
+                                                className="grid grid-cols-4 gap-x-1.5 gap-y-2.5"
                                             >
                                                 {section.fields.map((field) => (
                                                     <PaletteFieldTile
