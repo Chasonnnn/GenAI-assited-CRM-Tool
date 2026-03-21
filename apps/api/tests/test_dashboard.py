@@ -12,7 +12,14 @@ from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.security import create_session_token
 from app.db.enums import OwnerType, Role, SurrogateSource
-from app.db.models import Membership, Surrogate, SurrogateActivityLog, SurrogateStatusHistory, User
+from app.db.models import (
+    Membership,
+    PipelineStage,
+    Surrogate,
+    SurrogateActivityLog,
+    SurrogateStatusHistory,
+    User,
+)
 from app.main import app
 from app.services import pipeline_service, session_service
 
@@ -453,6 +460,85 @@ async def test_attention_stuck_excludes_on_hold(db, test_org):
         assert data["unreached_count"] == 0
         assert data["stuck_count"] == 0
         assert data["stuck_surrogates"] == []
+
+
+@pytest.mark.asyncio
+async def test_attention_stuck_excludes_terminal_and_paused_stage_keys_even_with_legacy_types(
+    db, test_org, default_stage
+):
+    async with role_client(db, test_org, Role.CASE_MANAGER) as (client, user):
+        legacy_excluded_stages = [
+            PipelineStage(
+                id=uuid.uuid4(),
+                pipeline_id=default_stage.pipeline_id,
+                stage_key=slug,
+                slug=slug,
+                label=label,
+                color="#EF4444",
+                stage_type="intake",
+                order=default_stage.order + offset,
+                is_active=True,
+                is_intake_stage=True,
+            )
+            for offset, (slug, label) in enumerate(
+                (
+                    ("on_hold", "On-Hold"),
+                    ("lost", "Lost"),
+                    ("disqualified", "Disqualified"),
+                ),
+                start=1,
+            )
+        ]
+        db.add_all(legacy_excluded_stages)
+        db.flush()
+
+        now = datetime.now(timezone.utc)
+        active_stuck = Surrogate(
+            id=uuid.uuid4(),
+            surrogate_number="S20007",
+            organization_id=test_org.id,
+            stage_id=default_stage.id,
+            status_label=default_stage.label,
+            source=SurrogateSource.MANUAL.value,
+            owner_type=OwnerType.USER.value,
+            owner_id=user.id,
+            full_name="Active Stuck Surrogate",
+            email="active-stuck@example.com",
+            email_hash=hash_email("active-stuck@example.com"),
+            created_at=now - timedelta(days=30),
+            updated_at=now - timedelta(days=30),
+            last_contacted_at=now,
+        )
+        excluded_surrogates = [
+            Surrogate(
+                id=uuid.uuid4(),
+                surrogate_number=f"S2000{8 + index}",
+                organization_id=test_org.id,
+                stage_id=stage.id,
+                status_label=stage.label,
+                source=SurrogateSource.MANUAL.value,
+                owner_type=OwnerType.USER.value,
+                owner_id=user.id,
+                full_name=f"Excluded {stage.label}",
+                email=f"excluded-{stage.stage_key}@example.com",
+                email_hash=hash_email(f"excluded-{stage.stage_key}@example.com"),
+                created_at=now - timedelta(days=30),
+                updated_at=now - timedelta(days=30),
+                last_contacted_at=now,
+            )
+            for index, stage in enumerate(legacy_excluded_stages)
+        ]
+        db.add(active_stuck)
+        db.add_all(excluded_surrogates)
+        db.flush()
+
+        response = await client.get("/dashboard/attention?days_stuck=14")
+        assert response.status_code == 200
+        data = response.json()
+
+        stuck_ids = {item["id"] for item in data["stuck_surrogates"]}
+        assert data["stuck_count"] == 1
+        assert stuck_ids == {str(active_stuck.id)}
 
 
 @pytest.mark.asyncio

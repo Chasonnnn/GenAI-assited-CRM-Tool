@@ -343,6 +343,99 @@ async def test_surrogates_dynamic_filter_attention_stuck_matches_dashboard_stage
 
 
 @pytest.mark.asyncio
+async def test_surrogates_dynamic_filter_attention_stuck_excludes_terminal_and_paused_stage_keys(
+    authed_client,
+    db,
+    test_org,
+    default_stage,
+    test_user,
+):
+    post_approval_stage = PipelineStage(
+        id=uuid.uuid4(),
+        pipeline_id=default_stage.pipeline_id,
+        slug="ready_to_match",
+        stage_key="ready_to_match",
+        label="Ready to Match",
+        color="#0EA5E9",
+        stage_type="post_approval",
+        order=2,
+        is_active=True,
+        is_intake_stage=False,
+    )
+    legacy_excluded_stages = [
+        PipelineStage(
+            id=uuid.uuid4(),
+            pipeline_id=default_stage.pipeline_id,
+            stage_key=slug,
+            slug=slug,
+            label=label,
+            color="#EF4444",
+            stage_type="intake",
+            order=3 + index,
+            is_active=True,
+            is_intake_stage=True,
+        )
+        for index, (slug, label) in enumerate(
+            (
+                ("on_hold", "On-Hold"),
+                ("lost", "Lost"),
+                ("disqualified", "Disqualified"),
+            )
+        )
+    ]
+    now = datetime.now(timezone.utc)
+    active_stuck = Surrogate(
+        id=uuid.uuid4(),
+        surrogate_number="S91006",
+        organization_id=test_org.id,
+        stage_id=post_approval_stage.id,
+        status_label=post_approval_stage.label,
+        source=SurrogateSource.MANUAL.value,
+        owner_type=OwnerType.USER.value,
+        owner_id=test_user.id,
+        full_name="Active Attention Stuck",
+        email="active-attention-stuck@example.com",
+        email_hash=hash_email("active-attention-stuck@example.com"),
+        created_at=now - timedelta(days=35),
+        updated_at=now - timedelta(days=35),
+        last_contacted_at=now,
+    )
+    excluded_surrogates = [
+        Surrogate(
+            id=uuid.uuid4(),
+            surrogate_number=f"S9101{index}",
+            organization_id=test_org.id,
+            stage_id=stage.id,
+            status_label=stage.label,
+            source=SurrogateSource.MANUAL.value,
+            owner_type=OwnerType.USER.value,
+            owner_id=test_user.id,
+            full_name=f"Excluded {stage.label}",
+            email=f"excluded-dynamic-{stage.stage_key}@example.com",
+            email_hash=hash_email(f"excluded-dynamic-{stage.stage_key}@example.com"),
+            created_at=now - timedelta(days=35),
+            updated_at=now - timedelta(days=35),
+            last_contacted_at=now,
+        )
+        for index, stage in enumerate(legacy_excluded_stages, start=1)
+    ]
+    db.add_all([post_approval_stage, *legacy_excluded_stages, active_stuck, *excluded_surrogates])
+    db.flush()
+
+    response = await authed_client.get(
+        "/surrogates",
+        params={"dynamic_filter": "attention_stuck"},
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    ids = {item["id"] for item in data["items"]}
+
+    assert str(active_stuck.id) in ids
+    for surrogate in excluded_surrogates:
+        assert str(surrogate.id) not in ids
+
+
+@pytest.mark.asyncio
 async def test_surrogates_dynamic_filter_invalid(authed_client):
     response = await authed_client.get(
         "/surrogates",

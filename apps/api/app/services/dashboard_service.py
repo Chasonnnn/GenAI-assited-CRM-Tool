@@ -24,9 +24,20 @@ from app.db.models import (
 
 logger = logging.getLogger(__name__)
 
+ATTENTION_STUCK_EXCLUDED_STAGE_TYPES = ("paused", "terminal")
+ATTENTION_STUCK_EXCLUDED_STAGE_KEYS = ("on_hold", "lost", "disqualified")
+
 
 def _is_admin_role(role: Role | str | None) -> bool:
     return role in (Role.ADMIN, Role.ADMIN.value, Role.DEVELOPER, Role.DEVELOPER.value)
+
+
+def attention_stuck_stage_filters():
+    """Exclude paused/terminal stages and legacy semantic stage keys from stuck queries."""
+    return (
+        PipelineStage.stage_type.notin_(ATTENTION_STUCK_EXCLUDED_STAGE_TYPES),
+        PipelineStage.stage_key.notin_(ATTENTION_STUCK_EXCLUDED_STAGE_KEYS),
+    )
 
 
 def _should_scope_attention_to_owner(
@@ -423,7 +434,7 @@ def get_attention_items(
         .filter(
             Surrogate.organization_id == org_id,
             Surrogate.is_archived.is_(False),
-            PipelineStage.stage_type != "paused",
+            *attention_stuck_stage_filters(),
             last_change_col < stuck_cutoff,
             *owner_filters,
         )
@@ -458,7 +469,7 @@ def get_attention_items(
         .filter(
             Surrogate.organization_id == org_id,
             Surrogate.is_archived.is_(False),
-            PipelineStage.stage_type != "paused",
+            *attention_stuck_stage_filters(),
             last_change_col < stuck_cutoff,
             *owner_filters,
         )
