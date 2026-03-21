@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import IntendedParentDetailPage from '../app/(app)/intended-parents/[id]/page'
 
 const mockPush = vi.fn()
@@ -580,17 +580,13 @@ describe('IntendedParentDetailPage', () => {
         render(<IntendedParentDetailPage />)
 
         expect(screen.queryByRole("heading", { name: "IVF Clinic" })).not.toBeInTheDocument()
-        await act(async () => {
-            fireEvent.click(screen.getByRole("button", { name: "Edit Info" }))
-        })
-        await act(async () => {
-            fireEvent.click(await screen.findByRole("menuitem", { name: /add section/i }))
-        })
-        await act(async () => {
-            fireEvent.click(await screen.findByRole("menuitem", { name: /ivf clinic/i }))
-        })
+        fireEvent.click(screen.getByRole("button", { name: "Edit Info" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: /add section/i }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: /ivf clinic/i }))
 
-        expect(screen.getByRole("heading", { name: "IVF Clinic" })).toBeInTheDocument()
+        await waitFor(() => {
+            expect(screen.getByRole("heading", { name: "IVF Clinic" })).toBeInTheDocument()
+        })
     })
 
     it("adds and removes embryo status from medical information", async () => {
@@ -661,30 +657,16 @@ describe('IntendedParentDetailPage', () => {
         render(<IntendedParentDetailPage />)
 
         expect(screen.queryByRole("heading", { name: "Embryo Status" })).not.toBeInTheDocument()
-        await act(async () => {
-            fireEvent.click(screen.getByRole("button", { name: "Edit Info" }))
-        })
-        await act(async () => {
-            fireEvent.click(await screen.findByRole("menuitem", { name: /add section/i }))
-        })
-        await act(async () => {
-            fireEvent.click(await screen.findByRole("menuitem", { name: /embryo status/i }))
-        })
+        fireEvent.click(screen.getByRole("button", { name: "Edit Info" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: /add section/i }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: /embryo status/i }))
 
         expect(screen.getByRole("heading", { name: "Embryo Status" })).toBeInTheDocument()
 
-        await act(async () => {
-            fireEvent.click(screen.getByRole("button", { name: "Edit Info" }))
-        })
-        await act(async () => {
-            fireEvent.click(await screen.findByRole("menuitem", { name: /delete section/i }))
-        })
-        await act(async () => {
-            fireEvent.click(await screen.findByRole("menuitem", { name: /delete embryo status/i }))
-        })
-        await act(async () => {
-            fireEvent.click(screen.getByRole("button", { name: "Delete Section" }))
-        })
+        fireEvent.click(screen.getByRole("button", { name: "Edit Info" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: /delete section/i }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: /delete embryo status/i }))
+        fireEvent.click(screen.getByRole("button", { name: "Delete Section" }))
 
         await waitFor(() => {
             expect(mockUpdateIntendedParent).toHaveBeenCalledWith({

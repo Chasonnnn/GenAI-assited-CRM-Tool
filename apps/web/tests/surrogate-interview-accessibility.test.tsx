@@ -1,5 +1,5 @@
 import React from "react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { render, screen, waitFor } from "@testing-library/react"
 
 import { TranscriptPane } from "@/components/surrogates/interviews/InterviewComments/TranscriptPane"
@@ -27,6 +27,10 @@ vi.mock("@/lib/hooks/use-surrogates", () => ({
 }))
 
 describe("Surrogate interview accessibility labels", () => {
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
+
     beforeEach(() => {
         mockUseInterviewComments.mockReturnValue({
             transcriptRef: React.createRef<HTMLDivElement>(),
@@ -126,6 +130,8 @@ describe("Surrogate interview accessibility labels", () => {
     })
 
     it("adds aria-labels to transcript toolbar icon buttons", async () => {
+        const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+
         render(
             <TranscriptEditor
                 content={{
@@ -142,6 +148,12 @@ describe("Surrogate interview accessibility labels", () => {
             expect(screen.getByRole("button", { name: "Redo" })).toBeInTheDocument()
             expect(screen.getByRole("button", { name: "Add Comment" })).toBeInTheDocument()
         })
+
+        expect(
+            warnSpy.mock.calls.some(([message]) =>
+                String(message).includes("Duplicate extension names"),
+            ),
+        ).toBe(false)
     })
 
     it("adds an aria-label to reply delete actions", () => {

@@ -60,6 +60,7 @@ describe('proxy hard-fail behavior', () => {
         vi.spyOn(globalThis, 'fetch').mockResolvedValue(
             new Response('upstream failure', { status: 500 }),
         )
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
         const response = await proxy(
             createRequest('https://ewi.surrogacyforce.com/dashboard', {
@@ -68,6 +69,9 @@ describe('proxy hard-fail behavior', () => {
         )
 
         expect(response.status).toBe(500)
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+            '[middleware] API error resolving org for ewi.surrogacyforce.com: 500'
+        )
     })
 
     it('rewrites missing route resources to /_not-found with a real 404', async () => {
