@@ -251,16 +251,26 @@ function ProfileSection() {
   })
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileSaved, setProfileSaved] = useState(false)
+  const userDisplayName = user?.display_name || ""
+  const userPhone = user?.phone || ""
+  const userTitle = user?.title || ""
 
   useEffect(() => {
-    if (user) {
-      setProfileForm({
-        name: user.display_name || "",
-        phone: user.phone || "",
-        title: user.title || "",
-      })
-    }
-  }, [user])
+    setProfileForm((current) => {
+      if (
+        current.name === userDisplayName
+        && current.phone === userPhone
+        && current.title === userTitle
+      ) {
+        return current
+      }
+      return {
+        name: userDisplayName,
+        phone: userPhone,
+        title: userTitle,
+      }
+    })
+  }, [userDisplayName, userPhone, userTitle])
 
   const updateProfileForm = (field: keyof ProfileFormState, value: string) => {
     setProfileForm((current) => ({ ...current, [field]: value }))
