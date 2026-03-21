@@ -150,7 +150,7 @@ export interface IntendedParentUpdate {
     notes_internal?: string | null
     pronouns?: string | null
     date_of_birth?: string | null
-    marital_status?: MaritalStatus | null
+    marital_status?: MaritalStatus | string | null
     partner_name?: string | null
     partner_email?: string | null
     partner_pronouns?: string | null
@@ -169,7 +169,7 @@ export interface IntendedParentUpdate {
     trust_state?: string | null
     trust_postal?: string | null
     trust_case_reference?: string | null
-    trust_funding_status?: TrustFundingStatus | null
+    trust_funding_status?: TrustFundingStatus | string | null
     trust_portal_url?: string | null
     trust_notes?: string | null
     address_line1?: string | null
