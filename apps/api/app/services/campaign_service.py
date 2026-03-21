@@ -1,6 +1,7 @@
 """Campaign service for bulk email management."""
 
 import os
+from copy import deepcopy
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -17,6 +18,7 @@ from app.db.models import (
     IntendedParent,
     Job,
     PipelineStage,
+    Pipeline,
 )
 from app.db.enums import CampaignStatus, CampaignRecipientStatus, JobType, JobStatus, EmailStatus
 from app.schemas.campaign import (
@@ -41,6 +43,110 @@ def _ensure_future_datetime(value: datetime | None, field_name: str) -> None:
     candidate = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
     if candidate <= now:
         raise ValueError(f"{field_name} must be in the future")
+
+
+def normalize_filter_criteria(
+    db: Session,
+    org_id: UUID,
+    recipient_type: str,
+    criteria: dict | FilterCriteria | None,
+) -> dict:
+    """Persist surrogate stage filters in stage-id/key form so slug edits stay safe."""
+    payload = (
+        criteria.model_dump(mode="json")
+        if isinstance(criteria, FilterCriteria)
+        else deepcopy(criteria or {})
+    )
+    normalized = FilterCriteria.model_validate(payload).model_dump(mode="json", exclude_none=True)
+
+    if recipient_type != "case":
+        return normalized
+
+    from app.services import pipeline_service
+
+    stage_ids: list[UUID] = []
+    raw_stage_ids = normalized.get("stage_ids") or []
+    for value in raw_stage_ids:
+        try:
+            stage_id = UUID(str(value))
+        except ValueError:
+            continue
+        stage = pipeline_service.get_stage_by_id(db, stage_id)
+        if stage and stage.is_active:
+            stage_ids.append(stage.id)
+
+    stage_refs = [
+        *[str(value) for value in normalized.get("stage_keys") or []],
+        *[str(value) for value in normalized.get("stage_slugs") or []],
+    ]
+    default_pipeline_id = (
+        db.query(Pipeline.id)
+        .filter(
+            Pipeline.organization_id == org_id,
+            Pipeline.is_default.is_(True),
+        )
+        .scalar()
+    )
+    resolved_ids = pipeline_service.get_stage_ids_by_keys_or_slugs(
+        db,
+        org_id,
+        stage_refs,
+        pipeline_id=default_pipeline_id,
+    )
+    for stage_id in resolved_ids:
+        if stage_id not in stage_ids:
+            stage_ids.append(stage_id)
+
+    stage_keys: list[str] = []
+    for stage_id in stage_ids:
+        stage = pipeline_service.get_stage_by_id(db, stage_id)
+        if stage and stage.is_active and stage.stage_key and stage.stage_key not in stage_keys:
+            stage_keys.append(stage.stage_key)
+
+    normalized["stage_ids"] = [str(stage_id) for stage_id in stage_ids]
+    normalized["stage_keys"] = stage_keys
+    normalized.pop("stage_slugs", None)
+    return normalized
+
+
+def remap_campaign_stage_references(
+    db: Session,
+    org_id: UUID,
+    campaign: Campaign,
+    remap_by_key: dict[str, str | None],
+) -> None:
+    if campaign.recipient_type != "case":
+        return
+
+    from app.services import pipeline_service
+
+    criteria = deepcopy(campaign.filter_criteria if isinstance(campaign.filter_criteria, dict) else {})
+    stage_keys: list[str] = []
+    for stage_id in criteria.get("stage_ids") or []:
+        try:
+            stage_uuid = UUID(str(stage_id))
+        except ValueError:
+            continue
+        stage = pipeline_service.get_stage_by_id(db, stage_uuid)
+        if stage and stage.stage_key:
+            replacement = remap_by_key.get(stage.stage_key, stage.stage_key)
+            if replacement and replacement not in stage_keys:
+                stage_keys.append(replacement)
+
+    for value in criteria.get("stage_keys") or []:
+        replacement = remap_by_key.get(str(value), str(value))
+        if replacement and replacement not in stage_keys:
+            stage_keys.append(replacement)
+
+    for value in criteria.get("stage_slugs") or []:
+        normalized_value = pipeline_service.normalize_stage_ref(str(value))
+        replacement = remap_by_key.get(normalized_value, normalized_value)
+        if replacement and replacement not in stage_keys:
+            stage_keys.append(replacement)
+
+    criteria["stage_keys"] = stage_keys
+    criteria.pop("stage_slugs", None)
+    campaign.filter_criteria = normalize_filter_criteria(db, org_id, campaign.recipient_type, criteria)
 
 
 # =============================================================================
@@ -169,9 +275,12 @@ def create_campaign(db: Session, org_id: UUID, user_id: UUID, data: CampaignCrea
         description=data.description,
         email_template_id=data.email_template_id,
         recipient_type=data.recipient_type,
-        filter_criteria=data.filter_criteria.model_dump(mode="json")
-        if data.filter_criteria
-        else {},
+        filter_criteria=normalize_filter_criteria(
+            db,
+            org_id,
+            data.recipient_type,
+            data.filter_criteria,
+        ),
         scheduled_at=data.scheduled_at,
         status=CampaignStatus.DRAFT.value,
         include_unsubscribed=data.include_unsubscribed,
@@ -225,7 +334,12 @@ def update_campaign(
     if data.recipient_type is not None:
         campaign.recipient_type = data.recipient_type
     if data.filter_criteria is not None:
-        campaign.filter_criteria = data.filter_criteria.model_dump(mode="json")
+        campaign.filter_criteria = normalize_filter_criteria(
+            db,
+            org_id,
+            data.recipient_type or campaign.recipient_type,
+            data.filter_criteria,
+        )
     if data.scheduled_at is not None:
         _ensure_future_datetime(data.scheduled_at, "scheduled_at")
         campaign.scheduled_at = data.scheduled_at

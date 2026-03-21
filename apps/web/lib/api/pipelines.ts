@@ -64,6 +64,9 @@ export interface PipelineFeatureConfig {
     };
     analytics: {
         funnel_stage_keys: string[];
+        performance_stage_keys: string[];
+        qualification_stage_key: string | null;
+        conversion_stage_key: string | null;
     };
     role_visibility: Record<string, RoleStageRule>;
     role_mutation: Record<string, RoleStageRule>;
@@ -146,6 +149,19 @@ export interface PipelineStageDependency {
         enabled: boolean;
     }>;
     integration_refs: string[];
+    campaign_refs: Array<{
+        id: string;
+        name: string;
+        status: string;
+        reference_modes: string[];
+    }>;
+    workflow_refs: Array<{
+        id: string;
+        name: string;
+        scope: string;
+        is_enabled: boolean;
+        reference_paths: string[];
+    }>;
     role_visibility_roles: string[];
     role_mutation_roles: string[];
 }

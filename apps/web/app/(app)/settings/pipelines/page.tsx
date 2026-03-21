@@ -156,8 +156,10 @@ const IMPACT_LABELS: Record<ImpactArea, string> = {
 
 const REMAP_REASON_LABELS: Record<string, string> = {
     active_surrogates: "Active surrogates",
+    campaigns: "Campaign filters",
     intelligent_suggestions: "Intelligent suggestions",
     integrations: "Integration mappings",
+    workflows: "Workflow references",
 }
 
 const SUGGESTION_PROFILE_OPTIONS = [
@@ -222,6 +224,9 @@ function createFallbackFeatureConfig(stages: PipelineStage[]): PipelineFeatureCo
         },
         analytics: {
             funnel_stage_keys: stageKeys.slice(0, 6),
+            performance_stage_keys: stageKeys.slice(1, 8),
+            qualification_stage_key: stageKeys[2] ?? stageKeys[0] ?? null,
+            conversion_stage_key: stageKeys[4] ?? stageKeys.at(-1) ?? null,
         },
         role_visibility: {},
         role_mutation: {},
@@ -449,6 +454,17 @@ function applyLocalFeatureConfigRemap(
         removedStageKey,
         targetStageKey,
     )
+    next.analytics.performance_stage_keys = remapStageKeys(
+        next.analytics.performance_stage_keys,
+        removedStageKey,
+        targetStageKey,
+    )
+    if (next.analytics.qualification_stage_key === removedStageKey) {
+        next.analytics.qualification_stage_key = targetStageKey ?? null
+    }
+    if (next.analytics.conversion_stage_key === removedStageKey) {
+        next.analytics.conversion_stage_key = targetStageKey ?? null
+    }
     for (const rule of Object.values(next.role_visibility)) {
         rule.stage_keys = remapStageKeys(rule.stage_keys, removedStageKey, targetStageKey)
     }
@@ -519,6 +535,12 @@ function getDeleteRequirements(
     }
     if (dependency.integration_refs.length > 0) {
         requirements.push("integration mappings")
+    }
+    if (dependency.campaign_refs.length > 0) {
+        requirements.push("campaign filters")
+    }
+    if (dependency.workflow_refs.length > 0) {
+        requirements.push("workflow references")
     }
     return requirements
 }
@@ -813,6 +835,16 @@ function StageEditor({
                                 {dependency.integration_refs.length > 0 ? (
                                     <Badge variant="outline">
                                         Integrations: {dependency.integration_refs.join(", ")}
+                                    </Badge>
+                                ) : null}
+                                {dependency.campaign_refs.length > 0 ? (
+                                    <Badge variant="outline">
+                                        Campaigns: {dependency.campaign_refs.length}
+                                    </Badge>
+                                ) : null}
+                                {dependency.workflow_refs.length > 0 ? (
+                                    <Badge variant="outline">
+                                        Workflows: {dependency.workflow_refs.length}
                                     </Badge>
                                 ) : null}
                             </div>

@@ -1,5 +1,6 @@
 """Workflow service - CRUD operations for automation workflows."""
 
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -14,6 +15,7 @@ from app.db.models import (
     Queue,
     EmailTemplate,
     Surrogate,
+    Pipeline,
 )
 from app.db.enums import WorkflowTriggerType, WorkflowExecutionStatus, OwnerType
 from app.schemas.workflow import (
@@ -22,6 +24,7 @@ from app.schemas.workflow import (
     WorkflowRead,
     WorkflowStats,
     WorkflowOptions,
+    Condition,
     ALLOWED_CONDITION_FIELDS,
     ALLOWED_UPDATE_FIELDS,
     ALLOWED_EMAIL_VARIABLES,
@@ -75,6 +78,234 @@ TRIGGER_ENTITY_TYPES = {
 }
 
 
+def _resolve_stage_ref(
+    db: Session,
+    org_id: UUID,
+    value: object | None,
+) -> tuple[str, str] | None:
+    if value in (None, ""):
+        return None
+
+    from app.services import pipeline_service
+
+    stage = None
+    try:
+        stage_uuid = UUID(str(value))
+    except (TypeError, ValueError):
+        stage_uuid = None
+
+    if stage_uuid is not None:
+        stage = pipeline_service.get_stage_by_id(db, stage_uuid)
+    else:
+        default_pipeline_id = (
+            db.query(Pipeline.id)
+            .filter(
+                Pipeline.organization_id == org_id,
+                Pipeline.is_default.is_(True),
+            )
+            .scalar()
+        )
+        if default_pipeline_id is None:
+            pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
+            default_pipeline_id = pipeline.id
+        stage = pipeline_service.resolve_stage(db, default_pipeline_id, str(value))
+
+    if not stage or stage.pipeline.organization_id != org_id:
+        return None
+    return str(stage.id), stage.stage_key
+
+
+def _canonicalize_trigger_config(
+    db: Session,
+    org_id: UUID,
+    trigger_type: WorkflowTriggerType,
+    trigger_config: dict[str, object],
+) -> dict[str, object]:
+    config = deepcopy(trigger_config or {})
+    if trigger_type != WorkflowTriggerType.STATUS_CHANGED:
+        return config
+
+    for prefix in ("from", "to"):
+        ref = (
+            config.get(f"{prefix}_stage_key")
+            or config.get(f"{prefix}_stage_id")
+            or config.get(f"{prefix}_status")
+        )
+        resolved = _resolve_stage_ref(db, org_id, ref)
+        config.pop(f"{prefix}_status", None)
+        if resolved:
+            config[f"{prefix}_stage_id"] = resolved[0]
+            config[f"{prefix}_stage_key"] = resolved[1]
+        else:
+            config.pop(f"{prefix}_stage_id", None)
+            config.pop(f"{prefix}_stage_key", None)
+    return config
+
+
+def _canonicalize_conditions(
+    db: Session,
+    org_id: UUID,
+    conditions: list[Condition] | list[dict] | None,
+) -> list[dict]:
+    normalized: list[dict] = []
+    for raw_condition in conditions or []:
+        condition = (
+            raw_condition.model_dump(mode="json")
+            if isinstance(raw_condition, Condition)
+            else deepcopy(raw_condition)
+        )
+        if condition.get("field") != "stage_id":
+            normalized.append(condition)
+            continue
+
+        value = condition.get("value")
+        if isinstance(value, list):
+            resolved_ids: list[str] = []
+            resolved_keys: list[str] = []
+            for item in value:
+                resolved = _resolve_stage_ref(db, org_id, item)
+                if not resolved:
+                    continue
+                stage_id, stage_key = resolved
+                if stage_id not in resolved_ids:
+                    resolved_ids.append(stage_id)
+                if stage_key not in resolved_keys:
+                    resolved_keys.append(stage_key)
+            condition["value"] = resolved_ids
+            condition["stage_keys"] = resolved_keys
+        else:
+            resolved = _resolve_stage_ref(db, org_id, value)
+            if resolved:
+                condition["value"] = resolved[0]
+                condition["stage_key"] = resolved[1]
+        normalized.append(condition)
+    return normalized
+
+
+def _canonicalize_actions(
+    db: Session,
+    org_id: UUID,
+    actions: list[dict[str, object]] | None,
+) -> list[dict]:
+    normalized: list[dict] = []
+    for raw_action in actions or []:
+        action = deepcopy(raw_action)
+        if action.get("action_type") == "update_status":
+            stage_id = action.get("stage_id")
+            if not stage_id:
+                raise ValueError("update_status requires stage_id")
+            action["action_type"] = "update_field"
+            action["field"] = "stage_id"
+            action["value"] = stage_id
+            action.pop("stage_id", None)
+
+        if action.get("action_type") == "update_field" and action.get("field") == "stage_id":
+            resolved = _resolve_stage_ref(
+                db,
+                org_id,
+                action.get("value_stage_key") or action.get("value"),
+            )
+            if resolved:
+                action["value"] = resolved[0]
+                action["value_stage_key"] = resolved[1]
+        normalized.append(action)
+    return normalized
+
+
+def remap_workflow_stage_references(
+    db: Session,
+    org_id: UUID,
+    workflow: AutomationWorkflow,
+    remap_by_key: dict[str, str | None],
+) -> None:
+    if not remap_by_key:
+        return
+
+    trigger_config = deepcopy(workflow.trigger_config or {})
+    if workflow.trigger_type == WorkflowTriggerType.STATUS_CHANGED.value:
+        for prefix in ("from", "to"):
+            current_key = trigger_config.get(f"{prefix}_stage_key")
+            if isinstance(current_key, str) and current_key in remap_by_key:
+                replacement = remap_by_key[current_key]
+                if replacement:
+                    trigger_config[f"{prefix}_stage_key"] = replacement
+                else:
+                    trigger_config.pop(f"{prefix}_stage_key", None)
+                    trigger_config.pop(f"{prefix}_stage_id", None)
+            legacy_status = trigger_config.get(f"{prefix}_status")
+            if isinstance(legacy_status, str):
+                normalized_status = legacy_status.strip().lower()
+                if normalized_status in remap_by_key:
+                    replacement = remap_by_key[normalized_status]
+                    if replacement:
+                        trigger_config[f"{prefix}_stage_key"] = replacement
+                    trigger_config.pop(f"{prefix}_status", None)
+        workflow.trigger_config = _canonicalize_trigger_config(
+            db,
+            org_id,
+            WorkflowTriggerType.STATUS_CHANGED,
+            trigger_config,
+        )
+
+    remapped_conditions: list[dict] = []
+    for raw_condition in workflow.conditions or []:
+        condition = deepcopy(raw_condition)
+        if condition.get("field") == "stage_id":
+            stage_key = condition.get("stage_key")
+            stage_keys = condition.get("stage_keys")
+            value = condition.get("value")
+            if isinstance(stage_key, str) and stage_key in remap_by_key:
+                replacement = remap_by_key[stage_key]
+                if replacement:
+                    condition["stage_key"] = replacement
+                    condition["value"] = replacement
+                else:
+                    continue
+            if isinstance(stage_keys, list):
+                remapped_stage_keys = [
+                    remap_by_key.get(str(item), str(item))
+                    for item in stage_keys
+                    if remap_by_key.get(str(item), str(item))
+                ]
+                condition["stage_keys"] = remapped_stage_keys
+                condition["value"] = remapped_stage_keys
+            elif stage_key is None:
+                resolved = _resolve_stage_ref(db, org_id, value)
+                current_key = resolved[1] if resolved else None
+                if current_key in remap_by_key:
+                    replacement = remap_by_key[current_key]
+                    if replacement:
+                        condition["stage_key"] = replacement
+                        condition["value"] = replacement
+                    else:
+                        continue
+        remapped_conditions.append(condition)
+    workflow.conditions = _canonicalize_conditions(db, org_id, remapped_conditions)
+
+    remapped_actions: list[dict] = []
+    for raw_action in workflow.actions or []:
+        action = deepcopy(raw_action)
+        if action.get("action_type") == "update_field" and action.get("field") == "stage_id":
+            stage_key = action.get("value_stage_key")
+            if isinstance(stage_key, str) and stage_key in remap_by_key:
+                replacement = remap_by_key[stage_key]
+                if replacement:
+                    action["value_stage_key"] = replacement
+                else:
+                    continue
+        elif action.get("action_type") == "update_status":
+            stage_ref = action.get("stage_id")
+            resolved = _resolve_stage_ref(db, org_id, stage_ref)
+            if resolved and resolved[1] in remap_by_key:
+                replacement = remap_by_key[resolved[1]]
+                if replacement:
+                    action["stage_id"] = replacement
+                else:
+                    continue
+        remapped_actions.append(action)
+    workflow.actions = _canonicalize_actions(db, org_id, remapped_actions)
+
+
 # =============================================================================
 # CRUD Operations
 # =============================================================================
@@ -87,10 +318,17 @@ def create_workflow(
     data: WorkflowCreate,
 ) -> AutomationWorkflow:
     """Create a new workflow with validation."""
-    # Validate trigger config
-    _validate_trigger_config(data.trigger_type, data.trigger_config)
+    trigger_config = _canonicalize_trigger_config(db, org_id, data.trigger_type, data.trigger_config)
+    conditions = _canonicalize_conditions(db, org_id, data.conditions)
 
-    actions = _normalize_actions_for_trigger(data.trigger_type, data.actions)
+    # Validate trigger config
+    _validate_trigger_config(data.trigger_type, trigger_config)
+
+    actions = _canonicalize_actions(
+        db,
+        org_id,
+        _normalize_actions_for_trigger(data.trigger_type, data.actions),
+    )
 
     # Validate actions
     for action in actions:
@@ -120,8 +358,8 @@ def create_workflow(
         scope=data.scope,
         owner_user_id=owner_user_id,
         trigger_type=data.trigger_type.value,
-        trigger_config=data.trigger_config,
-        conditions=[c.model_dump() for c in data.conditions],
+        trigger_config=trigger_config,
+        conditions=conditions,
         condition_logic=data.condition_logic,
         actions=actions,
         is_enabled=data.is_enabled,
@@ -147,17 +385,34 @@ def update_workflow(
     data: WorkflowUpdate,
 ) -> AutomationWorkflow:
     """Update an existing workflow with validation."""
-    if data.trigger_type is not None or data.trigger_config is not None:
-        trigger_type = data.trigger_type or WorkflowTriggerType(workflow.trigger_type)
-        trigger_config = (
-            data.trigger_config if data.trigger_config is not None else workflow.trigger_config
+    trigger_type = data.trigger_type or WorkflowTriggerType(workflow.trigger_type)
+    trigger_config = (
+        _canonicalize_trigger_config(db, workflow.organization_id, trigger_type, data.trigger_config)
+        if data.trigger_config is not None
+        else _canonicalize_trigger_config(
+            db,
+            workflow.organization_id,
+            trigger_type,
+            workflow.trigger_config,
         )
+    )
+    normalized_conditions = (
+        _canonicalize_conditions(db, workflow.organization_id, data.conditions)
+        if data.conditions is not None
+        else _canonicalize_conditions(db, workflow.organization_id, workflow.conditions)
+    )
+
+    if data.trigger_type is not None or data.trigger_config is not None:
         _validate_trigger_config(trigger_type, trigger_config)
 
     normalized_actions = data.actions
-    effective_trigger_type = data.trigger_type or WorkflowTriggerType(workflow.trigger_type)
+    effective_trigger_type = trigger_type
     if data.actions is not None:
-        normalized_actions = _normalize_actions_for_trigger(effective_trigger_type, data.actions)
+        normalized_actions = _canonicalize_actions(
+            db,
+            workflow.organization_id,
+            _normalize_actions_for_trigger(effective_trigger_type, data.actions),
+        )
         for action in normalized_actions:
             _validate_action_config(
                 db,
@@ -197,9 +452,9 @@ def update_workflow(
     if data.trigger_type is not None:
         workflow.trigger_type = data.trigger_type.value
     if data.trigger_config is not None:
-        workflow.trigger_config = data.trigger_config
+        workflow.trigger_config = trigger_config
     if data.conditions is not None:
-        workflow.conditions = [c.model_dump() for c in data.conditions]
+        workflow.conditions = normalized_conditions
     if data.condition_logic is not None:
         workflow.condition_logic = data.condition_logic
     if normalized_actions is not None:
@@ -1359,7 +1614,15 @@ def _validate_action_config(
             )
 
     elif action_type == "update_field":
-        UpdateFieldActionConfig.model_validate(action)
+        config = UpdateFieldActionConfig.model_validate(action)
+        if config.field == "stage_id":
+            resolved = _resolve_stage_ref(
+                db,
+                org_id,
+                action.get("value_stage_key") or config.value,
+            )
+            if not resolved:
+                raise ValueError(f"Stage {config.value} not found in organization")
 
     elif action_type == "add_note":
         AddNoteActionConfig.model_validate(action)

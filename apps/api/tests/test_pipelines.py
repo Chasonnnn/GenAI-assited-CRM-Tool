@@ -14,6 +14,7 @@ from app.core.encryption import hash_email
 from app.core.security import create_session_token
 from app.db.enums import Role
 from app.db.models import (
+    EmailTemplate,
     Membership,
     OrgIntelligentSuggestionRule,
     Pipeline,
@@ -22,7 +23,16 @@ from app.db.models import (
     User,
 )
 from app.main import app
-from app.services import pipeline_service, session_service, zapier_settings_service
+from app.schemas.campaign import CampaignCreate
+from app.schemas.workflow import WorkflowCreate
+from app.services import (
+    campaign_service,
+    pipeline_service,
+    session_service,
+    workflow_service,
+    zapier_settings_service,
+)
+from app.db.enums import WorkflowTriggerType
 from app.utils.normalization import normalize_email
 
 
@@ -45,6 +55,20 @@ def _create_surrogate_for_stage(db, *, org_id: UUID, user_id: UUID, stage: Pipel
     db.add(surrogate)
     db.flush()
     return surrogate
+
+
+def _create_email_template(db, *, org_id: UUID) -> EmailTemplate:
+    template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=org_id,
+        name=f"Pipeline template {uuid.uuid4().hex[:8]}",
+        subject="Pipeline update",
+        body="<p>Pipeline update</p>",
+        is_active=True,
+    )
+    db.add(template)
+    db.flush()
+    return template
 
 
 def _remove_stage_key_refs(feature_config: dict, stage_key: str) -> dict:
@@ -464,6 +488,42 @@ async def test_pipeline_change_preview_requires_remap_for_removed_stage_dependen
             "bucket": "converted",
         }
     ]
+    template = _create_email_template(db, org_id=test_org.id)
+    campaign_service.create_campaign(
+        db,
+        test_org.id,
+        test_user.id,
+        CampaignCreate(
+            name="Ready to Match Campaign",
+            email_template_id=template.id,
+            recipient_type="case",
+            filter_criteria={"stage_ids": [str(ready_to_match_db.id)]},
+        ),
+    )
+    workflow_service.create_workflow(
+        db,
+        test_org.id,
+        test_user.id,
+        WorkflowCreate(
+            name="Ready to Match Workflow",
+            trigger_type=WorkflowTriggerType.STATUS_CHANGED,
+            trigger_config={"to_stage_key": "ready_to_match"},
+            conditions=[
+                {
+                    "field": "stage_id",
+                    "operator": "equals",
+                    "value": "ready_to_match",
+                }
+            ],
+            actions=[
+                {
+                    "action_type": "update_field",
+                    "field": "stage_id",
+                    "value": "ready_to_match",
+                }
+            ],
+        ),
+    )
     db.commit()
 
     preview_payload = {
@@ -503,8 +563,10 @@ async def test_pipeline_change_preview_requires_remap_for_removed_stage_dependen
     )
     assert required_remap["surrogate_count"] == 1
     assert "active_surrogates" in required_remap["reasons"]
+    assert "campaigns" in required_remap["reasons"]
     assert "intelligent_suggestions" in required_remap["reasons"]
     assert "integrations" in required_remap["reasons"]
+    assert "workflows" in required_remap["reasons"]
 
 
 @pytest.mark.asyncio
@@ -528,6 +590,46 @@ async def test_apply_pipeline_draft_adds_stage_reclassifies_stage_and_deletes_wi
         org_id=test_org.id,
         user_id=test_user.id,
         stage=ready_to_match_db,
+    )
+    template = _create_email_template(db, org_id=test_org.id)
+    campaign = campaign_service.create_campaign(
+        db,
+        test_org.id,
+        test_user.id,
+        CampaignCreate(
+            name="Pipeline remap campaign",
+            email_template_id=template.id,
+            recipient_type="case",
+            filter_criteria={
+                "stage_ids": [str(ready_to_match_db.id)],
+                "stage_keys": ["ready_to_match"],
+                "stage_slugs": ["ready_to_match"],
+            },
+        ),
+    )
+    workflow = workflow_service.create_workflow(
+        db,
+        test_org.id,
+        test_user.id,
+        WorkflowCreate(
+            name="Pipeline remap workflow",
+            trigger_type=WorkflowTriggerType.STATUS_CHANGED,
+            trigger_config={"to_stage_key": "ready_to_match"},
+            conditions=[
+                {
+                    "field": "stage_id",
+                    "operator": "equals",
+                    "value": "ready_to_match",
+                }
+            ],
+            actions=[
+                {
+                    "action_type": "update_field",
+                    "field": "stage_id",
+                    "value": "ready_to_match",
+                }
+            ],
+        ),
     )
     db.commit()
 
@@ -616,7 +718,19 @@ async def test_apply_pipeline_draft_adds_stage_reclassifies_stage_and_deletes_wi
     assert all(stage["stage_key"] != "ready_to_match" or not stage["is_active"] for stage in payload["stages"])
 
     db.refresh(surrogate)
+    db.refresh(campaign)
+    db.refresh(workflow)
     matching_review_stage = pipeline_service.get_stage_by_key(db, UUID(payload["id"]), "matching_review")
     assert matching_review_stage is not None
     assert surrogate.stage_id == matching_review_stage.id
     assert surrogate.status_label == matching_review_stage.label
+    assert campaign.filter_criteria["stage_keys"] == ["matching_review"]
+    assert str(matching_review_stage.id) in {
+        str(stage_id) for stage_id in campaign.filter_criteria["stage_ids"]
+    }
+    assert workflow.trigger_config["to_stage_key"] == "matching_review"
+    assert str(workflow.trigger_config["to_stage_id"]) == str(matching_review_stage.id)
+    assert workflow.conditions[0]["stage_key"] == "matching_review"
+    assert str(workflow.conditions[0]["value"]) == str(matching_review_stage.id)
+    assert workflow.actions[0]["value_stage_key"] == "matching_review"
+    assert str(workflow.actions[0]["value"]) == str(matching_review_stage.id)

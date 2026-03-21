@@ -167,6 +167,8 @@ class PipelineStageDependencyRead(BaseModel):
     analytics_funnel: bool
     intelligent_suggestion_rules: list[dict[str, object]]
     integration_refs: list[str]
+    campaign_refs: list[dict[str, object]]
+    workflow_refs: list[dict[str, object]]
     role_visibility_roles: list[str]
     role_mutation_roles: list[str]
 

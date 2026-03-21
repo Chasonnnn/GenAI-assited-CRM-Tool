@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.stage_definitions import canonicalize_stage_key, get_default_stage_defs
 from app.db.models import (
+    AutomationWorkflow,
+    Campaign,
     MetaCrmDatasetSettings,
     OrgIntelligentSuggestionRule,
     Pipeline,
@@ -1214,8 +1216,19 @@ def build_pipeline_draft_preview(
             existing_stage_by_id=existing_stage_by_id,
         )
     )
+    remap_by_key = {
+        normalize_stage_ref(item.get("removed_stage_key")): normalize_stage_ref(
+            item.get("target_stage_key")
+        )
+        for item in remaps or []
+        if normalize_stage_ref(item.get("removed_stage_key"))
+    }
     after_feature_config = pipeline_semantics_service.get_pipeline_feature_config(
         {"feature_config": feature_config or pipeline.feature_config}
+    )
+    after_feature_config = pipeline_change_service.apply_feature_config_stage_remaps(
+        after_feature_config,
+        remap_by_key,
     )
     before_stages = [_serialize_stage(stage) for stage in pipeline.stages if stage.is_active]
     dependency_graph = pipeline_dependency_service.build_pipeline_dependency_graph(db, pipeline)
@@ -1240,7 +1253,12 @@ def _apply_external_stage_remaps(
     pipeline: Pipeline,
     remap_by_key: dict[str, str | None],
 ) -> None:
-    from app.services import meta_crm_dataset_settings_service, zapier_settings_service
+    from app.services import (
+        campaign_service,
+        meta_crm_dataset_settings_service,
+        workflow_service,
+        zapier_settings_service,
+    )
 
     if not remap_by_key:
         return
@@ -1299,6 +1317,36 @@ def _apply_external_stage_remaps(
             remapped.append(item)
         meta_settings.event_mapping = meta_crm_dataset_settings_service.normalize_event_mapping(
             remapped
+        )
+
+    campaigns = (
+        db.query(Campaign)
+        .filter(
+            Campaign.organization_id == pipeline.organization_id,
+            Campaign.recipient_type == "case",
+            Campaign.status.in_(("draft", "scheduled")),
+        )
+        .all()
+    )
+    for campaign in campaigns:
+        campaign_service.remap_campaign_stage_references(
+            db,
+            pipeline.organization_id,
+            campaign,
+            remap_by_key,
+        )
+
+    workflows = (
+        db.query(AutomationWorkflow)
+        .filter(AutomationWorkflow.organization_id == pipeline.organization_id)
+        .all()
+    )
+    for workflow in workflows:
+        workflow_service.remap_workflow_stage_references(
+            db,
+            pipeline.organization_id,
+            workflow,
+            remap_by_key,
         )
 
 

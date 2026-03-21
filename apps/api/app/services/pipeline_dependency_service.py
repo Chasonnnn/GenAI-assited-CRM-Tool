@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 
 from app.core.stage_definitions import canonicalize_stage_key
 from app.db.models import (
+    AutomationWorkflow,
+    Campaign,
     MetaCrmDatasetSettings,
     OrgIntelligentSuggestionRule,
     Pipeline,
@@ -41,7 +43,81 @@ def _empty_dependency_entry(stage: PipelineStage) -> dict[str, Any]:
         "integration_refs": [],
         "role_visibility_roles": [],
         "role_mutation_roles": [],
+        "campaign_refs": [],
+        "workflow_refs": [],
     }
+
+
+def _stage_ref_matches(stage: PipelineStage, value: Any) -> bool:
+    if value is None:
+        return False
+    if str(value) == str(stage.id):
+        return True
+    return _normalize_stage_key(str(value)) == stage.stage_key
+
+
+def _workflow_values_reference_stage(stage: PipelineStage, value: Any) -> bool:
+    if isinstance(value, list):
+        return any(_workflow_values_reference_stage(stage, item) for item in value)
+    return _stage_ref_matches(stage, value)
+
+
+def _workflow_reference_paths(workflow: AutomationWorkflow, stage: PipelineStage) -> list[str]:
+    refs: set[str] = set()
+    trigger_config = workflow.trigger_config if isinstance(workflow.trigger_config, dict) else {}
+    if _stage_ref_matches(stage, trigger_config.get("from_stage_id")) or _stage_ref_matches(
+        stage, trigger_config.get("from_stage_key")
+    ) or _stage_ref_matches(stage, trigger_config.get("from_status")):
+        refs.add("trigger.from_stage")
+    if _stage_ref_matches(stage, trigger_config.get("to_stage_id")) or _stage_ref_matches(
+        stage, trigger_config.get("to_stage_key")
+    ) or _stage_ref_matches(stage, trigger_config.get("to_status")):
+        refs.add("trigger.to_stage")
+
+    for condition in workflow.conditions or []:
+        if not isinstance(condition, dict) or condition.get("field") != "stage_id":
+            continue
+        if _workflow_values_reference_stage(stage, condition.get("value")) or _workflow_values_reference_stage(
+            stage, condition.get("stage_key")
+        ) or _workflow_values_reference_stage(stage, condition.get("stage_keys")):
+            refs.add("condition.stage_id")
+
+    for action in workflow.actions or []:
+        if not isinstance(action, dict):
+            continue
+        action_type = action.get("action_type")
+        if action_type == "update_status" and _stage_ref_matches(stage, action.get("stage_id")):
+            refs.add("action.update_status")
+            continue
+        if (
+            action_type == "update_field"
+            and action.get("field") == "stage_id"
+            and (
+                _stage_ref_matches(stage, action.get("value"))
+                or _stage_ref_matches(stage, action.get("value_stage_key"))
+            )
+        ):
+            refs.add("action.update_field.stage_id")
+
+    return sorted(refs)
+
+
+def _campaign_reference_modes(campaign: Campaign, stage: PipelineStage) -> list[str]:
+    criteria = campaign.filter_criteria if isinstance(campaign.filter_criteria, dict) else {}
+    refs: set[str] = set()
+    for value in criteria.get("stage_ids") or []:
+        if str(value) == str(stage.id):
+            refs.add("stage_ids")
+            break
+    for value in criteria.get("stage_keys") or []:
+        if _normalize_stage_key(str(value)) == stage.stage_key:
+            refs.add("stage_keys")
+            break
+    for value in criteria.get("stage_slugs") or []:
+        if _stage_ref_matches(stage, value):
+            refs.add("stage_slugs")
+            break
+    return sorted(refs)
 
 
 def build_pipeline_dependency_graph(
@@ -140,6 +216,51 @@ def build_pipeline_dependency_graph(
     for stage_key, refs in integration_refs.items():
         if stage_key in stage_map:
             stage_map[stage_key]["integration_refs"] = sorted(refs)
+
+    campaigns = (
+        db.query(Campaign)
+        .filter(
+            Campaign.organization_id == pipeline.organization_id,
+            Campaign.recipient_type == "case",
+            Campaign.status.in_(("draft", "scheduled")),
+        )
+        .all()
+    )
+    for campaign in campaigns:
+        for stage in stages:
+            if not stage.stage_key or stage.stage_key not in stage_map:
+                continue
+            reference_modes = _campaign_reference_modes(campaign, stage)
+            if reference_modes:
+                stage_map[stage.stage_key]["campaign_refs"].append(
+                    {
+                        "id": str(campaign.id),
+                        "name": campaign.name,
+                        "status": campaign.status,
+                        "reference_modes": reference_modes,
+                    }
+                )
+
+    workflows = (
+        db.query(AutomationWorkflow)
+        .filter(AutomationWorkflow.organization_id == pipeline.organization_id)
+        .all()
+    )
+    for workflow in workflows:
+        for stage in stages:
+            if not stage.stage_key or stage.stage_key not in stage_map:
+                continue
+            reference_paths = _workflow_reference_paths(workflow, stage)
+            if reference_paths:
+                stage_map[stage.stage_key]["workflow_refs"].append(
+                    {
+                        "id": str(workflow.id),
+                        "name": workflow.name,
+                        "scope": workflow.scope,
+                        "is_enabled": bool(workflow.is_enabled),
+                        "reference_paths": reference_paths,
+                    }
+                )
 
     ordered_entries = [
         stage_map[stage.stage_key]

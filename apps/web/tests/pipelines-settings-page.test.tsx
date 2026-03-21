@@ -157,6 +157,9 @@ const pipelineFixture = {
         },
         analytics: {
             funnel_stage_keys: ["new_unread", "contacted"],
+            performance_stage_keys: ["contacted", "lost"],
+            qualification_stage_key: "contacted",
+            conversion_stage_key: "lost",
         },
         role_visibility: {},
         role_mutation: {},
@@ -184,6 +187,8 @@ const dependencyGraphFixture = {
             stage.stage_key === "contacted",
         intelligent_suggestion_rules: [],
         integration_refs: [],
+        campaign_refs: [],
+        workflow_refs: [],
         role_visibility_roles: [],
         role_mutation_roles: [],
     })),

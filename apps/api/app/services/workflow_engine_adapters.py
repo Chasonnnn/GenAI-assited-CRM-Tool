@@ -908,6 +908,7 @@ class DefaultWorkflowDomainAdapter:
             old_label = entity.status_label
             old_stage = pipeline_service.get_stage_by_id(db, old_stage_id) if old_stage_id else None
             old_slug = old_stage.slug if old_stage else None
+            old_stage_key = old_stage.stage_key if old_stage else None
             entity.stage_id = stage.id
             entity.status_label = stage.label
             entity.updated_at = datetime.now(timezone.utc)
@@ -936,6 +937,8 @@ class DefaultWorkflowDomainAdapter:
                         "surrogate_id": str(entity.id),
                         "old_stage_id": str(old_stage_id) if old_stage_id else None,
                         "new_stage_id": str(stage.id),
+                        "old_stage_key": old_stage_key,
+                        "new_stage_key": stage.stage_key,
                         "old_status": old_slug,
                         "new_status": stage.slug,
                     },

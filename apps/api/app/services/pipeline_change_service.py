@@ -33,6 +33,14 @@ def _replace_stage_keys(values: list[str], remap_by_key: dict[str, str | None]) 
     return replaced
 
 
+def _replace_optional_stage_key(
+    value: str | None,
+    remap_by_key: dict[str, str | None],
+) -> str | None:
+    normalized = normalize_stage_key(value)
+    return remap_by_key.get(normalized, normalized)
+
+
 def apply_feature_config_stage_remaps(
     feature_config: PipelineFeatureConfig,
     remap_by_key: dict[str, str | None],
@@ -61,7 +69,19 @@ def apply_feature_config_stage_remaps(
                     "funnel_stage_keys": _replace_stage_keys(
                         feature_config.analytics.funnel_stage_keys,
                         remap_by_key,
-                    )
+                    ),
+                    "performance_stage_keys": _replace_stage_keys(
+                        feature_config.analytics.performance_stage_keys,
+                        remap_by_key,
+                    ),
+                    "qualification_stage_key": _replace_optional_stage_key(
+                        feature_config.analytics.qualification_stage_key,
+                        remap_by_key,
+                    ),
+                    "conversion_stage_key": _replace_optional_stage_key(
+                        feature_config.analytics.conversion_stage_key,
+                        remap_by_key,
+                    ),
                 }
             ),
             "role_visibility": {
@@ -220,6 +240,25 @@ def validate_guarded_invariants(
         raise ValueError(
             f"Analytics funnel references missing stages: {', '.join(missing_funnel_keys)}"
         )
+    missing_performance_keys = [
+        stage_key
+        for stage_key in feature_config.analytics.performance_stage_keys
+        if stage_key not in active_stage_keys
+    ]
+    if missing_performance_keys:
+        raise ValueError(
+            f"Analytics performance columns reference missing stages: {', '.join(missing_performance_keys)}"
+        )
+    qualification_stage_key = feature_config.analytics.qualification_stage_key
+    if qualification_stage_key and qualification_stage_key not in active_stage_keys:
+        raise ValueError(
+            f"Analytics qualification stage references missing stage: {qualification_stage_key}"
+        )
+    conversion_stage_key = feature_config.analytics.conversion_stage_key
+    if conversion_stage_key and conversion_stage_key not in active_stage_keys:
+        raise ValueError(
+            f"Analytics conversion stage references missing stage: {conversion_stage_key}"
+        )
 
 
 def build_impact_report(
@@ -237,7 +276,16 @@ def build_impact_report(
         before = before_by_key.get(stage_key)
         after = after_by_key.get(stage_key)
         if before is None or after is None:
-            impact.update({"journey", "analytics", "integrations", "intelligent_suggestions"})
+            impact.update(
+                {
+                    "journey",
+                    "analytics",
+                    "integrations",
+                    "intelligent_suggestions",
+                    "campaigns",
+                    "workflows",
+                }
+            )
             continue
         if before.get("order") != after.get("order"):
             impact.update({"ui_gating", "analytics"})
@@ -322,6 +370,10 @@ def build_pipeline_change_preview(
             reasons.append("intelligent_suggestions")
         if dependency.get("integration_refs"):
             reasons.append("integrations")
+        if dependency.get("campaign_refs"):
+            reasons.append("campaigns")
+        if dependency.get("workflow_refs"):
+            reasons.append("workflows")
         if not reasons:
             continue
 
