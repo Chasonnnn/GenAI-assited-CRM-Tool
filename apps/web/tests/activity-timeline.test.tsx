@@ -202,6 +202,62 @@ describe('ActivityTimeline', () => {
         expect(screen.getByText('Stage 2 note')).toBeInTheDocument()
     })
 
+    it('keeps stage headers aligned even when only some stages have expanded details', () => {
+        const stages = [
+            makeStage({ id: 's1', label: 'New', order: 1, slug: 'new' }),
+            makeStage({ id: 's2', label: 'Ready to Match', order: 2, slug: 'ready_to_match' }),
+            makeStage({ id: 's3', label: 'Delivered', order: 3, slug: 'delivered' }),
+        ]
+
+        mockUseSurrogateHistory.mockReturnValue({
+            data: [
+                makeHistory({
+                    id: 'h1',
+                    to_stage_id: 's1',
+                    to_label_snapshot: 'New',
+                    changed_at: '2024-01-01T00:00:00.000Z',
+                    effective_at: '2024-01-01T00:00:00.000Z',
+                    recorded_at: '2024-01-01T00:00:00.000Z',
+                }),
+                makeHistory({
+                    id: 'h2',
+                    from_stage_id: 's1',
+                    to_stage_id: 's2',
+                    from_label_snapshot: 'New',
+                    to_label_snapshot: 'Ready to Match',
+                    changed_at: '2024-02-01T00:00:00.000Z',
+                    effective_at: '2024-02-01T00:00:00.000Z',
+                    recorded_at: '2024-02-01T00:00:00.000Z',
+                }),
+            ],
+        })
+
+        render(
+            <ActivityTimeline
+                surrogateId="surr1"
+                currentStageId="s2"
+                stages={stages}
+                activities={[
+                    makeActivity({
+                        id: 'a2',
+                        details: { preview: 'Current stage note' },
+                        created_at: '2024-02-02T00:00:00.000Z',
+                    }),
+                ]}
+                tasks={[]}
+            />
+        )
+
+        expect(screen.getByTestId('timeline-stage-row-s2')).toHaveClass(
+            'grid-cols-[1rem_0.625rem_minmax(0,1fr)_minmax(6.5rem,max-content)]'
+        )
+        expect(screen.getByTestId('timeline-stage-row-s3')).toHaveClass(
+            'grid-cols-[1rem_0.625rem_minmax(0,1fr)_minmax(6.5rem,max-content)]'
+        )
+        expect(screen.getByTestId('timeline-stage-meta-s2')).toHaveClass('justify-self-end', 'text-right')
+        expect(screen.getByTestId('timeline-stage-meta-s3')).toHaveClass('justify-self-end', 'text-right')
+    })
+
     it('keeps other stages collapsed after collapsing the current stage and opening another one', () => {
         const stages = [
             makeStage({ id: 's1', label: 'Contacted', order: 1, slug: 'contacted' }),

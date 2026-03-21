@@ -469,6 +469,11 @@ const ActivityRow = memo(function ActivityRow({ item }: { item: ActivityItem }) 
     )
 })
 
+const STAGE_ROW_CLASS =
+    "grid w-full grid-cols-[1rem_0.625rem_minmax(0,1fr)_minmax(6.5rem,max-content)] items-center gap-x-2 rounded py-2 text-left"
+const STAGE_ROW_LABEL_CLASS = "flex min-w-0 items-center gap-2"
+const STAGE_ROW_META_CLASS = "justify-self-end text-right text-xs text-muted-foreground"
+
 const StageEntryRow = memo(function StageEntryRow({
     entryTitle,
     entryLabel,
@@ -666,8 +671,10 @@ export function ActivityTimeline({
                             return (
                                 <div
                                     key={stage.id}
-                                    className="flex items-center gap-2 py-1.5 pl-5"
+                                    data-testid={`timeline-stage-row-${stage.id}`}
+                                    className={STAGE_ROW_CLASS}
                                 >
+                                    <span className="size-4" aria-hidden="true" />
                                     <div
                                         className={cn(
                                             "size-2 rounded-full",
@@ -679,8 +686,17 @@ export function ActivityTimeline({
                                                 : undefined
                                         }
                                     />
-                                    <span className="text-sm text-muted-foreground">
-                                        {stage.label}
+                                    <div className={STAGE_ROW_LABEL_CLASS}>
+                                        <span className="truncate text-sm text-muted-foreground">
+                                            {stage.label}
+                                        </span>
+                                    </div>
+                                    <span
+                                        data-testid={`timeline-stage-meta-${stage.id}`}
+                                        className={cn(STAGE_ROW_META_CLASS, "opacity-0")}
+                                        aria-hidden="true"
+                                    >
+                                        --
                                     </span>
                                 </div>
                             )
@@ -694,7 +710,10 @@ export function ActivityTimeline({
                                 onOpenChange={(open) => handleStageToggle(stage.id, open)}
                             >
                                 {/* Stage Header */}
-                                <CollapsibleTrigger className="group flex items-center gap-2 w-full py-2 hover:bg-muted/50 rounded text-left">
+                                <CollapsibleTrigger
+                                    data-testid={`timeline-stage-row-${stage.id}`}
+                                    className={cn("group hover:bg-muted/50", STAGE_ROW_CLASS)}
+                                >
                                     <ChevronRightIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
                                     <div
                                         className={cn(
@@ -713,24 +732,31 @@ export function ActivityTimeline({
                                                 : undefined
                                         }
                                     />
-                                    <span
-                                        className={cn(
-                                            "text-sm font-medium",
-                                            !stage.isCurrent && "text-muted-foreground"
-                                        )}
-                                    >
-                                        {stage.label}
-                                    </span>
-                                    {stage.activityCount > 0 && (
-                                        <Badge variant="secondary" className="text-xs">
-                                            {stage.activityCount}
-                                        </Badge>
-                                    )}
-                                    {!stage.isUpcoming && (
-                                        <span className="text-xs text-muted-foreground ml-auto">
-                                            {stage.date || "—"}
+                                    <div className={STAGE_ROW_LABEL_CLASS}>
+                                        <span
+                                            className={cn(
+                                                "truncate text-sm font-medium",
+                                                !stage.isCurrent && "text-muted-foreground"
+                                            )}
+                                        >
+                                            {stage.label}
                                         </span>
-                                    )}
+                                        {stage.activityCount > 0 && (
+                                            <Badge variant="secondary" className="shrink-0 text-xs">
+                                                {stage.activityCount}
+                                            </Badge>
+                                        )}
+                                    </div>
+                                    <span
+                                        data-testid={`timeline-stage-meta-${stage.id}`}
+                                        className={cn(
+                                            STAGE_ROW_META_CLASS,
+                                            stage.isUpcoming && "opacity-0"
+                                        )}
+                                        aria-hidden={stage.isUpcoming ? "true" : undefined}
+                                    >
+                                        {stage.isUpcoming ? "—" : stage.date || "—"}
+                                    </span>
                                 </CollapsibleTrigger>
 
                                 {/* Stage Details */}

@@ -273,4 +273,67 @@ describe("IntendedParentActivityTimeline", () => {
         expect(screen.queryByText("Next stage note")).not.toBeInTheDocument()
         expect(screen.getByText("Next Steps")).toBeInTheDocument()
     })
+
+    it("keeps stage headers aligned even when only some stages show expanded details", () => {
+        render(
+            <IntendedParentActivityTimeline
+                currentStageId="stage-2"
+                stages={[
+                    makeStage({ id: "stage-1", stage_key: "new", slug: "new", label: "New", order: 1 }),
+                    makeStage({
+                        id: "stage-2",
+                        stage_key: "ready_to_match",
+                        slug: "ready_to_match",
+                        label: "Ready to Match",
+                        order: 2,
+                    }),
+                    makeStage({
+                        id: "stage-3",
+                        stage_key: "delivered",
+                        slug: "delivered",
+                        label: "Delivered",
+                        order: 3,
+                    }),
+                ]}
+                history={[
+                    makeHistory({
+                        id: "history-1",
+                        new_stage_id: "stage-1",
+                        new_status: "new",
+                        changed_at: "2024-01-01T00:00:00.000Z",
+                        effective_at: "2024-01-01T00:00:00.000Z",
+                        recorded_at: "2024-01-01T00:00:00.000Z",
+                    }),
+                    makeHistory({
+                        id: "history-2",
+                        old_stage_id: "stage-1",
+                        new_stage_id: "stage-2",
+                        old_status: "new",
+                        new_status: "ready_to_match",
+                        changed_at: "2024-02-01T00:00:00.000Z",
+                        effective_at: "2024-02-01T00:00:00.000Z",
+                        recorded_at: "2024-02-01T00:00:00.000Z",
+                    }),
+                ]}
+                notes={[
+                    makeNote({
+                        id: "note-2",
+                        content: "Current stage note",
+                        created_at: "2024-02-02T00:00:00.000Z",
+                    }),
+                ]}
+                attachments={[]}
+                tasks={[]}
+            />,
+        )
+
+        expect(screen.getByTestId("timeline-stage-row-stage-2")).toHaveClass(
+            "grid-cols-[1rem_0.625rem_minmax(0,1fr)_minmax(6.5rem,max-content)]",
+        )
+        expect(screen.getByTestId("timeline-stage-row-stage-3")).toHaveClass(
+            "grid-cols-[1rem_0.625rem_minmax(0,1fr)_minmax(6.5rem,max-content)]",
+        )
+        expect(screen.getByTestId("timeline-stage-meta-stage-2")).toHaveClass("justify-self-end", "text-right")
+        expect(screen.getByTestId("timeline-stage-meta-stage-3")).toHaveClass("justify-self-end", "text-right")
+    })
 })
