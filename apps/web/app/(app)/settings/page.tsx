@@ -1,15 +1,14 @@
 "use client"
 
-import { Suspense, useEffect, useState, useRef, useCallback, useMemo } from "react"
+import { Suspense, use, useEffect, useState, useRef, useCallback, useMemo } from "react"
 import NextImage from "next/image"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -30,21 +29,7 @@ import {
   LightbulbIcon,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import {
-  createIntelligentSuggestionRule,
-  deleteIntelligentSuggestionRule,
-  getIntelligentSuggestionRules,
-  getIntelligentSuggestionSettings,
-  getIntelligentSuggestionTemplates,
-  getOrgSettings,
-  updateIntelligentSuggestionRule,
-  updateIntelligentSuggestionSettings,
-  updateProfile,
-  updateOrgSettings,
-  type IntelligentSuggestionRule,
-  type IntelligentSuggestionSettings,
-  type IntelligentSuggestionTemplate,
-} from "@/lib/api/settings"
+import { getOrgSettings, updateProfile, updateOrgSettings } from "@/lib/api/settings"
 import {
   useOrgSignature,
   useUpdateOrgSignature,
@@ -58,12 +43,12 @@ import {
   useUploadAvatar,
   useDeleteAvatar,
 } from "@/lib/hooks/use-sessions"
-import { usePipelines } from "@/lib/hooks/use-pipelines"
 import { useSystemHealth } from "@/lib/hooks/use-system"
 import type { SocialLink } from "@/lib/api/signature"
 import { toast } from "sonner"
 import { getOrgSignaturePreview } from "@/lib/api/signature"
 import { SafeHtmlContent } from "@/components/safe-html-content"
+import { IntelligentSuggestionsSection } from "./intelligent-suggestions-section"
 
 const ROLE_LABELS: Record<string, string> = {
   intake_specialist: "Intake Specialist",
@@ -109,6 +94,31 @@ type SignatureTemplateOption = {
   id: string
   name: string
   description: string
+}
+
+type SettingsTab = "general" | "email-signature" | "intelligent-suggestions"
+
+type SettingsPageSearchParams = Promise<Record<string, string | string[] | undefined>>
+
+function normalizeSettingsTab(tabParam: string | string[] | undefined, isAdmin: boolean): SettingsTab {
+  const tab = Array.isArray(tabParam) ? tabParam[0] : tabParam
+  return isAdmin && (tab === "email-signature" || tab === "intelligent-suggestions")
+    ? tab
+    : "general"
+}
+
+function toUrlSearchParams(searchParams: Record<string, string | string[] | undefined>): URLSearchParams {
+  const nextParams = new URLSearchParams()
+  for (const [key, value] of Object.entries(searchParams)) {
+    if (typeof value === "string") {
+      nextParams.set(key, value)
+      continue
+    }
+    for (const item of value ?? []) {
+      nextParams.append(key, item)
+    }
+  }
+  return nextParams
 }
 
 function SignatureTemplatePicker({
@@ -230,6 +240,176 @@ function SignaturePreviewPanel({ html }: { html: string }) {
         html={html}
         className="prose prose-sm prose-stone max-w-none text-stone-900"
       />
+    </div>
+  )
+}
+
+function OrganizationBrandingFields({
+  brandingForm,
+  orgSettingsError,
+  onFieldChange,
+}: {
+  brandingForm: OrgBrandingFormState
+  orgSettingsError: string | null
+  onFieldChange: <K extends keyof OrgBrandingFormState>(field: K, value: OrgBrandingFormState[K]) => void
+}) {
+  return (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor="primaryColor">Primary Color</Label>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <input
+              type="color"
+              id="primaryColor"
+              value={brandingForm.primaryColor}
+              onChange={(event) => onFieldChange("primaryColor", event.target.value)}
+              className="w-10 h-10 rounded cursor-pointer border"
+            />
+          </div>
+          <Input
+            value={brandingForm.primaryColor}
+            onChange={(event) => onFieldChange("primaryColor", event.target.value)}
+            className="w-28 font-mono text-sm"
+            placeholder="#E444A4"
+            name="primaryColorHex"
+            autoComplete="off"
+            aria-label="Primary color hex"
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="sigCompanyName">Organization Name</Label>
+          <Input
+            id="sigCompanyName"
+            name="sigCompanyName"
+            autoComplete="organization"
+            value={brandingForm.companyName}
+            onChange={(event) => onFieldChange("companyName", event.target.value)}
+            placeholder="Your Organization"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="sigWebsite">Website</Label>
+          <Input
+            id="sigWebsite"
+            name="sigWebsite"
+            autoComplete="url"
+            value={brandingForm.website}
+            onChange={(event) => onFieldChange("website", event.target.value)}
+            placeholder="https://www.example.com"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="sigPhone">Phone</Label>
+          <Input
+            id="sigPhone"
+            name="sigPhone"
+            autoComplete="tel"
+            value={brandingForm.phone}
+            onChange={(event) => onFieldChange("phone", event.target.value)}
+            placeholder="(555) 123-4567"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="sigEmail">Email</Label>
+          <Input
+            id="sigEmail"
+            name="sigEmail"
+            autoComplete="email"
+            type="email"
+            value={brandingForm.orgEmail}
+            onChange={(event) => onFieldChange("orgEmail", event.target.value)}
+            placeholder="contact@company.com"
+            disabled={!!orgSettingsError}
+          />
+        </div>
+        <div className="space-y-2 md:col-span-2">
+          <Label htmlFor="sigAddress">Address</Label>
+          <Textarea
+            id="sigAddress"
+            name="sigAddress"
+            autoComplete="street-address"
+            value={brandingForm.address}
+            onChange={(event) => onFieldChange("address", event.target.value)}
+            placeholder="123 Main St, City, State 12345"
+            rows={2}
+          />
+        </div>
+        <div className="space-y-2 md:col-span-2">
+          <Label htmlFor="sigDisclaimer">Disclaimer / Legal Footer</Label>
+          <Textarea
+            id="sigDisclaimer"
+            name="sigDisclaimer"
+            value={brandingForm.disclaimer}
+            onChange={(event) => onFieldChange("disclaimer", event.target.value)}
+            placeholder="Confidentiality notice, legal disclaimer, etc."
+            rows={3}
+          />
+          <p className="text-xs text-muted-foreground">
+            Appears at the bottom of all email signatures (optional)
+          </p>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function OrganizationBrandingActions({
+  previewLoading,
+  saving,
+  saved,
+  previewHtml,
+  onPreview,
+  onSave,
+  saveDisabled,
+}: {
+  previewLoading: boolean
+  saving: boolean
+  saved: boolean
+  previewHtml: string | null
+  onPreview: () => Promise<void>
+  onSave: () => Promise<void>
+  saveDisabled: boolean
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          onClick={onPreview}
+          disabled={previewLoading}
+        >
+          {previewLoading ? (
+            <>
+              <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Loading…
+            </>
+          ) : (
+            <>
+              <EyeIcon className="mr-2 size-4" aria-hidden="true" /> Preview Template
+            </>
+          )}
+        </Button>
+        <Button onClick={onSave} disabled={saveDisabled}>
+          {saving ? (
+            <>
+              <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Saving…
+            </>
+          ) : saved ? (
+            <>
+              <CheckIcon className="mr-2 size-4" aria-hidden="true" /> Saved!
+            </>
+          ) : (
+            "Save Organization Branding"
+          )}
+        </Button>
+      </div>
+
+      {previewHtml && (
+        <SignaturePreviewPanel html={previewHtml} />
+      )}
     </div>
   )
 }
@@ -979,904 +1159,21 @@ function OrganizationBrandingSection() {
         deletePending={deleteLogo.isPending}
       />
 
-      {/* Primary Color */}
-      <div className="space-y-2">
-        <Label htmlFor="primaryColor">Primary Color</Label>
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <input
-              type="color"
-              id="primaryColor"
-              value={brandingForm.primaryColor}
-              onChange={(e) => updateBrandingForm("primaryColor", e.target.value)}
-              className="w-10 h-10 rounded cursor-pointer border"
-            />
-          </div>
-          <Input
-            value={brandingForm.primaryColor}
-            onChange={(e) => updateBrandingForm("primaryColor", e.target.value)}
-            className="w-28 font-mono text-sm"
-            placeholder="#E444A4"
-            name="primaryColorHex"
-            autoComplete="off"
-            aria-label="Primary color hex"
-          />
-        </div>
-      </div>
-
-      {/* Organization Info */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="sigCompanyName">Organization Name</Label>
-          <Input
-            id="sigCompanyName"
-            name="sigCompanyName"
-            autoComplete="organization"
-            value={brandingForm.companyName}
-            onChange={(e) => updateBrandingForm("companyName", e.target.value)}
-            placeholder="Your Organization"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="sigWebsite">Website</Label>
-          <Input
-            id="sigWebsite"
-            name="sigWebsite"
-            autoComplete="url"
-            value={brandingForm.website}
-            onChange={(e) => updateBrandingForm("website", e.target.value)}
-            placeholder="https://www.example.com"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="sigPhone">Phone</Label>
-          <Input
-            id="sigPhone"
-            name="sigPhone"
-            autoComplete="tel"
-            value={brandingForm.phone}
-            onChange={(e) => updateBrandingForm("phone", e.target.value)}
-            placeholder="(555) 123-4567"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="sigEmail">Email</Label>
-          <Input
-            id="sigEmail"
-            name="sigEmail"
-            autoComplete="email"
-            type="email"
-            value={brandingForm.orgEmail}
-            onChange={(e) => updateBrandingForm("orgEmail", e.target.value)}
-            placeholder="contact@company.com"
-            disabled={!!brandingUi.orgSettingsError}
-          />
-        </div>
-        <div className="space-y-2 md:col-span-2">
-          <Label htmlFor="sigAddress">Address</Label>
-          <Textarea
-            id="sigAddress"
-            name="sigAddress"
-            autoComplete="street-address"
-            value={brandingForm.address}
-            onChange={(e) => updateBrandingForm("address", e.target.value)}
-            placeholder="123 Main St, City, State 12345"
-            rows={2}
-          />
-        </div>
-        <div className="space-y-2 md:col-span-2">
-          <Label htmlFor="sigDisclaimer">Disclaimer / Legal Footer</Label>
-          <Textarea
-            id="sigDisclaimer"
-            name="sigDisclaimer"
-            value={brandingForm.disclaimer}
-            onChange={(e) => updateBrandingForm("disclaimer", e.target.value)}
-            placeholder="Confidentiality notice, legal disclaimer, etc."
-            rows={3}
-          />
-          <p className="text-xs text-muted-foreground">
-            Appears at the bottom of all email signatures (optional)
-          </p>
-        </div>
-      </div>
-
-      {/* Preview Button */}
-      <div className="space-y-4">
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={handlePreviewTemplate}
-            disabled={brandingUi.previewLoading}
-          >
-            {brandingUi.previewLoading ? (
-              <>
-                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Loading…
-              </>
-            ) : (
-              <>
-                <EyeIcon className="mr-2 size-4" aria-hidden="true" /> Preview Template
-              </>
-            )}
-          </Button>
-          <Button onClick={handleSave} disabled={brandingUi.saving || sigLoading || brandingUi.orgSettingsLoading}>
-            {brandingUi.saving ? (
-              <>
-                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Saving…
-              </>
-            ) : brandingUi.saved ? (
-              <>
-                <CheckIcon className="mr-2 size-4" aria-hidden="true" /> Saved!
-              </>
-            ) : (
-              "Save Organization Branding"
-            )}
-          </Button>
-        </div>
-
-        {sanitizedPreviewHtml && (
-          <SignaturePreviewPanel html={sanitizedPreviewHtml} />
-        )}
-      </div>
-    </div>
-  )
-}
-
-function IntelligentSuggestionsSection() {
-  type RuleDraft = {
-    template_key: string
-    name: string
-    stage_slug: string
-    business_days: number
-    enabled: boolean
-    sort_order: number
-  }
-
-  const [settings, setSettings] = useState<IntelligentSuggestionSettings | null>(null)
-  const [templates, setTemplates] = useState<IntelligentSuggestionTemplate[]>([])
-  const [rules, setRules] = useState<IntelligentSuggestionRule[]>([])
-  const [newRuleDraft, setNewRuleDraft] = useState<RuleDraft | null>(null)
-  const [editingRuleId, setEditingRuleId] = useState<string | null>(null)
-  const [editingRuleDraft, setEditingRuleDraft] = useState<RuleDraft | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [ruleSaving, setRuleSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const { data: pipelines } = usePipelines()
-
-  const stageOptions = useMemo(() => {
-    const byValue = new Map<string, { value: string; slug: string; stageKey: string; label: string }>()
-    for (const pipeline of pipelines ?? []) {
-      for (const rawStage of pipeline.stages ?? []) {
-        const stage = rawStage as {
-          slug?: string
-          status?: string
-          stage_key?: string
-          label?: string
-          is_active?: boolean
-        }
-        const slug = stage.slug ?? stage.status
-        const stageKey = stage.stage_key ?? slug
-        if (!slug || !stageKey || stage.is_active === false) continue
-        if (!byValue.has(stageKey)) {
-          byValue.set(stageKey, {
-            value: stageKey,
-            slug,
-            stageKey,
-            label: stage.label ?? stageKey,
-          })
-        }
-      }
-    }
-    return Array.from(byValue.values())
-      .sort((left, right) => left.label.localeCompare(right.label))
-  }, [pipelines])
-
-  const stageLabelByRef = useMemo(
-    () =>
-      new Map(
-        stageOptions.flatMap((option) => [
-          [option.value, option.label] as const,
-          [option.slug, option.label] as const,
-        ]),
-      ),
-    [stageOptions],
-  )
-  const stageOptionByValue = useMemo(
-    () => new Map(stageOptions.map((option) => [option.value, option])),
-    [stageOptions],
-  )
-  const templateByKey = useMemo(
-    () => new Map(templates.map((template) => [template.template_key, template])),
-    [templates],
-  )
-
-  const formatStageLabel = useCallback(
-    (stageRef: string | null | undefined) => {
-      if (!stageRef) return "N/A"
-      return stageLabelByRef.get(stageRef) ?? stageRef.replaceAll("_", " ")
-    },
-    [stageLabelByRef],
-  )
-
-  const requiresStageSelection = useCallback((template: IntelligentSuggestionTemplate | undefined) => {
-    if (!template) return false
-    return template.rule_kind === "stage_inactivity" && template.template_key !== "preapproval_stuck"
-  }, [])
-
-  const resolveStageSlug = useCallback(
-    (template: IntelligentSuggestionTemplate | undefined, stageSlug: string | null | undefined) => {
-      if (!template || !requiresStageSelection(template)) return ""
-      const normalized = (stageSlug ?? "").trim()
-      if (normalized) {
-        const matchingOption = stageOptions.find(
-          (option) => option.value === normalized || option.slug === normalized,
-        )
-        if (matchingOption) {
-          return matchingOption.value
-        }
-      }
-      const defaultStage = (template.default_stage_key ?? template.default_stage_slug ?? "").trim()
-      if (defaultStage) {
-        const matchingDefault = stageOptions.find(
-          (option) => option.value === defaultStage || option.slug === defaultStage,
-        )
-        if (matchingDefault) {
-          return matchingDefault.value
-        }
-      }
-      return stageOptions[0]?.value ?? defaultStage
-    },
-    [requiresStageSelection, stageOptions],
-  )
-
-  const buildRuleDraft = useCallback(
-    (
-      template: IntelligentSuggestionTemplate | undefined,
-      sortOrder: number,
-      overrides: Partial<RuleDraft> = {},
-    ): RuleDraft | null => {
-      if (!template) return null
-      return {
-        template_key: template.template_key,
-        name: overrides.name ?? template.name,
-        stage_slug: resolveStageSlug(
-          template,
-          overrides.stage_slug ?? template.default_stage_key ?? template.default_stage_slug,
-        ),
-        business_days: overrides.business_days ?? template.default_business_days,
-        enabled: overrides.enabled ?? true,
-        sort_order: overrides.sort_order ?? sortOrder,
-      }
-    },
-    [resolveStageSlug],
-  )
-
-  const loadSettings = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const [settingsResponse, templatesResponse, rulesResponse] = await Promise.all([
-        getIntelligentSuggestionSettings(),
-        getIntelligentSuggestionTemplates(),
-        getIntelligentSuggestionRules(),
-      ])
-      setSettings(settingsResponse)
-      setTemplates(templatesResponse)
-      setRules(rulesResponse)
-      const templateSeed = templatesResponse.find((template) => template.is_default) ?? templatesResponse[0]
-      if (templateSeed) {
-        const draft = buildRuleDraft(templateSeed, (rulesResponse.at(-1)?.sort_order ?? 0) + 1)
-        if (draft) setNewRuleDraft(draft)
-      }
-    } catch (loadError) {
-      console.error("Failed to load intelligent suggestion settings:", loadError)
-      setError("Unable to load settings. Please retry.")
-    } finally {
-      setLoading(false)
-    }
-  }, [buildRuleDraft])
-
-  useEffect(() => {
-    loadSettings()
-  }, [loadSettings])
-
-  useEffect(() => {
-    if (!newRuleDraft || templates.length === 0) return
-    const template = templateByKey.get(newRuleDraft.template_key)
-    if (!requiresStageSelection(template)) return
-    const normalizedStage = resolveStageSlug(template, newRuleDraft.stage_slug)
-    if (normalizedStage && normalizedStage !== newRuleDraft.stage_slug) {
-      setNewRuleDraft((prev) => (prev ? { ...prev, stage_slug: normalizedStage } : prev))
-    }
-  }, [newRuleDraft, templateByKey, templates, requiresStageSelection, resolveStageSlug])
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2Icon className="size-6 animate-spin text-muted-foreground motion-reduce:animate-none" aria-hidden="true" />
-      </div>
-    )
-  }
-
-  if (!settings) {
-    return (
-      <div className="space-y-4">
-        <p className="text-sm text-destructive">{error ?? "Unable to load settings."}</p>
-        <Button variant="outline" onClick={loadSettings}>
-          Retry
-        </Button>
-      </div>
-    )
-  }
-
-  const setDigestField = (rawValue: string) => {
-    const parsed = Number.parseInt(rawValue, 10)
-    const normalized = Number.isFinite(parsed) ? parsed : settings.digest_hour_local
-    setSettings((prev) => (prev ? { ...prev, digest_hour_local: Math.max(0, Math.min(23, normalized)) } : prev))
-  }
-
-  const handleSave = async () => {
-    setSaving(true)
-    setError(null)
-    try {
-      const updated = await updateIntelligentSuggestionSettings(settings)
-      setSettings(updated)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-      toast.success("Intelligent suggestion settings updated")
-    } catch (saveError) {
-      console.error("Failed to save intelligent suggestion settings:", saveError)
-      setError("Unable to save settings. Please try again.")
-      toast.error("Failed to save intelligent suggestion settings")
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleNewRuleTemplateChange = (templateKey: string | null) => {
-    if (!templateKey) return
-    const template = templateByKey.get(templateKey)
-    if (!template) return
-    setNewRuleDraft((prev) =>
-      buildRuleDraft(template, prev?.sort_order ?? (rules.at(-1)?.sort_order ?? 0) + 1, {
-        enabled: prev?.enabled ?? true,
-      }),
-    )
-  }
-
-  const handleCreateRule = async () => {
-    if (!newRuleDraft) return
-    const template = templateByKey.get(newRuleDraft.template_key)
-    if (!template) {
-      toast.error("Select a valid rule template")
-      return
-    }
-    const stageSlug = requiresStageSelection(template)
-      ? resolveStageSlug(template, newRuleDraft.stage_slug)
-      : null
-    if (requiresStageSelection(template) && !stageSlug) {
-      toast.error("Select a stage for this workflow rule")
-      return
-    }
-
-    setRuleSaving(true)
-    try {
-      const selectedStage = stageSlug ? stageOptionByValue.get(stageSlug) : null
-      const createdRule = await createIntelligentSuggestionRule({
-        template_key: template.template_key,
-        name: newRuleDraft.name.trim() || template.name,
-        stage_key: selectedStage?.stageKey ?? stageSlug,
-        stage_slug: selectedStage?.slug ?? stageSlug,
-        business_days: Math.max(1, Math.min(60, newRuleDraft.business_days)),
-        enabled: newRuleDraft.enabled,
-      })
-      setRules((prev) =>
-        [...prev, createdRule].sort((left, right) => left.sort_order - right.sort_order),
-      )
-      const resetDraft = buildRuleDraft(template, createdRule.sort_order + 1, { enabled: true })
-      if (resetDraft) setNewRuleDraft(resetDraft)
-      toast.success("Workflow rule created")
-    } catch (ruleError) {
-      console.error("Failed to create intelligent suggestion rule:", ruleError)
-      toast.error("Failed to create workflow rule")
-    } finally {
-      setRuleSaving(false)
-    }
-  }
-
-  const handleToggleRuleEnabled = async (rule: IntelligentSuggestionRule) => {
-    setRuleSaving(true)
-    try {
-      const updatedRule = await updateIntelligentSuggestionRule(rule.id, { enabled: !rule.enabled })
-      setRules((prev) => prev.map((current) => (current.id === rule.id ? updatedRule : current)))
-      if (editingRuleId === rule.id && editingRuleDraft) {
-        setEditingRuleDraft({ ...editingRuleDraft, enabled: updatedRule.enabled })
-      }
-      toast.success(`Rule ${updatedRule.enabled ? "enabled" : "disabled"}`)
-    } catch (ruleError) {
-      console.error("Failed to toggle intelligent suggestion rule:", ruleError)
-      toast.error("Failed to update rule status")
-    } finally {
-      setRuleSaving(false)
-    }
-  }
-
-  const startEditingRule = (rule: IntelligentSuggestionRule) => {
-    const template = templateByKey.get(rule.template_key)
-    const nextDraft = buildRuleDraft(template, rule.sort_order, {
-      name: rule.name,
-      stage_slug: rule.stage_key ?? rule.stage_slug ?? template?.default_stage_key ?? template?.default_stage_slug ?? "",
-      business_days: rule.business_days,
-      enabled: rule.enabled,
-      sort_order: rule.sort_order,
-    })
-    if (!nextDraft) return
-    setEditingRuleId(rule.id)
-    setEditingRuleDraft(nextDraft)
-  }
-
-  const cancelEditingRule = () => {
-    setEditingRuleId(null)
-    setEditingRuleDraft(null)
-  }
-
-  const handleSaveEditingRule = async () => {
-    if (!editingRuleId || !editingRuleDraft) return
-    const template = templateByKey.get(editingRuleDraft.template_key)
-    if (!template) {
-      toast.error("Unknown template for rule")
-      return
-    }
-    const stageSlug = requiresStageSelection(template)
-      ? resolveStageSlug(template, editingRuleDraft.stage_slug)
-      : null
-    if (requiresStageSelection(template) && !stageSlug) {
-      toast.error("Select a stage for this workflow rule")
-      return
-    }
-
-    setRuleSaving(true)
-    try {
-      const selectedStage = stageSlug ? stageOptionByValue.get(stageSlug) : null
-      const updatedRule = await updateIntelligentSuggestionRule(editingRuleId, {
-        name: editingRuleDraft.name.trim() || template.name,
-        stage_key: selectedStage?.stageKey ?? stageSlug,
-        stage_slug: selectedStage?.slug ?? stageSlug,
-        business_days: Math.max(1, Math.min(60, editingRuleDraft.business_days)),
-        enabled: editingRuleDraft.enabled,
-        sort_order: Math.max(0, editingRuleDraft.sort_order),
-      })
-      setRules((prev) =>
-        prev
-          .map((rule) => (rule.id === editingRuleId ? updatedRule : rule))
-          .sort((left, right) => left.sort_order - right.sort_order),
-      )
-      cancelEditingRule()
-      toast.success("Workflow rule updated")
-    } catch (ruleError) {
-      console.error("Failed to update intelligent suggestion rule:", ruleError)
-      toast.error("Failed to update workflow rule")
-    } finally {
-      setRuleSaving(false)
-    }
-  }
-
-  const handleDeleteRule = async (rule: IntelligentSuggestionRule) => {
-    if (!confirm(`Delete rule "${rule.name}"?`)) return
-    setRuleSaving(true)
-    try {
-      await deleteIntelligentSuggestionRule(rule.id)
-      setRules((prev) => prev.filter((current) => current.id !== rule.id))
-      if (editingRuleId === rule.id) cancelEditingRule()
-      toast.success("Workflow rule deleted")
-    } catch (ruleError) {
-      console.error("Failed to delete intelligent suggestion rule:", ruleError)
-      toast.error("Failed to delete workflow rule")
-    } finally {
-      setRuleSaving(false)
-    }
-  }
-
-  const describeRule = (rule: IntelligentSuggestionRule) => {
-    if (rule.rule_kind === "meeting_outcome_missing") {
-      return `Passed scheduled meeting ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"} but no outcome logged`
-    }
-    if (rule.template_key === "preapproval_stuck") {
-      return `No updates in intake pre-approval stages for ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"}`
-    }
-    return `${rule.stage_label ?? formatStageLabel(rule.stage_key ?? rule.stage_slug)} has no updates for ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"}`
-  }
-
-  const getRuleStageLabel = (rule: IntelligentSuggestionRule) => {
-    if (rule.rule_kind === "meeting_outcome_missing") {
-      return "All Stages Applied"
-    }
-    if (rule.template_key === "preapproval_stuck") {
-      return "Intake Pre-approval Stages"
-    }
-    return rule.stage_label ?? formatStageLabel(rule.stage_key ?? rule.stage_slug)
-  }
-
-  const buildStageInput = (
-    id: string,
-    value: string,
-    onChange: (nextValue: string | null) => void,
-    disabled = false,
-  ) => {
-    if (stageOptions.length > 0) {
-      return (
-        <Select value={value} onValueChange={onChange} disabled={disabled}>
-          <SelectTrigger id={id}>
-            <SelectValue placeholder="Select stage">
-              {(selected: string | null) => {
-                if (!selected) return "Select stage"
-                return stageLabelByRef.get(selected) ?? selected.replaceAll("_", " ")
-              }}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {stageOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )
-    }
-    return (
-      <Input
-        id={id}
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder="Stage key (for example: new_unread)"
+      <OrganizationBrandingFields
+        brandingForm={brandingForm}
+        orgSettingsError={brandingUi.orgSettingsError}
+        onFieldChange={updateBrandingForm}
       />
-    )
-  }
 
-  const newRuleTemplate = newRuleDraft ? templateByKey.get(newRuleDraft.template_key) : undefined
-  const newRuleNeedsStage = requiresStageSelection(newRuleTemplate)
-  const rulesPaused = !settings.enabled
-
-  return (
-    <div className="space-y-6">
-      {error && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
-      <div className="space-y-4">
-        <div className="flex items-center justify-between rounded-lg border border-border p-4">
-          <div>
-            <p className="font-medium">Enable Intelligent Suggestions</p>
-            <p className="text-sm text-muted-foreground">
-              Turn all intelligent suggestion workflows on or off for your organization.
-            </p>
-          </div>
-          <Switch
-            checked={settings.enabled}
-            onCheckedChange={(checked) => setSettings((prev) => (prev ? { ...prev, enabled: checked } : prev))}
-          />
-        </div>
-        {rulesPaused && (
-          <p className="text-sm text-muted-foreground">
-            Intelligent suggestions are paused globally. You can still configure rules below.
-          </p>
-        )}
-
-        <div className="rounded-lg border border-border p-4 space-y-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="font-medium">Add Workflow Rule</p>
-              <p className="text-sm text-muted-foreground">
-                Build rules like "stuck on stage X for Y business days" or "follow up after Y days."
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              onClick={handleCreateRule}
-              disabled={ruleSaving || !newRuleDraft || templates.length === 0}
-            >
-              <PlusIcon className="mr-2 size-4" aria-hidden="true" />
-              Add Rule
-            </Button>
-          </div>
-
-          {newRuleDraft ? (
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="new-rule-template">Template</Label>
-                <Select
-                  value={newRuleDraft.template_key}
-                  onValueChange={handleNewRuleTemplateChange}
-                  disabled={ruleSaving || templates.length === 0}
-                >
-                  <SelectTrigger id="new-rule-template">
-                    <SelectValue placeholder="Select template">
-                      {(selected: string | null) => {
-                        if (!selected) return "Select template"
-                        return templateByKey.get(selected)?.name ?? selected.replaceAll("_", " ")
-                      }}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {templates.map((template) => (
-                      <SelectItem key={template.template_key} value={template.template_key}>
-                        {template.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {newRuleTemplate && (
-                  <p className="text-xs text-muted-foreground">{newRuleTemplate.description}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="new-rule-name">Rule name</Label>
-                <Input
-                  id="new-rule-name"
-                  value={newRuleDraft.name}
-                  disabled={ruleSaving}
-                  onChange={(event) =>
-                    setNewRuleDraft((prev) => (prev ? { ...prev, name: event.target.value } : prev))
-                  }
-                />
-              </div>
-
-              {newRuleNeedsStage && (
-                <div className="space-y-2">
-                  <Label htmlFor="new-rule-stage">Stage</Label>
-                  {buildStageInput(
-                    "new-rule-stage",
-                    newRuleDraft.stage_slug,
-                    (nextStage) =>
-                      setNewRuleDraft((prev) =>
-                        nextStage && prev ? { ...prev, stage_slug: nextStage } : prev,
-                      ),
-                    ruleSaving,
-                  )}
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="new-rule-days">Business days</Label>
-                <Input
-                  id="new-rule-days"
-                  type="number"
-                  min={1}
-                  max={60}
-                  disabled={ruleSaving}
-                  value={newRuleDraft.business_days}
-                  onChange={(event) => {
-                    const parsed = Number.parseInt(event.target.value, 10)
-                    const normalized = Number.isFinite(parsed) ? parsed : newRuleDraft.business_days
-                    setNewRuleDraft((prev) =>
-                      prev ? { ...prev, business_days: Math.max(1, Math.min(60, normalized)) } : prev,
-                    )
-                  }}
-                />
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No templates available. Reload to retry.</p>
-          )}
-        </div>
-
-        <div className="space-y-3">
-          <div>
-            <p className="font-medium">Configured Workflow Rules</p>
-            <p className="text-sm text-muted-foreground">
-              Edit thresholds, target stages, priority, and enabled status.
-            </p>
-          </div>
-          {rules.length === 0 && (
-            <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
-              No intelligent suggestion rules configured.
-            </div>
-          )}
-          {rules.map((rule) => {
-            const template = templateByKey.get(rule.template_key)
-            const isEditing = editingRuleId === rule.id && editingRuleDraft !== null
-            const editingTemplate = isEditing ? templateByKey.get(editingRuleDraft.template_key) : undefined
-            const editingNeedsStage = requiresStageSelection(editingTemplate)
-            const ruleDescription = describeRule(rule)
-            const ruleStageLabel = getRuleStageLabel(rule)
-
-            return (
-              <div key={rule.id} className="rounded-lg border border-border p-4 space-y-3">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium">{rule.name}</p>
-                    <p className="text-sm text-muted-foreground">{ruleDescription}</p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={rule.enabled ? "default" : "secondary"}>
-                      {rule.enabled ? "Enabled" : "Disabled"}
-                    </Badge>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={ruleSaving}
-                      onClick={() => handleToggleRuleEnabled(rule)}
-                    >
-                      {rule.enabled ? "Disable" : "Enable"}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={ruleSaving}
-                      onClick={() => startEditingRule(rule)}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      disabled={ruleSaving}
-                      onClick={() => handleDeleteRule(rule)}
-                    >
-                      <TrashIcon className="mr-1 size-4" aria-hidden="true" />
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="grid gap-3 text-sm md:grid-cols-3">
-                  <p><span className="font-medium">Template:</span> {template?.name ?? rule.template_key}</p>
-                  <p><span className="font-medium">Stage:</span> {ruleStageLabel}</p>
-                  <p><span className="font-medium">Priority:</span> {rule.sort_order}</p>
-                </div>
-
-                {isEditing && editingRuleDraft && (
-                  <div className="rounded-md border border-border bg-muted/30 p-3 space-y-3">
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label htmlFor={`edit-rule-name-${rule.id}`}>Rule name</Label>
-                        <Input
-                          id={`edit-rule-name-${rule.id}`}
-                          value={editingRuleDraft.name}
-                          disabled={ruleSaving}
-                          onChange={(event) =>
-                            setEditingRuleDraft((prev) =>
-                              prev ? { ...prev, name: event.target.value } : prev,
-                            )
-                          }
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor={`edit-rule-days-${rule.id}`}>Business days</Label>
-                        <Input
-                          id={`edit-rule-days-${rule.id}`}
-                          type="number"
-                          min={1}
-                          max={60}
-                          disabled={ruleSaving}
-                          value={editingRuleDraft.business_days}
-                          onChange={(event) => {
-                            const parsed = Number.parseInt(event.target.value, 10)
-                            const normalized = Number.isFinite(parsed) ? parsed : editingRuleDraft.business_days
-                            setEditingRuleDraft((prev) =>
-                              prev
-                                ? { ...prev, business_days: Math.max(1, Math.min(60, normalized)) }
-                                : prev,
-                            )
-                          }}
-                        />
-                      </div>
-
-                      {editingNeedsStage && (
-                        <div className="space-y-2">
-                          <Label htmlFor={`edit-rule-stage-${rule.id}`}>Stage</Label>
-                          {buildStageInput(
-                            `edit-rule-stage-${rule.id}`,
-                            editingRuleDraft.stage_slug,
-                            (nextStage) =>
-                              setEditingRuleDraft((prev) =>
-                                nextStage && prev ? { ...prev, stage_slug: nextStage } : prev,
-                              ),
-                            ruleSaving,
-                          )}
-                        </div>
-                      )}
-
-                      <div className="space-y-2">
-                        <Label htmlFor={`edit-rule-priority-${rule.id}`}>Priority</Label>
-                        <Input
-                          id={`edit-rule-priority-${rule.id}`}
-                          type="number"
-                          min={0}
-                          disabled={ruleSaving}
-                          value={editingRuleDraft.sort_order}
-                          onChange={(event) => {
-                            const parsed = Number.parseInt(event.target.value, 10)
-                            const normalized = Number.isFinite(parsed) ? parsed : editingRuleDraft.sort_order
-                            setEditingRuleDraft((prev) =>
-                              prev ? { ...prev, sort_order: Math.max(0, normalized) } : prev,
-                            )
-                          }}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor={`edit-rule-enabled-${rule.id}`}>Enabled</Label>
-                        <div className="flex h-10 items-center rounded-md border border-input px-3">
-                          <Switch
-                            id={`edit-rule-enabled-${rule.id}`}
-                            checked={editingRuleDraft.enabled}
-                            disabled={ruleSaving}
-                            onCheckedChange={(checked) =>
-                              setEditingRuleDraft((prev) =>
-                                prev ? { ...prev, enabled: checked } : prev,
-                              )
-                            }
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" disabled={ruleSaving} onClick={handleSaveEditingRule}>
-                        Save Rule
-                      </Button>
-                      <Button size="sm" variant="outline" disabled={ruleSaving} onClick={cancelEditingRule}>
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        <div className="rounded-lg border border-border p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="font-medium">Daily digest notifications</p>
-            <Switch
-              disabled={!settings.enabled}
-              checked={settings.daily_digest_enabled}
-              onCheckedChange={(checked) =>
-                setSettings((prev) => (prev ? { ...prev, daily_digest_enabled: checked } : prev))
-              }
-            />
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Send a daily digest to users when suggestions are available.
-          </p>
-          <div className="space-y-2 max-w-xs">
-            <Label htmlFor="digest-hour">Digest hour (local org time, 0-23)</Label>
-            <Input
-              id="digest-hour"
-              type="number"
-              min={0}
-              max={23}
-              disabled={!settings.enabled || !settings.daily_digest_enabled}
-              value={settings.digest_hour_local}
-              onChange={(event) => setDigestField(event.target.value)}
-            />
-          </div>
-        </div>
-      </div>
-
-      <Button onClick={handleSave} disabled={saving}>
-        {saving ? (
-          <>
-            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-            Saving…
-          </>
-        ) : saved ? (
-          <>
-            <CheckIcon className="mr-2 size-4" aria-hidden="true" />
-            Saved!
-          </>
-        ) : (
-          "Save Intelligent Suggestion Rules"
-        )}
-      </Button>
+      <OrganizationBrandingActions
+        previewLoading={brandingUi.previewLoading}
+        saving={brandingUi.saving}
+        saved={brandingUi.saved}
+        previewHtml={sanitizedPreviewHtml}
+        onPreview={handlePreviewTemplate}
+        onSave={handleSave}
+        saveDisabled={brandingUi.saving || sigLoading || brandingUi.orgSettingsLoading}
+      />
     </div>
   )
 }
@@ -1885,28 +1182,17 @@ function IntelligentSuggestionsSection() {
 // Main Settings Page
 // =============================================================================
 
-function SettingsPageContent() {
+function SettingsPageContent({ searchParams }: { searchParams: SettingsPageSearchParams }) {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { user } = useAuth()
+  const resolvedSearchParams = use(searchParams)
 
   const isAdmin = user?.role === "admin" || user?.role === "developer"
-
-  type SettingsTab = "general" | "email-signature" | "intelligent-suggestions"
-  const urlTabParam = searchParams.get("tab")
-  const urlTab: SettingsTab = isAdmin
-    && (urlTabParam === "email-signature" || urlTabParam === "intelligent-suggestions")
-    ? urlTabParam
-    : "general"
-  const activeTab: SettingsTab = urlTab
+  const activeTab = normalizeSettingsTab(resolvedSearchParams.tab, isAdmin)
 
   const handleTabChange = (value: string) => {
-    const nextTab: SettingsTab = isAdmin
-      && (value === "email-signature" || value === "intelligent-suggestions")
-      ? value
-      : "general"
-
-    const nextParams = new URLSearchParams(searchParams.toString())
+    const nextTab = normalizeSettingsTab(value, isAdmin)
+    const nextParams = toUrlSearchParams(resolvedSearchParams)
     if (nextTab === "general") {
       nextParams.delete("tab")
     } else {
@@ -2043,10 +1329,14 @@ function SettingsPageContent() {
   )
 }
 
-export default function SettingsPage() {
+export default function SettingsPage({
+  searchParams,
+}: {
+  searchParams?: SettingsPageSearchParams
+}) {
   return (
     <Suspense fallback={<div className="min-h-screen bg-background" />}>
-      <SettingsPageContent />
+      <SettingsPageContent searchParams={searchParams ?? Promise.resolve({})} />
     </Suspense>
   )
 }

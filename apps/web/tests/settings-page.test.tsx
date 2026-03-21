@@ -1,13 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import SettingsPage from '../app/(app)/settings/page'
 
 const mockReplace = vi.fn()
-let mockSearchParams = new URLSearchParams()
 
 vi.mock('next/navigation', () => ({
     useRouter: () => ({ replace: mockReplace }),
-    useSearchParams: () => mockSearchParams,
 }))
 
 const mockUpdateNotificationSettings = vi.fn()
@@ -177,13 +175,18 @@ vi.mock('@/lib/hooks/use-system', () => ({
     useSystemHealth: () => ({ data: { version: '0.16.0' }, isLoading: false }),
 }))
 
+async function renderSettingsPage(searchParams: Record<string, string | string[] | undefined> = {}) {
+    await act(async () => {
+        render(<SettingsPage searchParams={Promise.resolve(searchParams)} />)
+    })
+}
+
 describe('SettingsPage', () => {
     beforeEach(() => {
         mockUpdateNotificationSettings.mockReset()
         mockRollbackPipeline.mockReset()
         mockRollbackTemplate.mockReset()
         versionModalSpy.mockClear()
-        mockSearchParams = new URLSearchParams()
         mockGetOrgSettings.mockResolvedValue({
             name: 'Test Organization',
             address: '123 Main St',
@@ -245,32 +248,31 @@ describe('SettingsPage', () => {
         mockUpdateIntelligentSuggestionSettings.mockResolvedValue({})
     })
 
-    it('renders general tab by default', () => {
-        render(<SettingsPage />)
+    it('renders general tab by default', async () => {
+        await renderSettingsPage()
         // There are multiple "General" texts (tab + heading), so use getAllByText
         expect(screen.getAllByText('General').length).toBeGreaterThan(0)
         expect(screen.getByText('Profile and access settings')).toBeDefined()
         expect(screen.getByText('v0.16.0')).toBeDefined()
     })
 
-    it('shows a friendly role label instead of the raw role value', () => {
-        render(<SettingsPage />)
+    it('shows a friendly role label instead of the raw role value', async () => {
+        await renderSettingsPage()
 
         expect(screen.getByText('Developer')).toBeInTheDocument()
         expect(screen.queryByText('developer')).not.toBeInTheDocument()
     })
 
     it('shows organization branding section in email signature tab', async () => {
-        mockSearchParams = new URLSearchParams('tab=email-signature')
-        render(<SettingsPage />)
+        await renderSettingsPage({ tab: 'email-signature' })
 
-        expect(await screen.findByText('Organization Branding')).toBeInTheDocument()
+        expect(screen.getByText('Organization Branding')).toBeInTheDocument()
         expect(screen.queryByText('Organization Info')).not.toBeInTheDocument()
         expect(screen.queryByText('Signature Branding')).not.toBeInTheDocument()
     })
 
-    it('shows intelligent suggestions tab for admin roles', () => {
-        render(<SettingsPage />)
+    it('shows intelligent suggestions tab for admin roles', async () => {
+        await renderSettingsPage()
         expect(screen.getByText('Intelligent Suggestions')).toBeInTheDocument()
     })
 
