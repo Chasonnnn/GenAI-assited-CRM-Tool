@@ -4,8 +4,8 @@ import * as React from "react"
 import { useParams } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { TabsContent } from "@/components/ui/tabs"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { InlineEditField } from "@/components/inline-edit-field"
 import { CombinedMedicalInsuranceCard } from "@/components/surrogates/CombinedMedicalInsuranceCard"
 import { ActivityTimeline } from "@/components/surrogates/ActivityTimeline"
@@ -27,6 +27,7 @@ import { computeBmi, formatDate, formatHeight } from "@/components/surrogates/de
 import { useSurrogateDetailContext } from "@/components/surrogates/detail/SurrogateDetailContext"
 import { formatRace } from "@/lib/formatters"
 import { getSurrogateStageContext, stageHasCapability } from "@/lib/surrogate-stage-context"
+import type { SurrogateLeadIntakeWarning } from "@/lib/types/surrogate"
 
 const LEAD_WARNING_FIELD_LABELS = {
     email: "Email",
@@ -34,6 +35,55 @@ const LEAD_WARNING_FIELD_LABELS = {
     height_ft: "Height",
     weight_lb: "Weight",
 } as const
+
+const LEAD_WARNING_REASON_LABELS = {
+    invalid_value: "Invalid structured value",
+    missing_value: "Missing structured value",
+} as const
+
+const LEAD_WARNING_REASON_COPY = {
+    invalid_value: "This value could not be structured, so the field needs review.",
+    missing_value: "This value could not be structured, so the field needs review.",
+} as const
+
+function LeadWarningIndicator({
+    warning,
+    fieldLabel,
+}: {
+    warning: SurrogateLeadIntakeWarning
+    fieldLabel: string
+}) {
+    return (
+        <Tooltip>
+            <TooltipTrigger
+                type="button"
+                aria-label={`${fieldLabel} lead intake warning`}
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-red-300/80 bg-[radial-gradient(circle_at_28%_28%,rgba(255,255,255,0.96),rgba(255,255,255,0.42)_34%,rgba(252,165,165,0.3)_38%,rgba(248,113,113,0.26)_62%,rgba(220,38,38,0.18)_100%)] text-red-600 shadow-[0_6px_16px_-10px_rgba(220,38,38,0.95),inset_0_1px_0_rgba(255,255,255,0.95)] transition-transform duration-150 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300/70 focus-visible:ring-offset-2"
+            >
+                <AlertTriangleIcon className="size-3.5" aria-hidden="true" />
+            </TooltipTrigger>
+            <TooltipContent className="max-w-64 px-3 py-2">
+                <div className="space-y-1.5">
+                    <div className="text-sm font-medium">{fieldLabel}</div>
+                    <div className="text-[10px] uppercase tracking-[0.16em] text-background/70">
+                        {LEAD_WARNING_REASON_LABELS[warning.issue]}
+                    </div>
+                    <p className="text-xs leading-relaxed text-background/88">
+                        {LEAD_WARNING_REASON_COPY[warning.issue]}
+                    </p>
+                    <div className="border-t border-background/15 pt-1.5">
+                        <div className="text-[10px] uppercase tracking-[0.16em] text-background/70">
+                            Raw lead value
+                        </div>
+                        <div className="mt-1 break-words text-xs font-medium">
+                            {warning.raw_value}
+                        </div>
+                    </div>
+                </div>
+            </TooltipContent>
+        </Tooltip>
+    )
+}
 
 export function SurrogateOverviewTab() {
     const params = useParams<{ id: string }>()
@@ -64,6 +114,10 @@ export function SurrogateOverviewTab() {
         () => surrogateData?.lead_intake_warnings ?? [],
         [surrogateData]
     )
+    const leadWarningMap = React.useMemo(
+        () => new Map(leadIntakeWarnings.map((warning) => [warning.field_key, warning])),
+        [leadIntakeWarnings]
+    )
 
     if (!surrogateData) {
         return null
@@ -76,6 +130,14 @@ export function SurrogateOverviewTab() {
     )
     const isTerminalIntakeOutcome =
         stageContext.effectiveStageKey === "lost" || stageContext.effectiveStageKey === "disqualified"
+    const emailLeadWarning = leadWarningMap.get("email")
+    const phoneLeadWarning = leadWarningMap.get("phone")
+    const heightLeadWarning = leadWarningMap.get("height_ft")
+    const weightLeadWarning = leadWarningMap.get("weight_lb")
+    const hasMeasurementData =
+        surrogateData.height_ft != null || surrogateData.weight_lb != null || bmiValue !== null
+    const shouldShowHeightRow = hasMeasurementData || Boolean(heightLeadWarning)
+    const shouldShowWeightRow = hasMeasurementData || Boolean(weightLeadWarning)
 
     const copyEmail = () => {
         navigator.clipboard.writeText(surrogateData.email)
@@ -105,19 +167,27 @@ export function SurrogateOverviewTab() {
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">Email:</span>
-                            <InlineEditField
-                                value={surrogateData.email}
-                                onSave={async (value) => {
-                                    await updateSurrogateMutation.mutateAsync({
-                                        surrogateId: id,
-                                        data: { email: value },
-                                    })
-                                }}
-                                type="email"
-                                placeholder="Enter email"
-                                validate={(value) => (!value.includes("@") ? "Invalid email" : null)}
-                                label="Email"
-                            />
+                            <div className="flex min-w-0 items-center gap-1.5">
+                                <InlineEditField
+                                    value={surrogateData.email}
+                                    onSave={async (value) => {
+                                        await updateSurrogateMutation.mutateAsync({
+                                            surrogateId: id,
+                                            data: { email: value },
+                                        })
+                                    }}
+                                    type="email"
+                                    placeholder="Enter email"
+                                    validate={(value) => (!value.includes("@") ? "Invalid email" : null)}
+                                    label="Email"
+                                />
+                                {emailLeadWarning && (
+                                    <LeadWarningIndicator
+                                        warning={emailLeadWarning}
+                                        fieldLabel={LEAD_WARNING_FIELD_LABELS.email}
+                                    />
+                                )}
+                            </div>
                             <Button
                                 variant="ghost"
                                 size="icon"
@@ -134,18 +204,26 @@ export function SurrogateOverviewTab() {
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">Phone:</span>
-                            <InlineEditField
-                                value={surrogateData.phone ?? undefined}
-                                onSave={async (value) => {
-                                    await updateSurrogateMutation.mutateAsync({
-                                        surrogateId: id,
-                                        data: { phone: value || null },
-                                    })
-                                }}
-                                type="tel"
-                                placeholder="-"
-                                label="Phone"
-                            />
+                            <div className="flex min-w-0 items-center gap-1.5">
+                                <InlineEditField
+                                    value={surrogateData.phone ?? undefined}
+                                    onSave={async (value) => {
+                                        await updateSurrogateMutation.mutateAsync({
+                                            surrogateId: id,
+                                            data: { phone: value || null },
+                                        })
+                                    }}
+                                    type="tel"
+                                    placeholder="-"
+                                    label="Phone"
+                                />
+                                {phoneLeadWarning && (
+                                    <LeadWarningIndicator
+                                        warning={phoneLeadWarning}
+                                        fieldLabel={LEAD_WARNING_FIELD_LABELS.phone}
+                                    />
+                                )}
+                            </div>
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">State:</span>
@@ -178,66 +256,6 @@ export function SurrogateOverviewTab() {
                         </div>
                     </SurrogateOverviewCard>
 
-                    {leadIntakeWarnings.length > 0 && (
-                        <Card
-                            data-testid="lead-intake-review-card"
-                            className="relative overflow-hidden border-amber-200/80 bg-[linear-gradient(145deg,rgba(255,251,235,0.96),rgba(255,255,255,0.9)_42%,rgba(254,243,199,0.72))] shadow-[0_20px_60px_-36px_rgba(217,119,6,0.55)]"
-                        >
-                            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(251,191,36,0.22),transparent_38%),radial-gradient(circle_at_80%_18%,rgba(255,255,255,0.85),transparent_24%)]" />
-                            <div className="pointer-events-none absolute -right-10 top-3 h-24 w-24 rounded-full bg-amber-200/55 blur-3xl" />
-                            <CardContent className="relative space-y-4 p-4">
-                                <div className="flex items-start justify-between gap-3">
-                                    <div className="space-y-1">
-                                        <div className="flex items-center gap-2 text-amber-900">
-                                            <AlertTriangleIcon className="size-4" />
-                                            <h3 className="text-sm font-semibold tracking-[0.01em]">
-                                                Lead Intake Review
-                                            </h3>
-                                        </div>
-                                        <p className="max-w-2xl text-sm text-amber-900/80">
-                                            These fields did not land as valid structured data. Review the
-                                            original lead values before outreach or qualification.
-                                        </p>
-                                    </div>
-                                    <Badge
-                                        variant="outline"
-                                        className="border-amber-300 bg-white/70 text-amber-800 backdrop-blur-sm"
-                                    >
-                                        Needs review
-                                    </Badge>
-                                </div>
-
-                                <div className="grid gap-3 md:grid-cols-2">
-                                    {leadIntakeWarnings.map((warning) => (
-                                        <div
-                                            key={`${warning.field_key}-${warning.raw_value}`}
-                                            className="rounded-2xl border border-amber-200/80 bg-white/72 px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] backdrop-blur-sm"
-                                        >
-                                            <div className="flex items-center justify-between gap-3">
-                                                <span className="text-sm font-medium text-slate-900">
-                                                    {
-                                                        LEAD_WARNING_FIELD_LABELS[
-                                                            warning.field_key as keyof typeof LEAD_WARNING_FIELD_LABELS
-                                                        ]
-                                                    }
-                                                </span>
-                                                <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-amber-700">
-                                                    {warning.issue === "invalid_value"
-                                                        ? "Invalid"
-                                                        : "Missing"}
-                                                </span>
-                                            </div>
-                                            <div className="mt-2 text-xs text-slate-500">Raw lead value</div>
-                                            <div className="mt-1 break-words text-sm font-medium text-slate-900">
-                                                {warning.raw_value}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )}
-
                     <SurrogateOverviewCard title="Demographics" icon={InfoIcon}>
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">Date of Birth:</span>
@@ -251,22 +269,42 @@ export function SurrogateOverviewTab() {
                             <span className="text-sm text-muted-foreground">Race:</span>
                             <span className="text-sm">{formatRace(surrogateData.race) || "-"}</span>
                         </div>
-                        {(surrogateData.height_ft ||
-                            surrogateData.weight_lb ||
+                        {(shouldShowHeightRow ||
+                            shouldShowWeightRow ||
                             bmiValue !== null) && (
                             <>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm text-muted-foreground">Height:</span>
-                                    <span className="text-sm">{formatHeight(surrogateData.height_ft)}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm text-muted-foreground">Weight:</span>
-                                    <span className="text-sm">
-                                        {surrogateData.weight_lb
-                                            ? `${surrogateData.weight_lb} lb`
-                                            : "-"}
-                                    </span>
-                                </div>
+                                {shouldShowHeightRow && (
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm text-muted-foreground">Height:</span>
+                                        <span className="text-sm">
+                                            {surrogateData.height_ft != null
+                                                ? formatHeight(surrogateData.height_ft)
+                                                : "-"}
+                                        </span>
+                                        {heightLeadWarning && (
+                                            <LeadWarningIndicator
+                                                warning={heightLeadWarning}
+                                                fieldLabel={LEAD_WARNING_FIELD_LABELS.height_ft}
+                                            />
+                                        )}
+                                    </div>
+                                )}
+                                {shouldShowWeightRow && (
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm text-muted-foreground">Weight:</span>
+                                        <span className="text-sm">
+                                            {surrogateData.weight_lb != null
+                                                ? `${surrogateData.weight_lb} lb`
+                                                : "-"}
+                                        </span>
+                                        {weightLeadWarning && (
+                                            <LeadWarningIndicator
+                                                warning={weightLeadWarning}
+                                                fieldLabel={LEAD_WARNING_FIELD_LABELS.weight_lb}
+                                            />
+                                        )}
+                                    </div>
+                                )}
                                 <div className="flex items-center gap-2">
                                     <span className="text-sm text-muted-foreground">BMI:</span>
                                     <span className="text-sm">{bmiValue ?? "-"}</span>

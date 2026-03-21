@@ -564,7 +564,7 @@ describe('SurrogateDetailPage', () => {
         expect(heightRow).toHaveTextContent(/Height:\s*-/)
     })
 
-    it('shows a reflective lead intake review card with raw values that need cleanup', () => {
+    it('shows inline lead warning icons for affected fields and no review card', async () => {
         mockUseSurrogate.mockReturnValueOnce({
             data: {
                 ...baseSurrogateData,
@@ -596,15 +596,29 @@ describe('SurrogateDetailPage', () => {
             </SurrogateDetailLayoutClient>
         )
 
-        const reviewCard = screen.getByTestId('lead-intake-review-card')
-        expect(reviewCard).toBeInTheDocument()
-        expect(reviewCard).toHaveTextContent('Lead Intake Review')
-        expect(reviewCard).toHaveTextContent('Phone')
-        expect(reviewCard).toHaveTextContent('555-CALL-NOW')
-        expect(reviewCard).toHaveTextContent('Height')
-        expect(reviewCard).toHaveTextContent('5 ft 7 in')
-        expect(reviewCard).toHaveTextContent('Weight')
-        expect(reviewCard).toHaveTextContent('140 lbs')
+        expect(screen.queryByTestId('lead-intake-review-card')).not.toBeInTheDocument()
+
+        expect(screen.getByLabelText('Phone lead intake warning')).toBeInTheDocument()
+        expect(screen.getByLabelText('Height lead intake warning')).toBeInTheDocument()
+        expect(screen.getByLabelText('Weight lead intake warning')).toBeInTheDocument()
+        expect(screen.queryByLabelText('Email lead intake warning')).not.toBeInTheDocument()
+        expect(screen.queryByLabelText('State lead intake warning')).not.toBeInTheDocument()
+
+        const heightRow = screen.getByText('Height:').parentElement
+        expect(heightRow).toBeTruthy()
+        expect(heightRow).toHaveTextContent(/Height:\s*-/)
+
+        const weightRow = screen.getByText('Weight:').parentElement
+        expect(weightRow).toBeTruthy()
+        expect(weightRow).toHaveTextContent(/Weight:\s*-/)
+
+        fireEvent.focus(screen.getByLabelText('Phone lead intake warning'))
+
+        await waitFor(() => {
+            expect(screen.getByText('Phone')).toBeInTheDocument()
+            expect(screen.getByText('This value could not be structured, so the field needs review.')).toBeInTheDocument()
+            expect(screen.getByText('555-CALL-NOW')).toBeInTheDocument()
+        })
     })
 
     it('computes BMI from rounded inches for decimal-feet height values', () => {
