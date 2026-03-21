@@ -4,6 +4,7 @@ import * as React from "react"
 import { useParams } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import { TabsContent } from "@/components/ui/tabs"
 import { InlineEditField } from "@/components/inline-edit-field"
 import { CombinedMedicalInsuranceCard } from "@/components/surrogates/CombinedMedicalInsuranceCard"
@@ -13,11 +14,26 @@ import { SurrogateOverviewCard } from "@/components/surrogates/SurrogateOverview
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useSurrogateActivity, useUpdateSurrogate } from "@/lib/hooks/use-surrogates"
 import { useTasks } from "@/lib/hooks/use-tasks"
-import { ClipboardCheckIcon, CopyIcon, InfoIcon, CheckIcon, UserIcon, XIcon } from "lucide-react"
+import {
+    AlertTriangleIcon,
+    ClipboardCheckIcon,
+    CopyIcon,
+    InfoIcon,
+    CheckIcon,
+    UserIcon,
+    XIcon,
+} from "lucide-react"
 import { computeBmi, formatDate, formatHeight } from "@/components/surrogates/detail/surrogate-detail-utils"
 import { useSurrogateDetailContext } from "@/components/surrogates/detail/SurrogateDetailContext"
 import { formatRace } from "@/lib/formatters"
 import { getSurrogateStageContext, stageHasCapability } from "@/lib/surrogate-stage-context"
+
+const LEAD_WARNING_FIELD_LABELS = {
+    email: "Email",
+    phone: "Phone",
+    height_ft: "Height",
+    weight_lb: "Weight",
+} as const
 
 export function SurrogateOverviewTab() {
     const params = useParams<{ id: string }>()
@@ -43,6 +59,10 @@ export function SurrogateOverviewTab() {
     const stageContext = React.useMemo(
         () => getSurrogateStageContext(surrogateData ?? null, stageById),
         [surrogateData, stageById]
+    )
+    const leadIntakeWarnings = React.useMemo(
+        () => surrogateData?.lead_intake_warnings ?? [],
+        [surrogateData]
     )
 
     if (!surrogateData) {
@@ -157,6 +177,66 @@ export function SurrogateOverviewTab() {
                             <span className="text-sm">{formatDate(surrogateData.created_at)}</span>
                         </div>
                     </SurrogateOverviewCard>
+
+                    {leadIntakeWarnings.length > 0 && (
+                        <Card
+                            data-testid="lead-intake-review-card"
+                            className="relative overflow-hidden border-amber-200/80 bg-[linear-gradient(145deg,rgba(255,251,235,0.96),rgba(255,255,255,0.9)_42%,rgba(254,243,199,0.72))] shadow-[0_20px_60px_-36px_rgba(217,119,6,0.55)]"
+                        >
+                            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(251,191,36,0.22),transparent_38%),radial-gradient(circle_at_80%_18%,rgba(255,255,255,0.85),transparent_24%)]" />
+                            <div className="pointer-events-none absolute -right-10 top-3 h-24 w-24 rounded-full bg-amber-200/55 blur-3xl" />
+                            <CardContent className="relative space-y-4 p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="space-y-1">
+                                        <div className="flex items-center gap-2 text-amber-900">
+                                            <AlertTriangleIcon className="size-4" />
+                                            <h3 className="text-sm font-semibold tracking-[0.01em]">
+                                                Lead Intake Review
+                                            </h3>
+                                        </div>
+                                        <p className="max-w-2xl text-sm text-amber-900/80">
+                                            These fields did not land as valid structured data. Review the
+                                            original lead values before outreach or qualification.
+                                        </p>
+                                    </div>
+                                    <Badge
+                                        variant="outline"
+                                        className="border-amber-300 bg-white/70 text-amber-800 backdrop-blur-sm"
+                                    >
+                                        Needs review
+                                    </Badge>
+                                </div>
+
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    {leadIntakeWarnings.map((warning) => (
+                                        <div
+                                            key={`${warning.field_key}-${warning.raw_value}`}
+                                            className="rounded-2xl border border-amber-200/80 bg-white/72 px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] backdrop-blur-sm"
+                                        >
+                                            <div className="flex items-center justify-between gap-3">
+                                                <span className="text-sm font-medium text-slate-900">
+                                                    {
+                                                        LEAD_WARNING_FIELD_LABELS[
+                                                            warning.field_key as keyof typeof LEAD_WARNING_FIELD_LABELS
+                                                        ]
+                                                    }
+                                                </span>
+                                                <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-amber-700">
+                                                    {warning.issue === "invalid_value"
+                                                        ? "Invalid"
+                                                        : "Missing"}
+                                                </span>
+                                            </div>
+                                            <div className="mt-2 text-xs text-slate-500">Raw lead value</div>
+                                            <div className="mt-1 break-words text-sm font-medium text-slate-900">
+                                                {warning.raw_value}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
 
                     <SurrogateOverviewCard title="Demographics" icon={InfoIcon}>
                         <div className="flex items-center gap-2">
