@@ -7,6 +7,7 @@ from datetime import date, datetime, time, timezone
 import pytest
 from httpx import AsyncClient, ASGITransport
 
+from app.core.config import settings
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.security import create_session_token
@@ -91,6 +92,16 @@ async def non_dev_client(db, test_org):
 
 
 class TestAdminExports:
+    def test_resolve_admin_export_path_rejects_traversal(self, monkeypatch, tmp_path):
+        original_local_dir = settings.EXPORT_LOCAL_DIR
+        settings.EXPORT_LOCAL_DIR = str(tmp_path)
+
+        try:
+            with pytest.raises(ValueError, match="outside export directory"):
+                admin_export_service.resolve_admin_export_path("../escape.csv")
+        finally:
+            settings.EXPORT_LOCAL_DIR = original_local_dir
+
     @pytest.mark.asyncio
     async def test_surrogates_export_requires_developer(self, non_dev_client):
         response = await non_dev_client.post("/admin/exports/surrogates")
@@ -380,3 +391,28 @@ class TestAdminExports:
         download = await authed_client.get(f"/admin/exports/jobs/{job_id}/file")
         assert download.status_code == 200
         assert download.headers["content-type"].startswith("application/zip")
+
+    @pytest.mark.asyncio
+    async def test_admin_export_download_rejects_traversal_path(self, authed_client, db, test_org):
+        original_storage_backend = settings.EXPORT_STORAGE_BACKEND
+        settings.EXPORT_STORAGE_BACKEND = "local"
+
+        try:
+            response = await authed_client.post("/admin/exports/surrogates")
+            assert response.status_code == 202
+            job_id = response.json()["job_id"]
+
+            job = job_service.get_job(db, uuid.UUID(job_id), test_org.id)
+            assert job is not None
+            job.status = "completed"
+            job.payload = {
+                "file_path": "../escape.csv",
+                "filename": "surrogates.csv",
+                "export_type": "surrogates_csv",
+            }
+            db.commit()
+
+            download = await authed_client.get(f"/admin/exports/jobs/{job_id}/file")
+            assert download.status_code == 404
+        finally:
+            settings.EXPORT_STORAGE_BACKEND = original_storage_backend

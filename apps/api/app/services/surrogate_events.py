@@ -188,7 +188,12 @@ def _maybe_send_capi_event(
     if surrogate.source != SurrogateSource.META.value:
         return
 
-    if not meta_capi.should_send_capi_event(old_status, new_status):
+    if not meta_capi.should_send_capi_event_for_org(
+        db,
+        surrogate.organization_id,
+        old_status,
+        new_status,
+    ):
         return
 
     if not surrogate.meta_lead_id:

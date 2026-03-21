@@ -19,10 +19,10 @@ from app.db.models import (
     User,
 )
 from app.services.analytics_shared import (
-    FUNNEL_SLUGS,
     _apply_date_range_filters,
     _get_default_pipeline_stages,
     _get_or_compute_snapshot,
+    get_funnel_stage_keys,
 )
 
 
@@ -648,8 +648,9 @@ def get_conversion_funnel(
 ) -> list[dict[str, Any]]:
     """Get conversion funnel data."""
     stages = _get_default_pipeline_stages(db, organization_id)
-    stage_by_slug = {s.slug: s for s in stages if s.is_active}
-    funnel_stages = [stage_by_slug[slug] for slug in FUNNEL_SLUGS if slug in stage_by_slug]
+    stage_by_key = {s.stage_key: s for s in stages if s.is_active}
+    funnel_stage_keys = get_funnel_stage_keys(db, organization_id)
+    funnel_stages = [stage_by_key[stage_key] for stage_key in funnel_stage_keys if stage_key in stage_by_key]
     if not funnel_stages:
         funnel_stages = sorted([s for s in stages if s.is_active], key=lambda s: s.order)[:5]
 

@@ -158,8 +158,9 @@ def get_pdf_export_data(
 
 
 _SHARED_EXPORTS = {
-    "FUNNEL_SLUGS",
+    "DEFAULT_FUNNEL_STAGE_KEYS",
     "_normalize_date_bounds",
+    "get_funnel_stage_keys",
     "parse_date_range",
 }
 _SURROGATE_EXPORTS = {

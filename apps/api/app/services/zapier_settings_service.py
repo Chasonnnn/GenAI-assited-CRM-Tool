@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.core.stage_definitions import canonicalize_stage_key
 from app.core.url_validation import validate_outbound_webhook_url
 from app.db.models import ZapierInboundWebhook, ZapierWebhookSettings
-from app.services import oauth_service
+from app.services import oauth_service, pipeline_semantics_service, pipeline_service
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +163,31 @@ DEFAULT_EVENT_MAPPING = [
         "bucket": NOT_QUALIFIED_BUCKET,
     },
 ]
+
+
+def build_default_event_mapping(
+    db: Session,
+    organization_id: uuid.UUID,
+) -> list[dict]:
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
+    snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline)
+    mapping: list[dict] = []
+    for stage in snapshot.stages:
+        if not stage.is_active or stage.stage_key in UNSUPPORTED_OUTBOUND_STAGE_KEYS:
+            continue
+        bucket = stage.semantics.integration_bucket
+        event_name = event_name_for_bucket(bucket)
+        if not event_name:
+            continue
+        mapping.append(
+            {
+                "stage_key": stage.stage_key,
+                "event_name": event_name,
+                "enabled": True,
+                "bucket": bucket,
+            }
+        )
+    return mapping or [dict(item) for item in DEFAULT_EVENT_MAPPING]
 
 
 def _now_utc() -> datetime:
@@ -327,7 +352,7 @@ def get_or_create_settings(
             is_active=True,
             outbound_enabled=False,
             outbound_send_hashed_pii=False,
-            outbound_event_mapping=DEFAULT_EVENT_MAPPING,
+            outbound_event_mapping=build_default_event_mapping(db, organization_id),
         )
         db.add(settings_row)
         db.commit()
@@ -473,9 +498,19 @@ def update_inbound_webhook(
     return inbound
 
 
-def normalize_event_mapping(mapping: list[dict] | None) -> list[dict]:
+def normalize_event_mapping(
+    mapping: list[dict] | None,
+    *,
+    db: Session | None = None,
+    organization_id: uuid.UUID | None = None,
+) -> list[dict]:
+    default_mapping = (
+        build_default_event_mapping(db, organization_id)
+        if db is not None and organization_id is not None
+        else [dict(item) for item in DEFAULT_EVENT_MAPPING]
+    )
     if not mapping:
-        return [dict(item) for item in DEFAULT_EVENT_MAPPING]
+        return default_mapping
     normalized: list[dict] = []
     index_by_stage_key: dict[str, int] = {}
     for item in mapping:
@@ -512,14 +547,14 @@ def normalize_event_mapping(mapping: list[dict] | None) -> list[dict]:
         else:
             normalized[existing_index] = normalized_item
 
-    for default_item in DEFAULT_EVENT_MAPPING:
+    for default_item in default_mapping:
         stage_key = default_item["stage_key"]
         if stage_key in index_by_stage_key:
             continue
         index_by_stage_key[stage_key] = len(normalized)
         normalized.append(dict(default_item))
 
-    return normalized or [dict(item) for item in DEFAULT_EVENT_MAPPING]
+    return normalized or default_mapping
 
 
 def update_outbound_settings(
@@ -546,7 +581,11 @@ def update_outbound_settings(
     if send_hashed_pii is not None:
         settings_row.outbound_send_hashed_pii = send_hashed_pii
     if event_mapping is not None:
-        settings_row.outbound_event_mapping = normalize_event_mapping(event_mapping)
+        settings_row.outbound_event_mapping = normalize_event_mapping(
+            event_mapping,
+            db=db,
+            organization_id=organization_id,
+        )
 
     settings_row.updated_at = _now_utc()
     db.commit()

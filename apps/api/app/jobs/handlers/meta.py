@@ -265,7 +265,11 @@ async def process_meta_capi_event(db, job) -> None:
         )
         return
 
-    meta_status = meta_capi.map_surrogate_status_to_meta_status(str(surrogate_status))
+    meta_status = meta_capi.map_stage_key_to_meta_status_for_org(
+        db,
+        job.organization_id,
+        str(surrogate_status),
+    )
     if not meta_status:
         raise Exception(f"Unsupported case status for Meta CAPI: {surrogate_status}")
 

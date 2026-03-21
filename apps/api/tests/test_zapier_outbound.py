@@ -321,3 +321,31 @@ def test_resolve_meta_stage_bucket_uses_configured_mapping():
         ]
     )
     assert zapier_settings_service.resolve_meta_stage_bucket("approved", disabled_mapping) is None
+
+
+def test_build_default_event_mapping_uses_pipeline_semantics(db, test_org):
+    from app.services import pipeline_service, zapier_settings_service
+
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id)
+    approved_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "approved")
+    new_unread_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "new_unread")
+
+    assert approved_stage is not None
+    assert new_unread_stage is not None
+
+    approved_stage.semantics = {
+        **approved_stage.semantics,
+        "integration_bucket": "converted",
+    }
+    new_unread_stage.semantics = {
+        **new_unread_stage.semantics,
+        "integration_bucket": "none",
+    }
+    db.commit()
+
+    mapping = zapier_settings_service.build_default_event_mapping(db, test_org.id)
+    by_stage = {item["stage_key"]: item for item in mapping}
+
+    assert by_stage["approved"]["bucket"] == "converted"
+    assert by_stage["approved"]["event_name"] == "Converted"
+    assert "new_unread" not in by_stage

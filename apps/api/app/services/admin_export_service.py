@@ -129,7 +129,15 @@ def store_surrogates_csv(db: Session, org_id: UUID, filename: str) -> str:
 
 def resolve_admin_export_path(file_path: str) -> str:
     """Resolve local admin export path from stored relative path."""
-    return os.path.join(os.path.abspath(settings.EXPORT_LOCAL_DIR), file_path)
+    base_dir = os.path.abspath(settings.EXPORT_LOCAL_DIR)
+    resolved_path = os.path.abspath(os.path.join(base_dir, file_path))
+    try:
+        is_within_base = os.path.commonpath([resolved_path, base_dir]) == base_dir
+    except ValueError as exc:
+        raise ValueError("Resolved export path is outside export directory") from exc
+    if not is_within_base:
+        raise ValueError("Resolved export path is outside export directory")
+    return resolved_path
 
 
 def build_export_filename(export_type: str) -> str:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import os
 from typing import Optional, Annotated
 
 from uuid import UUID
@@ -253,7 +254,12 @@ def download_export_file(
     if not file_path or not filename or not export_type:
         raise HTTPException(status_code=404, detail="Export file missing")
 
-    resolved_path = admin_export_service.resolve_admin_export_path(file_path)
+    try:
+        resolved_path = admin_export_service.resolve_admin_export_path(file_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Export file missing") from exc
+    if not os.path.exists(resolved_path):
+        raise HTTPException(status_code=404, detail="Export file missing")
     media_type = "text/csv" if export_type == "surrogates_csv" else "application/zip"
 
     return FileResponse(

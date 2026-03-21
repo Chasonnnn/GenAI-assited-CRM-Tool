@@ -90,6 +90,56 @@ def map_surrogate_status_to_meta_status(surrogate_status: str) -> str | None:
     return None
 
 
+def _map_integration_bucket_to_meta_status(bucket: str | None) -> str | None:
+    if bucket == "lost":
+        return META_STATUS_LOST
+    if bucket == "not_qualified":
+        return META_STATUS_DISQUALIFIED
+    if bucket in {"qualified", "converted"}:
+        return META_STATUS_QUALIFIED
+    if bucket == "intake":
+        return META_STATUS_INTAKE
+    return None
+
+
+def map_stage_key_to_meta_status_for_org(
+    db: "Session",
+    organization_id,
+    stage_key: str | None,
+) -> str | None:
+    from app.services import pipeline_semantics_service, pipeline_service
+
+    if not stage_key:
+        return None
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
+    snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline)
+    stage = snapshot.stage_by_key.get(stage_key)
+    if not stage:
+        normalized = next(
+            (
+                snapshot_stage
+                for snapshot_stage in snapshot.stages
+                if snapshot_stage.slug == stage_key
+            ),
+            None,
+        )
+        stage = normalized
+    return _map_integration_bucket_to_meta_status(stage.semantics.integration_bucket if stage else None)
+
+
+def should_send_capi_event_for_org(
+    db: "Session",
+    organization_id,
+    from_status: str,
+    to_status: str,
+) -> bool:
+    from_meta = map_stage_key_to_meta_status_for_org(db, organization_id, from_status)
+    to_meta = map_stage_key_to_meta_status_for_org(db, organization_id, to_status)
+    if not to_meta:
+        return False
+    return from_meta != to_meta
+
+
 def _normalize_event_id_value(value: str) -> str:
     """Normalize text for stable event_id values (ASCII-safe)."""
     return value.lower().replace(" ", "_").replace("/", "_")

@@ -178,6 +178,8 @@ class IntelligentSuggestionTemplateRead(BaseModel):
     description: str
     rule_kind: str
     default_stage_slug: str | None
+    default_stage_key: str | None = None
+    default_stage_label: str | None = None
     default_business_days: int
     is_default: bool
 
@@ -189,6 +191,8 @@ class IntelligentSuggestionRuleRead(BaseModel):
     name: str
     rule_kind: str
     stage_slug: str | None
+    stage_key: str | None = None
+    stage_label: str | None = None
     business_days: int
     enabled: bool
     sort_order: int
@@ -201,6 +205,7 @@ class IntelligentSuggestionRuleCreate(BaseModel):
     name: str | None = None
     rule_kind: str | None = None
     stage_slug: str | None = None
+    stage_key: str | None = None
     business_days: int | None = Field(None, ge=1, le=60)
     enabled: bool = True
 
@@ -208,6 +213,7 @@ class IntelligentSuggestionRuleCreate(BaseModel):
 class IntelligentSuggestionRuleUpdate(BaseModel):
     name: str | None = None
     stage_slug: str | None = None
+    stage_key: str | None = None
     business_days: int | None = Field(None, ge=1, le=60)
     enabled: bool | None = None
     sort_order: int | None = None
@@ -268,9 +274,9 @@ def list_intelligent_suggestion_templates(
     session: Annotated[UserSession, "fastapi_param"] = Depends(
         require_permission(POLICIES["org_settings"].default)
     ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
-    _ = session
-    templates = intelligent_suggestions_service.list_rule_templates()
+    templates = intelligent_suggestions_service.list_rule_templates(db, session.org_id)
     return [IntelligentSuggestionTemplateRead(**template) for template in templates]
 
 
@@ -286,7 +292,7 @@ def list_intelligent_suggestion_rules(
 ):
     rules = intelligent_suggestions_service.list_rules(db, session.org_id)
     return [
-        IntelligentSuggestionRuleRead(**intelligent_suggestions_service.serialize_rule(rule))
+        IntelligentSuggestionRuleRead(**intelligent_suggestions_service.serialize_rule(db, rule))
         for rule in rules
     ]
 
@@ -324,7 +330,7 @@ def create_intelligent_suggestion_rule(
         request=request,
     )
     db.commit()
-    return IntelligentSuggestionRuleRead(**intelligent_suggestions_service.serialize_rule(rule))
+    return IntelligentSuggestionRuleRead(**intelligent_suggestions_service.serialize_rule(db, rule))
 
 
 @router.patch(
@@ -362,7 +368,7 @@ def update_intelligent_suggestion_rule(
         request=request,
     )
     db.commit()
-    return IntelligentSuggestionRuleRead(**intelligent_suggestions_service.serialize_rule(rule))
+    return IntelligentSuggestionRuleRead(**intelligent_suggestions_service.serialize_rule(db, rule))
 
 
 @router.delete(

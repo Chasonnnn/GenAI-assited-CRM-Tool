@@ -15,7 +15,7 @@ from app.core.security import decode_export_token
 from app.core.surrogate_access import check_surrogate_access
 from app.db.enums import Role
 from app.schemas.auth import UserSession
-from app.services import journey_service, surrogate_service
+from app.services import journey_service, pipeline_semantics_service, pipeline_service, surrogate_service
 
 csrf_header_dependency = require_csrf_header
 
@@ -270,10 +270,6 @@ class JourneyFeaturedImageResponse(BaseModel):
     attachment_id: str | None
 
 
-# Valid milestone slugs for validation
-VALID_MILESTONE_SLUGS = {m.slug for m in journey_service.MILESTONES}
-
-
 @router.patch(
     "/surrogates/{surrogate_id}/milestones/{milestone_slug}/featured-image",
     response_model=JourneyFeaturedImageResponse,
@@ -296,14 +292,22 @@ def update_milestone_featured_image(
     if session.role not in (Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
-    # Validate milestone_slug
-    if milestone_slug not in VALID_MILESTONE_SLUGS:
-        raise HTTPException(status_code=400, detail=f"Invalid milestone slug: {milestone_slug}")
-
     # Verify surrogate exists and belongs to org
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
+
+    stage = pipeline_service.get_stage_by_id(db, surrogate.stage_id) if surrogate.stage_id else None
+    pipeline_id = stage.pipeline_id if stage is not None else None
+    if pipeline_id is None:
+        pipeline = pipeline_service.get_or_create_default_pipeline(db, session.org_id)
+        pipeline_id = pipeline.id
+    snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline_id)
+    valid_milestone_slugs = {
+        milestone.slug for milestone in snapshot.feature_config.journey.milestones
+    }
+    if milestone_slug not in valid_milestone_slugs:
+        raise HTTPException(status_code=400, detail=f"Invalid milestone slug: {milestone_slug}")
 
     try:
         attachment_id = journey_service.update_milestone_featured_image(

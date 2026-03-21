@@ -284,3 +284,38 @@ class TestMFAEndpoints:
 
         blocked = await authed_client.post(endpoint, json={"code": "000000"})
         assert blocked.status_code == 429
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "endpoint",
+        [
+            "/mfa/totp/setup",
+            "/mfa/recovery/regenerate",
+            "/mfa/disable",
+        ],
+    )
+    async def test_additional_sensitive_mfa_endpoints_rate_limited_after_five_attempts(
+        self,
+        authed_client,
+        db,
+        test_user,
+        rate_limiter_reset,
+        endpoint,
+    ):
+        test_user.duo_enrolled_at = None
+        if endpoint == "/mfa/totp/setup":
+            test_user.mfa_enabled = False
+            test_user.totp_enabled_at = None
+            test_user.mfa_recovery_codes = None
+        else:
+            test_user.mfa_enabled = True
+            test_user.totp_enabled_at = datetime.now(timezone.utc)
+            test_user.mfa_recovery_codes = mfa_service.hash_recovery_codes(["ABCD2345"])
+        db.commit()
+
+        for _ in range(5):
+            response = await authed_client.post(endpoint)
+            assert response.status_code == 200, response.text
+
+        blocked = await authed_client.post(endpoint)
+        assert blocked.status_code == 429

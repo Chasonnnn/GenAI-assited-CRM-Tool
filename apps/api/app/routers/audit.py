@@ -307,6 +307,24 @@ def download_audit_export(
     if job.redact_mode == "full" and session.role != Role.DEVELOPER:
         raise HTTPException(status_code=403, detail="Full exports require Developer role")
 
+    if settings.EXPORT_STORAGE_BACKEND == "s3":
+        url = compliance_service.generate_s3_download_url(job.file_path)
+        audit_service.log_compliance_export_downloaded(
+            db=db,
+            org_id=session.org_id,
+            user_id=session.user_id,
+            export_job_id=job.id,
+        )
+        db.commit()
+        return RedirectResponse(url=url)
+
+    try:
+        file_path = compliance_service.resolve_local_export_path(job.file_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Export file not found") from exc
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Export file not found")
+
     audit_service.log_compliance_export_downloaded(
         db=db,
         org_id=session.org_id,
@@ -314,14 +332,6 @@ def download_audit_export(
         export_job_id=job.id,
     )
     db.commit()
-
-    if settings.EXPORT_STORAGE_BACKEND == "s3":
-        url = compliance_service.generate_s3_download_url(job.file_path)
-        return RedirectResponse(url=url)
-
-    file_path = compliance_service.resolve_local_export_path(job.file_path)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Export file not found")
 
     filename = f"audit_export_{job.id}.{job.format}"
     return FileResponse(

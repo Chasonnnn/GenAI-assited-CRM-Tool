@@ -220,6 +220,33 @@ async def test_journey_unknown_stage_falls_back_to_first_milestone(authed_client
 
 
 @pytest.mark.asyncio
+async def test_journey_uses_pipeline_feature_config_for_milestone_membership(
+    authed_client, db, test_auth
+):
+    surrogate = await _create_surrogate(authed_client)
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, test_auth.org.id)
+    feature_config = dict(pipeline.feature_config)
+    milestones = [dict(milestone) for milestone in feature_config["journey"]["milestones"]]
+    milestones[0]["mapped_stage_keys"] = ["contacted"]
+    milestones[1]["mapped_stage_keys"] = ["new_unread", "under_review", "interview_scheduled", "approved"]
+    feature_config["journey"] = {
+        **feature_config["journey"],
+        "milestones": milestones,
+    }
+    pipeline.feature_config = feature_config
+    db.commit()
+
+    response = await authed_client.get(f"/journey/surrogates/{surrogate['id']}")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    screening_interviews = _find_milestone(payload, "screening_interviews")
+    application_intake = _find_milestone(payload, "application_intake")
+    assert screening_interviews["status"] == "current"
+    assert application_intake["status"] == "upcoming"
+
+
+@pytest.mark.asyncio
 async def test_journey_requires_surrogate_access(db, test_org, authed_client):
     surrogate = await _create_surrogate(authed_client)
 

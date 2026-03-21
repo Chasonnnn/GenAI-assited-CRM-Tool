@@ -569,7 +569,15 @@ def process_export_job(db: Session, export_job_id: UUID) -> ExportJob:
 
 
 def resolve_local_export_path(file_path: str) -> str:
-    return os.path.join(os.path.abspath(settings.EXPORT_LOCAL_DIR), file_path)
+    base_dir = os.path.abspath(settings.EXPORT_LOCAL_DIR)
+    resolved_path = os.path.abspath(os.path.join(base_dir, file_path))
+    try:
+        is_within_base = os.path.commonpath([resolved_path, base_dir]) == base_dir
+    except ValueError as exc:
+        raise ValueError("Resolved export path is outside export directory") from exc
+    if not is_within_base:
+        raise ValueError("Resolved export path is outside export directory")
+    return resolved_path
 
 
 def list_retention_policies(db: Session, org_id: UUID) -> list[DataRetentionPolicy]:

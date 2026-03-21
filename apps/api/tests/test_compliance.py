@@ -214,6 +214,11 @@ def test_export_empty_result(db, test_org, test_user, export_settings):
     assert len(rows) <= 1
 
 
+def test_resolve_local_export_path_rejects_traversal(export_settings):
+    with pytest.raises(ValueError, match="outside export directory"):
+        compliance_service.resolve_local_export_path("../escape.csv")
+
+
 def test_retention_preview_includes_ai_tables(db, test_org, test_user):
     cutoff = datetime.now(timezone.utc) - timedelta(days=30)
 

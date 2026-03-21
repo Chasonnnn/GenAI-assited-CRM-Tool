@@ -13,9 +13,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import AnalyticsSnapshot
+from app.services import pipeline_semantics_service, pipeline_service
 
 
-FUNNEL_SLUGS = [
+DEFAULT_FUNNEL_STAGE_KEYS = [
     "new_unread",
     "contacted",
     "pre_qualified",
@@ -152,10 +153,23 @@ async def _get_or_compute_snapshot_async(
 
 def _get_default_pipeline_stages(db: Session, organization_id: uuid.UUID):
     """Get active stages for the default pipeline."""
-    from app.services import pipeline_service
-
     pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
     return pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
+
+
+def get_funnel_stage_keys(
+    db: Session,
+    organization_id: uuid.UUID,
+    pipeline_id: uuid.UUID | None = None,
+) -> list[str]:
+    if pipeline_id is None:
+        pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
+    else:
+        pipeline = pipeline_service.get_pipeline(db, organization_id, pipeline_id)
+        if pipeline is None:
+            pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
+    feature_config = pipeline_semantics_service.get_pipeline_feature_config(pipeline)
+    return list(feature_config.analytics.funnel_stage_keys or DEFAULT_FUNNEL_STAGE_KEYS)
 
 
 def parse_date_range(

@@ -85,3 +85,36 @@ async def test_download_audit_export_commits_audit_log(authed_client, db, test_a
         assert event is not None
     finally:
         settings.EXPORT_STORAGE_BACKEND = original_storage_backend
+
+
+@pytest.mark.asyncio
+async def test_download_audit_export_rejects_traversal_path(authed_client, db, test_auth):
+    from app.core.config import settings
+    from app.db.models import ExportJob
+    from app.services import compliance_service
+
+    original_storage_backend = settings.EXPORT_STORAGE_BACKEND
+    settings.EXPORT_STORAGE_BACKEND = "local"
+
+    try:
+        job = ExportJob(
+            organization_id=test_auth.org.id,
+            created_by_user_id=test_auth.user.id,
+            status=compliance_service.EXPORT_STATUS_COMPLETED,
+            export_type="audit",
+            format="csv",
+            redact_mode="redacted",
+            date_range_start=datetime.now(timezone.utc) - timedelta(days=1),
+            date_range_end=datetime.now(timezone.utc),
+            file_path="../escape.csv",
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+
+        response = await authed_client.get(
+            f"/audit/exports/{job.id}/download", follow_redirects=False
+        )
+        assert response.status_code == 404
+    finally:
+        settings.EXPORT_STORAGE_BACKEND = original_storage_backend

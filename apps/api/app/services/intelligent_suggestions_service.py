@@ -23,14 +23,18 @@ from app.db.models import (
     Organization,
     OrgIntelligentSuggestionRule,
     OrgIntelligentSuggestionSettings,
-    Pipeline,
     PipelineStage,
     Surrogate,
     SurrogateActivityLog,
     SurrogateStatusHistory,
     User,
 )
-from app.services import dashboard_service, notification_facade
+from app.services import (
+    dashboard_service,
+    notification_facade,
+    pipeline_semantics_service,
+    pipeline_service,
+)
 from app.utils.business_hours import is_business_day
 
 # Dynamic filter values used by /surrogates endpoint.
@@ -50,14 +54,6 @@ ALLOWED_DYNAMIC_FILTERS = {
     FILTER_ATTENTION_STUCK,
 }
 
-INTAKE_PREAPPROVAL_STAGE_SLUGS = (
-    "contacted",
-    "qualified",
-    "interview_scheduled",
-    "application_submitted",
-    "under_review",
-)
-
 INTELLIGENT_RULE_KEYS = (
     FILTER_INTELLIGENT_NEW_UNREAD,
     FILTER_INTELLIGENT_MEETING_OUTCOME,
@@ -72,180 +68,27 @@ TEMPLATE_STAGE_FOLLOWUP_CUSTOM = "stage_followup_custom"
 TEMPLATE_PREAPPROVAL_STUCK = "preapproval_stuck"
 TEMPLATE_MEETING_OUTCOME_MISSING = "meeting_outcome_missing"
 
-STAGE_FOLLOWUP_TEMPLATE_DEFS = [
-    {
-        "template_key": TEMPLATE_NEW_UNREAD_FOLLOWUP,
-        "name": "New unread follow-up",
-        "description": "No updates after X business days in New Unread.",
-        "default_stage_slug": "new_unread",
-        "default_business_days": 1,
-        "is_default": True,
-    },
-    {
-        "template_key": "contacted_followup",
-        "name": "Contacted follow-up",
-        "description": "No updates after X business days in Contacted.",
-        "default_stage_slug": "contacted",
-        "default_business_days": 2,
-        "is_default": False,
-    },
-    {
-        "template_key": "qualified_followup",
-        "name": "Qualified follow-up",
-        "description": "No updates after X business days in Qualified.",
-        "default_stage_slug": "qualified",
-        "default_business_days": 2,
-        "is_default": False,
-    },
-    {
-        "template_key": "interview_scheduled_followup",
-        "name": "Interview scheduled follow-up",
-        "description": "No updates after X business days in Interview Scheduled.",
-        "default_stage_slug": "interview_scheduled",
-        "default_business_days": 1,
-        "is_default": False,
-    },
-    {
-        "template_key": "application_submitted_followup",
-        "name": "Application submitted follow-up",
-        "description": "No updates after X business days in Application Submitted.",
-        "default_stage_slug": "application_submitted",
-        "default_business_days": 2,
-        "is_default": False,
-    },
-    {
-        "template_key": "under_review_followup",
-        "name": "Under review follow-up",
-        "description": "No updates after X business days in Under Review.",
-        "default_stage_slug": "under_review",
-        "default_business_days": 3,
-        "is_default": False,
-    },
-    {
-        "template_key": "approved_followup",
-        "name": "Approved follow-up",
-        "description": "No updates after X business days in Approved.",
-        "default_stage_slug": "approved",
-        "default_business_days": 3,
-        "is_default": False,
-    },
-    {
-        "template_key": "ready_to_match_followup",
-        "name": "Ready to match follow-up",
-        "description": "No updates after X business days in Ready to Match.",
-        "default_stage_slug": "ready_to_match",
-        "default_business_days": 3,
-        "is_default": False,
-    },
-    {
-        "template_key": "matched_followup",
-        "name": "Matched follow-up",
-        "description": "No updates after X business days in Matched.",
-        "default_stage_slug": "matched",
-        "default_business_days": 5,
-        "is_default": False,
-    },
-    {
-        "template_key": "medical_clearance_followup",
-        "name": "Medical clearance follow-up",
-        "description": "No updates after X business days in Medical Clearance Passed.",
-        "default_stage_slug": "medical_clearance_passed",
-        "default_business_days": 3,
-        "is_default": False,
-    },
-    {
-        "template_key": "legal_clearance_followup",
-        "name": "Legal clearance follow-up",
-        "description": "No updates after X business days in Legal Clearance Passed.",
-        "default_stage_slug": "legal_clearance_passed",
-        "default_business_days": 3,
-        "is_default": False,
-    },
-    {
-        "template_key": "transfer_cycle_followup",
-        "name": "Transfer cycle follow-up",
-        "description": "No updates after X business days in Transfer Cycle.",
-        "default_stage_slug": "transfer_cycle",
-        "default_business_days": 4,
-        "is_default": False,
-    },
-    {
-        "template_key": "second_hcg_followup",
-        "name": "Second HCG follow-up",
-        "description": "No updates after X business days in Second HCG Confirmed.",
-        "default_stage_slug": "second_hcg_confirmed",
-        "default_business_days": 4,
-        "is_default": False,
-    },
-    {
-        "template_key": "heartbeat_followup",
-        "name": "Heartbeat follow-up",
-        "description": "No updates after X business days in Heartbeat Confirmed.",
-        "default_stage_slug": "heartbeat_confirmed",
-        "default_business_days": 5,
-        "is_default": False,
-    },
-    {
-        "template_key": "ob_care_followup",
-        "name": "OB care follow-up",
-        "description": "No updates after X business days in OB Care Established.",
-        "default_stage_slug": "ob_care_established",
-        "default_business_days": 5,
-        "is_default": False,
-    },
-    {
-        "template_key": "anatomy_scan_followup",
-        "name": "Anatomy scan follow-up",
-        "description": "No updates after X business days in Anatomy Scanned.",
-        "default_stage_slug": "anatomy_scanned",
-        "default_business_days": 7,
-        "is_default": False,
-    },
-]
-
-RULE_TEMPLATES = [
-    {
-        "template_key": TEMPLATE_STAGE_FOLLOWUP_CUSTOM,
-        "name": "Custom stage follow-up",
-        "description": "No updates after X business days at a selected stage.",
-        "rule_kind": RULE_KIND_STAGE_INACTIVITY,
-        "default_stage_slug": "new_unread",
-        "default_business_days": 2,
-        "is_default": False,
-    },
-    *[
-        {
-            "template_key": template["template_key"],
-            "name": template["name"],
-            "description": template["description"],
-            "rule_kind": RULE_KIND_STAGE_INACTIVITY,
-            "default_stage_slug": template["default_stage_slug"],
-            "default_business_days": template["default_business_days"],
-            "is_default": template["is_default"],
-        }
-        for template in STAGE_FOLLOWUP_TEMPLATE_DEFS
-    ],
-    {
-        "template_key": TEMPLATE_PREAPPROVAL_STUCK,
-        "name": "Pre-approval stuck",
-        "description": "No updates after X business days across intake pre-approval stages.",
-        "rule_kind": RULE_KIND_STAGE_INACTIVITY,
-        "default_stage_slug": None,
-        "default_business_days": 5,
-        "is_default": True,
-    },
-    {
-        "template_key": TEMPLATE_MEETING_OUTCOME_MISSING,
-        "name": "Meeting outcome missing",
-        "description": "Interview outcome still missing X business days after a meeting.",
-        "rule_kind": RULE_KIND_MEETING_OUTCOME_MISSING,
-        "default_stage_slug": None,
-        "default_business_days": 1,
-        "is_default": True,
-    },
-]
-
-RULE_TEMPLATE_MAP = {template["template_key"]: template for template in RULE_TEMPLATES}
+_DEFAULT_BUSINESS_DAYS_BY_PROFILE = {
+    TEMPLATE_NEW_UNREAD_FOLLOWUP: 1,
+    "contacted_followup": 2,
+    "qualified_followup": 2,
+    "interview_scheduled_followup": 1,
+    "application_submitted_followup": 2,
+    "under_review_followup": 3,
+    "approved_followup": 3,
+    "ready_to_match_followup": 3,
+    "matched_followup": 5,
+    "medical_clearance_followup": 3,
+    "legal_clearance_followup": 3,
+    "transfer_cycle_followup": 4,
+    "second_hcg_followup": 4,
+    "heartbeat_followup": 5,
+    "ob_care_followup": 5,
+    "anatomy_scan_followup": 7,
+    TEMPLATE_STAGE_FOLLOWUP_CUSTOM: 2,
+    TEMPLATE_PREAPPROVAL_STUCK: 5,
+    TEMPLATE_MEETING_OUTCOME_MISSING: 1,
+}
 
 DEFAULTS = {
     "enabled": True,
@@ -258,6 +101,100 @@ DEFAULTS = {
     "daily_digest_enabled": True,
     "digest_hour_local": 9,
 }
+
+
+def _get_default_pipeline_snapshot(db: Session, org_id: UUID):
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
+    return pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline)
+
+
+def _build_stage_followup_templates(db: Session, org_id: UUID) -> list[dict]:
+    snapshot = _get_default_pipeline_snapshot(db, org_id)
+    templates: list[dict] = []
+    for stage in snapshot.stages:
+        if not stage.is_active or stage.stage_type in {"paused", "terminal"}:
+            continue
+        profile_key = stage.semantics.suggestion_profile_key
+        if not profile_key:
+            continue
+        templates.append(
+            {
+                "template_key": profile_key,
+                "name": f"{stage.label} follow-up",
+                "description": f"No updates after X business days in {stage.label}.",
+                "rule_kind": RULE_KIND_STAGE_INACTIVITY,
+                "default_stage_slug": stage.stage_key,
+                "default_stage_key": stage.stage_key,
+                "default_stage_label": stage.label,
+                "default_business_days": _DEFAULT_BUSINESS_DAYS_BY_PROFILE.get(profile_key, 2),
+                "is_default": profile_key == TEMPLATE_NEW_UNREAD_FOLLOWUP,
+            }
+        )
+    return templates
+
+
+def list_rule_templates(db: Session | None = None, organization_id: UUID | None = None) -> list[dict]:
+    stage_templates = (
+        _build_stage_followup_templates(db, organization_id)
+        if db is not None and organization_id is not None
+        else [
+            {
+                "template_key": TEMPLATE_NEW_UNREAD_FOLLOWUP,
+                "name": "New unread follow-up",
+                "description": "No updates after X business days in New Unread.",
+                "rule_kind": RULE_KIND_STAGE_INACTIVITY,
+                "default_stage_slug": "new_unread",
+                "default_stage_key": "new_unread",
+                "default_stage_label": "New Unread",
+                "default_business_days": 1,
+                "is_default": True,
+            }
+        ]
+    )
+    templates = [
+        {
+            "template_key": TEMPLATE_STAGE_FOLLOWUP_CUSTOM,
+            "name": "Custom stage follow-up",
+            "description": "No updates after X business days at a selected stage.",
+            "rule_kind": RULE_KIND_STAGE_INACTIVITY,
+            "default_stage_slug": "new_unread",
+            "default_stage_key": "new_unread",
+            "default_stage_label": "New Unread",
+            "default_business_days": _DEFAULT_BUSINESS_DAYS_BY_PROFILE[TEMPLATE_STAGE_FOLLOWUP_CUSTOM],
+            "is_default": False,
+        },
+        *stage_templates,
+        {
+            "template_key": TEMPLATE_PREAPPROVAL_STUCK,
+            "name": "Pre-approval stuck",
+            "description": "No updates after X business days across intake pre-approval stages.",
+            "rule_kind": RULE_KIND_STAGE_INACTIVITY,
+            "default_stage_slug": None,
+            "default_stage_key": None,
+            "default_stage_label": None,
+            "default_business_days": _DEFAULT_BUSINESS_DAYS_BY_PROFILE[TEMPLATE_PREAPPROVAL_STUCK],
+            "is_default": True,
+        },
+        {
+            "template_key": TEMPLATE_MEETING_OUTCOME_MISSING,
+            "name": "Meeting outcome missing",
+            "description": "Interview outcome still missing X business days after a meeting.",
+            "rule_kind": RULE_KIND_MEETING_OUTCOME_MISSING,
+            "default_stage_slug": None,
+            "default_stage_key": None,
+            "default_stage_label": None,
+            "default_business_days": _DEFAULT_BUSINESS_DAYS_BY_PROFILE[TEMPLATE_MEETING_OUTCOME_MISSING],
+            "is_default": True,
+        },
+    ]
+    return [dict(template) for template in templates]
+
+
+def _get_rule_template_map(
+    db: Session,
+    org_id: UUID,
+) -> dict[str, dict]:
+    return {template["template_key"]: template for template in list_rule_templates(db, org_id)}
 
 
 def _to_role_value(role: Role | str | None) -> str:
@@ -346,11 +283,15 @@ def update_settings(
     return settings
 
 
-def list_rule_templates() -> list[dict]:
-    return [dict(template) for template in RULE_TEMPLATES]
+def _resolve_stage_for_org(db: Session, org_id: UUID, stage_ref: str | None) -> PipelineStage | None:
+    if not stage_ref:
+        return None
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
+    return pipeline_service.resolve_stage(db, pipeline.id, stage_ref)
 
 
-def serialize_rule(rule: OrgIntelligentSuggestionRule) -> dict:
+def serialize_rule(db: Session, rule: OrgIntelligentSuggestionRule) -> dict:
+    stage = _resolve_stage_for_org(db, rule.organization_id, rule.stage_slug)
     return {
         "id": str(rule.id),
         "organization_id": str(rule.organization_id),
@@ -358,6 +299,8 @@ def serialize_rule(rule: OrgIntelligentSuggestionRule) -> dict:
         "name": rule.name,
         "rule_kind": rule.rule_kind,
         "stage_slug": rule.stage_slug,
+        "stage_key": stage.stage_key if stage else pipeline_service.normalize_stage_ref(rule.stage_slug),
+        "stage_label": stage.label if stage else None,
         "business_days": rule.business_days,
         "enabled": rule.enabled,
         "sort_order": rule.sort_order,
@@ -367,17 +310,7 @@ def serialize_rule(rule: OrgIntelligentSuggestionRule) -> dict:
 
 
 def _stage_slug_exists_for_org(db: Session, org_id: UUID, stage_slug: str) -> bool:
-    return (
-        db.query(PipelineStage.id)
-        .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
-        .filter(
-            Pipeline.organization_id == org_id,
-            PipelineStage.slug == stage_slug,
-            PipelineStage.is_active.is_(True),
-        )
-        .first()
-        is not None
-    )
+    return _resolve_stage_for_org(db, org_id, stage_slug) is not None
 
 
 def _validate_rule_payload(
@@ -388,7 +321,7 @@ def _validate_rule_payload(
     rule_kind: str,
     stage_slug: str | None,
 ) -> None:
-    template = RULE_TEMPLATE_MAP.get(template_key)
+    template = _get_rule_template_map(db, org_id).get(template_key)
     if not template:
         raise ValueError("Unknown template_key")
 
@@ -409,6 +342,8 @@ def _validate_rule_payload(
 
 
 def _default_rules_from_settings(
+    db: Session,
+    organization_id: UUID,
     settings: OrgIntelligentSuggestionSettings,
 ) -> list[dict]:
     return [
@@ -416,7 +351,16 @@ def _default_rules_from_settings(
             "template_key": TEMPLATE_NEW_UNREAD_FOLLOWUP,
             "name": "New unread follow-up",
             "rule_kind": RULE_KIND_STAGE_INACTIVITY,
-            "stage_slug": "new_unread",
+            "stage_slug": (
+                next(
+                    (
+                        template["default_stage_key"]
+                        for template in list_rule_templates(db, organization_id)
+                        if template["template_key"] == TEMPLATE_NEW_UNREAD_FOLLOWUP
+                    ),
+                    "new_unread",
+                )
+            ),
             "business_days": settings.new_unread_business_days,
             "enabled": settings.new_unread_enabled,
             "sort_order": 0,
@@ -453,7 +397,7 @@ def _ensure_default_rules(db: Session, org_id: UUID) -> None:
         return
 
     settings = get_or_create_settings(db, org_id)
-    for payload in _default_rules_from_settings(settings):
+    for payload in _default_rules_from_settings(db, org_id, settings):
         db.add(
             OrgIntelligentSuggestionRule(
                 organization_id=org_id,
@@ -484,12 +428,12 @@ def list_rules(db: Session, organization_id: UUID) -> list[OrgIntelligentSuggest
 
 def create_rule(db: Session, organization_id: UUID, payload: dict) -> OrgIntelligentSuggestionRule:
     template_key = str(payload.get("template_key") or "").strip()
-    template = RULE_TEMPLATE_MAP.get(template_key)
+    template = _get_rule_template_map(db, organization_id).get(template_key)
     if not template:
         raise ValueError("Unknown template_key")
 
     rule_kind = str(payload.get("rule_kind") or template["rule_kind"]).strip()
-    stage_slug = payload.get("stage_slug")
+    stage_slug = payload.get("stage_key", payload.get("stage_slug"))
     if isinstance(stage_slug, str):
         stage_slug = stage_slug.strip() or None
     business_days = int(payload.get("business_days") or template["default_business_days"])
@@ -549,7 +493,7 @@ def update_rule(
 
     template_key = str(updates.get("template_key") or rule.template_key).strip()
     rule_kind = str(updates.get("rule_kind") or rule.rule_kind).strip()
-    stage_slug = updates.get("stage_slug", rule.stage_slug)
+    stage_slug = updates.get("stage_key", updates.get("stage_slug", rule.stage_slug))
     if isinstance(stage_slug, str):
         stage_slug = stage_slug.strip() or None
 
@@ -641,10 +585,26 @@ def _stage_inactivity_ids(
         )
     )
 
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
+    pipeline_snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline)
     if template_key == TEMPLATE_PREAPPROVAL_STUCK and stage_slug is None:
-        query = query.filter(PipelineStage.slug.in_(INTAKE_PREAPPROVAL_STAGE_SLUGS))
+        target_stage_ids = [
+            stage.id
+            for stage in pipeline_snapshot.stages
+            if stage.is_active
+            and stage.stage_type == "intake"
+            and stage.semantics.capabilities.counts_as_contacted
+            and not stage.semantics.capabilities.eligible_for_matching
+            and not stage.semantics.capabilities.locks_match_state
+        ]
+        if not target_stage_ids:
+            return set()
+        query = query.filter(PipelineStage.id.in_(target_stage_ids))
     elif stage_slug:
-        query = query.filter(PipelineStage.slug == stage_slug)
+        resolved_stage = pipeline_service.resolve_stage(db, pipeline.id, stage_slug)
+        if not resolved_stage:
+            return set()
+        query = query.filter(PipelineStage.id == resolved_stage.id)
     else:
         return set()
 
@@ -784,6 +744,16 @@ def _attention_unreached_ids(
     now_utc: datetime,
 ) -> set[UUID]:
     cutoff = now_utc - timedelta(days=7)
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
+    pipeline_snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline)
+    contact_stage = next(
+        (
+            stage
+            for stage in pipeline_snapshot.stages
+            if stage.is_active and stage.semantics.capabilities.counts_as_contacted
+        ),
+        None,
+    )
     owner_filters = _attention_owner_filters(
         db, org_id=org_id, user_id=user_id, user_role=user_role
     )
@@ -812,7 +782,7 @@ def _attention_unreached_ids(
             Surrogate.organization_id == org_id,
             Surrogate.is_archived.is_(False),
             PipelineStage.stage_type == "intake",
-            PipelineStage.order <= 2,
+            PipelineStage.order <= (contact_stage.order if contact_stage else 2),
             Surrogate.created_at < cutoff,
             last_touch_at < cutoff,
             or_(Surrogate.last_contacted_at.is_(None), Surrogate.last_contacted_at < cutoff),
@@ -940,7 +910,11 @@ def get_intelligent_rule_ids(
     for rule in rules:
         rule_ids = results.get(rule.id, set())
         if rule_key == FILTER_INTELLIGENT_NEW_UNREAD:
-            if rule.template_key == TEMPLATE_NEW_UNREAD_FOLLOWUP or rule.stage_slug == "new_unread":
+            resolved_stage_key = pipeline_service.normalize_stage_ref(rule.stage_slug)
+            if (
+                rule.template_key == TEMPLATE_NEW_UNREAD_FOLLOWUP
+                or resolved_stage_key == "new_unread"
+            ):
                 matched.update(rule_ids)
         elif rule_key == FILTER_INTELLIGENT_MEETING_OUTCOME:
             if rule.rule_kind == RULE_KIND_MEETING_OUTCOME_MISSING:
@@ -976,7 +950,10 @@ def get_intelligent_summary(
 
     for rule in rules:
         rule_ids = results.get(rule.id, set())
-        if rule.template_key == TEMPLATE_NEW_UNREAD_FOLLOWUP or rule.stage_slug == "new_unread":
+        if (
+            rule.template_key == TEMPLATE_NEW_UNREAD_FOLLOWUP
+            or pipeline_service.normalize_stage_ref(rule.stage_slug) == "new_unread"
+        ):
             counts[FILTER_INTELLIGENT_NEW_UNREAD] += len(rule_ids)
         if rule.rule_kind == RULE_KIND_MEETING_OUTCOME_MISSING:
             counts[FILTER_INTELLIGENT_MEETING_OUTCOME] += len(rule_ids)
@@ -986,7 +963,7 @@ def get_intelligent_summary(
     total = len({sid for ids in results.values() for sid in ids})
     rule_summaries = []
     for rule in rules:
-        serialized = serialize_rule(rule)
+        serialized = serialize_rule(db, rule)
         serialized["match_count"] = len(results.get(rule.id, set()))
         rule_summaries.append(serialized)
 

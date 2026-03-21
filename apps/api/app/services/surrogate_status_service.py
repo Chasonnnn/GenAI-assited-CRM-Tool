@@ -205,8 +205,7 @@ def change_status(
     Returns:
         StatusChangeResult with status='applied' or 'pending_approval'
     """
-    from app.core.stage_rules import ROLE_STAGE_MUTATION
-    from app.services import pipeline_service, surrogate_stage_context
+    from app.services import pipeline_semantics_service, pipeline_service, surrogate_stage_context
 
     now = datetime.now(timezone.utc)
     org_tz_str = _get_org_timezone(db, surrogate.organization_id)
@@ -264,25 +263,23 @@ def change_status(
     if not role_str:
         raise ValueError("User role is required to change stage")
 
-    rules = ROLE_STAGE_MUTATION.get(role_str)
-    if not rules:
-        raise ValueError("Role not permitted to change stage")
-
     if role_str == Role.CASE_MANAGER.value:
         if surrogate.owner_type != OwnerType.USER.value or surrogate.owner_id != user_id:
             raise ValueError("Surrogate must be claimed before changing stage")
 
-    allowed_types = set(rules["stage_types"])
-    allowed_stage_keys = {
-        normalized_key
-        for value in rules.get("extra_slugs", [])
-        if (normalized_key := pipeline_service.normalize_stage_ref(value))
-    }
-    new_stage_key = pipeline_service.get_stage_semantic_key(new_stage)
+    pipeline = pipeline_service.get_pipeline(db, surrogate.organization_id, surrogate_pipeline_id)
+    if not pipeline:
+        raise ValueError("Pipeline not found")
+    feature_config = pipeline_semantics_service.get_pipeline_feature_config(pipeline)
     if is_resume_from_on_hold:
         pass
     elif not is_regression:
-        if new_stage.stage_type not in allowed_types and new_stage_key not in allowed_stage_keys:
+        if not pipeline_semantics_service.can_role_access_stage(
+            role_str,
+            new_stage,
+            feature_config=feature_config,
+            mutation=True,
+        ):
             if role_str == Role.INTAKE_SPECIALIST.value:
                 raise ValueError(f"Intake specialists cannot set stage to {new_stage.slug}")
             if role_str == Role.CASE_MANAGER.value:

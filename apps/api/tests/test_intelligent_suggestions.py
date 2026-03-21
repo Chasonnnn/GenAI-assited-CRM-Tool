@@ -115,6 +115,11 @@ async def test_intelligent_suggestion_templates_and_rule_crud(
     template_keys = {template["template_key"] for template in templates}
     assert "stage_followup_custom" in template_keys
     assert "meeting_outcome_missing" in template_keys
+    new_unread_template = next(
+        template for template in templates if template["template_key"] == "new_unread_followup"
+    )
+    assert new_unread_template["default_stage_key"] == "new_unread"
+    assert new_unread_template["default_stage_label"] == "New Unread"
 
     rules_response = await authed_client.get("/settings/intelligent-suggestions/rules")
     assert rules_response.status_code == 200, rules_response.text
@@ -126,7 +131,7 @@ async def test_intelligent_suggestion_templates_and_rule_crud(
         json={
             "template_key": "stage_followup_custom",
             "name": "Custom stage check",
-            "stage_slug": default_stage.slug,
+            "stage_key": default_stage.stage_key,
             "business_days": 4,
             "enabled": True,
         },
@@ -134,7 +139,8 @@ async def test_intelligent_suggestion_templates_and_rule_crud(
     assert create_response.status_code == 200, create_response.text
     created_rule = create_response.json()
     assert created_rule["template_key"] == "stage_followup_custom"
-    assert created_rule["stage_slug"] == default_stage.slug
+    assert created_rule["stage_key"] == default_stage.stage_key
+    assert created_rule["stage_label"] == default_stage.label
     assert created_rule["business_days"] == 4
     assert created_rule["enabled"] is True
 
