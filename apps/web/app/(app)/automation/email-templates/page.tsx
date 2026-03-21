@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import NextImage from "next/image"
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -92,6 +93,7 @@ import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import Link from "@/components/app-link"
 import { normalizeTemplateHtml } from "@/lib/email-template-html"
 import { insertAtCursor } from "@/lib/insert-at-cursor"
+import { SafeHtmlContent } from "@/components/safe-html-content"
 
 // =============================================================================
 // Signature Override Field Component
@@ -242,6 +244,7 @@ function SignaturePhotoField({
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isUploading}
                         className="absolute bottom-0 right-0 flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-md"
+                        aria-label="Upload signature photo"
                     >
                         {isUploading ? (
                             <Loader2Icon className="size-3.5 animate-spin" />
@@ -321,9 +324,9 @@ function SignaturePreviewComponent() {
     }
 
     return (
-        <div
+        <SafeHtmlContent
+            html={preview.html}
             className="prose prose-sm prose-stone max-w-none text-stone-900"
-            dangerouslySetInnerHTML={{ __html: preview.html }}
         />
     )
 }
@@ -355,9 +358,9 @@ function OrgSignaturePreviewComponent() {
     }
 
     return (
-        <div
+        <SafeHtmlContent
+            html={preview.html}
             className="prose prose-sm prose-stone max-w-none text-stone-900"
-            dangerouslySetInnerHTML={{ __html: preview.html }}
         />
     )
 }
@@ -587,9 +590,6 @@ export default function EmailTemplatesPage() {
     const [signatureTwitter, setSignatureTwitter] = useState("")
     const [signatureInstagram, setSignatureInstagram] = useState("")
 
-    // Track if form has unsaved changes
-    const [hasChanges, setHasChanges] = useState(false)
-
     const hasComplexHtml = React.useMemo(
         () => /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(templateBody),
         [templateBody]
@@ -624,6 +624,26 @@ export default function EmailTemplatesPage() {
     const deletePhotoMutation = useDeleteSignaturePhoto()
     const { data: personalSignaturePreview } = useSignaturePreview()
     const { data: orgSignaturePreview } = useOrgSignaturePreview({ enabled: true, mode: "org_only" })
+
+    const hasChanges = React.useMemo(() => {
+        if (!signatureData) return false
+        return (
+            signatureName !== (signatureData.signature_name || "") ||
+            signatureTitle !== (signatureData.signature_title || "") ||
+            signaturePhone !== (signatureData.signature_phone || "") ||
+            signatureLinkedin !== (signatureData.signature_linkedin || "") ||
+            signatureTwitter !== (signatureData.signature_twitter || "") ||
+            signatureInstagram !== (signatureData.signature_instagram || "")
+        )
+    }, [
+        signatureData,
+        signatureName,
+        signatureTitle,
+        signaturePhone,
+        signatureLinkedin,
+        signatureTwitter,
+        signatureInstagram,
+    ])
 
     // Get full template details when editing
     const { data: fullTemplate } = useEmailTemplate(editingTemplate?.id || null)
@@ -836,22 +856,8 @@ export default function EmailTemplatesPage() {
             setSignatureLinkedin(signatureData.signature_linkedin || "")
             setSignatureTwitter(signatureData.signature_twitter || "")
             setSignatureInstagram(signatureData.signature_instagram || "")
-            setHasChanges(false)
         }
     }, [signatureData])
-
-    // Track changes
-    useEffect(() => {
-        if (!signatureData) return
-        const changed =
-            signatureName !== (signatureData.signature_name || "") ||
-            signatureTitle !== (signatureData.signature_title || "") ||
-            signaturePhone !== (signatureData.signature_phone || "") ||
-            signatureLinkedin !== (signatureData.signature_linkedin || "") ||
-            signatureTwitter !== (signatureData.signature_twitter || "") ||
-            signatureInstagram !== (signatureData.signature_instagram || "")
-        setHasChanges(changed)
-    }, [signatureName, signatureTitle, signaturePhone, signatureLinkedin, signatureTwitter, signatureInstagram, signatureData])
 
     const handleOpenModal = (template?: EmailTemplateListItem, scope: EmailTemplateScope = "personal") => {
         if (template) {
@@ -1206,7 +1212,6 @@ export default function EmailTemplatesPage() {
             },
             {
                 onSuccess: () => {
-                    setHasChanges(false)
                     refetchSignature()
                 },
             }
@@ -1649,10 +1654,13 @@ export default function EmailTemplatesPage() {
                                         <CardContent>
                                             <div className="flex items-center gap-3">
                                                 {signatureData.org_signature_logo_url && (
-                                                    <img
+                                                    <NextImage
                                                         src={signatureData.org_signature_logo_url}
                                                         alt="Logo"
-                                                        className="h-10 w-auto border rounded"
+                                                        width={160}
+                                                        height={40}
+                                                        unoptimized
+                                                        className="h-10 w-auto rounded border"
                                                     />
                                                 )}
                                                 <div>
@@ -2213,9 +2221,9 @@ export default function EmailTemplatesPage() {
                         </div>
                         {/* Email body section */}
                         <div className="p-4">
-                            <div
+                            <SafeHtmlContent
+                                html={previewHtml}
                                 className="prose prose-sm prose-stone max-w-none text-stone-900 [&_p]:whitespace-pre-wrap"
-                                dangerouslySetInnerHTML={{ __html: previewHtml }}
                             />
                         </div>
                     </div>

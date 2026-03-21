@@ -9,6 +9,7 @@ import { attachmentsApi, Attachment } from "@/lib/api/attachments"
 import { NoteRead } from "@/lib/api/notes"
 import { sanitizeHtml } from "@/lib/utils/sanitize"
 import { openDownloadUrlWithSpreadsheetWarning } from "@/lib/utils/csv-download-warning"
+import { SafeHtmlContent } from "@/components/safe-html-content"
 
 interface LatestUpdatesCardProps {
     surrogateId: string
@@ -61,9 +62,9 @@ export function LatestUpdatesCard({
                     <div className="flex items-start gap-2">
                         <FileTextIcon className="size-4 text-muted-foreground mt-0.5 shrink-0" />
                         <div className="flex-1 min-w-0">
-                            <div
+                            <SafeHtmlContent
+                                html={sanitizedNoteHtml}
                                 className="text-sm line-clamp-2 prose prose-sm max-w-none dark:prose-invert"
-                                dangerouslySetInnerHTML={{ __html: sanitizedNoteHtml }}
                             />
                             <div className="text-xs text-muted-foreground mt-0.5">
                                 {latestNote.author_name} · {formatRelativeTime(latestNote.created_at)}
@@ -82,7 +83,7 @@ export function LatestUpdatesCard({
                     <button
                         onClick={() => handleAttachmentClick(latestAttachment.id)}
                         disabled={isDownloading}
-                        className="flex items-start gap-2 w-full text-left hover:bg-muted/50 rounded p-1 -m-1 transition-colors"
+                        className="flex w-full items-start gap-2 rounded p-1 -m-1 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         aria-label={`Download ${latestAttachment.filename}`}
                     >
                         <PaperclipIcon className="size-4 text-muted-foreground mt-0.5 shrink-0" />

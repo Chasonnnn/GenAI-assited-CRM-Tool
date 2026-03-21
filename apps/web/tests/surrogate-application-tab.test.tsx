@@ -175,4 +175,86 @@ describe("SurrogateApplicationTab", () => {
             await screen.findByText(/choose a file field to enable upload/i),
         ).toBeInTheDocument()
     })
+
+    it("adds contextual aria-labels to field and file icon actions", async () => {
+        mockUseSurrogateFormSubmission.mockReturnValue({
+            isLoading: false,
+            error: null,
+            data: {
+                id: "submission-2",
+                form_id: "form-1",
+                surrogate_id: "surrogate-1",
+                status: "pending_review",
+                submitted_at: new Date().toISOString(),
+                reviewed_at: null,
+                reviewed_by_user_id: null,
+                review_notes: null,
+                source_mode: "dedicated",
+                intake_link_id: null,
+                intake_lead_id: null,
+                match_status: "linked",
+                match_reason: "dedicated_token",
+                matched_at: new Date().toISOString(),
+                answers: {
+                    email: "surrogate@example.com",
+                },
+                schema_snapshot: {
+                    pages: [
+                        {
+                            title: "Info",
+                            fields: [
+                                {
+                                    key: "email",
+                                    label: "Email",
+                                    type: "email",
+                                    required: false,
+                                },
+                                {
+                                    key: "documents",
+                                    label: "Documents",
+                                    type: "file",
+                                    required: false,
+                                },
+                            ],
+                        },
+                    ],
+                },
+                files: [
+                    {
+                        id: "file-1",
+                        filename: "medical-records.pdf",
+                        field_key: "documents",
+                        file_size: 1024,
+                        quarantined: false,
+                    },
+                ],
+            },
+        })
+
+        render(
+            <SurrogateApplicationTab
+                surrogateId="surrogate-1"
+                formId="form-1"
+                publishedForms={[]}
+            />,
+        )
+
+        expect(
+            screen.getByRole("button", { name: "Download medical-records.pdf" }),
+        ).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: /^edit$/i }))
+
+        const editFieldButton = await screen.findByRole("button", { name: "Edit Email" })
+        expect(editFieldButton).toBeInTheDocument()
+
+        fireEvent.click(editFieldButton)
+
+        expect(
+            screen.getByRole("button", { name: "Cancel editing Email" }),
+        ).toBeInTheDocument()
+        expect(
+            screen.getByRole("button", { name: "Delete medical-records.pdf" }),
+        ).toBeInTheDocument()
+    })
 })

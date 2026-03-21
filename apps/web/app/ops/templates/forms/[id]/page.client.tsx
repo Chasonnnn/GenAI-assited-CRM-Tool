@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import NextImage from "next/image"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -293,7 +294,7 @@ export default function FormBuilderPage() {
     const templateIdRef = useRef<string | null>(isNewForm ? null : id)
     const saveQueueRef = useRef<Promise<void>>(Promise.resolve())
     const hydratedFormRef = useRef<string | null>(null)
-    const [hasHydrated, setHasHydrated] = useState(false)
+    const [hasHydrated, setHasHydrated] = useState(isNewForm)
 
     // Form state
     const [formName, setFormName] = useState(isNewForm ? "" : "Surrogate Application Form")
@@ -339,7 +340,7 @@ export default function FormBuilderPage() {
     }, [])
 
     useEffect(() => {
-        setHasHydrated(false)
+        setHasHydrated(isNewForm)
         setAutoSaveStatus("idle")
         setLastSavedAt(null)
         hydratedFormRef.current = null
@@ -350,12 +351,6 @@ export default function FormBuilderPage() {
         setMaxFileCount(10)
         setAllowedMimeTypesText("")
     }, [formId, id, isNewForm])
-
-    useEffect(() => {
-        if (isNewForm) {
-            setHasHydrated(true)
-        }
-    }, [isNewForm])
 
     useEffect(() => {
         if (isNewForm || !templateData || hasHydrated) return
@@ -1409,6 +1404,7 @@ export default function FormBuilderPage() {
                                                                 e.stopPropagation()
                                                                 handleDuplicateField(field.id)
                                                             }}
+                                                            aria-label={`Duplicate ${field.label || "field"}`}
                                                         >
                                                             <CopyIcon className="size-4" />
                                                         </Button>
@@ -1420,6 +1416,7 @@ export default function FormBuilderPage() {
                                                                 e.stopPropagation()
                                                                 handleDeleteField(field.id)
                                                             }}
+                                                            aria-label={`Delete ${field.label || "field"}`}
                                                         >
                                                             <XIcon className="size-4" />
                                                         </Button>
@@ -1791,6 +1788,7 @@ export default function FormBuilderPage() {
                                                             onClick={() =>
                                                                 handleRemoveColumn(selectedFieldData.id, column.id)
                                                             }
+                                                            aria-label={`Remove column ${column.label || "column"}`}
                                                         >
                                                             <XIcon className="size-4" />
                                                         </Button>
@@ -1830,28 +1828,41 @@ export default function FormBuilderPage() {
                                 {selectedFieldData.options && (
                                     <div className="mt-4 space-y-2">
                                         <Label>Options</Label>
-                                        {selectedFieldData.options.map((option, index) => (
-                                            <div key={index} className="flex gap-2">
-                                                <Input
-                                                    value={option}
-                                                    onChange={(e) => {
-                                                        const newOptions = [...selectedFieldData.options!]
-                                                        newOptions[index] = e.target.value
-                                                        handleUpdateField(selectedFieldData.id, { options: newOptions })
-                                                    }}
-                                                />
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    onClick={() => {
-                                                        const newOptions = selectedFieldData.options!.filter((_, i) => i !== index)
-                                                        handleUpdateField(selectedFieldData.id, { options: newOptions })
-                                                    }}
-                                                >
-                                                    <XIcon className="size-4" />
-                                                </Button>
-                                            </div>
-                                        ))}
+                                        {selectedFieldData.options.map((option, index) => {
+                                            const optionOccurrence = selectedFieldData.options!
+                                                .slice(0, index + 1)
+                                                .filter((value) => value === option).length
+                                            const optionKey = `${selectedFieldData.id}-${option}-${optionOccurrence}`
+                                            return (
+                                                <div key={optionKey} className="flex gap-2">
+                                                    <Input
+                                                        value={option}
+                                                        onChange={(e) => {
+                                                            const newOptions = [...selectedFieldData.options!]
+                                                            newOptions[index] = e.target.value
+                                                            handleUpdateField(selectedFieldData.id, {
+                                                                options: newOptions,
+                                                            })
+                                                        }}
+                                                    />
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => {
+                                                            const newOptions = selectedFieldData.options!.filter(
+                                                                (_, i) => i !== index,
+                                                            )
+                                                            handleUpdateField(selectedFieldData.id, {
+                                                                options: newOptions,
+                                                            })
+                                                        }}
+                                                        aria-label={`Remove option ${option || `Option ${index + 1}`}`}
+                                                    >
+                                                        <XIcon className="size-4" />
+                                                    </Button>
+                                                </div>
+                                            )
+                                        })}
                                         <Button
                                             variant="outline"
                                             size="sm"
@@ -1963,9 +1974,12 @@ export default function FormBuilderPage() {
                                     )}
                                     {logoUrl && (
                                         <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
-                                            <img
+                                            <NextImage
                                                 src={resolvedLogoUrl}
                                                 alt="Form logo preview"
+                                                width={224}
+                                                height={56}
+                                                unoptimized
                                                 className="h-14 w-auto rounded-md object-contain"
                                             />
                                         </div>

@@ -337,9 +337,6 @@ function MembersTab() {
                                 </TableCell>
                                 <TableCell className="font-medium text-center">
                                     {member.display_name || "—"}
-                                    {member.user_id === user?.user_id && (
-                                        <Badge variant="outline" className="ml-2 text-xs">You</Badge>
-                                    )}
                                 </TableCell>
                                 <TableCell className="text-center">{member.email}</TableCell>
                                 <TableCell className="text-center">
@@ -353,7 +350,7 @@ function MembersTab() {
                                         : "Never"}
                                 </TableCell>
                                 <TableCell className="text-center">
-                                    <div className="flex items-center justify-center gap-2">
+                                    <div className="grid grid-cols-[auto_3.5rem] items-center justify-center gap-2">
                                         <Button
                                             render={<Link href={`/settings/team/members/${member.id}`} />}
                                             variant="ghost"
@@ -362,20 +359,22 @@ function MembersTab() {
                                             <Settings2 className="size-4 mr-1" aria-hidden="true" />
                                             Manage
                                         </Button>
-                                        {member.user_id !== user?.user_id ? (
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => handleRemove(member.id, member.email)}
-                                                disabled={removeMember.isPending}
-                                                className="text-destructive hover:text-destructive"
-                                                aria-label={`Remove ${member.email}`}
-                                            >
-                                                <X className="size-4" aria-hidden="true" />
-                                            </Button>
-                                        ) : (
-                                            <div className="w-8" />
-                                        )}
+                                        <div className="flex w-14 justify-center">
+                                            {member.user_id !== user?.user_id ? (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => handleRemove(member.id, member.email)}
+                                                    disabled={removeMember.isPending}
+                                                    className="text-destructive hover:text-destructive"
+                                                    aria-label={`Remove ${member.email}`}
+                                                >
+                                                    <X className="size-4" aria-hidden="true" />
+                                                </Button>
+                                            ) : (
+                                                <Badge variant="outline" className="text-xs">You</Badge>
+                                            )}
+                                        </div>
                                     </div>
                                 </TableCell>
                             </TableRow>

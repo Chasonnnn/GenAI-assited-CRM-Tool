@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import type { ImgHTMLAttributes } from "react"
 
 import FormBuilderPage from "../app/(app)/automation/forms/[id]/page.client"
@@ -16,7 +16,9 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("next/image", () => ({
     __esModule: true,
-    default: (props: ImgHTMLAttributes<HTMLImageElement>) => <img {...props} alt={props.alt ?? ""} />,
+    default: ({ alt, ...props }: ImgHTMLAttributes<HTMLImageElement>) => (
+        <span data-testid="next-image-mock" data-alt={alt ?? ""} {...props} />
+    ),
 }))
 
 vi.mock("qrcode.react", () => ({
@@ -87,5 +89,19 @@ describe("FormBuilderPage", () => {
         expect(screen.getByTestId("form-builder-palette")).toHaveClass("w-full", "xl:w-[200px]")
         expect(screen.getByTestId("form-builder-canvas")).toHaveClass("min-w-0", "p-4", "sm:p-6", "xl:p-8")
         expect(screen.getByTestId("form-builder-settings")).toHaveClass("w-full", "xl:w-[280px]")
+    })
+
+    it("adds contextual aria-labels to automation form builder icon buttons", async () => {
+        render(<FormBuilderPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Add Name field" }))
+        expect(await screen.findByRole("button", { name: "Duplicate Name" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Delete Name" })).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Add Select field" }))
+        expect(await screen.findByRole("button", { name: "Remove option Option 1" })).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Add Repeating Table field" }))
+        expect(await screen.findByRole("button", { name: "Remove column Column 1" })).toBeInTheDocument()
     })
 })

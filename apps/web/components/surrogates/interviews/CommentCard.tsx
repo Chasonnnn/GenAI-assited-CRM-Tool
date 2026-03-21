@@ -25,6 +25,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { InterviewNoteRead } from "@/lib/api/interviews"
+import { SafeHtmlContent } from "@/components/safe-html-content"
 
 interface CommentCardProps {
     note: InterviewNoteRead
@@ -51,8 +52,8 @@ const ReplyItem = memo(function ReplyItem({
 }: {
     reply: InterviewNoteRead
     canEdit: boolean
-    onDelete: () => void
-    onEdit?: (content: string) => void
+    onDelete: (replyId: string) => void
+    onEdit?: (replyId: string, content: string) => void
 }) {
     const [isEditing, setIsEditing] = useState(false)
     const [editContent, setEditContent] = useState(reply.content)
@@ -68,9 +69,9 @@ const ReplyItem = memo(function ReplyItem({
 
     const handleEditSubmit = useCallback(() => {
         if (!editContent.trim() || !onEdit) return
-        onEdit(editContent.trim())
+        onEdit(reply.id, editContent.trim())
         setIsEditing(false)
-    }, [editContent, onEdit])
+    }, [editContent, onEdit, reply.id])
 
     return (
         <div className="group relative pl-2 border-l-2 border-stone-200 dark:border-stone-700 ml-1 mt-2">
@@ -128,9 +129,9 @@ const ReplyItem = memo(function ReplyItem({
                             </div>
                         </div>
                     ) : (
-                        <div
+                        <SafeHtmlContent
+                            html={reply.content}
                             className="mt-1 text-sm text-foreground prose prose-sm prose-stone dark:prose-invert max-w-none [&>p]:my-0"
-                            dangerouslySetInnerHTML={{ __html: reply.content }}
                         />
                     )}
                 </div>
@@ -138,8 +139,10 @@ const ReplyItem = memo(function ReplyItem({
                     <Button
                         variant="ghost"
                         size="sm"
-                        onClick={onDelete}
+                        onClick={() => onDelete(reply.id)}
+                        data-comment-card-interaction="true"
                         className="size-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                        aria-label={`Delete reply from ${reply.author_name}`}
                     >
                         <Trash2Icon className="size-3" />
                     </Button>
@@ -151,6 +154,7 @@ const ReplyItem = memo(function ReplyItem({
                         variant="ghost"
                         size="sm"
                         onClick={() => setIsEditing(true)}
+                        data-comment-card-interaction="true"
                         className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
                     >
                         <PencilIcon className="size-3 mr-1" />
@@ -212,6 +216,14 @@ export const CommentCard = memo(function CommentCard({
         setIsEditing(false)
     }, [editContent, onEdit])
 
+    const handleCardClick = useCallback((event: React.MouseEvent<HTMLElement>) => {
+        const target = event.target
+        if (target instanceof Element && target.closest('[data-comment-card-interaction="true"]')) {
+            return
+        }
+        onClick()
+    }, [onClick])
+
     const handleKeyDown = useCallback((
         e: React.KeyboardEvent,
         onSubmit: () => void,
@@ -245,7 +257,7 @@ export const CommentCard = memo(function CommentCard({
             )}
             onMouseEnter={() => onHover(true)}
             onMouseLeave={() => onHover(false)}
-            onClick={onClick}
+            onClick={handleCardClick}
         >
             <div className="p-3 space-y-2">
                 {/* Anchor text quote */}
@@ -267,7 +279,7 @@ export const CommentCard = memo(function CommentCard({
 
                 {/* Comment content or edit mode */}
                 {isEditing ? (
-                    <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="space-y-2" data-comment-card-interaction="true">
                         <Textarea
                             ref={editInputRef}
                             value={editContent}
@@ -304,9 +316,9 @@ export const CommentCard = memo(function CommentCard({
                         </div>
                     </div>
                 ) : (
-                    <div
+                    <SafeHtmlContent
+                        html={note.content}
                         className="text-sm text-foreground prose prose-sm prose-stone dark:prose-invert max-w-none [&>p]:my-0 [&>p:last-child]:mb-0"
-                        dangerouslySetInnerHTML={{ __html: note.content }}
                     />
                 )}
 
@@ -324,27 +336,20 @@ export const CommentCard = memo(function CommentCard({
                 {note.replies && note.replies.length > 0 && (
                     <div className="pt-1">
                         {note.replies.map((reply) => (
-                            (() => {
-                                const onEdit = onEditReply
-                                    ? (content: string) => onEditReply(reply.id, content)
-                                    : undefined
-                                return (
-                                    <ReplyItem
-                                        key={reply.id}
-                                        reply={reply}
-                                        canEdit={canEdit}
-                                        onDelete={() => onDeleteReply(reply.id)}
-                                        {...(onEdit ? { onEdit } : {})}
-                                    />
-                                )
-                            })()
+                            <ReplyItem
+                                key={reply.id}
+                                reply={reply}
+                                canEdit={canEdit}
+                                onDelete={onDeleteReply}
+                                {...(onEditReply ? { onEdit: onEditReply } : {})}
+                            />
                         ))}
                     </div>
                 )}
 
                 {/* Reply input */}
                 {isReplying && (
-                    <div className="pt-2 space-y-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="pt-2 space-y-2" data-comment-card-interaction="true">
                         <div className="flex items-start gap-2">
                             <CornerDownRightIcon className="size-3.5 text-muted-foreground shrink-0 mt-2" />
                             <Textarea
@@ -389,12 +394,13 @@ export const CommentCard = memo(function CommentCard({
                 {!isEditing && !isReplying && (
                     <div
                         className="flex items-center justify-between pt-1"
-                        onClick={(e) => e.stopPropagation()}
+                        data-comment-card-interaction="true"
                     >
                         <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => setIsReplying(true)}
+                            data-comment-card-interaction="true"
                             className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
                         >
                             <MessageSquareIcon className="size-3 mr-1" />
@@ -406,6 +412,7 @@ export const CommentCard = memo(function CommentCard({
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => setIsEditing(true)}
+                                data-comment-card-interaction="true"
                                 className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
                             >
                                 <PencilIcon className="size-3 mr-1" />
@@ -418,6 +425,7 @@ export const CommentCard = memo(function CommentCard({
                                 variant="ghost"
                                 size="sm"
                                 onClick={onDelete}
+                                data-comment-card-interaction="true"
                                 className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
                             >
                                 <Trash2Icon className="size-3 mr-1" />

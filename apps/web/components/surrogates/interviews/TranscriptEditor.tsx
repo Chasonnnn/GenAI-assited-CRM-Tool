@@ -352,6 +352,7 @@ export function TranscriptEditor({
                     onClick={() => editor.chain().focus().undo().run()}
                     disabled={!editor.can().undo()}
                     className="size-8 p-0"
+                    aria-label="Undo"
                     title="Undo (Ctrl+Z)"
                 >
                     <Undo2Icon className="size-4" />
@@ -362,6 +363,7 @@ export function TranscriptEditor({
                     onClick={() => editor.chain().focus().redo().run()}
                     disabled={!editor.can().redo()}
                     className="size-8 p-0"
+                    aria-label="Redo"
                     title="Redo (Ctrl+Shift+Z)"
                 >
                     <Redo2Icon className="size-4" />
@@ -377,6 +379,7 @@ export function TranscriptEditor({
                             onClick={addComment}
                             disabled={!hasSelection}
                             className="size-8 p-0"
+                            aria-label="Add Comment"
                             title="Add Comment (select text first)"
                         >
                             <MessageSquareIcon className="size-4" />

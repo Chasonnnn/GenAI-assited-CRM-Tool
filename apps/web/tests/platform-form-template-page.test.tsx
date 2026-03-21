@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react"
+import type { ImgHTMLAttributes } from "react"
 import PlatformFormTemplatePage from "../app/ops/templates/forms/[id]/page.client"
 
 const mockUpdate = vi.fn()
@@ -33,6 +34,13 @@ vi.mock("next/navigation", () => ({
         push: vi.fn(),
         replace: vi.fn(),
     }),
+}))
+
+vi.mock("next/image", () => ({
+    __esModule: true,
+    default: ({ alt, ...props }: ImgHTMLAttributes<HTMLImageElement>) => (
+        <span data-testid="next-image-mock" data-alt={alt ?? ""} {...props} />
+    ),
 }))
 
 vi.mock("@/components/ops/templates/PublishDialog", () => ({
@@ -176,6 +184,20 @@ describe("PlatformFormTemplatePage", () => {
         expect(screen.getByTestId("form-builder-palette")).toHaveClass("w-full", "xl:w-[220px]")
         expect(screen.getByTestId("form-builder-canvas")).toHaveClass("min-w-0", "p-4", "sm:p-6", "xl:p-8")
         expect(screen.getByTestId("form-builder-settings")).toHaveClass("w-full", "xl:w-[280px]")
+    })
+
+    it("adds contextual aria-labels to form builder icon buttons", async () => {
+        render(<PlatformFormTemplatePage />)
+
+        fireEvent.click(await screen.findByRole("button", { name: "Add Name field" }))
+        expect(await screen.findByRole("button", { name: "Duplicate Name" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Delete Name" })).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Add Select field" }))
+        expect(await screen.findByRole("button", { name: "Remove option Option 1" })).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Add Repeating Table field" }))
+        expect(await screen.findByRole("button", { name: "Remove column Column 1" })).toBeInTheDocument()
     })
 
 })

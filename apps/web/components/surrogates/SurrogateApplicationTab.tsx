@@ -491,7 +491,7 @@ export function SurrogateApplicationTab({
         }
     }
 
-    const renderEditField = (
+    const buildEditField = (
         field: FormSchema["pages"][number]["fields"][number],
         value: unknown,
     ) => {
@@ -1009,7 +1009,7 @@ export function SurrogateApplicationTab({
         .filter((field) => field.type !== "file")
         .slice(0, 3)
 
-    const renderFieldValue = (
+    const getFieldValueContent = (
         field: FormSchema["pages"][number]["fields"][number],
         value: unknown,
     ) => {
@@ -1204,6 +1204,11 @@ export function SurrogateApplicationTab({
                                                     const hasEdit = editedValue !== undefined
                                                     const displayValue = hasEdit ? editedValue : originalValue
                                                     const isTableField = field.type === "repeatable_table"
+                                                    const fieldValueContent = getFieldValueContent(field, displayValue)
+                                                    const editFieldContent = buildEditField(
+                                                        field,
+                                                        editedValue ?? originalValue,
+                                                    )
                                                     const valueWrapperClass = cn(
                                                         hasEdit &&
                                                             "bg-yellow-100 dark:bg-yellow-900/30 px-1.5 py-0.5 rounded",
@@ -1217,12 +1222,13 @@ export function SurrogateApplicationTab({
                                                             <div className="flex items-center gap-2">
                                                                 {isEditing ? (
                                                                     <div className={cn("flex gap-2", isTableField ? "items-start" : "items-center")}>
-                                                                        {renderEditField(field, editedValue ?? originalValue)}
+                                                                        {editFieldContent}
                                                                         <Button
                                                                             size="sm"
                                                                             variant="ghost"
                                                                             className="h-7 w-7 p-0"
                                                                             onClick={cancelEditing}
+                                                                            aria-label={`Cancel editing ${field.label || field.key || "field"}`}
                                                                         >
                                                                             <XIcon className="h-3.5 w-3.5" />
                                                                         </Button>
@@ -1231,11 +1237,11 @@ export function SurrogateApplicationTab({
                                                                     <>
                                                                         {isTableField ? (
                                                                             <div className={valueWrapperClass}>
-                                                                                {renderFieldValue(field, displayValue)}
+                                                                                {fieldValueContent}
                                                                             </div>
                                                                         ) : (
                                                                             <span className={valueWrapperClass}>
-                                                                                {renderFieldValue(field, displayValue)}
+                                                                                {fieldValueContent}
                                                                             </span>
                                                                         )}
                                                                         {isEditMode && (
@@ -1244,6 +1250,7 @@ export function SurrogateApplicationTab({
                                                                                 variant="ghost"
                                                                                 className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                                                                                 onClick={() => setEditingField(field.key)}
+                                                                                aria-label={`Edit ${field.label || field.key || "field"}`}
                                                                             >
                                                                                 <PencilIcon className="h-3 w-3" />
                                                                             </Button>
@@ -1399,6 +1406,7 @@ export function SurrogateApplicationTab({
                                                         className="h-8 w-8"
                                                         disabled={file.quarantined}
                                                         onClick={() => handleDownloadFile(file.id)}
+                                                        aria-label={`Download ${file.filename}`}
                                                     >
                                                         <DownloadIcon className="h-4 w-4" />
                                                     </Button>
@@ -1410,6 +1418,7 @@ export function SurrogateApplicationTab({
                                                             className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                                             onClick={() => handleDeleteFile(file.id, file.filename)}
                                                             disabled={isDeleting}
+                                                            aria-label={`Delete ${file.filename}`}
                                                         >
                                                             {isDeleting ? (
                                                                 <Loader2Icon className="h-4 w-4 animate-spin" />
@@ -1504,12 +1513,18 @@ export function SurrogateApplicationTab({
                                     Surrogate fields will be updated based on configured mappings.
                                 </p>
                             ) : (
-                                previewFields.map((field) => (
-                                    <div key={field.key} className="flex justify-between">
-                                        <span className="text-muted-foreground">{field.label}</span>
-                                        {renderFieldValue(field, submission.answers[field.key])}
-                                    </div>
-                                ))
+                                previewFields.map((field) => {
+                                    const fieldValueContent = getFieldValueContent(
+                                        field,
+                                        submission.answers[field.key],
+                                    )
+                                    return (
+                                        <div key={field.key} className="flex justify-between">
+                                            <span className="text-muted-foreground">{field.label}</span>
+                                            {fieldValueContent}
+                                        </div>
+                                    )
+                                })
                             )}
                         </div>
                         <div>
