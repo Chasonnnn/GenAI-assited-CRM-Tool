@@ -2268,6 +2268,21 @@ def _generate_journey_html(
     """
 
 
+def _build_journey_milestone_images(
+    journey: journey_service.JourneyResponse,
+) -> dict[str, str]:
+    milestone_images: dict[str, str] = {}
+    for phase in journey.phases:
+        for milestone in phase.milestones:
+            if milestone.featured_image_url:
+                milestone_images[milestone.slug] = milestone.featured_image_url
+                continue
+            default_image_data_url = _get_default_image_data_url(milestone.slug)
+            if default_image_data_url:
+                milestone_images[milestone.slug] = default_image_data_url
+    return milestone_images
+
+
 def export_journey_pdf(
     db: Session,
     org_id: uuid.UUID,
@@ -2278,19 +2293,13 @@ def export_journey_pdf(
     if not journey:
         raise ValueError("Surrogate not found")
 
-    if not settings.FRONTEND_URL:
-        raise ValueError("FRONTEND_URL is not configured")
-
-    export_token = create_export_token(org_id, surrogate_id, variant=variant)
-    token_param = quote(export_token)
-    frontend_base = settings.FRONTEND_URL.rstrip("/")
-    print_url = (
-        f"{frontend_base}/surrogates/{surrogate_id}/journey/print?export_token={token_param}"
-    )
+    journey = journey_service.apply_export_variant(journey, variant)
+    milestone_images = _build_journey_milestone_images(journey)
+    html_content = _generate_journey_html(journey, milestone_images)
 
     loop = asyncio.new_event_loop()
     try:
-        pdf_bytes = loop.run_until_complete(_render_url_to_pdf(print_url))
+        pdf_bytes = loop.run_until_complete(_render_html_to_pdf(html_content))
     except Exception as exc:
         raise ValueError("Failed to render journey export") from exc
     finally:

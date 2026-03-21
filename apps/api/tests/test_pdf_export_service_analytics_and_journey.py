@@ -163,30 +163,6 @@ async def test_export_analytics_pdf_async_uses_renderer(db, test_org, monkeypatc
 
 
 def test_export_journey_pdf_and_generate_journey_html(db, test_org, monkeypatch):
-    monkeypatch.setattr(pdf_export_service.settings, "FRONTEND_URL", "http://localhost:3000")
-    monkeypatch.setattr(journey_service, "get_journey", lambda *_args, **_kwargs: object())
-
-    captured: dict[str, str] = {}
-
-    async def _fake_render_url_to_pdf(
-        url: str, wait_selector: str = "[data-journey-print='ready']"
-    ):
-        captured["url"] = url
-        captured["selector"] = wait_selector
-        return b"%PDF-1.7 journey"
-
-    monkeypatch.setattr(pdf_export_service, "_render_url_to_pdf", _fake_render_url_to_pdf)
-
-    surrogate_id = uuid4()
-    pdf = pdf_export_service.export_journey_pdf(
-        db=db,
-        org_id=test_org.id,
-        surrogate_id=surrogate_id,
-        variant="internal",
-    )
-    assert pdf.startswith(b"%PDF")
-    assert f"/surrogates/{surrogate_id}/journey/print" in captured["url"]
-
     milestone = journey_service.JourneyMilestone(
         slug="application_intake",
         label="Application & Intake",
@@ -212,6 +188,29 @@ def test_export_journey_pdf_and_generate_journey_html(db, test_org, monkeypatch)
         organization_name="Test Org",
         organization_logo_url=None,
     )
+    monkeypatch.setattr(pdf_export_service.settings, "FRONTEND_URL", "")
+    monkeypatch.setattr(journey_service, "get_journey", lambda *_args, **_kwargs: response)
+
+    rendered: dict[str, str] = {}
+
+    async def _fake_render_html_to_pdf(html_content: str):
+        rendered["html"] = html_content
+        return b"%PDF-1.7 journey"
+
+    monkeypatch.setattr(pdf_export_service, "_render_html_to_pdf", _fake_render_html_to_pdf)
+
+    surrogate_id = uuid4()
+    pdf = pdf_export_service.export_journey_pdf(
+        db=db,
+        org_id=test_org.id,
+        surrogate_id=surrogate_id,
+        variant="internal",
+    )
+    assert pdf.startswith(b"%PDF")
+    assert "Surrogacy Journey" in rendered["html"]
+    assert "Candidate A" in rendered["html"]
+    assert "Application &amp; Intake" in rendered["html"]
+
     journey_html = pdf_export_service._generate_journey_html(response, milestone_images={})
     assert "Surrogacy Journey" in journey_html
     assert "terminal-banner" in journey_html
